@@ -821,21 +821,19 @@ v1 默认值（可配置但需保持一致）：
 - `-32603` internal_error
 
 ### 12.2 DevHub 自定义错误（建议）
-|   code | message                  | 说明                                                         |
-| -----: | ------------------------ | ------------------------------------------------------------ |
-| -32001 | unauthorized             | token 不合法 / WS 未 authenticate                            |
-| -32002 | forbidden                | scopePolicy 不允许 / 访问被拒绝                              |
-| -32010 | instance_not_found       | 未找到可路由实例（且按矩阵不排队）                           |
-| -32011 | invocation_expired       | pending/invocation 过期                                      |
-| -32012 | invocation_timeout       | invoke.request 等待超时（waitTimeoutMs）                     |
-| -32013 | instance_offline         | 指定 instanceId 但不在线（可与 not_found 合并，v1 可二选一） |
-| -32014 | app_definition_not_found | 未找到 AppDefinition                                         |
-| -32020 | launch_failed            | 启动失败                                                     |
-| -32030 | delivery_conflict        | invocation 被重复 respond / lease 冲突等                     |
-| -32040 | rate_limited             | 触发限流/资源上限                                            |
-| -32099 | not_supported            | 当前协议/版本不支持                                          |
-
-> v1 允许把 `instance_offline` 合并为 `instance_not_found`，但建议区分以便排障。
+|   code | message                  | 说明                                                  |
+| -----: | ------------------------ | ----------------------------------------------------- |
+| -32001 | unauthorized             | token 不合法 / WS 未 authenticate                     |
+| -32002 | forbidden                | scopePolicy 不允许 / 访问被拒绝                       |
+| -32010 | instance_not_found       | 未找到可路由实例（且按矩阵不排队）                    |
+| -32011 | invocation_expired       | pending/invocation 过期                               |
+| -32012 | invocation_timeout       | invoke.request 等待超时（waitTimeoutMs）              |
+| -32013 | instance_offline         | 【废弃】指定 instanceId 但不在线（与 not_found 合并） |
+| -32014 | app_definition_not_found | 未找到 AppDefinition                                  |
+| -32020 | launch_failed            | 启动失败                                              |
+| -32030 | delivery_conflict        | invocation 被重复 respond / lease 冲突等              |
+| -32040 | rate_limited             | 触发限流/资源上限                                     |
+| -32099 | not_supported            | 当前协议/版本不支持                                   |
 
 ---
 
