@@ -1,5 +1,6 @@
 using DevHub.Core.Models;
 using System.Security.AccessControl;
+using System.Security.Cryptography;
 using System.Security.Principal;
 
 namespace DevHub.Core.Services;
@@ -164,31 +165,35 @@ public class FileSystemManager
     }
 
     /// <summary>
-    /// 生成新的随机 token
+    /// 生成新的随机 token（使用加密安全的随机数生成器）
     /// </summary>
     private string GenerateNewToken()
     {
         var randomBytes = new byte[32];
-        Random.Shared.NextBytes(randomBytes);
+        RandomNumberGenerator.Fill(randomBytes);
         return Convert.ToBase64String(randomBytes).TrimEnd('=');
     }
 
     /// <summary>
     /// 写入 hub.json 文件
     /// </summary>
-    public void WriteHubJson(int port)
+    /// <param name="port">监听端口</param>
+    /// <param name="hubVersion">Hub 版本号（可选）</param>
+    public void WriteHubJson(int port, string? hubVersion = null)
     {
         try
         {
-            _logger.Debug("开始写入 hub.json 文件，监听端口: {Port}", port);
+            _logger.Debug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, hubVersion);
 
             var hubRuntime = new HubRuntime
             {
                 ProtocolVersion = 1,
+                HubVersion = hubVersion,
+                Pid = Environment.ProcessId,
                 HttpBaseUrl = $"http://127.0.0.1:{port}",
                 WsUrl = $"ws://127.0.0.1:{port}/ws",
-                StartedAtUtc = DateTime.UtcNow,
-                TokenFile = _tokenFilePath
+                TokenFile = _tokenFilePath,
+                StartedAtUtc = DateTime.UtcNow
             };
 
             var tempPath = _hubJsonPath + ".tmp";
@@ -197,13 +202,9 @@ public class FileSystemManager
                 WriteIndented = true
             }));
 
-            if (File.Exists(_hubJsonPath))
-            {
-                _logger.Debug("删除旧的 hub.json 文件: {Path}", _hubJsonPath);
-                File.Delete(_hubJsonPath);
-            }
-
-            File.Move(tempPath, _hubJsonPath);
+            // 使用 overwrite = true 实现原子替换（在同一卷上）
+            // 注意：跨卷移动通常不是原子的，但 runtime 目录通常在同一卷
+            File.Move(tempPath, _hubJsonPath, overwrite: true);
             _logger.Information("成功写入 hub.json 文件: {Path}", _hubJsonPath);
         }
         catch (Exception ex)

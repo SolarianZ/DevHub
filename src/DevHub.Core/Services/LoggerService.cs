@@ -37,7 +37,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Trace(string message, params object[] args)
+    public void Trace(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Trace))
         {
@@ -51,7 +51,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Debug(string message, params object[] args)
+    public void Debug(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Debug))
         {
@@ -65,7 +65,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Information(string message, params object[] args)
+    public void Information(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Information))
         {
@@ -79,7 +79,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Warning(string message, params object[] args)
+    public void Warning(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Warning))
         {
@@ -94,7 +94,7 @@ public class LoggerService : ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Warning(Exception ex, string message, params object[] args)
+    public void Warning(Exception ex, string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Warning))
         {
@@ -109,7 +109,7 @@ public class LoggerService : ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Error(Exception ex, string message, params object[] args)
+    public void Error(Exception ex, string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Error))
         {
@@ -123,7 +123,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Error(string message, params object[] args)
+    public void Error(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Error))
         {
@@ -138,7 +138,7 @@ public class LoggerService : ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Fatal(Exception ex, string message, params object[] args)
+    public void Fatal(Exception ex, string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Critical))
         {
@@ -152,7 +152,7 @@ public class LoggerService : ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    public void Fatal(string message, params object[] args)
+    public void Fatal(string message, params object?[] args)
     {
         if (_logger.IsEnabled(LogLevel.Critical))
         {
@@ -166,7 +166,7 @@ public class LoggerService : ILoggerService
     /// <typeparam name="TState">范围状态类型</typeparam>
     /// <param name="state">范围状态</param>
     /// <returns>范围的 Disposable 对象</returns>
-    public IDisposable BeginScope<TState>(TState state)
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull
     {
         return _logger.BeginScope(state);
     }

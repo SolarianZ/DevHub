@@ -22,7 +22,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Trace(string message, params object[] args);
+    void Trace(string message, params object?[] args);
 
     /// <summary>
     /// 记录调试信息
@@ -30,7 +30,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Debug(string message, params object[] args);
+    void Debug(string message, params object?[] args);
 
     /// <summary>
     /// 记录信息级日志
@@ -38,7 +38,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Information(string message, params object[] args);
+    void Information(string message, params object?[] args);
 
     /// <summary>
     /// 记录警告级日志
@@ -46,7 +46,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Warning(string message, params object[] args);
+    void Warning(string message, params object?[] args);
 
     /// <summary>
     /// 记录警告级日志（带异常）
@@ -55,7 +55,7 @@ public interface ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Warning(Exception ex, string message, params object[] args);
+    void Warning(Exception ex, string message, params object?[] args);
 
     /// <summary>
     /// 记录错误级日志
@@ -64,7 +64,7 @@ public interface ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Error(Exception ex, string message, params object[] args);
+    void Error(Exception ex, string message, params object?[] args);
 
     /// <summary>
     /// 记录错误级日志（无异常）
@@ -72,7 +72,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Error(string message, params object[] args);
+    void Error(string message, params object?[] args);
 
     /// <summary>
     /// 记录致命级日志
@@ -81,7 +81,7 @@ public interface ILoggerService
     /// <param name="ex">异常对象</param>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Fatal(Exception ex, string message, params object[] args);
+    void Fatal(Exception ex, string message, params object?[] args);
 
     /// <summary>
     /// 记录致命级日志（无异常）
@@ -89,7 +89,7 @@ public interface ILoggerService
     /// </summary>
     /// <param name="message">日志消息</param>
     /// <param name="args">格式化参数</param>
-    void Fatal(string message, params object[] args);
+    void Fatal(string message, params object?[] args);
 
     /// <summary>
     /// 开始一个日志范围，用于关联相关的日志记录
@@ -97,5 +97,5 @@ public interface ILoggerService
     /// <typeparam name="TState">范围状态类型</typeparam>
     /// <param name="state">范围状态</param>
     /// <returns>范围的 Disposable 对象</returns>
-    IDisposable BeginScope<TState>(TState state);
+    IDisposable? BeginScope<TState>(TState state) where TState : notnull;
 }

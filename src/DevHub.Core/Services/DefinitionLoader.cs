@@ -132,8 +132,8 @@ public class DefinitionLoader
     /// <returns>true 表示有效，false 表示无效</returns>
     private bool IsValidScopePolicy(string scopePolicy)
     {
-        // 有效的 scopePolicy 值（M1 阶段支持的）
-        var validScopePolicies = new[] { "any", "global", "workspace" };
+        // 有效的 scopePolicy 值（M1 阶段支持的，对齐 Spec）
+        var validScopePolicies = new[] { "any", "globalOnly", "required" };
         return validScopePolicies.Contains(scopePolicy, StringComparer.OrdinalIgnoreCase);
     }
 }

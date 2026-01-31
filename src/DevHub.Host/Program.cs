@@ -119,7 +119,7 @@ namespace DevHub.Host
                                 Error = new JsonRpcError
                                 {
                                     Code = -32600,
-                                    Message = "无效请求"
+                                    Message = "invalid_request"
                                 }
                             });
                         }
@@ -159,7 +159,7 @@ namespace DevHub.Host
                             Error = new JsonRpcError
                             {
                                 Code = -32603,
-                                Message = "内部错误"
+                                Message = "internal_error"
                             }
                         });
                     }
@@ -227,7 +227,7 @@ namespace DevHub.Host
                     Error = new JsonRpcError
                     {
                         Code = -32099,
-                        Message = "不支持的协议版本"
+                        Message = "not_supported"
                     }
                 };
                 return false;
@@ -244,8 +244,9 @@ namespace DevHub.Host
                 {
                     Error = new JsonRpcError
                     {
-                        Code = -32602,
-                        Message = "缺少客户端 ID"
+                        Code = -32600,
+                        Message = "invalid_request",
+                        Data = new { reason = "missing_header", header = "X-DevHub-ClientId" }
                     }
                 };
                 return false;
@@ -262,8 +263,9 @@ namespace DevHub.Host
                 {
                     Error = new JsonRpcError
                     {
-                        Code = -32602,
-                        Message = "缺少会话 ID"
+                        Code = -32600,
+                        Message = "invalid_request",
+                        Data = new { reason = "missing_header", header = "X-DevHub-ClientSessionId" }
                     }
                 };
                 return false;
@@ -282,7 +284,8 @@ namespace DevHub.Host
                     Error = new JsonRpcError
                     {
                         Code = -32001,
-                        Message = "未授权"
+                        Message = "unauthorized",
+                        Data = new { reason = "missing_token" }
                     }
                 };
                 return false;
@@ -301,7 +304,8 @@ namespace DevHub.Host
                         Error = new JsonRpcError
                         {
                             Code = -32001,
-                            Message = "无效的 token"
+                            Message = "unauthorized",
+                            Data = new { reason = "invalid_token" }
                         }
                     };
                     return false;
@@ -317,7 +321,8 @@ namespace DevHub.Host
                     Error = new JsonRpcError
                     {
                         Code = -32001,
-                        Message = "token 验证失败"
+                        Message = "unauthorized",
+                        Data = new { reason = "token_verification_failed" }
                     }
                 };
                 return false;
@@ -327,53 +332,6 @@ namespace DevHub.Host
             return true;
         }
 
-        /// <summary>
-        /// 获取服务器监听端口
-        /// </summary>
-        private static int GetServerPort(WebApplication app, ILogger<Program> logger)
-        {
-            // 动态分配端口
-            var url = "http://127.0.0.1:0";
-            app.Urls.Add(url);
 
-            logger.LogDebug("服务器将监听地址: {Url}", url);
-
-            // 创建一个任务来获取实际端口
-            var portTask = new TaskCompletionSource<int>();
-
-            app.Lifetime.ApplicationStarted.Register(() =>
-            {
-                try
-                {
-                    var addresses = app.Urls;
-                    foreach (var address in addresses)
-                    {
-                        if (address.StartsWith("http://127.0.0.1:", StringComparison.OrdinalIgnoreCase) ||
-                            address.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var portStartIndex = address.LastIndexOf(':') + 1;
-                            var portStr = address.Substring(portStartIndex);
-                            if (int.TryParse(portStr, out var port))
-                            {
-                                logger.LogInformation("服务器成功启动，监听地址: {Address}", address);
-                                portTask.TrySetResult(port);
-                                return;
-                            }
-                        }
-                    }
-
-                    var errorMsg = "无法从监听地址中解析出有效端口";
-                    logger.LogError(errorMsg);
-                    portTask.TrySetException(new InvalidOperationException(errorMsg));
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "服务器启动过程中发生异常");
-                    portTask.TrySetException(ex);
-                }
-            });
-
-            return portTask.Task.Result;
-        }
     }
 }

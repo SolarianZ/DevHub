@@ -144,7 +144,7 @@ public class NegativeTests
         response.Id.Should().Be("2");
         response.Error.Should().NotBeNull();
         response.Error.Code.Should().Be(-32602); // Invalid params
-        response.Error.Message.Should().Contain("scope 不能为 'global'");
+        response.Error.Message.Should().Be("invalid_params");
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class NegativeTests
         response.Id.Should().Be("3");
         response.Error.Should().NotBeNull();
         response.Error.Code.Should().Be(-32602); // Invalid params
-        response.Error.Message.Should().Contain("scope 不能为 'global'");
+        response.Error.Message.Should().Be("invalid_params");
     }
 
     [Fact]

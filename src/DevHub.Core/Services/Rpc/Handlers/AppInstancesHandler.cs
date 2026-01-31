@@ -35,7 +35,7 @@ public class AppInstancesHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32601,
-                    Message = "方法未找到"
+                    Message = "method_not_found"
                 }
             };
         }
@@ -79,7 +79,7 @@ public class AppInstancesHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32602,
-                        Message = "无效参数"
+                        Message = "invalid_params"
                     }
                 });
             }
@@ -96,7 +96,7 @@ public class AppInstancesHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32602,
-                        Message = "无效参数"
+                        Message = "invalid_params"
                     }
                 });
             }
@@ -111,7 +111,8 @@ public class AppInstancesHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32602,
-                        Message = "无效参数: scope 不能为 'global'"
+                        Message = "invalid_params",
+                        Data = new { reason = "scope_cannot_be_global" }
                     }
                 });
             }
@@ -143,7 +144,7 @@ public class AppInstancesHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }
@@ -198,7 +199,8 @@ public class AppInstancesHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32010,
-                        Message = "实例未找到"
+                        Message = "instance_not_found",
+                        Data = new { instanceId = instanceId }
                     }
                 });
             }
@@ -226,7 +228,7 @@ public class AppInstancesHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }
@@ -285,7 +287,7 @@ public class AppInstancesHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }
@@ -325,7 +327,8 @@ public class AppInstancesHandler : IRpcHandler
                             Error = new JsonRpcError
                             {
                                 Code = -32602,
-                                Message = "无效参数: scope 不能为 'global'"
+                                Message = "invalid_params",
+                                Data = new { reason = "scope_cannot_be_global" }
                             }
                         });
                     }
@@ -349,6 +352,7 @@ public class AppInstancesHandler : IRpcHandler
                 Id = request.Id,
                 Result = new
                 {
+                    ok = true,
                     instances = instancesList
                 }
             };
@@ -365,7 +369,7 @@ public class AppInstancesHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }

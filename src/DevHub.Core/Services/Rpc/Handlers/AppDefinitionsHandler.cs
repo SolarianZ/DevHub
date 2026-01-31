@@ -37,7 +37,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32601,
-                    Message = "方法未找到"
+                    Message = "method_not_found"
                 }
             };
         }
@@ -54,7 +54,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32601,
-                    Message = "方法未找到"
+                    Message = "method_not_found"
                 }
             }
         };
@@ -76,6 +76,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 Id = request.Id,
                 Result = new
                 {
+                    ok = true,
                     definitions = definitions
                 }
             };
@@ -92,7 +93,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }
@@ -118,7 +119,7 @@ public class AppDefinitionsHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32602,
-                        Message = "无效参数"
+                        Message = "invalid_params"
                     }
                 });
             }
@@ -150,7 +151,8 @@ public class AppDefinitionsHandler : IRpcHandler
                     Error = new JsonRpcError
                     {
                         Code = -32014,
-                        Message = "应用程序定义未找到"
+                        Message = "app_definition_not_found",
+                        Data = new { appId = appId }
                     }
                 });
             }
@@ -159,7 +161,11 @@ public class AppDefinitionsHandler : IRpcHandler
             var response = new JsonRpcResponse
             {
                 Id = request.Id,
-                Result = definition
+                Result = new
+                {
+                    ok = true,
+                    definition = definition
+                }
             };
 
             _logger.Debug("hub.apps.getDefinition方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
@@ -174,7 +180,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 Error = new JsonRpcError
                 {
                     Code = -32603,
-                    Message = "内部错误"
+                    Message = "internal_error"
                 }
             });
         }
