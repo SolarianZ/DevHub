@@ -1,7 +1,7 @@
-# DevHub Protocol Specification v1.0
+# DevHub Protocol Specification v1.0.1
 
 **Status**: Final
-**Date**: 2026-01-30
+**Date**: 2026-01-31
 **Applicability**: DevHub Hub v1.x, SDKs (any language)
 
 ---
@@ -58,7 +58,10 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 - Notifications MUST **omit** `id` (i.e., `id` MUST NOT be present)
   - `"id": null` MUST NOT be used as a “notification marker”
 - `params` MAY be omitted
-- Batch requests (`array` root) MUST NOT be supported; Hub MUST return `-32600 invalid_request`
+- Batch requests (`array` root) MUST NOT be supported.
+  - If the incoming JSON root is an array, Hub MUST return a **single** JSON-RPC error response with:
+    - `error.code = -32600` (`invalid_request`)
+    - `id = null`
 
 #### 3.1.2 Notification (Client → Server or Server → Client on WS)
 ```json
@@ -110,10 +113,19 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 
 | Property          | Requirement                                                   |
 | ----------------- | ------------------------------------------------------------- |
-| Endpoint          | `/ws` (base URL from `hub.json`)                              |
+| Endpoint          | Connect to `wsUrl` from `hub.json` (use it as-is)             |
 | Authentication    | MUST use `hub.ws.authenticate` as first message               |
-| Pre-auth behavior | MUST reject all non-auth methods with `-32001 unauthorized`   |
+| Pre-auth behavior | MUST reject all non-auth methods with `-32001 unauthorized` **when an `id` is present** |
 | Message format    | JSON-RPC 2.0 objects; server MAY send notifications post-auth |
+
+**Pre-auth processing order (Normative)**:
+1. Hub MUST parse JSON text.
+   - On parse failure: return `-32700 parse_error` with `id: null` (then MAY close the connection).
+2. Hub MUST validate JSON-RPC envelope structure.
+   - If invalid: return `-32600 invalid_request` (use `id: null` when `id` cannot be determined; then MAY close).
+3. If the message is a JSON-RPC request/notification with `method != hub.ws.authenticate` and the connection is not authenticated:
+   - If `id` is present: return `-32001 unauthorized`.
+   - If `id` is absent (notification): Hub MUST close the connection (since it cannot send a JSON-RPC error response).
 
 ---
 
@@ -126,12 +138,13 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 - SDKs SHOULD support overriding the runtime directory via environment variable `DEVHUB_RUNTIME_DIR` (primarily for test harnesses / portable installs).
 
 #### 4.1.2 `hub.json` (Discovery file)
-Hub MUST write a discovery file at `${runtimeDir}\hub.json` containing at least:
+Hub MUST write a discovery file at `${runtimeDir}\hub.json`. This file MUST validate against the `HubRuntime` schema defined in §5.4.
 
+Example:
 ```json
 {
   "protocolVersion": 1,
-  "hubVersion": "1.0.0",
+  "hubVersion": "1.0.1",
   "pid": 47231,
   "httpBaseUrl": "http://127.0.0.1:47231",
   "wsUrl": "ws://127.0.0.1:47231/ws",
@@ -143,12 +156,12 @@ Hub MUST write a discovery file at `${runtimeDir}\hub.json` containing at least:
 Normative requirements:
 - `protocolVersion` MUST be `1` for this spec.
 - `httpBaseUrl` MUST NOT include trailing slash.
+- `wsUrl` MUST be an absolute WebSocket URL (`ws://` or `wss://`) and MUST NOT include trailing slash.
 - `httpBaseUrl` and `wsUrl` MUST point to loopback (`127.0.0.1` and/or `localhost`; implementations MAY use `::1` additionally).
 - `tokenFile` MUST be an absolute path.
 - Hub MUST update `hub.json` atomically (write temp + replace) to avoid torn reads.
 - `hub.json` MUST have OS ACL restricting access to the current user only.
-
-Clients MUST use `hub.json` as the authoritative endpoint source and MUST NOT assume a fixed port.
+- Clients MUST use `hub.json` as the authoritative endpoint source and MUST NOT assume a fixed port or fixed WS path.
 
 #### 4.1.3 `token.txt`
 - Default location: `${runtimeDir}\token.txt` (also discoverable via `hub.json.tokenFile`)
@@ -169,9 +182,9 @@ Clients MUST use `hub.json` as the authoritative endpoint source and MUST NOT as
 | Header                     | Format           | Description                                                                 |
 | -------------------------- | ---------------- | --------------------------------------------------------------------------- |
 | `Authorization`            | `Bearer {token}` | Token read from `hub.json.tokenFile` (or default `${runtimeDir}\token.txt`) |
-| `X-DevHub-Protocol`        | `1`              | Protocol version; MUST be `1`                                               |
+| `X-DevHub-Protocol`        | `"1"`            | Protocol version; HTTP header values are strings; MUST be exactly `"1"`     |
 | `X-DevHub-ClientId`        | string           | Logical client identity (`DevHubUI`, `VSPlugin`, etc.)                      |
-| `X-DevHub-ClientSessionId` | UUID-like string | Session identifier; MUST change on client restart                           |
+| `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID; MUST change on client restart                                |
 
 Missing/invalid headers MUST be handled as:
 - Missing/invalid `Authorization`: `-32001 unauthorized`
@@ -191,7 +204,7 @@ sequenceDiagram
     C->>S: WebSocket connect
     C->>S: {"jsonrpc":"2.0","id":1,"method":"hub.ws.authenticate","params":{...}}
     alt token valid & protocolVersion==1
-        S-->>C: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}
+        S-->>C: {"jsonrpc":"2.0","id":1,"result":{"ok":true, "protocolVersion": 1}}
         C->>S: Any method (e.g., hub.events.subscribe)
     else invalid token
         S-->>C: {"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"unauthorized"}}
@@ -205,9 +218,9 @@ sequenceDiagram
 ---
 
 ### 4.4 Security Boundary
-- `token.txt` and `hub.json` MUST have OS ACL restricting to current user only (Windows: read access for current user only)
 - Hub MUST listen ONLY on loopback (`127.0.0.1` / `localhost` and/or `::1`)
 - Cross-user access MUST NOT be supported in v1 (token is the boundary)
+- File ACL requirements for `token.txt` and `hub.json` are normative in §4.1.2 and §4.1.3.
 
 ---
 
@@ -254,7 +267,7 @@ sequenceDiagram
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://devhub.spec/v1/app-instance.json",
   "type": "object",
-  "required": ["instanceId", "appId", "pid", "registeredAtUtc", "lastSeenUtc", "endpoints"],
+  "required": ["instanceId", "appId", "pid", "registeredAtUtc", "lastSeenUtc", "invoke"],
   "properties": {
     "instanceId": {
       "type": "string",
@@ -266,7 +279,38 @@ sequenceDiagram
     "pid": { "type": "integer", "minimum": 1 },
     "registeredAtUtc": { "type": "string", "format": "date-time" },
     "lastSeenUtc": { "type": "string", "format": "date-time" },
-    "endpoints": {
+    "invoke": {
+      "type": "object",
+      "required": ["poll", "respond"],
+      "properties": {
+        "poll": { "type": "boolean" },
+        "respond": { "type": "boolean" }
+      }
+    },
+    "meta": { "type": "object" }
+  }
+}
+```
+
+#### 5.2.1 AppInstanceRegistration (Normative)
+`hub.apps.registerInstance.params.instance` MUST conform to the following shape (server-managed timestamps omitted):
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/app-instance-registration.json",
+  "type": "object",
+  "required": ["instanceId", "appId", "pid", "invoke"],
+  "properties": {
+    "instanceId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[a-zA-Z0-9._:-]+$"
+    },
+    "appId": { "type": "string" },
+    "scope": { "type": ["string", "null"] },
+    "pid": { "type": "integer", "minimum": 1 },
+    "invoke": {
       "type": "object",
       "required": ["poll", "respond"],
       "properties": {
@@ -303,7 +347,7 @@ sequenceDiagram
       }
     },
     "method": { "type": "string" },
-    "params": { "type": ["object", "array"] },
+    "args": { "type": ["object", "array"] },
     "kind": { "type": "string", "enum": ["request", "notify"] },
     "createdAtUtc": { "type": "string", "format": "date-time" },
     "options": {
@@ -373,11 +417,17 @@ sequenceDiagram
 
 ### 6.1 Conventions (Normative)
 - All `hub.*` methods MUST use **object** params (named params). If params is an array, Hub MUST return `-32602 invalid_params`.
-- Unless explicitly specified otherwise, success responses MUST have `result` shaped as:
+- For all successful `hub.*` calls, `result` MUST be a JSON object containing at least:
   ```json
   { "ok": true }
   ```
+  Additional fields MAY be included.
 - All errors MUST be returned using JSON-RPC `error` object as defined in §8.
+
+**Terminology (Normative)**:
+- “`target.scope` specified” means `target.scope` is a **non-empty string** (and it MUST also be valid per §5.5).
+- “`target.instanceId` specified” means `target.instanceId` is a **non-null string**.
+  - Empty string SHOULD be rejected as `-32602 invalid_params`.
 
 ### 6.2 Method Matrix
 
@@ -458,21 +508,22 @@ Clients MUST generate `instanceId` such that it is unique per process lifetime (
     "instanceId": "inst-123",
     "scope": null,
     "pid": 12345,
-    "endpoints": { "poll": true, "respond": true },
+    "invoke": { "poll": true, "respond": true },
     "meta": {}
   }
 }
 ```
 
+Normative requirements:
+- `params.instance` MUST conform to `AppInstanceRegistration` (§5.2.1).
+- Hub MUST set `registeredAtUtc` and `lastSeenUtc` server-side.
+- Hub MUST update `lastSeenUtc` on every successful `registerInstance`.
+- Hub MUST validate `scope` per §5.5 and (if definition exists) enforce `AppDefinition.scopePolicy`. Violations MUST return `-32002 forbidden`.
+
 **Result**:
 ```json
 { "ok": true, "instance": { /* AppInstance */ } }
 ```
-
-Normative behavior:
-- Hub MUST set `registeredAtUtc` and `lastSeenUtc` server-side.
-- Hub MUST update `lastSeenUtc` on every successful `registerInstance`.
-- Hub MUST validate `scope` per §5.5 and (if definition exists) enforce `AppDefinition.scopePolicy`. Violations MUST return `-32002 forbidden`.
 
 #### 6.3.6 `hub.apps.heartbeat` (HTTP only)
 **Params**:
@@ -529,13 +580,15 @@ Normative behavior:
 **Result**:
 ```json
 {
-  "status": "started | starting | already_running",
+  "ok": true,
+  "status": "started",
   "pid": 12345,
   "launchId": "..."
 }
 ```
 
 Normative behavior:
+- `status` MUST be one of: `started`, `starting`, `already_running`.
 - “Already running” is defined as “an **online** registered instance exists matching `appId` and `scope`” OR “a launch with the same `dedupeKey` is in progress.”
 - Hub MUST maintain a dedupe window (default 30 seconds) for `dedupeKey`. During this window, concurrent launches with the same key MUST return `already_running`.
 - If `dedupeKey` is omitted, Hub MUST generate it using `AppDefinition.launch.dedupeKeyTemplate`.
@@ -555,7 +608,7 @@ Normative behavior:
   "appId": "test.app",
   "target": { "scope": null, "instanceId": null },
   "method": "test.ping",
-  "params": {},
+  "args": {},
   "options": {
     "ttlMs": 60000,
     "queueIfOffline": true,
@@ -566,13 +619,14 @@ Normative behavior:
 
 **Result**:
 ```json
-{ "accepted": true, "invocationId": "invk-..." }
+{ "ok": true, "invocationId": "invk-..." }
 ```
 
-Validation:
-- If `options.autoLaunch==true`, then `options.queueIfOffline` MUST be `true` (else `-32602 invalid_params`).
-- If `target.instanceId` is provided, `options.autoLaunch` MUST be `false` (else `-32602 invalid_params`).
-- Default values if omitted: `ttlMs=60000`, `queueIfOffline=true`, `autoLaunch=true`.
+Validation & Defaults:
+- Default values if omitted: `ttlMs=60000`, `queueIfOffline=true`.
+- `autoLaunch` defaults to `true`, **unless** `target.instanceId` is **specified** (non-null string), in which case it defaults to `false`.
+- If `target.instanceId` is **specified** AND `options.autoLaunch` is explicitly set to `true`, Hub MUST return `-32602 invalid_params`.
+- If `options.autoLaunch` is true, then `options.queueIfOffline` MUST be true (else `-32602 invalid_params`).
 
 #### 6.3.11 `hub.invoke.request` (HTTP only)
 **Params**: same shape as `hub.invoke.notify`, plus:
@@ -587,7 +641,7 @@ Validation:
 
 **Success Result**:
 ```json
-{ "invocationId": "invk-...", "value": {} }
+{ "ok": true, "invocationId": "invk-...", "value": {} }
 ```
 
 **Errors**:
@@ -616,14 +670,13 @@ Validation:
 {
   "ok": true,
   "serverTimeUtc": "2026-01-30T12:34:56Z",
-  "leaseSeconds": 30,
   "items": [
     {
       "invocationId": "invk-...",
       "appId": "test.app",
       "target": { "scope": null, "instanceId": null },
       "method": "test.ping",
-      "params": {},
+      "args": {},
       "kind": "notify",
       "createdAtUtc": "2026-01-30T12:34:56Z",
       "caller": { "clientId": "DevHubUI", "clientSessionId": "..." },
@@ -636,9 +689,10 @@ Validation:
 
 Normative behavior:
 - Hub MUST require the instance to be registered (`hub.apps.registerInstance`) before polling; otherwise `-32010 instance_not_found`.
-- Hub MUST enforce that the instance has `endpoints.poll==true`; otherwise `-32002 forbidden`.
+- Hub MUST enforce that the instance has `invoke.poll==true`; otherwise `-32002 forbidden`.
 - Hub MUST support Long Polling: if no items are available, Hub MUST wait up to `waitMs` before returning an empty list.
 - Successful `poll` MUST update the instance’s `lastSeenUtc`.
+- The lease duration is returned inside each item's `delivery.leaseSeconds`.
 
 #### 6.3.13 `hub.invoke.respond` (HTTP only)
 **Params** (exactly one of `value` or `error` MUST be present):
@@ -664,12 +718,15 @@ Error response from callee:
 { "ok": true }
 ```
 
+Normative behavior:
+- Hub MUST require the instance to be registered; otherwise `-32010 instance_not_found`.
+- Hub MUST enforce that the instance has `invoke.respond==true`; otherwise `-32002 forbidden`.
+- Successful `respond` MUST update the instance’s `lastSeenUtc`.
+
 **Errors**:
 - `-32030 delivery_conflict` if lease is invalid/expired, wrong instance responds, or duplicate respond
 - `-32011 invocation_expired` if invocation is expired/canceled/timeout
 - `-32602 invalid_params` on malformed payload
-
-Successful `respond` MUST update the instance’s `lastSeenUtc`.
 
 #### 6.3.14 `hub.events.subscribe` (WS only)
 **Params**:
@@ -810,19 +867,19 @@ stateDiagram-v2
 
 ### 8.2 DevHub-Specific Errors
 
-| Code   | Name                       | When to Return                                      | `data` Fields (object)                                                            |
-| ------ | -------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| -32001 | `unauthorized`             | Invalid/missing token                               | `reason: "missing_token"                                                          | "invalid_token"`         |
-| -32002 | `forbidden`                | ScopePolicy violation / disallowed operation        | `reason: "scope_policy_violation"                                                 | "rpc_disabled"           | "poll_not_enabled"`, plus context fields |
-| -32010 | `instance_not_found`       | No route + !queueIfOffline / unknown instance       | `reason: "offline_no_queue"                                                       | "unknown_instance"       | "target_instance_missing"`               |
-| -32011 | `invocation_expired`       | TTL elapsed / canceled invocation used late         | `invocationId?: string`, `elapsedMs?: number`                                     |
-| -32012 | `invocation_timeout`       | `waitTimeoutMs` elapsed (request only)              | `invocationId?: string`, `elapsedMs: number`                                      |
-| -32014 | `app_definition_not_found` | Definition file missing / required for launch       | `appId?: string`                                                                  |
-| -32020 | `launch_failed`            | Process start failed / launch config unusable       | `reason?: string`, `exitCode?: number                                             | null`, `stderr?: string` |
-| -32030 | `delivery_conflict`        | Duplicate respond or lease violation                | `currentLeaseHolder?: string`, `invocationId?: string`                            |
-| -32040 | `rate_limited`             | Rate limit or resource cap exceeded                 | `reason?: string`                                                                 |
-| -32050 | `invocation_failed`        | Callee responded with application error (request)   | `invocationId: string`, `calleeError: { code:int, message:string, data?:object }` |
-| -32099 | `not_supported`            | Protocol version mismatch / missing protocol header | `expected: 1`, `received?: string                                                 | number                   | null`, `reason: "missing"                | "mismatch"` |
+| Code   | Name                       | When to Return                                      | `error.data` (object)                                                                                                      |
+| ------ | -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| -32001 | `unauthorized`             | Invalid/missing token                               | `reason`: `"missing_token"` or `"invalid_token"`                                                                           |
+| -32002 | `forbidden`                | ScopePolicy violation / disallowed operation        | `reason`: `"scope_policy_violation"`, `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; plus context fields |
+| -32010 | `instance_not_found`       | No route + !queueIfOffline / unknown instance       | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                          |
+| -32011 | `invocation_expired`       | TTL elapsed / canceled invocation used late         | `invocationId?`: string; `elapsedMs?`: number                                                                              |
+| -32012 | `invocation_timeout`       | `waitTimeoutMs` elapsed (request only)              | `invocationId?`: string; `elapsedMs`: number                                                                               |
+| -32014 | `app_definition_not_found` | Definition file missing / required for launch       | `appId?`: string                                                                                                           |
+| -32020 | `launch_failed`            | Process start failed / launch config unusable       | `reason?`: string; `exitCode?`: number or null; `stderr?`: string                                                          |
+| -32030 | `delivery_conflict`        | Duplicate respond or lease violation                | `currentLeaseHolder?`: string; `invocationId?`: string                                                                     |
+| -32040 | `rate_limited`             | Rate limit or resource cap exceeded                 | `reason?`: string                                                                                                          |
+| -32050 | `invocation_failed`        | Callee responded with application error (request)   | `invocationId`: string; `calleeError`: `{ code:int, message:string, data?:object }`                                        |
+| -32099 | `not_supported`            | Protocol version mismatch / missing protocol header | `expected`: 1; `received?`: string/number/null; `reason`: `"missing"` or `"mismatch"`                                      |
 
 > **Note**: `-32013 instance_offline` is intentionally omitted; use `-32010 instance_not_found` with `data.reason` for diagnostics.
 
@@ -892,7 +949,7 @@ Each test vector MUST be a JSON file with:
       "appId": "test.app",
       "target": { "scope": null },
       "method": "test.ping",
-      "params": {},
+      "args": {},
       "options": {
         "ttlMs": 5000,
         "waitTimeoutMs": 10000
@@ -967,5 +1024,5 @@ PASS  auth.missing_token_returns_unauthorized
 PASS  auth.invalid_protocol_version
 ...
 FAIL  invocation.request.timeout.wait_exceeds_ttl
-      Expected error.code=-32602, got 200 with result.accepted=true
+      Expected error.code=-32602, got 200 with result.ok=true
 ```
