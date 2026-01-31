@@ -13,7 +13,9 @@
       "Bash(taskkill:*)",
       "Bash(xcopy:*)",
       "Bash(ren:*)",
-      "Bash(move:*)"
+      "Bash(move:*)",
+      "Bash(dir:*)",
+      "Bash(dotnet add:*)"
     ]
   }
 }

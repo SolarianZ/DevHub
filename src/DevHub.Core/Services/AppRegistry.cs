@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services;
 
@@ -10,6 +11,12 @@ public class AppRegistry
 {
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
     private readonly TimeSpan _onlineThreshold = TimeSpan.FromSeconds(30);
+    private readonly ILogger<AppRegistry> _logger;
+
+    public AppRegistry(ILogger<AppRegistry> logger)
+    {
+        _logger = logger;
+    }
 
     /// <summary>
     /// 注册或更新应用程序实例
@@ -40,9 +47,11 @@ public class AppRegistry
             existing.Endpoints = instance.Endpoints;
             existing.Meta = instance.Meta;
 
+            _logger.LogInformation("已更新应用程序实例: {InstanceId} (AppId: {AppId})", instance.InstanceId, instance.AppId);
             return existing;
         });
 
+        _logger.LogInformation("已注册应用程序实例: {InstanceId} (AppId: {AppId})", instance.InstanceId, instance.AppId);
         return instanceToRegister;
     }
 
@@ -54,9 +63,11 @@ public class AppRegistry
         if (_instances.TryGetValue(instanceId, out var instance))
         {
             instance.LastSeenUtc = DateTime.UtcNow;
+            _logger.LogDebug("心跳更新: {InstanceId}", instanceId);
             return true;
         }
 
+        _logger.LogWarning("心跳更新失败: 未找到实例 {InstanceId}", instanceId);
         return false;
     }
 
@@ -65,7 +76,14 @@ public class AppRegistry
     /// </summary>
     public bool UnregisterInstance(string instanceId)
     {
-        return _instances.TryRemove(instanceId, out _);
+        if (_instances.TryRemove(instanceId, out var removedInstance))
+        {
+            _logger.LogInformation("已注销应用程序实例: {InstanceId} (AppId: {AppId})", instanceId, removedInstance.AppId);
+            return true;
+        }
+
+        _logger.LogWarning("注销失败: 未找到实例 {InstanceId}", instanceId);
+        return false;
     }
 
     /// <summary>

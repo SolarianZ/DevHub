@@ -314,67 +314,67 @@
 > 以“按功能闭环、随时可运行”为原则。
 
 ### Day 0.5：工程脚手架 + 单实例 + 文件系统
-- [ ] 创建项目（Minimal API）
-- [ ] Mutex 单实例
-- [ ] 初始化目录结构
-- [ ] token 生成/读取（写 `token.txt`）
-- [ ] 启动监听 localhost，拿到端口
-- [ ] 原子写 `hub.json`
+- [x] 创建项目（Minimal API）
+- [x] Mutex 单实例
+- [x] 初始化目录结构
+- [x] token 生成/读取（写 `token.txt`）
+- [x] 启动监听 localhost，拿到端口
+- [x] 原子写 `hub.json`
 
 ### Day 1：`/rpc` JSON-RPC + 鉴权 + `hub.ping`
-- [ ] 实现 `POST /rpc`：解析 JSON-RPC request
-- [ ] 校验 headers（token/protocol/clientId/sessionId）
-- [ ] 实现 `hub.ping`
-- [ ] 统一错误返回（200 + JSON-RPC error）
+- [x] 实现 `POST /rpc`：解析 JSON-RPC request
+- [x] 校验 headers（token/protocol/clientId/sessionId）
+- [x] 实现 `hub.ping`
+- [x] 统一错误返回（200 + JSON-RPC error）
 
 ### Day 1.5：AppDefinition（list/get）
-- [ ] 启动加载 definitions 目录
-- [ ] `hub.apps.listDefinitions`
-- [ ] `hub.apps.getDefinition` + `app_definition_not_found`
+- [x] 启动加载 definitions 目录
+- [x] `hub.apps.listDefinitions`
+- [x] `hub.apps.getDefinition` + `app_definition_not_found`
 
 ### Day 2：AppInstance Registry（register/heartbeat/unregister/list）
-- [ ] 内存 registry + 线程安全
-- [ ] registerInstance（upsert + lastSeen）
-- [ ] heartbeat（lastSeen + serverTimeUtc）
-- [ ] unregister（幂等）
-- [ ] listInstances（scope/includeAllScopes + 在线过滤）
+- [x] 内存 registry + 线程安全
+- [x] registerInstance（upsert + lastSeen）
+- [x] heartbeat（lastSeen + serverTimeUtc）
+- [x] unregister（幂等）
+- [x] listInstances（scope/includeAllScopes + 在线过滤）
 
 ### Day 3：测试脚本 + 稳定性修补
-- [ ] 集成测试脚本（curl/.http/python均可）
-- [ ] 覆盖负面用例（缺 token、协议版本不对、method 不存在、params 缺失）
-- [ ] 日志完善与小 bug 修复
+- [x] 集成测试脚本（curl/.http/python均可）
+- [x] 覆盖负面用例（缺 token、协议版本不对、method 不存在、params 缺失）
+- [x] 日志完善与小 bug 修复
 
 ---
 
 ## 11. M1 验收用例（最小可验收）
 
 ### 11.1 启动与发现
-- [ ] 启动后生成：
+- [x] 启动后生成：
   - `%LOCALAPPDATA%\DevHub\runtime\token.txt`
   - `%LOCALAPPDATA%\DevHub\runtime\hub.json`
-- [ ] `hub.json` 中 `httpBaseUrl` 可访问
+- [x] `hub.json` 中 `httpBaseUrl` 可访问
 
 ### 11.2 鉴权与协议版本
-- [ ] 调用 `hub.ping`：
+- [x] 调用 `hub.ping`：
   - 带正确 token -> ok + `serverTimeUtc`
   - 缺 token 或错误 token -> `unauthorized (-32001)`
-- [ ] `X-DevHub-Protocol != 1` -> `not_supported (-32099)`
-- [ ] 缺少 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId` -> `invalid_params (-32602)`
+- [x] `X-DevHub-Protocol != 1` -> `not_supported (-32099)`
+- [x] 缺少 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId` -> `invalid_params (-32602)`
 
 ### 11.3 AppDefinition
-- [ ] `apps/definitions/*.json` 中放入至少一个定义文件
-- [ ] `hub.apps.listDefinitions` 返回该定义
-- [ ] `hub.apps.getDefinition`：
+- [x] `apps/definitions/*.json` 中放入至少一个定义文件
+- [x] `hub.apps.listDefinitions` 返回该定义
+- [x] `hub.apps.getDefinition`：
   - 存在 -> 返回 definition
   - 不存在 -> `app_definition_not_found (-32014)`
 
 ### 11.4 AppInstance
-- [ ] `hub.apps.registerInstance` 注册后：
+- [x] `hub.apps.registerInstance` 注册后：
   - `hub.apps.listInstances` 能看到在线实例
   - lastSeenUtc 为当前时间附近
-- [ ] `hub.apps.heartbeat` 更新 lastSeenUtc（且返回 serverTimeUtc）
-- [ ] 超过 30s 不 heartbeat：listInstances 不再返回该实例（但不要求立即从内存删除）
-- [ ] `hub.apps.unregisterInstance` 后：listInstances 不再返回
+- [x] `hub.apps.heartbeat` 更新 lastSeenUtc（且返回 serverTimeUtc）
+- [x] 超过 30s 不 heartbeat：listInstances 不再返回该实例（但不要求立即从内存删除）
+- [x] `hub.apps.unregisterInstance` 后：listInstances 不再返回
 
 ---
 

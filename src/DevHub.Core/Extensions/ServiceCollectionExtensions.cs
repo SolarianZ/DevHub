@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDevHubCore(this IServiceCollection services, string definitionsPath)
     {
         // 注册核心服务
+        services.AddSingleton<FileSystemManager>();
         services.AddSingleton<AppRegistry>();
         services.AddSingleton<DefinitionLoader>(sp =>
         {
