@@ -111,12 +111,12 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 
 ### 3.3 WebSocket Transport
 
-| Property          | Requirement                                                   |
-| ----------------- | ------------------------------------------------------------- |
-| Endpoint          | Connect to `wsUrl` from `hub.json` (use it as-is)             |
-| Authentication    | MUST use `hub.ws.authenticate` as first message               |
+| Property          | Requirement                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| Endpoint          | Connect to `wsUrl` from `hub.json` (use it as-is)                                       |
+| Authentication    | MUST use `hub.ws.authenticate` as first message                                         |
 | Pre-auth behavior | MUST reject all non-auth methods with `-32001 unauthorized` **when an `id` is present** |
-| Message format    | JSON-RPC 2.0 objects; server MAY send notifications post-auth |
+| Message format    | JSON-RPC 2.0 objects; server MAY send notifications post-auth                           |
 
 **Pre-auth processing order (Normative)**:
 1. Hub MUST parse JSON text.
