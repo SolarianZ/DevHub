@@ -190,11 +190,8 @@ curl -X POST "http://127.0.0.1:{port}/rpc" \
 ## Important Notes
 
 1. **Protocol compliance is critical.** The M1-M6 milestones have specific acceptance criteria. Any implementation must pass the conformance tests defined in the specification.
-
 2. **Scope isolation is strict.** There is NO fallback from scoped to global - this is a key architectural decision to prevent workspace cross-contamination.
-
 3. **HTTP always returns 200.** Even for auth failures or parameter errors - errors are signaled via JSON-RPC error codes.
-
 4. **Token is per-session.** Hub generates a new token on each startup. Clients must re-read `token.txt` after Hub restart.
-
 5. **使用 .slnx 代替 .sln** 解决方案文件使用新版 `.slnx` 文件，不使用旧的 `.sln` 文件。
+6. **注意动态端口号** DevHub每次启动时随机分配端口。执行测试时，记得从discovery file中读取实际端口号。

@@ -10,17 +10,17 @@ using Moq;
 
 public class UnitTest1
 {
-    private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
-    private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
-    private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
-    private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsLogger;
+    private readonly Mock<ILoggerService> _mockFsLogger;
+    private readonly Mock<ILoggerService> _mockDefinitionLogger;
+    private readonly Mock<ILoggerService> _mockRegistryLogger;
+    private readonly Mock<ILoggerService> _mockDefinitionsLogger;
 
     public UnitTest1()
     {
-        _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
-        _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
-        _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
-        _mockDefinitionsLogger = new Mock<ILogger<AppDefinitionsHandler>>();
+        _mockFsLogger = new Mock<ILoggerService>();
+        _mockDefinitionLogger = new Mock<ILoggerService>();
+        _mockRegistryLogger = new Mock<ILoggerService>();
+        _mockDefinitionsLogger = new Mock<ILoggerService>();
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class UnitTest1
     public void HubPingHandler_ShouldReturnCorrectResponse()
     {
         // Arrange
-        var handler = new HubPingHandler();
+        var handler = new HubPingHandler(_mockDefinitionsLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "1",

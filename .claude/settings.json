@@ -16,7 +16,8 @@
       "Bash(ren:*)",
       "Bash(move:*)",
       "Bash(dir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(timeout:*)"
     ]
   }
 }

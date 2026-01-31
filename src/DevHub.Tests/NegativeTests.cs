@@ -11,19 +11,19 @@ using FluentAssertions;
 
 public class NegativeTests
 {
-    private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
-    private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
-    private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
-    private readonly Mock<ILogger<AppInstancesHandler>> _mockInstancesLogger;
-    private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsLogger;
+    private readonly Mock<ILoggerService> _mockFsLogger;
+    private readonly Mock<ILoggerService> _mockDefinitionLogger;
+    private readonly Mock<ILoggerService> _mockRegistryLogger;
+    private readonly Mock<ILoggerService> _mockInstancesLogger;
+    private readonly Mock<ILoggerService> _mockDefinitionsLogger;
 
     public NegativeTests()
     {
-        _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
-        _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
-        _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
-        _mockInstancesLogger = new Mock<ILogger<AppInstancesHandler>>();
-        _mockDefinitionsLogger = new Mock<ILogger<AppDefinitionsHandler>>();
+        _mockFsLogger = new Mock<ILoggerService>();
+        _mockDefinitionLogger = new Mock<ILoggerService>();
+        _mockRegistryLogger = new Mock<ILoggerService>();
+        _mockInstancesLogger = new Mock<ILoggerService>();
+        _mockDefinitionsLogger = new Mock<ILoggerService>();
     }
 
     [Fact]
