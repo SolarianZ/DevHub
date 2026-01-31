@@ -13,12 +13,14 @@ public class UnitTest1
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
     private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
+    private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsLogger;
 
     public UnitTest1()
     {
         _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
         _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
         _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
+        _mockDefinitionsLogger = new Mock<ILogger<AppDefinitionsHandler>>();
     }
 
     [Fact]
@@ -169,7 +171,7 @@ public class UnitTest1
     {
         // Arrange
         var mockDefinitionLoader = new Mock<DefinitionLoader>(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
-        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object);
+        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "2",

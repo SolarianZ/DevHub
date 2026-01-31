@@ -30,4 +30,10 @@ public class HubRuntime
     /// </summary>
     [JsonPropertyName("startedAtUtc")]
     public required DateTime StartedAtUtc { get; set; }
+
+    /// <summary>
+    /// Token文件路径
+    /// </summary>
+    [JsonPropertyName("tokenFile")]
+    public required string TokenFile { get; set; }
 }

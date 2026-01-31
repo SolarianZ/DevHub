@@ -1,5 +1,6 @@
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
@@ -10,10 +11,12 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 public class AppInstancesHandler : IRpcHandler
 {
     private readonly AppRegistry _appRegistry;
+    private readonly ILogger<AppInstancesHandler> _logger;
 
-    public AppInstancesHandler(AppRegistry appRegistry)
+    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger)
     {
         _appRegistry = appRegistry;
+        _logger = logger;
     }
 
     public string Method => "hub.apps";
@@ -91,6 +94,20 @@ public class AppInstancesHandler : IRpcHandler
                 });
             }
 
+            // 验证 scope 参数
+            if (instance.Scope == "global")
+            {
+                return Task.FromResult(new JsonRpcResponse
+                {
+                    Id = request.Id,
+                    Error = new JsonRpcError
+                    {
+                        Code = -32602,
+                        Message = "无效参数: scope 不能为 'global'"
+                    }
+                });
+            }
+
             _appRegistry.RegisterInstance(instance);
 
             var response = new JsonRpcResponse
@@ -106,6 +123,7 @@ public class AppInstancesHandler : IRpcHandler
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "处理hub.apps.registerInstance方法失败，请求参数: {Params}", request.Params);
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,
@@ -139,9 +157,8 @@ public class AppInstancesHandler : IRpcHandler
                 });
             }
 
-            var instanceId = instanceIdObj.ToString();
-
-            if (!_appRegistry.Heartbeat(instanceId))
+            var instanceId = instanceIdObj?.ToString();
+            if (string.IsNullOrEmpty(instanceId) || !_appRegistry.Heartbeat(instanceId))
             {
                 return Task.FromResult(new JsonRpcResponse
                 {
@@ -168,6 +185,7 @@ public class AppInstancesHandler : IRpcHandler
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "处理hub.apps.heartbeat方法失败，请求参数: {Params}", request.Params);
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,
@@ -201,8 +219,11 @@ public class AppInstancesHandler : IRpcHandler
                 });
             }
 
-            var instanceId = instanceIdObj.ToString();
-            _appRegistry.UnregisterInstance(instanceId);
+            var instanceId = instanceIdObj?.ToString();
+            if (!string.IsNullOrEmpty(instanceId))
+            {
+                _appRegistry.UnregisterInstance(instanceId);
+            }
 
             var response = new JsonRpcResponse
             {
@@ -217,6 +238,7 @@ public class AppInstancesHandler : IRpcHandler
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "处理hub.apps.unregisterInstance方法失败，请求参数: {Params}", request.Params);
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,
@@ -251,6 +273,19 @@ public class AppInstancesHandler : IRpcHandler
                 if (parameters.TryGetValue("scope", out var scopeObj))
                 {
                     scope = scopeObj?.ToString();
+                    // 验证 scope 参数
+                    if (scope == "global")
+                    {
+                        return Task.FromResult(new JsonRpcResponse
+                        {
+                            Id = request.Id,
+                            Error = new JsonRpcError
+                            {
+                                Code = -32602,
+                                Message = "无效参数: scope 不能为 'global'"
+                            }
+                        });
+                    }
                 }
 
                 if (parameters.TryGetValue("includeAllScopes", out var includeAllScopesObj) && includeAllScopesObj is bool value)
@@ -274,6 +309,7 @@ public class AppInstancesHandler : IRpcHandler
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "处理hub.apps.listInstances方法失败，请求参数: {Params}", request.Params);
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,

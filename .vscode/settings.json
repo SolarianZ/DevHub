@@ -10,5 +10,6 @@
         "**/obj": true,
         "**/.vs": true,
         "**/.idea": true
-    }
+    },
+    "dotnet.defaultSolution": "src/DevHub.slnx"
 }

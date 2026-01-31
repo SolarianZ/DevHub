@@ -7,15 +7,55 @@ namespace DevHub.Core.Services;
 /// <summary>
 /// 应用程序实例注册表
 /// </summary>
-public class AppRegistry
+public class AppRegistry : IDisposable
 {
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
     private readonly TimeSpan _onlineThreshold = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
     private readonly ILogger<AppRegistry> _logger;
+    private readonly Timer _cleanupTimer;
+    private bool _disposed = false;
 
     public AppRegistry(ILogger<AppRegistry> logger)
     {
         _logger = logger;
+        // 每60秒执行一次清理
+        _cleanupTimer = new Timer(OnCleanupTimer, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    /// <summary>
+    /// 清理过期实例的定时器回调
+    /// </summary>
+    /// <param name="state">状态参数</param>
+    private void OnCleanupTimer(object? state)
+    {
+        CleanupExpiredInstances();
+    }
+
+    /// <summary>
+    /// 清理过期实例（lastSeenUtc 超过 1 小时）
+    /// </summary>
+    private void CleanupExpiredInstances()
+    {
+        var now = DateTime.UtcNow;
+        var expiredInstanceIds = _instances.Values
+            .Where(i => now - i.LastSeenUtc > _cleanupThreshold)
+            .Select(i => i.InstanceId)
+            .ToList();
+
+        foreach (var instanceId in expiredInstanceIds)
+        {
+            if (_instances.TryRemove(instanceId, out var removedInstance))
+            {
+                _logger.LogInformation("已清理过期应用程序实例: {InstanceId} (AppId: {AppId})",
+                    instanceId, removedInstance.AppId);
+            }
+        }
+
+        if (expiredInstanceIds.Count > 0)
+        {
+            _logger.LogInformation("清理完成，共移除 {Count} 个过期实例", expiredInstanceIds.Count);
+        }
     }
 
     /// <summary>
@@ -121,5 +161,39 @@ public class AppRegistry
     public AppInstance? GetInstance(string instanceId)
     {
         return _instances.TryGetValue(instanceId, out var instance) ? instance : null;
+    }
+
+    /// <summary>
+    /// 释放资源
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 释放资源（内部实现）
+    /// </summary>
+    /// <param name="disposing">是否正在释放托管资源</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            _cleanupTimer.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    /// <summary>
+    /// 析构函数
+    /// </summary>
+    ~AppRegistry()
+    {
+        Dispose(false);
     }
 }

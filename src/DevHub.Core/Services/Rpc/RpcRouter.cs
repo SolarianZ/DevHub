@@ -34,6 +34,7 @@ public class RpcRouter
     /// </summary>
     public async Task<JsonRpcResponse> RouteAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
+        // 首先尝试精确匹配
         if (_handlers.TryGetValue(request.Method, out var handler))
         {
             try
@@ -48,8 +49,27 @@ public class RpcRouter
         }
         else
         {
-            _logger.LogWarning("未找到RPC方法: {Method}", request.Method);
-            return CreateErrorResponse(request, -32601, "方法未找到");
+            // 尝试前缀匹配（处理如 "hub.apps" 这样的前缀路由）
+            var matchingHandler = _handlers.Values.FirstOrDefault(h =>
+                request.Method.StartsWith(h.Method + ".", StringComparison.OrdinalIgnoreCase));
+
+            if (matchingHandler != null)
+            {
+                try
+                {
+                    return await matchingHandler.HandleAsync(request, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "处理RPC请求失败: {Method}", request.Method);
+                    return CreateErrorResponse(request, -32603, "内部错误");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("未找到RPC方法: {Method}", request.Method);
+                return CreateErrorResponse(request, -32601, "方法未找到");
+            }
         }
     }
 

@@ -183,6 +183,10 @@ curl -X POST "http://127.0.0.1:{port}/rpc" \
   * 注意甄别相似代码：仅合并本质相同的重复逻辑，功能相似但用途不同的代码应保持独立，不可强行抽象为通用工具。
 * **补充注释与日志**：仅在易误解或易出错处添加必要注释与日志，保持最小化。
 
+## 行为规范
+
+* 添加/修改/删除文件时，**不要**将文件提交到Git，留给用户手动处理
+
 ## Important Notes
 
 1. **Protocol compliance is critical.** The M1-M6 milestones have specific acceptance criteria. Any implementation must pass the conformance tests defined in the specification.
@@ -192,3 +196,5 @@ curl -X POST "http://127.0.0.1:{port}/rpc" \
 3. **HTTP always returns 200.** Even for auth failures or parameter errors - errors are signaled via JSON-RPC error codes.
 
 4. **Token is per-session.** Hub generates a new token on each startup. Clients must re-read `token.txt` after Hub restart.
+
+5. **使用 .slnx 代替 .sln** 解决方案文件使用新版 `.slnx` 文件，不使用旧的 `.sln` 文件。

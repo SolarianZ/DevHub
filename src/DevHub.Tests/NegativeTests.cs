@@ -14,12 +14,16 @@ public class NegativeTests
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
     private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
+    private readonly Mock<ILogger<AppInstancesHandler>> _mockInstancesLogger;
+    private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsLogger;
 
     public NegativeTests()
     {
         _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
         _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
         _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
+        _mockInstancesLogger = new Mock<ILogger<AppInstancesHandler>>();
+        _mockDefinitionsLogger = new Mock<ILogger<AppDefinitionsHandler>>();
     }
 
     [Fact]
@@ -90,7 +94,7 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "1",
@@ -109,11 +113,71 @@ public class NegativeTests
     }
 
     [Fact]
+    public void AppInstancesHandler_RegisterInstance_InvalidScope_ShouldReturnError()
+    {
+        // Arrange
+        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var request = new JsonRpcRequest
+        {
+            Id = "2",
+            Method = "hub.apps.registerInstance",
+            Params = new Dictionary<string, object>
+            {
+                { "instance", new Dictionary<string, object>
+                    {
+                        { "instanceId", "test-instance" },
+                        { "appId", "test-app" },
+                        { "scope", "global" }
+                    }
+                }
+            }
+        };
+
+        // Act
+        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+
+        // Assert
+        response.Should().NotBeNull();
+        response.Id.Should().Be("2");
+        response.Error.Should().NotBeNull();
+        response.Error.Code.Should().Be(-32602); // Invalid params
+        response.Error.Message.Should().Contain("scope 不能为 'global'");
+    }
+
+    [Fact]
+    public void AppInstancesHandler_ListInstances_InvalidScope_ShouldReturnError()
+    {
+        // Arrange
+        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var request = new JsonRpcRequest
+        {
+            Id = "3",
+            Method = "hub.apps.listInstances",
+            Params = new Dictionary<string, object>
+            {
+                { "scope", "global" }
+            }
+        };
+
+        // Act
+        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+
+        // Assert
+        response.Should().NotBeNull();
+        response.Id.Should().Be("3");
+        response.Error.Should().NotBeNull();
+        response.Error.Code.Should().Be(-32602); // Invalid params
+        response.Error.Message.Should().Contain("scope 不能为 'global'");
+    }
+
+    [Fact]
     public void AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "2",
@@ -137,7 +201,7 @@ public class NegativeTests
         // Arrange
         var testDir = TestHelpers.GetTestDirectory();
         var mockDefinitionLoader = new Mock<DefinitionLoader>(testDir, _mockDefinitionLogger.Object);
-        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object);
+        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "3",

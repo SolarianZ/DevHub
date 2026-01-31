@@ -97,7 +97,7 @@ namespace DevHub.Host
 
                     return Results.Json(response, jsonOptions);
                 }
-                catch (Exception ex)
+                catch
                 {
                     return Results.Json(new JsonRpcResponse
                     {

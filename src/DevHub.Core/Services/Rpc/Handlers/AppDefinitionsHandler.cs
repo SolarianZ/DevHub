@@ -1,5 +1,6 @@
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
 
@@ -9,10 +10,12 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 public class AppDefinitionsHandler : IRpcHandler
 {
     private readonly DefinitionLoader _definitionLoader;
+    private readonly ILogger<AppDefinitionsHandler> _logger;
 
-    public AppDefinitionsHandler(DefinitionLoader definitionLoader)
+    public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILogger<AppDefinitionsHandler> logger)
     {
         _definitionLoader = definitionLoader;
+        _logger = logger;
     }
 
     public string Method => "hub.apps";
@@ -58,18 +61,34 @@ public class AppDefinitionsHandler : IRpcHandler
     /// </summary>
     private Task<JsonRpcResponse> ListDefinitionsAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        var definitions = _definitionLoader.GetAllDefinitions();
-
-        var response = new JsonRpcResponse
+        try
         {
-            Id = request.Id,
-            Result = new
-            {
-                definitions = definitions
-            }
-        };
+            var definitions = _definitionLoader.GetAllDefinitions();
 
-        return Task.FromResult(response);
+            var response = new JsonRpcResponse
+            {
+                Id = request.Id,
+                Result = new
+                {
+                    definitions = definitions
+                }
+            };
+
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "处理hub.apps.listDefinitions方法失败");
+            return Task.FromResult(new JsonRpcResponse
+            {
+                Id = request.Id,
+                Error = new JsonRpcError
+                {
+                    Code = -32603,
+                    Message = "内部错误"
+                }
+            });
+        }
     }
 
     /// <summary>
@@ -77,43 +96,72 @@ public class AppDefinitionsHandler : IRpcHandler
     /// </summary>
     private Task<JsonRpcResponse> GetDefinitionAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        // 解析参数
-        var parameters = request.Params as Dictionary<string, object>;
-        if (parameters == null || !parameters.TryGetValue("appId", out var appIdObj) || appIdObj == null)
+        try
         {
+            // 解析参数
+            var parameters = request.Params as Dictionary<string, object>;
+            if (parameters == null || !parameters.TryGetValue("appId", out var appIdObj) || appIdObj == null)
+            {
+                return Task.FromResult(new JsonRpcResponse
+                {
+                    Id = request.Id,
+                    Error = new JsonRpcError
+                    {
+                        Code = -32602,
+                        Message = "无效参数"
+                    }
+                });
+            }
+
+            var appId = appIdObj?.ToString();
+            if (string.IsNullOrEmpty(appId))
+            {
+                return Task.FromResult(new JsonRpcResponse
+                {
+                    Id = request.Id,
+                    Error = new JsonRpcError
+                    {
+                        Code = -32602,
+                        Message = "无效参数"
+                    }
+                });
+            }
+
+            var definition = _definitionLoader.GetDefinition(appId);
+
+            if (definition == null)
+            {
+                return Task.FromResult(new JsonRpcResponse
+                {
+                    Id = request.Id,
+                    Error = new JsonRpcError
+                    {
+                        Code = -32014,
+                        Message = "应用程序定义未找到"
+                    }
+                });
+            }
+
+            var response = new JsonRpcResponse
+            {
+                Id = request.Id,
+                Result = definition
+            };
+
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "处理hub.apps.getDefinition方法失败，appId: {AppId}", request.Params);
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,
                 Error = new JsonRpcError
                 {
-                    Code = -32602,
-                    Message = "无效参数"
+                    Code = -32603,
+                    Message = "内部错误"
                 }
             });
         }
-
-        var appId = appIdObj.ToString();
-        var definition = _definitionLoader.GetDefinition(appId);
-
-        if (definition == null)
-        {
-            return Task.FromResult(new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = -32014,
-                    Message = "应用程序定义未找到"
-                }
-            });
-        }
-
-        var response = new JsonRpcResponse
-        {
-            Id = request.Id,
-            Result = definition
-        };
-
-        return Task.FromResult(response);
     }
 }

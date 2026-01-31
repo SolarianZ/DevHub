@@ -97,27 +97,26 @@ public class FileSystemManager
             _logger.LogInformation("生成新 token: {Token}", newToken);
 
             // 设置仅当前用户可访问的权限（Windows 平台）
-            // TODO: 实现 token 文件安全权限设置（需要检查 .NET 10 API）
-            /*
             if (OperatingSystem.IsWindows())
             {
                 try
                 {
-                    var security = new FileSecurity(_tokenFilePath, AccessControlSections.Access);
+                    var fileInfo = new FileInfo(_tokenFilePath);
+                    var security = fileInfo.GetAccessControl(AccessControlSections.Access);
                     var currentUser = WindowsIdentity.GetCurrent().Name;
                     var rule = new FileSystemAccessRule(currentUser, FileSystemRights.FullControl, AccessControlType.Allow);
                     security.SetAccessRule(rule);
 
                     // 移除继承的权限
                     security.SetAccessRuleProtection(true, false);
-                    File.SetAccessControl(_tokenFilePath, security);
+                    fileInfo.SetAccessControl(security);
+                    _logger.LogInformation("已设置 token 文件安全权限，仅当前用户可访问");
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "无法设置 token 文件的安全权限");
                 }
             }
-            */
 
             return newToken;
         }
@@ -150,7 +149,8 @@ public class FileSystemManager
                 ProtocolVersion = 1,
                 HttpBaseUrl = $"http://127.0.0.1:{port}",
                 WsUrl = $"ws://127.0.0.1:{port}/ws",
-                StartedAtUtc = DateTime.UtcNow
+                StartedAtUtc = DateTime.UtcNow,
+                TokenFile = _tokenFilePath
             };
 
             var tempPath = _hubJsonPath + ".tmp";
