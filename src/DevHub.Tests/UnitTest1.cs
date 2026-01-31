@@ -157,6 +157,7 @@ public class UnitTest1
         };
 
         // Act
+        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
         var response = handler.HandleAsync(request, CancellationToken.None).Result;
 
         // Assert
@@ -180,6 +181,7 @@ public class UnitTest1
         };
 
         // Act
+        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
         var response = handler.HandleAsync(request, CancellationToken.None).Result;
 
         // Assert
