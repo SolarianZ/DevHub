@@ -106,7 +106,8 @@ namespace DevHub.Host
 
                         var jsonOptions = new JsonSerializerOptions
                         {
-                            PropertyNameCaseInsensitive = true
+                            PropertyNameCaseInsensitive = true,
+                            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                         };
 
                         var rpcRequest = JsonSerializer.Deserialize<JsonRpcRequest>(body, jsonOptions);
@@ -244,8 +245,8 @@ namespace DevHub.Host
                 {
                     Error = new JsonRpcError
                     {
-                        Code = -32600,
-                        Message = "invalid_request",
+                        Code = -32602,
+                        Message = "invalid_params",
                         Data = new { reason = "missing_header", header = "X-DevHub-ClientId" }
                     }
                 };
@@ -263,8 +264,8 @@ namespace DevHub.Host
                 {
                     Error = new JsonRpcError
                     {
-                        Code = -32600,
-                        Message = "invalid_request",
+                        Code = -32602,
+                        Message = "invalid_params",
                         Data = new { reason = "missing_header", header = "X-DevHub-ClientSessionId" }
                     }
                 };

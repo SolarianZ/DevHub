@@ -78,11 +78,11 @@ public class RpcRouter
                     try
                     {
                         var response = await handler.HandleAsync(request, cancellationToken);
-                        // 如果处理器成功处理了请求，返回响应
-                        if (response.Error == null || response.Result != null)
+                        // 如果处理器成功处理了请求，或者返回了除“方法未找到”以外的错误，直接返回响应
+                        if (response.Error == null || response.Error.Code != -32601)
                         {
-                            _logger.Information("RPC请求处理成功: {Method}, RequestId: {RequestId}", request.Method, request.Id);
-                            _logger.Debug("RPC响应内容: {Response}", JsonSerializer.Serialize(response));
+                            _logger.Information("RPC请求处理完成: {Method}, RequestId: {RequestId}, 响应码: {ResponseCode}", 
+                                request.Method, request.Id, response.Error?.Code ?? 0);
                             return response;
                         }
                     }

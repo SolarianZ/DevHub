@@ -109,10 +109,9 @@ public class AppDefinitionsHandler : IRpcHandler
             _logger.Debug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
             // 解析参数
-            var parameters = request.Params as Dictionary<string, object>;
-            if (parameters == null || !parameters.TryGetValue("appId", out var appIdObj) || appIdObj == null)
+            if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
-                _logger.Warning("hub.apps.getDefinition方法参数无效: 缺少appId, RequestId: {RequestId}", request.Id);
+                _logger.Warning("hub.apps.getDefinition方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
                     Id = request.Id,
@@ -124,20 +123,21 @@ public class AppDefinitionsHandler : IRpcHandler
                 });
             }
 
-            var appId = appIdObj?.ToString();
-            if (string.IsNullOrEmpty(appId))
+            if (!paramsElement.TryGetProperty("appId", out var appIdProperty) || appIdProperty.ValueKind != JsonValueKind.String)
             {
-                _logger.Warning("hub.apps.getDefinition方法参数无效: appId为空, RequestId: {RequestId}", request.Id);
+                _logger.Warning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
                     Id = request.Id,
                     Error = new JsonRpcError
                     {
                         Code = -32602,
-                        Message = "无效参数"
+                        Message = "invalid_params"
                     }
                 });
             }
+
+            var appId = appIdProperty.GetString();
 
             _logger.Debug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
             var definition = _definitionLoader.GetDefinition(appId);
