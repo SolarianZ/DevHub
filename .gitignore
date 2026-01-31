@@ -1,0 +1,118 @@
+# .NET Core
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+Publish/
+*.deploy.*
+
+# NuGet
+*.nupkg
+# NuGet packages cache
+.nuget/packages/
+# The packages folder can be ignored because of Package Restore
+[Pp]ackages/
+# Windows MSBuild cache
+*_i.c
+*_p.c
+*.ilk
+*.meta
+*.obj
+*.pch
+*.pdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# .NET Core build folders
+artifacts/
+*.swp
+*.swo
+*~
+
+# Entity Framework Core migrations
+Migrations/
+
+# Localization
+*.resx
+
+# User-specific files
+*.user
+*.userprefs
+*.suo
+*.sln.docstates
+
+# Test results
+[Xx]Unit/
+[Vv]STestResults/
+[Cc]overage/
+*.coverage
+*.coveragexml
+
+# Performance profiling files
+*.psess
+*.vsp
+*.vspx
+*.dotCover
+
+# dotnet watch
+.dotnet/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Runtime data
+*.db
+*.sqlite
+
+# Secrets
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# DevHub specific
+runtime/hub.json
+runtime/token.txt
+logs/*.log
+apps/instances/*.json
