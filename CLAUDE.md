@@ -162,12 +162,10 @@ curl -X POST "http://127.0.0.1:{port}/rpc" \
 
 ## Important Notes
 
-1. **This is a specification repo, not implementation code.** Changes to protocol behavior require updating `Spec.md` and the Chinese documentation.
+1. **Protocol compliance is critical.** The M1-M6 milestones have specific acceptance criteria. Any implementation must pass the conformance tests defined in the specification.
 
-2. **Protocol compliance is critical.** The M1-M6 milestones have specific acceptance criteria. Any implementation must pass the conformance tests defined in the specification.
+2. **Scope isolation is strict.** There is NO fallback from scoped to global - this is a key architectural decision to prevent workspace cross-contamination.
 
-3. **Scope isolation is strict.** There is NO fallback from scoped to global - this is a key architectural decision to prevent workspace cross-contamination.
+3. **HTTP always returns 200.** Even for auth failures or parameter errors - errors are signaled via JSON-RPC error codes.
 
-4. **HTTP always returns 200.** Even for auth failures or parameter errors - errors are signaled via JSON-RPC error codes.
-
-5. **Token is per-session.** Hub generates a new token on each startup. Clients must re-read `token.txt` after Hub restart.
+4. **Token is per-session.** Hub generates a new token on each startup. Clients must re-read `token.txt` after Hub restart.
