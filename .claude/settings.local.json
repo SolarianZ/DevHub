@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet test:*)",
+      "Bash(Get-ChildItem:*)",
+      "Bash(powershell:*)",
+      "Bash(dir)",
+      "Bash(xcopy:*)",
+      "Bash(ren:*)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}
