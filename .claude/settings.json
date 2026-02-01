@@ -7,7 +7,6 @@
       "Bash(dotnet build:*)",
       "Bash(dotnet run:*)",
       "Bash(dotnet test:*)",
-      "Bash(dir)",
       "Bash(Get-ChildItem:*)",
       "Bash(Select-Object:*)",
       "Bash(powershell:*)",
@@ -19,12 +18,10 @@
       "Bash(tree:*)",
       "Bash(timeout:*)",
       "Bash(chmod:*)",
-      "Bash(python3 /Users/qiuyu/projects/DevHub/tests/test_runner.py)",
-      "Bash(PYTHONPATH=. python3:*)",
-      "Bash(pip3 install:*)",
       "Bash(pkill:*)",
-      "Bash(python3 tests/test_runner.py)",
       "Bash(kill:*)",
+      "Bash(PYTHONPATH=. python3:*)",
+      "Bash(python3:*)",
       "Bash(pip:*)"
     ]
   }

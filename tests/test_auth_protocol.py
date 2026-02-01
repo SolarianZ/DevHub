@@ -3,7 +3,13 @@
 DevHub M1 鉴权与协议版本测试
 """
 
+import os
+import sys
 import unittest
+
+# 添加项目根目录到 Python 模块搜索路径
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from tests.test_base import DiscoveryService, RpcClient, TestResult
 
 

@@ -6,6 +6,10 @@ DevHub M1 测试运行器
 import os
 import sys
 import logging
+
+# 添加项目根目录到 Python 模块搜索路径
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from tests.test_base import TestReport, create_temp_directory
 from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
