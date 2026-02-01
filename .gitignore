@@ -111,8 +111,5 @@ secrets.json
 .env.test.local
 .env.production.local
 
-# DevHub specific
-runtime/hub.json
-runtime/token.txt
-logs/*.log
-apps/instances/*.json
+# Temp files
+[Tt]emp/
