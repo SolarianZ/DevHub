@@ -3,13 +3,15 @@
         "**/bin": true,
         "**/obj": true,
         "**/.vs": true,
-        "**/.idea": true
+        "**/.idea": true,
+        "**/__pycache__": true
     },
     "search.exclude": {
         "**/bin": true,
         "**/obj": true,
         "**/.vs": true,
-        "**/.idea": true
+        "**/.idea": true,
+        "**/__pycache__": true
     },
     "dotnet.defaultSolution": "src/DevHub.slnx"
 }

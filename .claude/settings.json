@@ -17,7 +17,14 @@
       "Bash(move:*)",
       "Bash(dir:*)",
       "Bash(tree:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(chmod:*)",
+      "Bash(python3 /Users/qiuyu/projects/DevHub/tests/test_runner.py)",
+      "Bash(PYTHONPATH=. python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pkill:*)",
+      "Bash(python3 tests/test_runner.py)",
+      "Bash(kill:*)"
     ]
   }
 }

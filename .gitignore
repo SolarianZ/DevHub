@@ -113,3 +113,4 @@ secrets.json
 
 # Temp files
 [Tt]emp/
+**/__pycache__/
