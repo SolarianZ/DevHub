@@ -157,10 +157,7 @@ public class NegativeTests
         {
             Id = "3",
             Method = "hub.apps.listInstances",
-            Params = new Dictionary<string, object>
-            {
-                { "scope", "global" }
-            }
+            Params = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(@"{""scope"": ""global""}")
         };
 
         // Act

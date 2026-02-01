@@ -70,6 +70,11 @@ namespace DevHub.Host
                 fileSystemManager.InitializeDirectories();
                 logger.LogInformation("文件系统初始化完成");
 
+                // 确保 token 文件存在
+                logger.LogDebug("确保 token 文件存在...");
+                fileSystemManager.GetToken();
+                logger.LogInformation("Token 文件准备完成");
+
                 // 加载应用程序定义
                 var definitionLoader = app.Services.GetRequiredService<DefinitionLoader>();
                 logger.LogDebug("加载应用程序定义...");
