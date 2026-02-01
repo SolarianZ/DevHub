@@ -86,7 +86,8 @@ class RpcClient:
         url = f"{self.base_url}/rpc"
         try:
             response = requests.post(url, json=payload, headers=self.headers, timeout=30)
-            response.raise_for_status()
+            # 注意：根据 DevHub 规范，HTTP 状态码始终返回 200 OK
+            # 错误通过 JSON-RPC 的 error 字段表示，不应使用 raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             raise Exception(f"RPC request failed: {e}")

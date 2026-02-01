@@ -164,12 +164,92 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def test_instance_offline_after_30s_no_heartbeat(self):
+        """测试超过30s不发送心跳，实例应变为离线状态"""
+        result = TestResult("测试30s无心跳后实例变为离线")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            register_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345
+                }
+            })
+
+            if "result" not in register_response or not register_response["result"].get("ok"):
+                result.mark_failure(f"❌ 实例注册失败: {register_response.get('error', {})}")
+                return result
+
+            result.add_detail("✅ 实例注册成功")
+
+            # 立即列出实例，应该能看到（在线）
+            list_response = client.call("hub.apps.listInstances")
+            if "result" in list_response and "instances" in list_response["result"]:
+                instances = list_response["result"]["instances"]
+                found_before = any(inst.get("instanceId") == instance_id for inst in instances)
+
+                if found_before:
+                    result.add_detail("✅ 注册后实例在线可见")
+                else:
+                    result.mark_failure("❌ 注册后实例未在线显示")
+                    return result
+            else:
+                result.mark_failure("❌ 列出实例响应格式不正确")
+                return result
+
+            # 等待 30+ 秒（在线判定阈值）
+            wait_seconds = 35
+            result.add_detail(f"⏳ 等待 {wait_seconds} 秒，让实例超时离线...")
+
+            # 显示进度条
+            import sys
+            progress_width = 40
+            for i in range(wait_seconds + 1):
+                if i > 0:
+                    time.sleep(1)
+                percent = int((i / wait_seconds) * 100)
+                filled = int((i / wait_seconds) * progress_width)
+                bar = "█" * filled + "░" * (progress_width - filled)
+                sys.stdout.write(f"\r    [{bar}] {percent}% ({i}/{wait_seconds}s)")
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+            result.add_detail("✅ 等待完成，继续验证实例状态")
+
+            # 再次列出实例，不应看到该实例（已离线）
+            list_response2 = client.call("hub.apps.listInstances")
+            if "result" in list_response2 and "instances" in list_response2["result"]:
+                instances2 = list_response2["result"]["instances"]
+                found_after = any(inst.get("instanceId") == instance_id for inst in instances2)
+
+                if not found_after:
+                    result.add_detail("✅ 超过30s无心跳后，实例已离线不可见")
+                    result.mark_success()
+                else:
+                    result.mark_failure("❌ 超过30s无心跳后，实例仍然在线显示（不符合预期）")
+            else:
+                result.mark_failure("❌ 第二次列出实例响应格式不正确")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self):
         """运行所有 AppInstance 测试"""
         return [
             self.test_register_and_list_instances(),
             self.test_heartbeat_updates_last_seen(),
-            self.test_unregister_instance()
+            self.test_unregister_instance(),
+            self.test_instance_offline_after_30s_no_heartbeat()
         ]
 
 
