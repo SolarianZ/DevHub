@@ -793,7 +793,7 @@ flowchart TD
     B --> C{ScopePolicy violation?}
     C -->|Yes| D[Return -32002 forbidden]
     C -->|No| E{Online instance matches?}
-    E -->|Yes| F[Enqueue (Queued) → await poll]
+    E -->|Yes| F["Enqueue (Queued) → await poll"]
     E -->|No| G{queueIfOffline?}
     G -->|No| H[Return -32010 instance_not_found]
     G -->|Yes| CheckDef{AppDefinition exists?}
@@ -801,8 +801,8 @@ flowchart TD
     CheckDef -->|Yes| I{autoLaunch?}
     I -->|true| L{Launch succeeds?}
     L -->|No| M[Return -32020 launch_failed]
-    L -->|Yes| N[Enqueue (Pending)]
-    I -->|false| N[Enqueue (Pending)]
+    L -->|Yes| N["Enqueue (Pending)"]
+    I -->|false| N["Enqueue (Pending)"]
 ```
 
 Routing rules:

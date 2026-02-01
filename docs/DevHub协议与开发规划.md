@@ -82,36 +82,36 @@
 
 ```mermaid
 flowchart LR
-  subgraph ClientSide[调用侧]
-    C1[IDE Plugin]
-    C2[CLI]
-    C3[UI]
-  end
+    subgraph ClientSide[调用侧]
+        C1[IDE Plugin]
+        C2[CLI]
+        C3[UI]
+    end
 
-  subgraph HubSide[DevHub（本机 per-user）]
-    H[Hub HTTP/WS JSON-RPC]
-    REG[(App Registry<br/>in-memory + files)]
-    INV[(Invocation Queue<br/>in-memory)]
-  end
+    subgraph HubSide["DevHub（本机 per-user）"]
+        H["Hub HTTP/WS JSON-RPC"]
+        REG[("App Registry<br/>in-memory + files")]
+        INV[("Invocation Queue<br/>in-memory")]
+    end
 
-  subgraph AppSide[被调侧]
-    A1[AppInstance A]
-    A2[AppInstance B]
-  end
+    subgraph AppSide[被调侧]
+        A1[AppInstance A]
+        A2[AppInstance B]
+    end
 
-  C1 -->|HTTP JSON-RPC| H
-  C2 -->|HTTP JSON-RPC| H
-  C3 -->|WS JSON-RPC| H
+    C1 -->|"HTTP JSON-RPC"| H
+    C2 -->|"HTTP JSON-RPC"| H
+    C3 -->|"WS JSON-RPC"| H
 
-  H <--> REG
-  H <--> INV
+    H <--> REG
+    H <--> INV
 
-  A1 -->|poll (HTTP)| H
-  A2 -->|poll (HTTP)| H
-  A1 -->|respond (HTTP)| H
-  A2 -->|respond (HTTP)| H
+    A1 -->|"poll (HTTP)"| H
+    A2 -->|"poll (HTTP)"| H
+    A1 -->|"respond (HTTP)"| H
+    A2 -->|"respond (HTTP)"| H
 
-  H -->|hub.event (WS notify)| C3
+    H -->|"hub.event (WS notify)"| C3
 ```
 
 说明：

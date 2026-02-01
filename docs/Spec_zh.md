@@ -793,7 +793,7 @@ flowchart TD
     B --> C{ScopePolicy 违规?}
     C -->|是| D[返回 -32002 forbidden]
     C -->|否| E{有在线实例匹配?}
-    E -->|是| F[入队 (Queued) → 等待 poll]
+    E -->|是| F["入队 (Queued) → 等待 poll"]
     E -->|否| G{queueIfOffline?}
     G -->|否| H[返回 -32010 instance_not_found]
     G -->|是| CheckDef{AppDefinition 存在?}
@@ -801,8 +801,8 @@ flowchart TD
     CheckDef -->|是| I{autoLaunch?}
     I -->|true| L{启动成功?}
     L -->|否| M[返回 -32020 launch_failed]
-    L -->|是| N[入队 (Pending)]
-    I -->|false| N[入队 (Pending)]
+    L -->|是| N["入队 (Pending)"]
+    I -->|false| N["入队 (Pending)"]
 ```
 
 路由规则：
