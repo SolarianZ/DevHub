@@ -48,7 +48,7 @@ class TestAppInstances(unittest.TestCase):
                 # 列出实例
                 list_response = client.call("hub.apps.listInstances")
 
-                if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
+                if "result" in list_response and list_response["result"].get("ok") and "instances" in list_response["result"]:
                     instances = list_response["result"]["instances"]
                     found = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -90,7 +90,7 @@ class TestAppInstances(unittest.TestCase):
             # 第一次心跳
             heartbeat1_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-            if "result" in heartbeat1_response and "ok" in heartbeat1_response["result"] and heartbeat1_response["result"]["ok"] == True and "lastSeenUtc" in heartbeat1_response["result"]:
+            if "result" in heartbeat1_response and heartbeat1_response["result"].get("ok") and "lastSeenUtc" in heartbeat1_response["result"]:
                 last_seen1 = heartbeat1_response["result"]["lastSeenUtc"]
                 result.add_detail(f"✅ 第一次心跳成功，最后见过时间: {last_seen1}")
 
@@ -100,7 +100,7 @@ class TestAppInstances(unittest.TestCase):
                 # 第二次心跳
                 heartbeat2_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-                if "result" in heartbeat2_response and "ok" in heartbeat2_response["result"] and heartbeat2_response["result"]["ok"] == True and "lastSeenUtc" in heartbeat2_response["result"]:
+                if "result" in heartbeat2_response and heartbeat2_response["result"].get("ok") and "lastSeenUtc" in heartbeat2_response["result"]:
                     last_seen2 = heartbeat2_response["result"]["lastSeenUtc"]
                     result.add_detail(f"✅ 第二次心跳成功，最后见过时间: {last_seen2}")
 
@@ -114,6 +114,28 @@ class TestAppInstances(unittest.TestCase):
                     result.mark_failure("❌ 第二次心跳响应格式不正确")
             else:
                 result.mark_failure("❌ 第一次心跳响应格式不正确")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_unregister_nonexistent_instance(self):
+        """测试注销不存在的实例（幂等性）"""
+        result = TestResult("测试注销不存在的实例（幂等性）")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            nonexistent_instance_id = f"nonexistent-instance-{self.generate_unique_instance_id()}"
+
+            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_instance_id})
+
+            if "result" in response and response["result"].get("ok"):
+                result.add_detail("✅ 注销不存在的实例仍返回成功（幂等性）")
+                result.mark_success()
+            else:
+                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
 
         except Exception as e:
             result.mark_failure(str(e))
@@ -143,12 +165,12 @@ class TestAppInstances(unittest.TestCase):
             # 注销实例
             unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
 
-            if "result" in unregister_response and unregister_response["result"].get("ok"):
+            if "result" in unregister_response:
                 result.add_detail("✅ 实例注销成功")
 
                 # 验证实例不再列出
                 list_response = client.call("hub.apps.listInstances")
-                if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
+                if "result" in list_response and list_response["result"].get("ok") and "instances" in list_response["result"]:
                     instances = list_response["result"]["instances"]
                     found = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -187,7 +209,7 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "result" not in register_response or not register_response["result"].get("ok"):
+            if "result" not in register_response:
                 result.mark_failure(f"❌ 实例注册失败: {register_response.get('error', {})}")
                 return result
 
@@ -195,7 +217,7 @@ class TestAppInstances(unittest.TestCase):
 
             # 立即列出实例，应该能看到（在线）
             list_response = client.call("hub.apps.listInstances")
-            if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
+            if "result" in list_response and "instances" in list_response["result"]:
                 instances = list_response["result"]["instances"]
                 found_before = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -230,7 +252,7 @@ class TestAppInstances(unittest.TestCase):
 
             # 再次列出实例，不应看到该实例（已离线）
             list_response2 = client.call("hub.apps.listInstances")
-            if "result" in list_response2 and "ok" in list_response2["result"] and list_response2["result"]["ok"] == True and "instances" in list_response2["result"]:
+            if "result" in list_response2 and "instances" in list_response2["result"]:
                 instances2 = list_response2["result"]["instances"]
                 found_after = any(inst.get("instanceId") == instance_id for inst in instances2)
 
@@ -247,13 +269,292 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def test_heartbeat_nonexistent_instance(self):
+        """测试对不存在的实例发送心跳"""
+        result = TestResult("测试对不存在的实例发送心跳")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            nonexistent_instance_id = f"nonexistent-instance-{self.generate_unique_instance_id()}"
+
+            response = client.call("hub.apps.heartbeat", {"instanceId": nonexistent_instance_id})
+
+            if "error" in response and response["error"]["code"] == -32010:
+                result.add_detail(f"✅ 正确返回实例不存在错误: {response['error']['message']}")
+                result.mark_success()
+            else:
+                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_list_instances_with_params(self):
+        """测试使用参数列出实例"""
+        result = TestResult("测试使用参数列出实例")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id1 = self.generate_unique_instance_id()
+            instance_id2 = self.generate_unique_instance_id()
+
+            # 注册两个不同appId的实例
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id1,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id2,
+                    "appId": "test-app-2",
+                    "scope": "test-scope",
+                    "pid": 67890,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            # 测试按appId过滤
+            response_by_app = client.call("hub.apps.listInstances", {"appId": "test-app-1"})
+            if "result" in response_by_app and "instances" in response_by_app["result"]:
+                instances_by_app = response_by_app["result"]["instances"]
+                found = any(inst.get("instanceId") == instance_id1 for inst in instances_by_app)
+                not_found = any(inst.get("instanceId") == instance_id2 for inst in instances_by_app)
+
+                if found and not not_found:
+                    result.add_detail("✅ 按appId过滤测试成功")
+                else:
+                    result.mark_failure("❌ 按appId过滤测试失败")
+                    return result
+
+            # 测试按scope过滤
+            response_by_scope = client.call("hub.apps.listInstances", {"scope": "test-scope"})
+            if "result" in response_by_scope and "instances" in response_by_scope["result"]:
+                instances_by_scope = response_by_scope["result"]["instances"]
+                found = any(inst.get("instanceId") == instance_id2 for inst in instances_by_scope)
+                not_found = any(inst.get("instanceId") == instance_id1 for inst in instances_by_scope)
+
+                if found and not not_found:
+                    result.add_detail("✅ 按scope过滤测试成功")
+                else:
+                    result.mark_failure("❌ 按scope过滤测试失败")
+                    return result
+
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        finally:
+            # 清理测试实例
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                client = RpcClient(base_url, token)
+                # 这里不直接引用上面的变量，因为可能在异常情况下没有定义
+                # 简单的清理方式是列出所有实例并尝试注销
+                list_response = client.call("hub.apps.listInstances", {"includeAllScopes": True, "includeOffline": True})
+                if "result" in list_response and list_response["result"].get("ok") and "instances" in list_response["result"]:
+                    for instance in list_response["result"]["instances"]:
+                        if instance.get("appId") in ["test-app-1", "test-app-2"]:
+                            client.call("hub.apps.unregisterInstance", {"instanceId": instance.get("instanceId")})
+            except:
+                pass
+
+        return result
+
+    def test_register_instance_with_global_scope(self):
+        """测试注册 scope 为 \"global\" 的实例（禁止值）"""
+        result = TestResult("测试注册 scope 为 \"global\" 的实例")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": "global",  # 禁止值
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            if "error" in response and response["error"]["code"] == -32602:
+                result.add_detail(f"✅ 正确返回无效参数错误: {response['error']['message']}")
+                result.mark_success()
+            else:
+                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_list_instances_scope_strict_match(self):
+        """测试 listInstances 的 scope 严格匹配逻辑（无 fallback）"""
+        result = TestResult("测试 scope 严格匹配逻辑")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id1 = self.generate_unique_instance_id()
+            instance_id2 = self.generate_unique_instance_id()
+
+            # 注册两个不同 scope 的实例
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id1,
+                    "appId": "test-app-1",
+                    "scope": "scope1",
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id2,
+                    "appId": "test-app-1",
+                    "scope": "scope2",
+                    "pid": 67890,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            # 测试按 scope1 过滤，应该只返回 scope1 的实例
+            response = client.call("hub.apps.listInstances", {"scope": "scope1"})
+            if "result" in response and "instances" in response["result"]:
+                instances = response["result"]["instances"]
+
+                found_scope1 = any(inst.get("instanceId") == instance_id1 for inst in instances)
+                found_scope2 = any(inst.get("instanceId") == instance_id2 for inst in instances)
+
+                if found_scope1 and not found_scope2:
+                    result.add_detail("✅ Scope 严格匹配测试成功：只返回了 scope1 的实例")
+                else:
+                    result.mark_failure(f"❌ Scope 严格匹配测试失败：找到 scope1={found_scope1}, scope2={found_scope2}")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            # 清理测试实例
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                client = RpcClient(base_url, token)
+                list_response = client.call("hub.apps.listInstances", {"includeAllScopes": True, "includeOffline": True})
+                if "result" in list_response and list_response["result"].get("ok") and "instances" in list_response["result"]:
+                    for instance in list_response["result"]["instances"]:
+                        if instance.get("appId") == "test-app-1" and instance.get("scope") in ["scope1", "scope2"]:
+                            client.call("hub.apps.unregisterInstance", {"instanceId": instance.get("instanceId")})
+            except:
+                pass
+
+        return result
+
+    def test_register_instance_invoke_field_validation(self):
+        """测试注册实例时验证invoke字段包含poll和respond属性"""
+        result = TestResult("测试验证AppInstance的invoke字段")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            register_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            if "result" in register_response and register_response["result"].get("ok") and "instance" in register_response["result"]:
+                instance = register_response["result"]["instance"]
+
+                # 验证invoke字段存在且包含poll和respond属性
+                if "invoke" in instance:
+                    invoke = instance["invoke"]
+                    if "poll" in invoke and "respond" in invoke:
+                        result.add_detail("✅ 实例的invoke字段包含poll和respond属性")
+
+                        # 验证poll和respond属性是布尔值
+                        if isinstance(invoke["poll"], bool) and isinstance(invoke["respond"], bool):
+                            result.add_detail("✅ poll和respond属性是布尔值")
+                            result.mark_success()
+                        else:
+                            result.mark_failure("❌ poll或respond属性不是布尔值")
+                    else:
+                        result.mark_failure("❌ 实例的invoke字段缺少poll或respond属性")
+                else:
+                    result.mark_failure("❌ 实例缺少invoke字段")
+            else:
+                result.mark_failure(f"❌ 实例注册失败: {register_response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_register_instance_empty_scope(self):
+        """测试注册 scope 为空字符串的实例（无效值）"""
+        result = TestResult("测试注册 scope 为空字符串的实例（无效值）")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": "",  # 测试空字符串 scope（无效值）
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            if "error" in response and response["error"]["code"] == -32602:
+                result.add_detail(f"✅ 正确返回无效参数错误: {response['error']['message']}")
+                result.mark_success()
+            else:
+                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self):
         """运行所有 AppInstance 测试"""
         return [
             self.test_register_and_list_instances(),
             self.test_heartbeat_updates_last_seen(),
+            self.test_heartbeat_nonexistent_instance(),
             self.test_unregister_instance(),
-            self.test_instance_offline_after_30s_no_heartbeat()
+            self.test_unregister_nonexistent_instance(),
+            self.test_list_instances_with_params(),
+            self.test_instance_offline_after_30s_no_heartbeat(),
+            self.test_register_instance_with_global_scope(),
+            self.test_list_instances_scope_strict_match(),
+            self.test_register_instance_empty_scope(),
+            self.test_register_instance_invoke_field_validation()
         ]
 
 

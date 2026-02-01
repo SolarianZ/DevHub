@@ -18,6 +18,11 @@ class DiscoveryService:
     @staticmethod
     def get_runtime_directory():
         """获取运行时目录"""
+        # 首先检查是否设置了 DEVHUB_RUNTIME_DIR 环境变量
+        if "DEVHUB_RUNTIME_DIR" in os.environ:
+            return os.environ["DEVHUB_RUNTIME_DIR"]
+
+        # 如果没有设置，使用默认目录
         system = platform.system()
         if system == "Windows":
             return os.path.join(os.environ["LOCALAPPDATA"], "DevHub", "runtime")
@@ -110,6 +115,21 @@ class RpcClient:
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"RPC request failed: {e}")
+
+    def send_batch_request(self, requests_list):
+        """
+        发送 batch 请求（用于测试批量请求被拒绝的情况）
+        """
+        url = f"{self.base_url}/rpc"
+        try:
+            response = requests.post(url, json=requests_list, headers=self.headers, timeout=30)
+            # 即使响应不是有效的 JSON（虽然不应该），也返回响应内容
+            try:
+                return response.json(), response.status_code
+            except:
+                return response.text, response.status_code
         except requests.exceptions.RequestException as e:
             raise Exception(f"RPC request failed: {e}")
 

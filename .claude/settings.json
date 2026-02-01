@@ -31,7 +31,8 @@
       "Bash(findstr:*)"
     ],
     "deny": [
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
