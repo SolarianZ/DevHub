@@ -24,7 +24,8 @@
       "Bash(pip3 install:*)",
       "Bash(pkill:*)",
       "Bash(python3 tests/test_runner.py)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(pip:*)"
     ]
   }
 }

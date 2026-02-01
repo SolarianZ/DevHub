@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+DevHub M1 AppInstance 测试
+"""
+
+import unittest
+import time
+from tests.test_base import DiscoveryService, RpcClient, TestResult
+
+
+class TestAppInstances(unittest.TestCase):
+    """AppInstance 测试类"""
+
+    def generate_unique_instance_id(self):
+        """生成唯一的实例 ID"""
+        import uuid
+        return f"test-instance-{uuid.uuid4().hex[:8]}"
+
+    def test_register_and_list_instances(self):
+        """测试注册实例并列出实例"""
+        result = TestResult("测试注册实例并列出实例")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            register_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345
+                }
+            })
+
+            if "result" in register_response and register_response["result"].get("ok"):
+                result.add_detail("✅ 实例注册成功")
+
+                # 列出实例
+                list_response = client.call("hub.apps.listInstances")
+
+                if "result" in list_response and "instances" in list_response["result"]:
+                    instances = list_response["result"]["instances"]
+                    found = any(inst.get("instanceId") == instance_id for inst in instances)
+
+                    if found:
+                        result.add_detail("✅ 实例在列表中可见")
+                        result.mark_success()
+                    else:
+                        result.mark_failure("❌ 注册的实例未在列表中找到")
+                else:
+                    result.mark_failure("❌ 列出实例响应格式不正确")
+            else:
+                result.mark_failure(f"❌ 实例注册失败: {register_response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_heartbeat_updates_last_seen(self):
+        """测试心跳更新最后一次见过的时间"""
+        result = TestResult("测试心跳更新最后一次见过的时间")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345
+                }
+            })
+
+            # 第一次心跳
+            heartbeat1_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
+
+            if "result" in heartbeat1_response and "serverTimeUtc" in heartbeat1_response["result"]:
+                last_seen1 = heartbeat1_response["result"]["serverTimeUtc"]
+                result.add_detail(f"✅ 第一次心跳成功，最后见过时间: {last_seen1}")
+
+                # 等待一段时间
+                time.sleep(2)
+
+                # 第二次心跳
+                heartbeat2_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
+
+                if "result" in heartbeat2_response and "serverTimeUtc" in heartbeat2_response["result"]:
+                    last_seen2 = heartbeat2_response["result"]["serverTimeUtc"]
+                    result.add_detail(f"✅ 第二次心跳成功，最后见过时间: {last_seen2}")
+
+                    # 验证时间已更新
+                    if last_seen2 > last_seen1:
+                        result.add_detail("✅ 最后见过时间已正确更新")
+                        result.mark_success()
+                    else:
+                        result.mark_failure("❌ 最后见过时间未更新")
+                else:
+                    result.mark_failure("❌ 第二次心跳响应格式不正确")
+            else:
+                result.mark_failure("❌ 第一次心跳响应格式不正确")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_unregister_instance(self):
+        """测试注销实例"""
+        result = TestResult("测试注销实例")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-1",
+                    "scope": None,
+                    "pid": 12345
+                }
+            })
+
+            # 注销实例
+            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+
+            if "result" in unregister_response and unregister_response["result"].get("ok"):
+                result.add_detail("✅ 实例注销成功")
+
+                # 验证实例不再列出
+                list_response = client.call("hub.apps.listInstances")
+                if "result" in list_response and "instances" in list_response["result"]:
+                    instances = list_response["result"]["instances"]
+                    found = any(inst.get("instanceId") == instance_id for inst in instances)
+
+                    if not found:
+                        result.add_detail("✅ 实例已从列表中移除")
+                        result.mark_success()
+                    else:
+                        result.mark_failure("❌ 实例仍然在列表中")
+                else:
+                    result.mark_failure("❌ 列出实例响应格式不正确")
+            else:
+                result.mark_failure(f"❌ 实例注销失败: {unregister_response.get('error', {})}")
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def run_all_tests(self):
+        """运行所有 AppInstance 测试"""
+        return [
+            self.test_register_and_list_instances(),
+            self.test_heartbeat_updates_last_seen(),
+            self.test_unregister_instance()
+        ]
+
+
+if __name__ == "__main__":
+    # 运行测试
+    test = TestAppInstances()
+    results = test.run_all_tests()
+
+    # 输出结果
+    for result in results:
+        status = "✅ 通过" if result.success else "❌ 失败"
+        print(f"{status}: {result.test_name}")
+
+        if result.details:
+            for detail in result.details:
+                print(f"  - {detail}")
+
+        if result.error_message:
+            print(f"  错误: {result.error_message}")
+
+        print()
