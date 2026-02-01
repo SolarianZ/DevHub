@@ -42,12 +42,12 @@ class TestAppDefinitions(unittest.TestCase):
                 "appId": "test-app-1",
                 "displayName": "Test Application",
                 "description": "This is a test application",
-                "scopePolicy": "global",
+                "scopePolicy": "any",
                 "launch": {
-                    "command": "echo",
-                    "args": ["Hello from Test Application"]
+                    "exePath": "echo",
+                    "argsTemplate": "Hello from Test Application"
                 },
-                "capabilities": ["test"]
+                "capabilities": { "rpc": True, "events": False }
             }
 
             with open(test_app_path, "w", encoding="utf-8") as f:
@@ -68,7 +68,7 @@ class TestAppDefinitions(unittest.TestCase):
 
             response = client.call("hub.apps.listDefinitions")
 
-            if "result" in response and "definitions" in response["result"]:
+            if "result" in response and "ok" in response["result"] and response["result"]["ok"] == True and "definitions" in response["result"]:
                 definitions = response["result"]["definitions"]
                 result.add_detail(f"✅ 返回 {len(definitions)} 个应用程序定义")
 
@@ -100,7 +100,7 @@ class TestAppDefinitions(unittest.TestCase):
 
             response = client.call("hub.apps.getDefinition", {"appId": app_id})
 
-            if "result" in response and "definition" in response["result"]:
+            if "result" in response and "ok" in response["result"] and response["result"]["ok"] == True and "definition" in response["result"]:
                 definition = response["result"]["definition"]
                 if definition.get("appId") == app_id:
                     result.add_detail(f"✅ 获取应用程序定义成功")

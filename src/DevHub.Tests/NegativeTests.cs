@@ -33,7 +33,7 @@ public class NegativeTests
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
 
         // Act
-        var result = appRegistry.Heartbeat("non-existent-instance");
+        var result = appRegistry.Heartbeat("non-existent-instance", out _);
 
         // Assert
         result.Should().BeFalse();
@@ -90,7 +90,7 @@ public class NegativeTests
     }
 
     [Fact]
-    public void AppInstancesHandler_RegisterInstance_MissingParams_ShouldReturnError()
+    public async Task AppInstancesHandler_RegisterInstance_MissingParams_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
@@ -103,8 +103,7 @@ public class NegativeTests
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         response.Should().NotBeNull();
@@ -114,7 +113,7 @@ public class NegativeTests
     }
 
     [Fact]
-    public void AppInstancesHandler_RegisterInstance_InvalidScope_ShouldReturnError()
+    public async Task AppInstancesHandler_RegisterInstance_InvalidScope_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
@@ -136,8 +135,7 @@ public class NegativeTests
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         response.Should().NotBeNull();
@@ -148,7 +146,7 @@ public class NegativeTests
     }
 
     [Fact]
-    public void AppInstancesHandler_ListInstances_InvalidScope_ShouldReturnError()
+    public async Task AppInstancesHandler_ListInstances_InvalidScope_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
@@ -161,8 +159,7 @@ public class NegativeTests
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         response.Should().NotBeNull();
@@ -173,7 +170,7 @@ public class NegativeTests
     }
 
     [Fact]
-    public void AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
+    public async Task AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
@@ -186,8 +183,7 @@ public class NegativeTests
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         response.Should().NotBeNull();
@@ -197,7 +193,7 @@ public class NegativeTests
     }
 
     [Fact]
-    public void AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
+    public async Task AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
     {
         // Arrange
         var testDir = TestHelpers.GetTestDirectory();
@@ -211,8 +207,7 @@ public class NegativeTests
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         response.Should().NotBeNull();

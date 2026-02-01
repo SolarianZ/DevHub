@@ -21,9 +21,17 @@
       "Bash(chmod:*)",
       "Bash(pkill:*)",
       "Bash(kill:*)",
+      "Bash(tasklist:*)",
       "Bash(PYTHONPATH=. python3:*)",
       "Bash(python3:*)",
-      "Bash(pip:*)"
+      "Bash(python:*)",
+      "Bash(pip3:*)",
+      "Bash(pip:*)",
+      "Bash(curl:*)",
+      "Bash(findstr:*)"
+    ],
+    "deny": [
+      "Bash(git add *)"
     ]
   }
 }

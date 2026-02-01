@@ -99,7 +99,7 @@ public class UnitTest1
 
         // Act
         System.Threading.Thread.Sleep(100); // Wait for time to pass
-        appRegistry.Heartbeat("test-instance-2");
+        appRegistry.Heartbeat("test-instance-2", out _);
         var updatedInstance = appRegistry.GetInstance("test-instance-2");
 
         // Assert
@@ -145,7 +145,7 @@ public class UnitTest1
     }
 
     [Fact]
-    public void HubPingHandler_ShouldReturnCorrectResponse()
+    public async Task HubPingHandler_ShouldReturnCorrectResponse()
     {
         // Arrange
         var handler = new HubPingHandler(_mockDefinitionsLogger.Object);
@@ -157,8 +157,7 @@ public class UnitTest1
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         Assert.NotNull(response);
@@ -168,7 +167,7 @@ public class UnitTest1
     }
 
     [Fact]
-    public void AppDefinitionsHandler_MethodNotFound_ShouldReturnError()
+    public async Task AppDefinitionsHandler_MethodNotFound_ShouldReturnError()
     {
         // Arrange
         var mockDefinitionLoader = new Mock<DefinitionLoader>(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
@@ -181,8 +180,7 @@ public class UnitTest1
         };
 
         // Act
-        // TODO FIXME : Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead.
-        var response = handler.HandleAsync(request, CancellationToken.None).Result;
+        var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
         Assert.NotNull(response);

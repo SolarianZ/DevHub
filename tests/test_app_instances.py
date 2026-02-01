@@ -37,7 +37,8 @@ class TestAppInstances(unittest.TestCase):
                     "instanceId": instance_id,
                     "appId": "test-app-1",
                     "scope": None,
-                    "pid": 12345
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
                 }
             })
 
@@ -47,7 +48,7 @@ class TestAppInstances(unittest.TestCase):
                 # 列出实例
                 list_response = client.call("hub.apps.listInstances")
 
-                if "result" in list_response and "instances" in list_response["result"]:
+                if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
                     instances = list_response["result"]["instances"]
                     found = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -81,15 +82,16 @@ class TestAppInstances(unittest.TestCase):
                     "instanceId": instance_id,
                     "appId": "test-app-1",
                     "scope": None,
-                    "pid": 12345
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
                 }
             })
 
             # 第一次心跳
             heartbeat1_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-            if "result" in heartbeat1_response and "serverTimeUtc" in heartbeat1_response["result"]:
-                last_seen1 = heartbeat1_response["result"]["serverTimeUtc"]
+            if "result" in heartbeat1_response and "ok" in heartbeat1_response["result"] and heartbeat1_response["result"]["ok"] == True and "lastSeenUtc" in heartbeat1_response["result"]:
+                last_seen1 = heartbeat1_response["result"]["lastSeenUtc"]
                 result.add_detail(f"✅ 第一次心跳成功，最后见过时间: {last_seen1}")
 
                 # 等待一段时间
@@ -98,8 +100,8 @@ class TestAppInstances(unittest.TestCase):
                 # 第二次心跳
                 heartbeat2_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-                if "result" in heartbeat2_response and "serverTimeUtc" in heartbeat2_response["result"]:
-                    last_seen2 = heartbeat2_response["result"]["serverTimeUtc"]
+                if "result" in heartbeat2_response and "ok" in heartbeat2_response["result"] and heartbeat2_response["result"]["ok"] == True and "lastSeenUtc" in heartbeat2_response["result"]:
+                    last_seen2 = heartbeat2_response["result"]["lastSeenUtc"]
                     result.add_detail(f"✅ 第二次心跳成功，最后见过时间: {last_seen2}")
 
                     # 验证时间已更新
@@ -133,7 +135,8 @@ class TestAppInstances(unittest.TestCase):
                     "instanceId": instance_id,
                     "appId": "test-app-1",
                     "scope": None,
-                    "pid": 12345
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
                 }
             })
 
@@ -145,7 +148,7 @@ class TestAppInstances(unittest.TestCase):
 
                 # 验证实例不再列出
                 list_response = client.call("hub.apps.listInstances")
-                if "result" in list_response and "instances" in list_response["result"]:
+                if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
                     instances = list_response["result"]["instances"]
                     found = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -179,7 +182,8 @@ class TestAppInstances(unittest.TestCase):
                     "instanceId": instance_id,
                     "appId": "test-app-1",
                     "scope": None,
-                    "pid": 12345
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
                 }
             })
 
@@ -191,7 +195,7 @@ class TestAppInstances(unittest.TestCase):
 
             # 立即列出实例，应该能看到（在线）
             list_response = client.call("hub.apps.listInstances")
-            if "result" in list_response and "instances" in list_response["result"]:
+            if "result" in list_response and "ok" in list_response["result"] and list_response["result"]["ok"] == True and "instances" in list_response["result"]:
                 instances = list_response["result"]["instances"]
                 found_before = any(inst.get("instanceId") == instance_id for inst in instances)
 
@@ -226,7 +230,7 @@ class TestAppInstances(unittest.TestCase):
 
             # 再次列出实例，不应看到该实例（已离线）
             list_response2 = client.call("hub.apps.listInstances")
-            if "result" in list_response2 and "instances" in list_response2["result"]:
+            if "result" in list_response2 and "ok" in list_response2["result"] and list_response2["result"]["ok"] == True and "instances" in list_response2["result"]:
                 instances2 = list_response2["result"]["instances"]
                 found_after = any(inst.get("instanceId") == instance_id for inst in instances2)
 

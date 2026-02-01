@@ -112,17 +112,20 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 更新实例的最后更新时间（心跳）
     /// </summary>
-    public bool Heartbeat(string instanceId)
+    public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
         _logger.Debug("尝试更新实例心跳: {InstanceId}", instanceId);
 
         if (_instances.TryGetValue(instanceId, out var instance))
         {
-            instance.LastSeenUtc = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            instance.LastSeenUtc = now;
+            lastSeenUtc = now;
             _logger.Debug("成功更新实例心跳: {InstanceId}", instanceId);
             return true;
         }
 
+        lastSeenUtc = DateTime.MinValue;
         _logger.Warning("心跳更新失败: 未找到实例 {InstanceId}", instanceId);
         return false;
     }

@@ -26,7 +26,7 @@ class TestAuthProtocol(unittest.TestCase):
 
             response = client.call("hub.ping")
 
-            if "result" in response and "serverTimeUtc" in response["result"]:
+            if "result" in response and "ok" in response["result"] and response["result"]["ok"] == True and "serverTimeUtc" in response["result"]:
                 result.add_detail("✅ 调用成功")
                 result.add_detail(f"服务器时间: {response['result']['serverTimeUtc']}")
                 result.mark_success()

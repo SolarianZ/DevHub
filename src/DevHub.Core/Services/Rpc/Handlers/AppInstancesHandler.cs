@@ -215,7 +215,7 @@ public class AppInstancesHandler : IRpcHandler
             }
 
             _logger.Debug("尝试更新实例心跳，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            if (!_appRegistry.Heartbeat(instanceId))
+            if (!_appRegistry.Heartbeat(instanceId, out var lastSeenUtc))
             {
                 _logger.Warning("实例心跳更新失败: 未找到实例 {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
                 return Task.FromResult(new JsonRpcResponse
@@ -237,7 +237,7 @@ public class AppInstancesHandler : IRpcHandler
                 Result = new
                 {
                     ok = true,
-                    serverTimeUtc = DateTime.UtcNow.ToString("O")
+                    lastSeenUtc = lastSeenUtc.ToString("O")
                 }
             };
 

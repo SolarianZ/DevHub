@@ -45,7 +45,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                 import json
                 hub_info = json.load(f)
 
-            required_fields = ["protocolVersion", "httpBaseUrl", "tokenFile"]
+            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"]
             for field in required_fields:
                 if field in hub_info:
                     result.add_detail(f"✅ hub.json 包含 {field} 字段")
@@ -95,7 +95,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             client = RpcClient(base_url, token)
             response = client.call("hub.ping")
 
-            if "result" in response and "serverTimeUtc" in response["result"]:
+            if "result" in response and "ok" in response["result"] and response["result"]["ok"] == True and "serverTimeUtc" in response["result"]:
                 result.add_detail(f"✅ 服务器响应正常")
                 result.add_detail(f"服务器时间: {response['result']['serverTimeUtc']}")
                 result.mark_success()
