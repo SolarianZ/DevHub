@@ -259,6 +259,16 @@ sequenceDiagram
 }
 ```
 
+#### 5.1.1 AppDefinition Semantics (Normative)
+- `scopePolicy` controls which `scope` values are valid for this `appId`:
+  - `any`: `scope` MAY be global (`null`/omitted) or a non-empty string.
+  - `globalOnly`: `scope` MUST be global (`null`/omitted).
+  - `required`: `scope` MUST be a non-empty string.
+- If `scopePolicy` is violated, Hub MUST return `-32002 forbidden` with `error.data.reason="scope_policy_violation"`.
+- If `capabilities` or `capabilities.rpc` is omitted, it defaults to `true`.
+  - If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST reject `hub.invoke.notify` and `hub.invoke.request` for that `appId` with `-32002 forbidden` and `error.data.reason="rpc_disabled"`.
+- `capabilities.events` is reserved for future use; in v1, Hubs MUST ignore it.
+
 ---
 
 ### 5.2 AppInstance
@@ -518,7 +528,7 @@ Normative requirements:
 - `params.instance` MUST conform to `AppInstanceRegistration` (§5.2.1).
 - Hub MUST set `registeredAtUtc` and `lastSeenUtc` server-side.
 - Hub MUST update `lastSeenUtc` on every successful `registerInstance`.
-- Hub MUST validate `scope` per §5.5 and (if definition exists) enforce `AppDefinition.scopePolicy`. Violations MUST return `-32002 forbidden`.
+- Hub MUST validate `scope` per §5.5 and (if definition exists) enforce `AppDefinition.scopePolicy` (§5.1.1). Violations MUST return `-32002 forbidden` with `error.data.reason="scope_policy_violation"`.
 
 **Result**:
 ```json
@@ -598,7 +608,9 @@ Normative behavior:
   - `{scopeOrGlobal}`: The requested scope, or the literal string `global` if scope is null/omitted.
   - `{httpBaseUrl}`: The Hub's HTTP base URL (e.g. `http://127.0.0.1:47231`).
 - If `AppDefinition.launch.dedupeKeyTemplate` is omitted or null, Hub MUST use the default template: `{appId}:{scopeOrGlobal}`.
+- `waitForRegisterMs` defaults to `0` if omitted and MUST be an integer ≥ 0 (out of range => `-32602 invalid_params`).
 - If `waitForRegisterMs > 0`, Hub SHOULD wait up to that duration for an instance to register. If timeout occurs but process started, return `status: "starting"`.
+- If `AppDefinition.launch` is missing or `launch.exePath` is missing/empty, Hub MUST return `-32020 launch_failed` with `error.data.reason="launch_config_missing"`.
 - Hub MUST read `AppDefinition.launch.exePath`. If definition missing: `-32014`. If process creation fails: `-32020`.
 
 #### 6.3.10 `hub.invoke.notify` (HTTP only)
@@ -627,6 +639,7 @@ Validation & Defaults:
 - `autoLaunch` defaults to `true`, **unless** `target.instanceId` is **specified** (non-null string), in which case it defaults to `false`.
 - If `target.instanceId` is **specified** AND `options.autoLaunch` is explicitly set to `true`, Hub MUST return `-32602 invalid_params`.
 - If `options.autoLaunch` is true, then `options.queueIfOffline` MUST be true (else `-32602 invalid_params`).
+- If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST return `-32002 forbidden` with `error.data.reason="rpc_disabled"`.
 
 #### 6.3.11 `hub.invoke.request` (HTTP only)
 **Params**: same shape as `hub.invoke.notify`, plus:
@@ -654,6 +667,7 @@ Validation & Defaults:
 Validation:
 - Default values if omitted: `ttlMs=300000`, `waitTimeoutMs=120000`, `queueIfOffline=true`, `autoLaunch=true`.
 - `waitTimeoutMs` MUST be <= `ttlMs`.
+- If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST return `-32002 forbidden` with `error.data.reason="rpc_disabled"`.
 
 #### 6.3.12 `hub.invoke.poll` (HTTP only)
 **Params**:
@@ -689,7 +703,7 @@ Validation:
 
 Normative behavior:
 - Hub MUST require the instance to be registered (`hub.apps.registerInstance`) before polling; otherwise `-32010 instance_not_found`.
-- Hub MUST enforce that the instance has `invoke.poll==true`; otherwise `-32002 forbidden`.
+- Hub MUST enforce that the instance has `invoke.poll==true`; otherwise `-32002 forbidden` with `error.data.reason="poll_not_enabled"`.
 - Hub MUST support Long Polling: if no items are available, Hub MUST wait up to `waitMs` before returning an empty list.
 - Successful `poll` MUST update the instance’s `lastSeenUtc`.
 - The lease duration is returned inside each item's `delivery.leaseSeconds`.
@@ -720,7 +734,7 @@ Error response from callee:
 
 Normative behavior:
 - Hub MUST require the instance to be registered; otherwise `-32010 instance_not_found`.
-- Hub MUST enforce that the instance has `invoke.respond==true`; otherwise `-32002 forbidden`.
+- Hub MUST enforce that the instance has `invoke.respond==true`; otherwise `-32002 forbidden` with `error.data.reason="respond_not_enabled"`.
 - Successful `respond` MUST update the instance’s `lastSeenUtc`.
 
 **Errors**:
