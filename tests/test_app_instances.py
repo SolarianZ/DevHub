@@ -42,8 +42,13 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "result" in register_response and register_response["result"].get("ok"):
+            if "result" in register_response and register_response["result"].get("ok") and "instance" in register_response["result"]:
                 result.add_detail("✅ 实例注册成功")
+
+                # 验证返回的实例包含所有必备字段
+                instance = register_response["result"]["instance"]
+                if not self._validate_app_instance_fields(result, instance):
+                    return result
 
                 # 列出实例
                 list_response = client.call("hub.apps.listInstances")
@@ -54,6 +59,13 @@ class TestAppInstances(unittest.TestCase):
 
                     if found:
                         result.add_detail("✅ 实例在列表中可见")
+
+                        # 验证列出的实例包含所有必备字段
+                        for inst in instances:
+                            if inst.get("instanceId") == instance_id:
+                                if not self._validate_app_instance_fields(result, inst):
+                                    return result
+
                         result.mark_success()
                     else:
                         result.mark_failure("❌ 注册的实例未在列表中找到")
@@ -165,7 +177,7 @@ class TestAppInstances(unittest.TestCase):
             # 注销实例
             unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
 
-            if "result" in unregister_response:
+            if "result" in unregister_response and unregister_response["result"].get("ok"):
                 result.add_detail("✅ 实例注销成功")
 
                 # 验证实例不再列出
@@ -281,8 +293,14 @@ class TestAppInstances(unittest.TestCase):
             response = client.call("hub.apps.heartbeat", {"instanceId": nonexistent_instance_id})
 
             if "error" in response and response["error"]["code"] == -32010:
-                result.add_detail(f"✅ 正确返回实例不存在错误: {response['error']['message']}")
-                result.mark_success()
+                if response["error"]["message"] == "instance_not_found":
+                    if "data" in response["error"] and response["error"]["data"].get("reason") == "instance_not_found":
+                        result.add_detail("✅ 正确返回实例不存在错误")
+                        result.mark_success()
+                    else:
+                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
 
@@ -348,6 +366,25 @@ class TestAppInstances(unittest.TestCase):
                     result.mark_failure("❌ 按scope过滤测试失败")
                     return result
 
+            # 测试 includeAllScopes 参数（必须忽略 scope 参数）
+            response_all_scopes = client.call("hub.apps.listInstances", {
+                "scope": "invalid-scope",
+                "includeAllScopes": True
+            })
+            if "result" in response_all_scopes and "instances" in response_all_scopes["result"]:
+                instances_all_scopes = response_all_scopes["result"]["instances"]
+                found1 = any(inst.get("instanceId") == instance_id1 for inst in instances_all_scopes)
+                found2 = any(inst.get("instanceId") == instance_id2 for inst in instances_all_scopes)
+
+                if found1 and found2:
+                    result.add_detail("✅ includeAllScopes 参数测试成功：忽略 scope 参数，返回所有范围的实例")
+                else:
+                    result.mark_failure("❌ includeAllScopes 参数测试失败")
+                    return result
+
+            # 验证返回的实例包含所有必备字段
+            for instance in instances_all_scopes:
+                self._validate_app_instance_fields(result, instance)
 
             result.mark_success()
 
@@ -371,6 +408,42 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def _validate_app_instance_fields(self, result, instance):
+        """验证 AppInstance 包含所有必备字段"""
+        required_fields = ["instanceId", "appId", "pid", "registeredAtUtc", "lastSeenUtc", "invoke"]
+
+        for field in required_fields:
+            if field not in instance:
+                result.mark_failure(f"❌ 实例缺少必备字段: {field}")
+                return False
+
+        # 验证时间格式是 RFC3339
+        import re
+        rfc3339_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z'
+        if not re.match(rfc3339_pattern, instance["registeredAtUtc"]):
+            result.mark_failure(f"❌ registeredAtUtc 格式不符合 RFC3339: {instance['registeredAtUtc']}")
+            return False
+
+        if not re.match(rfc3339_pattern, instance["lastSeenUtc"]):
+            result.mark_failure(f"❌ lastSeenUtc 格式不符合 RFC3339: {instance['lastSeenUtc']}")
+            return False
+
+        # 验证 invoke 字段包含 poll 和 respond 属性
+        if "poll" not in instance["invoke"] or "respond" not in instance["invoke"]:
+            result.mark_failure("❌ 实例的invoke字段缺少poll或respond属性")
+            return False
+
+        if not isinstance(instance["invoke"]["poll"], bool) or not isinstance(instance["invoke"]["respond"], bool):
+            result.mark_failure("❌ poll或respond属性不是布尔值")
+            return False
+
+        # 验证 pid 是正整数
+        if not isinstance(instance["pid"], int) or instance["pid"] < 1:
+            result.mark_failure(f"❌ pid 必须是正整数: {instance['pid']}")
+            return False
+
+        return True
+
     def test_register_instance_with_global_scope(self):
         """测试注册 scope 为 \"global\" 的实例（禁止值）"""
         result = TestResult("测试注册 scope 为 \"global\" 的实例")
@@ -390,9 +463,15 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "error" in response and response["error"]["code"] == -32602:
-                result.add_detail(f"✅ 正确返回无效参数错误: {response['error']['message']}")
-                result.mark_success()
+            if "error" in response and response["error"]["code"] == -32002:
+                if response["error"]["message"] == "forbidden":
+                    if "data" in response["error"] and response["error"]["data"].get("reason") == "scope_policy_violation":
+                        result.add_detail("✅ 正确返回 -32002 forbidden 错误，reason 为 scope_policy_violation")
+                        result.mark_success()
+                    else:
+                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
 
@@ -444,6 +523,10 @@ class TestAppInstances(unittest.TestCase):
                     result.add_detail("✅ Scope 严格匹配测试成功：只返回了 scope1 的实例")
                 else:
                     result.mark_failure(f"❌ Scope 严格匹配测试失败：找到 scope1={found_scope1}, scope2={found_scope2}")
+
+                # 验证返回的实例包含所有必备字段
+                for instance in instances:
+                    self._validate_app_instance_fields(result, instance)
 
             result.mark_success()
 
@@ -530,14 +613,119 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "error" in response and response["error"]["code"] == -32602:
-                result.add_detail(f"✅ 正确返回无效参数错误: {response['error']['message']}")
-                result.mark_success()
+            if "error" in response and response["error"]["code"] == -32002:
+                if response["error"]["message"] == "forbidden":
+                    if "data" in response["error"] and response["error"]["data"].get("reason") == "scope_policy_violation":
+                        result.add_detail("✅ 正确返回 -32002 forbidden 错误，reason 为 scope_policy_violation")
+                        result.mark_success()
+                    else:
+                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
 
         except Exception as e:
             result.mark_failure(str(e))
+
+        return result
+
+    def test_list_instances_include_offline(self):
+        """测试 includeOffline 参数（包含离线实例）"""
+        result = TestResult("测试 includeOffline 参数")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            # 注册实例
+            client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": "test-app-offline",
+                    "scope": None,
+                    "pid": 12345,
+                    "invoke": { "poll": True, "respond": True }
+                }
+            })
+
+            # 首先验证实例在线时可见
+            list_response = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
+            if "result" in list_response and "instances" in list_response["result"]:
+                instances = list_response["result"]["instances"]
+                found = any(inst.get("instanceId") == instance_id for inst in instances)
+
+                if found:
+                    result.add_detail("✅ 实例在线时可见")
+                else:
+                    result.mark_failure("❌ 实例在线时未找到")
+                    return result
+
+            # 让实例超时变为离线（超过30秒不发送心跳）
+            wait_seconds = 35
+            result.add_detail(f"⏳ 等待 {wait_seconds} 秒，让实例超时离线...")
+
+            import sys
+            progress_width = 40
+            for i in range(wait_seconds + 1):
+                if i > 0:
+                    time.sleep(1)
+                percent = int((i / wait_seconds) * 100)
+                filled = int((i / wait_seconds) * progress_width)
+                bar = "█" * filled + "░" * (progress_width - filled)
+                sys.stdout.write(f"\r    [{bar}] {percent}% ({i}/{wait_seconds}s)")
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+            # 验证默认情况下不返回离线实例
+            list_response_default = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
+            if "result" in list_response_default and "instances" in list_response_default["result"]:
+                instances_default = list_response_default["result"]["instances"]
+                found = any(inst.get("instanceId") == instance_id for inst in instances_default)
+
+                if not found:
+                    result.add_detail("✅ 默认情况下不返回离线实例")
+                else:
+                    result.mark_failure("❌ 默认情况下返回了离线实例")
+                    return result
+
+            # 验证 includeOffline=true 时返回离线实例
+            list_response_offline = client.call("hub.apps.listInstances", {
+                "appId": "test-app-offline",
+                "includeOffline": True
+            })
+            if "result" in list_response_offline and "instances" in list_response_offline["result"]:
+                instances_offline = list_response_offline["result"]["instances"]
+                found = any(inst.get("instanceId") == instance_id for inst in instances_offline)
+
+                if found:
+                    result.add_detail("✅ includeOffline=true 时返回离线实例")
+
+                    # 验证返回的实例包含所有必备字段
+                    for instance in instances_offline:
+                        self._validate_app_instance_fields(result, instance)
+                else:
+                    result.mark_failure("❌ includeOffline=true 时未返回离线实例")
+                    return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            # 清理测试实例
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                client = RpcClient(base_url, token)
+                list_response = client.call("hub.apps.listInstances", {"includeAllScopes": True, "includeOffline": True})
+                if "result" in list_response and list_response["result"].get("ok") and "instances" in list_response["result"]:
+                    for instance in list_response["result"]["instances"]:
+                        if instance.get("appId") == "test-app-offline":
+                            client.call("hub.apps.unregisterInstance", {"instanceId": instance.get("instanceId")})
+            except:
+                pass
 
         return result
 
@@ -550,6 +738,7 @@ class TestAppInstances(unittest.TestCase):
             self.test_unregister_instance(),
             self.test_unregister_nonexistent_instance(),
             self.test_list_instances_with_params(),
+            self.test_list_instances_include_offline(),
             self.test_instance_offline_after_30s_no_heartbeat(),
             self.test_register_instance_with_global_scope(),
             self.test_list_instances_scope_strict_match(),

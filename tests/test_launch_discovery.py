@@ -60,11 +60,48 @@ class TestLaunchDiscovery(unittest.TestCase):
                 result.mark_failure(f"❌ 协议版本不正确: {hub_info.get('protocolVersion')}")
                 return result
 
-            # 验证 httpBaseUrl 是否可访问
-            result.add_detail(f"HTTP 地址: {hub_info['httpBaseUrl']}")
+            # 验证 httpBaseUrl 规范
+            http_base_url = hub_info["httpBaseUrl"]
+            result.add_detail(f"HTTP 地址: {http_base_url}")
+            # 检查是否指向 loopback 地址
+            if not any(addr in http_base_url for addr in ["127.0.0.1", "localhost", "::1"]):
+                result.mark_failure(f"❌ httpBaseUrl 必须指向 loopback 地址: {http_base_url}")
+                return result
+            # 检查是否有尾随斜杠
+            if http_base_url.endswith("/"):
+                result.mark_failure(f"❌ httpBaseUrl 不得有尾随斜杠: {http_base_url}")
+                return result
+
+            # 验证 wsUrl 规范
+            ws_url = hub_info["wsUrl"]
+            result.add_detail(f"WebSocket 地址: {ws_url}")
+            # 检查是否为有效的 WebSocket URL
+            if not ws_url.startswith("ws://") and not ws_url.startswith("wss://"):
+                result.mark_failure(f"❌ wsUrl 必须是 ws:// 或 wss:// 开头的绝对 URL: {ws_url}")
+                return result
+            # 检查是否指向 loopback 地址
+            if not any(addr in ws_url for addr in ["127.0.0.1", "localhost", "::1"]):
+                result.mark_failure(f"❌ wsUrl 必须指向 loopback 地址: {ws_url}")
+                return result
+            # 检查是否有尾随斜杠
+            if ws_url.endswith("/"):
+                result.mark_failure(f"❌ wsUrl 不得有尾随斜杠: {ws_url}")
+                return result
+
+            # 验证 tokenFile 规范
+            token_file = hub_info["tokenFile"]
+            result.add_detail(f"Token 文件路径: {token_file}")
+            # 检查是否为绝对路径
+            if not os.path.isabs(token_file):
+                result.mark_failure(f"❌ tokenFile 必须是绝对路径: {token_file}")
+                return result
+            # 检查文件是否存在
+            if not os.path.exists(token_file):
+                result.mark_failure(f"❌ tokenFile 指向的文件不存在: {token_file}")
+                return result
 
             # 检查 token 文件内容
-            with open(token_path, "r", encoding="utf-8") as f:
+            with open(token_file, "r", encoding="utf-8") as f:
                 token = f.read().strip()
 
             if token:
@@ -114,14 +151,18 @@ class TestLaunchDiscovery(unittest.TestCase):
         try:
             runtime_dir = DiscoveryService.get_runtime_directory()
             token_path = os.path.join(runtime_dir, "token.txt")
+            hub_json_path = os.path.join(runtime_dir, "hub.json")
 
+            # 检查 token.txt 权限
             if os.name == "nt":  # Windows 系统
                 import win32security
                 import ntsecuritycon as con
 
                 # 获取文件安全描述符
-                sd = win32security.GetFileSecurity(token_path, win32security.DACL_SECURITY_INFORMATION)
-                dacl = sd.GetSecurityDescriptorDacl()
+                sd_token = win32security.GetFileSecurity(token_path, win32security.DACL_SECURITY_INFORMATION)
+                dacl_token = sd_token.GetSecurityDescriptorDacl()
+                sd_hub = win32security.GetFileSecurity(hub_json_path, win32security.DACL_SECURITY_INFORMATION)
+                dacl_hub = sd_hub.GetSecurityDescriptorDacl()
 
                 # 获取当前用户 SID
                 user_sid = win32security.GetTokenInformation(
@@ -132,40 +173,63 @@ class TestLaunchDiscovery(unittest.TestCase):
                     win32security.TokenUser
                 )[0]
 
-                # 检查是否只有当前用户有访问权限
-                has_only_user_access = True
-                for i in range(dacl.GetAceCount()):
-                    ace = dacl.GetAce(i)
+                # 检查 token.txt 是否只有当前用户有访问权限
+                has_only_user_access_token = True
+                for i in range(dacl_token.GetAceCount()):
+                    ace = dacl_token.GetAce(i)
                     ace_type, ace_flags, ace_data = ace
                     if ace_type == win32security.ACCESS_ALLOWED_ACE_TYPE:
                         sid = ace_data[0]
-                        # 检查是否是当前用户 SID
                         if sid != user_sid:
-                            has_only_user_access = False
+                            has_only_user_access_token = False
                             break
 
-                if has_only_user_access:
+                if has_only_user_access_token:
                     result.add_detail("✅ Token 文件权限正确（仅当前用户可访问）")
                 else:
-                    result.add_detail("⚠️  Token 文件权限可能不正确")
+                    result.mark_failure("❌ Token 文件权限不正确")
+                    return result
 
-                result.mark_success()
+                # 检查 hub.json 是否只有当前用户有访问权限
+                has_only_user_access_hub = True
+                for i in range(dacl_hub.GetAceCount()):
+                    ace = dacl_hub.GetAce(i)
+                    ace_type, ace_flags, ace_data = ace
+                    if ace_type == win32security.ACCESS_ALLOWED_ACE_TYPE:
+                        sid = ace_data[0]
+                        if sid != user_sid:
+                            has_only_user_access_hub = False
+                            break
+
+                if has_only_user_access_hub:
+                    result.add_detail("✅ hub.json 文件权限正确（仅当前用户可访问）")
+                else:
+                    result.mark_failure("❌ hub.json 文件权限不正确")
+                    return result
 
             else:  # 非 Windows 系统，简化检查
                 import stat
 
-                # 检查文件权限是否为 0o600（仅用户可读写）
-                st_mode = os.stat(token_path).st_mode
-                if (st_mode & 0o777) == 0o600:
+                # 检查 token.txt 权限是否为 0o600（仅用户可读写）
+                st_mode_token = os.stat(token_path).st_mode
+                if (st_mode_token & 0o777) == 0o600:
                     result.add_detail("✅ Token 文件权限正确（0o600）")
                 else:
-                    result.add_detail(f"⚠️  Token 文件权限可能不正确: 0o{oct(st_mode & 0o777)[2:]}")
+                    result.mark_failure(f"❌ Token 文件权限不正确: 0o{oct(st_mode_token & 0o777)[2:]}")
+                    return result
 
-                result.mark_success()
+                # 检查 hub.json 权限是否为 0o600（仅用户可读写）
+                st_mode_hub = os.stat(hub_json_path).st_mode
+                if (st_mode_hub & 0o777) == 0o600:
+                    result.add_detail("✅ hub.json 文件权限正确（0o600）")
+                else:
+                    result.mark_failure(f"❌ hub.json 文件权限不正确: 0o{oct(st_mode_hub & 0o777)[2:]}")
+                    return result
+
+            result.mark_success()
 
         except Exception as e:
-            result.add_detail(f"⚠️  无法检查 token 文件权限: {e}")
-            result.mark_success()  # 权限检查失败不应该导致测试失败
+            result.mark_failure(f"❌ 无法检查文件权限: {e}")
 
         return result
 
@@ -178,17 +242,39 @@ class TestLaunchDiscovery(unittest.TestCase):
             hub_json_path = os.path.join(runtime_dir, "hub.json")
             hub_json_tmp_path = os.path.join(runtime_dir, "hub.json.tmp")
 
-            # 检查是否存在临时文件（原子写入的痕迹）
-            if not os.path.exists(hub_json_tmp_path):
-                result.add_detail("✅ 没有发现临时文件，可能使用了原子写入")
-            else:
-                result.add_detail("⚠️  发现临时文件，可能原子写入过程中出现了问题")
+            # 验证原子写入的实现方式：应该先写临时文件再替换
+            # 我们可以通过检查文件的修改时间和存在性来推断
+            import time
 
+            # 首先检查是否存在临时文件
+            if os.path.exists(hub_json_tmp_path):
+                result.mark_failure("❌ 发现临时文件，原子写入过程可能失败")
+                return result
+
+            # 检查 hub.json 是否存在
+            if not os.path.exists(hub_json_path):
+                result.mark_failure("❌ hub.json 文件不存在")
+                return result
+
+            # 尝试读取 hub.json 内容以验证其完整性
+            with open(hub_json_path, "r", encoding="utf-8") as f:
+                import json
+                hub_info = json.load(f)
+
+            # 验证 hub.json 内容的完整性
+            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"]
+            for field in required_fields:
+                if field not in hub_info:
+                    result.mark_failure(f"❌ hub.json 缺少 {field} 字段，可能是原子写入失败导致的")
+                    return result
+
+            # 原子写入的一个重要特性是文件内容的完整性，因为如果在写入过程中失败，
+            # 临时文件不会被重命名为目标文件，从而避免了部分写入的问题
+            result.add_detail("✅ hub.json 内容完整，原子写入特性正常")
             result.mark_success()
 
         except Exception as e:
-            result.add_detail(f"⚠️  无法检查原子写入特性: {e}")
-            result.mark_success()
+            result.mark_failure(f"❌ 无法检查原子写入特性: {e}")
 
         return result
 

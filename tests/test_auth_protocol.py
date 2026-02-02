@@ -64,7 +64,21 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32001:
-                result.add_detail(f"✅ 正确返回未授权错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "unauthorized":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data.reason 包含正确的原因
+                expected_reason = "missing_token" if invalid_headers["Authorization"] == "" else "invalid_token"
+                if "data" in response["error"] and response["error"]["data"].get("reason") == expected_reason:
+                    result.add_detail("✅ 错误数据包含正确的原因")
+                else:
+                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -88,7 +102,21 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32001:
-                result.add_detail(f"✅ 正确返回未授权错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "unauthorized":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data.reason 包含正确的原因
+                expected_reason = "missing_token" if invalid_headers["Authorization"] == "" else "invalid_token"
+                if "data" in response["error"] and response["error"]["data"].get("reason") == expected_reason:
+                    result.add_detail("✅ 错误数据包含正确的原因")
+                else:
+                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -112,7 +140,23 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32099:
-                result.add_detail(f"✅ 正确返回不支持协议版本错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "not_supported":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data 包含 expected 和 received 字段
+                received_version = invalid_headers["X-DevHub-Protocol"]
+                if "data" in response["error"] and response["error"]["data"].get("expected") == 1 and \
+                   response["error"]["data"].get("received") == received_version and \
+                   response["error"]["data"].get("reason") == "mismatch":
+                    result.add_detail("✅ 错误数据包含正确的 expected 和 received 字段")
+                else:
+                    result.mark_failure(f"❌ 错误数据字段不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -158,7 +202,20 @@ class TestAuthProtocol(unittest.TestCase):
             if isinstance(response, dict) and "error" in response:
                 # Spec.md 6.1 明确要求 batch 请求必须返回 -32600 invalid_request
                 if response["error"]["code"] == -32600:
-                    result.add_detail(f"✅ 正确返回错误: {response['error']['message']}")
+                    # 验证 error.message 与 Spec.md 一致
+                    if response["error"]["message"] == "invalid_request":
+                        result.add_detail("✅ 错误消息正确")
+                    else:
+                        result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                        return result
+
+                    # 验证 id 为 null
+                    if response["id"] is None:
+                        result.add_detail("✅ 响应 id 为 null")
+                    else:
+                        result.mark_failure(f"❌ 响应 id 不正确: {response['id']}")
+                        return result
+
                     result.mark_success()
                 else:
                     result.mark_failure(f"❌ 错误码不正确: code={response['error']['code']}")
@@ -185,7 +242,23 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32099:
-                result.add_detail(f"✅ 正确返回不支持协议版本错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "not_supported":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data 包含 expected 和 received 字段
+                received_version = invalid_headers["X-DevHub-Protocol"]
+                if "data" in response["error"] and response["error"]["data"].get("expected") == 1 and \
+                   response["error"]["data"].get("received") == received_version and \
+                   response["error"]["data"].get("reason") == "mismatch":
+                    result.add_detail("✅ 错误数据包含正确的 expected 和 received 字段")
+                else:
+                    result.mark_failure(f"❌ 错误数据字段不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -209,7 +282,20 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32600:
-                result.add_detail(f"✅ 正确返回无效请求错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "invalid_request":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data.reason 包含正确的原因
+                if "data" in response["error"] and response["error"]["data"].get("reason") == "missing_header":
+                    result.add_detail("✅ 错误数据包含正确的原因")
+                else:
+                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -233,7 +319,20 @@ class TestAuthProtocol(unittest.TestCase):
             )
 
             if "error" in response and response["error"]["code"] == -32600:
-                result.add_detail(f"✅ 正确返回无效请求错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "invalid_request":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data.reason 包含正确的原因
+                if "data" in response["error"] and response["error"]["data"].get("reason") == "missing_header":
+                    result.add_detail("✅ 错误数据包含正确的原因")
+                else:
+                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -252,12 +351,13 @@ class TestAuthProtocol(unittest.TestCase):
 
             # 直接使用 requests 库发送请求，以便检查 HTTP 状态码
             import requests
+            import uuid
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {token}",
                 "X-DevHub-Protocol": "1",
                 "X-DevHub-ClientId": "PythonTestClient",
-                "X-DevHub-ClientSessionId": "test-session-123"
+                "X-DevHub-ClientSessionId": str(uuid.uuid4())  # 使用 RFC 4122 UUID
             }
 
             # 测试有效请求
@@ -286,6 +386,17 @@ class TestAuthProtocol(unittest.TestCase):
             response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
             if response.status_code == 200:
                 result.add_detail("✅ 无效方法请求返回 200 OK")
+                # 验证 JSON-RPC 错误响应
+                response_json = response.json()
+                if "error" in response_json:
+                    if response_json["error"]["code"] == -32601 and response_json["error"]["message"] == "method_not_found":
+                        result.add_detail("✅ 无效方法返回正确的 -32601 method_not_found 错误")
+                    else:
+                        result.mark_failure(f"❌ 无效方法返回了错误的错误码或消息: code={response_json['error']['code']}, message={response_json['error']['message']}")
+                        return result
+                else:
+                    result.mark_failure("❌ 无效方法请求未返回 JSON-RPC 错误响应")
+                    return result
             else:
                 result.mark_failure(f"❌ 无效方法请求返回了错误的状态码: {response.status_code}")
                 return result

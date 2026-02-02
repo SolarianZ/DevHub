@@ -7,6 +7,7 @@ import os
 import json
 import platform
 import requests
+import uuid
 from datetime import datetime
 
 
@@ -41,15 +42,16 @@ class DiscoveryService:
         """
         runtime_dir = DiscoveryService.get_runtime_directory()
         hub_json_path = os.path.join(runtime_dir, "hub.json")
-        token_path = os.path.join(runtime_dir, "token.txt")
 
         if not os.path.exists(hub_json_path):
             raise FileNotFoundError(f"hub.json not found: {hub_json_path}")
-        if not os.path.exists(token_path):
-            raise FileNotFoundError(f"token.txt not found: {token_path}")
 
         with open(hub_json_path, "r", encoding="utf-8") as f:
             hub_info = json.load(f)
+
+        token_path = hub_info["tokenFile"]
+        if not os.path.exists(token_path):
+            raise FileNotFoundError(f"Token file not found: {token_path}")
 
         with open(token_path, "r", encoding="utf-8") as f:
             token = f.read().strip()
@@ -62,7 +64,7 @@ class RpcClient:
     JSON-RPC 客户端
     """
 
-    def __init__(self, base_url, token):
+    def __init__(self, base_url, token, client_session_id=None):
         self.base_url = base_url
         self.token = token
         self.headers = {
@@ -70,7 +72,7 @@ class RpcClient:
             "Authorization": f"Bearer {token}",
             "X-DevHub-Protocol": "1",
             "X-DevHub-ClientId": "PythonTestClient",
-            "X-DevHub-ClientSessionId": "test-session-123"
+            "X-DevHub-ClientSessionId": client_session_id or str(uuid.uuid4())
         }
 
     def call(self, method, params=None, request_id="1"):

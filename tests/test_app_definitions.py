@@ -18,17 +18,17 @@ class TestAppDefinitions(unittest.TestCase):
     """AppDefinition 测试类"""
 
     def get_test_app_definition_path(self):
-        """获取应用程序定义文件夹路径（使用临时目录）"""
-        import tempfile
-        temp_dir = tempfile.mkdtemp(prefix="devhub-test-")
-        definitions_dir = os.path.join(temp_dir, "apps", "definitions")
+        """获取应用程序定义文件夹路径（使用规范目录）"""
+        from tests.test_base import DiscoveryService
+        runtime_dir = DiscoveryService.get_runtime_directory()
+        definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
         os.makedirs(definitions_dir, exist_ok=True)
         return definitions_dir
 
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
         definitions_dir = self.get_test_app_definition_path()
-        test_app_path = os.path.join(definitions_dir, "test-app.json")
+        test_app_path = os.path.join(definitions_dir, "test-app-1.json")  # 文件名与appId一致
 
         # 如果文件不存在则创建
         if not os.path.exists(test_app_path):
@@ -71,7 +71,8 @@ class TestAppDefinitions(unittest.TestCase):
                 if found_test_app:
                     result.add_detail("✅ 测试应用程序定义在返回列表中")
                 else:
-                    result.add_detail("⚠️  未找到测试应用程序定义")
+                    result.mark_failure("❌ 未找到测试应用程序定义")
+                    return result
 
                 result.mark_success()
             else:
@@ -139,7 +140,20 @@ class TestAppDefinitions(unittest.TestCase):
             response = client.call("hub.apps.getDefinition", {"appId": "non-existent-app"})
 
             if "error" in response and response["error"]["code"] == -32014:
-                result.add_detail(f"✅ 正确返回应用程序定义不存在错误: {response['error']['message']}")
+                # 验证 error.message 与 Spec.md 一致
+                if response["error"]["message"] == "app_definition_not_found":
+                    result.add_detail("✅ 错误消息正确")
+                else:
+                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+                    return result
+
+                # 验证 error.data.appId 包含请求的 appId
+                if "data" in response["error"] and response["error"]["data"].get("appId") == "non-existent-app":
+                    result.add_detail("✅ 错误数据包含正确的 appId")
+                else:
+                    result.mark_failure(f"❌ 错误数据中 appId 不正确: {response['error'].get('data', {})}")
+                    return result
+
                 result.mark_success()
             else:
                 result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
@@ -161,7 +175,7 @@ class TestAppDefinitions(unittest.TestCase):
             definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
             os.makedirs(definitions_dir, exist_ok=True)
 
-            invalid_app_path = os.path.join(definitions_dir, "invalid-appid-app.json")
+            invalid_app_path = os.path.join(definitions_dir, "invalid app id.json")  # 文件名与appId一致
 
             # 创建appId格式无效的应用程序定义
             invalid_app = {
