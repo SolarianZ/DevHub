@@ -15,6 +15,8 @@ from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_app_definitions import TestAppDefinitions
 from tests.test_app_instances import TestAppInstances
+from tests.test_invalid_params import TestInvalidParams
+from tests.test_internal_errors import TestInternalErrors
 
 
 def setup_logging(log_file):
@@ -58,6 +60,14 @@ def run_all_tests():
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
     report.results.extend(app_instances_tests.run_all_tests())
+
+    logger.info("=== 运行 invalid_params 参数验证测试 ===")
+    invalid_params_tests = TestInvalidParams()
+    report.results.extend(invalid_params_tests.run_all_tests())
+
+    logger.info("=== 运行 internal_error 内部服务器错误测试 ===")
+    internal_errors_tests = TestInternalErrors()
+    report.results.extend(internal_errors_tests.run_all_tests())
 
     # 保存报告
     json_report_path = os.path.join(temp_dir, "test_results.json")
