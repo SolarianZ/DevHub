@@ -57,10 +57,11 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            invalid_headers = {"Authorization": ""}
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers={"Authorization": ""}
+                invalid_headers=invalid_headers
             )
 
             if "error" in response and response["error"]["code"] == -32001:
@@ -95,10 +96,11 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            invalid_headers = {"Authorization": "Bearer invalid_token"}
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers={"Authorization": "Bearer invalid_token"}
+                invalid_headers=invalid_headers
             )
 
             if "error" in response and response["error"]["code"] == -32001:
@@ -133,10 +135,11 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            invalid_headers = {"X-DevHub-Protocol": "2"}
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers={"X-DevHub-Protocol": "2"}
+                invalid_headers=invalid_headers
             )
 
             if "error" in response and response["error"]["code"] == -32099:
@@ -234,11 +237,12 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            invalid_headers = {"X-DevHub-Protocol": "1.0"}  # 注意：这里是字符串但不是 "1"
 
             # 测试使用其他字符串值作为协议版本
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers={"X-DevHub-Protocol": "1.0"}  # 注意：这里是字符串但不是 "1"
+                invalid_headers=invalid_headers
             )
 
             if "error" in response and response["error"]["code"] == -32099:

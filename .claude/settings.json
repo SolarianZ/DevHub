@@ -23,12 +23,14 @@
       "Bash(kill:*)",
       "Bash(tasklist:*)",
       "Bash(PYTHONPATH=. python3:*)",
-      "Bash(python3 ./tests/test_runner.py*)",
-      "Bash(python ./tests/test_runner.py*)",
       "Bash(pip3:*)",
       "Bash(pip:*)",
       "Bash(curl:*)",
       "Bash(findstr:*)"
+    ],
+    "ask": [
+      "Bash(python3 ./tests/test_runner.py*)",
+      "Bash(python ./tests/test_runner.py*)"
     ],
     "deny": [
       "Bash(git add *)",

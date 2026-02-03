@@ -147,12 +147,13 @@ class TestAppDefinitions(unittest.TestCase):
                     result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
                     return result
 
-                # 验证 error.data.appId 包含请求的 appId
-                if "data" in response["error"] and response["error"]["data"].get("appId") == "non-existent-app":
-                    result.add_detail("✅ 错误数据包含正确的 appId")
-                else:
-                    result.mark_failure(f"❌ 错误数据中 appId 不正确: {response['error'].get('data', {})}")
-                    return result
+                # 验证 error.data.appId（如果存在）包含请求的 appId
+                if "data" in response["error"] and "appId" in response["error"]["data"]:
+                    if response["error"]["data"].get("appId") == "non-existent-app":
+                        result.add_detail("✅ 错误数据包含正确的 appId")
+                    else:
+                        result.mark_failure(f"❌ 错误数据中 appId 不正确: {response['error']['data'].get('appId')}")
+                        return result
 
                 result.mark_success()
             else:

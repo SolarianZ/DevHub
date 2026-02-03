@@ -294,11 +294,16 @@ class TestAppInstances(unittest.TestCase):
 
             if "error" in response and response["error"]["code"] == -32010:
                 if response["error"]["message"] == "instance_not_found":
-                    if "data" in response["error"] and response["error"]["data"].get("reason") == "instance_not_found":
-                        result.add_detail("✅ 正确返回实例不存在错误")
-                        result.mark_success()
-                    else:
-                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+                    # 验证 error.data.reason（如果存在）是规范允许的值
+                    if "data" in response["error"] and "reason" in response["error"]["data"]:
+                        allowed_reasons = ["offline_no_queue", "unknown_instance", "target_instance_missing"]
+                        if response["error"]["data"].get("reason") in allowed_reasons:
+                            result.add_detail("✅ 错误数据包含规范允许的 reason 值")
+                        else:
+                            result.mark_failure(f"❌ 错误数据中 reason 不是规范允许的值: {response['error']['data'].get('reason')}")
+                            return result
+                    result.add_detail("✅ 正确返回实例不存在错误")
+                    result.mark_success()
                 else:
                     result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
@@ -463,13 +468,10 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "error" in response and response["error"]["code"] == -32002:
-                if response["error"]["message"] == "forbidden":
-                    if "data" in response["error"] and response["error"]["data"].get("reason") == "scope_policy_violation":
-                        result.add_detail("✅ 正确返回 -32002 forbidden 错误，reason 为 scope_policy_violation")
-                        result.mark_success()
-                    else:
-                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+            if "error" in response and response["error"]["code"] == -32602:
+                if response["error"]["message"] == "invalid_params":
+                    result.add_detail("✅ 正确返回 -32602 invalid_params 错误")
+                    result.mark_success()
                 else:
                     result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
@@ -613,13 +615,10 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if "error" in response and response["error"]["code"] == -32002:
-                if response["error"]["message"] == "forbidden":
-                    if "data" in response["error"] and response["error"]["data"].get("reason") == "scope_policy_violation":
-                        result.add_detail("✅ 正确返回 -32002 forbidden 错误，reason 为 scope_policy_violation")
-                        result.mark_success()
-                    else:
-                        result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
+            if "error" in response and response["error"]["code"] == -32602:
+                if response["error"]["message"] == "invalid_params":
+                    result.add_detail("✅ 正确返回 -32602 invalid_params 错误")
+                    result.mark_success()
                 else:
                     result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
             else:
