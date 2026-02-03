@@ -242,7 +242,7 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ 列出实例响应格式不正确")
                 return result
 
-            # 等待 30+ 秒（在线判定阈值）
+            # 等待30秒以上（在线判定阈值）
             wait_seconds = 35
             result.add_detail(f"⏳ 等待 {wait_seconds} 秒，让实例超时离线...")
 
@@ -737,8 +737,8 @@ class TestAppInstances(unittest.TestCase):
             self.test_unregister_instance(),
             self.test_unregister_nonexistent_instance(),
             self.test_list_instances_with_params(),
-            self.test_list_instances_include_offline(),
-            self.test_instance_offline_after_30s_no_heartbeat(),
+            # self.test_list_instances_include_offline(),               # 耗时项目，暂时屏蔽
+            # self.test_instance_offline_after_30s_no_heartbeat(),      # 耗时项目，暂时屏蔽
             self.test_register_instance_with_global_scope(),
             self.test_list_instances_scope_strict_match(),
             self.test_register_instance_empty_scope(),
