@@ -1,50 +1,52 @@
-# DevHub Protocol Specification v1.0.1
+# DevHub 协议规范 v1.0.1
 
-**Status**: Final
-**Date**: 2026-01-31
-**Applicability**: DevHub Hub v1.x, SDKs (any language)
-
----
-
-## 1. Introduction
-
-### 1.1 Purpose
-This specification defines the protocol for DevHub — a **per-user local daemon** that enables:
-- App instance registration & discovery
-- Cross-tool method invocation orchestration
-- Workspace isolation via `scope`
-- Event subscription for UI/monitoring
-
-### 1.2 Scope
-MUST be used by:
-- DevHub Hub implementation
-- All language SDKs (.NET, JS/TS, etc.)
-- Conformance test suites
-
-### 1.3 Non-Goals
-- Cross-machine communication
-- Strong consistency guarantees
-- Multi-user authorization
+**状态**：最终版
+**日期**：2026-01-31
+**适用范围**：DevHub Hub v1.x, SDKs（任意语言）
 
 ---
 
-## 2. Conformance Keywords (RFC 2119)
+## 1. 引言
 
-| Keyword      | Meaning                                       |
-| ------------ | --------------------------------------------- |
-| **MUST**     | Required behavior; violation = non-conformant |
-| **SHOULD**   | Recommended; deviation requires justification |
-| **MAY**      | Optional capability                           |
-| **MUST NOT** | Prohibited behavior                           |
+### 1.1 目的
+本规范定义了 DevHub 的协议 —— 一个**per-user本地守护进程**，用于实现：
+- 注册与发现应用实例
+- 编排跨工具方法调用
+- 由 `scope` 实现的工作区隔离
+- 用于 UI/监控 的事件订阅
+
+### 1.2 范围
+**必须**由以下项使用：
+- DevHub Hub 实现
+  - 简单身份验证
+- 所有语言 SDK（.NET, JS/TS 等）
+- 符合性测试套件
+
+### 1.3 非目标
+- 跨机器通信
+- 强一致性保证
+- 多用户授权
+- 复杂身份验证
 
 ---
 
-## 3. Transport & Message Format
+## 2. 符合性关键字 (RFC 2119)
 
-### 3.1 JSON-RPC 2.0 Baseline
-All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specification) and MUST be UTF-8 JSON text.
+| 关键字                  | 含义                             |
+| ----------------------- | -------------------------------- |
+| **必须** (**MUST**)     | 强制性行为；违反即视为不符合规范 |
+| **应该** (**SHOULD**)   | 推荐行为；偏离需有正当理由       |
+| **可以** (**MAY**)      | 可选功能                         |
+| **禁止** (**MUST NOT**) | 禁止的行为                       |
 
-#### 3.1.1 Request
+---
+
+## 3. 传输与消息格式
+
+### 3.1 JSON-RPC 2.0 基准
+所有消息**必须**符合 [JSON-RPC 2.0](https://www.jsonrpc.org/specification) 规范，且**必须**为 UTF-8 编码的 JSON 文本。
+
+#### 3.1.1 请求
 ```json
 {
   "jsonrpc": "2.0",
@@ -54,16 +56,16 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 }
 ```
 
-- `id` MUST be present for requests expecting a response and MUST be a **string** or **number**
-- Notifications MUST **omit** `id` (i.e., `id` MUST NOT be present)
-  - `"id": null` MUST NOT be used as a “notification marker”
-- `params` MAY be omitted
-- Batch requests (`array` root) MUST NOT be supported.
-  - If the incoming JSON root is an array, Hub MUST return a **single** JSON-RPC error response with:
+- 期望响应的请求**必须**包含 `id`，且**必须**为 **string** 或 **number**。
+- 通知**必须省略** `id`（即**禁止**存在 `id` 字段）。
+  - **禁止**使用 `"id": null` 作为“通知标记”。
+- `params` **可以**省略。
+- **禁止**支持批量请求（以 `array` 为根）。
+  - 如果输入的 JSON 根是数组，Hub **必须**返回一个**单一**的 JSON-RPC 错误响应：
     - `error.code = -32600` (`invalid_request`)
     - `id = null`
 
-#### 3.1.2 Notification (Client → Server or Server → Client on WS)
+#### 3.1.2 通知（客户端 → 服务端 或 服务端 → 客户端 在 WS 上）
 ```json
 {
   "jsonrpc": "2.0",
@@ -72,21 +74,21 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
 }
 ```
 
-#### 3.1.3 Success Response
+#### 3.1.3 成功响应
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "<same as request>",
+  "id": "<与请求相同>",
   "result": "object"
 }
 ```
-- `result` MUST be a JSON object for all `hub.*` methods.
+- 所有 `hub.*` 方法的 `result` **必须**是一个 JSON 对象。
 
-#### 3.1.4 Error Response
+#### 3.1.4 错误响应
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "<same as request, or null if unparseable>",
+  "id": "<与请求相同，若无法解析则为 null>",
   "error": {
     "code": "integer",
     "message": "string",
@@ -94,53 +96,59 @@ All messages MUST conform to [JSON-RPC 2.0](https://www.jsonrpc.org/specificatio
   }
 }
 ```
-- If the request is not parseable JSON, Hub MUST return `-32700 parse_error` with `id: null`.
+- 如果请求不是可解析的 JSON，Hub **必须**返回 `-32700 parse_error` 和 `id: null`。
 
 ---
 
-### 3.2 HTTP Transport
+### 3.2 HTTP 传输
 
-| Property        | Requirement                                  |
-| --------------- | -------------------------------------------- |
-| Endpoint        | `POST /rpc` (base URL from `hub.json`)       |
-| `Content-Type`  | MUST be `application/json` (charset allowed) |
-| HTTP Status     | MUST always return `200 OK` even for errors  |
-| Error signaling | MUST use JSON-RPC `error` field              |
-
----
-
-### 3.3 WebSocket Transport
-
-| Property          | Requirement                                                                             |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| Endpoint          | Connect to `wsUrl` from `hub.json` (use it as-is)                                       |
-| Authentication    | MUST use `hub.ws.authenticate` as first message                                         |
-| Pre-auth behavior | MUST reject all non-auth methods with `-32001 unauthorized` **when an `id` is present** |
-| Message format    | JSON-RPC 2.0 objects; server MAY send notifications post-auth                           |
-
-**Pre-auth processing order (Normative)**:
-1. Hub MUST parse JSON text.
-   - On parse failure: return `-32700 parse_error` with `id: null` (then MAY close the connection).
-2. Hub MUST validate JSON-RPC envelope structure.
-   - If invalid: return `-32600 invalid_request` (use `id: null` when `id` cannot be determined; then MAY close).
-3. If the message is a JSON-RPC request/notification with `method != hub.ws.authenticate` and the connection is not authenticated:
-   - If `id` is present: return `-32001 unauthorized`.
-   - If `id` is absent (notification): Hub MUST close the connection (since it cannot send a JSON-RPC error response).
+| 属性            | 要求                                            |
+| --------------- | ----------------------------------------------- |
+| 端点 (Endpoint) | `POST /rpc`（基础 URL 来自 `hub.json`）         |
+| `Content-Type`  | **必须**为 `application/json`（允许指定字符集） |
+| HTTP 状态码     | 即使发生错误也**必须**始终返回 `200 OK`         |
+| 错误信号        | **必须**使用 JSON-RPC 的 `error` 字段           |
 
 ---
 
-## 4. Runtime Discovery, Authentication & Security Boundary
+### 3.3 WebSocket 传输
 
-### 4.1 Runtime Files & Discovery (Normative)
+| 属性            | 要求                                                                       |
+| --------------- | -------------------------------------------------------------------------- |
+| 端点 (Endpoint) | 连接到 `hub.json` 中的 `wsUrl`（原样使用）                                 |
+| 身份验证        | **必须**使用 `hub.ws.authenticate` 作为第一条消息                          |
+| 鉴权前行为      | 当**存在** `id` 时，**必须**拒绝所有非鉴权方法并返回 `-32001 unauthorized` |
+| 消息格式        | JSON-RPC 2.0 对象；服务端可在鉴权后发送通知                                |
 
-#### 4.1.1 Runtime directory
-- Default (Windows): `%LOCALAPPDATA%\DevHub\runtime\`
-- SDKs SHOULD support overriding the runtime directory via environment variable `DEVHUB_RUNTIME_DIR` (primarily for test harnesses / portable installs).
+**鉴权前处理顺序（规范性）**：
+1. Hub **必须**解析 JSON 文本。
+   - 解析失败：返回 `-32700 parse_error` 且 `id: null`（随后**可以**关闭连接）。
+2. Hub **必须**验证 JSON-RPC 信封结构。
+   - 若无效：返回 `-32600 invalid_request`（无法确定 `id` 时使用 `id: null`；随后**可以**关闭）。
+3. 如果消息是 `method != hub.ws.authenticate` 的 JSON-RPC 请求/通知且连接未通过鉴权：
+   - 如果存在 `id`：返回 `-32001 unauthorized`。
+   - 如果不存在 `id`（通知）：Hub **必须**关闭连接（因为无法发送 JSON-RPC 错误响应）。
 
-#### 4.1.2 `hub.json` (Discovery file)
-Hub MUST write a discovery file at `${runtimeDir}\hub.json`. This file MUST validate against the `HubRuntime` schema defined in §5.4.
+---
 
-Example:
+## 4. 运行时发现、身份验证与安全边界
+
+### 4.1 运行时文件与发现（规范性）
+
+#### 4.1.1 运行时目录
+
+SDK **应该**支持通过环境变量 `DEVHUB_RUNTIME_DIR` 覆盖运行时目录（主要用于测试框架 / 便携式安装）。
+
+| 平台        | 建议路径                                        | 完整路径（供参考）                     |
+| :---------- | :---------------------------------------------- | :------------------------------------- |
+| **Windows** | `%LOCALAPPDATA%\DevHub\runtime\`                | `<User>\AppData\Local\DevHub\runtime\` |
+| **macOS**   | `~/Library/Application Support/DevHub/runtime/` | 与标准路径相同                         |
+| **Linux**   | `$XDG_DATA_HOME/DevHub/runtime/`                | `~/.local/share/DevHub/runtime/`       |
+
+#### 4.1.2 `hub.json`（发现文件）
+Hub **必须**在 `${runtimeDir}\hub.json` 写入发现文件。该文件**必须**符合 §5.4 定义的 `HubRuntime` 架构。
+
+示例：
 ```json
 {
   "protocolVersion": 1,
@@ -153,49 +161,49 @@ Example:
 }
 ```
 
-Normative requirements:
-- `protocolVersion` MUST be `1` for this spec.
-- `httpBaseUrl` MUST NOT include trailing slash.
-- `wsUrl` MUST be an absolute WebSocket URL (`ws://` or `wss://`) and MUST NOT include trailing slash.
-- `httpBaseUrl` and `wsUrl` MUST point to loopback (`127.0.0.1` and/or `localhost`; implementations MAY use `::1` additionally).
-- `tokenFile` MUST be an absolute path.
-- Hub MUST update `hub.json` atomically (write temp + replace) to avoid torn reads.
-- `hub.json` MUST have OS ACL restricting access to the current user only.
-- Clients MUST use `hub.json` as the authoritative endpoint source and MUST NOT assume a fixed port or fixed WS path.
+规范性要求：
+- 本规范的 `protocolVersion` **必须**为 `1`。
+- `httpBaseUrl` **禁止**包含末尾斜杠。
+- `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
+- `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
+- `tokenFile` **必须**是绝对路径。
+- Hub **必须**原子化地更新 `hub.json`（先写临时文件再替换）以避免读取不完整。
+- `hub.json` **必须**具有 OS ACL，限制仅当前用户可访问。
+- 客户端**必须**将 `hub.json` 作为权威端点来源，**禁止**假设固定的端口或固定的 WS 路径。
 
 #### 4.1.3 `token.txt`
-- Default location: `${runtimeDir}\token.txt` (also discoverable via `hub.json.tokenFile`)
-- File contents: a single bearer token string (UTF-8 text). Clients SHOULD trim trailing `\r\n`/whitespace when reading.
-- Token lifetime: token SHOULD be regenerated on Hub startup (“per Hub session”). Old tokens MUST be rejected.
+- 默认位置：`${runtimeDir}\token.txt`（也可通过 `hub.json.tokenFile` 发现）
+- 文件内容：单个持有者令牌 (bearer token) 字符串（UTF-8 文本）。客户端读取时**应该**修剪末尾的 `\r\n` 和空白字符。
+- 令牌有效期：令牌**应该**在 Hub 启动时重新生成（“每个 Hub 会话一次”）。旧令牌**必须**被拒绝。
 
-#### 4.1.4 AppDefinition store (Windows v1)
-- Default location: `%LOCALAPPDATA%\DevHub\apps\definitions\`
-- Each definition MUST be a JSON file named `{appId}.json` and MUST validate against `AppDefinition` schema (§5.1).
-- Hub MUST ignore files that do not match the naming rule or fail schema validation (and SHOULD log diagnostics).
+#### 4.1.4 AppDefinition 存储 (Windows v1)
+- 默认位置：`%LOCALAPPDATA%\DevHub\apps\definitions\`
+- 每个定义**必须**是一个名为 `{appId}.json` 的 JSON 文件，且**必须**符合 `AppDefinition` 架构 (§5.1)。
+- Hub **必须**忽略不符合命名规则或未通过架构验证的文件（并**应该**记录诊断日志）。
 
-> Note: Non-Windows filesystem locations are implementation-defined in v1; conformance testing assumes the Windows default unless `DEVHUB_RUNTIME_DIR` is used.
-
----
-
-### 4.2 HTTP Headers (MUST be present)
-
-| Header                     | Format           | Description                                                                 |
-| -------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| `Authorization`            | `Bearer {token}` | Token read from `hub.json.tokenFile` (or default `${runtimeDir}\token.txt`) |
-| `X-DevHub-Protocol`        | `"1"`            | Protocol version; HTTP header values are strings; MUST be exactly `"1"`     |
-| `X-DevHub-ClientId`        | string           | Logical client identity (`DevHubUI`, `VSPlugin`, etc.)                      |
-| `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID; MUST change on client restart                                |
-
-Missing/invalid headers MUST be handled as:
-- Missing/invalid `Authorization`: `-32001 unauthorized`
-- Missing/invalid `X-DevHub-Protocol`: `-32099 not_supported`
-- Missing `X-DevHub-ClientId` or `X-DevHub-ClientSessionId`: `-32600 invalid_request` with `error.data.reason="missing_header"`
+> 注意：非 Windows 文件系统位置在 v1 中由实现定义；符合性测试假设使用 Windows 默认值，除非使用了 `DEVHUB_RUNTIME_DIR`。
 
 ---
 
-### 4.3 WebSocket Authentication Flow
+### 4.2 HTTP 请求头（**必须**存在）
 
-`hub.ws.authenticate` MUST be the first WS message and MUST be a JSON-RPC request (i.e., has `id`).
+| 请求头                     | 格式             | 描述                                                                    |
+| -------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${runtimeDir}\token.txt`）读取的令牌 |
+| `X-DevHub-Protocol`        | `"1"`            | 协议版本；HTTP 请求头值为字符串；**必须**精确为 `"1"`                   |
+| `X-DevHub-ClientId`        | string           | 逻辑客户端身份（如 `DevHubUI`, `VSPlugin` 等）                          |
+| `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID；**必须**在客户端重启时更改                               |
+
+缺失/无效请求头的处理方式：
+- 缺失/无效 `Authorization`：返回 `-32001 unauthorized`
+- 缺失/无效 `X-DevHub-Protocol`：返回 `-32099 not_supported`
+- 缺失 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId`：返回 `-32600 invalid_request` 且 `error.data.reason="missing_header"`
+
+---
+
+### 4.3 WebSocket 身份验证流程
+
+`hub.ws.authenticate` **必须**是第一条 WS 消息，且**必须**是一个 JSON-RPC 请求（即包含 `id`）。
 
 ```mermaid
 sequenceDiagram
@@ -217,14 +225,14 @@ sequenceDiagram
 
 ---
 
-### 4.4 Security Boundary
-- Hub MUST listen ONLY on loopback (`127.0.0.1` / `localhost` and/or `::1`)
-- Cross-user access MUST NOT be supported in v1 (token is the boundary)
-- File ACL requirements for `token.txt` and `hub.json` are normative in §4.1.2 and §4.1.3.
+### 4.4 安全边界
+- Hub **必须**仅监听回环地址（`127.0.0.1` / `localhost` 和/或 `::1`）。
+- v1 **禁止**跨用户访问（令牌是边界）。
+- §4.1.2 和 §4.1.3 中关于 `token.txt` 和 `hub.json` 的文件 ACL 要求是规范性的。
 
 ---
 
-## 5. Data Models (with JSON Schema)
+## 5. 数据模型（含 JSON Schema）
 
 ### 5.1 AppDefinition
 ```json
@@ -259,15 +267,15 @@ sequenceDiagram
 }
 ```
 
-#### 5.1.1 AppDefinition Semantics (Normative)
-- `scopePolicy` controls which `scope` values are valid for this `appId`:
-  - `any`: `scope` MAY be global (`null`/omitted) or a non-empty string.
-  - `globalOnly`: `scope` MUST be global (`null`/omitted).
-  - `required`: `scope` MUST be a non-empty string.
-- If `scopePolicy` is violated, Hub MUST return `-32002 forbidden` with `error.data.reason="scope_policy_violation"`.
-- If `capabilities` or `capabilities.rpc` is omitted, it defaults to `true`.
-  - If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST reject `hub.invoke.notify` and `hub.invoke.request` for that `appId` with `-32002 forbidden` and `error.data.reason="rpc_disabled"`.
-- `capabilities.events` is reserved for future use; in v1, Hubs MUST ignore it.
+#### 5.1.1 AppDefinition 语义（规范性）
+- `scopePolicy` 控制该 `appId` 哪些 `scope` 值有效：
+  - `any`: `scope` **可以**是全局（`null`/省略）或非空字符串。
+  - `globalOnly`: `scope` **必须**是全局（`null`/省略）。
+  - `required`: `scope` **必须**是非空字符串。
+- 如果违反 `scopePolicy`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="scope_policy_violation"`。
+- 如果省略 `capabilities` 或 `capabilities.rpc`，默认值为 `true`。
+  - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
+- `capabilities.events` 保留供未来使用；在 v1 中，Hub **必须**忽略它。
 
 ---
 
@@ -302,8 +310,8 @@ sequenceDiagram
 }
 ```
 
-#### 5.2.1 AppInstanceRegistration (Normative)
-`hub.apps.registerInstance.params.instance` MUST conform to the following shape (server-managed timestamps omitted):
+#### 5.2.1 AppInstanceRegistration（规范性）
+`hub.apps.registerInstance.params.instance` **必须**符合以下结构（省略服务端管理的时间戳）：
 
 ```json
 {
@@ -411,71 +419,71 @@ sequenceDiagram
 
 ---
 
-### 5.5 Scope Rules (Normative)
+### 5.5 作用域 (Scope) 规则（规范性）
 
-| Input            | Interpretation                                   | Forbidden / Invalid Values |
-| ---------------- | ------------------------------------------------ | -------------------------- |
-| omitted field    | global scope                                     | —                          |
-| `null`           | global scope                                     | —                          |
-| empty string     | **invalid**                                      | `""`                       |
-| non-empty string | workspace-scoped (case-sensitive, exact match)   | `"global"` string literal  |
-| **Routing rule** | MUST NOT fallback to global when scope specified | —                          |
+| 输入         | 解释                                   | 禁止 / 无效值           |
+| ------------ | -------------------------------------- | ----------------------- |
+| 省略字段     | 全局作用域                             | —                       |
+| `null`       | 全局作用域                             | —                       |
+| 空字符串     | **无效**                               | `""`                    |
+| 非空字符串   | 工作区作用域（区分大小写，精确匹配）   | `"global"` 字符串字面量 |
+| **路由规则** | 指定作用域时，**禁止**回退到全局作用域 | —                       |
 
 ---
 
-## 6. RPC Methods
+## 6. RPC 方法
 
-### 6.1 Conventions (Normative)
-- All `hub.*` methods MUST use **object** params (named params). If params is an array, Hub MUST return `-32602 invalid_params`.
-- For all successful `hub.*` calls, `result` MUST be a JSON object containing at least:
+### 6.1 约定（规范性）
+- 所有 `hub.*` 方法**必须**使用**对象**参数（具名参数）。如果参数是数组，Hub **必须**返回 `-32602 invalid_params`。
+- 对于所有成功的 `hub.*` 调用，`result` **必须**是一个至少包含以下内容的 JSON 对象：
   ```json
   { "ok": true }
   ```
-  Additional fields MAY be included.
-- All errors MUST be returned using JSON-RPC `error` object as defined in §8.
+  **可以**包含额外字段。
+- 所有错误**必须**使用 §8 定义的 JSON-RPC `error` 对象返回。
 
-**Terminology (Normative)**:
-- “`target.scope` specified” means `target.scope` is a **non-empty string** (and it MUST also be valid per §5.5).
-- “`target.instanceId` specified” means `target.instanceId` is a **non-null string**.
-  - Empty string SHOULD be rejected as `-32602 invalid_params`.
+**术语（规范性）**：
+- “指定了 `target.scope`” 指 `target.scope` 是一个**非空字符串**（且**必须**符合 §5.5 验证）。
+- “指定了 `target.instanceId`” 指 `target.instanceId` 是一个**非 null 字符串**。
+  - 空字符串**应该**被拒绝并返回 `-32602 invalid_params`。
 
-### 6.2 Method Matrix
+### 6.2 方法矩阵
 
-| Method                        | HTTP | WS (post-auth)     | Retry-safe* | Side Effects                            |
-| ----------------------------- | ---- | ------------------ | ----------- | --------------------------------------- |
-| `hub.ping`                    | ✓    | ✓                  | ✓           | None                                    |
-| `hub.ws.authenticate`         | ✗    | ✓ (first msg only) | ✓           | Binds client identity to WS             |
-| `hub.apps.listDefinitions`    | ✓    | ✓                  | ✓           | None                                    |
-| `hub.apps.getDefinition`      | ✓    | ✓                  | ✓           | None                                    |
-| `hub.apps.registerInstance`   | ✓    | ✗                  | ✗           | Upserts instance; updates `lastSeenUtc` |
-| `hub.apps.heartbeat`          | ✓    | ✗                  | ✓           | Updates `lastSeenUtc`                   |
-| `hub.apps.unregisterInstance` | ✓    | ✗                  | ✓           | Removes instance                        |
-| `hub.apps.listInstances`      | ✓    | ✓                  | ✓           | None                                    |
-| `hub.apps.launch`             | ✓    | ✗                  | ✗           | Starts process (if not running)         |
-| `hub.invoke.notify`           | ✓    | ✗                  | ✗           | Enqueues invocation                     |
-| `hub.invoke.request`          | ✓    | ✗                  | ✗           | Enqueues + waits for response           |
-| `hub.invoke.poll`             | ✓    | ✗                  | ✗           | Claims invocations (lease begins)       |
-| `hub.invoke.respond`          | ✓    | ✗                  | ✗           | Completes invocation                    |
-| `hub.events.subscribe`        | ✗    | ✓                  | ✗           | Creates subscription                    |
-| `hub.events.unsubscribe`      | ✗    | ✓                  | ✓           | Removes subscription                    |
+| 方法                          | HTTP | WS (鉴权后)      | 重试安全* | 副作用                            |
+| ----------------------------- | ---- | ---------------- | --------- | --------------------------------- |
+| `hub.ping`                    | ✓    | ✓                | ✓         | 无                                |
+| `hub.ws.authenticate`         | ✗    | ✓ (仅限首条消息) | ✓         | 将客户端身份绑定到 WS             |
+| `hub.apps.listDefinitions`    | ✓    | ✓                | ✓         | 无                                |
+| `hub.apps.getDefinition`      | ✓    | ✓                | ✓         | 无                                |
+| `hub.apps.registerInstance`   | ✓    | ✗                | ✗         | 更新/插入实例；更新 `lastSeenUtc` |
+| `hub.apps.heartbeat`          | ✓    | ✗                | ✓         | 更新 `lastSeenUtc`                |
+| `hub.apps.unregisterInstance` | ✓    | ✗                | ✓         | 移除实例                          |
+| `hub.apps.listInstances`      | ✓    | ✓                | ✓         | 无                                |
+| `hub.apps.launch`             | ✓    | ✗                | ✗         | 启动进程（若未运行）              |
+| `hub.invoke.notify`           | ✓    | ✗                | ✗         | 将调用入队                        |
+| `hub.invoke.request`          | ✓    | ✗                | ✗         | 入队并等待响应                    |
+| `hub.invoke.poll`             | ✓    | ✗                | ✗         | 认领调用（租约开始）              |
+| `hub.invoke.respond`          | ✓    | ✗                | ✗         | 完成调用                          |
+| `hub.events.subscribe`        | ✗    | ✓                | ✗         | 创建订阅                          |
+| `hub.events.unsubscribe`      | ✗    | ✓                | ✓         | 移除订阅                          |
 
-\* “Retry-safe” means callers can safely retry on transport failure without creating duplicate durable resources. It is not strict HTTP idempotency.
+\* “重试安全”意味着调用者在传输失败时**可以**安全重试，而不会创建重复的持久资源。这不等同于严格的 HTTP 幂等性。
 
-> **Note**: WS transport for invocation methods (`poll`/`respond`) is intentionally unsupported to avoid callee-side WS connection state complexity.
+> **注意**：调用方法（`poll`/`respond`）有意不支持 WS 传输，以避免被调用侧 WS 连接状态的复杂性。
 
 ---
 
-### 6.3 Method Definitions
+### 6.3 方法定义
 
 #### 6.3.1 `hub.ping`
-**Params (optional)**: `{ "echo": any }`
-**Result**:
+**参数（可选）**：`{ "echo": any }`
+**结果**：
 ```json
 { "ok": true, "serverTimeUtc": "2026-01-30T12:34:56Z", "echo": "..." }
 ```
 
-#### 6.3.2 `hub.ws.authenticate` (WS only)
-**Params**:
+#### 6.3.2 `hub.ws.authenticate` (仅限 WS)
+**参数**：
 ```json
 {
   "token": "string",
@@ -484,33 +492,33 @@ sequenceDiagram
   "clientSessionId": "string"
 }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true, "protocolVersion": 1 }
 ```
 
 #### 6.3.3 `hub.apps.listDefinitions`
-**Params**: `{}` (or omitted)
-**Result**:
+**参数**：`{}` (或省略)
+**结果**：
 ```json
 { "ok": true, "definitions": [ /* AppDefinition[] */ ] }
 ```
 
 #### 6.3.4 `hub.apps.getDefinition`
-**Params**:
+**参数**：
 ```json
 { "appId": "test.app" }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true, "definition": { /* AppDefinition */ } }
 ```
-**Errors**: `-32014 app_definition_not_found`
+**错误**：`-32014 app_definition_not_found`
 
-#### 6.3.5 `hub.apps.registerInstance` (HTTP only)
-Clients MUST generate `instanceId` such that it is unique per process lifetime (SHOULD change on process restart).
+#### 6.3.5 `hub.apps.registerInstance` (仅限 HTTP)
+客户端**必须**生成的 `instanceId` 在进程生命周期内唯一（**应该**在进程重启时更改）。
 
-**Params**:
+**参数**：
 ```json
 {
   "instance": {
@@ -524,41 +532,41 @@ Clients MUST generate `instanceId` such that it is unique per process lifetime (
 }
 ```
 
-Normative requirements:
-- `params.instance` MUST conform to `AppInstanceRegistration` (§5.2.1).
-- Hub MUST set `registeredAtUtc` and `lastSeenUtc` server-side.
-- Hub MUST update `lastSeenUtc` on every successful `registerInstance`.
-- Hub MUST validate `scope` per §5.5 and (if definition exists) enforce `AppDefinition.scopePolicy` (§5.1.1). Violations MUST return `-32002 forbidden` with `error.data.reason="scope_policy_violation"`.
+规范性要求：
+- `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
+- Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
+- Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
+- Hub **必须**根据 §5.5 验证 `scope`，并（如果定义存在）强制执行 `AppDefinition.scopePolicy` (§5.1.1)。违反时**必须**返回 `-32002 forbidden` 且 `error.data.reason="scope_policy_violation"`。
 
-**Result**:
+**结果**：
 ```json
 { "ok": true, "instance": { /* AppInstance */ } }
 ```
 
-#### 6.3.6 `hub.apps.heartbeat` (HTTP only)
-**Params**:
+#### 6.3.6 `hub.apps.heartbeat` (仅限 HTTP)
+**参数**：
 ```json
 { "instanceId": "inst-123" }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true, "lastSeenUtc": "2026-01-30T12:34:56Z" }
 ```
-**Errors**: `-32010 instance_not_found`
+**错误**：`-32010 instance_not_found`
 
-#### 6.3.7 `hub.apps.unregisterInstance` (HTTP only)
-**Params**:
+#### 6.3.7 `hub.apps.unregisterInstance` (仅限 HTTP)
+**参数**：
 ```json
 { "instanceId": "inst-123" }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true }
 ```
-Idempotent: if instance does not exist, Hub MUST still return `{ "ok": true }`.
+幂等性：如果实例不存在，Hub 仍**必须**返回 `{ "ok": true }`。
 
 #### 6.3.8 `hub.apps.listInstances`
-**Params (optional)**:
+**参数（可选）**：
 ```json
 {
   "appId": "test.app",
@@ -567,17 +575,17 @@ Idempotent: if instance does not exist, Hub MUST still return `{ "ok": true }`.
   "includeAllScopes": false
 }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true, "instances": [ /* AppInstance[] */ ] }
 ```
-Normative behavior:
-- If `includeAllScopes` is `true`, Hub MUST ignore the `scope` parameter and return instances from all scopes.
-- If `includeAllScopes` is `false` (or omitted), Hub MUST filter by `scope` (defaulting to global if omitted).
-- `includeOffline` defaults to `false`.
+规范性行为：
+- 如果 `includeAllScopes` 为 `true`，Hub **必须**忽略 `scope` 参数并返回所有作用域的实例。
+- 如果 `includeAllScopes` 为 `false`（或省略），Hub **必须**按 `scope` 过滤（省略时默认为全局）。
+- `includeOffline` 默认为 `false`。
 
-#### 6.3.9 `hub.apps.launch` (HTTP only)
-**Params**:
+#### 6.3.9 `hub.apps.launch` (仅限 HTTP)
+**参数**：
 ```json
 {
   "appId": "test.app",
@@ -587,7 +595,7 @@ Normative behavior:
 }
 ```
 
-**Result**:
+**结果**：
 ```json
 {
   "ok": true,
@@ -597,24 +605,24 @@ Normative behavior:
 }
 ```
 
-Normative behavior:
-- `status` MUST be one of: `started`, `starting`, `already_running`.
-- “Already running” is defined as “an **online** registered instance exists matching `appId` and `scope`” OR “a launch with the same `dedupeKey` is in progress.”
-- Hub MUST maintain a dedupe window (default 30 seconds) for `dedupeKey`. During this window, concurrent launches with the same key MUST return `already_running`.
-- If `dedupeKey` is omitted, Hub MUST generate it using `AppDefinition.launch.dedupeKeyTemplate`.
-- **Template Substitution**: Hub MUST support the following placeholders in `dedupeKeyTemplate` and `argsTemplate`:
-  - `{appId}`: The application ID.
-  - `{scope}`: The requested scope (or empty string if global).
-  - `{scopeOrGlobal}`: The requested scope, or the literal string `global` if scope is null/omitted.
-  - `{httpBaseUrl}`: The Hub's HTTP base URL (e.g. `http://127.0.0.1:47231`).
-- If `AppDefinition.launch.dedupeKeyTemplate` is omitted or null, Hub MUST use the default template: `{appId}:{scopeOrGlobal}`.
-- `waitForRegisterMs` defaults to `0` if omitted and MUST be an integer ≥ 0 (out of range => `-32602 invalid_params`).
-- If `waitForRegisterMs > 0`, Hub SHOULD wait up to that duration for an instance to register. If timeout occurs but process started, return `status: "starting"`.
-- If `AppDefinition.launch` is missing or `launch.exePath` is missing/empty, Hub MUST return `-32020 launch_failed` with `error.data.reason="launch_config_missing"`.
-- Hub MUST read `AppDefinition.launch.exePath`. If definition missing: `-32014`. If process creation fails: `-32020`.
+规范性行为：
+- `status` **必须**是以下之一：`started`, `starting`, `already_running`。
+- “Already running” (已在运行) 的定义为：“存在匹配 `appId` 和 `scope` 的**在线**注册实例” 或 “具有相同 `dedupeKey` 的启动正在进行中”。
+- Hub **必须**为 `dedupeKey` 维护一个去重窗口（默认 30 秒）。在此窗口内，具有相同 key 的并发启动**必须**返回 `already_running`。
+- 如果省略 `dedupeKey`，Hub **必须**使用 `AppDefinition.launch.dedupeKeyTemplate` 生成它。
+- **模板替换**：Hub **必须**支持 `dedupeKeyTemplate` 和 `argsTemplate` 中的以下占位符：
+  - `{appId}`: 应用程序 ID。
+  - `{scope}`: 请求的作用域（若为全局则为空字符串）。
+  - `{scopeOrGlobal}`: 请求的作用域，若 scope 为 null/省略则为字面量字符串 `global`。
+  - `{httpBaseUrl}`: Hub 的 HTTP 基础 URL（例如 `http://127.0.0.1:47231`）。
+- 如果 `AppDefinition.launch.dedupeKeyTemplate` 被省略或为 null，Hub **必须**使用默认模板：`{appId}:{scopeOrGlobal}`。
+- `waitForRegisterMs` 若省略则默认为 `0`，且**必须**为 ≥ 0 的整数（超出范围 => `-32602 invalid_params`）。
+- 如果 `waitForRegisterMs > 0`，Hub **应该**等待最长该时长以待实例注册。如果超时但进程已启动，返回 `status: "starting"`。
+- 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空，Hub **必须**返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。
+- Hub **必须**读取 `AppDefinition.launch.exePath`。若定义缺失：返回 `-32014`。若进程创建失败：返回 `-32020`。
 
-#### 6.3.10 `hub.invoke.notify` (HTTP only)
-**Params**:
+#### 6.3.10 `hub.invoke.notify` (仅限 HTTP)
+**参数**：
 ```json
 {
   "appId": "test.app",
@@ -629,20 +637,20 @@ Normative behavior:
 }
 ```
 
-**Result**:
+**结果**：
 ```json
 { "ok": true, "invocationId": "invk-..." }
 ```
 
-Validation & Defaults:
-- Default values if omitted: `ttlMs=60000`, `queueIfOffline=true`.
-- `autoLaunch` defaults to `true`, **unless** `target.instanceId` is **specified** (non-null string), in which case it defaults to `false`.
-- If `target.instanceId` is **specified** AND `options.autoLaunch` is explicitly set to `true`, Hub MUST return `-32602 invalid_params`.
-- If `options.autoLaunch` is true, then `options.queueIfOffline` MUST be true (else `-32602 invalid_params`).
-- If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST return `-32002 forbidden` with `error.data.reason="rpc_disabled"`.
+验证与默认值：
+- 省略时的默认值：`ttlMs=60000`, `queueIfOffline=true`。
+- `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
+- 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
+- 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
+- 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
-#### 6.3.11 `hub.invoke.request` (HTTP only)
-**Params**: same shape as `hub.invoke.notify`, plus:
+#### 6.3.11 `hub.invoke.request` (仅限 HTTP)
+**参数**：结构与 `hub.invoke.notify` 相同，外加：
 ```json
 "options": {
   "ttlMs": 300000,
@@ -652,25 +660,25 @@ Validation & Defaults:
 }
 ```
 
-**Success Result**:
+**成功结果**：
 ```json
 { "ok": true, "invocationId": "invk-...", "value": {} }
 ```
 
-**Errors**:
-- `-32012 invocation_timeout` when `waitTimeoutMs` elapses before completion
-  - Hub MUST cancel the invocation (callee SHOULD NOT receive it afterwards; late `respond` MUST be rejected)
-- `-32011 invocation_expired` when `ttlMs` elapses before delivery/response
-- `-32050 invocation_failed` when callee responds with an application error (details in `error.data.calleeError`)
-- plus routing/auth/validation errors (§8)
+**错误**：
+- `-32012 invocation_timeout`：当 `waitTimeoutMs` 在完成前耗尽。
+  - Hub **必须**取消该调用（被调用方此后**不应该**收到该调用；迟到的 `respond` **必须**被拒绝）。
+- `-32011 invocation_expired`：当 `ttlMs` 在交付/响应前耗尽。
+- `-32050 invocation_failed`：当被调用方返回应用程序错误时（详见 `error.data.calleeError`）。
+- 以及路由/鉴权/验证错误 (§8)。
 
-Validation:
-- Default values if omitted: `ttlMs=300000`, `waitTimeoutMs=120000`, `queueIfOffline=true`, `autoLaunch=true`.
-- `waitTimeoutMs` MUST be <= `ttlMs`.
-- If the `AppDefinition` exists and `capabilities.rpc` is `false`, Hub MUST return `-32002 forbidden` with `error.data.reason="rpc_disabled"`.
+验证：
+- 省略时的默认值：`ttlMs=300000`, `waitTimeoutMs=120000`, `queueIfOffline=true`, `autoLaunch=true`。
+- `waitTimeoutMs` **必须** ≤ `ttlMs`。
+- 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
-#### 6.3.12 `hub.invoke.poll` (HTTP only)
-**Params**:
+#### 6.3.12 `hub.invoke.poll` (仅限 HTTP)
+**参数**：
 ```json
 {
   "instanceId": "inst-123",
@@ -679,7 +687,7 @@ Validation:
 }
 ```
 
-**Result**:
+**结果**：
 ```json
 {
   "ok": true,
@@ -701,15 +709,15 @@ Validation:
 }
 ```
 
-Normative behavior:
-- Hub MUST require the instance to be registered (`hub.apps.registerInstance`) before polling; otherwise `-32010 instance_not_found`.
-- Hub MUST enforce that the instance has `invoke.poll==true`; otherwise `-32002 forbidden` with `error.data.reason="poll_not_enabled"`.
-- Hub MUST support Long Polling: if no items are available, Hub MUST wait up to `waitMs` before returning an empty list.
-- Successful `poll` MUST update the instance’s `lastSeenUtc`.
-- The lease duration is returned inside each item's `delivery.leaseSeconds`.
+规范性行为：
+- Hub **必须**要求实例在轮询前已注册（`hub.apps.registerInstance`）；否则返回 `-32010 instance_not_found`。
+- Hub **必须**强制要求实例具有 `invoke.poll==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="poll_not_enabled"`。
+- Hub **必须**支持长轮询 (Long Polling)：如果没有可用项，Hub **必须**等待最长 `waitMs` 时长再返回空列表。
+- 成功的 `poll` **必须**更新实例的 `lastSeenUtc`。
+- 租约时长在每个条目的 `delivery.leaseSeconds` 中返回。
 
-#### 6.3.13 `hub.invoke.respond` (HTTP only)
-**Params** (exactly one of `value` or `error` MUST be present):
+#### 6.3.13 `hub.invoke.respond` (仅限 HTTP)
+**参数**（`value` 或 `error` **必须**且只能存在其中之一）：
 ```json
 {
   "instanceId": "inst-123",
@@ -718,7 +726,7 @@ Normative behavior:
 }
 ```
 
-Error response from callee:
+来自被调用方的错误响应：
 ```json
 {
   "instanceId": "inst-123",
@@ -727,34 +735,34 @@ Error response from callee:
 }
 ```
 
-**Result**:
+**结果**：
 ```json
 { "ok": true }
 ```
 
-Normative behavior:
-- Hub MUST require the instance to be registered; otherwise `-32010 instance_not_found`.
-- Hub MUST enforce that the instance has `invoke.respond==true`; otherwise `-32002 forbidden` with `error.data.reason="respond_not_enabled"`.
-- Successful `respond` MUST update the instance’s `lastSeenUtc`.
+规范性行为：
+- Hub **必须**要求实例已注册；否则返回 `-32010 instance_not_found`。
+- Hub **必须**强制要求实例具有 `invoke.respond==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="respond_not_enabled"`。
+- 成功的 `respond` **必须**更新实例的 `lastSeenUtc`。
 
-**Errors**:
-- `-32030 delivery_conflict` if lease is invalid/expired, wrong instance responds, or duplicate respond
-- `-32011 invocation_expired` if invocation is expired/canceled/timeout
-- `-32602 invalid_params` on malformed payload
+**错误**：
+- `-32030 delivery_conflict`：如果租约无效/已过期、错误的实例响应或重复响应。
+- `-32011 invocation_expired`：如果调用已过期/被取消/超时。
+- `-32602 invalid_params`：负载格式错误。
 
-#### 6.3.14 `hub.events.subscribe` (WS only)
-**Params**:
+#### 6.3.14 `hub.events.subscribe` (仅限 WS)
+**参数**：
 ```json
 { "types": ["app.instance.registered", "invocation.completed"] }
 ```
-If `types` is omitted or empty, subscribe to all events.
+如果 `types` 被省略或为空，则订阅所有事件。
 
-**Result**:
+**结果**：
 ```json
 { "ok": true, "subscriptionId": "sub-..." }
 ```
 
-**Supported Event Types**:
+**支持的事件类型**：
 - `app.instance.registered`
 - `app.instance.unregistered`
 - `invocation.queued`
@@ -762,19 +770,19 @@ If `types` is omitted or empty, subscribe to all events.
 - `invocation.completed`
 - `invocation.failed`
 
-#### 6.3.15 `hub.events.unsubscribe` (WS only)
-**Params**:
+#### 6.3.15 `hub.events.unsubscribe` (仅限 WS)
+**参数**：
 ```json
 { "subscriptionId": "sub-..." }
 ```
-**Result**:
+**结果**：
 ```json
 { "ok": true }
 ```
-Idempotent: unsubscribing an unknown `subscriptionId` MUST still return `{ "ok": true }`.
+幂等性：取消订阅未知的 `subscriptionId` 仍**必须**返回 `{ "ok": true }`。
 
-#### 6.3.16 Server → Client Event Delivery (WS only)
-Hub MUST deliver subscribed events as JSON-RPC notifications:
+#### 6.3.16 服务端 → 客户端 事件交付 (仅限 WS)
+Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 
 ```json
 {
@@ -793,57 +801,57 @@ Hub MUST deliver subscribed events as JSON-RPC notifications:
 }
 ```
 
-Events are best-effort and non-durable; Hub MAY drop events under load.
+事件交付是尽力而为且非持久化的；Hub 在负载过高时**可以**丢弃事件。
 
 ---
 
-## 7. Invocation Lifecycle & Routing
+## 7. 调用生命周期与路由
 
-### 7.1 Routing Decision Matrix (Normative)
+### 7.1 路由决策矩阵（规范性）
 ```mermaid
 flowchart TD
-    A[Invocation Received] --> B[Validate params/options/scope rules]
-    B -->|Invalid| X[Return -32602 invalid_params]
-    B --> C{ScopePolicy violation?}
-    C -->|Yes| D[Return -32002 forbidden]
-    C -->|No| E{Online instance matches?}
-    E -->|Yes| F["Enqueue (Queued) → await poll"]
-    E -->|No| G{queueIfOffline?}
-    G -->|No| H[Return -32010 instance_not_found]
-    G -->|Yes| CheckDef{AppDefinition exists?}
-    CheckDef -->|No| H2[Return -32010 instance_not_found]
+    A[收到调用] --> B[验证参数/选项/作用域规则]
+    B -->|无效| X[返回 -32602 invalid_params]
+    B --> C{违反 ScopePolicy?}
+    C -->|是| D[返回 -32002 forbidden]
+    C -->|否| E{存在匹配的在线实例?}
+    E -->|是| F["入队 (Queued) → 等待轮询"]
+    E -->|否| G{queueIfOffline?}
+    G -->|否| H[返回 -32010 instance_not_found]
+    G -->|是| CheckDef{AppDefinition 存在?}
+    CheckDef -->|否| H2[返回 -32010 instance_not_found]
     CheckDef -->|Yes| I{autoLaunch?}
-    I -->|true| L{Launch succeeds?}
-    L -->|No| M[Return -32020 launch_failed]
-    L -->|Yes| N["Enqueue (Pending)"]
-    I -->|false| N["Enqueue (Pending)"]
+    I -->|true| L{启动成功?}
+    L -->|否| M[返回 -32020 launch_failed]
+    L -->|是| N["入队 (Pending)"]
+    I -->|false| N["入队 (Pending)"]
 ```
 
-Routing rules:
-- If `target.instanceId` is provided, Hub MUST ONLY route to that instanceId (no fallback).
-- If `target.scope` is a non-empty string, Hub MUST ONLY route to that scope (no fallback).
-- When multiple instances match a scope/global queue, delivery is “first poll wins.”
-- **Pending Queue Constraint**: Hub MUST NOT enqueue an invocation if no `AppDefinition` exists for the `appId`, even if `queueIfOffline` is true. In this case, `-32010 instance_not_found` MUST be returned.
+路由规则：
+- 如果提供了 `target.instanceId`，Hub **必须**仅路由到该 instanceId（不回退）。
+- 如果 `target.scope` 是非空字符串，Hub **必须**仅路由到该作用域（不回退）。
+- 当多个实例匹配一个作用域/全局队列时，交付遵循“先轮询者得”原则。
+- **挂起队列约束**：如果 `appId` 不存在 `AppDefinition`，即使 `queueIfOffline` 为 true，Hub 中也**禁止**将调用入队。在这种情况下，**必须**返回 `-32010 instance_not_found`。
 
-### 7.2 Invocation State Machine
+### 7.2 调用状态机
 ```mermaid
 stateDiagram-v2
     [*] --> Created
-    Created --> Queued: Accepted
-    Created --> Rejected: Validation/forbidden/no route + !queueIfOffline
+    Created --> Queued: 已接受
+    Created --> Rejected: 验证/禁止/无路由且 !queueIfOffline
 
-    Queued --> Pending: No online instance
-    Queued --> Delivered: Callee polls (lease starts)
+    Queued --> Pending: 无在线实例
+    Queued --> Delivered: 被调用方轮询 (租约开始)
 
-    Pending --> Delivered: Matching instance polls
-    Pending --> Expired: ttlMs elapsed
-    Pending --> Timeout: waitTimeoutMs elapsed (request only; cancels)
+    Pending --> Delivered: 匹配的实例轮询
+    Pending --> Expired: ttlMs 耗尽
+    Pending --> Timeout: waitTimeoutMs 耗尽 (仅限请求；取消)
 
-    Delivered --> Completed: Callee responds (success)
-    Delivered --> Failed: Callee responds (error)
-    Delivered --> Requeued: Lease expired and ttlMs not elapsed (attempt++)
-    Delivered --> Expired: ttlMs elapsed
-    Delivered --> Timeout: waitTimeoutMs elapsed (request only; cancels)
+    Delivered --> Completed: 被调用方响应 (成功)
+    Delivered --> Failed: 被调用方响应 (错误)
+    Delivered --> Requeued: 租约过期且 ttlMs 未耗尽 (尝试次数++)
+    Delivered --> Expired: ttlMs 耗尽
+    Delivered --> Timeout: waitTimeoutMs 耗尽 (仅限请求；取消)
 
     Requeued --> Queued
 
@@ -854,98 +862,98 @@ stateDiagram-v2
     Rejected --> [*]
 ```
 
-### 7.3 Key Timing Constraints
+### 7.3 关键时间约束
 
-| Parameter                 | Default (notify) | Default (request) | Constraint                                     |
-| ------------------------- | ---------------- | ----------------- | ---------------------------------------------- |
-| `ttlMs`                   | 60,000 ms        | 300,000 ms        | MUST be ≥ 1,000 ms                             |
-| `waitTimeoutMs`           | N/A              | 120,000 ms        | MUST be ≤ `ttlMs`                              |
-| `leaseSeconds`            | 30 s (fixed)     | 30 s (fixed)      | Assigned by Hub on `poll`                      |
-| Online threshold          | 30 s             | 30 s              | `now - lastSeenUtc ≤ 30s`                      |
-| Dedupe window             | 30 s             | 30 s              | Launch dedupe window                           |
-| `maxCount` (poll default) | 10               | 10                | MUST be 1..100 (out of range = invalid_params) |
-
----
-
-## 8. Error Codes
-
-### 8.1 Standard JSON-RPC Errors
-
-| Code   | Name               | Condition                                  |
-| ------ | ------------------ | ------------------------------------------ |
-| -32700 | `parse_error`      | Invalid JSON text                          |
-| -32600 | `invalid_request`  | Invalid JSON-RPC structure / batch request |
-| -32601 | `method_not_found` | Method not found                           |
-| -32602 | `invalid_params`   | Missing/invalid parameter                  |
-| -32603 | `internal_error`   | Internal server error                      |
-
-### 8.2 DevHub-Specific Errors
-
-| Code   | Name                       | When to Return                                      | `error.data` (object)                                                                                                      |
-| ------ | -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| -32001 | `unauthorized`             | Invalid/missing token                               | `reason`: `"missing_token"` or `"invalid_token"`                                                                           |
-| -32002 | `forbidden`                | ScopePolicy violation / disallowed operation        | `reason`: `"scope_policy_violation"`, `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; plus context fields |
-| -32010 | `instance_not_found`       | No route + !queueIfOffline / unknown instance       | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                          |
-| -32011 | `invocation_expired`       | TTL elapsed / canceled invocation used late         | `invocationId?`: string; `elapsedMs?`: number                                                                              |
-| -32012 | `invocation_timeout`       | `waitTimeoutMs` elapsed (request only)              | `invocationId?`: string; `elapsedMs`: number                                                                               |
-| -32014 | `app_definition_not_found` | Definition file missing / required for launch       | `appId?`: string                                                                                                           |
-| -32020 | `launch_failed`            | Process start failed / launch config unusable       | `reason?`: string; `exitCode?`: number or null; `stderr?`: string                                                          |
-| -32030 | `delivery_conflict`        | Duplicate respond or lease violation                | `currentLeaseHolder?`: string; `invocationId?`: string                                                                     |
-| -32040 | `rate_limited`             | Rate limit or resource cap exceeded                 | `reason?`: string                                                                                                          |
-| -32050 | `invocation_failed`        | Callee responded with application error (request)   | `invocationId`: string; `calleeError`: `{ code:int, message:string, data?:object }`                                        |
-| -32099 | `not_supported`            | Protocol version mismatch / missing protocol header | `expected`: 1; `received?`: string/number/null; `reason`: `"missing"` or `"mismatch"`                                      |
-
-> **Note**: `-32013 instance_offline` is intentionally omitted; use `-32010 instance_not_found` with `data.reason` for diagnostics.
-
-### 8.3 Canonical `error.message` Strings (Normative)
-For conformance, Hub MUST set `error.message` to exactly the `Name` string in the tables above.
+| 参数                    | 默认值 (notify) | 默认值 (request) | 约束                                          |
+| ----------------------- | --------------- | ---------------- | --------------------------------------------- |
+| `ttlMs`                 | 60,000 ms       | 300,000 ms       | **必须** ≥ 1,000 ms                           |
+| `waitTimeoutMs`         | N/A             | 120,000 ms       | **必须** ≤ `ttlMs`                            |
+| `leaseSeconds`          | 30 s (固定)     | 30 s (固定)      | 由 Hub 在 `poll` 时分配                       |
+| 在线阈值                | 30 s            | 30 s             | `now - lastSeenUtc ≤ 30s`                     |
+| 去重窗口                | 30 s            | 30 s             | 启动去重窗口                                  |
+| `maxCount` (轮询默认值) | 10              | 10               | **必须**在 1..100 (超出范围 = invalid_params) |
 
 ---
 
-## 9. Versioning & Compatibility
+## 8. 错误代码
 
-### 9.1 Version Identifier
-- Protocol version is signaled via `X-DevHub-Protocol` header (HTTP) or `protocolVersion` param (WS auth)
-- Current protocol version: `1`
+### 8.1 标准 JSON-RPC 错误
 
-### 9.2 Backward Compatibility Rules
+| 代码   | 名称               | 条件                            |
+| ------ | ------------------ | ------------------------------- |
+| -32700 | `parse_error`      | 无效的 JSON 文本                |
+| -32600 | `invalid_request`  | 无效的 JSON-RPC 结构 / 批量请求 |
+| -32601 | `method_not_found` | 方法未找到                      |
+| -32602 | `invalid_params`   | 缺失/无效的参数                 |
+| -32603 | `internal_error`   | 服务端内部错误                  |
 
-| Change Type                                           | Allowed in v1.x? | Client Impact                              |
-| ----------------------------------------------------- | ---------------- | ------------------------------------------ |
-| Add optional field to response                        | ✓                | MUST ignore unknown fields                 |
-| Add new error code                                    | ✓                | MUST handle unknown codes as generic error |
-| Add new RPC method                                    | ✓                | MAY ignore unsupported methods             |
-| Change field type/semantics                           | ✗                | Breaking; requires v2                      |
-| Remove field                                          | ✗                | Breaking; requires v2                      |
-| Tighten validation (reject previously accepted input) | ✗                | Breaking; requires v2                      |
+### 8.2 DevHub 特定错误
 
-### 9.3 Hub Behavior on Version Mismatch
-- If `X-DevHub-Protocol` missing or not equal to `1`: MUST return `-32099 not_supported` with `data.expected=1`
-- Hub MUST NOT attempt protocol negotiation
+| 代码   | 名称                       | 何时返回                            | `error.data` (对象)                                                                                                   |
+| ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
+| -32002 | `forbidden`                | 违反 ScopePolicy / 操作被禁止       | `reason`: `"scope_policy_violation"`, `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; 包含上下文字段 |
+| -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                     |
+| -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用       | `invocationId?`: string; `elapsedMs?`: number                                                                         |
+| -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
+| -32014 | `app_definition_not_found` | 定义文件缺失 / 启动所需定义缺失     | `appId?`: string                                                                                                      |
+| -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string                                                     |
+| -32030 | `delivery_conflict`        | 重复响应或违反租约                  | `currentLeaseHolder?`: string; `invocationId?`: string                                                                |
+| -32040 | `rate_limited`             | 超过速率限制或资源上限              | `reason?`: string                                                                                                     |
+| -32050 | `invocation_failed`        | 被调用方返回应用程序错误 (请求)     | `invocationId`: string; `calleeError`: `{ code:int, message:string, data?:object }`                                   |
+| -32099 | `not_supported`            | 协议版本不匹配 / 缺失协议头         | `expected`: 1; `received?`: string/number/null; `reason`: `"missing"` 或 `"mismatch"`                                 |
+
+> **注意**：`-32013 instance_offline` 已有意省略；请使用 `-32010 instance_not_found` 配合 `data.reason` 进行诊断。
+
+### 8.3 规范化的 `error.message` 字符串（规范性）
+为了符合性，Hub **必须**将 `error.message` 设置为与上述表格中 `Name` 列完全一致的字符串。
 
 ---
 
-## 10. Conformance Test Baseline
+## 9. 版本控制与兼容性
 
-### 10.1 Required Test Categories
-| Category             | Test Count (min) | Description                                              |
-| -------------------- | ---------------- | -------------------------------------------------------- |
-| Discovery            | 3                | `hub.json` parsing, token discovery                      |
-| Authentication       | 5                | Valid/invalid token, missing headers, WS auth flow       |
-| AppDefinition        | 4                | List/get with/without definitions                        |
-| AppInstance          | 8                | Register/heartbeat/unregister/list with scope variations |
-| Invocation (notify)  | 6                | Online/offline/queue/autoLaunch paths                    |
-| Invocation (request) | 10               | Full roundtrip + timeout/lease/TTL edge cases            |
-| Events               | 4                | Subscribe/unsubscribe + disconnect cleanup               |
-| Error handling       | 12               | All error codes with correct `data` fields               |
+### 9.1 版本标识符
+- 协议版本通过 `X-DevHub-Protocol` 请求头 (HTTP) 或 `protocolVersion` 参数 (WS 鉴权) 传递。
+- 当前协议版本：`1`
 
-### 10.2 Signature Test Vector Format
-Each test vector MUST be a JSON file with:
+### 9.2 向后兼容性规则
+
+| 变更类型                       | v1.x 允许吗? | 对客户端的影响                     |
+| ------------------------------ | ------------ | ---------------------------------- |
+| 向响应添加可选字段             | ✓            | **必须**忽略未知字段               |
+| 添加新错误代码                 | ✓            | **必须**将未知代码视为通用错误处理 |
+| 添加新 RPC 方法                | ✓            | **可以**忽略不支持的方法           |
+| 更改字段类型/语义              | ✗            | 破坏性变更；需要 v2                |
+| 移除字段                       | ✗            | 破坏性变更；需要 v2                |
+| 收紧验证（拒绝此前接受的输入） | ✗            | 破坏性变更；需要 v2                |
+
+### 9.3 版本不匹配时的 Hub 行为
+- 如果 `X-DevHub-Protocol` 缺失或不等于 `1`：**必须**返回 `-32099 not_supported` 且 `data.expected=1`。
+- Hub **禁止**尝试协议协商。
+
+---
+
+## 10. 符合性测试基准
+
+### 10.1 要求的测试类别
+| 类别                   | 测试计数 (最小) | 描述                                   |
+| ---------------------- | --------------- | -------------------------------------- |
+| 发现 (Discovery)       | 3               | `hub.json` 解析，令牌发现              |
+| 身份验证 (Auth)        | 5               | 有效/无效令牌，缺失请求头，WS 鉴权流程 |
+| 应用定义 (AppDef)      | 4               | 存在/不存在定义时的列表/获取           |
+| 应用实例 (AppInstance) | 8               | 各种作用域下的注册/心跳/注销/列表      |
+| 调用 (notify)          | 6               | 在线/离线/队列/自动启动路径            |
+| 调用 (request)         | 10              | 完整往返 + 超时/租约/TTL 边缘情况      |
+| 事件 (Events)          | 4               | 订阅/取消订阅 + 断开连接清理           |
+| 错误处理               | 12              | 所有错误代码及其正确的 `data` 字段     |
+
+### 10.2 签名测试向量格式
+每个测试向量**必须**是一个包含以下内容的 JSON 文件：
 
 ```json
 {
   "id": "invoke.request.timeout.wait_exceeds_ttl",
-  "description": "waitTimeoutMs > ttlMs MUST be rejected at call time",
+  "description": "waitTimeoutMs > ttlMs **必须**在调用时被拒绝",
   "transport": "http",
   "http": {
     "headers": {
@@ -983,34 +991,34 @@ Each test vector MUST be a JSON file with:
 }
 ```
 
-### 10.3 Conformance Criteria
-An implementation is conformant IFF:
-1. Passes 100% of MUST-level assertions in this spec
-2. Passes 100% of test vectors in the official conformance suite
-3. Produces JSON responses that are semantically equivalent to expected responses (JSON object key order and whitespace MUST be ignored)
+### 10.3 符合性标准
+一个实现当且仅当满足以下条件时才被视为符合规范：
+1. 通过本规范中 100% 的 MUST 级别断言。
+2. 通过官方符合性套件中 100% 的测试向量。
+3. 生成的 JSON 响应与预期响应在语义上等价（**必须**忽略 JSON 对象键的顺序和空白字符）。
 
 ---
 
-## 11. Security Considerations
+## 11. 安全注意事项
 
-### 11.1 Threat Model (v1 Scope)
-| Threat                  | Mitigation                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Local user token theft  | OS ACL on `token.txt` / `hub.json` (current user only)                                                            |
-| Cross-user access       | Listen only on loopback; token is per-user secret                                                                 |
-| Malicious AppDefinition | User responsible for `%LOCALAPPDATA%\DevHub\apps\definitions\` integrity; Hub does NOT sandbox launched processes |
-| Replay attacks          | Token is per Hub session; short-lived invocations limit impact                                                    |
+### 11.1 威胁模型 (v1 范围)
+| 威胁                 | 缓解措施                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| 本地用户令牌被盗     | 在 `token.txt` / `hub.json` 上设置 OS ACL（仅限当前用户）                                   |
+| 跨用户访问           | 仅监听回环地址；令牌是每个用户的私密凭据                                                    |
+| 恶意的 AppDefinition | 用户负责 `%LOCALAPPDATA%\DevHub\apps\definitions\` 的完整性；Hub 不会对启动的进程进行沙箱化 |
+| 重放攻击             | 令牌随每个 Hub 会话变化；短寿命的调用限制了影响范围                                         |
 
-### 11.2 Out of Scope (v1)
-- Process sandboxing for launched apps
-- Definition signing/verification
-- Cross-user isolation beyond OS ACLs
+### 11.2 超出范围 (v1)
+- 启动应用的进程沙箱化
+- 定义文件的签名/验证
+- 除 OS ACL 之外的跨用户隔离
 
 ---
 
-## Appendix A: Complete JSON Schema Bundle
+## 附录 A：完整的 JSON Schema 包
 
-[Download full schema bundle (ZIP)](schemas/v1/devhub-schemas-v1.0.1.zip) containing:
+[下载完整 Schema 包 (ZIP)](schemas/v1/devhub-schemas-v1.0.1.zip) 包含：
 - `app-definition.json`
 - `app-instance.json`
 - `invocation.json`
@@ -1019,20 +1027,20 @@ An implementation is conformant IFF:
 - `rpc-response.json`
 - `error-response.json`
 
-All schemas are Draft-07 compliant and include `$id` URIs for tooling integration.
+所有 Schema 均符合 Draft-07 标准，并包含用于工具集成的 `$id` URI。
 
 ---
 
-## Appendix B: Example Conformance Test Run
+## 附录 B：符合性测试运行示例
 
 ```bash
-# Run official conformance suite against local Hub
+# 针对本地 Hub 运行官方符合性套件
 devhub-conformance-cli \
   --hub-url http://127.0.0.1:47231 \
   --token-file %LOCALAPPDATA%\DevHub\runtime\token.txt \
   --suite v1.0.1
 
-# Output:
+# 输出：
 PASS  discovery.hub_json_parsable
 PASS  auth.missing_token_returns_unauthorized
 PASS  auth.invalid_protocol_version
