@@ -137,16 +137,18 @@
 
 #### 4.1.1 运行时目录
 
+**路径分隔符约定**：本文档中的路径示例统一使用 `/` 作为分隔符。Windows 平台实现时应将 `/` 替换为 `\`（例如 `C:/Users/me/...` → `C:\Users\me\...`）。
+
 SDK **应该**支持通过环境变量 `DEVHUB_RUNTIME_DIR` 覆盖运行时目录（主要用于测试框架 / 便携式安装）。
 
 | 平台        | 建议路径                                        | 完整路径（供参考）                     |
 | :---------- | :---------------------------------------------- | :------------------------------------- |
-| **Windows** | `%LOCALAPPDATA%\DevHub\runtime\`                | `<User>\AppData\Local\DevHub\runtime\` |
+| **Windows** | `%LOCALAPPDATA%/DevHub/runtime/`                | `<User>/AppData/Local/DevHub/runtime/` |
 | **macOS**   | `~/Library/Application Support/DevHub/runtime/` | 与标准路径相同                         |
 | **Linux**   | `$XDG_DATA_HOME/DevHub/runtime/`                | `~/.local/share/DevHub/runtime/`       |
 
 #### 4.1.2 `hub.json`（发现文件）
-Hub **必须**在 `${runtimeDir}\hub.json` 写入发现文件。该文件**必须**符合 §5.4 定义的 `HubRuntime` 架构。
+Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必须**符合 §5.4 定义的 `HubRuntime` 架构。
 
 示例：
 ```json
@@ -156,7 +158,7 @@ Hub **必须**在 `${runtimeDir}\hub.json` 写入发现文件。该文件**必�
   "pid": 47231,
   "httpBaseUrl": "http://127.0.0.1:47231",
   "wsUrl": "ws://127.0.0.1:47231/ws",
-  "tokenFile": "C:\\Users\\me\\AppData\\Local\\DevHub\\runtime\\token.txt",
+  "tokenFile": "C:/Users/me/AppData/Local/DevHub/runtime/token.txt",
   "startedAtUtc": "2026-01-30T12:34:56Z"
 }
 ```
@@ -172,16 +174,20 @@ Hub **必须**在 `${runtimeDir}\hub.json` 写入发现文件。该文件**必�
 - 客户端**必须**将 `hub.json` 作为权威端点来源，**禁止**假设固定的端口或固定的 WS 路径。
 
 #### 4.1.3 `token.txt`
-- 默认位置：`${runtimeDir}\token.txt`（也可通过 `hub.json.tokenFile` 发现）
+- 默认位置：`${runtimeDir}/token.txt`（也可通过 `hub.json.tokenFile` 发现）
 - 文件内容：单个持有者令牌 (bearer token) 字符串（UTF-8 文本）。客户端读取时**应该**修剪末尾的 `\r\n` 和空白字符。
 - 令牌有效期：令牌**应该**在 Hub 启动时重新生成（“每个 Hub 会话一次”）。旧令牌**必须**被拒绝。
 
-#### 4.1.4 AppDefinition 存储 (Windows v1)
-- 默认位置：`%LOCALAPPDATA%\DevHub\apps\definitions\`
+#### 4.1.4 AppDefinition 存储 (v1)
+- 默认位置：
+  - **Windows**：`%LOCALAPPDATA%/DevHub/apps/definitions/`
+  - **macOS**：`~/Library/Application Support/DevHub/apps/definitions/`
+  - **Linux**：`$XDG_DATA_HOME/DevHub/apps/definitions/`（若 `XDG_DATA_HOME` 未设置，则使用 `~/.local/share/DevHub/apps/definitions/`）
+- Hub **应该**支持通过环境变量 `DEVHUB_APPDEFS_DIR` 覆盖定义目录（主要用于测试框架 / 便携式安装）。
 - 每个定义**必须**是一个名为 `{appId}.json` 的 JSON 文件，且**必须**符合 `AppDefinition` 架构 (§5.1)。
 - Hub **必须**忽略不符合命名规则或未通过架构验证的文件（并**应该**记录诊断日志）。
 
-> 注意：非 Windows 文件系统位置在 v1 中由实现定义；符合性测试假设使用 Windows 默认值，除非使用了 `DEVHUB_RUNTIME_DIR`。
+> 注意：符合性测试假设使用平台默认值，除非使用了 `DEVHUB_APPDEFS_DIR`。`DEVHUB_RUNTIME_DIR` 仅影响运行时目录。
 
 ---
 
@@ -189,7 +195,7 @@ Hub **必须**在 `${runtimeDir}\hub.json` 写入发现文件。该文件**必�
 
 | 请求头                     | 格式             | 描述                                                                    |
 | -------------------------- | ---------------- | ----------------------------------------------------------------------- |
-| `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${runtimeDir}\token.txt`）读取的令牌 |
+| `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${runtimeDir}/token.txt`）读取的令牌 |
 | `X-DevHub-Protocol`        | `"1"`            | 协议版本；HTTP 请求头值为字符串；**必须**精确为 `"1"`                   |
 | `X-DevHub-ClientId`        | string           | 逻辑客户端身份（如 `DevHubUI`, `VSPlugin` 等）                          |
 | `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID；**必须**在客户端重启时更改                               |
@@ -672,8 +678,11 @@ sequenceDiagram
 - `-32050 invocation_failed`：当被调用方返回应用程序错误时（详见 `error.data.calleeError`）。
 - 以及路由/鉴权/验证错误 (§8)。
 
-验证：
-- 省略时的默认值：`ttlMs=300000`, `waitTimeoutMs=120000`, `queueIfOffline=true`, `autoLaunch=true`。
+验证与默认值：
+- 省略时的默认值：`ttlMs=300000`, `waitTimeoutMs=120000`, `queueIfOffline=true`。
+- `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
+- 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
+- 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
@@ -1002,12 +1011,12 @@ stateDiagram-v2
 ## 11. 安全注意事项
 
 ### 11.1 威胁模型 (v1 范围)
-| 威胁                 | 缓解措施                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| 本地用户令牌被盗     | 在 `token.txt` / `hub.json` 上设置 OS ACL（仅限当前用户）                                   |
-| 跨用户访问           | 仅监听回环地址；令牌是每个用户的私密凭据                                                    |
-| 恶意的 AppDefinition | 用户负责 `%LOCALAPPDATA%\DevHub\apps\definitions\` 的完整性；Hub 不会对启动的进程进行沙箱化 |
-| 重放攻击             | 令牌随每个 Hub 会话变化；短寿命的调用限制了影响范围                                         |
+| 威胁                 | 缓解措施                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| 本地用户令牌被盗     | 在 `token.txt` / `hub.json` 上设置 OS ACL（仅限当前用户）                            |
+| 跨用户访问           | 仅监听回环地址；令牌是每个用户的私密凭据                                             |
+| 恶意的 AppDefinition | 用户负责 AppDefinition 定义目录（见 §4.1.4）的完整性；Hub 不会对启动的进程进行沙箱化 |
+| 重放攻击             | 令牌随每个 Hub 会话变化；短寿命的调用限制了影响范围                                  |
 
 ### 11.2 超出范围 (v1)
 - 启动应用的进程沙箱化
@@ -1037,7 +1046,7 @@ stateDiagram-v2
 # 针对本地 Hub 运行官方符合性套件
 devhub-conformance-cli \
   --hub-url http://127.0.0.1:47231 \
-  --token-file %LOCALAPPDATA%\DevHub\runtime\token.txt \
+  --token-file %LOCALAPPDATA%/DevHub/runtime/token.txt \
   --suite v1.0.1
 
 # 输出：
