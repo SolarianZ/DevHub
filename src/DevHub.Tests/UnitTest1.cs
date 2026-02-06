@@ -10,17 +10,19 @@ using Moq;
 
 public class UnitTest1
 {
-    private readonly Mock<ILoggerService> _mockFsLogger;
-    private readonly Mock<ILoggerService> _mockDefinitionLogger;
-    private readonly Mock<ILoggerService> _mockRegistryLogger;
-    private readonly Mock<ILoggerService> _mockDefinitionsLogger;
+    private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
+    private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
+    private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
+    private readonly Mock<ILogger<HubPingHandler>> _mockHubPingLogger;
+    private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsHandlerLogger;
 
     public UnitTest1()
     {
-        _mockFsLogger = new Mock<ILoggerService>();
-        _mockDefinitionLogger = new Mock<ILoggerService>();
-        _mockRegistryLogger = new Mock<ILoggerService>();
-        _mockDefinitionsLogger = new Mock<ILoggerService>();
+        _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
+        _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
+        _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
+        _mockHubPingLogger = new Mock<ILogger<HubPingHandler>>();
+        _mockDefinitionsHandlerLogger = new Mock<ILogger<AppDefinitionsHandler>>();
     }
 
     [Fact]
@@ -148,7 +150,7 @@ public class UnitTest1
     public async Task HubPingHandler_ShouldReturnCorrectResponse()
     {
         // Arrange
-        var handler = new HubPingHandler(_mockDefinitionsLogger.Object);
+        var handler = new HubPingHandler(_mockHubPingLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "1",
@@ -171,7 +173,7 @@ public class UnitTest1
     {
         // Arrange
         var mockDefinitionLoader = new Mock<DefinitionLoader>(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
-        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsLogger.Object);
+        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsHandlerLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "2",

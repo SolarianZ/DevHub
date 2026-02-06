@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Models;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace DevHub.Core.Services;
@@ -12,11 +13,11 @@ public class AppRegistry : IDisposable
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
     private readonly TimeSpan _onlineThreshold = TimeSpan.FromSeconds(30);
     private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
-    private readonly ILoggerService _logger;
+    private readonly ILogger<AppRegistry> _logger;
     private readonly Timer _cleanupTimer;
     private bool _disposed = false;
 
-    public AppRegistry(ILoggerService logger)
+    public AppRegistry(ILogger<AppRegistry> logger)
     {
         _logger = logger;
         // 每60秒执行一次清理
@@ -29,7 +30,7 @@ public class AppRegistry : IDisposable
     /// <param name="state">状态参数</param>
     private void OnCleanupTimer(object? state)
     {
-        _logger.Debug("开始执行过期实例清理任务");
+        _logger.LogDebug("开始执行过期实例清理任务");
         CleanupExpiredInstances();
     }
 
@@ -39,31 +40,31 @@ public class AppRegistry : IDisposable
     private void CleanupExpiredInstances()
     {
         var now = DateTime.UtcNow;
-        _logger.Debug("当前实例数量: {Count}", _instances.Count);
+        _logger.LogDebug("当前实例数量: {Count}", _instances.Count);
 
         var expiredInstanceIds = _instances.Values
             .Where(i => now - i.LastSeenUtc > _cleanupThreshold)
             .Select(i => i.InstanceId)
             .ToList();
 
-        _logger.Debug("发现 {Count} 个过期实例需要清理", expiredInstanceIds.Count);
+        _logger.LogDebug("发现 {Count} 个过期实例需要清理", expiredInstanceIds.Count);
 
         foreach (var instanceId in expiredInstanceIds)
         {
             if (_instances.TryRemove(instanceId, out var removedInstance))
             {
-                _logger.Information("已清理过期应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID}, LastSeen: {LastSeen})",
+                _logger.LogInformation("已清理过期应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID}, LastSeen: {LastSeen})",
                     instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid, removedInstance.LastSeenUtc);
             }
         }
 
         if (expiredInstanceIds.Count > 0)
         {
-            _logger.Information("清理完成，共移除 {Count} 个过期实例", expiredInstanceIds.Count);
+            _logger.LogInformation("清理完成，共移除 {Count} 个过期实例", expiredInstanceIds.Count);
         }
         else
         {
-            _logger.Debug("没有发现过期实例需要清理");
+            _logger.LogDebug("没有发现过期实例需要清理");
         }
     }
 
@@ -72,7 +73,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public AppInstance RegisterInstance(AppInstance instance)
     {
-        _logger.Debug("尝试注册/更新应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, 详细信息: {InstanceDetails}",
+        _logger.LogDebug("尝试注册/更新应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, 详细信息: {InstanceDetails}",
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, JsonSerializer.Serialize(instance));
 
         var now = DateTime.UtcNow;
@@ -99,12 +100,12 @@ public class AppRegistry : IDisposable
             existing.Endpoints = instance.Endpoints;
             existing.Meta = instance.Meta;
 
-            _logger.Information("已更新应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+            _logger.LogInformation("已更新应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid);
             return existing;
         });
 
-        _logger.Information("已注册应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+        _logger.LogInformation("已注册应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid);
         return instanceToRegister;
     }
@@ -114,19 +115,19 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
-        _logger.Debug("尝试更新实例心跳: {InstanceId}", instanceId);
+        _logger.LogDebug("尝试更新实例心跳: {InstanceId}", instanceId);
 
         if (_instances.TryGetValue(instanceId, out var instance))
         {
             var now = DateTime.UtcNow;
             instance.LastSeenUtc = now;
             lastSeenUtc = now;
-            _logger.Debug("成功更新实例心跳: {InstanceId}", instanceId);
+            _logger.LogDebug("成功更新实例心跳: {InstanceId}", instanceId);
             return true;
         }
 
         lastSeenUtc = DateTime.MinValue;
-        _logger.Warning("心跳更新失败: 未找到实例 {InstanceId}", instanceId);
+        _logger.LogWarning("心跳更新失败: 未找到实例 {InstanceId}", instanceId);
         return false;
     }
 
@@ -135,16 +136,16 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool UnregisterInstance(string instanceId)
     {
-        _logger.Debug("尝试注销应用程序实例: {InstanceId}", instanceId);
+        _logger.LogDebug("尝试注销应用程序实例: {InstanceId}", instanceId);
 
         if (_instances.TryRemove(instanceId, out var removedInstance))
         {
-            _logger.Information("已成功注销应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+            _logger.LogInformation("已成功注销应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
                 instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid);
             return true;
         }
 
-        _logger.Warning("注销失败: 未找到实例 {InstanceId}", instanceId);
+        _logger.LogWarning("注销失败: 未找到实例 {InstanceId}", instanceId);
         return false;
     }
 
@@ -153,7 +154,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeAllScopes = false)
     {
-        _logger.Debug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}",
+        _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}",
             appId, scope, includeAllScopes);
 
         var now = DateTime.UtcNow;
@@ -178,7 +179,7 @@ public class AppRegistry : IDisposable
         }
 
         var result = instances.ToList();
-        _logger.Debug("成功列出 {Count} 个应用程序实例", result.Count);
+        _logger.LogDebug("成功列出 {Count} 个应用程序实例", result.Count);
         return result;
     }
 
@@ -187,16 +188,16 @@ public class AppRegistry : IDisposable
     /// </summary>
     public AppInstance? GetInstance(string instanceId)
     {
-        _logger.Debug("尝试获取应用程序实例: {InstanceId}", instanceId);
+        _logger.LogDebug("尝试获取应用程序实例: {InstanceId}", instanceId);
 
         if (_instances.TryGetValue(instanceId, out var instance))
         {
-            _logger.Debug("成功获取应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+            _logger.LogDebug("成功获取应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
                 instanceId, instance.AppId, instance.Scope, instance.Pid);
             return instance;
         }
 
-        _logger.Debug("未找到应用程序实例: {InstanceId}", instanceId);
+        _logger.LogDebug("未找到应用程序实例: {InstanceId}", instanceId);
         return null;
     }
 
@@ -220,9 +221,9 @@ public class AppRegistry : IDisposable
 
         if (disposing)
         {
-            _logger.Debug("开始释放 AppRegistry 资源");
+            _logger.LogDebug("开始释放 AppRegistry 资源");
             _cleanupTimer.Dispose();
-            _logger.Information("AppRegistry 资源释放完成");
+            _logger.LogInformation("AppRegistry 资源释放完成");
         }
 
         _disposed = true;

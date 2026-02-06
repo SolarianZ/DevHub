@@ -17,16 +17,15 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddDevHubCore(this IServiceCollection services, string definitionsPath)
     {
         // 注册核心服务
-        services.AddSingleton<ILoggerService, LoggerService>();
         services.AddSingleton<FileSystemManager>(sp =>
         {
-            var logger = sp.GetRequiredService<ILoggerService>();
+            var logger = sp.GetRequiredService<ILogger<FileSystemManager>>();
             return new FileSystemManager(logger, definitionsPath);
         });
         services.AddSingleton<AppRegistry>();
         services.AddSingleton<DefinitionLoader>(sp =>
         {
-            var logger = sp.GetRequiredService<ILoggerService>();
+            var logger = sp.GetRequiredService<ILogger<DefinitionLoader>>();
             return new DefinitionLoader(definitionsPath, logger);
         });
 

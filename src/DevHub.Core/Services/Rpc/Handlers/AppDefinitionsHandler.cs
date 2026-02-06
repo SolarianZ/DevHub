@@ -1,7 +1,8 @@
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
-using System.Text.Json;
 using DevHub.Core.Services;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
 
@@ -11,9 +12,9 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 public class AppDefinitionsHandler : IRpcHandler
 {
     private readonly DefinitionLoader _definitionLoader;
-    private readonly ILoggerService _logger;
+    private readonly ILogger<AppDefinitionsHandler> _logger;
 
-    public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILoggerService logger)
+    public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILogger<AppDefinitionsHandler> logger)
     {
         _definitionLoader = definitionLoader;
         _logger = logger;
@@ -23,14 +24,14 @@ public class AppDefinitionsHandler : IRpcHandler
 
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        _logger.Debug("收到应用程序定义相关RPC请求: {Method}, RequestId: {RequestId}", request.Method, request.Id);
+        _logger.LogDebug("收到应用程序定义相关RPC请求: {Method}, RequestId: {RequestId}", request.Method, request.Id);
 
         // 根据具体方法路由到不同处理逻辑
         var methodParts = request.Method.Split('.');
 
         if (methodParts.Length < 3)
         {
-            _logger.Warning("RPC方法格式无效: {Method}, RequestId: {RequestId}", request.Method, request.Id);
+            _logger.LogWarning("RPC方法格式无效: {Method}, RequestId: {RequestId}", request.Method, request.Id);
             return new JsonRpcResponse
             {
                 Id = request.Id,
@@ -67,9 +68,9 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.Debug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
             var definitions = _definitionLoader.GetAllDefinitions();
-            _logger.Information("成功获取应用程序定义列表，数量: {Count}, RequestId: {RequestId}", definitions.Count, request.Id);
+            _logger.LogInformation("成功获取应用程序定义列表，数量: {Count}, RequestId: {RequestId}", definitions.Count, request.Id);
 
             var response = new JsonRpcResponse
             {
@@ -81,12 +82,12 @@ public class AppDefinitionsHandler : IRpcHandler
                 }
             };
 
-            _logger.Debug("hub.apps.listDefinitions方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.listDefinitions方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,
@@ -106,12 +107,12 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.Debug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
             // 解析参数
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
-                _logger.Warning("hub.apps.getDefinition方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
                     Id = request.Id,
@@ -125,7 +126,7 @@ public class AppDefinitionsHandler : IRpcHandler
 
             if (!paramsElement.TryGetProperty("appId", out var appIdProperty) || appIdProperty.ValueKind != JsonValueKind.String)
             {
-                _logger.Warning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
                     Id = request.Id,
@@ -139,12 +140,12 @@ public class AppDefinitionsHandler : IRpcHandler
 
             var appId = appIdProperty.GetString();
 
-            _logger.Debug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
+            _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
             var definition = _definitionLoader.GetDefinition(appId);
 
             if (definition == null)
             {
-                _logger.Warning("未找到应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
+                _logger.LogWarning("未找到应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
                     Id = request.Id,
@@ -157,7 +158,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 });
             }
 
-            _logger.Information("成功获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
+            _logger.LogInformation("成功获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
             var response = new JsonRpcResponse
             {
                 Id = request.Id,
@@ -168,12 +169,12 @@ public class AppDefinitionsHandler : IRpcHandler
                 }
             };
 
-            _logger.Debug("hub.apps.getDefinition方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.getDefinition方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
             return Task.FromResult(new JsonRpcResponse
             {
                 Id = request.Id,

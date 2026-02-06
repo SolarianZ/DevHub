@@ -1,6 +1,6 @@
 using DevHub.Core.Models.Rpc;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using DevHub.Core.Services;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
 
@@ -9,9 +9,9 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 /// </summary>
 public class HubPingHandler : IRpcHandler
 {
-    private readonly ILoggerService _logger;
+    private readonly ILogger<HubPingHandler> _logger;
 
-    public HubPingHandler(ILoggerService logger)
+    public HubPingHandler(ILogger<HubPingHandler> logger)
     {
         _logger = logger;
     }
@@ -20,7 +20,7 @@ public class HubPingHandler : IRpcHandler
 
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        _logger.Debug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+        _logger.LogDebug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
         var response = new JsonRpcResponse
         {
@@ -32,8 +32,8 @@ public class HubPingHandler : IRpcHandler
             }
         };
 
-        _logger.Information("处理 hub.ping 请求成功，RequestId: {RequestId}", request.Id);
-        _logger.Debug("hub.ping 响应内容: {Response}", JsonSerializer.Serialize(response));
+        _logger.LogInformation("处理 hub.ping 请求成功，RequestId: {RequestId}", request.Id);
+        _logger.LogDebug("hub.ping 响应内容: {Response}", JsonSerializer.Serialize(response));
         return Task.FromResult(response);
     }
 }
