@@ -68,9 +68,21 @@ namespace DevHub.Host
                 builder.Services.AddOpenApi();
 
                 // Add DevHub core services
-                var definitionsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "apps", "definitions");
+                const string DevHubAppDefsDir = "DEVHUB_APPDEFS_DIR";
+                string definitionsPath;
+
+                if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DevHubAppDefsDir)))
+                {
+                    definitionsPath = Environment.GetEnvironmentVariable(DevHubAppDefsDir)!;
+                    Log.Debug("使用环境变量配置的应用程序定义目录: {DefinitionsPath}", definitionsPath);
+                }
+                else
+                {
+                    definitionsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "apps", "definitions");
+                    Log.Debug("使用默认应用程序定义目录: {DefinitionsPath}", definitionsPath);
+                }
+
                 Directory.CreateDirectory(definitionsPath);
-                Log.Debug("应用程序定义目录: {DefinitionsPath}", definitionsPath);
                 builder.Services.AddDevHubCore(definitionsPath);
                 Log.Information("DevHub 核心服务注册完成");
 

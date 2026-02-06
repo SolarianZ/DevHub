@@ -17,16 +17,37 @@ public class FileSystemManager
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
 
-    public FileSystemManager(ILoggerService logger)
+    // 新增：接受自定义 definitionsPath 的构造函数
+    public FileSystemManager(ILoggerService logger, string? definitionsPath = null)
     {
         _logger = logger;
 
         // 计算数据目录路径
         _rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
         _runtimePath = Path.Combine(_rootPath, "runtime");
-        _definitionsPath = Path.Combine(_rootPath, "apps", "definitions");
+
+        // 优先使用参数，然后检查环境变量，最后使用默认路径
+        if (!string.IsNullOrEmpty(definitionsPath))
+        {
+            _definitionsPath = definitionsPath;
+        }
+        else if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVHUB_APPDEFS_DIR")))
+        {
+            _definitionsPath = Environment.GetEnvironmentVariable("DEVHUB_APPDEFS_DIR")!;
+        }
+        else
+        {
+            _definitionsPath = Path.Combine(_rootPath, "apps", "definitions");
+        }
+
         _tokenFilePath = Path.Combine(_runtimePath, "token.txt");
         _hubJsonPath = Path.Combine(_runtimePath, "hub.json");
+    }
+
+    // 保留默认构造函数以保持兼容性
+    public FileSystemManager(ILoggerService logger)
+        : this(logger, null)
+    {
     }
 
     /// <summary>

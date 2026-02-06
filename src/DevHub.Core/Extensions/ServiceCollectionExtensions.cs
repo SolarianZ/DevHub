@@ -18,7 +18,11 @@ public static class ServiceCollectionExtensions
     {
         // 注册核心服务
         services.AddSingleton<ILoggerService, LoggerService>();
-        services.AddSingleton<FileSystemManager>();
+        services.AddSingleton<FileSystemManager>(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerService>();
+            return new FileSystemManager(logger, definitionsPath);
+        });
         services.AddSingleton<AppRegistry>();
         services.AddSingleton<DefinitionLoader>(sp =>
         {

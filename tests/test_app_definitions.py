@@ -19,9 +19,13 @@ class TestAppDefinitions(unittest.TestCase):
 
     def get_test_app_definition_path(self):
         """获取应用程序定义文件夹路径（使用规范目录）"""
-        from tests.test_base import DiscoveryService
-        runtime_dir = DiscoveryService.get_runtime_directory()
-        definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+        if "DEVHUB_APPDEFS_DIR" in os.environ:
+            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
+        else:
+            from tests.test_base import DiscoveryService
+            runtime_dir = DiscoveryService.get_runtime_directory()
+            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+
         os.makedirs(definitions_dir, exist_ok=True)
         return definitions_dir
 
