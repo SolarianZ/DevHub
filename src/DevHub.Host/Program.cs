@@ -17,7 +17,8 @@ namespace DevHub.Host
 
         public static void Main(string[] args)
         {
-            // 检查是否已有实例在运行
+            #region 检查是否已有实例在运行
+
             bool createdNew;
             _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
 
@@ -28,7 +29,18 @@ namespace DevHub.Host
                 return;
             }
 
-            // 配置 Serilog
+            #endregion
+
+
+            #region  配置 Serilog
+
+            const string DevHubLogDir = "DEVHUB_LOG_DIR";
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DevHubLogDir)))
+            {
+                var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "logs");
+                Environment.SetEnvironmentVariable(DevHubLogDir, logDir);
+            }
+
             Log.Logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(new ConfigurationBuilder()
                     .SetBasePath(Directory.GetCurrentDirectory())
@@ -36,6 +48,9 @@ namespace DevHub.Host
                     .AddEnvironmentVariables()
                     .Build())
                 .CreateLogger();
+
+            #endregion
+
 
             try
             {
