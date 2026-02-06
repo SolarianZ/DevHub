@@ -17,18 +17,21 @@ public class JsonRpcResponse
     /// 请求ID
     /// </summary>
     [JsonPropertyName("id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public object? Id { get; set; }
 
     /// <summary>
     /// 结果
     /// </summary>
     [JsonPropertyName("result")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public object? Result { get; set; }
 
     /// <summary>
     /// 错误信息
     /// </summary>
     [JsonPropertyName("error")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public JsonRpcError? Error { get; set; }
 }
 
@@ -53,5 +56,6 @@ public class JsonRpcError
     /// 错误数据
     /// </summary>
     [JsonPropertyName("data")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public object? Data { get; set; }
 }

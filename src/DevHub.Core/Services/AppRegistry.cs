@@ -86,6 +86,7 @@ public class AppRegistry : IDisposable
             Pid = instance.Pid,
             RegisteredAtUtc = instance.RegisteredAtUtc ?? now,
             LastSeenUtc = now,
+            Invoke = instance.Invoke,
             Endpoints = instance.Endpoints,
             Meta = instance.Meta
         };
@@ -97,6 +98,7 @@ public class AppRegistry : IDisposable
             existing.Scope = instance.Scope;
             existing.Pid = instance.Pid;
             existing.LastSeenUtc = now;
+            existing.Invoke = instance.Invoke;
             existing.Endpoints = instance.Endpoints;
             existing.Meta = instance.Meta;
 
@@ -152,14 +154,18 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 列出应用程序实例
     /// </summary>
-    public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeAllScopes = false)
+    public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeAllScopes = false, bool includeOffline = false)
     {
-        _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}",
-            appId, scope, includeAllScopes);
+        _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}, IncludeOffline: {IncludeOffline}",
+            appId, scope, includeAllScopes, includeOffline);
 
         var now = DateTime.UtcNow;
-        var instances = _instances.Values
-            .Where(i => now - i.LastSeenUtc <= _onlineThreshold);
+        var instances = _instances.Values.AsEnumerable();
+
+        if (!includeOffline)
+        {
+            instances = instances.Where(i => now - i.LastSeenUtc <= _onlineThreshold);
+        }
 
         if (!string.IsNullOrEmpty(appId))
         {

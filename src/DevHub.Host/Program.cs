@@ -116,6 +116,8 @@ namespace DevHub.Host
 
                 app.UseAuthorization();
 
+                var currentPort = 0;
+
                 // RPC endpoint
                 app.MapPost("/rpc", async (HttpRequest request, RpcRouter rpcRouter, FileSystemManager fsManager, ILogger<Program> endpointLogger, CancellationToken cancellationToken) =>
                 {
@@ -126,6 +128,9 @@ namespace DevHub.Host
 
                     try
                     {
+                        // 轻量确保 runtime 产物存在，避免运行过程中被误删导致后续请求失败
+                        fsManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
+
                         // 获取客户端ID（用于日志上下文）
                         request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
                         clientId = clientIdValue;
@@ -138,49 +143,73 @@ namespace DevHub.Host
 
                         var jsonOptions = new JsonSerializerOptions
                         {
-                            PropertyNameCaseInsensitive = true,
-                            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                            PropertyNameCaseInsensitive = true
                         };
 
-                        var rpcRequest = JsonSerializer.Deserialize<JsonRpcRequest>(body, jsonOptions);
-
-                        if (rpcRequest == null)
+                        JsonDocument requestDocument;
+                        try
                         {
-                            endpointLogger.LogWarning("收到无效的JSON-RPC请求，客户端ID: {ClientId}，请求体为空或格式不正确", clientId);
-                            return Results.Json(new JsonRpcResponse
+                            requestDocument = JsonDocument.Parse(body);
+                        }
+                        catch (JsonException ex)
+                        {
+                            endpointLogger.LogWarning(ex, "JSON 解析失败，返回 parse_error，ClientId: {ClientId}", clientId);
+                            return Results.Json(CreateErrorResponse(-32700, "parse_error", null));
+                        }
+
+                        using (requestDocument)
+                        {
+                            var root = requestDocument.RootElement;
+                            if (root.ValueKind == JsonValueKind.Array)
                             {
-                                Error = new JsonRpcError
-                                {
-                                    Code = -32600,
-                                    Message = "invalid_request"
-                                }
-                            });
+                                endpointLogger.LogWarning("收到批量请求，按规范拒绝，ClientId: {ClientId}", clientId);
+                                return Results.Json(CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
+                            }
+
+                            if (root.ValueKind != JsonValueKind.Object)
+                            {
+                                endpointLogger.LogWarning("收到非对象 JSON-RPC 根节点，ClientId: {ClientId}", clientId);
+                                return Results.Json(CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
+                            }
+
+                            if (!TryBuildRpcRequest(root, out var rpcRequest, out var requestErrorResponse))
+                            {
+                                endpointLogger.LogWarning("JSON-RPC 信封无效，ClientId: {ClientId}", clientId);
+                                return Results.Json(requestErrorResponse, jsonOptions);
+                            }
+
+                            requestId = rpcRequest.Id;
+                            method = rpcRequest.Method;
+
+                            endpointLogger.LogInformation("处理RPC请求: {Method}, RequestId: {RequestId}, ClientId: {ClientId}",
+                                rpcRequest.Method, rpcRequest.Id, clientId);
+
+                            // 校验请求头
+                            if (!ValidateHeaders(request, fsManager, endpointLogger, rpcRequest.Id, out var errorResponse))
+                            {
+                                endpointLogger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                                    rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
+                                return Results.Json(errorResponse, jsonOptions);
+                            }
+
+                            // Spec: 所有 hub.* 方法 params 为数组时返回 invalid_params
+                            if (IsHubMethodParamsArray(rpcRequest))
+                            {
+                                endpointLogger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",
+                                    rpcRequest.Method, rpcRequest.Id);
+                                return Results.Json(CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), jsonOptions);
+                            }
+
+                            // Route request
+                            var response = await rpcRouter.RouteAsync(rpcRequest, cancellationToken);
+
+                            stopwatch.Stop();
+                            endpointLogger.LogInformation("RPC请求处理成功: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
+                                rpcRequest.Method, rpcRequest.Id, clientId, stopwatch.ElapsedMilliseconds);
+
+                            endpointLogger.LogDebug("RPC响应内容: {Response}", JsonSerializer.Serialize(response, jsonOptions));
+                            return Results.Json(response, jsonOptions);
                         }
-
-                        requestId = rpcRequest.Id;
-                        method = rpcRequest.Method;
-
-                        endpointLogger.LogInformation("处理RPC请求: {Method}, RequestId: {RequestId}, ClientId: {ClientId}",
-                            rpcRequest.Method, rpcRequest.Id, clientId);
-
-                        // 校验协议头
-                        if (!ValidateHeaders(request, fsManager, endpointLogger, out var errorResponse))
-                        {
-                            errorResponse.Id = rpcRequest.Id;
-                            endpointLogger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                                rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
-                            return Results.Json(errorResponse, jsonOptions);
-                        }
-
-                        // Route request
-                        var response = await rpcRouter.RouteAsync(rpcRequest, cancellationToken);
-
-                        stopwatch.Stop();
-                        endpointLogger.LogInformation("RPC请求处理成功: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
-                            rpcRequest.Method, rpcRequest.Id, clientId, stopwatch.ElapsedMilliseconds);
-
-                        endpointLogger.LogDebug("RPC响应内容: {Response}", JsonSerializer.Serialize(response, jsonOptions));
-                        return Results.Json(response, jsonOptions);
                     }
                     catch (Exception ex)
                     {
@@ -189,6 +218,7 @@ namespace DevHub.Host
                             method, requestId, clientId, stopwatch.ElapsedMilliseconds);
                         return Results.Json(new JsonRpcResponse
                         {
+                            Id = requestId,
                             Error = new JsonRpcError
                             {
                                 Code = -32603,
@@ -206,7 +236,6 @@ namespace DevHub.Host
                 app.Urls.Add(url);
 
                 // 启动服务器并获取实际监听端口
-                var port = 0;
                 app.Lifetime.ApplicationStarted.Register(() =>
                 {
                     var addresses = app.Urls;
@@ -219,12 +248,12 @@ namespace DevHub.Host
                             var portStr = address.Substring(portStartIndex);
                             if (int.TryParse(portStr, out var parsedPort))
                             {
-                                port = parsedPort;
+                                currentPort = parsedPort;
                                 logger.LogInformation("服务器成功启动，监听地址: {Address}", address);
                                 logger.LogDebug("写入 hub.json 文件...");
-                                fileSystemManager.WriteHubJson(port);
-                                logger.LogInformation("DevHub 启动成功，监听端口: {Port}", port);
-                                logger.LogInformation("HTTP 地址: http://127.0.0.1:{Port}", port);
+                                fileSystemManager.WriteHubJson(parsedPort);
+                                logger.LogInformation("DevHub 启动成功，监听端口: {Port}", parsedPort);
+                                logger.LogInformation("HTTP 地址: http://127.0.0.1:{Port}", parsedPort);
                             }
                         }
                     }
@@ -247,41 +276,44 @@ namespace DevHub.Host
         /// <summary>
         /// 校验 HTTP 请求头
         /// </summary>
-        private static bool ValidateHeaders(HttpRequest request, FileSystemManager fileSystemManager, ILogger<Program> logger, out JsonRpcResponse errorResponse)
+        private static bool ValidateHeaders(HttpRequest request, FileSystemManager fileSystemManager, ILogger<Program> logger, object? requestId, out JsonRpcResponse errorResponse)
         {
-            // 校验协议版本
-            if (!request.Headers.TryGetValue("X-DevHub-Protocol", out var protocolValue) ||
-                !int.TryParse(protocolValue, out var protocolVersion) ||
-                protocolVersion != 1)
+            // 校验协议版本（必须是字符串 "1"）
+            if (!request.Headers.TryGetValue("X-DevHub-Protocol", out var protocolValue) || string.IsNullOrWhiteSpace(protocolValue))
             {
-                logger.LogWarning("协议版本校验失败，请求的版本: {ProtocolVersion}", protocolValue);
-                errorResponse = new JsonRpcResponse
-                {
-                    Error = new JsonRpcError
-                    {
-                        Code = -32099,
-                        Message = "not_supported"
-                    }
-                };
+                logger.LogWarning("协议版本头缺失");
+                errorResponse = CreateErrorResponse(
+                    -32099,
+                    "not_supported",
+                    requestId,
+                    new { expected = 1, reason = "missing" });
                 return false;
             }
 
-            logger.LogDebug("协议版本校验通过: {ProtocolVersion}", protocolVersion);
+            var protocol = protocolValue.ToString().Trim();
+            if (!string.Equals(protocol, "1", StringComparison.Ordinal))
+            {
+                logger.LogWarning("协议版本校验失败，请求的版本: {ProtocolVersion}", protocol);
+                errorResponse = CreateErrorResponse(
+                    -32099,
+                    "not_supported",
+                    requestId,
+                    new { expected = 1, received = protocol, reason = "mismatch" });
+                return false;
+            }
+
+            logger.LogDebug("协议版本校验通过: {ProtocolVersion}", protocol);
 
             // 校验客户端 ID
             if (!request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue) ||
                 string.IsNullOrWhiteSpace(clientIdValue))
             {
                 logger.LogWarning("客户端ID校验失败");
-                errorResponse = new JsonRpcResponse
-                {
-                    Error = new JsonRpcError
-                    {
-                        Code = -32602,
-                        Message = "invalid_params",
-                        Data = new { reason = "missing_header", header = "X-DevHub-ClientId" }
-                    }
-                };
+                errorResponse = CreateErrorResponse(
+                    -32600,
+                    "invalid_request",
+                    requestId,
+                    new { reason = "missing_header", header = "X-DevHub-ClientId" });
                 return false;
             }
 
@@ -292,15 +324,11 @@ namespace DevHub.Host
                 string.IsNullOrWhiteSpace(sessionIdValue))
             {
                 logger.LogWarning("会话ID校验失败");
-                errorResponse = new JsonRpcResponse
-                {
-                    Error = new JsonRpcError
-                    {
-                        Code = -32602,
-                        Message = "invalid_params",
-                        Data = new { reason = "missing_header", header = "X-DevHub-ClientSessionId" }
-                    }
-                };
+                errorResponse = CreateErrorResponse(
+                    -32600,
+                    "invalid_request",
+                    requestId,
+                    new { reason = "missing_header", header = "X-DevHub-ClientSessionId" });
                 return false;
             }
 
@@ -312,15 +340,11 @@ namespace DevHub.Host
                 !authorizationValue.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogWarning("Authorization头校验失败");
-                errorResponse = new JsonRpcResponse
-                {
-                    Error = new JsonRpcError
-                    {
-                        Code = -32001,
-                        Message = "unauthorized",
-                        Data = new { reason = "missing_token" }
-                    }
-                };
+                errorResponse = CreateErrorResponse(
+                    -32001,
+                    "unauthorized",
+                    requestId,
+                    new { reason = "missing_token" });
                 return false;
             }
 
@@ -332,15 +356,11 @@ namespace DevHub.Host
                 if (token != validToken)
                 {
                     logger.LogWarning("Token校验失败");
-                    errorResponse = new JsonRpcResponse
-                    {
-                        Error = new JsonRpcError
-                        {
-                            Code = -32001,
-                            Message = "unauthorized",
-                            Data = new { reason = "invalid_token" }
-                        }
-                    };
+                    errorResponse = CreateErrorResponse(
+                        -32001,
+                        "unauthorized",
+                        requestId,
+                        new { reason = "invalid_token" });
                     return false;
                 }
 
@@ -349,15 +369,11 @@ namespace DevHub.Host
             catch (Exception ex)
             {
                 logger.LogError(ex, "Token验证过程中发生异常");
-                errorResponse = new JsonRpcResponse
-                {
-                    Error = new JsonRpcError
-                    {
-                        Code = -32001,
-                        Message = "unauthorized",
-                        Data = new { reason = "token_verification_failed" }
-                    }
-                };
+                errorResponse = CreateErrorResponse(
+                    -32001,
+                    "unauthorized",
+                    requestId,
+                    new { reason = "token_verification_failed" });
                 return false;
             }
 
@@ -365,6 +381,124 @@ namespace DevHub.Host
             return true;
         }
 
+        /// <summary>
+        /// 构建 JSON-RPC 请求模型并进行信封校验
+        /// </summary>
+        private static bool TryBuildRpcRequest(JsonElement root, out JsonRpcRequest request, out JsonRpcResponse errorResponse)
+        {
+            request = null!;
 
+            if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
+                jsonRpcElement.ValueKind != JsonValueKind.String ||
+                !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
+            {
+                errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
+                return false;
+            }
+
+            if (!root.TryGetProperty("method", out var methodElement) ||
+                methodElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(methodElement.GetString()))
+            {
+                errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
+                return false;
+            }
+
+            object? requestId = null;
+            if (root.TryGetProperty("id", out var idElement))
+            {
+                if (!TryConvertJsonRpcId(idElement, out requestId))
+                {
+                    errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
+                    return false;
+                }
+            }
+
+            object? requestParams = null;
+            if (root.TryGetProperty("params", out var paramsElement))
+            {
+                if (paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Array and not JsonValueKind.Null)
+                {
+                    errorResponse = CreateErrorResponse(-32600, "invalid_request", requestId);
+                    return false;
+                }
+
+                requestParams = paramsElement.Clone();
+            }
+
+            request = new JsonRpcRequest
+            {
+                Id = requestId,
+                Method = methodElement.GetString()!,
+                Params = requestParams
+            };
+
+            errorResponse = null!;
+            return true;
+        }
+
+        /// <summary>
+        /// 将 JSON-RPC id 转换为可序列化对象
+        /// </summary>
+        private static bool TryConvertJsonRpcId(JsonElement idElement, out object? id)
+        {
+            switch (idElement.ValueKind)
+            {
+                case JsonValueKind.String:
+                    id = idElement.GetString();
+                    return true;
+                case JsonValueKind.Number:
+                    if (idElement.TryGetInt64(out var int64Value))
+                    {
+                        id = int64Value;
+                        return true;
+                    }
+
+                    if (idElement.TryGetDouble(out var doubleValue))
+                    {
+                        id = doubleValue;
+                        return true;
+                    }
+
+                    id = null;
+                    return false;
+                case JsonValueKind.Null:
+                    id = null;
+                    return true;
+                default:
+                    id = null;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 判断是否 hub.* 方法且 params 为数组
+        /// </summary>
+        private static bool IsHubMethodParamsArray(JsonRpcRequest request)
+        {
+            if (!request.Method.StartsWith("hub.", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return request.Params is JsonElement paramsElement && paramsElement.ValueKind == JsonValueKind.Array;
+        }
+
+        /// <summary>
+        /// 创建标准 JSON-RPC 错误响应
+        /// </summary>
+        private static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
+        {
+            return new JsonRpcResponse
+            {
+                Id = id,
+                Error = new JsonRpcError
+                {
+                    Code = code,
+                    Message = message,
+                    Data = data
+                }
+            };
+        }
     }
 }

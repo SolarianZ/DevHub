@@ -69,6 +69,10 @@ public class AppDefinitionsHandler : IRpcHandler
         try
         {
             _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+
+            // 每次查询前重新加载，反映测试期间新增/修改的定义文件
+            _definitionLoader.Load();
+
             var definitions = _definitionLoader.GetAllDefinitions();
             _logger.LogInformation("成功获取应用程序定义列表，数量: {Count}, RequestId: {RequestId}", definitions.Count, request.Id);
 
@@ -109,6 +113,9 @@ public class AppDefinitionsHandler : IRpcHandler
         {
             _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
+            // 每次查询前重新加载，反映测试期间新增/修改的定义文件
+            _definitionLoader.Load();
+
             // 解析参数
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -139,6 +146,19 @@ public class AppDefinitionsHandler : IRpcHandler
             }
 
             var appId = appIdProperty.GetString();
+            if (string.IsNullOrWhiteSpace(appId))
+            {
+                _logger.LogWarning("hub.apps.getDefinition方法参数无效: appId 不能为空, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(new JsonRpcResponse
+                {
+                    Id = request.Id,
+                    Error = new JsonRpcError
+                    {
+                        Code = -32602,
+                        Message = "invalid_params"
+                    }
+                });
+            }
 
             _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
             var definition = _definitionLoader.GetDefinition(appId);

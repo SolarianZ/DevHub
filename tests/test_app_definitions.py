@@ -17,6 +17,17 @@ from tests.test_base import DiscoveryService, RpcClient, TestResult
 class TestAppDefinitions(unittest.TestCase):
     """AppDefinition 测试类"""
 
+    def _safe_remove_file(self, file_path):
+        """仅删除当前测试创建的文件，避免误删运行时根目录"""
+        if not file_path:
+            return
+
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except:
+            pass
+
     def get_test_app_definition_path(self):
         """获取应用程序定义文件夹路径（使用规范目录）"""
         if "DEVHUB_APPDEFS_DIR" in os.environ:
@@ -56,11 +67,12 @@ class TestAppDefinitions(unittest.TestCase):
     def test_list_definitions(self):
         """测试列出所有应用程序定义"""
         result = TestResult("测试列出所有应用程序定义")
-        definitions_dir = None
+        test_app_path = None
 
         try:
             # 确保有一个测试应用程序定义
             _, definitions_dir = self.create_test_app_definition()
+            test_app_path = os.path.join(definitions_dir, "test-app-1.json")
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -85,24 +97,20 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            # 清理测试文件
-            if definitions_dir and os.path.exists(definitions_dir):
-                import shutil
-                try:
-                    shutil.rmtree(os.path.dirname(os.path.dirname(definitions_dir)))  # 删除整个临时目录
-                except:
-                    pass
+            # 仅清理当前测试创建的文件，避免误删 DevHub 运行时目录
+            self._safe_remove_file(test_app_path)
 
         return result
 
     def test_get_definition(self):
         """测试获取单个应用程序定义"""
         result = TestResult("测试获取单个应用程序定义")
-        definitions_dir = None
+        test_app_path = None
 
         try:
             # 确保有一个测试应用程序定义
             app_id, definitions_dir = self.create_test_app_definition()
+            test_app_path = os.path.join(definitions_dir, "test-app-1.json")
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -123,13 +131,8 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            # 清理测试文件
-            if definitions_dir and os.path.exists(definitions_dir):
-                import shutil
-                try:
-                    shutil.rmtree(os.path.dirname(os.path.dirname(definitions_dir)))  # 删除整个临时目录
-                except:
-                    pass
+            # 仅清理当前测试创建的文件，避免误删 DevHub 运行时目录
+            self._safe_remove_file(test_app_path)
 
         return result
 
@@ -214,11 +217,7 @@ class TestAppDefinitions(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             # 清理测试文件
-            try:
-                if "invalid_app_path" in locals() and os.path.exists(invalid_app_path):
-                    os.remove(invalid_app_path)
-            except:
-                pass
+            self._safe_remove_file(locals().get("invalid_app_path"))
 
         return result
 
@@ -268,11 +267,7 @@ class TestAppDefinitions(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             # 清理测试文件
-            try:
-                if "invalid_app_path" in locals() and os.path.exists(invalid_app_path):
-                    os.remove(invalid_app_path)
-            except:
-                pass
+            self._safe_remove_file(locals().get("invalid_app_path"))
 
         return result
 
@@ -315,11 +310,7 @@ class TestAppDefinitions(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             # 清理测试文件
-            try:
-                if "invalid_app_path" in locals() and os.path.exists(invalid_app_path):
-                    os.remove(invalid_app_path)
-            except:
-                pass
+            self._safe_remove_file(locals().get("invalid_app_path"))
 
         return result
 

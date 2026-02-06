@@ -37,9 +37,15 @@ class TestInternalErrors(unittest.TestCase):
                         "very": {
                             "complex": "structure" * 1000
                         }
-                    } * 100
-                } * 10
+                    }
+                }
             }
+
+            # 扩大复杂度（避免使用 dict * int 这种非法 Python 运算）
+            for index in range(10):
+                complex_params["nested"][f"deep_{index}"] = {
+                    "very": {"complex": "structure" * 100}
+                }
 
             response = client.call("hub.ping", complex_params)
             if "error" in response:
@@ -211,9 +217,14 @@ class TestInternalErrors(unittest.TestCase):
                             "very": {
                                 "complex": "structure" * 1000
                             }
-                        } * 100
-                    } * 10
+                        }
+                    }
                 }
+
+                for index in range(10):
+                    complex_params["nested"][f"deep_{index}"] = {
+                        "very": {"complex": "structure" * 100}
+                    }
                 client.call("hub.ping", complex_params)
             except:
                 pass

@@ -24,8 +24,14 @@ public class FileSystemManager
         _logger = logger;
 
         // 计算数据目录路径
-        _rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
-        _runtimePath = Path.Combine(_rootPath, "runtime");
+        var defaultRootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
+        _rootPath = defaultRootPath;
+
+        // DEVHUB_RUNTIME_DIR 仅覆盖 runtime 目录（Spec 约束）
+        var runtimeOverride = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
+        _runtimePath = string.IsNullOrWhiteSpace(runtimeOverride)
+            ? Path.Combine(defaultRootPath, "runtime")
+            : runtimeOverride;
 
         // 优先使用参数，然后检查环境变量，最后使用默认路径
         if (!string.IsNullOrEmpty(definitionsPath))
@@ -38,7 +44,7 @@ public class FileSystemManager
         }
         else
         {
-            _definitionsPath = Path.Combine(_rootPath, "apps", "definitions");
+            _definitionsPath = Path.Combine(defaultRootPath, "apps", "definitions");
         }
 
         _tokenFilePath = Path.Combine(_runtimePath, "token.txt");
@@ -207,6 +213,8 @@ public class FileSystemManager
         {
             _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, hubVersion);
 
+            Directory.CreateDirectory(_runtimePath);
+
             var hubRuntime = new HubRuntime
             {
                 ProtocolVersion = 1,
@@ -233,6 +241,21 @@ public class FileSystemManager
         {
             _logger.LogError(ex, "写入 hub.json 文件失败，文件路径: {Path}", _hubJsonPath);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 轻量确保运行时文件可用，避免运行期间文件被删除导致发现失败
+    /// </summary>
+    public void EnsureRuntimeArtifacts(int? port = null)
+    {
+        InitializeDirectories();
+        GetToken();
+
+        if (port.HasValue && port.Value > 0 && !File.Exists(_hubJsonPath))
+        {
+            _logger.LogWarning("检测到 hub.json 丢失，尝试按当前端口重建，端口: {Port}", port.Value);
+            WriteHubJson(port.Value);
         }
     }
 

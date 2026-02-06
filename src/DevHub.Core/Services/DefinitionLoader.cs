@@ -1,6 +1,7 @@
 using DevHub.Core.Models;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace DevHub.Core.Services;
 
@@ -9,6 +10,14 @@ namespace DevHub.Core.Services;
 /// </summary>
 public class DefinitionLoader
 {
+    private static readonly Regex AppIdPattern = new("^[a-z0-9][a-z0-9.-]*$", RegexOptions.Compiled);
+    private static readonly HashSet<string> ValidScopePolicies = new(StringComparer.Ordinal)
+    {
+        "any",
+        "globalOnly",
+        "required"
+    };
+
     private readonly string _definitionsPath;
     private readonly ILogger<DefinitionLoader> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -38,6 +47,7 @@ public class DefinitionLoader
             if (!Directory.Exists(_definitionsPath))
             {
                 _logger.LogWarning("应用程序定义目录不存在: {Path}", _definitionsPath);
+                _definitions = new List<AppDefinition>();
                 return;
             }
 
@@ -53,30 +63,21 @@ public class DefinitionLoader
                     var content = File.ReadAllText(file);
                     var definition = JsonSerializer.Deserialize<AppDefinition>(content, _jsonOptions);
 
-                    if (definition != null && !string.IsNullOrEmpty(definition.AppId))
+                    if (definition == null)
                     {
-                        // 验证应用程序定义的有效性
-                        if (string.IsNullOrEmpty(definition.AppId))
-                        {
-                            _logger.LogWarning("应用程序定义缺少 appId 字段: {File}", file);
-                            continue;
-                        }
-
-                        // 验证 scopePolicy（如果存在）
-                        if (!string.IsNullOrEmpty(definition.ScopePolicy) &&
-                            !IsValidScopePolicy(definition.ScopePolicy))
-                        {
-                            _logger.LogWarning("应用程序定义包含无效的 scopePolicy: {ScopePolicy}, 文件: {File}", definition.ScopePolicy, file);
-                        }
-
-                        definitions.Add(definition);
-                        _logger.LogDebug("成功加载应用程序定义: {AppId} (文件: {File}, 详细信息: {DefinitionDetails})",
-                            definition.AppId, file, JsonSerializer.Serialize(definition));
+                        _logger.LogWarning("应用程序定义文件反序列化为空: {File}", file);
+                        continue;
                     }
-                    else
+
+                    if (!IsValidDefinition(definition, file, out var invalidReason))
                     {
-                        _logger.LogWarning("应用程序定义无效或缺少 appId 字段: {File}", file);
+                        _logger.LogWarning("应用程序定义无效，已忽略: {File}, 原因: {Reason}", file, invalidReason);
+                        continue;
                     }
+
+                    definitions.Add(definition);
+                    _logger.LogDebug("成功加载应用程序定义: {AppId} (文件: {File}, 详细信息: {DefinitionDetails})",
+                        definition.AppId, file, JsonSerializer.Serialize(definition));
                 }
                 catch (JsonException ex)
                 {
@@ -127,14 +128,49 @@ public class DefinitionLoader
     }
 
     /// <summary>
-    /// 验证 scopePolicy 的有效性
+    /// 校验 AppDefinition 是否符合 Spec 约束
     /// </summary>
-    /// <param name="scopePolicy">scopePolicy 值</param>
-    /// <returns>true 表示有效，false 表示无效</returns>
-    private bool IsValidScopePolicy(string scopePolicy)
+    private static bool IsValidDefinition(AppDefinition definition, string filePath, out string reason)
     {
-        // 有效的 scopePolicy 值（M1 阶段支持的，对齐 Spec）
-        var validScopePolicies = new[] { "any", "globalOnly", "required" };
-        return validScopePolicies.Contains(scopePolicy, StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(definition.AppId))
+        {
+            reason = "缺少 appId";
+            return false;
+        }
+
+        if (!AppIdPattern.IsMatch(definition.AppId))
+        {
+            reason = "appId 不符合格式要求";
+            return false;
+        }
+
+        var expectedFileName = $"{definition.AppId}.json";
+        var actualFileName = Path.GetFileName(filePath);
+        if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
+        {
+            reason = "文件名与 appId 不匹配";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(definition.DisplayName))
+        {
+            reason = "缺少 displayName";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(definition.ScopePolicy))
+        {
+            reason = "缺少 scopePolicy";
+            return false;
+        }
+
+        if (!ValidScopePolicies.Contains(definition.ScopePolicy))
+        {
+            reason = "scopePolicy 取值无效";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
     }
 }
