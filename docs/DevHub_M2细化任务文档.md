@@ -23,7 +23,7 @@
   - `parse_error` / `invalid_request` / `invalid_params` / `method_not_found` / `internal_error`
   - `unauthorized` / `forbidden` / `instance_not_found` / `invocation_expired` / `invocation_timeout` / `app_definition_not_found` / `launch_failed` / `delivery_conflict` / `invocation_failed` / `not_supported`
 
-### 0.3 M2 非范围（必须明确）
+### 0.3 非 M2 范围（必须明确）
 - **M4 范围**：`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 推送。
 - **M3 范围**：`scopePolicy` 严格隔离能力的全链路完善（M2 仅保持边界约束，不扩展为完整 M3 方案）。
 - **v2 范围**：Invocation 持久化、事件重放、Hub 重启后的 pending 恢复。
