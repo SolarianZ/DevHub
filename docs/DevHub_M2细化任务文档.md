@@ -27,6 +27,11 @@
   - 新增 `InvocationStore.Sweep(now)` 统一推进 `TTL/waitTimeout/lease` 到期状态。
   - 新增 `InvocationTimeoutWorker` 周期扫描器，并接入 Host 启动生命周期。
   - 为 request 的 timeout/expired 扫描路径补齐 waiter 通知闭环。
+- 本轮架构/DRY 审查修复（2026-02-07）已完成：
+  - 新增 `RpcErrorFactory` 统一标准 JSON-RPC 错误构造，消除多 Handler 重复实现。
+  - 新增 `RpcParamReader` 下沉通用参数读取逻辑，明确“通用解析”与“业务语义”边界。
+  - `IRpcHandler`、`IRuntimeHttpBaseUrlProvider`、`AddDevHubCore` 补齐文档级 XML 注释。
+  - 仅做 M1/M2 范围内保守重构，不涉及 M3/M4 能力扩展，不改变协议输出语义。
 
 ## 0. 目标与验收对齐（必须满足）
 

@@ -102,7 +102,6 @@ public class NegativeTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
@@ -126,7 +125,6 @@ public class NegativeTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
@@ -160,7 +158,6 @@ public class NegativeTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
@@ -185,7 +182,6 @@ public class NegativeTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {

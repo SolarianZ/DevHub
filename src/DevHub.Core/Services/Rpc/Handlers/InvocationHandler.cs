@@ -2,6 +2,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Invocation;
+using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using InvocationModel = DevHub.Core.Models.Invocation;
 
@@ -58,26 +59,26 @@ public class InvocationHandler : IRpcHandler
             "hub.invoke.request" => RequestAsync(request, cancellationToken),
             "hub.invoke.poll" => PollAsync(request, cancellationToken),
             "hub.invoke.respond" => RespondAsync(request),
-            _ => Task.FromResult(MethodNotFound(request.Id))
+            _ => Task.FromResult(RpcErrorFactory.MethodNotFound(request.Id))
         };
     }
 
     private async Task<JsonRpcResponse> NotifyAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
             return paramsError;
         }
 
-        if (!TryGetRequiredString(paramsElement, "appId", out var appId) ||
-            !TryGetRequiredString(paramsElement, "method", out var method))
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
+            !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         if (!TryParseTarget(paramsElement, out var target, out var targetError))
         {
-            return CreateError(request.Id, -32602, "invalid_params", targetError);
+            return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
         }
 
         if (!TryParseNotifyOptions(paramsElement, target, out var options, out var optionErrorResponse))
@@ -90,7 +91,7 @@ public class InvocationHandler : IRpcHandler
         var definition = _definitionLoader.GetDefinition(appId);
         if (definition is not null && definition.Capabilities?.Rpc == false)
         {
-            return CreateError(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
+            return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
@@ -98,7 +99,7 @@ public class InvocationHandler : IRpcHandler
         {
             if (!options.QueueIfOffline)
             {
-                return CreateError(
+                return RpcErrorFactory.Create(
                     request.Id,
                     -32010,
                     "instance_not_found",
@@ -107,7 +108,7 @@ public class InvocationHandler : IRpcHandler
 
             if (definition is null)
             {
-                return CreateError(
+                return RpcErrorFactory.Create(
                     request.Id,
                     -32010,
                     "instance_not_found",
@@ -125,7 +126,7 @@ public class InvocationHandler : IRpcHandler
 
                 if (!launchResult.Ok)
                 {
-                    return CreateError(
+                    return RpcErrorFactory.Create(
                         request.Id,
                         launchResult.ErrorCode ?? -32603,
                         launchResult.ErrorMessage ?? "internal_error",
@@ -176,20 +177,20 @@ public class InvocationHandler : IRpcHandler
 
     private async Task<JsonRpcResponse> RequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
             return paramsError;
         }
 
-        if (!TryGetRequiredString(paramsElement, "appId", out var appId) ||
-            !TryGetRequiredString(paramsElement, "method", out var method))
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
+            !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         if (!TryParseTarget(paramsElement, out var target, out var targetError))
         {
-            return CreateError(request.Id, -32602, "invalid_params", targetError);
+            return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
         }
 
         if (!TryParseRequestOptions(paramsElement, target, out var options, out var optionErrorResponse))
@@ -202,7 +203,7 @@ public class InvocationHandler : IRpcHandler
         var definition = _definitionLoader.GetDefinition(appId);
         if (definition is not null && definition.Capabilities?.Rpc == false)
         {
-            return CreateError(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
+            return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
@@ -210,7 +211,7 @@ public class InvocationHandler : IRpcHandler
         {
             if (!options.QueueIfOffline)
             {
-                return CreateError(
+                return RpcErrorFactory.Create(
                     request.Id,
                     -32010,
                     "instance_not_found",
@@ -219,7 +220,7 @@ public class InvocationHandler : IRpcHandler
 
             if (definition is null)
             {
-                return CreateError(
+                return RpcErrorFactory.Create(
                     request.Id,
                     -32010,
                     "instance_not_found",
@@ -237,7 +238,7 @@ public class InvocationHandler : IRpcHandler
 
                 if (!launchResult.Ok)
                 {
-                    return CreateError(
+                    return RpcErrorFactory.Create(
                         request.Id,
                         launchResult.ErrorCode ?? -32603,
                         launchResult.ErrorMessage ?? "internal_error",
@@ -301,7 +302,7 @@ public class InvocationHandler : IRpcHandler
                     return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
                 }
 
-                return CreateError(request.Id, -32011, "invocation_expired", new
+                return RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new
                 {
                     invocationId = invocation.InvocationId,
                     elapsedMs
@@ -319,7 +320,7 @@ public class InvocationHandler : IRpcHandler
                 return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
             }
 
-            return CreateError(request.Id, -32012, "invocation_timeout", new
+            return RpcErrorFactory.Create(request.Id, -32012, "invocation_timeout", new
             {
                 invocationId = invocation.InvocationId,
                 elapsedMs
@@ -344,35 +345,35 @@ public class InvocationHandler : IRpcHandler
                     value = completion.Value
                 }
             },
-            InvocationRequestCompletionKind.Failed => CreateError(requestId, -32050, "invocation_failed", new
+            InvocationRequestCompletionKind.Failed => RpcErrorFactory.Create(requestId, -32050, "invocation_failed", new
             {
                 invocationId,
                 calleeError = completion.CalleeError
             }),
-            InvocationRequestCompletionKind.Timeout => CreateError(requestId, -32012, "invocation_timeout", new
+            InvocationRequestCompletionKind.Timeout => RpcErrorFactory.Create(requestId, -32012, "invocation_timeout", new
             {
                 invocationId,
                 elapsedMs = completion.ElapsedMs ?? 0
             }),
-            InvocationRequestCompletionKind.Expired => CreateError(requestId, -32011, "invocation_expired", new
+            InvocationRequestCompletionKind.Expired => RpcErrorFactory.Create(requestId, -32011, "invocation_expired", new
             {
                 invocationId,
                 elapsedMs = completion.ElapsedMs ?? 0
             }),
-            _ => CreateError(requestId, -32603, "internal_error")
+            _ => RpcErrorFactory.Create(requestId, -32603, "internal_error")
         };
     }
 
     private async Task<JsonRpcResponse> PollAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
             return paramsError;
         }
 
-        if (!TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         var maxCount = 10;
@@ -380,7 +381,7 @@ public class InvocationHandler : IRpcHandler
         {
             if (maxCountElement.ValueKind != JsonValueKind.Number || !maxCountElement.TryGetInt32(out maxCount) || maxCount is < 1 or > 100)
             {
-                return InvalidParams(request.Id);
+                return RpcErrorFactory.InvalidParams(request.Id);
             }
         }
 
@@ -389,19 +390,19 @@ public class InvocationHandler : IRpcHandler
         {
             if (waitMsElement.ValueKind != JsonValueKind.Number || !waitMsElement.TryGetInt32(out waitMs) || waitMs < 0)
             {
-                return InvalidParams(request.Id);
+                return RpcErrorFactory.InvalidParams(request.Id);
             }
         }
 
         var instance = _appRegistry.GetInstance(instanceId);
         if (instance is null)
         {
-            return CreateError(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId });
+            return RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId });
         }
 
         if (instance.Invoke?.Poll != true)
         {
-            return CreateError(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
+            return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
         }
 
         _appRegistry.Heartbeat(instanceId, out _);
@@ -436,33 +437,33 @@ public class InvocationHandler : IRpcHandler
 
     private Task<JsonRpcResponse> RespondAsync(JsonRpcRequest request)
     {
-        if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
             return Task.FromResult(paramsError);
         }
 
-        if (!TryGetRequiredString(paramsElement, "instanceId", out var instanceId) ||
-            !TryGetRequiredString(paramsElement, "invocationId", out var invocationId))
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId) ||
+            !RpcParamReader.TryGetRequiredString(paramsElement, "invocationId", out var invocationId))
         {
-            return Task.FromResult(InvalidParams(request.Id));
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
         var hasValue = paramsElement.TryGetProperty("value", out var valueElement);
         var hasError = paramsElement.TryGetProperty("error", out var errorElement);
         if (hasValue == hasError)
         {
-            return Task.FromResult(InvalidParams(request.Id));
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
         var instance = _appRegistry.GetInstance(instanceId);
         if (instance is null)
         {
-            return Task.FromResult(CreateError(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId }));
+            return Task.FromResult(RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId }));
         }
 
         if (instance.Invoke?.Respond != true)
         {
-            return Task.FromResult(CreateError(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
+            return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
         }
 
         _appRegistry.Heartbeat(instanceId, out _);
@@ -501,14 +502,14 @@ public class InvocationHandler : IRpcHandler
                 Id = request.Id,
                 Result = new { ok = true }
             }),
-            InvocationRespondStatus.NotFound => Task.FromResult(CreateError(request.Id, -32011, "invocation_expired", new { invocationId })),
-            InvocationRespondStatus.Expired => Task.FromResult(CreateError(request.Id, -32011, "invocation_expired", new { invocationId })),
-            InvocationRespondStatus.DeliveryConflict => Task.FromResult(CreateError(
+            InvocationRespondStatus.NotFound => Task.FromResult(RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new { invocationId })),
+            InvocationRespondStatus.Expired => Task.FromResult(RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new { invocationId })),
+            InvocationRespondStatus.DeliveryConflict => Task.FromResult(RpcErrorFactory.Create(
                 request.Id,
                 -32030,
                 "delivery_conflict",
                 BuildDeliveryConflictData(invocationId))),
-            _ => Task.FromResult(CreateError(request.Id, -32603, "internal_error"))
+            _ => Task.FromResult(RpcErrorFactory.Create(request.Id, -32603, "internal_error"))
         };
     }
 
@@ -544,7 +545,7 @@ public class InvocationHandler : IRpcHandler
         {
             if (optionsElement.ValueKind != JsonValueKind.Object)
             {
-                errorResponse = InvalidParams(null);
+                errorResponse = RpcErrorFactory.InvalidParams(null);
                 return false;
             }
 
@@ -552,7 +553,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (ttlElement.ValueKind != JsonValueKind.Number || !ttlElement.TryGetInt32(out var ttlMs) || ttlMs < 1000)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -563,7 +564,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (waitElement.ValueKind != JsonValueKind.Number || !waitElement.TryGetInt32(out var waitMs) || waitMs < 1)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -574,7 +575,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (queueElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -585,7 +586,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (autoLaunchElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -595,55 +596,23 @@ public class InvocationHandler : IRpcHandler
 
         if (!string.IsNullOrWhiteSpace(target.InstanceId) && options.AutoLaunch)
         {
-            errorResponse = InvalidParams(null);
+            errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
         }
 
         if (options.AutoLaunch && !options.QueueIfOffline)
         {
-            errorResponse = InvalidParams(null);
+            errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
         }
 
         if (options.WaitTimeoutMs is null || options.WaitTimeoutMs > options.TtlMs)
         {
-            errorResponse = InvalidParams(null);
+            errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
         }
 
         errorResponse = null!;
-        return true;
-    }
-
-    private static bool TryReadParamsObject(JsonRpcRequest request, out JsonElement paramsElement, out JsonRpcResponse error)
-    {
-        if (request.Params is JsonElement element && element.ValueKind == JsonValueKind.Object)
-        {
-            paramsElement = element;
-            error = null!;
-            return true;
-        }
-
-        paramsElement = default;
-        error = InvalidParams(request.Id);
-        return false;
-    }
-
-    private static bool TryGetRequiredString(JsonElement element, string propertyName, out string value)
-    {
-        value = string.Empty;
-        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        var str = property.GetString();
-        if (string.IsNullOrWhiteSpace(str))
-        {
-            return false;
-        }
-
-        value = str;
         return true;
     }
 
@@ -723,7 +692,7 @@ public class InvocationHandler : IRpcHandler
         {
             if (optionsElement.ValueKind != JsonValueKind.Object)
             {
-                errorResponse = InvalidParams(null);
+                errorResponse = RpcErrorFactory.InvalidParams(null);
                 return false;
             }
 
@@ -731,7 +700,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (ttlElement.ValueKind != JsonValueKind.Number || !ttlElement.TryGetInt32(out var ttlMs) || ttlMs < 1000)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -742,7 +711,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (queueElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -753,7 +722,7 @@ public class InvocationHandler : IRpcHandler
             {
                 if (autoLaunchElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
-                    errorResponse = InvalidParams(null);
+                    errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
                 }
 
@@ -763,63 +732,18 @@ public class InvocationHandler : IRpcHandler
 
         if (!string.IsNullOrWhiteSpace(target.InstanceId) && options.AutoLaunch)
         {
-            errorResponse = InvalidParams(null);
+            errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
         }
 
         if (options.AutoLaunch && !options.QueueIfOffline)
         {
-            errorResponse = InvalidParams(null);
+            errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
         }
 
         errorResponse = null!;
         return true;
-    }
-
-    private static JsonRpcResponse MethodNotFound(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32601,
-                Message = "method_not_found"
-            }
-        };
-    }
-
-    private static JsonRpcResponse InvalidParams(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32602,
-                Message = "invalid_params"
-            }
-        };
-    }
-
-    private static JsonRpcResponse NotSupported(object? id, string reason)
-    {
-        return CreateError(id, -32099, "not_supported", new { reason });
-    }
-
-    private static JsonRpcResponse CreateError(object? id, int code, string message, object? data = null)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = code,
-                Message = message,
-                Data = data
-            }
-        };
     }
 
     private static string ResolveNoCandidateReason(InvocationTarget target)

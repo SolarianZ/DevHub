@@ -1,5 +1,6 @@
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -36,7 +37,7 @@ public class AppDefinitionsHandler : IRpcHandler
         {
             "hub.apps.listDefinitions" => await ListDefinitionsAsync(request, cancellationToken),
             "hub.apps.getDefinition" => await GetDefinitionAsync(request, cancellationToken),
-            _ => MethodNotFound(request.Id)
+            _ => RpcErrorFactory.MethodNotFound(request.Id)
         };
     }
 
@@ -71,7 +72,7 @@ public class AppDefinitionsHandler : IRpcHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
-            return Task.FromResult(InternalError(request.Id));
+            return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
 
@@ -91,20 +92,20 @@ public class AppDefinitionsHandler : IRpcHandler
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(InvalidParams(request.Id));
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             if (!paramsElement.TryGetProperty("appId", out var appIdProperty) || appIdProperty.ValueKind != JsonValueKind.String)
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(InvalidParams(request.Id));
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             var appId = appIdProperty.GetString();
             if (string.IsNullOrWhiteSpace(appId))
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: appId 不能为空, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(InvalidParams(request.Id));
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
@@ -133,60 +134,12 @@ public class AppDefinitionsHandler : IRpcHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
-            return Task.FromResult(InternalError(request.Id));
+            return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
-    }
-
-    private static JsonRpcResponse MethodNotFound(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32601,
-                Message = "method_not_found"
-            }
-        };
-    }
-
-    private static JsonRpcResponse InvalidParams(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32602,
-                Message = "invalid_params"
-            }
-        };
-    }
-
-    private static JsonRpcResponse InternalError(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32603,
-                Message = "internal_error"
-            }
-        };
     }
 
     private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId)
     {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32014,
-                Message = "app_definition_not_found",
-                Data = new { appId }
-            }
-        };
+        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new { appId });
     }
 }

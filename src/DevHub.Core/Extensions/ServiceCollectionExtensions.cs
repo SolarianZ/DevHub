@@ -13,8 +13,14 @@ namespace DevHub.Core.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// 添加DevHub核心服务
+    /// 注册 DevHub M1/M2 阶段核心服务。
     /// </summary>
+    /// <param name="services">依赖注入服务集合。</param>
+    /// <param name="definitionsPath">AppDefinition 目录路径（用于 DefinitionLoader 与 FileSystemManager）。</param>
+    /// <returns>原服务集合，便于链式调用。</returns>
+    /// <remarks>
+    /// 本方法仅负责服务装配，不承担启动流程控制或运行时状态初始化。
+    /// </remarks>
     public static IServiceCollection AddDevHubCore(this IServiceCollection services, string definitionsPath)
     {
         // 注册核心服务

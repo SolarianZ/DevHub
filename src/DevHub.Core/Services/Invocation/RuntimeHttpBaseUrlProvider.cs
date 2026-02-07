@@ -11,6 +11,10 @@ public interface IRuntimeHttpBaseUrlProvider
     /// <summary>
     /// 获取当前 Hub 的 HTTP 基础地址。
     /// </summary>
+    /// <remarks>
+    /// 返回值用于 launch 模板替换中的 <c>{httpBaseUrl}</c> 占位符。
+    /// 读取失败时必须返回空字符串，调用方按降级语义继续执行。
+    /// </remarks>
     /// <returns>若无法读取则返回空字符串。</returns>
     string GetHttpBaseUrl();
 }
@@ -79,4 +83,3 @@ public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "runtime");
     }
 }
-

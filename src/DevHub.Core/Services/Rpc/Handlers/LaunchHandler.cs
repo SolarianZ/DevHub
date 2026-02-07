@@ -1,5 +1,6 @@
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Invocation;
+using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -28,24 +29,24 @@ public class LaunchHandler : IRpcHandler
     /// <inheritdoc />
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!TryReadParamsObject(request, out var paramsElement, out var invalidParams))
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
         {
             return invalidParams;
         }
 
-        if (!TryGetRequiredString(paramsElement, "appId", out var appId))
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         if (!TryParseScope(paramsElement, out var scope))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         if (!TryParseWaitForRegisterMs(paramsElement, out var waitForRegisterMs))
         {
-            return InvalidParams(request.Id);
+            return RpcErrorFactory.InvalidParams(request.Id);
         }
 
         var dedupeKey = TryGetOptionalString(paramsElement, "dedupeKey");
@@ -53,16 +54,11 @@ public class LaunchHandler : IRpcHandler
 
         if (!launchResult.Ok)
         {
-            return new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = launchResult.ErrorCode ?? -32603,
-                    Message = launchResult.ErrorMessage ?? "internal_error",
-                    Data = launchResult.ErrorData
-                }
-            };
+            return RpcErrorFactory.Create(
+                request.Id,
+                launchResult.ErrorCode ?? -32603,
+                launchResult.ErrorMessage ?? "internal_error",
+                launchResult.ErrorData);
         }
 
         return new JsonRpcResponse
@@ -76,38 +72,6 @@ public class LaunchHandler : IRpcHandler
                 launchId = launchResult.LaunchId
             }
         };
-    }
-
-    private static bool TryReadParamsObject(JsonRpcRequest request, out JsonElement paramsElement, out JsonRpcResponse error)
-    {
-        if (request.Params is JsonElement element && element.ValueKind == JsonValueKind.Object)
-        {
-            paramsElement = element;
-            error = null!;
-            return true;
-        }
-
-        paramsElement = default;
-        error = InvalidParams(request.Id);
-        return false;
-    }
-
-    private static bool TryGetRequiredString(JsonElement element, string propertyName, out string value)
-    {
-        value = string.Empty;
-        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        var str = property.GetString();
-        if (string.IsNullOrWhiteSpace(str))
-        {
-            return false;
-        }
-
-        value = str;
-        return true;
     }
 
     private static bool TryParseScope(JsonElement element, out string? scope)
@@ -174,16 +138,4 @@ public class LaunchHandler : IRpcHandler
         return property.GetString();
     }
 
-    private static JsonRpcResponse InvalidParams(object? id)
-    {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = -32602,
-                Message = "invalid_params"
-            }
-        };
-    }
 }
