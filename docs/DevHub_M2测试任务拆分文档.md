@@ -17,7 +17,7 @@
 - 本批次仍在开发：
   - `test_launch_invocation.py`
   - `LaunchCoordinatorTests.cs`
-  - lease 到期重投递（30s）长耗时场景
+  - lease 到期重投递（30s）长耗时场景（已落地，full-only）
 
 ## 0. 文档目标与使用方式
 
@@ -124,15 +124,16 @@
 
 #### `M2-RESP-001` 重复/越权 respond
 - [x] 重复响应场景：同 invocation 连续 respond 两次。
-- [ ] 越权响应场景：非 lease holder 的实例 respond。
-- [ ] 断言：均返回 `-32030 delivery_conflict`（开发中：重复响应已覆盖，越权响应待补）。
+- [x] 越权响应场景：非 lease holder 的实例 respond。
+- [x] 断言：均返回 `-32030 delivery_conflict`。
 
 #### `M2-LEASE-001` lease 到期重投递
-- [ ] 前置：生成 invocation 并由实例 A poll 获取（不 respond）。
-- [ ] 步骤：等待超过 30s lease，再由实例 B poll。
-- [ ] 断言：
+- [x] 前置：生成 invocation 并由实例 A poll 获取（不 respond）。
+- [x] 步骤：等待超过 30s lease，再由实例 B poll。
+- [x] 断言：
   - 实例 B 可重新拿到同一 `invocationId`。
   - `delivery.attempt` 相比首次递增（至少 +1）。
+  - 该场景仅在 `--full` 模式运行。
 
 #### poll/resp 参数边界
 - [ ] `maxCount=0` 或 `maxCount>100` -> `-32602`。
@@ -163,6 +164,7 @@
 - [ ] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
 - [ ] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
 - [ ] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
+- [x] `--full` 模式增加 lease 重投递长场景（30s，default/fast 不执行）。
 
 ---
 
@@ -188,7 +190,7 @@
 ### 3.4 `InvocationLeaseTests.cs`
 - [x] poll 分配 lease（30s）并记录 holder。
 - [x] lease 未过期时非 holder respond 返回 conflict。
-- [ ] lease 到期回收后可重投递且 `attempt++`。
+- [x] lease 到期回收后可重投递且 `attempt++`。
 
 ### 3.5 `InvocationRequestWaiterTests.cs`
 - [x] waiter 在成功响应时完成并移除。
@@ -214,7 +216,7 @@
 - [ ] 每个用例结束执行 unregister（失败也要清理）。
 
 ### 4.3 长耗时场景隔离
-- [ ] lease 到期类用例单独分组，避免拖慢默认回归。
+- [x] lease 到期类用例单独分组，避免拖慢默认回归（full-only）。
 - [ ] 默认回归优先 2~5 秒可完成用例。
 
 ---

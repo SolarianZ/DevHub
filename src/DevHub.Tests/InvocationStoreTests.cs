@@ -73,6 +73,88 @@ public class InvocationStoreTests
         Assert.Equal(InvocationState.Delivered, polled[0].State);
     }
 
+    [Fact]
+    public async Task DeliveredRespondWithError_ShouldTransitionToFailed()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-failed",
+            AppId = "failed.app",
+            Scope = null,
+            Pid = 4003,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("failed.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(polled);
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, value: null, error: new { code = 1001, message = "app_error" });
+        Assert.Equal(InvocationRespondStatus.Success, status);
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Failed, current!.State);
+        Assert.NotNull(current.ResponseError);
+    }
+
+    [Fact]
+    public async Task DeliveredMarkedTimeout_ShouldRejectLateRespondAsExpired()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-timeout",
+            AppId = "timeout.app",
+            Scope = null,
+            Pid = 4004,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("timeout.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(polled);
+
+        var marked = store.MarkTimeout(created.InvocationId, DateTime.UtcNow);
+        Assert.True(marked);
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        Assert.Equal(InvocationRespondStatus.Expired, status);
+    }
+
+    [Fact]
+    public async Task DeliveredMarkedExpired_ShouldRejectLateRespondAsExpired()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-expired",
+            AppId = "expired.app",
+            Scope = null,
+            Pid = 4005,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("expired.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(polled);
+
+        var marked = store.MarkExpired(created.InvocationId, DateTime.UtcNow);
+        Assert.True(marked);
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        Assert.Equal(InvocationRespondStatus.Expired, status);
+    }
+
     private static Invocation CreateNotify(string appId, string? targetScope, string? targetInstanceId)
     {
         return new Invocation

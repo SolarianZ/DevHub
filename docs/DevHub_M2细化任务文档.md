@@ -19,7 +19,7 @@
 - 本批次后续仍在开发：
   - `hub.invoke.request` 完整闭环（waiter、timeout、failed 映射）**（本轮完成）**
   - `hub.apps.launch` 真正启动与 dedupe
-  - lease 到期重投递（`attempt++`）与超时扫描
+  - lease 到期重投递（`attempt++`）与超时扫描 **（本轮完成：poll/respond 驱动回收）**
 
 ## 0. 目标与验收对齐（必须满足）
 
@@ -27,7 +27,7 @@
 - `hub.invoke.request` 实现闭环：caller -> hub -> callee `poll` -> callee `respond` -> caller 收到结果。**（开发中）**
 - `hub.invoke.notify` 支持入队并被 `hub.invoke.poll` 正确拉取。**（已完成：第一迭代）**
 - `queueIfOffline + autoLaunch` 在无在线实例时可触发 `hub.apps.launch`，实例注册后可投递。**（开发中）**
-- Lease 到期支持重投递；TTL 到期返回 `invocation_expired (-32011)`。**（开发中）**
+- Lease 到期支持重投递；TTL 到期返回 `invocation_expired (-32011)`。**（本轮完成：重投递 + attempt 递增）**
 
 ### 0.2 协议输出约束（M2 继续沿用）
 - **HTTP 状态码始终返回 `200`**，业务错误通过 JSON-RPC `error` 返回。
@@ -391,7 +391,7 @@
 
 ### Day 3：超时/重投递 + 回归
 - [ ] 实现 TTL / waitTimeout / lease 到期扫描
-- [ ] 实现 lease 到期重投递与 `attempt++`
+- [x] 实现 lease 到期重投递与 `attempt++`（poll/respond 驱动回收）
 - [ ] 完成 M2 回归测试并修复关键缺陷
 
 ---
@@ -407,14 +407,14 @@
 - [ ] `M2-LAUNCH-001`：autoLaunch 触发成功，实例注册后完成投递
 - [ ] `M2-LAUNCH-002`：dedupe 窗口内重复启动返回 `already_running`
 - [x] `M2-POLL-001`：未注册实例 poll 返回 `-32010 instance_not_found`
-- [ ] `M2-RESP-001`：重复响应/越权响应返回 `-32030 delivery_conflict`（开发中：重复响应已覆盖；越权响应黑盒待补）
-- [ ] `M2-LEASE-001`：lease 到期触发重投递且 `attempt` 递增
+- [x] `M2-RESP-001`：重复响应/越权响应返回 `-32030 delivery_conflict`
+- [x] `M2-LEASE-001`：lease 到期触发重投递且 `attempt` 递增（长耗时场景放入 full 模式）
 
 ### 11.2 C# 单元测试（白盒）
 - [x] 路由选择：`instanceId`/`scope` 精确匹配且不回退
 - [x] 队列状态机：Created -> Queued/Pending -> Delivered -> Completed/Failed
 - [x] waiter 清理：超时、取消、异常分支均可释放
-- [ ] lease 回收：到期后回队并更新 `attempt`（开发中：冲突校验已覆盖，重投递待补）
+- [x] lease 回收：到期后回队并更新 `attempt`
 - [ ] 模板渲染：`dedupeKeyTemplate/argsTemplate` 占位符替换正确
 
 ---

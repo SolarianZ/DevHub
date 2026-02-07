@@ -76,7 +76,80 @@ public class InvocationLeaseTests
         Assert.Equal(InvocationRespondStatus.DeliveryConflict, second);
     }
 
-    private static Invocation CreateNotify(string appId)
+    [Fact]
+    public async Task LeaseExpired_ShouldBeRequeuedAndAttemptIncremented()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instanceA = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "lease-requeue-a",
+            AppId = "lease.app",
+            Scope = null,
+            Pid = 5004,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        var instanceB = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "lease-requeue-b",
+            AppId = "lease.app",
+            Scope = null,
+            Pid = 5005,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
+        var firstPoll = await store.PollAsync(instanceA, maxCount: 1, waitMs: 0, CancellationToken.None);
+
+        Assert.Single(firstPoll);
+        Assert.Equal(1, firstPoll[0].Delivery.Attempt);
+        Assert.Equal(instanceA.InstanceId, firstPoll[0].LeaseHolderInstanceId);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1200));
+
+        var secondPoll = await store.PollAsync(instanceB, maxCount: 1, waitMs: 200, CancellationToken.None);
+        Assert.Single(secondPoll);
+
+        var redelivered = secondPoll.Single();
+        Assert.Equal(created.InvocationId, redelivered.InvocationId);
+        Assert.Equal(2, redelivered.Delivery.Attempt);
+        Assert.Equal(InvocationState.Delivered, redelivered.State);
+        Assert.Equal(instanceB.InstanceId, redelivered.LeaseHolderInstanceId);
+    }
+
+    [Fact]
+    public async Task Respond_AfterLeaseExpired_ShouldReturnDeliveryConflict()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "lease-expired-owner",
+            AppId = "lease.app",
+            Scope = null,
+            Pid = 5006,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
+        var firstPoll = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(firstPoll);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(1200));
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        Assert.Equal(InvocationRespondStatus.DeliveryConflict, status);
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Queued, current!.State);
+        Assert.Equal(2, current.Delivery.Attempt);
+    }
+
+    private static Invocation CreateNotify(string appId, int leaseSeconds = 30)
     {
         return new Invocation
         {
@@ -99,7 +172,7 @@ public class InvocationLeaseTests
             },
             Delivery = new InvocationDelivery
             {
-                LeaseSeconds = 30,
+                LeaseSeconds = leaseSeconds,
                 Attempt = 1
             },
             Caller = new InvocationCaller

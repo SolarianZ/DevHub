@@ -59,6 +59,7 @@ public class InvocationStore
         while (true)
         {
             var now = DateTime.UtcNow;
+            SweepExpiredLeases(now);
             var leased = TryLease(instance, maxCount, now);
             if (leased.Count > 0)
             {
@@ -83,6 +84,8 @@ public class InvocationStore
     {
         lock (_syncRoot)
         {
+            SweepExpiredLeases(DateTime.UtcNow);
+
             if (!_all.TryGetValue(invocationId, out var invocation))
             {
                 return InvocationRespondStatus.NotFound;
@@ -117,8 +120,7 @@ public class InvocationStore
 
             if (invocation.LeaseExpireAtUtc.HasValue && now > invocation.LeaseExpireAtUtc.Value)
             {
-                invocation.State = InvocationState.Expired;
-                return InvocationRespondStatus.Expired;
+                return InvocationRespondStatus.DeliveryConflict;
             }
 
             invocation.State = error is null ? InvocationState.Completed : InvocationState.Failed;
@@ -199,6 +201,43 @@ public class InvocationStore
             }
 
             return candidates;
+        }
+    }
+
+    private void SweepExpiredLeases(DateTime now)
+    {
+        lock (_syncRoot)
+        {
+            var expiredDelivered = _all.Values
+                .Where(i => i.State == InvocationState.Delivered)
+                .Where(i => i.LeaseExpireAtUtc.HasValue && now > i.LeaseExpireAtUtc.Value)
+                .ToList();
+
+            foreach (var invocation in expiredDelivered)
+            {
+                var ttlExpireAt = invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
+                if (now > ttlExpireAt)
+                {
+                    invocation.State = InvocationState.Expired;
+                    invocation.CompletedAtUtc = now;
+                    continue;
+                }
+
+                invocation.LeaseHolderInstanceId = null;
+                invocation.LeaseExpireAtUtc = null;
+                invocation.Delivery.Attempt += 1;
+
+                var hasOnlineCandidates = _routingService
+                    .GetOnlineCandidates(invocation.AppId, invocation.Target)
+                    .Count > 0;
+                invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
+
+                _logger.LogInformation(
+                    "Invocation 租约到期已回收并重投递，InvocationId: {InvocationId}, Attempt: {Attempt}, NextState: {State}",
+                    invocation.InvocationId,
+                    invocation.Delivery.Attempt,
+                    invocation.State);
+            }
         }
     }
 }

@@ -452,9 +452,27 @@ public class InvocationHandler : IRpcHandler
             }),
             InvocationRespondStatus.NotFound => Task.FromResult(CreateError(request.Id, -32011, "invocation_expired", new { invocationId })),
             InvocationRespondStatus.Expired => Task.FromResult(CreateError(request.Id, -32011, "invocation_expired", new { invocationId })),
-            InvocationRespondStatus.DeliveryConflict => Task.FromResult(CreateError(request.Id, -32030, "delivery_conflict", new { invocationId })),
+            InvocationRespondStatus.DeliveryConflict => Task.FromResult(CreateError(
+                request.Id,
+                -32030,
+                "delivery_conflict",
+                BuildDeliveryConflictData(invocationId))),
             _ => Task.FromResult(CreateError(request.Id, -32603, "internal_error"))
         };
+    }
+
+    private object BuildDeliveryConflictData(string invocationId)
+    {
+        if (_store.TryGet(invocationId, out var current) && current is not null)
+        {
+            return new
+            {
+                invocationId,
+                currentLeaseHolder = current.LeaseHolderInstanceId
+            };
+        }
+
+        return new { invocationId };
     }
 
     private static bool TryParseRequestOptions(
