@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>();
         services.AddSingleton<InvocationRequestWaiter>();
+        services.AddSingleton<InvocationTimeoutWorker>();
         services.AddSingleton<IRuntimeHttpBaseUrlProvider, RuntimeHttpBaseUrlProvider>();
         services.AddSingleton<LaunchCoordinator>();
 

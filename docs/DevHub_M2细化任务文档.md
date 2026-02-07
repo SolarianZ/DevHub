@@ -19,6 +19,14 @@
   - `hub.apps.launch` 最小闭环（参数校验、配置校验、进程启动、`started/starting/already_running`）
 - 本批次后续仍在开发：
   - lease 到期重投递（`attempt++`）与超时扫描 **（本轮完成：poll/respond 驱动回收）**
+- 第二迭代（边界闭环）已完成：
+  - notify 参数边界补齐：`autoLaunch=true && queueIfOffline=false`、`ttlMs<1000`。
+  - poll/respond 参数与能力门禁补齐：`maxCount` 边界、`poll_not_enabled`、`respond_not_enabled`。
+  - 回归入口文案升级至 M2 语义，并确认 `fast/full` 模式开关行为与文档一致。
+- 第三迭代（超时扫描）已完成：
+  - 新增 `InvocationStore.Sweep(now)` 统一推进 `TTL/waitTimeout/lease` 到期状态。
+  - 新增 `InvocationTimeoutWorker` 周期扫描器，并接入 Host 启动生命周期。
+  - 为 request 的 timeout/expired 扫描路径补齐 waiter 通知闭环。
 
 ## 0. 目标与验收对齐（必须满足）
 
@@ -371,7 +379,7 @@
 ### Day 0.5：模型/存储与队列骨架
 - [x] 定义 Invocation 内存模型与状态枚举
 - [x] 建立 Queued/Pending/Delivered 三类集合与索引
-- [ ] 建立 request waiter 生命周期管理（创建/完成/取消/清理）
+- [x] 建立 request waiter 生命周期管理（创建/完成/取消/清理）
 
 ### Day 1：`launch` + dedupe
 - [x] 实现 `hub.apps.launch` 参数校验与返回模型
@@ -381,7 +389,7 @@
 ### Day 1.5：`notify/request`
 - [x] 实现 `hub.invoke.notify`（默认值、校验、入队）
 - [x] 实现 `hub.invoke.request`（waiter 绑定、成功返回、超时/失败映射）
-- [ ] 完成离线矩阵路由与 autoLaunch 触发（开发中：`queueIfOffline + autoLaunch=false` 已支持，`autoLaunch=true` deferred）
+- [x] 完成离线矩阵路由与 autoLaunch 触发（`queueIfOffline + autoLaunch` 组合边界已覆盖）
 
 ### Day 2：`poll/respond` + lease
 - [x] 实现 `hub.invoke.poll` 长轮询与租约分配
@@ -389,9 +397,9 @@
 - [x] 完成 `poll/respond` 的 `lastSeenUtc` 更新时间
 
 ### Day 3：超时/重投递 + 回归
-- [ ] 实现 TTL / waitTimeout / lease 到期扫描
+- [x] 实现 TTL / waitTimeout / lease 到期扫描（`InvocationStore.Sweep` + `InvocationTimeoutWorker`）
 - [x] 实现 lease 到期重投递与 `attempt++`（poll/respond 驱动回收）
-- [ ] 完成 M2 回归测试并修复关键缺陷
+- [x] 完成 M2 回归测试并修复关键缺陷（本轮边界补齐后 `fast/full` + `dotnet test` 全绿）
 
 ---
 

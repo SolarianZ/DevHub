@@ -87,8 +87,8 @@
 
 #### 参数校验补充
 - [x] 指定 `target.instanceId` 且显式 `autoLaunch=true` -> `-32602`。
-- [ ] `autoLaunch=true` 且 `queueIfOffline=false` -> `-32602`。
-- [ ] `ttlMs<1000` -> `-32602`。
+- [x] `autoLaunch=true` 且 `queueIfOffline=false` -> `-32602`。
+- [x] `ttlMs<1000` -> `-32602`。
 
 ### 2.4 用例任务：`tests/test_invocation_request.py`
 
@@ -136,9 +136,9 @@
   - 该场景仅在 `--full` 模式运行。
 
 #### poll/resp 参数边界
-- [ ] `maxCount=0` 或 `maxCount>100` -> `-32602`。
-- [ ] `invoke.poll=false` 的实例调用 poll -> `-32002 forbidden` + `reason=poll_not_enabled`。
-- [ ] `invoke.respond=false` 的实例调用 respond -> `-32002 forbidden` + `reason=respond_not_enabled`。
+- [x] `maxCount=0` 或 `maxCount>100` -> `-32602`。
+- [x] `invoke.poll=false` 的实例调用 poll -> `-32002 forbidden` + `reason=poll_not_enabled`。
+- [x] `invoke.respond=false` 的实例调用 respond -> `-32002 forbidden` + `reason=respond_not_enabled`。
 
 ### 2.6 用例任务：`tests/test_launch_invocation.py`
 
@@ -161,9 +161,9 @@
 
 ### 2.7 `tests/test_runner.py` 集成任务
 - [x] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`、`TestLaunchInvocation`。
-- [ ] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
-- [ ] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
-- [ ] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
+- [x] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
+- [x] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
+- [x] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
 - [x] `--full` 模式增加 lease 重投递长场景（30s，default/fast 不执行）。
 
 ---
@@ -184,8 +184,8 @@
 
 ### 3.3 `InvocationStoreTests.cs`
 - [x] 状态迁移：Created -> Queued/Pending -> Delivered -> Completed。
-- [ ] 失败迁移：Delivered -> Failed / Expired / Timeout。
-- [ ] 请求取消后，后续 respond 必然拒绝（expired/conflict 路径之一，按实现约定断言）。
+- [x] 失败迁移：Delivered -> Failed / Expired / Timeout。
+- [x] 请求取消后，后续 respond 必然拒绝（expired/conflict 路径之一，按实现约定断言）。
 
 ### 3.4 `InvocationLeaseTests.cs`
 - [x] poll 分配 lease（30s）并记录 holder。
@@ -196,6 +196,7 @@
 - [x] waiter 在成功响应时完成并移除。
 - [x] waiter 在超时/取消时完成异常并移除。
 - [x] waiter 清理后不残留内存引用（避免泄漏）。
+- [x] 扫描器触发 timeout/expired 时，request waiter 完成并移除。
 
 ### 3.6 `LaunchCoordinatorTests.cs`
 - [x] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。
@@ -238,16 +239,16 @@
 ## 6. 完成定义（DoD）
 
 ### 6.1 功能覆盖
-- [ ] M2 验收 10 个编号用例全部落地并可重复执行。
-- [ ] 默认回归模式稳定通过；`fast/full` 模式行为符合预期。
+- [x] M2 验收 10 个编号用例全部落地并可重复执行。
+- [x] 默认回归模式稳定通过；`fast/full` 模式行为符合预期。
 
 ### 6.2 协议一致性
-- [ ] 错误码与 `error.message` 与 Spec 字符串完全一致。
-- [ ] 关键 `error.data.reason` 字段在对应场景出现。
+- [x] 错误码与 `error.message` 与 Spec 字符串完全一致。
+- [x] 关键 `error.data.reason` 字段在对应场景出现。
 
 ### 6.3 可维护性
-- [ ] 新增测试按模块分文件，不将 M2 用例混入旧 M1 文件。
-- [ ] 公共逻辑抽到 `test_base.py`，避免重复复制请求构造代码。
+- [x] 新增测试按模块分文件，不将 M2 用例混入旧 M1 文件。
+- [x] 公共逻辑抽到 `test_base.py`，避免重复复制请求构造代码。
 
 ---
 
@@ -271,5 +272,5 @@
 
 - [x] Python 新增 4 个 M2 测试模块并接入 `test_runner.py`（`test_launch_invocation.py` 已接入）。
 - [x] C# 新增 5 个白盒测试文件并通过 `dotnet test`。
-- [ ] 产出测试报告：`temp/test_results.txt`、`temp/test_results.json`、`temp/test_log.txt`。
-- [ ] 与 `DevHub_M2细化任务文档.md` 的用例编号一一对应。
+- [x] 产出测试报告：`temp/test_results.txt`、`temp/test_results.json`、`temp/test_log.txt`。
+- [x] 与 `DevHub_M2细化任务文档.md` 的用例编号一一对应。

@@ -1,6 +1,7 @@
 using DevHub.Core.Extensions;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -113,6 +114,10 @@ namespace DevHub.Host
                 logger.LogDebug("加载应用程序定义...");
                 definitionLoader.Load();
                 logger.LogInformation("应用程序定义加载完成");
+
+                // 启动 Invocation 超时扫描器
+                _ = app.Services.GetRequiredService<InvocationTimeoutWorker>();
+                logger.LogInformation("InvocationTimeoutWorker 已启动");
 
                 // Configure the HTTP request pipeline.
                 if (app.Environment.IsDevelopment())

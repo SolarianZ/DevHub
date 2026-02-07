@@ -181,6 +181,66 @@ public class InvocationStore
         }
     }
 
+    /// <summary>
+    /// 扫描并推进调用状态（TTL / waitTimeout / lease 到期）。
+    /// </summary>
+    /// <param name="now">当前 UTC 时间。</param>
+    public IReadOnlyList<InvocationSweepTransition> Sweep(DateTime now)
+    {
+        var transitions = new List<InvocationSweepTransition>();
+
+        lock (_syncRoot)
+        {
+            SweepExpiredLeases(now, transitions);
+
+            var timeoutOrExpiredCandidates = _all.Values
+                .Where(i => i.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered)
+                .ToList();
+
+            foreach (var invocation in timeoutOrExpiredCandidates)
+            {
+                var ttlElapsed = now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
+                if (ttlElapsed)
+                {
+                    invocation.State = InvocationState.Expired;
+                    invocation.CompletedAtUtc = now;
+                    invocation.LeaseHolderInstanceId = null;
+                    invocation.LeaseExpireAtUtc = null;
+
+                    transitions.Add(new InvocationSweepTransition
+                    {
+                        InvocationId = invocation.InvocationId,
+                        Kind = invocation.Kind,
+                        Outcome = InvocationSweepOutcome.Expired,
+                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
+                    });
+
+                    continue;
+                }
+
+                if (invocation.Kind == InvocationKind.Request &&
+                    invocation.Options.WaitTimeoutMs.HasValue &&
+                    now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
+                {
+                    invocation.State = InvocationState.Timeout;
+                    invocation.CompletedAtUtc = now;
+                    invocation.LeaseHolderInstanceId = null;
+                    invocation.LeaseExpireAtUtc = null;
+
+                    transitions.Add(new InvocationSweepTransition
+                    {
+                        InvocationId = invocation.InvocationId,
+                        Kind = invocation.Kind,
+                        Outcome = InvocationSweepOutcome.Timeout,
+                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
+                    });
+                }
+            }
+        }
+
+        return transitions;
+    }
+
     private List<InvocationModel> TryLease(AppInstance instance, int maxCount, DateTime now)
     {
         lock (_syncRoot)
@@ -204,7 +264,7 @@ public class InvocationStore
         }
     }
 
-    private void SweepExpiredLeases(DateTime now)
+    private void SweepExpiredLeases(DateTime now, List<InvocationSweepTransition>? transitions = null)
     {
         lock (_syncRoot)
         {
@@ -220,6 +280,15 @@ public class InvocationStore
                 {
                     invocation.State = InvocationState.Expired;
                     invocation.CompletedAtUtc = now;
+
+                    transitions?.Add(new InvocationSweepTransition
+                    {
+                        InvocationId = invocation.InvocationId,
+                        Kind = invocation.Kind,
+                        Outcome = InvocationSweepOutcome.Expired,
+                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
+                    });
+
                     continue;
                 }
 
@@ -237,7 +306,62 @@ public class InvocationStore
                     invocation.InvocationId,
                     invocation.Delivery.Attempt,
                     invocation.State);
+
+                transitions?.Add(new InvocationSweepTransition
+                {
+                    InvocationId = invocation.InvocationId,
+                    Kind = invocation.Kind,
+                    Outcome = InvocationSweepOutcome.Requeued,
+                    ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
+                });
             }
         }
     }
+}
+
+/// <summary>
+/// 调用扫描迁移结果。
+/// </summary>
+public class InvocationSweepTransition
+{
+    /// <summary>
+    /// 调用 ID。
+    /// </summary>
+    public required string InvocationId { get; set; }
+
+    /// <summary>
+    /// 调用类型。
+    /// </summary>
+    public InvocationKind Kind { get; set; }
+
+    /// <summary>
+    /// 扫描推进结果。
+    /// </summary>
+    public InvocationSweepOutcome Outcome { get; set; }
+
+    /// <summary>
+    /// 已耗时毫秒。
+    /// </summary>
+    public int ElapsedMs { get; set; }
+}
+
+/// <summary>
+/// 调用扫描推进结果类型。
+/// </summary>
+public enum InvocationSweepOutcome
+{
+    /// <summary>
+    /// 已过期。
+    /// </summary>
+    Expired,
+
+    /// <summary>
+    /// 请求等待超时。
+    /// </summary>
+    Timeout,
+
+    /// <summary>
+    /// 租约到期后回队。
+    /// </summary>
+    Requeued
 }

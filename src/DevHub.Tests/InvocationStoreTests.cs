@@ -155,6 +155,87 @@ public class InvocationStoreTests
         Assert.Equal(InvocationRespondStatus.Expired, status);
     }
 
+    [Fact]
+    public void Sweep_ShouldMarkNotifyAsExpired_WhenTtlElapsed()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var notify = CreateNotify("sweep-expired.app", targetScope: null, targetInstanceId: null);
+        notify.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
+        notify.Options.TtlMs = 1000;
+
+        var created = store.CreateInvocation(notify, hasOnlineCandidates: true);
+        Assert.Equal(InvocationState.Queued, created.State);
+
+        var transitions = store.Sweep(DateTime.UtcNow);
+
+        Assert.Contains(
+            transitions,
+            t => t.InvocationId == created.InvocationId && t.Outcome == InvocationSweepOutcome.Expired);
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Expired, current!.State);
+    }
+
+    [Fact]
+    public void Sweep_ShouldMarkRequestAsTimeout_WhenWaitTimeoutElapsed()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var request = CreateRequest("sweep-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
+        request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
+
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+        Assert.Equal(InvocationState.Queued, created.State);
+
+        var transitions = store.Sweep(DateTime.UtcNow);
+
+        Assert.Contains(
+            transitions,
+            t => t.InvocationId == created.InvocationId && t.Outcome == InvocationSweepOutcome.Timeout);
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Timeout, current!.State);
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-sweep-lease",
+            AppId = "sweep-lease.app",
+            Scope = null,
+            Pid = 4010,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+
+        var created = store.CreateInvocation(CreateNotify("sweep-lease.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(polled);
+
+        var delivered = polled[0];
+        delivered.LeaseExpireAtUtc = DateTime.UtcNow.AddMilliseconds(-1);
+        delivered.Delivery.Attempt = 1;
+
+        _ = store.Sweep(DateTime.UtcNow);
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Queued, current!.State);
+        Assert.Null(current.LeaseHolderInstanceId);
+        Assert.Null(current.LeaseExpireAtUtc);
+        Assert.Equal(2, current.Delivery.Attempt);
+    }
+
     private static Invocation CreateNotify(string appId, string? targetScope, string? targetInstanceId)
     {
         return new Invocation
@@ -173,6 +254,42 @@ public class InvocationStoreTests
             Options = new InvocationOptions
             {
                 TtlMs = 60000,
+                QueueIfOffline = true,
+                AutoLaunch = false
+            },
+            Delivery = new InvocationDelivery
+            {
+                LeaseSeconds = 30,
+                Attempt = 1
+            },
+            Caller = new InvocationCaller
+            {
+                ClientId = "test-client",
+                ClientSessionId = Guid.NewGuid().ToString("D")
+            },
+            State = InvocationState.Created
+        };
+    }
+
+    private static Invocation CreateRequest(string appId, string? targetScope, string? targetInstanceId, int ttlMs, int waitTimeoutMs)
+    {
+        return new Invocation
+        {
+            InvocationId = $"invk-{Guid.NewGuid():N}",
+            AppId = appId,
+            Target = new InvocationTarget
+            {
+                Scope = targetScope,
+                InstanceId = targetInstanceId
+            },
+            Method = "demo.request",
+            Args = new Dictionary<string, object?>(),
+            Kind = InvocationKind.Request,
+            CreatedAtUtc = DateTime.UtcNow,
+            Options = new InvocationOptions
+            {
+                TtlMs = ttlMs,
+                WaitTimeoutMs = waitTimeoutMs,
                 QueueIfOffline = true,
                 AutoLaunch = false
             },

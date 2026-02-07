@@ -224,11 +224,61 @@ class TestInvocationNotify(unittest.TestCase):
 
         return result
 
+    def test_notify_with_autolaunch_true_and_queue_false_should_fail(self):
+        """notify 参数校验: autoLaunch=true 且 queueIfOffline=false"""
+        result = TestResult("notify 参数校验 autoLaunch=true + queueIfOffline=false")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.invoke_notify(
+                app_id="m2-invalid-app",
+                method="asset.rebuild",
+                queue_if_offline=False,
+                auto_launch=True,
+                request_id="notify-invalid-2",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_notify_with_ttl_less_than_1000_should_fail(self):
+        """notify 参数校验: ttlMs < 1000"""
+        result = TestResult("notify 参数校验 ttlMs<1000")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.invoke_notify(
+                app_id="m2-invalid-app",
+                method="asset.rebuild",
+                ttl_ms=999,
+                auto_launch=False,
+                request_id="notify-invalid-3",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_notify_online_delivery(),
             self.test_notify_pending_then_deliver(),
             self.test_notify_with_target_instance_and_autolaunch_true_should_fail(),
+            self.test_notify_with_autolaunch_true_and_queue_false_should_fail(),
+            self.test_notify_with_ttl_less_than_1000_should_fail(),
         ]
 
 
@@ -245,4 +295,3 @@ if __name__ == "__main__":
         if result.error_message:
             print(f"  错误: {result.error_message}")
         print()
-

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 测试运行器
+DevHub M2 测试运行器
 """
 
 import os
@@ -45,14 +45,14 @@ def run_all_tests(full=False, fast=False):
 
     if full:
         mode = "full"
-        coverage = "M1+Spec 严格覆盖（含扩展耗时场景）"
+        coverage = "M2 严格覆盖（含 lease(30s)/并发去重等扩展耗时场景）"
     elif fast:
         mode = "fast"
-        coverage = "M1 必测（跳过超时测试，用于快速回归）"
+        coverage = "M2 快速回归（跳过 lease(30s) 与并发压力等长耗时场景）"
     else:
         mode = "default"
-        coverage = "全部 M1 必测 + Spec MUST（默认）"
-    logger.info("开始 DevHub M1 功能测试，模式: %s", mode)
+        coverage = "M2 默认回归（核心链路 + Spec MUST，不含 full 扩展慢场景）"
+    logger.info("开始 DevHub M2 功能测试，模式: %s", mode)
 
     # 创建测试报告
     report = TestReport(mode=mode, coverage=coverage)
@@ -141,7 +141,7 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="DevHub M1 功能测试运行器")
+    parser = argparse.ArgumentParser(description="DevHub M2 功能测试运行器")
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -152,7 +152,7 @@ def main():
 
     if not args.no_header:
         print("=" * 60)
-        print("DevHub M1 功能测试")
+        print("DevHub M2 功能测试")
         print("=" * 60)
         print()
 

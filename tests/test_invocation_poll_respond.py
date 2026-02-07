@@ -65,6 +65,128 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         return result
 
+    def test_poll_with_invalid_max_count_should_fail(self):
+        """poll 参数边界: maxCount=0 或 maxCount>100"""
+        result = TestResult("poll 参数边界 maxCount 范围")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response_zero = client.poll_once(self._instance_id("invalid-max-0"), max_count=0, wait_ms=0)
+            if not RpcAssertions.expect_error(result, response_zero, -32602, "invalid_params"):
+                return result
+
+            response_over = client.poll_once(self._instance_id("invalid-max-101"), max_count=101, wait_ms=0)
+            if not RpcAssertions.expect_error(result, response_over, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_poll_with_poll_disabled_instance_should_fail(self):
+        """poll 能力门禁: invoke.poll=false"""
+        result = TestResult("poll 能力门禁 invoke.poll=false")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = "m2-poll-disabled-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("poll-disabled")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=False,
+                respond=True,
+                pid=23005,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            poll_response = client.poll_once(instance_id, max_count=1, wait_ms=0)
+            if not RpcAssertions.expect_error(result, poll_response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, poll_response, {"reason": "poll_not_enabled"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_respond_with_respond_disabled_instance_should_fail(self):
+        """respond 能力门禁: invoke.respond=false"""
+        result = TestResult("respond 能力门禁 invoke.respond=false")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = "m2-respond-disabled-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("respond-disabled")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=False,
+                pid=23006,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            respond_response = client.respond_value(instance_id, "invk-not-exists", {"ok": True})
+            if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, respond_response, {"reason": "respond_not_enabled"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def test_respond_duplicate_should_conflict(self):
         """M2-RESP-001: 同一 invocation 重复 respond 返回冲突"""
         result = TestResult("M2-RESP-001 重复 respond 返回冲突")
@@ -331,6 +453,9 @@ class TestInvocationPollRespond(unittest.TestCase):
     def run_all_tests(self, full=False):
         results = [
             self.test_poll_unregistered_instance(),
+            self.test_poll_with_invalid_max_count_should_fail(),
+            self.test_poll_with_poll_disabled_instance_should_fail(),
+            self.test_respond_with_respond_disabled_instance_should_fail(),
             self.test_respond_duplicate_should_conflict(),
             self.test_respond_by_non_lease_holder_should_conflict(),
         ]
