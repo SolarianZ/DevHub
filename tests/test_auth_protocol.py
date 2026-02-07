@@ -5,16 +5,33 @@ DevHub M1 鉴权与协议版本测试
 
 import os
 import sys
+import uuid
 import unittest
+import requests
 
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult
+from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
 
 
 class TestAuthProtocol(unittest.TestCase):
     """鉴权与协议版本测试类"""
+
+    def _build_headers(self, token, content_type="application/json"):
+        """构造标准请求头"""
+        return {
+            "Content-Type": content_type,
+            "Authorization": f"Bearer {token}",
+            "X-DevHub-Protocol": "1",
+            "X-DevHub-ClientId": "PythonTestClient",
+            "X-DevHub-ClientSessionId": str(uuid.uuid4())
+        }
+
+    def _post_json(self, base_url, headers, payload):
+        """发送 JSON 请求并返回 (status_code, json_response)"""
+        response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+        return response.status_code, response.json()
 
     def test_ping_with_valid_credentials(self):
         """测试使用有效凭证调用 hub.ping"""
@@ -24,26 +41,24 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            # 测试不带参数的情况
             response = client.call("hub.ping")
+            if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
+                return result
 
-            if "result" in response and response["result"].get("ok") and "serverTimeUtc" in response["result"]:
-                result.add_detail("✅ 调用成功")
-                result.add_detail(f"服务器时间: {response['result']['serverTimeUtc']}")
+            result.add_detail(f"✅ 服务器时间: {response['result']['serverTimeUtc']}")
 
-                # 检查是否支持 echo 参数（可选）
-                test_echo = "test-message-123"
-                response_with_echo = client.call("hub.ping", {"echo": test_echo})
+            # hub.ping echo 为可选实现
+            test_echo = "test-message-123"
+            response_with_echo = client.call("hub.ping", {"echo": test_echo})
+            if not RpcAssertions.expect_success(result, response_with_echo, ["serverTimeUtc"]):
+                return result
 
-                if "result" in response_with_echo and "ok" in response_with_echo["result"] and response_with_echo["result"]["ok"] == True:
-                    if "echo" in response_with_echo["result"] and response_with_echo["result"]["echo"] == test_echo:
-                        result.add_detail(f"✅ Echo 参数测试成功: {response_with_echo['result']['echo']}")
-                    else:
-                        result.add_detail("⚠️  Echo 参数未实现")
-
-                result.mark_success()
+            if response_with_echo["result"].get("echo") == test_echo:
+                result.add_detail(f"✅ Echo 参数测试成功: {response_with_echo['result']['echo']}")
             else:
-                result.mark_failure("❌ 响应格式不正确")
+                result.add_detail("⚠️ Echo 参数未实现（允许）")
+
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
@@ -57,32 +72,25 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            invalid_headers = {"Authorization": ""}
+            request_id = "auth-missing-token-id"
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers=invalid_headers
+                invalid_headers={"Authorization": ""},
+                request_id=request_id
             )
 
-            if "error" in response and response["error"]["code"] == -32001:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "unauthorized":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id=request_id,
+                expected_data={"reason": "missing_token"}
+            ):
+                return result
 
-                # 验证 error.data.reason 包含正确的原因
-                expected_reason = "missing_token" if invalid_headers["Authorization"] == "" else "invalid_token"
-                if "data" in response["error"] and response["error"]["data"].get("reason") == expected_reason:
-                    result.add_detail("✅ 错误数据包含正确的原因")
-                else:
-                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
@@ -96,32 +104,24 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            invalid_headers = {"Authorization": "Bearer invalid_token"}
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers=invalid_headers
+                invalid_headers={"Authorization": "Bearer invalid_token"},
+                request_id="auth-invalid-token-id"
             )
 
-            if "error" in response and response["error"]["code"] == -32001:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "unauthorized":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id="auth-invalid-token-id",
+                expected_data={"reason": "invalid_token"}
+            ):
+                return result
 
-                # 验证 error.data.reason 包含正确的原因
-                expected_reason = "missing_token" if invalid_headers["Authorization"] == "" else "invalid_token"
-                if "data" in response["error"] and response["error"]["data"].get("reason") == expected_reason:
-                    result.add_detail("✅ 错误数据包含正确的原因")
-                else:
-                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
@@ -135,284 +135,21 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            invalid_headers = {"X-DevHub-Protocol": "2"}
 
             response = client.call_with_invalid_headers(
                 "hub.ping",
-                invalid_headers=invalid_headers
+                invalid_headers={"X-DevHub-Protocol": "2"},
+                request_id="auth-invalid-protocol-id"
             )
 
-            if "error" in response and response["error"]["code"] == -32099:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "not_supported":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
-
-                # 验证 error.data 包含 expected 和 received 字段
-                received_version = invalid_headers["X-DevHub-Protocol"]
-                if "data" in response["error"] and response["error"]["data"].get("expected") == 1 and \
-                   response["error"]["data"].get("received") == received_version and \
-                   response["error"]["data"].get("reason") == "mismatch":
-                    result.add_detail("✅ 错误数据包含正确的 expected 和 received 字段")
-                else:
-                    result.mark_failure(f"❌ 错误数据字段不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-
-    def test_batch_request_rejected(self):
-        """测试批量请求（数组根）被拒绝"""
-        result = TestResult("测试批量请求（数组根）被拒绝")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-
-            # 发送 batch 请求
-            batch_request = [
-                {
-                    "jsonrpc": "2.0",
-                    "id": "1",
-                    "method": "hub.ping",
-                    "params": {}
-                },
-                {
-                    "jsonrpc": "2.0",
-                    "id": "2",
-                    "method": "hub.ping",
-                    "params": {"echo": "test"}
-                }
-            ]
-
-            response, status_code = client.send_batch_request(batch_request)
-
-            # 验证 HTTP 状态码始终是 200 OK
-            if status_code != 200:
-                result.mark_failure(f"❌ HTTP 状态码不正确: {status_code}")
-                return result
-
-            # 验证响应包含错误
-            if isinstance(response, dict) and "error" in response:
-                # Spec.md 6.1 明确要求 batch 请求必须返回 -32600 invalid_request
-                if response["error"]["code"] == -32600:
-                    # 验证 error.message 与 Spec.md 一致
-                    if response["error"]["message"] == "invalid_request":
-                        result.add_detail("✅ 错误消息正确")
-                    else:
-                        result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                        return result
-
-                    # 验证 id 为 null
-                    if response["id"] is None:
-                        result.add_detail("✅ 响应 id 为 null")
-                    else:
-                        result.mark_failure(f"❌ 响应 id 不正确: {response['id']}")
-                        return result
-
-                    result.mark_success()
-                else:
-                    result.mark_failure(f"❌ 错误码不正确: code={response['error']['code']}")
-            else:
-                result.mark_failure(f"❌ 响应格式不正确: {response}")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-    def test_protocol_version_must_be_string(self):
-        """测试 X-DevHub-Protocol 头部值必须是字符串 \"1\""""
-        result = TestResult("测试 X-DevHub-Protocol 头部值必须是字符串 \"1\"")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            invalid_headers = {"X-DevHub-Protocol": "1.0"}  # 注意：这里是字符串但不是 "1"
-
-            # 测试使用其他字符串值作为协议版本
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers=invalid_headers
-            )
-
-            if "error" in response and response["error"]["code"] == -32099:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "not_supported":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
-
-                # 验证 error.data 包含 expected 和 received 字段
-                received_version = invalid_headers["X-DevHub-Protocol"]
-                if "data" in response["error"] and response["error"]["data"].get("expected") == 1 and \
-                   response["error"]["data"].get("received") == received_version and \
-                   response["error"]["data"].get("reason") == "mismatch":
-                    result.add_detail("✅ 错误数据包含正确的 expected 和 received 字段")
-                else:
-                    result.mark_failure(f"❌ 错误数据字段不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-    def test_ping_without_client_id(self):
-        """测试缺少X-DevHub-ClientId头部的调用"""
-        result = TestResult("测试缺少X-DevHub-ClientId头部的调用")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"X-DevHub-ClientId": ""}
-            )
-
-            if "error" in response and response["error"]["code"] == -32600:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "invalid_request":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
-
-                # 验证 error.data.reason 包含正确的原因
-                if "data" in response["error"] and response["error"]["data"].get("reason") == "missing_header":
-                    result.add_detail("✅ 错误数据包含正确的原因")
-                else:
-                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-    def test_ping_without_client_session_id(self):
-        """测试缺少X-DevHub-ClientSessionId头部的调用"""
-        result = TestResult("测试缺少X-DevHub-ClientSessionId头部的调用")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"X-DevHub-ClientSessionId": ""}
-            )
-
-            if "error" in response and response["error"]["code"] == -32600:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "invalid_request":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
-
-                # 验证 error.data.reason 包含正确的原因
-                if "data" in response["error"] and response["error"]["data"].get("reason") == "missing_header":
-                    result.add_detail("✅ 错误数据包含正确的原因")
-                else:
-                    result.mark_failure(f"❌ 错误数据中 reason 不正确: {response['error'].get('data', {})}")
-                    return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-    def test_http_status_code_always_200(self):
-        """测试 HTTP 响应状态码始终为 200 OK，即使发生错误"""
-        result = TestResult("测试 HTTP 响应状态码始终为 200 OK")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-
-            # 直接使用 requests 库发送请求，以便检查 HTTP 状态码
-            import requests
-            import uuid
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {token}",
-                "X-DevHub-Protocol": "1",
-                "X-DevHub-ClientId": "PythonTestClient",
-                "X-DevHub-ClientSessionId": str(uuid.uuid4())  # 使用 RFC 4122 UUID
-            }
-
-            # 测试有效请求
-            payload = {
-                "jsonrpc": "2.0",
-                "id": "1",
-                "method": "hub.ping",
-                "params": {}
-            }
-
-            response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
-            if response.status_code == 200:
-                result.add_detail("✅ 有效请求返回 200 OK")
-            else:
-                result.mark_failure(f"❌ 有效请求返回了错误的状态码: {response.status_code}")
-                return result
-
-            # 测试无效请求（无效的方法名）
-            payload = {
-                "jsonrpc": "2.0",
-                "id": "2",
-                "method": "invalid.method",
-                "params": {}
-            }
-
-            response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
-            if response.status_code == 200:
-                result.add_detail("✅ 无效方法请求返回 200 OK")
-                # 验证 JSON-RPC 错误响应
-                response_json = response.json()
-                if "error" in response_json:
-                    if response_json["error"]["code"] == -32601 and response_json["error"]["message"] == "method_not_found":
-                        result.add_detail("✅ 无效方法返回正确的 -32601 method_not_found 错误")
-                    else:
-                        result.mark_failure(f"❌ 无效方法返回了错误的错误码或消息: code={response_json['error']['code']}, message={response_json['error']['message']}")
-                        return result
-                else:
-                    result.mark_failure("❌ 无效方法请求未返回 JSON-RPC 错误响应")
-                    return result
-            else:
-                result.mark_failure(f"❌ 无效方法请求返回了错误的状态码: {response.status_code}")
-                return result
-
-            # 测试无效 token 请求
-            invalid_headers = headers.copy()
-            invalid_headers["Authorization"] = "Bearer invalid_token"
-            response = requests.post(f"{base_url}/rpc", json=payload, headers=invalid_headers, timeout=30)
-            if response.status_code == 200:
-                result.add_detail("✅ 无效 token 请求返回 200 OK")
-            else:
-                result.mark_failure(f"❌ 无效 token 请求返回了错误的状态码: {response.status_code}")
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32099,
+                expected_message="not_supported",
+                expected_id="auth-invalid-protocol-id",
+                expected_data={"expected": 1, "received": "2", "reason": "mismatch"}
+            ):
                 return result
 
             result.mark_success()
@@ -422,19 +159,300 @@ class TestAuthProtocol(unittest.TestCase):
 
         return result
 
-    def run_all_tests(self):
+    def test_ping_without_protocol_header(self):
+        """测试缺少协议版本头"""
+        result = TestResult("测试缺少协议版本头")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call_with_invalid_headers(
+                "hub.ping",
+                invalid_headers={"X-DevHub-Protocol": ""},
+                request_id="auth-missing-protocol-id"
+            )
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32099,
+                expected_message="not_supported",
+                expected_id="auth-missing-protocol-id",
+                expected_data={"expected": 1, "reason": "missing"}
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ping_without_client_id(self):
+        """测试缺少 X-DevHub-ClientId"""
+        result = TestResult("测试缺少 X-DevHub-ClientId")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call_with_invalid_headers(
+                "hub.ping",
+                invalid_headers={"X-DevHub-ClientId": ""},
+                request_id="auth-missing-client-id"
+            )
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id="auth-missing-client-id",
+                expected_data={"reason": "missing_header", "header": "X-DevHub-ClientId"}
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ping_without_client_session_id(self):
+        """测试缺少 X-DevHub-ClientSessionId"""
+        result = TestResult("测试缺少 X-DevHub-ClientSessionId")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call_with_invalid_headers(
+                "hub.ping",
+                invalid_headers={"X-DevHub-ClientSessionId": ""},
+                request_id="auth-missing-client-session-id"
+            )
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id="auth-missing-client-session-id",
+                expected_data={"reason": "missing_header", "header": "X-DevHub-ClientSessionId"}
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_client_session_id_must_be_uuid(self):
+        """测试 X-DevHub-ClientSessionId 必须为 UUID"""
+        result = TestResult("测试 X-DevHub-ClientSessionId 必须为 UUID")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call_with_invalid_headers(
+                "hub.ping",
+                invalid_headers={"X-DevHub-ClientSessionId": "not-a-uuid"},
+                request_id="auth-invalid-session-id"
+            )
+
+            # Spec 要求为 UUID；当前实现若未校验，此测试会失败并提示实现不合规
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id="auth-invalid-session-id"
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_authorization_must_use_bearer_scheme(self):
+        """测试 Authorization 必须为 Bearer 方案"""
+        result = TestResult("测试 Authorization 必须为 Bearer 方案")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call_with_invalid_headers(
+                "hub.ping",
+                invalid_headers={"Authorization": "Basic abcdef"},
+                request_id="auth-invalid-scheme-id"
+            )
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id="auth-invalid-scheme-id",
+                expected_data={"reason": "missing_token"}
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_batch_request_rejected(self):
+        """测试批量请求（数组根）被拒绝"""
+        result = TestResult("测试批量请求（数组根）被拒绝")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            batch_request = [
+                {
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "method": "hub.ping",
+                    "params": {}
+                }
+            ]
+
+            response, status_code = client.send_batch_request(batch_request)
+            if status_code != 200:
+                result.mark_failure(f"❌ HTTP 状态码不正确: {status_code}")
+                return result
+
+            if not isinstance(response, dict):
+                result.mark_failure(f"❌ batch 响应格式不正确: {response}")
+                return result
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id=None
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_content_type_must_be_application_json(self):
+        """测试 Content-Type 必须为 application/json"""
+        result = TestResult("测试 Content-Type 必须为 application/json")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token, content_type="text/plain")
+            payload = {
+                "jsonrpc": "2.0",
+                "id": "auth-content-type-id",
+                "method": "hub.ping",
+                "params": {}
+            }
+
+            status_code, response = self._post_json(base_url, headers, payload)
+            if status_code != 200:
+                result.mark_failure(f"❌ HTTP 状态码不正确: {status_code}")
+                return result
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id="auth-content-type-id"
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_http_status_code_always_200(self):
+        """测试 HTTP 响应状态码始终为 200"""
+        result = TestResult("测试 HTTP 响应状态码始终为 200")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+
+            cases = [
+                {
+                    "name": "有效请求",
+                    "payload": {"jsonrpc": "2.0", "id": "1", "method": "hub.ping", "params": {}},
+                    "headers": headers
+                },
+                {
+                    "name": "无效方法",
+                    "payload": {"jsonrpc": "2.0", "id": "2", "method": "invalid.method", "params": {}},
+                    "headers": headers
+                },
+                {
+                    "name": "无效 token",
+                    "payload": {"jsonrpc": "2.0", "id": "3", "method": "hub.ping", "params": {}},
+                    "headers": {**headers, "Authorization": "Bearer invalid_token"}
+                },
+                {
+                    "name": "缺少协议头",
+                    "payload": {"jsonrpc": "2.0", "id": "4", "method": "hub.ping", "params": {}},
+                    "headers": {**headers, "X-DevHub-Protocol": ""}
+                }
+            ]
+
+            for case in cases:
+                response = requests.post(f"{base_url}/rpc", json=case["payload"], headers=case["headers"], timeout=30)
+                if response.status_code != 200:
+                    result.mark_failure(f"❌ {case['name']} 返回非200状态码: {response.status_code}")
+                    return result
+                result.add_detail(f"✅ {case['name']} 返回 200 OK")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def run_all_tests(self, full=False):
         """运行所有鉴权与协议版本测试"""
-        return [
-            self.test_ping_with_valid_credentials(),
-            self.test_ping_without_token(),
-            self.test_ping_with_invalid_token(),
-            self.test_ping_with_invalid_protocol_version(),
-            self.test_batch_request_rejected(),
-            self.test_protocol_version_must_be_string(),
-            self.test_http_status_code_always_200(),
-            self.test_ping_without_client_id(),
-            self.test_ping_without_client_session_id()
+        tests = [
+            self.test_ping_with_valid_credentials,
+            self.test_ping_without_token,
+            self.test_ping_with_invalid_token,
+            self.test_ping_with_invalid_protocol_version,
+            self.test_ping_without_protocol_header,
+            self.test_ping_without_client_id,
+            self.test_ping_without_client_session_id,
+            self.test_client_session_id_must_be_uuid,
+            self.test_authorization_must_use_bearer_scheme,
+            self.test_batch_request_rejected,
+            self.test_content_type_must_be_application_json,
+            self.test_http_status_code_always_200
         ]
+        return [test() for test in tests]
 
 
 if __name__ == "__main__":

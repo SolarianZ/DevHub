@@ -9,6 +9,7 @@ import platform
 import requests
 import uuid
 from datetime import datetime
+from typing import Any, List, Optional
 
 
 class DiscoveryService:
@@ -176,15 +177,90 @@ class TestResult:
         }
 
 
+class RpcAssertions:
+    """JSON-RPC 断言辅助方法"""
+
+    @staticmethod
+    def expect_success(result: TestResult, response: dict, required_fields: Optional[List[str]] = None):
+        """断言响应为成功结果"""
+        if "error" in response:
+            result.mark_failure(f"❌ 期望成功响应，但返回错误: {response['error']}")
+            return False
+
+        if "result" not in response or not isinstance(response["result"], dict):
+            result.mark_failure(f"❌ 响应缺少 result 对象: {response}")
+            return False
+
+        if response["result"].get("ok") is not True:
+            result.mark_failure(f"❌ result.ok 不为 true: {response['result']}")
+            return False
+
+        if required_fields:
+            for field in required_fields:
+                if field not in response["result"]:
+                    result.mark_failure(f"❌ 成功响应缺少字段 {field}: {response['result']}")
+                    return False
+
+        return True
+
+    @staticmethod
+    def expect_error(
+        result: TestResult,
+        response: dict,
+        expected_code: int,
+        expected_message: Optional[str] = None,
+        expected_id: Any = ...,
+        expected_data: Optional[dict] = None,
+    ):
+        """断言响应为错误结果"""
+        if "error" not in response or not isinstance(response["error"], dict):
+            result.mark_failure(f"❌ 期望错误响应，但未返回 error: {response}")
+            return False
+
+        error = response["error"]
+        actual_code = error.get("code")
+        if actual_code != expected_code:
+            result.mark_failure(f"❌ 错误码不正确: 期望 {expected_code}，实际 {actual_code}")
+            return False
+
+        if expected_message is not None:
+            actual_message = error.get("message")
+            if actual_message != expected_message:
+                result.mark_failure(f"❌ 错误消息不正确: 期望 {expected_message}，实际 {actual_message}")
+                return False
+
+        if expected_id is not ...:
+            actual_id = response.get("id")
+            if actual_id != expected_id:
+                result.mark_failure(f"❌ 响应 id 不正确: 期望 {expected_id}，实际 {actual_id}")
+                return False
+
+        if expected_data is not None:
+            data = error.get("data")
+            if not isinstance(data, dict):
+                result.mark_failure(f"❌ error.data 不是对象: {error}")
+                return False
+
+            for key, expected_value in expected_data.items():
+                if data.get(key) != expected_value:
+                    result.mark_failure(
+                        f"❌ error.data.{key} 不正确: 期望 {expected_value}，实际 {data.get(key)}")
+                    return False
+
+        return True
+
+
 class TestReport:
     """
     测试报告类
     """
 
-    def __init__(self):
+    def __init__(self, mode="quick", coverage="核心M1+Spec必测（快速）"):
         self.results = []
         self.start_time = datetime.now()
         self.end_time = None
+        self.mode = mode
+        self.coverage = coverage
 
     def add_result(self, result):
         """添加测试结果"""
@@ -214,6 +290,8 @@ class TestReport:
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat(),
             "duration": (self.end_time - self.start_time).total_seconds(),
+            "mode": self.mode,
+            "coverage": self.coverage,
             "summary": self.get_summary(),
             "results": [r.to_dict() for r in self.results]
         }
@@ -233,6 +311,8 @@ class TestReport:
             f.write(f"测试时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"完成时间: {self.end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"测试时长: {self.end_time - self.start_time}\n")
+            f.write(f"测试模式: {self.mode}\n")
+            f.write(f"覆盖级别: {self.coverage}\n")
             f.write("\n")
             f.write(f"总测试数: {summary['total']}\n")
             f.write(f"通过数: {summary['passed']}\n")

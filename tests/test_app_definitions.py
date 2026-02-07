@@ -11,7 +11,7 @@ import json
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult
+from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
 
 
 class TestAppDefinitions(unittest.TestCase):
@@ -21,11 +21,10 @@ class TestAppDefinitions(unittest.TestCase):
         """仅删除当前测试创建的文件，避免误删运行时根目录"""
         if not file_path:
             return
-
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
-        except:
+        except Exception:
             pass
 
     def get_test_app_definition_path(self):
@@ -33,7 +32,6 @@ class TestAppDefinitions(unittest.TestCase):
         if "DEVHUB_APPDEFS_DIR" in os.environ:
             definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
         else:
-            from tests.test_base import DiscoveryService
             runtime_dir = DiscoveryService.get_runtime_directory()
             definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
 
@@ -43,26 +41,24 @@ class TestAppDefinitions(unittest.TestCase):
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
         definitions_dir = self.get_test_app_definition_path()
-        test_app_path = os.path.join(definitions_dir, "test-app-1.json")  # 文件名与appId一致
+        test_app_path = os.path.join(definitions_dir, "test-app-1.json")
 
-        # 如果文件不存在则创建
-        if not os.path.exists(test_app_path):
-            test_app = {
-                "appId": "test-app-1",
-                "displayName": "Test Application",
-                "description": "This is a test application",
-                "scopePolicy": "any",
-                "launch": {
-                    "exePath": "echo",
-                    "argsTemplate": "Hello from Test Application"
-                },
-                "capabilities": { "rpc": True, "events": False }
-            }
+        test_app = {
+            "appId": "test-app-1",
+            "displayName": "Test Application",
+            "description": "This is a test application",
+            "scopePolicy": "any",
+            "launch": {
+                "exePath": "echo",
+                "argsTemplate": "Hello from Test Application"
+            },
+            "capabilities": {"rpc": True, "events": False}
+        }
 
-            with open(test_app_path, "w", encoding="utf-8") as f:
-                json.dump(test_app, f, ensure_ascii=False, indent=2)
+        with open(test_app_path, "w", encoding="utf-8") as f:
+            json.dump(test_app, f, ensure_ascii=False, indent=2)
 
-        return "test-app-1", definitions_dir  # 返回appId和定义文件所在目录，以便测试后清理
+        return "test-app-1", test_app_path
 
     def test_list_definitions(self):
         """测试列出所有应用程序定义"""
@@ -70,34 +66,29 @@ class TestAppDefinitions(unittest.TestCase):
         test_app_path = None
 
         try:
-            # 确保有一个测试应用程序定义
-            _, definitions_dir = self.create_test_app_definition()
-            test_app_path = os.path.join(definitions_dir, "test-app-1.json")
+            _, test_app_path = self.create_test_app_definition()
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, response, ["definitions"]):
+                return result
 
-            if "result" in response and response["result"].get("ok") and "definitions" in response["result"]:
-                definitions = response["result"]["definitions"]
-                result.add_detail(f"✅ 返回 {len(definitions)} 个应用程序定义")
+            definitions = response["result"]["definitions"]
+            result.add_detail(f"✅ 返回 {len(definitions)} 个应用程序定义")
 
-                found_test_app = any(d.get("appId") == "test-app-1" for d in definitions)
-                if found_test_app:
-                    result.add_detail("✅ 测试应用程序定义在返回列表中")
-                else:
-                    result.mark_failure("❌ 未找到测试应用程序定义")
-                    return result
+            found_test_app = any(d.get("appId") == "test-app-1" for d in definitions)
+            if not found_test_app:
+                result.mark_failure("❌ 未找到测试应用程序定义")
+                return result
 
-                result.mark_success()
-            else:
-                result.mark_failure("❌ 响应格式不正确")
+            result.add_detail("✅ 测试应用程序定义在返回列表中")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            # 仅清理当前测试创建的文件，避免误删 DevHub 运行时目录
             self._safe_remove_file(test_app_path)
 
         return result
@@ -108,30 +99,27 @@ class TestAppDefinitions(unittest.TestCase):
         test_app_path = None
 
         try:
-            # 确保有一个测试应用程序定义
-            app_id, definitions_dir = self.create_test_app_definition()
-            test_app_path = os.path.join(definitions_dir, "test-app-1.json")
+            app_id, test_app_path = self.create_test_app_definition()
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            if not RpcAssertions.expect_success(result, response, ["definition"]):
+                return result
 
-            if "result" in response and response["result"].get("ok") and "definition" in response["result"]:
-                definition = response["result"]["definition"]
-                if definition.get("appId") == app_id:
-                    result.add_detail(f"✅ 获取应用程序定义成功")
-                    result.add_detail(f"应用程序名称: {definition.get('displayName')}")
-                    result.mark_success()
-                else:
-                    result.mark_failure("❌ 返回的应用程序定义 ID 不匹配")
-            else:
-                result.mark_failure("❌ 响应格式不正确")
+            definition = response["result"]["definition"]
+            if definition.get("appId") != app_id:
+                result.mark_failure("❌ 返回的应用程序定义 ID 不匹配")
+                return result
+
+            result.add_detail("✅ 获取应用程序定义成功")
+            result.add_detail(f"应用程序名称: {definition.get('displayName')}")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            # 仅清理当前测试创建的文件，避免误删 DevHub 运行时目录
             self._safe_remove_file(test_app_path)
 
         return result
@@ -145,129 +133,23 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.getDefinition", {"appId": "non-existent-app"})
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32014,
+                expected_message="app_definition_not_found"
+            ):
+                return result
 
-            if "error" in response and response["error"]["code"] == -32014:
-                # 验证 error.message 与 Spec.md 一致
-                if response["error"]["message"] == "app_definition_not_found":
-                    result.add_detail("✅ 错误消息正确")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            error_data = response.get("error", {}).get("data", {})
+            if error_data and error_data.get("appId") != "non-existent-app":
+                result.mark_failure(f"❌ 错误数据中 appId 不正确: {error_data}")
+                return result
 
-                # 验证 error.data.appId（如果存在）包含请求的 appId
-                if "data" in response["error"] and "appId" in response["error"]["data"]:
-                    if response["error"]["data"].get("appId") == "non-existent-app":
-                        result.add_detail("✅ 错误数据包含正确的 appId")
-                    else:
-                        result.mark_failure(f"❌ 错误数据中 appId 不正确: {response['error']['data'].get('appId')}")
-                        return result
-
-                result.mark_success()
-            else:
-                result.mark_failure(f"❌ 错误码不正确: {response.get('error', {})}")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
-
-        return result
-
-    def test_app_definition_appid_format_validation(self):
-        """测试应用程序定义的appId格式验证"""
-        result = TestResult("测试应用程序定义的appId格式验证")
-        definitions_dir = None
-
-        try:
-            # 获取真实的 DevHub 应用程序定义目录
-            from tests.test_base import DiscoveryService
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-            os.makedirs(definitions_dir, exist_ok=True)
-
-            invalid_app_path = os.path.join(definitions_dir, "invalid app id.json")  # 文件名与appId一致
-
-            # 创建appId格式无效的应用程序定义
-            invalid_app = {
-                "appId": "invalid app id",  # 包含空格，不符合格式要求
-                "displayName": "Invalid AppId Application",
-                "scopePolicy": "any"
-            }
-
-            with open(invalid_app_path, "w", encoding="utf-8") as f:
-                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
-
-            # 调用 listDefinitions，DevHub 应忽略无效的appId格式
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            response = client.call("hub.apps.listDefinitions")
-
-            if "result" in response and response["result"].get("ok") and "definitions" in response["result"]:
-                definitions = response["result"]["definitions"]
-                found_invalid_app = any(d.get("appId") == "invalid app id" for d in definitions)
-
-                if not found_invalid_app:
-                    result.add_detail("✅ DevHub 正确忽略了appId格式无效的应用程序定义")
-                else:
-                    result.mark_failure("❌ DevHub 错误地加载了appId格式无效的应用程序定义")
-
-                result.mark_success()
-            else:
-                result.mark_failure("❌ 响应格式不正确")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-        finally:
-            # 清理测试文件
-            self._safe_remove_file(locals().get("invalid_app_path"))
-
-        return result
-
-    def test_app_definition_scopepolicy_validation(self):
-        """测试应用程序定义的scopePolicy值验证"""
-        result = TestResult("测试应用程序定义的scopePolicy值验证")
-        definitions_dir = None
-
-        try:
-            # 获取真实的 DevHub 应用程序定义目录
-            from tests.test_base import DiscoveryService
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-            os.makedirs(definitions_dir, exist_ok=True)
-
-            invalid_app_path = os.path.join(definitions_dir, "invalid-scopepolicy-app.json")
-
-            # 创建scopePolicy值无效的应用程序定义
-            invalid_app = {
-                "appId": "invalid-scopepolicy-app",
-                "displayName": "Invalid ScopePolicy Application",
-                "scopePolicy": "invalid"  # 无效的scopePolicy值
-            }
-
-            with open(invalid_app_path, "w", encoding="utf-8") as f:
-                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
-
-            # 调用 listDefinitions，DevHub 应忽略无效的scopePolicy值
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            response = client.call("hub.apps.listDefinitions")
-
-            if "result" in response and response["result"].get("ok") and "definitions" in response["result"]:
-                definitions = response["result"]["definitions"]
-                found_invalid_app = any(d.get("appId") == "invalid-scopepolicy-app" for d in definitions)
-
-                if not found_invalid_app:
-                    result.add_detail("✅ DevHub 正确忽略了scopePolicy值无效的应用程序定义")
-                else:
-                    result.mark_failure("❌ DevHub 错误地加载了scopePolicy值无效的应用程序定义")
-
-                result.mark_success()
-            else:
-                result.mark_failure("❌ 响应格式不正确")
-
-        except Exception as e:
-            result.mark_failure(str(e))
-        finally:
-            # 清理测试文件
-            self._safe_remove_file(locals().get("invalid_app_path"))
 
         return result
 
@@ -276,45 +158,153 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试无效格式的应用程序定义文件")
 
         try:
-            # 获取真实的 DevHub 应用程序定义目录
-            from tests.test_base import DiscoveryService
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-            os.makedirs(definitions_dir, exist_ok=True)
-
+            definitions_dir = self.get_test_app_definition_path()
             invalid_app_path = os.path.join(definitions_dir, "invalid-app.json")
 
-            # 创建无效格式的应用程序定义
+            # 缺少 appId/displayName/scopePolicy
             with open(invalid_app_path, "w", encoding="utf-8") as f:
-                f.write('{"invalid_field": "value"}')  # 缺少必填字段 appId, displayName, scopePolicy
+                f.write('{"invalid_field": "value"}')
 
-            # 调用 listDefinitions，DevHub 应忽略无效的定义文件
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, response, ["definitions"]):
+                return result
 
-            if "result" in response and response["result"].get("ok") and "definitions" in response["result"]:
-                definitions = response["result"]["definitions"]
-                found_invalid_app = any(d.get("appId") == "invalid-app" for d in definitions)
+            definitions = response["result"]["definitions"]
+            found_invalid_app = any(d.get("appId") == "invalid-app" for d in definitions)
+            if found_invalid_app:
+                result.mark_failure("❌ DevHub 错误地加载了无效定义")
+                return result
 
-                if not found_invalid_app:
-                    result.add_detail("✅ DevHub 正确忽略了无效的应用程序定义文件")
-                else:
-                    result.mark_failure("❌ DevHub 错误地加载了无效的应用程序定义文件")
-
-                result.mark_success()
-            else:
-                result.mark_failure("❌ 响应格式不正确")
+            result.add_detail("✅ DevHub 正确忽略了无效定义")
+            result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            # 清理测试文件
             self._safe_remove_file(locals().get("invalid_app_path"))
 
         return result
 
-    def run_all_tests(self):
+    def test_app_definition_appid_format_validation(self):
+        """测试应用程序定义 appId 格式验证"""
+        result = TestResult("测试应用程序定义 appId 格式验证")
+
+        try:
+            definitions_dir = self.get_test_app_definition_path()
+            invalid_app_path = os.path.join(definitions_dir, "invalid app id.json")
+
+            invalid_app = {
+                "appId": "invalid app id",
+                "displayName": "Invalid AppId Application",
+                "scopePolicy": "any"
+            }
+
+            with open(invalid_app_path, "w", encoding="utf-8") as f:
+                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, response, ["definitions"]):
+                return result
+
+            definitions = response["result"]["definitions"]
+            found_invalid_app = any(d.get("appId") == "invalid app id" for d in definitions)
+            if found_invalid_app:
+                result.mark_failure("❌ DevHub 错误地加载了 appId 格式无效的定义")
+                return result
+
+            result.add_detail("✅ DevHub 正确忽略 appId 格式无效定义")
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._safe_remove_file(locals().get("invalid_app_path"))
+
+        return result
+
+    def test_app_definition_scopepolicy_validation(self):
+        """测试应用程序定义 scopePolicy 值验证"""
+        result = TestResult("测试应用程序定义 scopePolicy 值验证")
+
+        try:
+            definitions_dir = self.get_test_app_definition_path()
+            invalid_app_path = os.path.join(definitions_dir, "invalid-scopepolicy-app.json")
+
+            invalid_app = {
+                "appId": "invalid-scopepolicy-app",
+                "displayName": "Invalid ScopePolicy Application",
+                "scopePolicy": "invalid"
+            }
+
+            with open(invalid_app_path, "w", encoding="utf-8") as f:
+                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, response, ["definitions"]):
+                return result
+
+            definitions = response["result"]["definitions"]
+            found_invalid_app = any(d.get("appId") == "invalid-scopepolicy-app" for d in definitions)
+            if found_invalid_app:
+                result.mark_failure("❌ DevHub 错误地加载了 scopePolicy 无效定义")
+                return result
+
+            result.add_detail("✅ DevHub 正确忽略 scopePolicy 无效定义")
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._safe_remove_file(locals().get("invalid_app_path"))
+
+        return result
+
+    def test_definition_filename_must_match_appid(self):
+        """测试文件名与 appId 不一致时应被忽略"""
+        result = TestResult("测试文件名与 appId 不一致时应被忽略")
+
+        try:
+            definitions_dir = self.get_test_app_definition_path()
+            mismatch_path = os.path.join(definitions_dir, "mismatch-name.json")
+
+            mismatch_app = {
+                "appId": "real-app-id",
+                "displayName": "Mismatch Name Application",
+                "scopePolicy": "any"
+            }
+
+            with open(mismatch_path, "w", encoding="utf-8") as f:
+                json.dump(mismatch_app, f, ensure_ascii=False, indent=2)
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, response, ["definitions"]):
+                return result
+
+            definitions = response["result"]["definitions"]
+            found = any(d.get("appId") == "real-app-id" for d in definitions)
+            if found:
+                result.mark_failure("❌ 文件名与 appId 不一致的定义不应被加载")
+                return result
+
+            result.add_detail("✅ 文件名与 appId 不一致的定义被正确忽略")
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._safe_remove_file(locals().get("mismatch_path"))
+
+        return result
+
+    def run_all_tests(self, full=False):
         """运行所有 AppDefinition 测试"""
         return [
             self.test_list_definitions(),
@@ -322,7 +312,8 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_get_nonexistent_definition(),
             self.test_invalid_app_definition(),
             self.test_app_definition_appid_format_validation(),
-            self.test_app_definition_scopepolicy_validation()
+            self.test_app_definition_scopepolicy_validation(),
+            self.test_definition_filename_must_match_appid()
         ]
 
 

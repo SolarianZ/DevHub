@@ -6,49 +6,40 @@ DevHub M1 -32602 invalid_params 参数验证测试
 import os
 import sys
 import unittest
-import json
-import uuid
 
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult
+from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
 
 
 class TestInvalidParams(unittest.TestCase):
     """-32602 invalid_params 参数验证测试类"""
 
     def test_params_as_array(self):
-        """测试所有 hub.* 方法使用数组参数时返回 invalid_params"""
+        """测试 hub.* 方法使用数组参数时返回 invalid_params"""
         result = TestResult("测试参数为数组时返回 invalid_params")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            # 测试 hub.ping 方法
-            response = client.call("hub.ping", ["invalid"])
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ hub.ping 方法正确拒绝数组参数")
-                else:
-                    result.mark_failure(f"❌ hub.ping 错误消息不正确: {response['error']['message']}")
-                    return result
-            else:
-                result.mark_failure(f"❌ hub.ping 未正确拒绝数组参数: {response.get('error', {})}")
-                return result
+            cases = [
+                ("hub.ping", ["invalid"]),
+                ("hub.apps.listDefinitions", ["invalid"]),
+                ("hub.apps.getDefinition", ["invalid"]),
+            ]
 
-            # 测试 hub.apps.listDefinitions 方法
-            response = client.call("hub.apps.listDefinitions", ["invalid"])
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ hub.apps.listDefinitions 方法正确拒绝数组参数")
-                else:
-                    result.mark_failure(f"❌ hub.apps.listDefinitions 错误消息不正确: {response['error']['message']}")
+            for method, params in cases:
+                response = client.call(method, params)
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    expected_code=-32602,
+                    expected_message="invalid_params"
+                ):
                     return result
-            else:
-                result.mark_failure(f"❌ hub.apps.listDefinitions 未正确拒绝数组参数: {response.get('error', {})}")
-                return result
+                result.add_detail(f"✅ {method} 正确拒绝数组参数")
 
             result.mark_success()
 
@@ -66,12 +57,8 @@ class TestInvalidParams(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.getDefinition", {})
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
 
             result.mark_success()
 
@@ -89,12 +76,8 @@ class TestInvalidParams(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.getDefinition", {"appId": ""})
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
 
             result.mark_success()
 
@@ -112,12 +95,8 @@ class TestInvalidParams(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.registerInstance", {})
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
 
             result.mark_success()
 
@@ -134,65 +113,54 @@ class TestInvalidParams(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            # 缺少 instanceId
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "appId": "test-app",
-                    "pid": 12345,
-                    "invoke": {"poll": True, "respond": True}
+            cases = [
+                {
+                    "name": "缺少 instanceId",
+                    "payload": {
+                        "instance": {
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "缺少 appId",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "缺少 pid",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "缺少 invoke",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "pid": 12345
+                        }
+                    }
                 }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 缺少 instanceId 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            ]
 
-            # 缺少 appId
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "pid": 12345,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 缺少 appId 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+            for case in cases:
+                response = client.call("hub.apps.registerInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                     return result
-
-            # 缺少 pid
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 缺少 pid 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
-
-            # 缺少 invoke
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "pid": 12345
-                }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 缺少 invoke 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
 
             result.mark_success()
 
@@ -202,44 +170,43 @@ class TestInvalidParams(unittest.TestCase):
         return result
 
     def test_hub_apps_register_instance_invalid_pid(self):
-        """测试 hub.apps.registerInstance 使用无效的 pid"""
-        result = TestResult("测试 hub.apps.registerInstance 使用无效的 pid")
+        """测试 hub.apps.registerInstance 使用无效 pid"""
+        result = TestResult("测试 hub.apps.registerInstance 使用无效 pid")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            # pid 为 0
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "pid": 0,
-                    "invoke": {"poll": True, "respond": True}
+            cases = [
+                {
+                    "name": "pid=0",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "pid": 0,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "pid=-1",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "pid": -1,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
                 }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ pid=0 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            ]
 
-            # pid 为负数
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "pid": -1,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ pid 为负数正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+            for case in cases:
+                response = client.call("hub.apps.registerInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                     return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
 
             result.mark_success()
 
@@ -249,46 +216,45 @@ class TestInvalidParams(unittest.TestCase):
         return result
 
     def test_hub_apps_register_instance_invalid_scope(self):
-        """测试 hub.apps.registerInstance 使用无效的 scope"""
-        result = TestResult("测试 hub.apps.registerInstance 使用无效的 scope")
+        """测试 hub.apps.registerInstance 使用无效 scope"""
+        result = TestResult("测试 hub.apps.registerInstance 使用无效 scope")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            # scope 为空字符串
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "scope": "",
-                    "pid": 12345,
-                    "invoke": {"poll": True, "respond": True}
+            cases = [
+                {
+                    "name": "scope 空字符串",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "scope": "",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "scope='global'",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance",
+                            "appId": "test-app",
+                            "scope": "global",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
                 }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ scope 为空字符串正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            ]
 
-            # scope 为 "global" 字符串
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": "test-instance",
-                    "appId": "test-app",
-                    "scope": "global",
-                    "pid": 12345,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ scope 为 'global' 字符串正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
+            for case in cases:
+                response = client.call("hub.apps.registerInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                     return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
 
             result.mark_success()
 
@@ -306,12 +272,8 @@ class TestInvalidParams(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.call("hub.apps.heartbeat", {})
-            if "error" in response and response["error"]["code"] == -32602:
-                if response["error"]["message"] == "invalid_params":
-                    result.add_detail("✅ 正确返回 invalid_params 错误")
-                else:
-                    result.mark_failure(f"❌ 错误消息不正确: {response['error']['message']}")
-                    return result
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
 
             result.mark_success()
 
@@ -320,8 +282,7 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
-
-    def run_all_tests(self):
+    def run_all_tests(self, full=False):
         """运行所有 invalid_params 测试"""
         return [
             self.test_params_as_array(),

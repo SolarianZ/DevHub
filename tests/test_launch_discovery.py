@@ -348,7 +348,7 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         return result
 
-    def run_all_tests(self):
+    def run_all_tests(self, full=False):
         """运行所有启动与发现测试"""
         results = []
 

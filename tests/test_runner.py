@@ -32,42 +32,44 @@ def setup_logging(log_file):
     return logging.getLogger(__name__)
 
 
-def run_all_tests():
+def run_all_tests(full=False):
     """运行所有测试"""
     # 创建 temp 目录
     temp_dir = create_temp_directory()
     log_file = os.path.join(temp_dir, "test_log.txt")
     logger = setup_logging(log_file)
 
-    logger.info("开始 DevHub M1 功能测试")
+    mode = "full" if full else "quick"
+    coverage = "M1+Spec 严格覆盖（含耗时场景）" if full else "核心 M1+Spec MUST（快速反馈）"
+    logger.info("开始 DevHub M1 功能测试，模式: %s", mode)
 
     # 创建测试报告
-    report = TestReport()
+    report = TestReport(mode=mode, coverage=coverage)
 
     # 运行各个模块的测试
     logger.info("=== 运行启动与发现测试 ===")
     launch_discovery_tests = TestLaunchDiscovery()
-    report.results.extend(launch_discovery_tests.run_all_tests())
+    report.results.extend(launch_discovery_tests.run_all_tests(full=full))
 
     logger.info("=== 运行鉴权与协议版本测试 ===")
     auth_protocol_tests = TestAuthProtocol()
-    report.results.extend(auth_protocol_tests.run_all_tests())
+    report.results.extend(auth_protocol_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 AppDefinition 测试 ===")
     app_definitions_tests = TestAppDefinitions()
-    report.results.extend(app_definitions_tests.run_all_tests())
+    report.results.extend(app_definitions_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
-    report.results.extend(app_instances_tests.run_all_tests())
+    report.results.extend(app_instances_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 invalid_params 参数验证测试 ===")
     invalid_params_tests = TestInvalidParams()
-    report.results.extend(invalid_params_tests.run_all_tests())
+    report.results.extend(invalid_params_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 internal_error 内部服务器错误测试 ===")
     internal_errors_tests = TestInternalErrors()
-    report.results.extend(internal_errors_tests.run_all_tests())
+    report.results.extend(internal_errors_tests.run_all_tests(full=full))
 
     # 保存报告
     json_report_path = os.path.join(temp_dir, "test_results.json")
@@ -104,6 +106,7 @@ def print_usage():
     print("Options:")
     print("  -h, --help    Show this help message and exit")
     print("  --no-header   Don't print test header")
+    print("  --full        Run full suite including long-running tests")
 
 
 def main():
@@ -112,6 +115,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="DevHub M1 功能测试运行器")
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
+    parser.add_argument("--full", action="store_true", help="Run full suite including long-running tests")
 
     args = parser.parse_args()
 
@@ -122,7 +126,7 @@ def main():
         print()
 
     # 运行测试
-    return run_all_tests()
+    return run_all_tests(full=args.full)
 
 
 if __name__ == "__main__":
