@@ -289,7 +289,7 @@ class TestReport:
     测试报告类
     """
 
-    def __init__(self, mode="quick", coverage="核心M1+Spec必测（快速）"):
+    def __init__(self, mode="default", coverage="全部 M1 必测 + Spec MUST（默认）"):
         self.results = []
         self.start_time = datetime.now()
         self.end_time = None

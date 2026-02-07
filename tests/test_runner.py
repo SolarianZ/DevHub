@@ -32,15 +32,22 @@ def setup_logging(log_file):
     return logging.getLogger(__name__)
 
 
-def run_all_tests(full=False):
+def run_all_tests(full=False, fast=False):
     """运行所有测试"""
     # 创建 temp 目录
     temp_dir = create_temp_directory()
     log_file = os.path.join(temp_dir, "test_log.txt")
     logger = setup_logging(log_file)
 
-    mode = "full" if full else "quick"
-    coverage = "M1+Spec 严格覆盖（含扩展耗时场景）" if full else "全部 M1 必测 + Spec MUST（默认）"
+    if full:
+        mode = "full"
+        coverage = "M1+Spec 严格覆盖（含扩展耗时场景）"
+    elif fast:
+        mode = "fast"
+        coverage = "M1 必测（跳过超时测试，用于快速回归）"
+    else:
+        mode = "default"
+        coverage = "全部 M1 必测 + Spec MUST（默认）"
     logger.info("开始 DevHub M1 功能测试，模式: %s", mode)
 
     # 创建测试报告
@@ -61,7 +68,7 @@ def run_all_tests(full=False):
 
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
-    report.results.extend(app_instances_tests.run_all_tests(full=full))
+    report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=not fast))
 
     logger.info("=== 运行 invalid_params 参数验证测试 ===")
     invalid_params_tests = TestInvalidParams()
@@ -106,6 +113,7 @@ def print_usage():
     print("Options:")
     print("  -h, --help    Show this help message and exit")
     print("  --no-header   Don't print test header")
+    print("  --fast        Run fast suite (skip timeout tests)")
     print("  --full        Run full suite including long-running tests")
 
 
@@ -115,7 +123,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="DevHub M1 功能测试运行器")
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
-    parser.add_argument("--full", action="store_true", help="Run full suite including long-running tests")
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout tests)")
+    mode_group.add_argument("--full", action="store_true", help="Run full suite including long-running tests")
 
     args = parser.parse_args()
 
@@ -126,7 +137,7 @@ def main():
         print()
 
     # 运行测试
-    return run_all_tests(full=args.full)
+    return run_all_tests(full=args.full, fast=args.fast)
 
 
 if __name__ == "__main__":

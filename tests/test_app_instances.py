@@ -19,6 +19,20 @@ from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertio
 class TestAppInstances(unittest.TestCase):
     """AppInstance 测试类"""
 
+    @staticmethod
+    def _wait_with_progress(total_seconds, label):
+        """等待并输出终端进度条。"""
+        # 避免终端长时间无反应，测试人员误以为卡死
+        bar_width = 30
+        for elapsed in range(total_seconds):
+            completed = elapsed + 1
+            ratio = completed / total_seconds
+            filled = int(bar_width * ratio)
+            bar = "=" * filled + "-" * (bar_width - filled)
+            print(f"\r{label} [{bar}] {completed}/{total_seconds}s", end="", flush=True)
+            time.sleep(1)
+        print()
+
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""
         return f"test-instance-{uuid.uuid4().hex[:10]}"
@@ -682,7 +696,7 @@ class TestAppInstances(unittest.TestCase):
 
             wait_seconds = 35
             result.add_detail(f"⏳ 等待 {wait_seconds}s 触发离线")
-            time.sleep(wait_seconds)
+            self._wait_with_progress(wait_seconds, "离线判定等待中")
 
             list_after = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
             if not RpcAssertions.expect_success(result, list_after, ["instances"]):
@@ -733,7 +747,9 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            time.sleep(35)
+            wait_seconds = 35
+            result.add_detail(f"⏳ 等待 {wait_seconds}s 触发离线")
+            self._wait_with_progress(wait_seconds, "离线实例等待中")
 
             list_default = client.call("hub.apps.listInstances", {"appId": "test-app-offline-include"})
             if not RpcAssertions.expect_success(result, list_default, ["instances"]):
@@ -857,7 +873,7 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
-    def run_all_tests(self, full=False):
+    def run_all_tests(self, full=False, run_timeout_tests=True):
         """运行所有 AppInstance 测试"""
         tests = [
             self.test_register_and_list_instances,
@@ -873,10 +889,12 @@ class TestAppInstances(unittest.TestCase):
             self.test_register_instance_empty_scope,
             self.test_list_instances_scope_strict_match,
             self.test_register_instance_invoke_field_validation,
-            self.test_instance_offline_after_30s_no_heartbeat,
             self.test_scope_policy_global_only_rejects_scoped_register,
             self.test_scope_policy_required_rejects_global_register
         ]
+
+        if run_timeout_tests:
+            tests.append(self.test_instance_offline_after_30s_no_heartbeat)
 
         if full:
             tests.extend([
