@@ -17,7 +17,7 @@
   - `Invocation` 模型升级（`target/options/delivery/caller/kind/state`）
   - `hub.invoke.request` / `hub.apps.launch` 显式 `-32099 not_supported`（`reason=request_deferred/launch_deferred`）
 - 本批次后续仍在开发：
-  - `hub.invoke.request` 完整闭环（waiter、timeout、failed 映射）
+  - `hub.invoke.request` 完整闭环（waiter、timeout、failed 映射）**（本轮完成）**
   - `hub.apps.launch` 真正启动与 dedupe
   - lease 到期重投递（`attempt++`）与超时扫描
 
@@ -365,6 +365,10 @@
 
 ## 10. 开发排期（1 人可执行）
 
+> 说明（2026-02-07）：以下 Day 计划来自原始拆分建议。本轮按“测试先行 + 小步切片”执行，
+> 优先落地 `notify/poll/respond` 最小闭环，因此任务完成顺序与 Day 编号不完全一致。
+> Day 编号在当前阶段主要表示工作包分组，不等同于严格的日历先后。
+
 ### Day 0.5：模型/存储与队列骨架
 - [x] 定义 Invocation 内存模型与状态枚举
 - [x] 建立 Queued/Pending/Delivered 三类集合与索引
@@ -377,7 +381,7 @@
 
 ### Day 1.5：`notify/request`
 - [x] 实现 `hub.invoke.notify`（默认值、校验、入队）
-- [ ] 实现 `hub.invoke.request`（waiter 绑定、成功返回）
+- [x] 实现 `hub.invoke.request`（waiter 绑定、成功返回、超时/失败映射）
 - [ ] 完成离线矩阵路由与 autoLaunch 触发（开发中：`queueIfOffline + autoLaunch=false` 已支持，`autoLaunch=true` deferred）
 
 ### Day 2：`poll/respond` + lease
@@ -395,9 +399,9 @@
 ## 11. M2 验收用例（最小可验收）
 
 ### 11.1 Python 集成测试（黑盒）
-- [ ] `M2-REQ-001`：request 成功往返，caller 收到 `value`
-- [ ] `M2-REQ-002`：request 超时返回 `-32012 invocation_timeout`
-- [ ] `M2-REQ-003`：TTL 到期返回 `-32011 invocation_expired`
+- [x] `M2-REQ-001`：request 成功往返，caller 收到 `value`
+- [x] `M2-REQ-002`：request 超时返回 `-32012 invocation_timeout`
+- [x] `M2-REQ-003`：TTL 到期/取消后迟到响应返回 `-32011 invocation_expired`
 - [x] `M2-NOTIFY-001`：notify 在线投递并被 poll 取走
 - [x] `M2-NOTIFY-002`：离线入队，实例上线后可 poll 拉取
 - [ ] `M2-LAUNCH-001`：autoLaunch 触发成功，实例注册后完成投递
@@ -409,7 +413,7 @@
 ### 11.2 C# 单元测试（白盒）
 - [x] 路由选择：`instanceId`/`scope` 精确匹配且不回退
 - [x] 队列状态机：Created -> Queued/Pending -> Delivered -> Completed/Failed
-- [ ] waiter 清理：超时、取消、异常分支均可释放
+- [x] waiter 清理：超时、取消、异常分支均可释放
 - [ ] lease 回收：到期后回队并更新 `attempt`（开发中：冲突校验已覆盖，重投递待补）
 - [ ] 模板渲染：`dedupeKeyTemplate/argsTemplate` 占位符替换正确
 

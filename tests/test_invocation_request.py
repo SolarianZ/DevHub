@@ -1,0 +1,362 @@
+#!/usr/bin/env python3
+"""
+DevHub M2 Invocation Request 冒烟测试
+"""
+
+import os
+import sys
+import time
+import uuid
+import json
+import threading
+import unittest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+
+
+class TestInvocationRequest(unittest.TestCase):
+    """Invocation request 测试类"""
+
+    def _definitions_dir(self):
+        if "DEVHUB_APPDEFS_DIR" in os.environ:
+            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
+        else:
+            runtime_dir = DiscoveryService.get_runtime_directory()
+            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+
+        os.makedirs(definitions_dir, exist_ok=True)
+        return definitions_dir
+
+    def _create_definition(self, app_id, rpc=True):
+        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
+        payload = {
+            "appId": app_id,
+            "displayName": app_id,
+            "scopePolicy": "any",
+            "capabilities": {
+                "rpc": rpc,
+                "events": False,
+            },
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        return path
+
+    @staticmethod
+    def _instance_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+    def test_request_roundtrip_success(self):
+        """M2-REQ-001: request 成功往返"""
+        result = TestResult("M2-REQ-001 request 成功往返")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = "m2-request-success-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-success")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=24001,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            poll_outcome = {}
+
+            def callee_worker():
+                poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                poll_outcome["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if not items:
+                    return
+
+                invocation_id = items[0].get("invocationId")
+                poll_outcome["invocation_id"] = invocation_id
+                respond_response = client.respond_value(callee_instance_id, invocation_id, {"status": "ok", "count": 1})
+                poll_outcome["respond"] = respond_response
+
+            worker = threading.Thread(target=callee_worker, daemon=True)
+            worker.start()
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                args={"branch": "main"},
+                options={
+                    "ttlMs": 5000,
+                    "waitTimeoutMs": 2000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m2-request-success",
+            )
+
+            worker.join(timeout=3)
+
+            if not RpcAssertions.expect_success(result, request_response, ["invocationId", "value"]):
+                return result
+
+            value = request_response["result"].get("value", {})
+            if value.get("status") != "ok":
+                result.mark_failure(f"❌ request 返回 value.status 不正确: {value}")
+                return result
+
+            respond_response = poll_outcome.get("respond")
+            if not respond_response:
+                result.mark_failure("❌ callee 未执行 respond")
+                return result
+
+            if not RpcAssertions.expect_success(result, respond_response):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_request_timeout_then_late_respond_expired(self):
+        """M2-REQ-002/003: request 超时 + 迟到 respond 过期"""
+        result = TestResult("M2-REQ-002/003 request 超时与迟到响应")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = "m2-request-timeout-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-timeout")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=24002,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            poll_holder = {}
+
+            def callee_poll_only():
+                poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                poll_holder["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if items:
+                    poll_holder["invocation_id"] = items[0].get("invocationId")
+
+            worker = threading.Thread(target=callee_poll_only, daemon=True)
+            worker.start()
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.slow",
+                args={"x": 1},
+                options={
+                    "ttlMs": 5000,
+                    "waitTimeoutMs": 300,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m2-request-timeout",
+            )
+
+            worker.join(timeout=3)
+
+            if not RpcAssertions.expect_error(result, request_response, -32012, "invocation_timeout"):
+                return result
+
+            timeout_data = request_response.get("error", {}).get("data", {})
+            invocation_id = timeout_data.get("invocationId")
+            if not invocation_id:
+                result.mark_failure(f"❌ timeout 响应缺少 invocationId: {request_response}")
+                return result
+
+            elapsed_ms = timeout_data.get("elapsedMs")
+            if not isinstance(elapsed_ms, int):
+                result.mark_failure(f"❌ timeout 响应缺少 elapsedMs: {request_response}")
+                return result
+
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            if not RpcAssertions.expect_error(result, late_respond, -32011, "invocation_expired"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_request_invalid_waittimeout_gt_ttl(self):
+        """request 参数边界: waitTimeoutMs > ttlMs"""
+        result = TestResult("request 参数边界 waitTimeoutMs > ttlMs")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id="request-invalid-app",
+                method="asset.build",
+                args={},
+                options={
+                    "ttlMs": 1000,
+                    "waitTimeoutMs": 1001,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="request-invalid-wait",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_request_invalid_target_instance_with_autolaunch_true(self):
+        """request 参数边界: target.instanceId + autoLaunch=true"""
+        result = TestResult("request 参数边界 target.instanceId + autoLaunch=true")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id="request-invalid-app",
+                method="asset.build",
+                args={},
+                target_instance_id="inst-target",
+                options={
+                    "ttlMs": 2000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": True,
+                    "autoLaunch": True,
+                },
+                request_id="request-invalid-target",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_request_offline_without_queue_should_fail(self):
+        """request 参数边界: queueIfOffline=false 且无在线实例"""
+        result = TestResult("request 参数边界 queueIfOffline=false")
+        definition_path = None
+
+        try:
+            app_id = "m2-request-offline-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                args={},
+                options={
+                    "ttlMs": 3000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="request-offline-noqueue",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32010, "instance_not_found"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "offline_no_queue"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def run_all_tests(self, full=False):
+        return [
+            self.test_request_roundtrip_success(),
+            self.test_request_timeout_then_late_respond_expired(),
+            self.test_request_invalid_waittimeout_gt_ttl(),
+            self.test_request_invalid_target_instance_with_autolaunch_true(),
+            self.test_request_offline_without_queue_should_fail(),
+        ]
+
+
+if __name__ == "__main__":
+    test = TestInvocationRequest()
+    results = test.run_all_tests()
+
+    for result in results:
+        status = "✅ 通过" if result.success else "❌ 失败"
+        print(f"{status}: {result.test_name}")
+        if result.details:
+            for detail in result.details:
+                print(f"  - {detail}")
+        if result.error_message:
+            print(f"  错误: {result.error_message}")
+        print()
+

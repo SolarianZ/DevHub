@@ -132,38 +132,10 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         return result
 
-    def test_request_is_deferred_not_supported(self):
-        """request 本阶段显式 not_supported"""
-        result = TestResult("request 延后策略 not_supported")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-
-            response = client.invoke_request(
-                app_id="deferred.app",
-                method="demo.call",
-                args={"x": 1},
-                request_id="request-deferred",
-            )
-
-            if not RpcAssertions.expect_error(result, response, -32099, "not_supported"):
-                return result
-
-            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "request_deferred"}):
-                return result
-
-            result.mark_success()
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
     def run_all_tests(self, full=False):
         return [
             self.test_poll_unregistered_instance(),
             self.test_respond_duplicate_should_conflict(),
-            self.test_request_is_deferred_not_supported(),
         ]
 
 
@@ -180,4 +152,3 @@ if __name__ == "__main__":
         if result.error_message:
             print(f"  错误: {result.error_message}")
         print()
-

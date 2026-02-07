@@ -13,12 +13,15 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 public class InvocationHandler : IRpcHandler
 {
     private const int DefaultNotifyTtlMs = 60000;
+    private const int DefaultRequestTtlMs = 300000;
+    private const int DefaultRequestWaitTimeoutMs = 120000;
     private const int LeaseSeconds = 30;
 
     private readonly AppRegistry _appRegistry;
     private readonly DefinitionLoader _definitionLoader;
     private readonly InvocationRoutingService _routingService;
     private readonly InvocationStore _store;
+    private readonly InvocationRequestWaiter _requestWaiter;
     private readonly ILogger<InvocationHandler> _logger;
 
     /// <summary>
@@ -29,12 +32,14 @@ public class InvocationHandler : IRpcHandler
         DefinitionLoader definitionLoader,
         InvocationRoutingService routingService,
         InvocationStore store,
+        InvocationRequestWaiter requestWaiter,
         ILogger<InvocationHandler> logger)
     {
         _appRegistry = appRegistry;
         _definitionLoader = definitionLoader;
         _routingService = routingService;
         _store = store;
+        _requestWaiter = requestWaiter;
         _logger = logger;
     }
 
@@ -47,9 +52,9 @@ public class InvocationHandler : IRpcHandler
         return request.Method switch
         {
             "hub.invoke.notify" => NotifyAsync(request),
+            "hub.invoke.request" => RequestAsync(request),
             "hub.invoke.poll" => PollAsync(request, cancellationToken),
             "hub.invoke.respond" => RespondAsync(request),
-            "hub.invoke.request" => Task.FromResult(NotSupported(request.Id, "request_deferred")),
             _ => Task.FromResult(MethodNotFound(request.Id))
         };
     }
@@ -140,6 +145,171 @@ public class InvocationHandler : IRpcHandler
                 invocationId = invocation.InvocationId
             }
         });
+    }
+
+    private async Task<JsonRpcResponse> RequestAsync(JsonRpcRequest request)
+    {
+        if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        {
+            return paramsError;
+        }
+
+        if (!TryGetRequiredString(paramsElement, "appId", out var appId) ||
+            !TryGetRequiredString(paramsElement, "method", out var method))
+        {
+            return InvalidParams(request.Id);
+        }
+
+        if (!TryParseTarget(paramsElement, out var target, out var targetError))
+        {
+            return CreateError(request.Id, -32602, "invalid_params", targetError);
+        }
+
+        if (!TryParseRequestOptions(paramsElement, target, out var options, out var optionErrorResponse))
+        {
+            optionErrorResponse.Id = request.Id;
+            return optionErrorResponse;
+        }
+
+        _definitionLoader.Load();
+        var definition = _definitionLoader.GetDefinition(appId);
+        if (definition is not null && definition.Capabilities?.Rpc == false)
+        {
+            return CreateError(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
+        }
+
+        var candidates = _routingService.GetOnlineCandidates(appId, target);
+        if (candidates.Count == 0)
+        {
+            if (!options.QueueIfOffline)
+            {
+                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+            }
+
+            if (definition is null)
+            {
+                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+            }
+
+            if (options.AutoLaunch)
+            {
+                return CreateError(request.Id, -32099, "not_supported", new { reason = "auto_launch_deferred" });
+            }
+        }
+
+        var createdAt = DateTime.UtcNow;
+        var invocation = new InvocationModel
+        {
+            InvocationId = $"invk-{Guid.NewGuid():N}",
+            AppId = appId,
+            Target = target,
+            Method = method,
+            Args = paramsElement.TryGetProperty("args", out var argsElement)
+                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
+                : new Dictionary<string, object?>(),
+            Kind = InvocationKind.Request,
+            CreatedAtUtc = createdAt,
+            Options = options,
+            Delivery = new InvocationDelivery
+            {
+                LeaseSeconds = LeaseSeconds,
+                Attempt = 1
+            },
+            Caller = new InvocationCaller
+            {
+                ClientId = "unknown",
+                ClientSessionId = Guid.Empty.ToString("D")
+            },
+            State = InvocationState.Created
+        };
+
+        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
+        var waiterTask = _requestWaiter.Register(invocation.InvocationId);
+
+        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(DateTime.UtcNow - createdAt).TotalMilliseconds);
+        var waitRemaining = Math.Max(1, invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs);
+        var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
+
+        var completionTask = await Task.WhenAny(waiterTask, Task.Delay(timeoutWindowMs));
+
+        if (completionTask != waiterTask)
+        {
+            var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - createdAt).TotalMilliseconds);
+            var ttlReached = elapsedMs >= invocation.Options.TtlMs;
+
+            if (ttlReached)
+            {
+                var markedExpired = _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
+                if (markedExpired)
+                {
+                    _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
+                }
+                else
+                {
+                    var racedCompletion = await waiterTask;
+                    return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
+                }
+
+                return CreateError(request.Id, -32011, "invocation_expired", new
+                {
+                    invocationId = invocation.InvocationId,
+                    elapsedMs
+                });
+            }
+
+            var markedTimeout = _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
+            if (markedTimeout)
+            {
+                _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
+            }
+            else
+            {
+                var racedCompletion = await waiterTask;
+                return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
+            }
+
+            return CreateError(request.Id, -32012, "invocation_timeout", new
+            {
+                invocationId = invocation.InvocationId,
+                elapsedMs
+            });
+        }
+
+        var completion = await waiterTask;
+        return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+    }
+
+    private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)
+    {
+        return completion.Kind switch
+        {
+            InvocationRequestCompletionKind.Success => new JsonRpcResponse
+            {
+                Id = requestId,
+                Result = new
+                {
+                    ok = true,
+                    invocationId,
+                    value = completion.Value
+                }
+            },
+            InvocationRequestCompletionKind.Failed => CreateError(requestId, -32050, "invocation_failed", new
+            {
+                invocationId,
+                calleeError = completion.CalleeError
+            }),
+            InvocationRequestCompletionKind.Timeout => CreateError(requestId, -32012, "invocation_timeout", new
+            {
+                invocationId,
+                elapsedMs = completion.ElapsedMs ?? 0
+            }),
+            InvocationRequestCompletionKind.Expired => CreateError(requestId, -32011, "invocation_expired", new
+            {
+                invocationId,
+                elapsedMs = completion.ElapsedMs ?? 0
+            }),
+            _ => CreateError(requestId, -32603, "internal_error")
+        };
     }
 
     private async Task<JsonRpcResponse> PollAsync(JsonRpcRequest request, CancellationToken cancellationToken)
@@ -250,6 +420,29 @@ public class InvocationHandler : IRpcHandler
         var error = hasError ? JsonSerializer.Deserialize<object>(errorElement.GetRawText()) : null;
 
         var status = _store.Respond(instanceId, invocationId, value, error);
+
+        if (_store.TryGet(invocationId, out var invocation) && invocation is not null && invocation.Kind == InvocationKind.Request)
+        {
+            switch (status)
+            {
+                case InvocationRespondStatus.Success:
+                    if (error is null)
+                    {
+                        _requestWaiter.CompleteSuccess(invocationId, value);
+                    }
+                    else
+                    {
+                        _requestWaiter.CompleteFailure(invocationId, error);
+                    }
+
+                    break;
+                case InvocationRespondStatus.Expired:
+                    var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+                    _requestWaiter.CompleteExpired(invocationId, elapsedMs);
+                    break;
+            }
+        }
+
         return status switch
         {
             InvocationRespondStatus.Success => Task.FromResult(new JsonRpcResponse
@@ -262,6 +455,95 @@ public class InvocationHandler : IRpcHandler
             InvocationRespondStatus.DeliveryConflict => Task.FromResult(CreateError(request.Id, -32030, "delivery_conflict", new { invocationId })),
             _ => Task.FromResult(CreateError(request.Id, -32603, "internal_error"))
         };
+    }
+
+    private static bool TryParseRequestOptions(
+        JsonElement paramsElement,
+        InvocationTarget target,
+        out InvocationOptions options,
+        out JsonRpcResponse errorResponse)
+    {
+        options = new InvocationOptions
+        {
+            TtlMs = DefaultRequestTtlMs,
+            WaitTimeoutMs = DefaultRequestWaitTimeoutMs,
+            QueueIfOffline = true,
+            AutoLaunch = string.IsNullOrWhiteSpace(target.InstanceId)
+        };
+
+        if (paramsElement.TryGetProperty("options", out var optionsElement))
+        {
+            if (optionsElement.ValueKind != JsonValueKind.Object)
+            {
+                errorResponse = InvalidParams(null);
+                return false;
+            }
+
+            if (optionsElement.TryGetProperty("ttlMs", out var ttlElement))
+            {
+                if (ttlElement.ValueKind != JsonValueKind.Number || !ttlElement.TryGetInt32(out var ttlMs) || ttlMs < 1000)
+                {
+                    errorResponse = InvalidParams(null);
+                    return false;
+                }
+
+                options.TtlMs = ttlMs;
+            }
+
+            if (optionsElement.TryGetProperty("waitTimeoutMs", out var waitElement))
+            {
+                if (waitElement.ValueKind != JsonValueKind.Number || !waitElement.TryGetInt32(out var waitMs) || waitMs < 1)
+                {
+                    errorResponse = InvalidParams(null);
+                    return false;
+                }
+
+                options.WaitTimeoutMs = waitMs;
+            }
+
+            if (optionsElement.TryGetProperty("queueIfOffline", out var queueElement))
+            {
+                if (queueElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                {
+                    errorResponse = InvalidParams(null);
+                    return false;
+                }
+
+                options.QueueIfOffline = queueElement.GetBoolean();
+            }
+
+            if (optionsElement.TryGetProperty("autoLaunch", out var autoLaunchElement))
+            {
+                if (autoLaunchElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                {
+                    errorResponse = InvalidParams(null);
+                    return false;
+                }
+
+                options.AutoLaunch = autoLaunchElement.GetBoolean();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(target.InstanceId) && options.AutoLaunch)
+        {
+            errorResponse = InvalidParams(null);
+            return false;
+        }
+
+        if (options.AutoLaunch && !options.QueueIfOffline)
+        {
+            errorResponse = InvalidParams(null);
+            return false;
+        }
+
+        if (options.WaitTimeoutMs is null || options.WaitTimeoutMs > options.TtlMs)
+        {
+            errorResponse = InvalidParams(null);
+            return false;
+        }
+
+        errorResponse = null!;
+        return true;
     }
 
     private static bool TryReadParamsObject(JsonRpcRequest request, out JsonElement paramsElement, out JsonRpcResponse error)

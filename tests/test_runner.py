@@ -16,6 +16,7 @@ from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_app_definitions import TestAppDefinitions
 from tests.test_app_instances import TestAppInstances
 from tests.test_invocation_notify import TestInvocationNotify
+from tests.test_invocation_request import TestInvocationRequest
 from tests.test_invocation_poll_respond import TestInvocationPollRespond
 from tests.test_invalid_params import TestInvalidParams
 from tests.test_internal_errors import TestInternalErrors
@@ -75,6 +76,10 @@ def run_all_tests(full=False, fast=False):
     logger.info("=== 运行 Invocation Notify 测试 ===")
     invocation_notify_tests = TestInvocationNotify()
     report.results.extend(invocation_notify_tests.run_all_tests(full=full))
+
+    logger.info("=== 运行 Invocation Request 测试 ===")
+    invocation_request_tests = TestInvocationRequest()
+    report.results.extend(invocation_request_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 Invocation Poll/Respond 测试 ===")
     invocation_poll_respond_tests = TestInvocationPollRespond()

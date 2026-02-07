@@ -90,6 +90,18 @@ public class Invocation
     /// </summary>
     [JsonIgnore]
     public DateTime? CompletedAtUtc { get; set; }
+
+    /// <summary>
+    /// 响应成功值（仅内存态）。
+    /// </summary>
+    [JsonIgnore]
+    public object? ResponseValue { get; set; }
+
+    /// <summary>
+    /// 响应错误对象（仅内存态）。
+    /// </summary>
+    [JsonIgnore]
+    public object? ResponseError { get; set; }
 }
 
 /// <summary>
@@ -264,4 +276,3 @@ public enum InvocationRespondStatus
     /// </summary>
     DeliveryConflict
 }
-

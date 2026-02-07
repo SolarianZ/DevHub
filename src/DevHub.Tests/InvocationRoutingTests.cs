@@ -104,7 +104,8 @@ public class InvocationRoutingTests : IDisposable
         definitionLoader.Load();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, _invocationHandlerLogger.Object);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -145,7 +146,8 @@ public class InvocationRoutingTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, _invocationHandlerLogger.Object);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -179,7 +181,8 @@ public class InvocationRoutingTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, _invocationHandlerLogger.Object);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -209,21 +212,35 @@ public class InvocationRoutingTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
-        var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, _invocationHandlerLogger.Object);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
         var launchHandler = new LaunchHandler(_launchHandlerLogger.Object);
 
         var requestResponse = await invocationHandler.HandleAsync(new JsonRpcRequest
         {
-            Id = "request-deferred",
+            Id = "request-runtime-check",
             Method = "hub.invoke.request",
-            Params = JsonSerializer.SerializeToElement(new { appId = "test.app", method = "test.m", args = new { } })
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "test.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "test.m",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 1000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
         }, CancellationToken.None);
 
         Assert.NotNull(requestResponse.Error);
-        Assert.Equal(-32099, requestResponse.Error.Code);
-        Assert.Equal("not_supported", requestResponse.Error.Message);
+        Assert.Equal(-32010, requestResponse.Error.Code);
+        Assert.Equal("instance_not_found", requestResponse.Error.Message);
         var requestData = JsonSerializer.SerializeToElement(requestResponse.Error.Data);
-        Assert.Equal("request_deferred", requestData.GetProperty("reason").GetString());
+        Assert.Equal("offline_no_queue", requestData.GetProperty("reason").GetString());
 
         var launchResponse = await launchHandler.HandleAsync(new JsonRpcRequest
         {

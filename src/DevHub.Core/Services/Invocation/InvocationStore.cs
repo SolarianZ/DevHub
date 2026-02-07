@@ -100,6 +100,11 @@ public class InvocationStore
                 return InvocationRespondStatus.DeliveryConflict;
             }
 
+            if (invocation.State is InvocationState.Timeout or InvocationState.Expired)
+            {
+                return InvocationRespondStatus.Expired;
+            }
+
             if (invocation.State != InvocationState.Delivered)
             {
                 return InvocationRespondStatus.DeliveryConflict;
@@ -118,7 +123,59 @@ public class InvocationStore
 
             invocation.State = error is null ? InvocationState.Completed : InvocationState.Failed;
             invocation.CompletedAtUtc = now;
+            invocation.ResponseValue = value;
+            invocation.ResponseError = error;
             return InvocationRespondStatus.Success;
+        }
+    }
+
+    /// <summary>
+    /// 将 request 标记为等待超时。
+    /// </summary>
+    /// <param name="invocationId">调用 ID。</param>
+    /// <param name="now">当前 UTC 时间。</param>
+    public bool MarkTimeout(string invocationId, DateTime now)
+    {
+        lock (_syncRoot)
+        {
+            if (!_all.TryGetValue(invocationId, out var invocation))
+            {
+                return false;
+            }
+
+            if (invocation.State is InvocationState.Completed or InvocationState.Failed or InvocationState.Timeout or InvocationState.Expired)
+            {
+                return false;
+            }
+
+            invocation.State = InvocationState.Timeout;
+            invocation.CompletedAtUtc = now;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 将调用标记为过期。
+    /// </summary>
+    /// <param name="invocationId">调用 ID。</param>
+    /// <param name="now">当前 UTC 时间。</param>
+    public bool MarkExpired(string invocationId, DateTime now)
+    {
+        lock (_syncRoot)
+        {
+            if (!_all.TryGetValue(invocationId, out var invocation))
+            {
+                return false;
+            }
+
+            if (invocation.State is InvocationState.Completed or InvocationState.Failed or InvocationState.Timeout or InvocationState.Expired)
+            {
+                return false;
+            }
+
+            invocation.State = InvocationState.Expired;
+            invocation.CompletedAtUtc = now;
+            return true;
         }
     }
 

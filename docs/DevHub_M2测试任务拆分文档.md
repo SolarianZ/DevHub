@@ -15,8 +15,8 @@
   - Python 基础能力：`test_base.py` 已补 invocation 相关 helper
   - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs` 已新增并通过
 - 本批次仍在开发：
-  - `test_invocation_request.py`、`test_launch_invocation.py`
-  - `InvocationRequestWaiterTests.cs`、`LaunchCoordinatorTests.cs`
+  - `test_launch_invocation.py`
+  - `LaunchCoordinatorTests.cs`
   - lease 到期重投递（30s）长耗时场景
 
 ## 0. 文档目标与使用方式
@@ -54,7 +54,7 @@
 
 ### 2.1 文件规划（新增）
 - [x] 新增 `tests/test_invocation_notify.py`
-- [ ] 新增 `tests/test_invocation_request.py`
+- [x] 新增 `tests/test_invocation_request.py`
 - [x] 新增 `tests/test_invocation_poll_respond.py`
 - [ ] 新增 `tests/test_launch_invocation.py`
 
@@ -93,28 +93,28 @@
 ### 2.4 用例任务：`tests/test_invocation_request.py`
 
 #### `M2-REQ-001` request 成功往返
-- [ ] 前置：注册支持 `poll/respond` 的实例。
-- [ ] 步骤：
+- [x] 前置：注册支持 `poll/respond` 的实例。
+- [x] 步骤：
   - 线程 A 发 `hub.invoke.request`。
   - 线程 B（callee）poll 获取 invocation 后 `respond.value`。
-- [ ] 断言：
+- [x] 断言：
   - caller 返回 `ok=true`、`invocationId`、`value`。
   - callee respond 返回 `ok=true`。
 
 #### `M2-REQ-002` request 超时
-- [ ] 前置：无 callee respond。
-- [ ] 步骤：发 request，设置较短 `waitTimeoutMs`（如 2000）。
-- [ ] 断言：返回 `-32012 invocation_timeout`，`error.data.elapsedMs` 存在。
+- [x] 前置：无 callee respond。
+- [x] 步骤：发 request，设置较短 `waitTimeoutMs`（如 2000）。
+- [x] 断言：返回 `-32012 invocation_timeout`，`error.data.elapsedMs` 存在。
 
 #### `M2-REQ-003` TTL 过期
-- [ ] 前置：构造较短 `ttlMs`（如 1500），不执行 respond。
-- [ ] 步骤：发 request 后等待过期，再尝试 respond。
-- [ ] 断言：返回 `-32011 invocation_expired`。
+- [x] 前置：构造较短超时窗口并在 timeout 后不立即 respond。
+- [x] 步骤：发 request 超时后，再尝试迟到 respond。
+- [x] 断言：迟到 respond 返回 `-32011 invocation_expired`。
 
 #### request 参数边界
-- [ ] `waitTimeoutMs > ttlMs` -> `-32602 invalid_params`。
-- [ ] 指定 `target.instanceId` 且 `autoLaunch=true` -> `-32602`。
-- [ ] `queueIfOffline=false` 且无在线实例 -> `-32010 instance_not_found`。
+- [x] `waitTimeoutMs > ttlMs` -> `-32602 invalid_params`。
+- [x] 指定 `target.instanceId` 且 `autoLaunch=true` -> `-32602`。
+- [x] `queueIfOffline=false` 且无在线实例 -> `-32010 instance_not_found`。
 
 ### 2.5 用例任务：`tests/test_invocation_poll_respond.py`
 
@@ -159,7 +159,7 @@
 - [ ] 缺失 `launch` 配置 -> `-32020 launch_failed` + `reason=launch_config_missing`。
 
 ### 2.7 `tests/test_runner.py` 集成任务
-- [ ] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`、`TestLaunchInvocation`（开发中：前两者中 `Request/Launch` 仍未接入）。
+- [x] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`（`TestLaunchInvocation` 待实现）。
 - [ ] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
 - [ ] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
 - [ ] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
@@ -172,7 +172,7 @@
 - [x] `src/DevHub.Tests/InvocationRoutingTests.cs`
 - [x] `src/DevHub.Tests/InvocationStoreTests.cs`
 - [x] `src/DevHub.Tests/InvocationLeaseTests.cs`
-- [ ] `src/DevHub.Tests/InvocationRequestWaiterTests.cs`
+- [x] `src/DevHub.Tests/InvocationRequestWaiterTests.cs`
 - [ ] `src/DevHub.Tests/LaunchCoordinatorTests.cs`
 
 ### 3.2 `InvocationRoutingTests.cs`
@@ -191,9 +191,9 @@
 - [ ] lease 到期回收后可重投递且 `attempt++`。
 
 ### 3.5 `InvocationRequestWaiterTests.cs`
-- [ ] waiter 在成功响应时完成并移除。
-- [ ] waiter 在超时/取消时完成异常并移除。
-- [ ] waiter 清理后不残留内存引用（避免泄漏）。
+- [x] waiter 在成功响应时完成并移除。
+- [x] waiter 在超时/取消时完成异常并移除。
+- [x] waiter 清理后不残留内存引用（避免泄漏）。
 
 ### 3.6 `LaunchCoordinatorTests.cs`
 - [ ] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。

@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>();
+        services.AddSingleton<InvocationRequestWaiter>();
 
         // 注册RPC处理器
         services.AddSingleton<IRpcHandler, HubPingHandler>();

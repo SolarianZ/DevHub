@@ -256,13 +256,22 @@ class RpcClient:
         )
         return self.call("hub.invoke.notify", params=params, request_id=request_id)
 
-    def invoke_request(self, app_id, method, args=None, options=None, request_id="1"):
-        """调用 hub.invoke.request（用于延后策略测试）。"""
+    def invoke_request(
+        self,
+        app_id,
+        method,
+        args=None,
+        target_scope=None,
+        target_instance_id=None,
+        options=None,
+        request_id="1",
+    ):
+        """调用 hub.invoke.request。"""
         params = {
             "appId": app_id,
             "target": {
-                "scope": None,
-                "instanceId": None
+                "scope": target_scope,
+                "instanceId": target_instance_id
             },
             "method": method,
             "args": args or {},
