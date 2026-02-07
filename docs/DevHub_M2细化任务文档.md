@@ -46,7 +46,7 @@
 
 ### 0.3 非 M2 范围（必须明确）
 - **M4 范围**：`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 推送。
-- **M3 范围**：`scopePolicy` 严格隔离能力的全链路完善（M2 仅保持边界约束，不扩展为完整 M3 方案）。
+- **M3 范围**：Scope 路由一致性与隔离能力的全链路完善（M2 仅保持边界约束，不扩展为完整 M3 方案）。
 - **v2 范围**：Invocation 持久化、事件重放、Hub 重启后的 pending 恢复。
 
 ---
@@ -197,6 +197,7 @@
 
 ### 4.1 严格路由规则（M2 必须）
 - 指定 `target.instanceId`：仅允许路由到该实例，不允许回退。
+- `target.scope` omitted/null：仅允许路由到 global，不允许命中非 global scope。
 - 指定 `target.scope`（非空字符串）：仅允许路由到该 scope，不允许回退到 global。
 - 目标 `scope` 为 `""` 或 `"global"` 字符串应视为非法参数。
 
@@ -430,7 +431,7 @@
 
 ### 12.1 与 M3/M4 边界
 - M2 不引入 WS 事件订阅与推送（M4）。
-- M2 不将 `scopePolicy` 扩展为完整 M3 级严格隔离体系。
+- M2 不将 Scope 隔离能力扩展为完整 M3 级全链路一致性体系。
 
 ### 12.2 调用语义与幂等建议
 - Hub 提供 at-least-once 语义，业务方应使用 `invocationId` 做幂等去重。

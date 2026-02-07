@@ -246,12 +246,11 @@ sequenceDiagram
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://devhub.spec/v1/app-definition.json",
   "type": "object",
-  "required": ["appId", "displayName", "scopePolicy"],
+  "required": ["appId", "displayName"],
   "properties": {
     "appId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
     "displayName": { "type": "string" },
     "description": { "type": "string" },
-    "scopePolicy": { "type": "string", "enum": ["any", "globalOnly", "required"] },
     "capabilities": {
       "type": "object",
       "properties": {
@@ -274,11 +273,7 @@ sequenceDiagram
 ```
 
 #### 5.1.1 AppDefinition 语义（规范性）
-- `scopePolicy` 控制该 `appId` 哪些 `scope` 值有效：
-  - `any`: `scope` **可以**是全局（`null`/省略）或非空字符串。
-  - `globalOnly`: `scope` **必须**是全局（`null`/省略）。
-  - `required`: `scope` **必须**是非空字符串。
-- 如果违反 `scopePolicy`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="scope_policy_violation"`。
+- `AppDefinition` 不定义作用域白名单或强制模式；`scope` 的解释与路由行为统一由 §5.5 定义。
 - 如果省略 `capabilities` 或 `capabilities.rpc`，默认值为 `true`。
   - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - `capabilities.events` 保留供未来使用；在 v1 中，Hub **必须**忽略它。
@@ -427,13 +422,11 @@ sequenceDiagram
 
 ### 5.5 作用域 (Scope) 规则（规范性）
 
-| 输入         | 解释                                   | 禁止 / 无效值           |
-| ------------ | -------------------------------------- | ----------------------- |
-| 省略字段     | 全局作用域                             | —                       |
-| `null`       | 全局作用域                             | —                       |
-| 空字符串     | **无效**                               | `""`                    |
-| 非空字符串   | 工作区作用域（区分大小写，精确匹配）   | `"global"` 字符串字面量 |
-| **路由规则** | 指定作用域时，**禁止**回退到全局作用域 | —                       |
+- **SCOPE-01（App 生效作用域）**：对于 `hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 字段，省略或为 `null` 时生效为 Global；为非空字符串时生效为该字符串对应作用域。
+- **SCOPE-02（调用默认作用域）**：对于 `hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope`，省略或为 `null` 时，Hub **必须**仅在 Global 作用域内匹配与投递，**禁止**命中任何非 Global 作用域实例。
+- **SCOPE-03（调用显式作用域）**：当 `target.scope` 为非空字符串时，Hub **必须**仅路由到该字符串对应作用域；若不存在匹配实例，**禁止**回退到 Global。
+- **SCOPE-04（非法值）**：`scope` 或 `target.scope` 为 `""` 或 `"global"` 字符串字面量时，Hub **必须**返回 `-32602 invalid_params`。
+- **SCOPE-05（匹配规则）**：非空字符串作用域 **必须**按区分大小写的精确匹配处理。
 
 ---
 
@@ -542,7 +535,7 @@ sequenceDiagram
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
 - Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
-- Hub **必须**根据 §5.5 验证 `scope`，并（如果定义存在）强制执行 `AppDefinition.scopePolicy` (§5.1.1)。违反时**必须**返回 `-32002 forbidden` 且 `error.data.reason="scope_policy_violation"`。
+- Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 非法（例如 `""` 或 `"global"`），**必须**返回 `-32602 invalid_params`。
 
 **结果**：
 ```json
@@ -653,6 +646,7 @@ sequenceDiagram
 - `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
 - 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
 - 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
+- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅在 Global 作用域中路由该调用。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
 #### 6.3.11 `hub.invoke.request` (仅限 HTTP)
@@ -683,6 +677,7 @@ sequenceDiagram
 - `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
 - 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
 - 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
+- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅在 Global 作用域中路由该调用。
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
@@ -821,9 +816,7 @@ Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 flowchart TD
     A[收到调用] --> B[验证参数/选项/作用域规则]
     B -->|无效| X[返回 -32602 invalid_params]
-    B --> C{违反 ScopePolicy?}
-    C -->|是| D[返回 -32002 forbidden]
-    C -->|否| E{存在匹配的在线实例?}
+    B --> E{存在匹配的在线实例?}
     E -->|是| F["入队 (Queued) → 等待轮询"]
     E -->|否| G{queueIfOffline?}
     G -->|否| H[返回 -32010 instance_not_found]
@@ -838,6 +831,7 @@ flowchart TD
 
 路由规则：
 - 如果提供了 `target.instanceId`，Hub **必须**仅路由到该 instanceId（不回退）。
+- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅路由到 Global 作用域（不命中非 Global 作用域实例）。
 - 如果 `target.scope` 是非空字符串，Hub **必须**仅路由到该作用域（不回退）。
 - 当多个实例匹配一个作用域/全局队列时，交付遵循“先轮询者得”原则。
 - **挂起队列约束**：如果 `appId` 不存在 `AppDefinition`，即使 `queueIfOffline` 为 true，Hub 中也**禁止**将调用入队。在这种情况下，**必须**返回 `-32010 instance_not_found`。
@@ -901,7 +895,7 @@ stateDiagram-v2
 | 代码   | 名称                       | 何时返回                            | `error.data` (对象)                                                                                                   |
 | ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
-| -32002 | `forbidden`                | 违反 ScopePolicy / 操作被禁止       | `reason`: `"scope_policy_violation"`, `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; 包含上下文字段 |
+| -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; 包含上下文字段                          |
 | -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                     |
 | -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用       | `invocationId?`: string; `elapsedMs?`: number                                                                         |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |

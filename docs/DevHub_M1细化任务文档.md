@@ -149,8 +149,11 @@
   - 非空 string => 具体 scope
 - **建议在 registerInstance / listInstances 参数解析时做最小校验**：
   - 若 scope 字符串等于 `"global"`：返回 `-32602 invalid_params`（协议明确禁止）
+- 对调用路由的约束需与 Spec §5.5 保持一致：
+  - `target.scope` omitted/null => 仅允许命中 global；
+  - `target.scope` 非空字符串 => 仅允许命中该 scope，禁止回退 global。
 
-> `scopePolicy` 严格校验属于 M3；**M1 不强行实现**，避免越界与返工。
+> M1 以 scope 字段解析与列表过滤为主；调用路由完整矩阵在 M2/M3 阶段落地。
 
 ### 5.2 在线判定（协议 13.3）
 - 若 `now - lastSeenUtc <= 30s`：在线
@@ -179,7 +182,7 @@
 - params：`{}`
 - result：
   ```json
-  { "definitions": [ { "appId": "...", "displayName": "...", "scopePolicy": "any" } ] }
+  { "definitions": [ { "appId": "...", "displayName": "..." } ] }
   ```
 - 若某些字段缺失（例如 `displayName`）：可返回 null 或空字符串，但建议保持 DTO 稳定。
 
@@ -380,6 +383,6 @@
 
 ## 12. 边界与风险提示（M1 不做但要留接口位）
 
-- **不要在 M1 引入 scopePolicy 强校验**：那属于 M3；M1 只需把 scope 字段的过滤逻辑在 listInstances 上做正确。
+- **M1 不扩展调用路由矩阵**：M1 只需把 scope 字段解析与 `listInstances` 过滤逻辑做正确；调用默认/global 与显式 scope 不回退规则以 Spec §5.5 为准，并在后续里程碑完整覆盖。
 - **鉴权失败时 id 返回**：建议先解析 body 再校验 headers，避免客户端拿不到对应 id（更利于 SDK）。
 - **端口动态分配**：务必在真正监听成功后写 `hub.json`，否则 discovery 读到错误地址。

@@ -172,7 +172,7 @@ Client 必须通过读取 `runtime\hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 
 > 规范定义与 Schema 见 **[Spec.md §5 (Data Models)](./Spec.md#5-data-models-with-json-schema)**。
 
 ### 7.1 核心模型
-- **AppDefinition**：静态定义（`appId`, `scopePolicy`, `launch` 配置）。
+- **AppDefinition**：静态定义（`appId`, `launch` 配置与能力开关）。
 - **AppInstance**：运行时实例（`instanceId`, `pid`, `invoke` 能力开关）。
 - **Invocation**：调用对象（`invocationId`, `target`, `method`, `options`, `delivery`）。
 
@@ -181,7 +181,9 @@ Client 必须通过读取 `runtime\hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 
 
 - **Global**：`scope` 为 null 或 omitted。
 - **Scoped**：`scope` 为非空字符串。
-- **隔离原则**：请求指定了 scope，则**绝不允许 fallback 到 global**。
+- **默认作用域原则**：调用请求未指定 `target.scope`（null/omitted）时，仅允许命中 Global 实例。
+- **显式作用域原则**：调用请求指定 `target.scope`（非空字符串）时，仅允许命中该作用域，且找不到时禁止 fallback 到 Global。
+- **非法值原则**：`scope` 或 `target.scope` 为 `""` 或 `"global"` 字符串时，必须按 `invalid_params (-32602)` 处理。
 
 ---
 
@@ -306,7 +308,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 | M0        | 文档冻结 + Spec v0                 | DevHub.md + **Spec.md** + JSON schemas                                                        | 本文档即为 M0 产物 |
 | M1        | Hub（HTTP）基础能力 + Spec v1 冻结 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（协议定稿） | WS 可先不做        |
 | M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心            |
-| M3        | scopePolicy 与严格隔离             | any/globalOnly/required + 错误码 + 测试用例                                                   |                    |
+| M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                    |
 | M4        | WebSocket（认证 + events）         | `/ws`、hub.ws.authenticate、subscribe/unsubscribe、hub.event 推送                             | UI/监控可接入      |
 | M5        | SDK（.NET + JS/TS）                | .NET SDK、JS/TS SDK、签名测试向量、契约测试                                                   | Spec 已前置        |
 | M6        | 治理与诊断增强（可选）             | 指标、日志、dump、限流配置                                                                    | 不阻塞 v1          |
@@ -329,8 +331,8 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 - lease 到期可重投递；TTL 到期返回 `invocation_expired`。
 
 **M3**
-- `scopePolicy` 三种规则对 register/launch/invoke 生效。
-- 任意 scope 不允许 fallback 到 global。
+- register/launch/invoke 在 `scope` 解释上统一遵循 Spec §5.5。
+- 调用未指定 `target.scope` 时仅命中 Global；指定时仅命中显式 Scope 且禁止 fallback 到 Global。
 
 **M4**
 - WS 必须先 `hub.ws.authenticate`；未认证调用返回 `unauthorized`。

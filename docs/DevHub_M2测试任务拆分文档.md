@@ -177,6 +177,7 @@
 
 ### 3.2 `InvocationRoutingTests.cs`
 - [x] 指定 `target.instanceId` 仅命中对应实例，不发生 scope/global 回退。
+- [x] `target.scope` omitted/null 时仅命中 global，不命中非 global scope。
 - [x] 指定 `target.scope` 仅命中对应 scope，不回退 global。
 - [x] 无定义且 `queueIfOffline=true` 时，拒绝入 Pending（返回 instance_not_found 路径）。
 
