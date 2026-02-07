@@ -1,0 +1,28 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="devhubTitle devhubDesc">
+  <title id="devhubTitle">DevHub Icon</title>
+  <desc id="devhubDesc">极简的中心 Hub 与四向节点连接图标。</desc>
+  <defs>
+    <linearGradient id="bg" x1="16" y1="16" x2="240" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6F0FF"/>
+      <stop offset="1" stop-color="#CFE2FF"/>
+    </linearGradient>
+    <linearGradient id="line" x1="64" y1="64" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="224" height="224" rx="52" fill="url(#bg)" stroke="#60A5FA" stroke-width="2"/>
+
+  <line x1="128" y1="78" x2="128" y2="102" stroke="url(#line)" stroke-width="10" stroke-linecap="round"/>
+  <line x1="178" y1="128" x2="154" y2="128" stroke="url(#line)" stroke-width="10" stroke-linecap="round"/>
+  <line x1="128" y1="178" x2="128" y2="154" stroke="url(#line)" stroke-width="10" stroke-linecap="round"/>
+  <line x1="78" y1="128" x2="102" y2="128" stroke="url(#line)" stroke-width="10" stroke-linecap="round"/>
+
+  <circle cx="128" cy="64" r="14" fill="#06B6D4"/>
+  <circle cx="192" cy="128" r="14" fill="#6366F1"/>
+  <circle cx="128" cy="192" r="14" fill="#0EA5E9"/>
+  <circle cx="64" cy="128" r="14" fill="#3B82F6"/>
+
+  <circle cx="128" cy="128" r="28" fill="#FFFFFF" stroke="url(#line)" stroke-width="8"/>
+</svg>
