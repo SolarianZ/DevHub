@@ -65,6 +65,72 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
+    public async Task AppDefinitionsHandler_ListDefinitions_ShouldReturnDefinitions()
+    {
+        WriteJson("list-target.json", new
+        {
+            appId = "list-target",
+            displayName = "List Target",
+            scopePolicy = "any"
+        });
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppDefinitionsHandler(
+            definitionLoader,
+            Mock.Of<ILogger<AppDefinitionsHandler>>());
+
+        var request = new JsonRpcRequest
+        {
+            Id = "req-list",
+            Method = "hub.apps.listDefinitions",
+            Params = JsonSerializer.SerializeToElement(new { })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        Assert.NotNull(response.Result);
+
+        var resultElement = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(resultElement.GetProperty("ok").GetBoolean());
+        Assert.True(resultElement.TryGetProperty("definitions", out var definitionsElement));
+        Assert.Contains(definitionsElement.EnumerateArray(), d => d.GetProperty("appId").GetString() == "list-target");
+    }
+
+    [Fact]
+    public async Task AppDefinitionsHandler_GetDefinition_ShouldReturnDefinitionWhenExists()
+    {
+        WriteJson("get-target.json", new
+        {
+            appId = "get-target",
+            displayName = "Get Target",
+            scopePolicy = "any"
+        });
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppDefinitionsHandler(
+            definitionLoader,
+            Mock.Of<ILogger<AppDefinitionsHandler>>());
+
+        var request = new JsonRpcRequest
+        {
+            Id = "req-get",
+            Method = "hub.apps.getDefinition",
+            Params = JsonSerializer.SerializeToElement(new { appId = "get-target" })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        Assert.NotNull(response.Result);
+
+        var resultElement = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(resultElement.GetProperty("ok").GetBoolean());
+        var definitionElement = resultElement.GetProperty("definition");
+        Assert.Equal("get-target", definitionElement.GetProperty("appId").GetString());
+    }
+
+    [Fact]
     public async Task AppInstancesHandler_RegisterInstance_ShouldReturnInstanceInResult()
     {
         // Arrange
@@ -180,6 +246,68 @@ public class SpecConformanceTests : IDisposable
 
         Assert.Equal(-32602, missingInvokeResponse.Error?.Code);
         Assert.Equal("invalid_params", missingInvokeResponse.Error?.Message);
+    }
+
+    [Fact]
+    public async Task AppInstancesHandler_UnregisterInstance_ShouldBeIdempotent()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
+
+        var registerRequest = new JsonRpcRequest
+        {
+            Id = "req-register",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "test-instance-unregister",
+                    appId = "test-app",
+                    scope = (string?)null,
+                    pid = 45678,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        };
+
+        await handler.HandleAsync(registerRequest, CancellationToken.None);
+
+        var unregisterRequest = new JsonRpcRequest
+        {
+            Id = "req-unregister-1",
+            Method = "hub.apps.unregisterInstance",
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "test-instance-unregister" })
+        };
+
+        var firstResponse = await handler.HandleAsync(unregisterRequest, CancellationToken.None);
+        var secondResponse = await handler.HandleAsync(unregisterRequest, CancellationToken.None);
+
+        Assert.Null(firstResponse.Error);
+        Assert.Null(secondResponse.Error);
+
+        var firstResult = JsonSerializer.SerializeToElement(firstResponse.Result);
+        var secondResult = JsonSerializer.SerializeToElement(secondResponse.Result);
+        Assert.True(firstResult.GetProperty("ok").GetBoolean());
+        Assert.True(secondResult.GetProperty("ok").GetBoolean());
+
+        var listResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-list-after-unregister",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "test-app",
+                includeAllScopes = true,
+                includeOffline = true
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(listResponse.Error);
+        var listResult = JsonSerializer.SerializeToElement(listResponse.Result);
+        var instancesElement = listResult.GetProperty("instances");
+        Assert.DoesNotContain(instancesElement.EnumerateArray(), i => i.GetProperty("instanceId").GetString() == "test-instance-unregister");
     }
 
     public void Dispose()

@@ -9,13 +9,14 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using FluentAssertions;
 
-public class NegativeTests
+public class NegativeTests : IDisposable
 {
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
     private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
     private readonly Mock<ILogger<AppInstancesHandler>> _mockInstancesLogger;
     private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsLogger;
+    private readonly string _testDirectory;
 
     public NegativeTests()
     {
@@ -24,6 +25,7 @@ public class NegativeTests
         _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
         _mockInstancesLogger = new Mock<ILogger<AppInstancesHandler>>();
         _mockDefinitionsLogger = new Mock<ILogger<AppDefinitionsHandler>>();
+        _testDirectory = TestHelpers.GetTestDirectory();
     }
 
     [Fact]
@@ -69,8 +71,7 @@ public class NegativeTests
     public void DefinitionLoader_GetDefinition_NonExistentAppId_ShouldReturnNull()
     {
         // Arrange
-        var testDir = TestHelpers.GetTestDirectory();
-        var definitionLoader = new DefinitionLoader(testDir, _mockDefinitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
 
         // Act
         var result = definitionLoader.GetDefinition("non-existent-app-id");
@@ -80,13 +81,28 @@ public class NegativeTests
     }
 
     [Fact]
-    public void FileSystemManager_InitializeDirectories_ShouldHandleException()
+    public void FileSystemManager_InitializeDirectories_ShouldCreateConfiguredDirectories()
     {
-        // 注意：这个测试可能需要根据权限情况调整，因为它涉及到文件系统操作
-        // 我们可以创建一个无法访问的目录来测试异常处理，但这可能需要特殊权限
+        // Arrange
+        var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
+        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
-        // 这里我们不直接测试异常情况，因为它需要特定的权限设置
-        // 相反，我们会在其他测试中验证正常操作是否正常工作
+        try
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, _testDirectory);
+
+            // Act
+            fileSystemManager.InitializeDirectories();
+
+            // Assert
+            Assert.True(Directory.Exists(_testDirectory));
+            Assert.True(Directory.Exists(runtimeDirectory));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
+        }
     }
 
     [Fact]
@@ -94,7 +110,7 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
@@ -118,7 +134,7 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
@@ -152,7 +168,7 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
@@ -177,7 +193,7 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
@@ -200,8 +216,7 @@ public class NegativeTests
     public async Task AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
     {
         // Arrange
-        var testDir = TestHelpers.GetTestDirectory();
-        var mockDefinitionLoader = new Mock<DefinitionLoader>(testDir, _mockDefinitionLogger.Object);
+        var mockDefinitionLoader = new Mock<DefinitionLoader>(_testDirectory, _mockDefinitionLogger.Object);
         var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsLogger.Object);
         var request = new JsonRpcRequest
         {
@@ -218,5 +233,13 @@ public class NegativeTests
         response.Id.Should().Be("3");
         response.Error.Should().NotBeNull();
         response.Error.Code.Should().Be(-32602); // Invalid params
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_testDirectory))
+        {
+            Directory.Delete(_testDirectory, recursive: true);
+        }
     }
 }

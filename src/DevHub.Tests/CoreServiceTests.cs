@@ -8,7 +8,7 @@ using DevHub.Core.Models.Rpc;
 using Microsoft.Extensions.Logging;
 using Moq;
 
-public class UnitTest1
+public class CoreServiceTests
 {
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
@@ -16,7 +16,7 @@ public class UnitTest1
     private readonly Mock<ILogger<HubPingHandler>> _mockHubPingLogger;
     private readonly Mock<ILogger<AppDefinitionsHandler>> _mockDefinitionsHandlerLogger;
 
-    public UnitTest1()
+    public CoreServiceTests()
     {
         _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
         _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
@@ -26,53 +26,89 @@ public class UnitTest1
     }
 
     [Fact]
-    public void FileSystemManager_InitializeDirectories_ShouldCreateDirectories()
+    public void FileSystemManager_GetToken_ShouldWriteTokenToRuntimeOverrideDirectory()
     {
-        // Arrange
-        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object);
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
-        // Act - This should not throw an exception
-        fileSystemManager.InitializeDirectories();
+        try
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-        // Assert - Verify directories exist
-        var rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
-        Assert.True(Directory.Exists(rootPath));
-        Assert.True(Directory.Exists(Path.Combine(rootPath, "runtime")));
-        Assert.True(Directory.Exists(Path.Combine(rootPath, "apps", "definitions")));
-        Assert.True(Directory.Exists(Path.Combine(rootPath, "apps", "instances")));
-        Assert.True(Directory.Exists(Path.Combine(rootPath, "logs")));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var token = fileSystemManager.GetToken();
+
+            Assert.False(string.IsNullOrWhiteSpace(token));
+            Assert.True(File.Exists(Path.Combine(runtimeDirectory, "token.txt")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
     public void FileSystemManager_GetToken_ShouldGenerateValidToken()
     {
-        // Arrange
-        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object);
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
-        // Act
-        var token1 = fileSystemManager.GetToken();
-        var token2 = fileSystemManager.GetToken();
+        try
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-        // Assert
-        Assert.False(string.IsNullOrEmpty(token1));
-        Assert.Equal(token1, token2); // Should return same token second time
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var token1 = fileSystemManager.GetToken();
+            var token2 = fileSystemManager.GetToken();
+
+            Assert.False(string.IsNullOrWhiteSpace(token1));
+            Assert.Equal(token1, token2);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
     public void FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
     {
-        // Arrange
-        var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object);
-        var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object);
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
-        // Act
-        var token1 = fileSystemManager1.GetToken();
-        var token2 = fileSystemManager2.GetToken();
+        try
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-        // Assert
-        Assert.False(string.IsNullOrEmpty(token1));
-        Assert.False(string.IsNullOrEmpty(token2));
-        Assert.NotEqual(token1, token2);
+            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, testRoot);
+
+            var token1 = fileSystemManager1.GetToken();
+            var token2 = fileSystemManager2.GetToken();
+
+            Assert.False(string.IsNullOrWhiteSpace(token1));
+            Assert.False(string.IsNullOrWhiteSpace(token2));
+            Assert.NotEqual(token1, token2);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -116,14 +152,14 @@ public class UnitTest1
         };
         appRegistry.RegisterInstance(instance);
 
-        // Act
-        System.Threading.Thread.Sleep(100); // Wait for time to pass
+        var beforeHeartbeat = instance.LastSeenUtc;
+
         appRegistry.Heartbeat("test-instance-2", out _);
         var updatedInstance = appRegistry.GetInstance("test-instance-2");
 
         // Assert
         Assert.NotNull(updatedInstance);
-        Assert.True(updatedInstance.LastSeenUtc > instance.LastSeenUtc);
+        Assert.True(updatedInstance.LastSeenUtc > beforeHeartbeat);
     }
 
     [Fact]
@@ -189,23 +225,35 @@ public class UnitTest1
     public async Task AppDefinitionsHandler_MethodNotFound_ShouldReturnError()
     {
         // Arrange
-        var mockDefinitionLoader = new Mock<DefinitionLoader>(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
-        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsHandlerLogger.Object);
-        var request = new JsonRpcRequest
+        var testDirectory = TestHelpers.GetTestDirectory();
+
+        try
         {
-            Id = "2",
-            Method = "hub.apps.invalidMethod",
-            Params = new Dictionary<string, object>()
-        };
+            var mockDefinitionLoader = new Mock<DefinitionLoader>(testDirectory, _mockDefinitionLogger.Object);
+            var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsHandlerLogger.Object);
+            var request = new JsonRpcRequest
+            {
+                Id = "2",
+                Method = "hub.apps.invalidMethod",
+                Params = new Dictionary<string, object>()
+            };
 
-        // Act
-        var response = await handler.HandleAsync(request, CancellationToken.None);
+            // Act
+            var response = await handler.HandleAsync(request, CancellationToken.None);
 
-        // Assert
-        Assert.NotNull(response);
-        Assert.Equal("2", response.Id);
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32601, response.Error.Code); // Method not found
+            // Assert
+            Assert.NotNull(response);
+            Assert.Equal("2", response.Id);
+            Assert.NotNull(response.Error);
+            Assert.Equal(-32601, response.Error.Code); // Method not found
+        }
+        finally
+        {
+            if (Directory.Exists(testDirectory))
+            {
+                Directory.Delete(testDirectory, recursive: true);
+            }
+        }
     }
 }
 
@@ -213,20 +261,8 @@ public static class TestHelpers
 {
     public static string GetTestDirectory()
     {
-        var testDirectory = Path.Combine(Path.GetTempPath(), "DevHubTests");
-        if (!Directory.Exists(testDirectory))
-        {
-            Directory.CreateDirectory(testDirectory);
-        }
+        var testDirectory = Path.Combine(Path.GetTempPath(), "DevHubTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDirectory);
         return testDirectory;
-    }
-
-    public static void CleanupTestDirectory()
-    {
-        var testDirectory = GetTestDirectory();
-        if (Directory.Exists(testDirectory))
-        {
-            Directory.Delete(testDirectory, true);
-        }
     }
 }
