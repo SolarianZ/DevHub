@@ -284,6 +284,25 @@ class RpcClient:
         }
         return self.call("hub.invoke.request", params=params, request_id=request_id)
 
+    def launch_app(
+        self,
+        app_id,
+        scope=None,
+        dedupe_key=None,
+        wait_for_register_ms=0,
+        request_id="1",
+    ):
+        """调用 hub.apps.launch。"""
+        params = {
+            "appId": app_id,
+            "scope": scope,
+            "waitForRegisterMs": wait_for_register_ms,
+        }
+        if dedupe_key is not None:
+            params["dedupeKey"] = dedupe_key
+
+        return self.call("hub.apps.launch", params=params, request_id=request_id)
+
 
 class TestResult:
     """

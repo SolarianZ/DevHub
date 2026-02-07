@@ -15,8 +15,8 @@
   - Python 基础能力：`test_base.py` 已补 invocation 相关 helper
   - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs` 已新增并通过
 - 本批次仍在开发：
-  - `test_launch_invocation.py`
-  - `LaunchCoordinatorTests.cs`
+  - `test_launch_invocation.py`（本轮完成 `LAUNCH-001` 与关键负例）
+  - `LaunchCoordinatorTests.cs`（本轮完成最小闭环用例，dedupe 模板类用例待补）
   - lease 到期重投递（30s）长耗时场景（已落地，full-only）
 
 ## 0. 文档目标与使用方式
@@ -56,7 +56,7 @@
 - [x] 新增 `tests/test_invocation_notify.py`
 - [x] 新增 `tests/test_invocation_request.py`
 - [x] 新增 `tests/test_invocation_poll_respond.py`
-- [ ] 新增 `tests/test_launch_invocation.py`
+- [x] 新增 `tests/test_launch_invocation.py`
 
 > 命名风格与现有文件保持一致：`test_xxx.py`，类名 `TestXxx(unittest.TestCase)`。
 
@@ -143,9 +143,9 @@
 ### 2.6 用例任务：`tests/test_launch_invocation.py`
 
 #### `M2-LAUNCH-001` autoLaunch 成功链路
-- [ ] 前置：定义有效 `launch.exePath`，并可在测试环境启动。
-- [ ] 步骤：调用 notify/request（`autoLaunch=true`，无在线实例）。
-- [ ] 断言：
+- [x] 前置：定义有效 `launch.exePath`，并可在测试环境启动。
+- [x] 步骤：调用 notify/request（`autoLaunch=true`，无在线实例）。
+- [x] 断言：
   - 调用不会因“无在线实例”直接返回 `instance_not_found`。
   - 新实例注册后可成功 `poll/respond` 并完成调用闭环。
 
@@ -156,11 +156,11 @@
   - 窗口内 `launchId` 复用。
 
 #### launch 参数校验
-- [ ] `waitForRegisterMs < 0` -> `-32602`。
-- [ ] 缺失 `launch` 配置 -> `-32020 launch_failed` + `reason=launch_config_missing`。
+- [x] `waitForRegisterMs < 0` -> `-32602`。
+- [x] 缺失 `launch` 配置 -> `-32020 launch_failed` + `reason=launch_config_missing`。
 
 ### 2.7 `tests/test_runner.py` 集成任务
-- [x] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`（`TestLaunchInvocation` 待实现）。
+- [x] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`、`TestLaunchInvocation`。
 - [ ] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
 - [ ] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
 - [ ] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
@@ -175,7 +175,7 @@
 - [x] `src/DevHub.Tests/InvocationStoreTests.cs`
 - [x] `src/DevHub.Tests/InvocationLeaseTests.cs`
 - [x] `src/DevHub.Tests/InvocationRequestWaiterTests.cs`
-- [ ] `src/DevHub.Tests/LaunchCoordinatorTests.cs`
+- [x] `src/DevHub.Tests/LaunchCoordinatorTests.cs`
 
 ### 3.2 `InvocationRoutingTests.cs`
 - [x] 指定 `target.instanceId` 仅命中对应实例，不发生 scope/global 回退。
@@ -200,8 +200,8 @@
 ### 3.6 `LaunchCoordinatorTests.cs`
 - [ ] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。
 - [ ] dedupe 窗口内重复 launch 返回 already_running。
-- [ ] `waitForRegisterMs` 超时后返回 `starting`。
-- [ ] 缺失配置时返回 `launch_failed` 语义对象。
+- [x] `waitForRegisterMs` 超时后返回 `starting`。
+- [x] 缺失配置时返回 `launch_failed` 语义对象。
 
 ---
 
@@ -269,7 +269,7 @@
 
 ## 8. 交付清单（测试阶段）
 
-- [ ] Python 新增 4 个 M2 测试模块并接入 `test_runner.py`（开发中：已完成 2/4）。
-- [ ] C# 新增 5 个白盒测试文件并通过 `dotnet test`（开发中：已完成 3/5，且当前已通过）。
+- [x] Python 新增 4 个 M2 测试模块并接入 `test_runner.py`（`test_launch_invocation.py` 已接入）。
+- [x] C# 新增 5 个白盒测试文件并通过 `dotnet test`。
 - [ ] 产出测试报告：`temp/test_results.txt`、`temp/test_results.json`、`temp/test_log.txt`。
 - [ ] 与 `DevHub_M2细化任务文档.md` 的用例编号一一对应。

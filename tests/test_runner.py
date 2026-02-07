@@ -18,6 +18,7 @@ from tests.test_app_instances import TestAppInstances
 from tests.test_invocation_notify import TestInvocationNotify
 from tests.test_invocation_request import TestInvocationRequest
 from tests.test_invocation_poll_respond import TestInvocationPollRespond
+from tests.test_launch_invocation import TestLaunchInvocation
 from tests.test_invalid_params import TestInvalidParams
 from tests.test_internal_errors import TestInternalErrors
 
@@ -84,6 +85,10 @@ def run_all_tests(full=False, fast=False):
     logger.info("=== 运行 Invocation Poll/Respond 测试 ===")
     invocation_poll_respond_tests = TestInvocationPollRespond()
     report.results.extend(invocation_poll_respond_tests.run_all_tests(full=full))
+
+    logger.info("=== 运行 Launch + Invocation 测试 ===")
+    launch_invocation_tests = TestLaunchInvocation()
+    report.results.extend(launch_invocation_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 invalid_params 参数验证测试 ===")
     invalid_params_tests = TestInvalidParams()

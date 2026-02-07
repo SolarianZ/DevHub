@@ -20,6 +20,7 @@ public class InvocationRoutingTests : IDisposable
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<InvocationStore>> _storeLogger = new();
     private readonly Mock<ILogger<InvocationRoutingService>> _routingLogger = new();
+    private readonly Mock<ILogger<LaunchCoordinator>> _launchLogger = new();
     private readonly Mock<ILogger<InvocationHandler>> _invocationHandlerLogger = new();
     private readonly Mock<ILogger<LaunchHandler>> _launchHandlerLogger = new();
 
@@ -105,7 +106,8 @@ public class InvocationRoutingTests : IDisposable
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -147,7 +149,8 @@ public class InvocationRoutingTests : IDisposable
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -182,7 +185,8 @@ public class InvocationRoutingTests : IDisposable
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -206,15 +210,17 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationAndLaunchDeferredMethods_ShouldReturnNotSupported()
+    public async Task InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
-        var launchHandler = new LaunchHandler(_launchHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
         var requestResponse = await invocationHandler.HandleAsync(new JsonRpcRequest
         {
@@ -230,8 +236,8 @@ public class InvocationRoutingTests : IDisposable
                 {
                     ttlMs = 1000,
                     waitTimeoutMs = 1000,
-                    queueIfOffline = false,
-                    autoLaunch = false
+                    queueIfOffline = true,
+                    autoLaunch = true
                 }
             })
         }, CancellationToken.None);
@@ -250,10 +256,52 @@ public class InvocationRoutingTests : IDisposable
         }, CancellationToken.None);
 
         Assert.NotNull(launchResponse.Error);
-        Assert.Equal(-32099, launchResponse.Error.Code);
-        Assert.Equal("not_supported", launchResponse.Error.Message);
+        Assert.Equal(-32014, launchResponse.Error.Code);
+        Assert.Equal("app_definition_not_found", launchResponse.Error.Message);
         var launchData = JsonSerializer.SerializeToElement(launchResponse.Error.Data);
-        Assert.Equal("launch_deferred", launchData.GetProperty("reason").GetString());
+        Assert.Equal("launch.app", launchData.GetProperty("appId").GetString());
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Notify_AutoLaunchWithoutLaunchConfig_ShouldReturnLaunchFailed()
+    {
+        WriteDefinition("notify-launch-missing", scopePolicy: "any", rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        var request = new JsonRpcRequest
+        {
+            Id = "notify-launch-missing",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "notify-launch-missing",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.sync",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = true
+                }
+            })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32020, response.Error.Code);
+        Assert.Equal("launch_failed", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("launch_config_missing", data.GetProperty("reason").GetString());
     }
 
     /// <summary>

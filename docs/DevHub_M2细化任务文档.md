@@ -15,9 +15,9 @@
   - `hub.invoke.poll`（门禁、长轮询、lease 返回、`lastSeenUtc` 更新）
   - `hub.invoke.respond`（`value/error` 互斥、实例能力门禁、重复响应冲突）
   - `Invocation` 模型升级（`target/options/delivery/caller/kind/state`）
-  - `hub.invoke.request` / `hub.apps.launch` 显式 `-32099 not_supported`（`reason=request_deferred/launch_deferred`）
+  - `hub.invoke.request` 闭环（waiter、timeout、failed 映射）
+  - `hub.apps.launch` 最小闭环（参数校验、配置校验、进程启动、`started/starting/already_running`）
 - 本批次后续仍在开发：
-  - `hub.invoke.request` 完整闭环（waiter、timeout、failed 映射）**（本轮完成）**
   - `hub.apps.launch` 真正启动与 dedupe
   - lease 到期重投递（`attempt++`）与超时扫描 **（本轮完成：poll/respond 驱动回收）**
 
@@ -26,7 +26,7 @@
 ### 0.1 M2 必须实现（对齐里程碑验收清单）
 - `hub.invoke.request` 实现闭环：caller -> hub -> callee `poll` -> callee `respond` -> caller 收到结果。**（开发中）**
 - `hub.invoke.notify` 支持入队并被 `hub.invoke.poll` 正确拉取。**（已完成：第一迭代）**
-- `queueIfOffline + autoLaunch` 在无在线实例时可触发 `hub.apps.launch`，实例注册后可投递。**（开发中）**
+- `queueIfOffline + autoLaunch` 在无在线实例时可触发 `hub.apps.launch`，实例注册后可投递。**（开发中：LAUNCH-001 已完成，dedupe 待完成）**
 - Lease 到期支持重投递；TTL 到期返回 `invocation_expired (-32011)`。**（本轮完成：重投递 + attempt 递增）**
 
 ### 0.2 协议输出约束（M2 继续沿用）
@@ -375,9 +375,9 @@
 - [ ] 建立 request waiter 生命周期管理（创建/完成/取消/清理）
 
 ### Day 1：`launch` + dedupe
-- [ ] 实现 `hub.apps.launch` 参数校验与返回模型（开发中：当前为 deferred `not_supported`）
+- [x] 实现 `hub.apps.launch` 参数校验与返回模型
 - [ ] 实现 dedupe 窗口（30s）与模板渲染
-- [ ] 接入 `AppDefinition.launch` 配置并完成进程启动封装
+- [x] 接入 `AppDefinition.launch` 配置并完成进程启动封装
 
 ### Day 1.5：`notify/request`
 - [x] 实现 `hub.invoke.notify`（默认值、校验、入队）
@@ -404,7 +404,7 @@
 - [x] `M2-REQ-003`：TTL 到期/取消后迟到响应返回 `-32011 invocation_expired`
 - [x] `M2-NOTIFY-001`：notify 在线投递并被 poll 取走
 - [x] `M2-NOTIFY-002`：离线入队，实例上线后可 poll 拉取
-- [ ] `M2-LAUNCH-001`：autoLaunch 触发成功，实例注册后完成投递
+- [x] `M2-LAUNCH-001`：autoLaunch 触发成功，实例注册后完成投递
 - [ ] `M2-LAUNCH-002`：dedupe 窗口内重复启动返回 `already_running`
 - [x] `M2-POLL-001`：未注册实例 poll 返回 `-32010 instance_not_found`
 - [x] `M2-RESP-001`：重复响应/越权响应返回 `-32030 delivery_conflict`

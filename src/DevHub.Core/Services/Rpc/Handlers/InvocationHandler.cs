@@ -22,6 +22,7 @@ public class InvocationHandler : IRpcHandler
     private readonly InvocationRoutingService _routingService;
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
+    private readonly LaunchCoordinator _launchCoordinator;
     private readonly ILogger<InvocationHandler> _logger;
 
     /// <summary>
@@ -33,6 +34,7 @@ public class InvocationHandler : IRpcHandler
         InvocationRoutingService routingService,
         InvocationStore store,
         InvocationRequestWaiter requestWaiter,
+        LaunchCoordinator launchCoordinator,
         ILogger<InvocationHandler> logger)
     {
         _appRegistry = appRegistry;
@@ -40,6 +42,7 @@ public class InvocationHandler : IRpcHandler
         _routingService = routingService;
         _store = store;
         _requestWaiter = requestWaiter;
+        _launchCoordinator = launchCoordinator;
         _logger = logger;
     }
 
@@ -51,43 +54,43 @@ public class InvocationHandler : IRpcHandler
     {
         return request.Method switch
         {
-            "hub.invoke.notify" => NotifyAsync(request),
-            "hub.invoke.request" => RequestAsync(request),
+            "hub.invoke.notify" => NotifyAsync(request, cancellationToken),
+            "hub.invoke.request" => RequestAsync(request, cancellationToken),
             "hub.invoke.poll" => PollAsync(request, cancellationToken),
             "hub.invoke.respond" => RespondAsync(request),
             _ => Task.FromResult(MethodNotFound(request.Id))
         };
     }
 
-    private Task<JsonRpcResponse> NotifyAsync(JsonRpcRequest request)
+    private async Task<JsonRpcResponse> NotifyAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
-            return Task.FromResult(paramsError);
+            return paramsError;
         }
 
         if (!TryGetRequiredString(paramsElement, "appId", out var appId) ||
             !TryGetRequiredString(paramsElement, "method", out var method))
         {
-            return Task.FromResult(InvalidParams(request.Id));
+            return InvalidParams(request.Id);
         }
 
         if (!TryParseTarget(paramsElement, out var target, out var targetError))
         {
-            return Task.FromResult(CreateError(request.Id, -32602, "invalid_params", targetError));
+            return CreateError(request.Id, -32602, "invalid_params", targetError);
         }
 
         if (!TryParseNotifyOptions(paramsElement, target, out var options, out var optionErrorResponse))
         {
             optionErrorResponse.Id = request.Id;
-            return Task.FromResult(optionErrorResponse);
+            return optionErrorResponse;
         }
 
         _definitionLoader.Load();
         var definition = _definitionLoader.GetDefinition(appId);
         if (definition is not null && definition.Capabilities?.Rpc == false)
         {
-            return Task.FromResult(CreateError(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" }));
+            return CreateError(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
@@ -95,17 +98,31 @@ public class InvocationHandler : IRpcHandler
         {
             if (!options.QueueIfOffline)
             {
-                return Task.FromResult(CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" }));
+                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
             }
 
             if (definition is null)
             {
-                return Task.FromResult(CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" }));
+                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
             }
 
             if (options.AutoLaunch)
             {
-                return Task.FromResult(CreateError(request.Id, -32099, "not_supported", new { reason = "auto_launch_deferred" }));
+                var launchResult = await _launchCoordinator.LaunchAsync(
+                    appId,
+                    target.Scope,
+                    dedupeKey: null,
+                    waitForRegisterMs: 0,
+                    cancellationToken);
+
+                if (!launchResult.Ok)
+                {
+                    return CreateError(
+                        request.Id,
+                        launchResult.ErrorCode ?? -32603,
+                        launchResult.ErrorMessage ?? "internal_error",
+                        launchResult.ErrorData);
+                }
             }
         }
 
@@ -136,7 +153,7 @@ public class InvocationHandler : IRpcHandler
 
         _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
 
-        return Task.FromResult(new JsonRpcResponse
+        return new JsonRpcResponse
         {
             Id = request.Id,
             Result = new
@@ -144,10 +161,10 @@ public class InvocationHandler : IRpcHandler
                 ok = true,
                 invocationId = invocation.InvocationId
             }
-        });
+        };
     }
 
-    private async Task<JsonRpcResponse> RequestAsync(JsonRpcRequest request)
+    private async Task<JsonRpcResponse> RequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         if (!TryReadParamsObject(request, out var paramsElement, out var paramsError))
         {
@@ -193,7 +210,21 @@ public class InvocationHandler : IRpcHandler
 
             if (options.AutoLaunch)
             {
-                return CreateError(request.Id, -32099, "not_supported", new { reason = "auto_launch_deferred" });
+                var launchResult = await _launchCoordinator.LaunchAsync(
+                    appId,
+                    target.Scope,
+                    dedupeKey: null,
+                    waitForRegisterMs: 0,
+                    cancellationToken);
+
+                if (!launchResult.Ok)
+                {
+                    return CreateError(
+                        request.Id,
+                        launchResult.ErrorCode ?? -32603,
+                        launchResult.ErrorMessage ?? "internal_error",
+                        launchResult.ErrorData);
+                }
             }
         }
 

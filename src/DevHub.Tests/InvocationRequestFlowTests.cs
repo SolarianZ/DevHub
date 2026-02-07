@@ -20,6 +20,7 @@ public class InvocationRequestFlowTests : IDisposable
     private readonly Mock<ILogger<InvocationStore>> _storeLogger = new();
     private readonly Mock<ILogger<InvocationRoutingService>> _routingLogger = new();
     private readonly Mock<ILogger<InvocationRequestWaiter>> _waiterLogger = new();
+    private readonly Mock<ILogger<LaunchCoordinator>> _launchLogger = new();
     private readonly Mock<ILogger<InvocationHandler>> _invocationHandlerLogger = new();
 
     /// <summary>
@@ -353,7 +354,8 @@ public class InvocationRequestFlowTests : IDisposable
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        return new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        return new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled)
