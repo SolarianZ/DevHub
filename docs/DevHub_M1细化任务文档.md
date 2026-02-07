@@ -63,7 +63,7 @@
 
 ### 2.3 Token 生成与写入（必须）
 - 若 `runtime\token.txt` 不存在：生成随机 token 并写入。
-- 若已存在：读取复用（**建议**：方便 Hub 重启后客户端无需重新发现 token；协议未禁止）。
+- 若已存在：启动时重新生成并覆盖（按 Spec 建议每个 Hub 会话轮换 token）。
 - token 建议：
   - 32 bytes random -> Base64/Hex
 - **ACL（可选）**：

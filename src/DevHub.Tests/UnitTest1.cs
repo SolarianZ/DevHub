@@ -59,6 +59,23 @@ public class UnitTest1
     }
 
     [Fact]
+    public void FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
+    {
+        // Arrange
+        var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object);
+        var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object);
+
+        // Act
+        var token1 = fileSystemManager1.GetToken();
+        var token2 = fileSystemManager2.GetToken();
+
+        // Assert
+        Assert.False(string.IsNullOrEmpty(token1));
+        Assert.False(string.IsNullOrEmpty(token2));
+        Assert.NotEqual(token1, token2);
+    }
+
+    [Fact]
     public void AppRegistry_RegisterInstance_ShouldAddOrUpdateInstance()
     {
         // Arrange

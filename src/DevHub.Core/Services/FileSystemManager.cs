@@ -13,6 +13,7 @@ namespace DevHub.Core.Services;
 public class FileSystemManager
 {
     private readonly ILogger<FileSystemManager> _logger;
+    private readonly object _tokenSyncRoot = new();
     private readonly string _rootPath;
     private readonly string _runtimePath;
     private readonly string _definitionsPath;
@@ -20,6 +21,8 @@ public class FileSystemManager
     private readonly string _hubJsonPath;
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
+    private bool _sessionTokenInitialized;
+    private string? _sessionToken;
 
     /// <summary>
     /// 初始化文件系统管理器。
@@ -138,52 +141,83 @@ public class FileSystemManager
     }
 
     /// <summary>
-    /// 生成或读取 token
+    /// 获取当前 Hub 会话 token。
+    /// 首次调用时会按 Spec 要求轮换 token（每个 Hub 会话一个 token）。
     /// </summary>
     public string GetToken()
     {
-        try
+        lock (_tokenSyncRoot)
         {
-            _logger.LogDebug("开始处理 token 请求，文件路径: {FilePath}", _tokenFilePath);
-
-            if (File.Exists(_tokenFilePath))
+            try
             {
-                if (!_tokenPermissionEnsured)
+                _logger.LogDebug("开始处理 token 请求，文件路径: {FilePath}", _tokenFilePath);
+
+                if (!_sessionTokenInitialized)
                 {
-                    EnsureCurrentUserOnlyAccess(_tokenFilePath);
-                    _tokenPermissionEnsured = true;
+                    _sessionToken = CreateAndPersistNewSessionToken();
+                    _sessionTokenInitialized = true;
                 }
 
-                _logger.LogDebug("Token 文件存在，尝试读取现有 token");
-                var existingToken = File.ReadAllText(_tokenFilePath).Trim();
-                if (!string.IsNullOrEmpty(existingToken))
-                {
-                    _logger.LogInformation("成功读取现有 token，文件路径: {FilePath}", _tokenFilePath);
-                    return existingToken;
-                }
-                _logger.LogWarning("Token 文件存在但内容为空，将生成新 token，文件路径: {FilePath}", _tokenFilePath);
+                EnsureSessionTokenFileExists();
+                return _sessionToken!;
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogDebug("Token 文件不存在，将生成新 token，文件路径: {FilePath}", _tokenFilePath);
+                _logger.LogError(ex, "读取或生成 token 失败，文件路径: {FilePath}", _tokenFilePath);
+                throw;
             }
+        }
+    }
 
-            _logger.LogDebug("开始生成新 token");
-            var newToken = GenerateNewToken();
-            _logger.LogDebug("成功生成新 token，长度: {TokenLength} 字符", newToken.Length);
+    /// <summary>
+    /// 生成并持久化当前 Hub 会话 token。
+    /// </summary>
+    private string CreateAndPersistNewSessionToken()
+    {
+        if (File.Exists(_tokenFilePath))
+        {
+            _logger.LogInformation("检测到历史 token，将按 Spec 在 Hub 启动时轮换 token，文件路径: {FilePath}", _tokenFilePath);
+        }
+        else
+        {
+            _logger.LogDebug("Token 文件不存在，将为当前 Hub 会话生成新 token，文件路径: {FilePath}", _tokenFilePath);
+        }
 
-            _logger.LogDebug("开始写入新 token 到文件: {FilePath}", _tokenFilePath);
-            File.WriteAllText(_tokenFilePath, newToken);
+        Directory.CreateDirectory(_runtimePath);
+
+        var newToken = GenerateNewToken();
+        _logger.LogDebug("成功生成新 token，长度: {TokenLength} 字符", newToken.Length);
+
+        File.WriteAllText(_tokenFilePath, newToken);
+        EnsureCurrentUserOnlyAccess(_tokenFilePath);
+        _tokenPermissionEnsured = true;
+
+        _logger.LogInformation("成功生成并写入当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
+        return newToken;
+    }
+
+    /// <summary>
+    /// 确保 token 文件存在并与当前 Hub 会话 token 一致。
+    /// </summary>
+    private void EnsureSessionTokenFileExists()
+    {
+        if (string.IsNullOrEmpty(_sessionToken))
+        {
+            throw new InvalidOperationException("Hub 会话 token 尚未初始化。");
+        }
+
+        if (!File.Exists(_tokenFilePath))
+        {
+            _logger.LogWarning("检测到 token 文件丢失，正在恢复当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
+            Directory.CreateDirectory(_runtimePath);
+            File.WriteAllText(_tokenFilePath, _sessionToken);
+            _tokenPermissionEnsured = false;
+        }
+
+        if (!_tokenPermissionEnsured)
+        {
             EnsureCurrentUserOnlyAccess(_tokenFilePath);
             _tokenPermissionEnsured = true;
-            _logger.LogInformation("成功生成新 token 并写入文件，文件路径: {FilePath}", _tokenFilePath);
-
-            return newToken;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "读取或生成 token 失败，文件路径: {FilePath}", _tokenFilePath);
-            throw;
         }
     }
 
