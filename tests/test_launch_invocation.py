@@ -36,7 +36,6 @@ class TestLaunchInvocation(unittest.TestCase):
         payload = {
             "appId": app_id,
             "displayName": app_id,
-            "scopePolicy": "any",
             "capabilities": {
                 "rpc": True,
                 "events": False

@@ -269,7 +269,6 @@ public class LaunchCoordinatorTests : IDisposable
         {
             ["appId"] = appId,
             ["displayName"] = appId,
-            ["scopePolicy"] = "any",
             ["capabilities"] = new Dictionary<string, object?>
             {
                 ["rpc"] = true,

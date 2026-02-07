@@ -48,14 +48,13 @@ class TestAppInstances(unittest.TestCase):
         os.makedirs(definitions_dir, exist_ok=True)
         return definitions_dir
 
-    def _create_definition(self, app_id, scope_policy):
-        """创建用于 scopePolicy 测试的应用定义文件。"""
+    def _create_definition(self, app_id):
+        """创建应用定义文件。"""
         definitions_dir = self._get_definitions_dir()
         definition_path = os.path.join(definitions_dir, f"{app_id}.json")
         definition = {
             "appId": app_id,
-            "displayName": app_id,
-            "scopePolicy": scope_policy
+            "displayName": app_id
         }
         with open(definition_path, "w", encoding="utf-8") as f:
             json.dump(definition, f, ensure_ascii=False, indent=2)
@@ -777,102 +776,6 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
-    def test_scope_policy_global_only_rejects_scoped_register(self):
-        """测试 globalOnly 定义拒绝非空 scope 注册。"""
-        result = TestResult("测试 globalOnly 定义拒绝非空 scope 注册")
-        definition_path = None
-
-        try:
-            app_id = "scope-policy-globalonly-app"
-            definition_path = self._create_definition(app_id, "globalOnly")
-
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            instance_id = self.generate_unique_instance_id()
-
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": app_id,
-                    "scope": "workspace-forbidden",
-                    "pid": 12362,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-
-            if not RpcAssertions.expect_error(
-                result,
-                response,
-                expected_code=-32002,
-                expected_message="forbidden"
-            ):
-                return result
-
-            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "scope_policy_violation"}):
-                return result
-
-            result.mark_success()
-
-        except Exception as e:
-            result.mark_failure(str(e))
-        finally:
-            if definition_path and os.path.exists(definition_path):
-                try:
-                    os.remove(definition_path)
-                except Exception:
-                    pass
-            self._cleanup_test_instances(["scope-policy-globalonly-app"])
-
-        return result
-
-    def test_scope_policy_required_rejects_global_register(self):
-        """测试 required 定义拒绝全局 scope 注册。"""
-        result = TestResult("测试 required 定义拒绝全局 scope 注册")
-        definition_path = None
-
-        try:
-            app_id = "scope-policy-required-app"
-            definition_path = self._create_definition(app_id, "required")
-
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            instance_id = self.generate_unique_instance_id()
-
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": app_id,
-                    "scope": None,
-                    "pid": 12363,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-
-            if not RpcAssertions.expect_error(
-                result,
-                response,
-                expected_code=-32002,
-                expected_message="forbidden"
-            ):
-                return result
-
-            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "scope_policy_violation"}):
-                return result
-
-            result.mark_success()
-
-        except Exception as e:
-            result.mark_failure(str(e))
-        finally:
-            if definition_path and os.path.exists(definition_path):
-                try:
-                    os.remove(definition_path)
-                except Exception:
-                    pass
-            self._cleanup_test_instances(["scope-policy-required-app"])
-
-        return result
-
     def run_all_tests(self, full=False, run_timeout_tests=True):
         """运行所有 AppInstance 测试"""
         tests = [
@@ -888,9 +791,7 @@ class TestAppInstances(unittest.TestCase):
             self.test_register_instance_with_global_scope,
             self.test_register_instance_empty_scope,
             self.test_list_instances_scope_strict_match,
-            self.test_register_instance_invoke_field_validation,
-            self.test_scope_policy_global_only_rejects_scoped_register,
-            self.test_scope_policy_required_rejects_global_register
+            self.test_register_instance_invoke_field_validation
         ]
 
         if run_timeout_tests:

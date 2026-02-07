@@ -27,30 +27,20 @@ public class SpecConformanceTests : IDisposable
         WriteJson("valid-app.json", new
         {
             appId = "valid-app",
-            displayName = "Valid App",
-            scopePolicy = "any"
+            displayName = "Valid App"
         });
 
         WriteJson("invalid app id.json", new
         {
             appId = "invalid app id",
-            displayName = "Invalid AppId",
-            scopePolicy = "any"
-        });
-
-        WriteJson("invalid-scope.json", new
-        {
-            appId = "invalid-scope",
-            displayName = "Invalid Scope",
-            scopePolicy = "invalid"
+            displayName = "Invalid AppId"
         });
 
         // 文件名与 appId 不一致
         WriteJson("mismatch-name.json", new
         {
             appId = "real-name",
-            displayName = "Mismatch Name",
-            scopePolicy = "any"
+            displayName = "Mismatch Name"
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -70,8 +60,7 @@ public class SpecConformanceTests : IDisposable
         WriteJson("list-target.json", new
         {
             appId = "list-target",
-            displayName = "List Target",
-            scopePolicy = "any"
+            displayName = "List Target"
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -103,8 +92,7 @@ public class SpecConformanceTests : IDisposable
         WriteJson("get-target.json", new
         {
             appId = "get-target",
-            displayName = "Get Target",
-            scopePolicy = "any"
+            displayName = "Get Target"
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -135,8 +123,7 @@ public class SpecConformanceTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "req-1",
@@ -178,8 +165,7 @@ public class SpecConformanceTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
 
         // pid 非法
         var invalidPidRequest = new JsonRpcRequest
@@ -252,8 +238,7 @@ public class SpecConformanceTests : IDisposable
     public async Task AppInstancesHandler_UnregisterInstance_ShouldBeIdempotent()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
 
         var registerRequest = new JsonRpcRequest
         {

@@ -27,12 +27,6 @@ public class AppDefinition
     public string? Description { get; set; }
 
     /// <summary>
-    /// 作用域策略：any | globalOnly | required
-    /// </summary>
-    [JsonPropertyName("scopePolicy")]
-    public string? ScopePolicy { get; set; }
-
-    /// <summary>
     /// 启动配置
     /// </summary>
     [JsonPropertyName("launch")]

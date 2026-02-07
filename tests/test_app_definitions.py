@@ -47,7 +47,6 @@ class TestAppDefinitions(unittest.TestCase):
             "appId": "test-app-1",
             "displayName": "Test Application",
             "description": "This is a test application",
-            "scopePolicy": "any",
             "launch": {
                 "exePath": "echo",
                 "argsTemplate": "Hello from Test Application"
@@ -161,7 +160,7 @@ class TestAppDefinitions(unittest.TestCase):
             definitions_dir = self.get_test_app_definition_path()
             invalid_app_path = os.path.join(definitions_dir, "invalid-app.json")
 
-            # 缺少 appId/displayName/scopePolicy
+            # 缺少 appId/displayName
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid_field": "value"}')
 
@@ -197,8 +196,7 @@ class TestAppDefinitions(unittest.TestCase):
 
             invalid_app = {
                 "appId": "invalid app id",
-                "displayName": "Invalid AppId Application",
-                "scopePolicy": "any"
+                "displayName": "Invalid AppId Application"
             }
 
             with open(invalid_app_path, "w", encoding="utf-8") as f:
@@ -226,45 +224,6 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
-    def test_app_definition_scopepolicy_validation(self):
-        """测试应用程序定义 scopePolicy 值验证"""
-        result = TestResult("测试应用程序定义 scopePolicy 值验证")
-
-        try:
-            definitions_dir = self.get_test_app_definition_path()
-            invalid_app_path = os.path.join(definitions_dir, "invalid-scopepolicy-app.json")
-
-            invalid_app = {
-                "appId": "invalid-scopepolicy-app",
-                "displayName": "Invalid ScopePolicy Application",
-                "scopePolicy": "invalid"
-            }
-
-            with open(invalid_app_path, "w", encoding="utf-8") as f:
-                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
-
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            response = client.call("hub.apps.listDefinitions")
-            if not RpcAssertions.expect_success(result, response, ["definitions"]):
-                return result
-
-            definitions = response["result"]["definitions"]
-            found_invalid_app = any(d.get("appId") == "invalid-scopepolicy-app" for d in definitions)
-            if found_invalid_app:
-                result.mark_failure("❌ DevHub 错误地加载了 scopePolicy 无效定义")
-                return result
-
-            result.add_detail("✅ DevHub 正确忽略 scopePolicy 无效定义")
-            result.mark_success()
-
-        except Exception as e:
-            result.mark_failure(str(e))
-        finally:
-            self._safe_remove_file(locals().get("invalid_app_path"))
-
-        return result
-
     def test_definition_filename_must_match_appid(self):
         """测试文件名与 appId 不一致时应被忽略"""
         result = TestResult("测试文件名与 appId 不一致时应被忽略")
@@ -275,8 +234,7 @@ class TestAppDefinitions(unittest.TestCase):
 
             mismatch_app = {
                 "appId": "real-app-id",
-                "displayName": "Mismatch Name Application",
-                "scopePolicy": "any"
+                "displayName": "Mismatch Name Application"
             }
 
             with open(mismatch_path, "w", encoding="utf-8") as f:
@@ -312,7 +270,6 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_get_nonexistent_definition(),
             self.test_invalid_app_definition(),
             self.test_app_definition_appid_format_validation(),
-            self.test_app_definition_scopepolicy_validation(),
             self.test_definition_filename_must_match_appid()
         ]
 

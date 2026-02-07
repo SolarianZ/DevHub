@@ -366,7 +366,6 @@ public class InvocationRequestFlowTests : IDisposable
         {
             appId,
             displayName = appId,
-            scopePolicy = "any",
             capabilities = new
             {
                 rpc = rpcEnabled,

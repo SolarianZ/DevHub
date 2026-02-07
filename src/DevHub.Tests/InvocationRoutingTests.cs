@@ -181,7 +181,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_WithRpcDisabledDefinition_ShouldReturnForbidden()
     {
-        WriteDefinition("disabled-app", scopePolicy: "any", rpcEnabled: false);
+        WriteDefinition("disabled-app", rpcEnabled: false);
 
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -352,7 +352,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_AutoLaunchWithoutLaunchConfig_ShouldReturnLaunchFailed()
     {
-        WriteDefinition("notify-launch-missing", scopePolicy: "any", rpcEnabled: true);
+        WriteDefinition("notify-launch-missing", rpcEnabled: true);
 
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -403,14 +403,13 @@ public class InvocationRoutingTests : IDisposable
         }
     }
 
-    private void WriteDefinition(string appId, string scopePolicy, bool rpcEnabled)
+    private void WriteDefinition(string appId, bool rpcEnabled)
     {
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
             displayName = appId,
-            scopePolicy,
             capabilities = new
             {
                 rpc = rpcEnabled,

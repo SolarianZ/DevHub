@@ -11,12 +11,6 @@ namespace DevHub.Core.Services;
 public class DefinitionLoader
 {
     private static readonly Regex AppIdPattern = new("^[a-z0-9][a-z0-9.-]*$", RegexOptions.Compiled);
-    private static readonly HashSet<string> ValidScopePolicies = new(StringComparer.Ordinal)
-    {
-        "any",
-        "globalOnly",
-        "required"
-    };
 
     private readonly string _definitionsPath;
     private readonly ILogger<DefinitionLoader> _logger;
@@ -160,18 +154,6 @@ public class DefinitionLoader
         if (string.IsNullOrWhiteSpace(definition.DisplayName))
         {
             reason = "缺少 displayName";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(definition.ScopePolicy))
-        {
-            reason = "缺少 scopePolicy";
-            return false;
-        }
-
-        if (!ValidScopePolicies.Contains(definition.ScopePolicy))
-        {
-            reason = "scopePolicy 取值无效";
             return false;
         }
 
