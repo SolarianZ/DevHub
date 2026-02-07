@@ -30,11 +30,10 @@ public class CoreServiceTests
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
-        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
         try
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
             var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
             var token = fileSystemManager.GetToken();
@@ -44,7 +43,6 @@ public class CoreServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
             if (Directory.Exists(testRoot))
             {
                 Directory.Delete(testRoot, recursive: true);
@@ -57,11 +55,10 @@ public class CoreServiceTests
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
-        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
         try
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
             var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
             var token1 = fileSystemManager.GetToken();
@@ -72,7 +69,6 @@ public class CoreServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
             if (Directory.Exists(testRoot))
             {
                 Directory.Delete(testRoot, recursive: true);
@@ -85,11 +81,10 @@ public class CoreServiceTests
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
-        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
         try
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
             var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, testRoot);
             var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, testRoot);
@@ -103,7 +98,6 @@ public class CoreServiceTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
             if (Directory.Exists(testRoot))
             {
                 Directory.Delete(testRoot, recursive: true);

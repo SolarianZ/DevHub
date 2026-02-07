@@ -10,7 +10,7 @@ import unittest
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, TestResult
+from tests.test_base import DiscoveryService, TestResult, temporary_env_var
 
 
 class TestLaunchDiscovery(unittest.TestCase):
@@ -301,50 +301,44 @@ class TestLaunchDiscovery(unittest.TestCase):
 
             # 创建临时目录作为自定义运行时目录
             with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-") as temp_dir:
-                # 设置环境变量
-                os.environ["DEVHUB_RUNTIME_DIR"] = temp_dir
+                with temporary_env_var("DEVHUB_RUNTIME_DIR", temp_dir):
+                    # 验证 DiscoveryService 能够读取环境变量
+                    discovery_dir = DiscoveryService.get_runtime_directory()
+                    if discovery_dir == temp_dir:
+                        result.add_detail(f"✅ DiscoveryService 正确读取了 DEVHUB_RUNTIME_DIR: {temp_dir}")
+                    else:
+                        result.mark_failure(f"❌ DiscoveryService 未正确读取 DEVHUB_RUNTIME_DIR: 实际值 {discovery_dir}, 预期值 {temp_dir}")
+                        return result
 
-                # 验证 DiscoveryService 能够读取环境变量
-                discovery_dir = DiscoveryService.get_runtime_directory()
-                if discovery_dir == temp_dir:
-                    result.add_detail(f"✅ DiscoveryService 正确读取了 DEVHUB_RUNTIME_DIR: {temp_dir}")
-                else:
-                    result.mark_failure(f"❌ DiscoveryService 未正确读取 DEVHUB_RUNTIME_DIR: 实际值 {discovery_dir}, 预期值 {temp_dir}")
-                    return result
+                    # 创建所需的子目录和文件
+                    os.makedirs(os.path.join(temp_dir, "apps", "definitions"), exist_ok=True)
 
-                # 创建所需的子目录和文件
-                os.makedirs(os.path.join(temp_dir, "apps", "definitions"), exist_ok=True)
+                    # 创建临时的 hub.json 和 token.txt
+                    with open(os.path.join(temp_dir, "hub.json"), "w", encoding="utf-8") as f:
+                        import json
+                        json.dump({
+                            "protocolVersion": 1,
+                            "pid": 12345,
+                            "httpBaseUrl": "http://127.0.0.1:12345",
+                            "wsUrl": "ws://127.0.0.1:12345/ws",
+                            "tokenFile": os.path.join(temp_dir, "token.txt"),
+                            "startedAtUtc": "2026-01-30T12:34:56Z"
+                        }, f)
 
-                # 创建临时的 hub.json 和 token.txt
-                with open(os.path.join(temp_dir, "hub.json"), "w", encoding="utf-8") as f:
-                    import json
-                    json.dump({
-                        "protocolVersion": 1,
-                        "pid": 12345,
-                        "httpBaseUrl": "http://127.0.0.1:12345",
-                        "wsUrl": "ws://127.0.0.1:12345/ws",
-                        "tokenFile": os.path.join(temp_dir, "token.txt"),
-                        "startedAtUtc": "2026-01-30T12:34:56Z"
-                    }, f)
+                    with open(os.path.join(temp_dir, "token.txt"), "w", encoding="utf-8") as f:
+                        f.write("test-token-123")
 
-                with open(os.path.join(temp_dir, "token.txt"), "w", encoding="utf-8") as f:
-                    f.write("test-token-123")
+                    # 测试获取 hub 信息
+                    base_url, token = DiscoveryService.get_hub_info()
+                    if base_url == "http://127.0.0.1:12345" and token == "test-token-123":
+                        result.add_detail("✅ 成功从自定义运行时目录获取 hub 信息")
+                    else:
+                        result.mark_failure(f"❌ 从自定义运行时目录获取的 hub 信息不正确: base_url={base_url}, token={token}")
 
-                # 测试获取 hub 信息
-                base_url, token = DiscoveryService.get_hub_info()
-                if base_url == "http://127.0.0.1:12345" and token == "test-token-123":
-                    result.add_detail("✅ 成功从自定义运行时目录获取 hub 信息")
-                else:
-                    result.mark_failure(f"❌ 从自定义运行时目录获取的 hub 信息不正确: base_url={base_url}, token={token}")
-
-                result.mark_success()
+                    result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
-        finally:
-            # 清除环境变量
-            if "DEVHUB_RUNTIME_DIR" in os.environ:
-                del os.environ["DEVHUB_RUNTIME_DIR"]
 
         return result
 

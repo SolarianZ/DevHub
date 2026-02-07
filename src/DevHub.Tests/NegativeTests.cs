@@ -85,24 +85,16 @@ public class NegativeTests : IDisposable
     {
         // Arrange
         var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
-        var previousRuntimeDirectory = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
 
-        try
-        {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDirectory);
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, _testDirectory);
+        using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, _testDirectory);
 
-            // Act
-            fileSystemManager.InitializeDirectories();
+        // Act
+        fileSystemManager.InitializeDirectories();
 
-            // Assert
-            Assert.True(Directory.Exists(_testDirectory));
-            Assert.True(Directory.Exists(runtimeDirectory));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", previousRuntimeDirectory);
-        }
+        // Assert
+        Assert.True(Directory.Exists(_testDirectory));
+        Assert.True(Directory.Exists(runtimeDirectory));
     }
 
     [Fact]

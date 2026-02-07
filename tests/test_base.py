@@ -8,8 +8,32 @@ import json
 import platform
 import requests
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, List, Optional
+
+
+@contextmanager
+def temporary_env_var(name: str, value: Optional[str]):
+    """
+    临时设置环境变量并在退出时恢复原值。
+
+    该 helper 用于解决集成测试中的环境污染问题：
+    某些用例（例如 DEVHUB_RUNTIME_DIR 相关测试）若直接覆盖并清空环境变量，
+    会导致后续用例读取到错误的 hub.json 路径，从而出现 Connection refused。
+    """
+    original_value = os.environ.get(name)
+    try:
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+        yield
+    finally:
+        if original_value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = original_value
 
 
 class DiscoveryService:

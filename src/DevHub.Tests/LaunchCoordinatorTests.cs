@@ -13,7 +13,7 @@ public class LaunchCoordinatorTests : IDisposable
 {
     private readonly string _tempDirectory;
     private readonly string _runtimeDirectory;
-    private readonly string? _originalRuntimeDir;
+    private readonly EnvironmentVariableScope _runtimeScope;
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<LaunchCoordinator>> _launchLogger = new();
@@ -25,10 +25,9 @@ public class LaunchCoordinatorTests : IDisposable
     {
         _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchCoordinatorTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
-        _originalRuntimeDir = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
         Directory.CreateDirectory(_tempDirectory);
         Directory.CreateDirectory(_runtimeDirectory);
-        Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", _runtimeDirectory);
+        _runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", _runtimeDirectory);
     }
 
     [Fact]
@@ -227,7 +226,7 @@ public class LaunchCoordinatorTests : IDisposable
     /// </summary>
     public void Dispose()
     {
-        Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", _originalRuntimeDir);
+        _runtimeScope.Dispose();
 
         if (Directory.Exists(_tempDirectory))
         {
