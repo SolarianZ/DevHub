@@ -96,6 +96,89 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        var request = new JsonRpcRequest
+        {
+            Id = "request-target-instance-missing",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "target-missing.app",
+                target = new { scope = (string?)null, instanceId = "inst-not-exists" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 1000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32010, response.Error.Code);
+        Assert.Equal("instance_not_found", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("target_instance_missing", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Notify_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        var request = new JsonRpcRequest
+        {
+            Id = "notify-target-instance-missing",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "target-missing.app",
+                target = new { scope = (string?)null, instanceId = "inst-not-exists" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32010, response.Error.Code);
+        Assert.Equal("instance_not_found", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("target_instance_missing", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Notify_WithRpcDisabledDefinition_ShouldReturnForbidden()
     {
         WriteDefinition("disabled-app", scopePolicy: "any", rpcEnabled: false);

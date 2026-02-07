@@ -196,12 +196,22 @@ namespace DevHub.Host
                                 rpcRequest.Method, rpcRequest.Id, clientId);
 
                             // 校验请求头
-                            if (!ValidateHeaders(request, fsManager, endpointLogger, rpcRequest.Id, out var errorResponse))
+                            if (!ValidateHeaders(
+                                request,
+                                fsManager,
+                                endpointLogger,
+                                rpcRequest.Id,
+                                out var errorResponse,
+                                out var validatedClientId,
+                                out var validatedClientSessionId))
                             {
                                 endpointLogger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
                                     rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
                                 return Results.Json(errorResponse, jsonOptions);
                             }
+
+                            rpcRequest.ClientId = validatedClientId;
+                            rpcRequest.ClientSessionId = validatedClientSessionId;
 
                             // Spec: 所有 hub.* 方法 params 为数组时返回 invalid_params
                             if (IsHubMethodParamsArray(rpcRequest))
@@ -287,8 +297,18 @@ namespace DevHub.Host
         /// <summary>
         /// 校验 HTTP 请求头
         /// </summary>
-        private static bool ValidateHeaders(HttpRequest request, FileSystemManager fileSystemManager, ILogger<Program> logger, object? requestId, out JsonRpcResponse errorResponse)
+        private static bool ValidateHeaders(
+            HttpRequest request,
+            FileSystemManager fileSystemManager,
+            ILogger<Program> logger,
+            object? requestId,
+            out JsonRpcResponse errorResponse,
+            out string? validatedClientId,
+            out string? validatedClientSessionId)
         {
+            validatedClientId = null;
+            validatedClientSessionId = null;
+
             // 校验 Content-Type（必须为 application/json，可带 charset）
             if (!IsValidJsonContentType(request.ContentType))
             {
@@ -341,6 +361,7 @@ namespace DevHub.Host
             }
 
             var clientId = clientIdValue.ToString().Trim();
+            validatedClientId = clientId;
             logger.LogDebug("客户端ID校验通过: {ClientId}", clientId);
 
             // 校验会话 ID
@@ -368,6 +389,7 @@ namespace DevHub.Host
                 return false;
             }
 
+            validatedClientSessionId = sessionId;
             logger.LogDebug("会话ID校验通过: {SessionId}", sessionId);
 
             // 校验 Authorization 头

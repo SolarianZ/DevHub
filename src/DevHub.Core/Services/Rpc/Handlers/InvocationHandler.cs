@@ -98,12 +98,20 @@ public class InvocationHandler : IRpcHandler
         {
             if (!options.QueueIfOffline)
             {
-                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+                return CreateError(
+                    request.Id,
+                    -32010,
+                    "instance_not_found",
+                    new { reason = ResolveNoCandidateReason(target) });
             }
 
             if (definition is null)
             {
-                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+                return CreateError(
+                    request.Id,
+                    -32010,
+                    "instance_not_found",
+                    new { reason = ResolveNoCandidateReason(target) });
             }
 
             if (options.AutoLaunch)
@@ -145,8 +153,10 @@ public class InvocationHandler : IRpcHandler
             },
             Caller = new InvocationCaller
             {
-                ClientId = "unknown",
-                ClientSessionId = Guid.Empty.ToString("D")
+                ClientId = string.IsNullOrWhiteSpace(request.ClientId) ? "unknown" : request.ClientId,
+                ClientSessionId = string.IsNullOrWhiteSpace(request.ClientSessionId)
+                    ? Guid.Empty.ToString("D")
+                    : request.ClientSessionId
             },
             State = InvocationState.Created
         };
@@ -200,12 +210,20 @@ public class InvocationHandler : IRpcHandler
         {
             if (!options.QueueIfOffline)
             {
-                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+                return CreateError(
+                    request.Id,
+                    -32010,
+                    "instance_not_found",
+                    new { reason = ResolveNoCandidateReason(target) });
             }
 
             if (definition is null)
             {
-                return CreateError(request.Id, -32010, "instance_not_found", new { reason = "offline_no_queue" });
+                return CreateError(
+                    request.Id,
+                    -32010,
+                    "instance_not_found",
+                    new { reason = ResolveNoCandidateReason(target) });
             }
 
             if (options.AutoLaunch)
@@ -248,8 +266,10 @@ public class InvocationHandler : IRpcHandler
             },
             Caller = new InvocationCaller
             {
-                ClientId = "unknown",
-                ClientSessionId = Guid.Empty.ToString("D")
+                ClientId = string.IsNullOrWhiteSpace(request.ClientId) ? "unknown" : request.ClientId,
+                ClientSessionId = string.IsNullOrWhiteSpace(request.ClientSessionId)
+                    ? Guid.Empty.ToString("D")
+                    : request.ClientSessionId
             },
             State = InvocationState.Created
         };
@@ -800,5 +820,12 @@ public class InvocationHandler : IRpcHandler
                 Data = data
             }
         };
+    }
+
+    private static string ResolveNoCandidateReason(InvocationTarget target)
+    {
+        return string.IsNullOrWhiteSpace(target.InstanceId)
+            ? "offline_no_queue"
+            : "target_instance_missing";
     }
 }

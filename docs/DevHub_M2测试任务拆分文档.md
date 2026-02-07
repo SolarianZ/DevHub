@@ -9,15 +9,13 @@
 
 ## 当前状态（截至 2026-02-07）
 
-- M2 测试任务总体状态：**开发中**。
-- 本批次已完成：
-  - Python：`test_invocation_notify.py`、`test_invocation_poll_respond.py` 已新增并接入 `test_runner.py`
-  - Python 基础能力：`test_base.py` 已补 invocation 相关 helper
-  - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs` 已新增并通过
-- 本批次仍在开发：
-  - `test_launch_invocation.py`（本轮完成 `LAUNCH-001` 与关键负例）
-  - `LaunchCoordinatorTests.cs`（本轮完成最小闭环用例，dedupe 模板类用例待补）
-  - lease 到期重投递（30s）长耗时场景（已落地，full-only）
+- M2 测试任务总体状态：**已完成**。
+- 本批次完成项（复验日期：2026-02-07）：
+  - Python：`test_invocation_notify.py`、`test_invocation_request.py`、`test_invocation_poll_respond.py`、`test_launch_invocation.py` 已落地并接入 `test_runner.py`。
+  - Python 基础能力：`test_base.py` invocation 相关 helper 已补齐。
+  - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs`、`InvocationRequestWaiterTests.cs`、`LaunchCoordinatorTests.cs` 已落地并通过。
+  - strict 对齐补齐：`target_instance_missing` 语义与 `caller` 头透传相关黑白盒测试已补齐。
+  - 回归策略：默认模式已迁移离线判定长耗时场景为 `full-only`，`--fast`/默认模式不再执行 35s 离线等待。
 
 ## 0. 文档目标与使用方式
 
@@ -180,7 +178,7 @@
 ### 3.2 `InvocationRoutingTests.cs`
 - [x] 指定 `target.instanceId` 仅命中对应实例，不发生 scope/global 回退。
 - [x] 指定 `target.scope` 仅命中对应 scope，不回退 global。
-- [ ] 无定义且 `queueIfOffline=true` 时，拒绝入 Pending（返回 instance_not_found 路径）。
+- [x] 无定义且 `queueIfOffline=true` 时，拒绝入 Pending（返回 instance_not_found 路径）。
 
 ### 3.3 `InvocationStoreTests.cs`
 - [x] 状态迁移：Created -> Queued/Pending -> Delivered -> Completed。
@@ -209,16 +207,17 @@
 ## 4. 测试数据与环境任务
 
 ### 4.1 AppDefinition 样例准备
-- [ ] 增加 M2 用 definition：支持 `capabilities.rpc=true` 与 `launch` 配置。
-- [ ] 增加负例 definition：`capabilities.rpc=false`。
+- [x] 增加 M2 用 definition：支持 `capabilities.rpc=true` 与 `launch` 配置。
+- [x] 增加负例 definition：`capabilities.rpc=false`。
 
 ### 4.2 实例 ID 与隔离策略
-- [ ] 每个用例使用唯一 `instanceId`（带时间戳/uuid）。
-- [ ] 每个用例结束执行 unregister（失败也要清理）。
+- [x] 每个用例使用唯一 `instanceId`（带时间戳/uuid）。
+- [x] 每个用例结束执行 unregister（失败也要清理）。
 
 ### 4.3 长耗时场景隔离
 - [x] lease 到期类用例单独分组，避免拖慢默认回归（full-only）。
-- [ ] 默认回归优先 2~5 秒可完成用例。
+- [x] 默认回归优先 2~5 秒可完成用例。
+- [x] `test_runner` 默认模式已将 AppInstance 离线判定（35s）迁移到 `--full`（同步于 2026-02-07）。
 
 ---
 

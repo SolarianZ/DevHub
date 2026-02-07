@@ -114,6 +114,15 @@ class TestInvocationNotify(unittest.TestCase):
                 result.mark_failure(f"❌ attempt 非 1: {delivery}")
                 return result
 
+            caller = found.get("caller", {})
+            if caller.get("clientId") != client.headers.get("X-DevHub-ClientId"):
+                result.mark_failure(f"❌ caller.clientId 不匹配: {caller}")
+                return result
+
+            if caller.get("clientSessionId") != client.headers.get("X-DevHub-ClientSessionId"):
+                result.mark_failure(f"❌ caller.clientSessionId 不匹配: {caller}")
+                return result
+
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
@@ -272,6 +281,44 @@ class TestInvocationNotify(unittest.TestCase):
 
         return result
 
+    def test_notify_target_instance_missing_should_return_specific_reason(self):
+        """notify 指定 target.instanceId 且不可达时返回 target_instance_missing"""
+        result = TestResult("notify target.instanceId 缺失返回 target_instance_missing")
+        definition_path = None
+
+        try:
+            app_id = "m2-notify-target-missing-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                target_instance_id="inst-target-not-found",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="notify-target-missing",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32010, "instance_not_found"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "target_instance_missing"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_notify_online_delivery(),
@@ -279,6 +326,7 @@ class TestInvocationNotify(unittest.TestCase):
             self.test_notify_with_target_instance_and_autolaunch_true_should_fail(),
             self.test_notify_with_autolaunch_true_and_queue_false_should_fail(),
             self.test_notify_with_ttl_less_than_1000_should_fail(),
+            self.test_notify_target_instance_missing_should_return_specific_reason(),
         ]
 
 

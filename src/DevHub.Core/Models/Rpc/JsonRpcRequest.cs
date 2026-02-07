@@ -30,4 +30,16 @@ public class JsonRpcRequest
     /// </summary>
     [JsonPropertyName("params")]
     public object? Params { get; set; }
+
+    /// <summary>
+    /// 请求头中的客户端 ID（仅运行时上下文，非 JSON-RPC 负载字段）。
+    /// </summary>
+    [JsonIgnore]
+    public string? ClientId { get; set; }
+
+    /// <summary>
+    /// 请求头中的客户端会话 ID（仅运行时上下文，非 JSON-RPC 负载字段）。
+    /// </summary>
+    [JsonIgnore]
+    public string? ClientSessionId { get; set; }
 }

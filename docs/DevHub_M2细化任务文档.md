@@ -9,7 +9,7 @@
 
 ## 当前状态（截至 2026-02-07）
 
-- M2 总体状态：**开发中**（按“测试先行 + 小步迭代”推进）。
+- M2 总体状态：**已完成**（按“测试先行 + 小步迭代”推进并已闭环）。
 - 第一迭代已完成（本批次）：
   - `hub.invoke.notify`（默认值、校验、Queued/Pending 入队）
   - `hub.invoke.poll`（门禁、长轮询、lease 返回、`lastSeenUtc` 更新）
@@ -31,9 +31,9 @@
 ## 0. 目标与验收对齐（必须满足）
 
 ### 0.1 M2 必须实现（对齐里程碑验收清单）
-- `hub.invoke.request` 实现闭环：caller -> hub -> callee `poll` -> callee `respond` -> caller 收到结果。**（开发中）**
+- `hub.invoke.request` 实现闭环：caller -> hub -> callee `poll` -> callee `respond` -> caller 收到结果。**（已完成）**
 - `hub.invoke.notify` 支持入队并被 `hub.invoke.poll` 正确拉取。**（已完成：第一迭代）**
-- `queueIfOffline + autoLaunch` 在无在线实例时可触发 `hub.apps.launch`，实例注册后可投递。**（开发中：LAUNCH-001 已完成，dedupe 待完成）**
+- `queueIfOffline + autoLaunch` 在无在线实例时可触发 `hub.apps.launch`，实例注册后可投递。**（已完成）**
 - Lease 到期支持重投递；TTL 到期返回 `invocation_expired (-32011)`。**（本轮完成：重投递 + attempt 递增）**
 
 ### 0.2 协议输出约束（M2 继续沿用）

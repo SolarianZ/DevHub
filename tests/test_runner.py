@@ -51,7 +51,7 @@ def run_all_tests(full=False, fast=False):
         coverage = "M2 快速回归（跳过 lease(30s) 与并发压力等长耗时场景）"
     else:
         mode = "default"
-        coverage = "M2 默认回归（核心链路 + Spec MUST，不含 full 扩展慢场景）"
+        coverage = "M2 默认回归（核心链路 + Spec MUST，离线判定等长耗时场景归入 full）"
     logger.info("开始 DevHub M2 功能测试，模式: %s", mode)
 
     # 创建测试报告
@@ -72,7 +72,7 @@ def run_all_tests(full=False, fast=False):
 
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
-    report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=not fast))
+    report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=full))
 
     logger.info("=== 运行 Invocation Notify 测试 ===")
     invocation_notify_tests = TestInvocationNotify()
@@ -133,8 +133,8 @@ def print_usage():
     print("Options:")
     print("  -h, --help    Show this help message and exit")
     print("  --no-header   Don't print test header")
-    print("  --fast        Run fast suite (skip timeout tests)")
-    print("  --full        Run full suite including long-running tests")
+    print("  --fast        Run fast suite (skip timeout/offline long tests)")
+    print("  --full        Run full suite including timeout/offline long tests")
 
 
 def main():
@@ -145,8 +145,8 @@ def main():
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
 
     mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout tests)")
-    mode_group.add_argument("--full", action="store_true", help="Run full suite including long-running tests")
+    mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout/offline long tests)")
+    mode_group.add_argument("--full", action="store_true", help="Run full suite including timeout/offline long tests")
 
     args = parser.parse_args()
 

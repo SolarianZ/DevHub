@@ -336,6 +336,49 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_target_instance_missing_should_return_specific_reason(self):
+        """request 指定 target.instanceId 且不可达时返回 target_instance_missing"""
+        result = TestResult("request target.instanceId 缺失返回 target_instance_missing")
+        definition_path = None
+
+        try:
+            app_id = "m2-request-target-missing-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                args={},
+                target_instance_id="inst-target-not-found",
+                options={
+                    "ttlMs": 3000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="request-target-missing",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32010, "instance_not_found"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "target_instance_missing"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_request_roundtrip_success(),
@@ -343,6 +386,7 @@ class TestInvocationRequest(unittest.TestCase):
             self.test_request_invalid_waittimeout_gt_ttl(),
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),
+            self.test_request_target_instance_missing_should_return_specific_reason(),
         ]
 
 
@@ -359,4 +403,3 @@ if __name__ == "__main__":
         if result.error_message:
             print(f"  错误: {result.error_message}")
         print()
-
