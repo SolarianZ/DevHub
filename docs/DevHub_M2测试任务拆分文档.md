@@ -7,6 +7,18 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_M2细化任务文档.md](./DevHub_M2细化任务文档.md)
 
+## 当前状态（截至 2026-02-07）
+
+- M2 测试任务总体状态：**开发中**。
+- 本批次已完成：
+  - Python：`test_invocation_notify.py`、`test_invocation_poll_respond.py` 已新增并接入 `test_runner.py`
+  - Python 基础能力：`test_base.py` 已补 invocation 相关 helper
+  - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs` 已新增并通过
+- 本批次仍在开发：
+  - `test_invocation_request.py`、`test_launch_invocation.py`
+  - `InvocationRequestWaiterTests.cs`、`LaunchCoordinatorTests.cs`
+  - lease 到期重投递（30s）长耗时场景
+
 ## 0. 文档目标与使用方式
 
 ### 0.1 目标
@@ -41,40 +53,40 @@
 ## 2. Python 集成测试任务拆分（黑盒）
 
 ### 2.1 文件规划（新增）
-- [ ] 新增 `tests/test_invocation_notify.py`
+- [x] 新增 `tests/test_invocation_notify.py`
 - [ ] 新增 `tests/test_invocation_request.py`
-- [ ] 新增 `tests/test_invocation_poll_respond.py`
+- [x] 新增 `tests/test_invocation_poll_respond.py`
 - [ ] 新增 `tests/test_launch_invocation.py`
 
 > 命名风格与现有文件保持一致：`test_xxx.py`，类名 `TestXxx(unittest.TestCase)`。
 
 ### 2.2 基础能力扩展（复用 `tests/test_base.py`）
-- [ ] 增加 `RpcClient.call_with_timeout(method, params, timeout_sec)`，支持 request 超时场景。
-- [ ] 增加公共方法：`register_instance(instance_id, app_id, scope, poll, respond)`。
-- [ ] 增加公共方法：`heartbeat_instance(instance_id)`、`unregister_instance(instance_id)`。
-- [ ] 增加公共方法：`poll_once(instance_id, max_count=10, wait_ms=25000)`。
-- [ ] 增加公共方法：`respond_value(instance_id, invocation_id, value)` 与 `respond_error(...)`。
-- [ ] 增加公共方法：`invoke_notify(...)` 与 `invoke_request(...)` 的参数构造器（包含默认值填充）。
+- [x] 增加 `RpcClient.call_with_timeout(method, params, timeout_sec)`，支持 request 超时场景。
+- [x] 增加公共方法：`register_instance(instance_id, app_id, scope, poll, respond)`。
+- [x] 增加公共方法：`heartbeat_instance(instance_id)`、`unregister_instance(instance_id)`。
+- [x] 增加公共方法：`poll_once(instance_id, max_count=10, wait_ms=25000)`。
+- [x] 增加公共方法：`respond_value(instance_id, invocation_id, value)` 与 `respond_error(...)`。
+- [x] 增加公共方法：`invoke_notify(...)` 与 `invoke_request(...)` 的参数构造器（包含默认值填充）。
 
 ### 2.3 用例任务：`tests/test_invocation_notify.py`
 
 #### `M2-NOTIFY-001` notify 在线投递
-- [ ] 前置：注册 1 个 `invoke.poll=true` 实例。
-- [ ] 步骤：caller 发 `hub.invoke.notify`；callee 调 `hub.invoke.poll` 拉取。
-- [ ] 断言：
+- [x] 前置：注册 1 个 `invoke.poll=true` 实例。
+- [x] 步骤：caller 发 `hub.invoke.notify`；callee 调 `hub.invoke.poll` 拉取。
+- [x] 断言：
   - notify 返回 `ok=true` 与 `invocationId`。
   - poll 返回 `items` 至少 1 条，且 `invocationId/method/target` 匹配。
   - `delivery.leaseSeconds=30`，`attempt=1`。
 
 #### `M2-NOTIFY-002` notify 离线入队 + 上线投递
-- [ ] 前置：不注册实例，准备有效 AppDefinition。
-- [ ] 步骤：caller 发 notify（`queueIfOffline=true`）；稍后注册实例并 poll。
-- [ ] 断言：
+- [x] 前置：不注册实例，准备有效 AppDefinition。
+- [x] 步骤：caller 发 notify（`queueIfOffline=true`）；稍后注册实例并 poll。
+- [x] 断言：
   - notify 返回成功（入队）。
   - 实例上线后 poll 可取到该 invocation。
 
 #### 参数校验补充
-- [ ] 指定 `target.instanceId` 且显式 `autoLaunch=true` -> `-32602`。
+- [x] 指定 `target.instanceId` 且显式 `autoLaunch=true` -> `-32602`。
 - [ ] `autoLaunch=true` 且 `queueIfOffline=false` -> `-32602`。
 - [ ] `ttlMs<1000` -> `-32602`。
 
@@ -107,13 +119,13 @@
 ### 2.5 用例任务：`tests/test_invocation_poll_respond.py`
 
 #### `M2-POLL-001` 未注册实例 poll
-- [ ] 步骤：直接调用 `hub.invoke.poll`（随机 instanceId）。
-- [ ] 断言：`-32010 instance_not_found`，`error.message` 精确匹配。
+- [x] 步骤：直接调用 `hub.invoke.poll`（随机 instanceId）。
+- [x] 断言：`-32010 instance_not_found`，`error.message` 精确匹配。
 
 #### `M2-RESP-001` 重复/越权 respond
-- [ ] 重复响应场景：同 invocation 连续 respond 两次。
+- [x] 重复响应场景：同 invocation 连续 respond 两次。
 - [ ] 越权响应场景：非 lease holder 的实例 respond。
-- [ ] 断言：均返回 `-32030 delivery_conflict`。
+- [ ] 断言：均返回 `-32030 delivery_conflict`（开发中：重复响应已覆盖，越权响应待补）。
 
 #### `M2-LEASE-001` lease 到期重投递
 - [ ] 前置：生成 invocation 并由实例 A poll 获取（不 respond）。
@@ -147,7 +159,7 @@
 - [ ] 缺失 `launch` 配置 -> `-32020 launch_failed` + `reason=launch_config_missing`。
 
 ### 2.7 `tests/test_runner.py` 集成任务
-- [ ] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`、`TestLaunchInvocation`。
+- [ ] 增加新模块导入：`TestInvocationNotify`、`TestInvocationRequest`、`TestInvocationPollRespond`、`TestLaunchInvocation`（开发中：前两者中 `Request/Launch` 仍未接入）。
 - [ ] 运行顺序建议：launch_discovery -> auth -> app_def -> app_instance -> invocation -> invalid_params -> internal_errors。
 - [ ] `--fast` 模式跳过 `lease(30s)` 与超时长场景。
 - [ ] `--full` 模式增加并发与压力场景（dedupe 并发、批量 poll）。
@@ -157,25 +169,25 @@
 ## 3. C# 单元测试任务拆分（白盒）
 
 ### 3.1 文件规划（新增）
-- [ ] `src/DevHub.Tests/InvocationRoutingTests.cs`
-- [ ] `src/DevHub.Tests/InvocationStoreTests.cs`
-- [ ] `src/DevHub.Tests/InvocationLeaseTests.cs`
+- [x] `src/DevHub.Tests/InvocationRoutingTests.cs`
+- [x] `src/DevHub.Tests/InvocationStoreTests.cs`
+- [x] `src/DevHub.Tests/InvocationLeaseTests.cs`
 - [ ] `src/DevHub.Tests/InvocationRequestWaiterTests.cs`
 - [ ] `src/DevHub.Tests/LaunchCoordinatorTests.cs`
 
 ### 3.2 `InvocationRoutingTests.cs`
-- [ ] 指定 `target.instanceId` 仅命中对应实例，不发生 scope/global 回退。
-- [ ] 指定 `target.scope` 仅命中对应 scope，不回退 global。
+- [x] 指定 `target.instanceId` 仅命中对应实例，不发生 scope/global 回退。
+- [x] 指定 `target.scope` 仅命中对应 scope，不回退 global。
 - [ ] 无定义且 `queueIfOffline=true` 时，拒绝入 Pending（返回 instance_not_found 路径）。
 
 ### 3.3 `InvocationStoreTests.cs`
-- [ ] 状态迁移：Created -> Queued/Pending -> Delivered -> Completed。
+- [x] 状态迁移：Created -> Queued/Pending -> Delivered -> Completed。
 - [ ] 失败迁移：Delivered -> Failed / Expired / Timeout。
 - [ ] 请求取消后，后续 respond 必然拒绝（expired/conflict 路径之一，按实现约定断言）。
 
 ### 3.4 `InvocationLeaseTests.cs`
-- [ ] poll 分配 lease（30s）并记录 holder。
-- [ ] lease 未过期时非 holder respond 返回 conflict。
+- [x] poll 分配 lease（30s）并记录 holder。
+- [x] lease 未过期时非 holder respond 返回 conflict。
 - [ ] lease 到期回收后可重投递且 `attempt++`。
 
 ### 3.5 `InvocationRequestWaiterTests.cs`
@@ -255,7 +267,7 @@
 
 ## 8. 交付清单（测试阶段）
 
-- [ ] Python 新增 4 个 M2 测试模块并接入 `test_runner.py`。
-- [ ] C# 新增 5 个白盒测试文件并通过 `dotnet test`。
+- [ ] Python 新增 4 个 M2 测试模块并接入 `test_runner.py`（开发中：已完成 2/4）。
+- [ ] C# 新增 5 个白盒测试文件并通过 `dotnet test`（开发中：已完成 3/5，且当前已通过）。
 - [ ] 产出测试报告：`temp/test_results.txt`、`temp/test_results.json`、`temp/test_log.txt`。
 - [ ] 与 `DevHub_M2细化任务文档.md` 的用例编号一一对应。

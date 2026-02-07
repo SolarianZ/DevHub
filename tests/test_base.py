@@ -142,6 +142,139 @@ class RpcClient:
         status_code, response = self.post_json(requests_list, headers=self.headers, timeout=30)
         return response, status_code
 
+    def call_with_timeout(self, method, params=None, timeout_sec=30, request_id="1"):
+        """带超时的 JSON-RPC 调用。"""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params or {}
+        }
+
+        _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
+        return response
+
+    def register_instance(self, instance_id, app_id, scope=None, poll=True, respond=True, pid=12345):
+        """注册实例。"""
+        return self.call("hub.apps.registerInstance", {
+            "instance": {
+                "instanceId": instance_id,
+                "appId": app_id,
+                "scope": scope,
+                "pid": pid,
+                "invoke": {
+                    "poll": poll,
+                    "respond": respond
+                }
+            }
+        })
+
+    def heartbeat_instance(self, instance_id):
+        """发送实例心跳。"""
+        return self.call("hub.apps.heartbeat", {"instanceId": instance_id})
+
+    def unregister_instance(self, instance_id):
+        """注销实例。"""
+        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+
+    def poll_once(self, instance_id, max_count=10, wait_ms=25000):
+        """执行一次 poll。"""
+        return self.call("hub.invoke.poll", {
+            "instanceId": instance_id,
+            "maxCount": max_count,
+            "waitMs": wait_ms
+        })
+
+    def respond_value(self, instance_id, invocation_id, value):
+        """回传 value。"""
+        return self.call("hub.invoke.respond", {
+            "instanceId": instance_id,
+            "invocationId": invocation_id,
+            "value": value
+        })
+
+    def respond_error(self, instance_id, invocation_id, error):
+        """回传 error。"""
+        return self.call("hub.invoke.respond", {
+            "instanceId": instance_id,
+            "invocationId": invocation_id,
+            "error": error
+        })
+
+    def build_invoke_notify_params(
+        self,
+        app_id,
+        method,
+        args=None,
+        target_scope=None,
+        target_instance_id=None,
+        ttl_ms=60000,
+        queue_if_offline=True,
+        auto_launch=None,
+    ):
+        """构造 notify 参数。"""
+        if auto_launch is None:
+            auto_launch = target_instance_id is None
+
+        return {
+            "appId": app_id,
+            "target": {
+                "scope": target_scope,
+                "instanceId": target_instance_id
+            },
+            "method": method,
+            "args": args or {},
+            "options": {
+                "ttlMs": ttl_ms,
+                "queueIfOffline": queue_if_offline,
+                "autoLaunch": auto_launch
+            }
+        }
+
+    def invoke_notify(
+        self,
+        app_id,
+        method,
+        args=None,
+        target_scope=None,
+        target_instance_id=None,
+        ttl_ms=60000,
+        queue_if_offline=True,
+        auto_launch=None,
+        request_id="1",
+    ):
+        """调用 hub.invoke.notify。"""
+        params = self.build_invoke_notify_params(
+            app_id=app_id,
+            method=method,
+            args=args,
+            target_scope=target_scope,
+            target_instance_id=target_instance_id,
+            ttl_ms=ttl_ms,
+            queue_if_offline=queue_if_offline,
+            auto_launch=auto_launch,
+        )
+        return self.call("hub.invoke.notify", params=params, request_id=request_id)
+
+    def invoke_request(self, app_id, method, args=None, options=None, request_id="1"):
+        """调用 hub.invoke.request（用于延后策略测试）。"""
+        params = {
+            "appId": app_id,
+            "target": {
+                "scope": None,
+                "instanceId": None
+            },
+            "method": method,
+            "args": args or {},
+            "options": options or {
+                "ttlMs": 300000,
+                "waitTimeoutMs": 120000,
+                "queueIfOffline": True,
+                "autoLaunch": True
+            }
+        }
+        return self.call("hub.invoke.request", params=params, request_id=request_id)
+
 
 class TestResult:
     """

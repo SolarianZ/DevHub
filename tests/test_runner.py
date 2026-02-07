@@ -15,6 +15,8 @@ from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_app_definitions import TestAppDefinitions
 from tests.test_app_instances import TestAppInstances
+from tests.test_invocation_notify import TestInvocationNotify
+from tests.test_invocation_poll_respond import TestInvocationPollRespond
 from tests.test_invalid_params import TestInvalidParams
 from tests.test_internal_errors import TestInternalErrors
 
@@ -69,6 +71,14 @@ def run_all_tests(full=False, fast=False):
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
     report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=not fast))
+
+    logger.info("=== 运行 Invocation Notify 测试 ===")
+    invocation_notify_tests = TestInvocationNotify()
+    report.results.extend(invocation_notify_tests.run_all_tests(full=full))
+
+    logger.info("=== 运行 Invocation Poll/Respond 测试 ===")
+    invocation_poll_respond_tests = TestInvocationPollRespond()
+    report.results.extend(invocation_poll_respond_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 invalid_params 参数验证测试 ===")
     invalid_params_tests = TestInvalidParams()

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
 
@@ -28,11 +29,15 @@ public static class ServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<DefinitionLoader>>();
             return new DefinitionLoader(definitionsPath, logger);
         });
+        services.AddSingleton<InvocationRoutingService>();
+        services.AddSingleton<InvocationStore>();
 
         // 注册RPC处理器
         services.AddSingleton<IRpcHandler, HubPingHandler>();
         services.AddSingleton<IRpcHandler, AppDefinitionsHandler>();
         services.AddSingleton<IRpcHandler, AppInstancesHandler>();
+        services.AddSingleton<IRpcHandler, InvocationHandler>();
+        services.AddSingleton<IRpcHandler, LaunchHandler>();
 
         // 注册RPC路由器
         services.AddSingleton<RpcRouter>();

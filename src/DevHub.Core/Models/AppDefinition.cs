@@ -37,6 +37,12 @@ public class AppDefinition
     /// </summary>
     [JsonPropertyName("launch")]
     public LaunchConfiguration? Launch { get; set; }
+
+    /// <summary>
+    /// 能力声明配置。
+    /// </summary>
+    [JsonPropertyName("capabilities")]
+    public AppCapabilities? Capabilities { get; set; }
 }
 
 /// <summary>
@@ -71,3 +77,20 @@ public class LaunchConfiguration
     public string? DedupeKeyTemplate { get; set; }
 }
 
+/// <summary>
+/// 应用能力声明。
+/// </summary>
+public class AppCapabilities
+{
+    /// <summary>
+    /// 是否允许 RPC 调用。
+    /// </summary>
+    [JsonPropertyName("rpc")]
+    public bool? Rpc { get; set; }
+
+    /// <summary>
+    /// 是否允许事件能力。
+    /// </summary>
+    [JsonPropertyName("events")]
+    public bool? Events { get; set; }
+}
