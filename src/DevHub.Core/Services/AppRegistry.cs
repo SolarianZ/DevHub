@@ -17,6 +17,10 @@ public class AppRegistry : IDisposable
     private readonly Timer _cleanupTimer;
     private bool _disposed = false;
 
+    /// <summary>
+    /// 初始化应用程序实例注册表。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
     public AppRegistry(ILogger<AppRegistry> logger)
     {
         _logger = logger;

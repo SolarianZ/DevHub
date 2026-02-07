@@ -24,6 +24,11 @@ public class DefinitionLoader
 
     private List<AppDefinition> _definitions = new();
 
+    /// <summary>
+    /// 初始化应用程序定义加载器。
+    /// </summary>
+    /// <param name="definitionsPath">应用定义目录路径。</param>
+    /// <param name="logger">日志记录器。</param>
     public DefinitionLoader(string definitionsPath, ILogger<DefinitionLoader> logger)
     {
         _definitionsPath = definitionsPath;

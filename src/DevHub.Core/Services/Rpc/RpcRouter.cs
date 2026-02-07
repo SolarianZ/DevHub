@@ -13,6 +13,11 @@ public class RpcRouter
     private readonly ConcurrentDictionary<string, List<IRpcHandler>> _handlers = new();
     private readonly ILogger<RpcRouter> _logger;
 
+    /// <summary>
+    /// 初始化 RPC 路由器并注册所有处理器。
+    /// </summary>
+    /// <param name="handlers">可用的 RPC 处理器集合。</param>
+    /// <param name="logger">日志记录器。</param>
     public RpcRouter(IEnumerable<IRpcHandler> handlers, ILogger<RpcRouter> logger)
     {
         _logger = logger;

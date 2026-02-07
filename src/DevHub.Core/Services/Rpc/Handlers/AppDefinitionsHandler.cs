@@ -1,4 +1,3 @@
-using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using Microsoft.Extensions.Logging;
@@ -14,50 +13,30 @@ public class AppDefinitionsHandler : IRpcHandler
     private readonly DefinitionLoader _definitionLoader;
     private readonly ILogger<AppDefinitionsHandler> _logger;
 
+    /// <summary>
+    /// 初始化应用定义 RPC 处理器。
+    /// </summary>
+    /// <param name="definitionLoader">应用定义加载器。</param>
+    /// <param name="logger">日志记录器。</param>
     public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILogger<AppDefinitionsHandler> logger)
     {
         _definitionLoader = definitionLoader;
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public string Method => "hub.apps";
 
+    /// <inheritdoc />
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("收到应用程序定义相关RPC请求: {Method}, RequestId: {RequestId}", request.Method, request.Id);
 
-        // 根据具体方法路由到不同处理逻辑
-        var methodParts = request.Method.Split('.');
-
-        if (methodParts.Length < 3)
+        return request.Method switch
         {
-            _logger.LogWarning("RPC方法格式无效: {Method}, RequestId: {RequestId}", request.Method, request.Id);
-            return new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = -32601,
-                    Message = "method_not_found"
-                }
-            };
-        }
-
-        var subMethod = methodParts[2];
-
-        return subMethod switch
-        {
-            "listDefinitions" => await ListDefinitionsAsync(request, cancellationToken),
-            "getDefinition" => await GetDefinitionAsync(request, cancellationToken),
-            _ => new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = -32601,
-                    Message = "method_not_found"
-                }
-            }
+            "hub.apps.listDefinitions" => await ListDefinitionsAsync(request, cancellationToken),
+            "hub.apps.getDefinition" => await GetDefinitionAsync(request, cancellationToken),
+            _ => MethodNotFound(request.Id)
         };
     }
 
@@ -92,15 +71,7 @@ public class AppDefinitionsHandler : IRpcHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
-            return Task.FromResult(new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = -32603,
-                    Message = "internal_error"
-                }
-            });
+            return Task.FromResult(InternalError(request.Id));
         }
     }
 
@@ -120,44 +91,20 @@ public class AppDefinitionsHandler : IRpcHandler
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(new JsonRpcResponse
-                {
-                    Id = request.Id,
-                    Error = new JsonRpcError
-                    {
-                        Code = -32602,
-                        Message = "invalid_params"
-                    }
-                });
+                return Task.FromResult(InvalidParams(request.Id));
             }
 
             if (!paramsElement.TryGetProperty("appId", out var appIdProperty) || appIdProperty.ValueKind != JsonValueKind.String)
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(new JsonRpcResponse
-                {
-                    Id = request.Id,
-                    Error = new JsonRpcError
-                    {
-                        Code = -32602,
-                        Message = "invalid_params"
-                    }
-                });
+                return Task.FromResult(InvalidParams(request.Id));
             }
 
             var appId = appIdProperty.GetString();
             if (string.IsNullOrWhiteSpace(appId))
             {
                 _logger.LogWarning("hub.apps.getDefinition方法参数无效: appId 不能为空, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(new JsonRpcResponse
-                {
-                    Id = request.Id,
-                    Error = new JsonRpcError
-                    {
-                        Code = -32602,
-                        Message = "invalid_params"
-                    }
-                });
+                return Task.FromResult(InvalidParams(request.Id));
             }
 
             _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
@@ -166,16 +113,7 @@ public class AppDefinitionsHandler : IRpcHandler
             if (definition == null)
             {
                 _logger.LogWarning("未找到应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
-                return Task.FromResult(new JsonRpcResponse
-                {
-                    Id = request.Id,
-                    Error = new JsonRpcError
-                    {
-                        Code = -32014,
-                        Message = "app_definition_not_found",
-                        Data = new { appId = appId }
-                    }
-                });
+                return Task.FromResult(AppDefinitionNotFound(request.Id, appId));
             }
 
             _logger.LogInformation("成功获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
@@ -195,15 +133,60 @@ public class AppDefinitionsHandler : IRpcHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
-            return Task.FromResult(new JsonRpcResponse
-            {
-                Id = request.Id,
-                Error = new JsonRpcError
-                {
-                    Code = -32603,
-                    Message = "internal_error"
-                }
-            });
+            return Task.FromResult(InternalError(request.Id));
         }
+    }
+
+    private static JsonRpcResponse MethodNotFound(object? id)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = -32601,
+                Message = "method_not_found"
+            }
+        };
+    }
+
+    private static JsonRpcResponse InvalidParams(object? id)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = -32602,
+                Message = "invalid_params"
+            }
+        };
+    }
+
+    private static JsonRpcResponse InternalError(object? id)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = -32603,
+                Message = "internal_error"
+            }
+        };
+    }
+
+    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = -32014,
+                Message = "app_definition_not_found",
+                Data = new { appId }
+            }
+        };
     }
 }

@@ -18,6 +18,12 @@ public class AppInstancesHandler : IRpcHandler
     private readonly ILogger<AppInstancesHandler> _logger;
     private readonly DefinitionLoader _definitionLoader;
 
+    /// <summary>
+    /// 初始化应用实例 RPC 处理器。
+    /// </summary>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="definitionLoader">应用定义加载器。</param>
     public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, DefinitionLoader definitionLoader)
     {
         _appRegistry = appRegistry;
@@ -25,26 +31,20 @@ public class AppInstancesHandler : IRpcHandler
         _definitionLoader = definitionLoader;
     }
 
+    /// <inheritdoc />
     public string Method => "hub.apps";
 
+    /// <inheritdoc />
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("收到应用程序实例相关RPC请求: {Method}, RequestId: {RequestId}", request.Method, request.Id);
 
-        var methodParts = request.Method.Split('.');
-        if (methodParts.Length < 3)
+        return request.Method switch
         {
-            _logger.LogWarning("RPC方法格式无效: {Method}, RequestId: {RequestId}", request.Method, request.Id);
-            return MethodNotFound(request.Id);
-        }
-
-        var subMethod = methodParts[2];
-        return subMethod switch
-        {
-            "registerInstance" => await RegisterInstanceAsync(request, cancellationToken),
-            "heartbeat" => await HeartbeatAsync(request, cancellationToken),
-            "unregisterInstance" => await UnregisterInstanceAsync(request, cancellationToken),
-            "listInstances" => await ListInstancesAsync(request, cancellationToken),
+            "hub.apps.registerInstance" => await RegisterInstanceAsync(request, cancellationToken),
+            "hub.apps.heartbeat" => await HeartbeatAsync(request, cancellationToken),
+            "hub.apps.unregisterInstance" => await UnregisterInstanceAsync(request, cancellationToken),
+            "hub.apps.listInstances" => await ListInstancesAsync(request, cancellationToken),
             _ => MethodNotFound(request.Id)
         };
     }

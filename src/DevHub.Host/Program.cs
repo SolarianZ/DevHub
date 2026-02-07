@@ -1,4 +1,3 @@
-
 using DevHub.Core.Extensions;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
@@ -10,11 +9,19 @@ using System.Threading;
 
 namespace DevHub.Host
 {
+    /// <summary>
+    /// DevHub Host 进程入口。
+    /// 负责单实例控制、依赖注入装配与 HTTP RPC 服务启动。
+    /// </summary>
     public class Program
     {
         private static Mutex? _singleInstanceMutex;
         private const string MutexName = "Local\\DevHub_SingleInstance";
 
+        /// <summary>
+        /// 应用程序主入口。
+        /// </summary>
+        /// <param name="args">命令行参数。</param>
         public static void Main(string[] args)
         {
             #region 检查是否已有实例在运行
@@ -82,7 +89,6 @@ namespace DevHub.Host
                     Log.Debug("使用默认应用程序定义目录: {DefinitionsPath}", definitionsPath);
                 }
 
-                Directory.CreateDirectory(definitionsPath);
                 builder.Services.AddDevHubCore(definitionsPath);
                 Log.Information("DevHub 核心服务注册完成");
 

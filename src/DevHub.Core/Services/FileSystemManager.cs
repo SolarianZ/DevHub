@@ -21,7 +21,11 @@ public class FileSystemManager
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
 
-    // 新增：接受自定义 definitionsPath 的构造函数
+    /// <summary>
+    /// 初始化文件系统管理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="definitionsPath">可选的应用定义目录路径覆盖。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger, string? definitionsPath = null)
     {
         _logger = logger;
@@ -54,7 +58,10 @@ public class FileSystemManager
         _hubJsonPath = Path.Combine(_runtimePath, "hub.json");
     }
 
-    // 保留默认构造函数以保持兼容性
+    /// <summary>
+    /// 使用默认配置初始化文件系统管理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger)
         : this(logger, null)
     {

@@ -11,13 +11,19 @@ public class HubPingHandler : IRpcHandler
 {
     private readonly ILogger<HubPingHandler> _logger;
 
+    /// <summary>
+    /// 初始化 hub.ping RPC 处理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
     public HubPingHandler(ILogger<HubPingHandler> logger)
     {
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public string Method => "hub.ping";
 
+    /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
