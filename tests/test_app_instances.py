@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import uuid
+import json
 import unittest
 
 # 添加项目根目录到 Python 模块搜索路径
@@ -21,6 +22,30 @@ class TestAppInstances(unittest.TestCase):
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""
         return f"test-instance-{uuid.uuid4().hex[:10]}"
+
+    def _get_definitions_dir(self):
+        """获取应用定义目录。"""
+        if "DEVHUB_APPDEFS_DIR" in os.environ:
+            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
+        else:
+            runtime_dir = DiscoveryService.get_runtime_directory()
+            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+
+        os.makedirs(definitions_dir, exist_ok=True)
+        return definitions_dir
+
+    def _create_definition(self, app_id, scope_policy):
+        """创建用于 scopePolicy 测试的应用定义文件。"""
+        definitions_dir = self._get_definitions_dir()
+        definition_path = os.path.join(definitions_dir, f"{app_id}.json")
+        definition = {
+            "appId": app_id,
+            "displayName": app_id,
+            "scopePolicy": scope_policy
+        }
+        with open(definition_path, "w", encoding="utf-8") as f:
+            json.dump(definition, f, ensure_ascii=False, indent=2)
+        return definition_path
 
     def _cleanup_test_instances(self, app_ids):
         """清理测试实例"""
@@ -667,6 +692,17 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ 超过30s无心跳后实例仍在线")
                 return result
 
+            list_after_explicit = client.call("hub.apps.listInstances", {
+                "appId": "test-app-offline",
+                "includeOffline": False
+            })
+            if not RpcAssertions.expect_success(result, list_after_explicit, ["instances"]):
+                return result
+
+            if any(inst.get("instanceId") == instance_id for inst in list_after_explicit["result"]["instances"]):
+                result.mark_failure("❌ includeOffline=false 显式查询不应返回离线实例")
+                return result
+
             result.mark_success()
 
         except Exception as e:
@@ -725,6 +761,102 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def test_scope_policy_global_only_rejects_scoped_register(self):
+        """测试 globalOnly 定义拒绝非空 scope 注册。"""
+        result = TestResult("测试 globalOnly 定义拒绝非空 scope 注册")
+        definition_path = None
+
+        try:
+            app_id = "scope-policy-globalonly-app"
+            definition_path = self._create_definition(app_id, "globalOnly")
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": app_id,
+                    "scope": "workspace-forbidden",
+                    "pid": 12362,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            })
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32002,
+                expected_message="forbidden"
+            ):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "scope_policy_violation"}):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            if definition_path and os.path.exists(definition_path):
+                try:
+                    os.remove(definition_path)
+                except Exception:
+                    pass
+            self._cleanup_test_instances(["scope-policy-globalonly-app"])
+
+        return result
+
+    def test_scope_policy_required_rejects_global_register(self):
+        """测试 required 定义拒绝全局 scope 注册。"""
+        result = TestResult("测试 required 定义拒绝全局 scope 注册")
+        definition_path = None
+
+        try:
+            app_id = "scope-policy-required-app"
+            definition_path = self._create_definition(app_id, "required")
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": instance_id,
+                    "appId": app_id,
+                    "scope": None,
+                    "pid": 12363,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            })
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32002,
+                expected_message="forbidden"
+            ):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "scope_policy_violation"}):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            if definition_path and os.path.exists(definition_path):
+                try:
+                    os.remove(definition_path)
+                except Exception:
+                    pass
+            self._cleanup_test_instances(["scope-policy-required-app"])
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有 AppInstance 测试"""
         tests = [
@@ -740,12 +872,14 @@ class TestAppInstances(unittest.TestCase):
             self.test_register_instance_with_global_scope,
             self.test_register_instance_empty_scope,
             self.test_list_instances_scope_strict_match,
-            self.test_register_instance_invoke_field_validation
+            self.test_register_instance_invoke_field_validation,
+            self.test_instance_offline_after_30s_no_heartbeat,
+            self.test_scope_policy_global_only_rejects_scoped_register,
+            self.test_scope_policy_required_rejects_global_register
         ]
 
         if full:
             tests.extend([
-                self.test_instance_offline_after_30s_no_heartbeat,
                 self.test_list_instances_include_offline
             ])
 

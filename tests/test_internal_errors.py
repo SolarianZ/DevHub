@@ -72,7 +72,7 @@ class TestInternalErrors(unittest.TestCase):
                 {
                     "name": "jsonrpc 非 2.0",
                     "payload": {"jsonrpc": "1.0", "id": "bad-envelope-1", "method": "hub.ping", "params": {}},
-                    "expected_id": None
+                    "expected_id": "bad-envelope-1"
                 },
                 {
                     "name": "method 缺失",
@@ -103,6 +103,32 @@ class TestInternalErrors(unittest.TestCase):
                     return result
 
                 result.add_detail(f"✅ {case['name']} 返回 invalid_request")
+
+            root_type_cases = [
+                {"name": "根节点为字符串", "body": '"not-an-object"'},
+                {"name": "根节点为数字", "body": '123'},
+                {"name": "根节点为布尔", "body": 'true'},
+            ]
+
+            for case in root_type_cases:
+                status_code, response_payload = client.post_raw(case["body"], headers=headers)
+                if not RpcAssertions.expect_http_status(result, status_code):
+                    return result
+
+                if not isinstance(response_payload, dict):
+                    result.mark_failure(f"❌ {case['name']} 响应不是 JSON 对象: {response_payload}")
+                    return result
+
+                if not RpcAssertions.expect_error(
+                    result,
+                    response_payload,
+                    expected_code=-32600,
+                    expected_message="invalid_request",
+                    expected_id=None
+                ):
+                    return result
+
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_request")
 
             result.mark_success()
 

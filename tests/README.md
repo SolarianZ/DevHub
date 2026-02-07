@@ -58,6 +58,8 @@ python3 tests/test_runner.py --full
 - 非 Bearer 授权头：`test_authorization_must_use_bearer_scheme`
 - sessionId UUID 约束：`test_client_session_id_must_be_uuid`
 - batch 禁止：`test_batch_request_rejected`
+- 未知方法：`test_method_not_found`
+- JSON-RPC id 规则：`test_jsonrpc_id_null_rejected` / `test_jsonrpc_id_must_be_string_or_number`
 - Content-Type 约束：`test_content_type_must_be_application_json`
 - 错误场景 HTTP 200：`test_http_status_code_always_200`
 
@@ -83,13 +85,16 @@ python3 tests/test_runner.py --full
 - scope 非法值校验：`test_register_instance_with_global_scope` / `test_register_instance_empty_scope`
 - scope 严格匹配不回退：`test_list_instances_scope_strict_match`
 - invoke 字段结构：`test_register_instance_invoke_field_validation`
-- 30s 离线判定（full）：`test_instance_offline_after_30s_no_heartbeat`
+- 30s 离线判定（Quick）：`test_instance_offline_after_30s_no_heartbeat`
+- scopePolicy 严格校验：`test_scope_policy_global_only_rejects_scoped_register` / `test_scope_policy_required_rejects_global_register`
 - includeOffline（full）：`test_list_instances_include_offline`
 
 ### E. 参数校验与错误处理
 
 - hub.* 数组参数拒绝：`TestInvalidParams.test_params_as_array`
 - getDefinition/register/heartbeat 各类 invalid_params：`TestInvalidParams.*`
+- registerInstance.invoke 结构校验：`test_hub_apps_register_instance_invalid_invoke`
+- heartbeat.instanceId 类型/空值校验：`test_hub_apps_heartbeat_invalid_instanceid`
 - parse_error：`TestInternalErrors.test_parse_error_invalid_json`
 - invalid_request：`TestInternalErrors.test_invalid_request_envelope`
 - 恢复性与鲁棒性：`test_internal_error_handling` / `test_server_recovery_after_error` / `test_concurrent_invalid_requests`
@@ -97,8 +102,8 @@ python3 tests/test_runner.py --full
 
 ## Quick 与 Full 的差异
 
-- Quick（默认）：覆盖 M1 核心链路 + Spec MUST 关键项，不执行耗时压力场景。
-- Full：在 Quick 基础上增加离线判定（30s）与压力/大负载场景，用于严格回归与验收。
+- Quick（默认）：覆盖全部 M1 必测项 + Spec MUST 关键项（含 30s 离线判定）。
+- Full：在 Quick 基础上增加扩展场景（如 `includeOffline`、压力与大负载测试），用于严格回归与验收。
 
 ## 备注
 

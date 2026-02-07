@@ -278,6 +278,18 @@ namespace DevHub.Host
         /// </summary>
         private static bool ValidateHeaders(HttpRequest request, FileSystemManager fileSystemManager, ILogger<Program> logger, object? requestId, out JsonRpcResponse errorResponse)
         {
+            // 校验 Content-Type（必须为 application/json，可带 charset）
+            if (!IsValidJsonContentType(request.ContentType))
+            {
+                logger.LogWarning("Content-Type 校验失败: {ContentType}", request.ContentType);
+                errorResponse = CreateErrorResponse(
+                    -32600,
+                    "invalid_request",
+                    requestId,
+                    new { reason = "invalid_content_type", received = request.ContentType });
+                return false;
+            }
+
             // 校验协议版本（必须是字符串 "1"）
             if (!request.Headers.TryGetValue("X-DevHub-Protocol", out var protocolValue) || string.IsNullOrWhiteSpace(protocolValue))
             {
@@ -317,7 +329,8 @@ namespace DevHub.Host
                 return false;
             }
 
-            logger.LogDebug("客户端ID校验通过: {ClientId}", clientIdValue);
+            var clientId = clientIdValue.ToString().Trim();
+            logger.LogDebug("客户端ID校验通过: {ClientId}", clientId);
 
             // 校验会话 ID
             if (!request.Headers.TryGetValue("X-DevHub-ClientSessionId", out var sessionIdValue) ||
@@ -332,7 +345,19 @@ namespace DevHub.Host
                 return false;
             }
 
-            logger.LogDebug("会话ID校验通过: {SessionId}", sessionIdValue);
+            var sessionId = sessionIdValue.ToString().Trim();
+            if (!Guid.TryParseExact(sessionId, "D", out _))
+            {
+                logger.LogWarning("会话ID格式无效: {SessionId}", sessionId);
+                errorResponse = CreateErrorResponse(
+                    -32600,
+                    "invalid_request",
+                    requestId,
+                    new { reason = "invalid_header", header = "X-DevHub-ClientSessionId" });
+                return false;
+            }
+
+            logger.LogDebug("会话ID校验通过: {SessionId}", sessionId);
 
             // 校验 Authorization 头
             if (!request.Headers.TryGetValue("Authorization", out var authorizationValue) ||
@@ -379,6 +404,24 @@ namespace DevHub.Host
 
             errorResponse = null!;
             return true;
+        }
+
+        /// <summary>
+        /// 校验 Content-Type 是否为 application/json（允许附带 charset）
+        /// </summary>
+        private static bool IsValidJsonContentType(string? contentType)
+        {
+            if (string.IsNullOrWhiteSpace(contentType))
+            {
+                return false;
+            }
+
+            var separatorIndex = contentType.IndexOf(';');
+            var mediaType = separatorIndex >= 0
+                ? contentType[..separatorIndex].Trim()
+                : contentType.Trim();
+
+            return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

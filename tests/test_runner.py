@@ -40,7 +40,7 @@ def run_all_tests(full=False):
     logger = setup_logging(log_file)
 
     mode = "full" if full else "quick"
-    coverage = "M1+Spec 严格覆盖（含耗时场景）" if full else "核心 M1+Spec MUST（快速反馈）"
+    coverage = "M1+Spec 严格覆盖（含扩展耗时场景）" if full else "全部 M1 必测 + Spec MUST（默认）"
     logger.info("开始 DevHub M1 功能测试，模式: %s", mode)
 
     # 创建测试报告

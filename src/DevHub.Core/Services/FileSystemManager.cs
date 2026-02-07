@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
+using System.Runtime.InteropServices;
 
 namespace DevHub.Core.Services;
 
@@ -17,6 +18,8 @@ public class FileSystemManager
     private readonly string _definitionsPath;
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
+    private bool _tokenPermissionEnsured;
+    private bool _hubJsonPermissionEnsured;
 
     // 新增：接受自定义 definitionsPath 的构造函数
     public FileSystemManager(ILogger<FileSystemManager> logger, string? definitionsPath = null)
@@ -138,6 +141,12 @@ public class FileSystemManager
 
             if (File.Exists(_tokenFilePath))
             {
+                if (!_tokenPermissionEnsured)
+                {
+                    EnsureCurrentUserOnlyAccess(_tokenFilePath);
+                    _tokenPermissionEnsured = true;
+                }
+
                 _logger.LogDebug("Token 文件存在，尝试读取现有 token");
                 var existingToken = File.ReadAllText(_tokenFilePath).Trim();
                 if (!string.IsNullOrEmpty(existingToken))
@@ -158,30 +167,9 @@ public class FileSystemManager
 
             _logger.LogDebug("开始写入新 token 到文件: {FilePath}", _tokenFilePath);
             File.WriteAllText(_tokenFilePath, newToken);
+            EnsureCurrentUserOnlyAccess(_tokenFilePath);
+            _tokenPermissionEnsured = true;
             _logger.LogInformation("成功生成新 token 并写入文件，文件路径: {FilePath}", _tokenFilePath);
-
-            // 设置仅当前用户可访问的权限（Windows 平台）
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    _logger.LogDebug("尝试设置 token 文件权限，文件路径: {FilePath}", _tokenFilePath);
-                    var fileInfo = new FileInfo(_tokenFilePath);
-                    var security = fileInfo.GetAccessControl(AccessControlSections.Access);
-                    var currentUser = WindowsIdentity.GetCurrent().Name;
-                    var rule = new FileSystemAccessRule(currentUser, FileSystemRights.FullControl, AccessControlType.Allow);
-                    security.SetAccessRule(rule);
-
-                    // 移除继承的权限
-                    security.SetAccessRuleProtection(true, false);
-                    fileInfo.SetAccessControl(security);
-                    _logger.LogInformation("已成功设置 token 文件安全权限，仅当前用户可访问，文件路径: {FilePath}", _tokenFilePath);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "无法设置 token 文件的安全权限，文件路径: {FilePath}", _tokenFilePath);
-                }
-            }
 
             return newToken;
         }
@@ -235,6 +223,8 @@ public class FileSystemManager
             // 使用 overwrite = true 实现原子替换（在同一卷上）
             // 注意：跨卷移动通常不是原子的，但 runtime 目录通常在同一卷
             File.Move(tempPath, _hubJsonPath, overwrite: true);
+            EnsureCurrentUserOnlyAccess(_hubJsonPath);
+            _hubJsonPermissionEnsured = true;
             _logger.LogInformation("成功写入 hub.json 文件: {Path}", _hubJsonPath);
         }
         catch (Exception ex)
@@ -245,12 +235,82 @@ public class FileSystemManager
     }
 
     /// <summary>
+    /// 设置文件仅当前用户可访问
+    /// </summary>
+    private void EnsureCurrentUserOnlyAccess(string filePath)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                EnsureCurrentUserOnlyAccessOnWindows(filePath);
+                return;
+            }
+
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                EnsureCurrentUserOnlyAccessOnUnix(filePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "无法设置文件权限（仅当前用户可访问），文件路径: {FilePath}", filePath);
+        }
+    }
+
+    /// <summary>
+    /// 在 Windows 平台设置 ACL，仅当前用户可访问
+    /// </summary>
+    private void EnsureCurrentUserOnlyAccessOnWindows(string filePath)
+    {
+        _logger.LogDebug("尝试设置 Windows 文件 ACL，文件路径: {FilePath}", filePath);
+
+        var fileInfo = new FileInfo(filePath);
+        var security = fileInfo.GetAccessControl(AccessControlSections.Access);
+        var currentUser = WindowsIdentity.GetCurrent().Name;
+        var rule = new FileSystemAccessRule(currentUser, FileSystemRights.FullControl, AccessControlType.Allow);
+
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.ResetAccessRule(rule);
+        fileInfo.SetAccessControl(security);
+
+        _logger.LogInformation("已成功设置 Windows 文件 ACL（仅当前用户可访问），文件路径: {FilePath}", filePath);
+    }
+
+    /// <summary>
+    /// 在 Unix 平台设置权限为 0600
+    /// </summary>
+    private void EnsureCurrentUserOnlyAccessOnUnix(string filePath)
+    {
+        _logger.LogDebug("尝试设置 Unix 文件权限为 0600，文件路径: {FilePath}", filePath);
+
+        const int OwnerReadWrite = 0x180; // 0600
+        var result = Chmod(filePath, OwnerReadWrite);
+        if (result != 0)
+        {
+            var errorCode = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException($"chmod 失败，错误码: {errorCode}");
+        }
+
+        _logger.LogInformation("已成功设置 Unix 文件权限为 0600，文件路径: {FilePath}", filePath);
+    }
+
+    [DllImport("libc", SetLastError = true, EntryPoint = "chmod")]
+    private static extern int Chmod(string path, int mode);
+
+    /// <summary>
     /// 轻量确保运行时文件可用，避免运行期间文件被删除导致发现失败
     /// </summary>
     public void EnsureRuntimeArtifacts(int? port = null)
     {
         InitializeDirectories();
         GetToken();
+
+        if (!_hubJsonPermissionEnsured && File.Exists(_hubJsonPath))
+        {
+            EnsureCurrentUserOnlyAccess(_hubJsonPath);
+            _hubJsonPermissionEnsured = true;
+        }
 
         if (port.HasValue && port.Value > 0 && !File.Exists(_hubJsonPath))
         {

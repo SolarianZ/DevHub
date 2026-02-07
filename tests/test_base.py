@@ -20,17 +20,18 @@ class DiscoveryService:
     @staticmethod
     def get_runtime_directory():
         """获取运行时目录"""
-        # 首先检查是否设置了 DEVHUB_RUNTIME_DIR 环境变量
         if "DEVHUB_RUNTIME_DIR" in os.environ:
             return os.environ["DEVHUB_RUNTIME_DIR"]
 
-        # 如果没有设置，使用默认目录
         system = platform.system()
         if system == "Windows":
             return os.path.join(os.environ["LOCALAPPDATA"], "DevHub", "runtime")
-        elif system == "Darwin":  # macOS
+        elif system == "Darwin":
             return os.path.join(os.environ["HOME"], "Library", "Application Support", "DevHub", "runtime")
         elif system == "Linux":
+            xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+            if xdg_data_home:
+                return os.path.join(xdg_data_home, "DevHub", "runtime")
             return os.path.join(os.environ["HOME"], ".local", "share", "DevHub", "runtime")
         else:
             raise Exception(f"Unsupported OS: {system}")
@@ -76,6 +77,29 @@ class RpcClient:
             "X-DevHub-ClientSessionId": client_session_id or str(uuid.uuid4())
         }
 
+    def post_json(self, payload, headers=None, timeout=30):
+        """发送 JSON body 并返回 (status_code, parsed_json)。"""
+        request_headers = headers or self.headers
+        url = f"{self.base_url}/rpc"
+        try:
+            response = requests.post(url, json=payload, headers=request_headers, timeout=timeout)
+            return response.status_code, response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"RPC request failed: {e}")
+
+    def post_raw(self, body, headers=None, timeout=30):
+        """发送原始 body 并返回 (status_code, parsed_json/text)。"""
+        request_headers = headers or self.headers
+        url = f"{self.base_url}/rpc"
+        try:
+            response = requests.post(url, data=body, headers=request_headers, timeout=timeout)
+            try:
+                return response.status_code, response.json()
+            except Exception:
+                return response.status_code, response.text
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"RPC request failed: {e}")
+
     def call(self, method, params=None, request_id="1"):
         """
         调用 JSON-RPC 方法
@@ -91,14 +115,8 @@ class RpcClient:
             "params": params or {}
         }
 
-        url = f"{self.base_url}/rpc"
-        try:
-            response = requests.post(url, json=payload, headers=self.headers, timeout=30)
-            # 注意：根据 DevHub 规范，HTTP 状态码始终返回 200 OK
-            # 错误通过 JSON-RPC 的 error 字段表示，不应使用 raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+        _, response = self.post_json(payload, headers=self.headers, timeout=30)
+        return response
 
     def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
         """
@@ -114,27 +132,15 @@ class RpcClient:
             "params": params or {}
         }
 
-        url = f"{self.base_url}/rpc"
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+        _, response = self.post_json(payload, headers=headers, timeout=30)
+        return response
 
     def send_batch_request(self, requests_list):
         """
         发送 batch 请求（用于测试批量请求被拒绝的情况）
         """
-        url = f"{self.base_url}/rpc"
-        try:
-            response = requests.post(url, json=requests_list, headers=self.headers, timeout=30)
-            # 即使响应不是有效的 JSON（虽然不应该），也返回响应内容
-            try:
-                return response.json(), response.status_code
-            except:
-                return response.text, response.status_code
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+        status_code, response = self.post_json(requests_list, headers=self.headers, timeout=30)
+        return response, status_code
 
 
 class TestResult:
@@ -246,6 +252,34 @@ class RpcAssertions:
                     result.mark_failure(
                         f"❌ error.data.{key} 不正确: 期望 {expected_value}，实际 {data.get(key)}")
                     return False
+
+        return True
+
+    @staticmethod
+    def expect_http_status(result: TestResult, status_code: int, expected_status: int = 200):
+        """断言 HTTP 状态码。"""
+        if status_code != expected_status:
+            result.mark_failure(f"❌ HTTP 状态码不正确: 期望 {expected_status}，实际 {status_code}")
+            return False
+        return True
+
+    @staticmethod
+    def expect_error_data_fields(result: TestResult, response: dict, expected_data: dict):
+        """断言 error.data 关键字段。"""
+        if "error" not in response or not isinstance(response["error"], dict):
+            result.mark_failure(f"❌ 响应缺少 error 对象: {response}")
+            return False
+
+        data = response["error"].get("data")
+        if not isinstance(data, dict):
+            result.mark_failure(f"❌ error.data 不是对象: {response['error']}")
+            return False
+
+        for key, expected_value in expected_data.items():
+            if data.get(key) != expected_value:
+                result.mark_failure(
+                    f"❌ error.data.{key} 不正确: 期望 {expected_value}，实际 {data.get(key)}")
+                return False
 
         return True
 

@@ -332,8 +332,7 @@ class TestAuthProtocol(unittest.TestCase):
             ]
 
             response, status_code = client.send_batch_request(batch_request)
-            if status_code != 200:
-                result.mark_failure(f"❌ HTTP 状态码不正确: {status_code}")
+            if not RpcAssertions.expect_http_status(result, status_code):
                 return result
 
             if not isinstance(response, dict):
@@ -348,6 +347,109 @@ class TestAuthProtocol(unittest.TestCase):
                 expected_id=None
             ):
                 return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_method_not_found(self):
+        """测试未知方法返回 method_not_found"""
+        result = TestResult("测试未知方法返回 method_not_found")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            request_id = "auth-method-not-found-id"
+
+            response = client.call("hub.unknown.method", {}, request_id=request_id)
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32601,
+                expected_message="method_not_found",
+                expected_id=request_id
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_jsonrpc_id_null_rejected(self):
+        """测试 JSON-RPC id=null 被拒绝为 invalid_request"""
+        result = TestResult("测试 JSON-RPC id=null 被拒绝")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            payload = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "method": "hub.ping",
+                "params": {}
+            }
+
+            status_code, response = client.post_json(payload)
+            if not RpcAssertions.expect_http_status(result, status_code):
+                return result
+
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                expected_code=-32600,
+                expected_message="invalid_request",
+                expected_id=None
+            ):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_jsonrpc_id_must_be_string_or_number(self):
+        """测试 JSON-RPC id 仅允许 string/number"""
+        result = TestResult("测试 JSON-RPC id 仅允许 string/number")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "id 为对象", "id": {"bad": 1}},
+                {"name": "id 为数组", "id": [1, 2, 3]},
+            ]
+
+            for case in cases:
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": case["id"],
+                    "method": "hub.ping",
+                    "params": {}
+                }
+
+                status_code, response = client.post_json(payload)
+                if not RpcAssertions.expect_http_status(result, status_code):
+                    return result
+
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    expected_code=-32600,
+                    expected_message="invalid_request",
+                    expected_id=None
+                ):
+                    return result
+
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_request")
 
             result.mark_success()
 
@@ -449,6 +551,9 @@ class TestAuthProtocol(unittest.TestCase):
             self.test_client_session_id_must_be_uuid,
             self.test_authorization_must_use_bearer_scheme,
             self.test_batch_request_rejected,
+            self.test_method_not_found,
+            self.test_jsonrpc_id_null_rejected,
+            self.test_jsonrpc_id_must_be_string_or_number,
             self.test_content_type_must_be_application_json,
             self.test_http_status_code_always_200
         ]
