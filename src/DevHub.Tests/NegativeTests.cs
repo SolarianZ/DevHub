@@ -94,7 +94,8 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
             Id = "1",
@@ -117,7 +118,8 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
             Id = "2",
@@ -150,7 +152,8 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
             Id = "3",
@@ -174,7 +177,8 @@ public class NegativeTests
     {
         // Arrange
         var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(TestHelpers.GetTestDirectory(), _mockDefinitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
             Id = "2",

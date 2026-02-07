@@ -16,11 +16,13 @@ public class AppInstancesHandler : IRpcHandler
 
     private readonly AppRegistry _appRegistry;
     private readonly ILogger<AppInstancesHandler> _logger;
+    private readonly DefinitionLoader _definitionLoader;
 
-    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger)
+    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, DefinitionLoader definitionLoader)
     {
         _appRegistry = appRegistry;
         _logger = logger;
+        _definitionLoader = definitionLoader;
     }
 
     public string Method => "hub.apps";
@@ -71,6 +73,11 @@ public class AppInstancesHandler : IRpcHandler
             if (!TryParseInstanceRegistration(instanceElement, request.Id, out var instance))
             {
                 return Task.FromResult(InvalidParams(request.Id));
+            }
+
+            if (TryValidateScopePolicy(instance, request.Id, out var scopePolicyError))
+            {
+                return Task.FromResult(scopePolicyError);
             }
 
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
@@ -422,6 +429,51 @@ public class AppInstancesHandler : IRpcHandler
         return true;
     }
 
+    /// <summary>
+    /// 校验定义存在时的 ScopePolicy 约束
+    /// </summary>
+    private bool TryValidateScopePolicy(AppInstance instance, object? requestId, out JsonRpcResponse errorResponse)
+    {
+        errorResponse = null!;
+
+        _definitionLoader.Load();
+        var definition = _definitionLoader.GetDefinition(instance.AppId);
+        if (definition == null || string.IsNullOrWhiteSpace(definition.ScopePolicy))
+        {
+            return false;
+        }
+
+        var scopePolicy = definition.ScopePolicy;
+        var hasScope = !string.IsNullOrWhiteSpace(instance.Scope);
+
+        var violated =
+            (string.Equals(scopePolicy, "globalOnly", StringComparison.Ordinal) && hasScope) ||
+            (string.Equals(scopePolicy, "required", StringComparison.Ordinal) && !hasScope);
+
+        if (!violated)
+        {
+            return false;
+        }
+
+        _logger.LogWarning(
+            "hub.apps.registerInstance scopePolicy 校验失败: AppId={AppId}, ScopePolicy={ScopePolicy}, Scope={Scope}, RequestId={RequestId}",
+            instance.AppId,
+            scopePolicy,
+            instance.Scope,
+            requestId);
+
+        errorResponse = Forbidden(
+            requestId,
+            new
+            {
+                reason = "scope_policy_violation",
+                appId = instance.AppId,
+                scopePolicy,
+                scope = instance.Scope
+            });
+        return true;
+    }
+
     private static JsonRpcResponse MethodNotFound(object? id)
     {
         return new JsonRpcResponse
@@ -457,6 +509,20 @@ public class AppInstancesHandler : IRpcHandler
             {
                 Code = -32603,
                 Message = "internal_error"
+            }
+        };
+    }
+
+    private static JsonRpcResponse Forbidden(object? id, object? data)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = -32002,
+                Message = "forbidden",
+                Data = data
             }
         };
     }

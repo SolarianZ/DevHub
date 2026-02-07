@@ -431,11 +431,13 @@ namespace DevHub.Host
         {
             request = null!;
 
+            var canUseRequestId = TryExtractRequestId(root, out var requestId);
+
             if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
                 jsonRpcElement.ValueKind != JsonValueKind.String ||
                 !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
             {
-                errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
+                errorResponse = CreateErrorResponse(-32600, "invalid_request", canUseRequestId ? requestId : null);
                 return false;
             }
 
@@ -443,11 +445,10 @@ namespace DevHub.Host
                 methodElement.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(methodElement.GetString()))
             {
-                errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
+                errorResponse = CreateErrorResponse(-32600, "invalid_request", canUseRequestId ? requestId : null);
                 return false;
             }
 
-            object? requestId = null;
             if (root.TryGetProperty("id", out var idElement))
             {
                 if (!TryConvertJsonRpcId(idElement, out requestId))
@@ -481,6 +482,21 @@ namespace DevHub.Host
         }
 
         /// <summary>
+        /// 尝试从原始请求提取可用于错误响应的请求ID
+        /// </summary>
+        private static bool TryExtractRequestId(JsonElement root, out object? requestId)
+        {
+            requestId = null;
+
+            if (!root.TryGetProperty("id", out var idElement))
+            {
+                return false;
+            }
+
+            return TryConvertJsonRpcId(idElement, out requestId);
+        }
+
+        /// <summary>
         /// 将 JSON-RPC id 转换为可序列化对象
         /// </summary>
         private static bool TryConvertJsonRpcId(JsonElement idElement, out object? id)
@@ -507,7 +523,7 @@ namespace DevHub.Host
                     return false;
                 case JsonValueKind.Null:
                     id = null;
-                    return true;
+                    return false;
                 default:
                     id = null;
                     return false;

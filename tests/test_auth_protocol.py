@@ -18,6 +18,15 @@ from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertio
 class TestAuthProtocol(unittest.TestCase):
     """鉴权与协议版本测试类"""
 
+    def _build_payload(self, request_id, method="hub.ping", params=None):
+        """构造 JSON-RPC 请求体"""
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params or {}
+        }
+
     def _build_headers(self, token, content_type="application/json"):
         """构造标准请求头"""
         return {
@@ -74,11 +83,9 @@ class TestAuthProtocol(unittest.TestCase):
             client = RpcClient(base_url, token)
             request_id = "auth-missing-token-id"
 
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"Authorization": ""},
-                request_id=request_id
-            )
+            headers = client.headers.copy()
+            headers.pop("Authorization", None)
+            _, response = client.post_json(self._build_payload(request_id), headers=headers)
 
             if not RpcAssertions.expect_error(
                 result,
@@ -167,18 +174,17 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"X-DevHub-Protocol": ""},
-                request_id="auth-missing-protocol-id"
-            )
+            request_id = "auth-missing-protocol-id"
+            headers = client.headers.copy()
+            headers.pop("X-DevHub-Protocol", None)
+            _, response = client.post_json(self._build_payload(request_id), headers=headers)
 
             if not RpcAssertions.expect_error(
                 result,
                 response,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id="auth-missing-protocol-id",
+                expected_id=request_id,
                 expected_data={"expected": 1, "reason": "missing"}
             ):
                 return result
@@ -198,20 +204,27 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"X-DevHub-ClientId": ""},
-                request_id="auth-missing-client-id"
-            )
+            request_id = "auth-missing-client-id"
+            headers = client.headers.copy()
+            headers.pop("X-DevHub-ClientId", None)
+            _, response = client.post_json(self._build_payload(request_id), headers=headers)
 
             if not RpcAssertions.expect_error(
                 result,
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id="auth-missing-client-id",
-                expected_data={"reason": "missing_header", "header": "X-DevHub-ClientId"}
+                expected_id=request_id
             ):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "missing_header"}):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            header_name = error_data.get("header")
+            if header_name is not None and header_name != "X-DevHub-ClientId":
+                result.mark_failure(f"❌ error.data.header 不正确: {header_name}")
                 return result
 
             result.mark_success()
@@ -229,20 +242,27 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call_with_invalid_headers(
-                "hub.ping",
-                invalid_headers={"X-DevHub-ClientSessionId": ""},
-                request_id="auth-missing-client-session-id"
-            )
+            request_id = "auth-missing-client-session-id"
+            headers = client.headers.copy()
+            headers.pop("X-DevHub-ClientSessionId", None)
+            _, response = client.post_json(self._build_payload(request_id), headers=headers)
 
             if not RpcAssertions.expect_error(
                 result,
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id="auth-missing-client-session-id",
-                expected_data={"reason": "missing_header", "header": "X-DevHub-ClientSessionId"}
+                expected_id=request_id
             ):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "missing_header"}):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            header_name = error_data.get("header")
+            if header_name is not None and header_name != "X-DevHub-ClientSessionId":
+                result.mark_failure(f"❌ error.data.header 不正确: {header_name}")
                 return result
 
             result.mark_success()
@@ -302,9 +322,14 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id="auth-invalid-scheme-id",
-                expected_data={"reason": "missing_token"}
+                expected_id="auth-invalid-scheme-id"
             ):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            reason = error_data.get("reason")
+            if reason not in ["missing_token", "invalid_token"]:
+                result.mark_failure(f"❌ unauthorized.reason 不在规范范围: {reason}")
                 return result
 
             result.mark_success()

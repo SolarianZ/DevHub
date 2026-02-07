@@ -219,6 +219,63 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_register_instance_invalid_instanceid(self):
+        """测试 hub.apps.registerInstance 使用非法 instanceId"""
+        result = TestResult("测试 hub.apps.registerInstance 使用非法 instanceId")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {
+                    "name": "instanceId 非字符串",
+                    "payload": {
+                        "instance": {
+                            "instanceId": 123,
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "instanceId 含非法字符",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "invalid instance id",
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "instanceId 长度超过256",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "a" * 257,
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                }
+            ]
+
+            for case in cases:
+                response = client.call("hub.apps.registerInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_apps_register_instance_invalid_scope(self):
         """测试 hub.apps.registerInstance 使用无效 scope"""
         result = TestResult("测试 hub.apps.registerInstance 使用无效 scope")
@@ -381,6 +438,63 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_unregister_instance_invalid_instanceid(self):
+        """测试 hub.apps.unregisterInstance instanceId 非法"""
+        result = TestResult("测试 hub.apps.unregisterInstance instanceId 非法")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "instanceId 空字符串", "payload": {"instanceId": ""}},
+                {"name": "instanceId 非字符串", "payload": {"instanceId": 12345}},
+                {"name": "instanceId 为 null", "payload": {"instanceId": None}},
+            ]
+
+            for case in cases:
+                response = client.call("hub.apps.unregisterInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_hub_apps_list_instances_invalid_params(self):
+        """测试 hub.apps.listInstances 关键参数类型校验"""
+        result = TestResult("测试 hub.apps.listInstances 关键参数类型校验")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "appId 非字符串", "payload": {"appId": 123}},
+                {"name": "scope 非字符串/非null", "payload": {"scope": 123}},
+                {"name": "includeAllScopes 非布尔", "payload": {"includeAllScopes": "true"}},
+                {"name": "includeOffline 非布尔", "payload": {"includeOffline": "true"}},
+                {"name": "scope 空字符串", "payload": {"scope": ""}},
+                {"name": "scope=global", "payload": {"scope": "global"}},
+            ]
+
+            for case in cases:
+                response = client.call("hub.apps.listInstances", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有 invalid_params 测试"""
         return [
@@ -390,10 +504,13 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_register_instance_missing_instance(),
             self.test_hub_apps_register_instance_missing_required_fields(),
             self.test_hub_apps_register_instance_invalid_pid(),
+            self.test_hub_apps_register_instance_invalid_instanceid(),
             self.test_hub_apps_register_instance_invalid_scope(),
             self.test_hub_apps_heartbeat_missing_instanceid(),
             self.test_hub_apps_register_instance_invalid_invoke(),
-            self.test_hub_apps_heartbeat_invalid_instanceid()
+            self.test_hub_apps_heartbeat_invalid_instanceid(),
+            self.test_hub_apps_unregister_instance_invalid_instanceid(),
+            self.test_hub_apps_list_instances_invalid_params()
         ]
 
 

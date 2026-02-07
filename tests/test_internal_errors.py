@@ -35,6 +35,7 @@ class TestInternalErrors(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             headers = self._headers(token)
+            client = RpcClient(base_url, token)
 
             invalid_json = '{"jsonrpc":"2.0","id":"bad-json-id","method":"hub.ping","params":{'
             response = requests.post(f"{base_url}/rpc", data=invalid_json, headers=headers, timeout=30)
@@ -67,8 +68,14 @@ class TestInternalErrors(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             headers = self._headers(token)
+            client = RpcClient(base_url, token)
 
             cases = [
+                {
+                    "name": "jsonrpc 缺失",
+                    "payload": {"id": "bad-envelope-0", "method": "hub.ping", "params": {}},
+                    "expected_id": "bad-envelope-0"
+                },
                 {
                     "name": "jsonrpc 非 2.0",
                     "payload": {"jsonrpc": "1.0", "id": "bad-envelope-1", "method": "hub.ping", "params": {}},
@@ -77,7 +84,7 @@ class TestInternalErrors(unittest.TestCase):
                 {
                     "name": "method 缺失",
                     "payload": {"jsonrpc": "2.0", "id": "bad-envelope-2", "params": {}},
-                    "expected_id": None
+                    "expected_id": "bad-envelope-2"
                 },
                 {
                     "name": "params 非 object/array/null",

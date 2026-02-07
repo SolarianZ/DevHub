@@ -69,7 +69,8 @@ public class SpecConformanceTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
         var request = new JsonRpcRequest
         {
             Id = "req-1",
@@ -111,7 +112,8 @@ public class SpecConformanceTests : IDisposable
     {
         // Arrange
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object, definitionLoader);
 
         // pid 非法
         var invalidPidRequest = new JsonRpcRequest

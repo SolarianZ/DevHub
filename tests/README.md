@@ -55,6 +55,7 @@ python3 tests/test_runner.py --full
 - 缺失/无效 token：`test_ping_without_token` / `test_ping_with_invalid_token`
 - 协议版本错误/缺失：`test_ping_with_invalid_protocol_version` / `test_ping_without_protocol_header`
 - 缺失客户端头：`test_ping_without_client_id` / `test_ping_without_client_session_id`
+- 缺失客户端头错误码：`invalid_request (-32600)`，并校验 `error.data.reason=missing_header`
 - 非 Bearer 授权头：`test_authorization_must_use_bearer_scheme`
 - sessionId UUID 约束：`test_client_session_id_must_be_uuid`
 - batch 禁止：`test_batch_request_rejected`
@@ -93,8 +94,11 @@ python3 tests/test_runner.py --full
 
 - hub.* 数组参数拒绝：`TestInvalidParams.test_params_as_array`
 - getDefinition/register/heartbeat 各类 invalid_params：`TestInvalidParams.*`
+- registerInstance.instanceId 约束：`test_hub_apps_register_instance_invalid_instanceid`
 - registerInstance.invoke 结构校验：`test_hub_apps_register_instance_invalid_invoke`
 - heartbeat.instanceId 类型/空值校验：`test_hub_apps_heartbeat_invalid_instanceid`
+- unregisterInstance.instanceId 类型/空值校验：`test_hub_apps_unregister_instance_invalid_instanceid`
+- listInstances 参数类型/scope 非法值校验：`test_hub_apps_list_instances_invalid_params`
 - parse_error：`TestInternalErrors.test_parse_error_invalid_json`
 - invalid_request：`TestInternalErrors.test_invalid_request_envelope`
 - 恢复性与鲁棒性：`test_internal_error_handling` / `test_server_recovery_after_error` / `test_concurrent_invalid_requests`
