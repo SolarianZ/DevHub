@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>();
         services.AddSingleton<InvocationRequestWaiter>();
+        services.AddSingleton<IRuntimeHttpBaseUrlProvider, RuntimeHttpBaseUrlProvider>();
         services.AddSingleton<LaunchCoordinator>();
 
         // 注册RPC处理器

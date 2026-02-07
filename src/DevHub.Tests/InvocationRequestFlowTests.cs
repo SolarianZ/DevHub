@@ -354,7 +354,8 @@ public class InvocationRequestFlowTests : IDisposable
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
         return new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
     }
 

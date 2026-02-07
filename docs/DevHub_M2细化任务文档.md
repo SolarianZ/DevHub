@@ -18,7 +18,6 @@
   - `hub.invoke.request` 闭环（waiter、timeout、failed 映射）
   - `hub.apps.launch` 最小闭环（参数校验、配置校验、进程启动、`started/starting/already_running`）
 - 本批次后续仍在开发：
-  - `hub.apps.launch` 真正启动与 dedupe
   - lease 到期重投递（`attempt++`）与超时扫描 **（本轮完成：poll/respond 驱动回收）**
 
 ## 0. 目标与验收对齐（必须满足）
@@ -376,7 +375,7 @@
 
 ### Day 1：`launch` + dedupe
 - [x] 实现 `hub.apps.launch` 参数校验与返回模型
-- [ ] 实现 dedupe 窗口（30s）与模板渲染
+- [x] 实现 dedupe 窗口（30s）与模板渲染
 - [x] 接入 `AppDefinition.launch` 配置并完成进程启动封装
 
 ### Day 1.5：`notify/request`
@@ -405,7 +404,7 @@
 - [x] `M2-NOTIFY-001`：notify 在线投递并被 poll 取走
 - [x] `M2-NOTIFY-002`：离线入队，实例上线后可 poll 拉取
 - [x] `M2-LAUNCH-001`：autoLaunch 触发成功，实例注册后完成投递
-- [ ] `M2-LAUNCH-002`：dedupe 窗口内重复启动返回 `already_running`
+- [x] `M2-LAUNCH-002`：dedupe 窗口内重复启动返回 `already_running`
 - [x] `M2-POLL-001`：未注册实例 poll 返回 `-32010 instance_not_found`
 - [x] `M2-RESP-001`：重复响应/越权响应返回 `-32030 delivery_conflict`
 - [x] `M2-LEASE-001`：lease 到期触发重投递且 `attempt` 递增（长耗时场景放入 full 模式）
@@ -415,7 +414,7 @@
 - [x] 队列状态机：Created -> Queued/Pending -> Delivered -> Completed/Failed
 - [x] waiter 清理：超时、取消、异常分支均可释放
 - [x] lease 回收：到期后回队并更新 `attempt`
-- [ ] 模板渲染：`dedupeKeyTemplate/argsTemplate` 占位符替换正确
+- [x] 模板渲染：`dedupeKeyTemplate/argsTemplate` 占位符替换正确
 
 ---
 

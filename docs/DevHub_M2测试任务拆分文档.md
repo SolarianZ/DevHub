@@ -150,8 +150,8 @@
   - 新实例注册后可成功 `poll/respond` 并完成调用闭环。
 
 #### `M2-LAUNCH-002` dedupe 窗口并发去重
-- [ ] 步骤：并发触发同 appId/scope 启动请求。
-- [ ] 断言：
+- [x] 步骤：并发触发同 appId/scope 启动请求。
+- [x] 断言：
   - 仅首个请求进入启动；其余返回 `status=already_running`。
   - 窗口内 `launchId` 复用。
 
@@ -198,8 +198,8 @@
 - [x] waiter 清理后不残留内存引用（避免泄漏）。
 
 ### 3.6 `LaunchCoordinatorTests.cs`
-- [ ] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。
-- [ ] dedupe 窗口内重复 launch 返回 already_running。
+- [x] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。
+- [x] dedupe 窗口内重复 launch 返回 already_running。
 - [x] `waitForRegisterMs` 超时后返回 `starting`。
 - [x] 缺失配置时返回 `launch_failed` 语义对象。
 

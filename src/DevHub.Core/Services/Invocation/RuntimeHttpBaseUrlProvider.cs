@@ -1,0 +1,82 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+
+namespace DevHub.Core.Services.Invocation;
+
+/// <summary>
+/// 运行时 HTTP 基础地址提供器。
+/// </summary>
+public interface IRuntimeHttpBaseUrlProvider
+{
+    /// <summary>
+    /// 获取当前 Hub 的 HTTP 基础地址。
+    /// </summary>
+    /// <returns>若无法读取则返回空字符串。</returns>
+    string GetHttpBaseUrl();
+}
+
+/// <summary>
+/// 从运行时发现文件 hub.json 读取 HTTP 基础地址。
+/// </summary>
+public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
+{
+    private readonly string _runtimeDirectory;
+    private readonly string _hubJsonPath;
+    private readonly ILogger<RuntimeHttpBaseUrlProvider> _logger;
+
+    /// <summary>
+    /// 初始化运行时 HTTP 基础地址提供器。
+    /// </summary>
+    public RuntimeHttpBaseUrlProvider(ILogger<RuntimeHttpBaseUrlProvider> logger)
+    {
+        _runtimeDirectory = ResolveRuntimeDirectory();
+        _hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public string GetHttpBaseUrl()
+    {
+        try
+        {
+            if (!File.Exists(_hubJsonPath))
+            {
+                return string.Empty;
+            }
+
+            using var stream = File.OpenRead(_hubJsonPath);
+            using var document = JsonDocument.Parse(stream);
+
+            if (!document.RootElement.TryGetProperty("httpBaseUrl", out var httpBaseUrlElement) ||
+                httpBaseUrlElement.ValueKind != JsonValueKind.String)
+            {
+                return string.Empty;
+            }
+
+            var httpBaseUrl = httpBaseUrlElement.GetString();
+            if (string.IsNullOrWhiteSpace(httpBaseUrl))
+            {
+                return string.Empty;
+            }
+
+            return httpBaseUrl.TrimEnd('/');
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取 hub.json 的 httpBaseUrl 失败，路径: {HubJsonPath}", _hubJsonPath);
+            return string.Empty;
+        }
+    }
+
+    private static string ResolveRuntimeDirectory()
+    {
+        var runtimeOverride = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
+        if (!string.IsNullOrWhiteSpace(runtimeOverride))
+        {
+            return runtimeOverride;
+        }
+
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "runtime");
+    }
+}
+

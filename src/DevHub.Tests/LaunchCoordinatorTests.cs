@@ -12,6 +12,8 @@ using Moq;
 public class LaunchCoordinatorTests : IDisposable
 {
     private readonly string _tempDirectory;
+    private readonly string _runtimeDirectory;
+    private readonly string? _originalRuntimeDir;
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<LaunchCoordinator>> _launchLogger = new();
@@ -22,7 +24,11 @@ public class LaunchCoordinatorTests : IDisposable
     public LaunchCoordinatorTests()
     {
         _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchCoordinatorTests", Guid.NewGuid().ToString("N"));
+        _runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
+        _originalRuntimeDir = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
         Directory.CreateDirectory(_tempDirectory);
+        Directory.CreateDirectory(_runtimeDirectory);
+        Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", _runtimeDirectory);
     }
 
     [Fact]
@@ -31,7 +37,8 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         definitionLoader.Load();
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "missing.app",
@@ -55,7 +62,8 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         definitionLoader.Load();
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-missing.app",
@@ -79,7 +87,8 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         definitionLoader.Load();
         var appRegistry = new AppRegistry(_registryLogger.Object);
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-started.app",
@@ -100,10 +109,7 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-starting.app", includeLaunch: true);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, _launchLogger.Object);
+        var coordinator = CreateCoordinator();
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-starting.app",
@@ -119,18 +125,146 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
     }
 
+    [Fact]
+    public async Task LaunchAsync_WithSameDedupeKeyWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
+    {
+        WriteDefinition(
+            "launch-dedupe-window.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+
+        var coordinator = CreateCoordinator();
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-dedupe-window.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-dedupe-window.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WithExplicitDedupeKey_ShouldOverrideTemplate()
+    {
+        WriteDefinition(
+            "launch-explicit-dedupe.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{httpBaseUrl}");
+
+        WriteHubRuntime("http://127.0.0.1:61001");
+        var coordinator = CreateCoordinator();
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-explicit-dedupe.app",
+            scope: null,
+            dedupeKey: "manual-key",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        WriteHubRuntime("http://127.0.0.1:61002");
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-explicit-dedupe.app",
+            scope: null,
+            dedupeKey: "manual-key",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WhenHttpBaseUrlChanges_ShouldUseDifferentTemplateKey()
+    {
+        WriteDefinition(
+            "launch-httpbaseurl-template.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}:{httpBaseUrl}");
+
+        var coordinator = CreateCoordinator();
+
+        WriteHubRuntime("http://127.0.0.1:62001");
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-httpbaseurl-template.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        WriteHubRuntime("http://127.0.0.1:62002");
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-httpbaseurl-template.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.True(second.Ok);
+        Assert.Equal("started", second.Status);
+        Assert.NotEqual(first.LaunchId, second.LaunchId);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
     public void Dispose()
     {
+        Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", _originalRuntimeDir);
+
         if (Directory.Exists(_tempDirectory))
         {
             Directory.Delete(_tempDirectory, recursive: true);
         }
     }
 
-    private void WriteDefinition(string appId, bool includeLaunch)
+    private LaunchCoordinator CreateCoordinator()
+    {
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        return new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+    }
+
+    private void WriteHubRuntime(string httpBaseUrl)
+    {
+        var tokenFile = Path.Combine(_runtimeDirectory, "token.txt");
+        File.WriteAllText(tokenFile, "launch-coordinator-tests-token");
+
+        var payload = new
+        {
+            protocolVersion = 1,
+            hubVersion = "test",
+            pid = 12345,
+            httpBaseUrl,
+            wsUrl = httpBaseUrl.Replace("http://", "ws://", StringComparison.Ordinal) + "/ws",
+            tokenFile,
+            startedAtUtc = DateTime.UtcNow.ToString("O")
+        };
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        File.WriteAllText(hubJsonPath, JsonSerializer.Serialize(payload));
+    }
+
+    private void WriteDefinition(string appId, bool includeLaunch, string? dedupeKeyTemplate = null)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -146,11 +280,18 @@ public class LaunchCoordinatorTests : IDisposable
 
         if (includeLaunch)
         {
-            payload["launch"] = new Dictionary<string, object?>
+            var launch = new Dictionary<string, object?>
             {
                 ["exePath"] = "dotnet",
                 ["argsTemplate"] = "--version"
             };
+
+            if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))
+            {
+                launch["dedupeKeyTemplate"] = dedupeKeyTemplate;
+            }
+
+            payload["launch"] = launch;
         }
 
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");

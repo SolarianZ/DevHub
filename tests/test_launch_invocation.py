@@ -8,6 +8,7 @@ import sys
 import uuid
 import json
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -30,7 +31,7 @@ class TestLaunchInvocation(unittest.TestCase):
     def _launch_script_path(self):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
 
-    def _create_definition(self, app_id, include_launch=True):
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
         path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
@@ -43,10 +44,14 @@ class TestLaunchInvocation(unittest.TestCase):
         }
 
         if include_launch:
-            payload["launch"] = {
+            launch_config = {
                 "exePath": "python3",
                 "argsTemplate": self._launch_script_path(),
             }
+            if dedupe_key_template is not None:
+                launch_config["dedupeKeyTemplate"] = dedupe_key_template
+
+            payload["launch"] = launch_config
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -181,12 +186,88 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
+    def test_launch_dedupe_concurrent_should_return_already_running(self):
+        """M2-LAUNCH-002: dedupe 窗口并发去重（full-only）"""
+        result = TestResult("M2-LAUNCH-002 dedupe 窗口并发去重")
+        definition_path = None
+
+        try:
+            app_id = "m2-launch-dedupe-app"
+            definition_path = self._create_definition(
+                app_id,
+                include_launch=True,
+                dedupe_key_template="{appId}:{scopeOrGlobal}",
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            request_count = 8
+
+            def send_launch(index):
+                client = RpcClient(base_url, token)
+                return client.launch_app(
+                    app_id=app_id,
+                    wait_for_register_ms=0,
+                    request_id=f"m2-launch-dedupe-{index}",
+                )
+
+            with ThreadPoolExecutor(max_workers=request_count) as executor:
+                responses = list(executor.map(send_launch, range(request_count)))
+
+            if len(responses) != request_count:
+                result.mark_failure(f"❌ 并发请求返回数量异常: {len(responses)}")
+                return result
+
+            statuses = []
+            launch_ids = []
+
+            for response in responses:
+                if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                    return result
+
+                status = response["result"].get("status")
+                launch_id = response["result"].get("launchId")
+                statuses.append(status)
+                launch_ids.append(launch_id)
+
+            started_count = sum(1 for status in statuses if status in ("started", "starting"))
+            already_running_count = sum(1 for status in statuses if status == "already_running")
+
+            if started_count < 1:
+                result.mark_failure(f"❌ 未出现 started/starting，statuses={statuses}")
+                return result
+
+            if already_running_count != request_count - 1:
+                result.mark_failure(
+                    f"❌ already_running 数量不符合预期: got={already_running_count}, expected={request_count - 1}, statuses={statuses}")
+                return result
+
+            if len(set(launch_ids)) != 1:
+                result.mark_failure(f"❌ launchId 未复用: {launch_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
-        return [
+        results = [
             self.test_notify_autolaunch_then_register_poll_success(),
             self.test_launch_invalid_wait_for_register_should_fail(),
             self.test_launch_missing_config_should_fail(),
         ]
+
+        if full:
+            results.append(self.test_launch_dedupe_concurrent_should_return_already_running())
+
+        return results
 
 
 if __name__ == "__main__":

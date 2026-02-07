@@ -10,17 +10,28 @@ namespace DevHub.Core.Services.Invocation;
 /// </summary>
 public class LaunchCoordinator
 {
+    private const int DedupeWindowSeconds = 30;
+    private const string DefaultDedupeKeyTemplate = "{appId}:{scopeOrGlobal}";
+
+    private readonly object _dedupeSyncRoot = new();
+    private readonly Dictionary<string, DedupeLaunchRecord> _dedupeRecords = new();
     private readonly DefinitionLoader _definitionLoader;
     private readonly AppRegistry _appRegistry;
+    private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
     private readonly ILogger<LaunchCoordinator> _logger;
 
     /// <summary>
     /// 初始化启动协调器。
     /// </summary>
-    public LaunchCoordinator(DefinitionLoader definitionLoader, AppRegistry appRegistry, ILogger<LaunchCoordinator> logger)
+    public LaunchCoordinator(
+        DefinitionLoader definitionLoader,
+        AppRegistry appRegistry,
+        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        ILogger<LaunchCoordinator> logger)
     {
         _definitionLoader = definitionLoader;
         _appRegistry = appRegistry;
+        _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
         _logger = logger;
     }
 
@@ -61,12 +72,59 @@ public class LaunchCoordinator
             return configError;
         }
 
+        var httpBaseUrl = _runtimeHttpBaseUrlProvider.GetHttpBaseUrl();
+        var resolvedDedupeKey = ResolveDedupeKey(definition, appId, scope, dedupeKey, httpBaseUrl);
+
+        var now = DateTime.UtcNow;
+        DedupeLaunchRecord? existingRecord;
+        lock (_dedupeSyncRoot)
+        {
+            CleanupExpiredDedupeRecords(now);
+            if (_dedupeRecords.TryGetValue(resolvedDedupeKey, out var record))
+            {
+                existingRecord = record;
+            }
+            else
+            {
+                existingRecord = null;
+            }
+        }
+
+        if (existingRecord is not null)
+        {
+            return LaunchOperationResult.CreateSuccess(
+                status: "already_running",
+                launchId: existingRecord.LaunchId,
+                pid: existingRecord.Pid);
+        }
+
+        var launchId = BuildLaunchId();
+        lock (_dedupeSyncRoot)
+        {
+            CleanupExpiredDedupeRecords(DateTime.UtcNow);
+            if (_dedupeRecords.TryGetValue(resolvedDedupeKey, out var record))
+            {
+                return LaunchOperationResult.CreateSuccess(
+                    status: "already_running",
+                    launchId: record.LaunchId,
+                    pid: record.Pid);
+            }
+
+            _dedupeRecords[resolvedDedupeKey] = new DedupeLaunchRecord
+            {
+                LaunchId = launchId,
+                CreatedAtUtc = DateTime.UtcNow,
+                Pid = null
+            };
+        }
+
         Process? process;
         try
         {
-            process = StartProcess(launchConfig!, appId, scope, dedupeKey);
+            process = StartProcess(launchConfig!, appId, scope, httpBaseUrl, resolvedDedupeKey);
             if (process is null)
             {
+                RemoveDedupeRecord(resolvedDedupeKey, launchId);
                 return LaunchOperationResult.CreateError(
                     -32020,
                     "launch_failed",
@@ -78,6 +136,7 @@ public class LaunchCoordinator
         }
         catch (Exception ex)
         {
+            RemoveDedupeRecord(resolvedDedupeKey, launchId);
             _logger.LogError(ex, "启动进程失败，AppId: {AppId}, Scope: {Scope}", appId, scope);
             return LaunchOperationResult.CreateError(
                 -32020,
@@ -89,7 +148,7 @@ public class LaunchCoordinator
                 });
         }
 
-        var launchId = BuildLaunchId();
+        UpdateDedupeRecordPid(resolvedDedupeKey, launchId, process.Id);
         if (waitForRegisterMs <= 0)
         {
             return LaunchOperationResult.CreateSuccess("started", launchId, process.Id);
@@ -121,13 +180,18 @@ public class LaunchCoordinator
         return true;
     }
 
-    private static Process? StartProcess(LaunchConfiguration launchConfig, string appId, string? scope, string? dedupeKey)
+    private static Process? StartProcess(
+        LaunchConfiguration launchConfig,
+        string appId,
+        string? scope,
+        string httpBaseUrl,
+        string dedupeKey)
     {
         var arguments = RenderTemplate(
             launchConfig.ArgsTemplate,
             appId,
             scope,
-            httpBaseUrl: string.Empty,
+            httpBaseUrl,
             dedupeKey);
 
         var startInfo = new ProcessStartInfo
@@ -185,6 +249,75 @@ public class LaunchCoordinator
             .Replace("{scopeOrGlobal}", scopeOrGlobal, StringComparison.Ordinal)
             .Replace("{httpBaseUrl}", httpBaseUrl, StringComparison.Ordinal)
             .Replace("{dedupeKey}", dedupeKey ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    private string ResolveDedupeKey(
+        AppDefinition definition,
+        string appId,
+        string? scope,
+        string? explicitDedupeKey,
+        string httpBaseUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitDedupeKey))
+        {
+            return explicitDedupeKey;
+        }
+
+        var template = definition.Launch?.DedupeKeyTemplate;
+        if (string.IsNullOrWhiteSpace(template))
+        {
+            template = DefaultDedupeKeyTemplate;
+        }
+
+        var rendered = RenderTemplate(template, appId, scope, httpBaseUrl, dedupeKey: string.Empty);
+        return string.IsNullOrWhiteSpace(rendered)
+            ? RenderTemplate(DefaultDedupeKeyTemplate, appId, scope, httpBaseUrl, dedupeKey: string.Empty) ?? $"{appId}:{scope ?? "global"}"
+            : rendered;
+    }
+
+    private void UpdateDedupeRecordPid(string dedupeKey, string launchId, int pid)
+    {
+        lock (_dedupeSyncRoot)
+        {
+            if (_dedupeRecords.TryGetValue(dedupeKey, out var record) && record.LaunchId == launchId)
+            {
+                record.Pid = pid;
+                record.CreatedAtUtc = DateTime.UtcNow;
+            }
+        }
+    }
+
+    private void RemoveDedupeRecord(string dedupeKey, string launchId)
+    {
+        lock (_dedupeSyncRoot)
+        {
+            if (_dedupeRecords.TryGetValue(dedupeKey, out var record) && record.LaunchId == launchId)
+            {
+                _dedupeRecords.Remove(dedupeKey);
+            }
+        }
+    }
+
+    private void CleanupExpiredDedupeRecords(DateTime now)
+    {
+        var expiredKeys = _dedupeRecords
+            .Where(entry => now > entry.Value.CreatedAtUtc.AddSeconds(DedupeWindowSeconds))
+            .Select(entry => entry.Key)
+            .ToList();
+
+        foreach (var key in expiredKeys)
+        {
+            _dedupeRecords.Remove(key);
+        }
+    }
+
+    private sealed class DedupeLaunchRecord
+    {
+        public required string LaunchId { get; init; }
+
+        public required DateTime CreatedAtUtc { get; set; }
+
+        public int? Pid { get; set; }
     }
 }
 
