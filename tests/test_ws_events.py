@@ -94,6 +94,9 @@ class SimpleWebSocketClient:
     def send_json(self, payload):
         self._send_frame(0x1, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
+    def send_text(self, text):
+        self._send_frame(0x1, text.encode("utf-8"))
+
     def recv_json(self, timeout=None):
         while True:
             opcode, payload = self._recv_frame(timeout=timeout)
@@ -859,6 +862,76 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_013_pre_auth_invalid_json_should_parse_error(self):
+        """M4-WS-013: 鉴权前非法 JSON 应返回 parse_error 并断连。"""
+        result = TestResult("M4-WS-013 鉴权前非法JSON返回 parse_error")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_text('{"jsonrpc":"2.0","id":"bad-json-13","method":"hub.ping","params":')
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32700, "parse_error", expected_id=None):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 鉴权前非法 JSON 返回 parse_error 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(self):
+        """M4-WS-014: 鉴权前非法信封应返回 invalid_request 并断连。"""
+        result = TestResult("M4-WS-014 鉴权前非法信封返回 invalid_request")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+
+            cases = [
+                {
+                    "name": "缺少 method",
+                    "id": "bad-envelope-14-1",
+                    "payload": {
+                        "jsonrpc": "2.0",
+                        "id": "bad-envelope-14-1",
+                        "params": {}
+                    }
+                },
+                {
+                    "name": "jsonrpc 非 2.0",
+                    "id": "bad-envelope-14-2",
+                    "payload": {
+                        "jsonrpc": "1.0",
+                        "id": "bad-envelope-14-2",
+                        "method": "hub.ping",
+                        "params": {}
+                    }
+                }
+            ]
+
+            for case in cases:
+                with SimpleWebSocketClient(ws_url) as ws:
+                    ws.send_json(case["payload"])
+
+                    response = ws.recv_json(timeout=3)
+                    if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id=case["id"]):
+                        return result
+
+                    if not ws.wait_for_close(timeout=2):
+                        result.mark_failure(f"❌ {case['name']} 返回 invalid_request 后连接未关闭")
+                        return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_m4_ws_001_first_message_must_authenticate(),
@@ -872,6 +945,8 @@ class TestWsEvents:
             self.test_m4_ws_010_pre_auth_notification_array_params_should_close(),
             self.test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(),
             self.test_m4_ws_012_should_push_unregistered_event(),
+            self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
+            self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
         ]
 
         if full:

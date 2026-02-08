@@ -487,11 +487,155 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_callee_error_should_return_invocation_failed(self):
+        """M2-REQ-005: callee respond_error 时 caller 返回 invocation_failed。"""
+        result = TestResult("M2-REQ-005 request callee error 返回 invocation_failed")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = "m2-request-failed-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-failed")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=24004,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            callee_error = {
+                "code": 1001,
+                "message": "app_error",
+                "data": {"reason": "mock"}
+            }
+
+            def callee_worker():
+                poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if not items:
+                    return
+
+                invocation_id = items[0].get("invocationId")
+                client.respond_error(callee_instance_id, invocation_id, callee_error)
+
+            worker = threading.Thread(target=callee_worker, daemon=True)
+            worker.start()
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.fail",
+                args={"x": 3},
+                options={
+                    "ttlMs": 5000,
+                    "waitTimeoutMs": 2000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m2-request-failed",
+            )
+
+            worker.join(timeout=3)
+
+            if not RpcAssertions.expect_error(result, request_response, -32050, "invocation_failed"):
+                return result
+
+            error_data = request_response.get("error", {}).get("data", {})
+            if not isinstance(error_data.get("invocationId"), str):
+                result.mark_failure(f"❌ invocation_failed 缺少 invocationId: {request_response}")
+                return result
+
+            callee_error_data = error_data.get("calleeError")
+            if not isinstance(callee_error_data, dict):
+                result.mark_failure(f"❌ invocation_failed 缺少 calleeError 对象: {request_response}")
+                return result
+
+            if callee_error_data.get("code") != 1001 or callee_error_data.get("message") != "app_error":
+                result.mark_failure(f"❌ calleeError code/message 不匹配: {callee_error_data}")
+                return result
+
+            if callee_error_data.get("data", {}).get("reason") != "mock":
+                result.mark_failure(f"❌ calleeError.data.reason 不匹配: {callee_error_data}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_request_rpc_disabled_should_forbidden(self):
+        """M2-REQ-006: capabilities.rpc=false 时 request 返回 forbidden/rpc_disabled。"""
+        result = TestResult("M2-REQ-006 request rpc_disabled 门禁")
+        definition_path = None
+
+        try:
+            app_id = "m2-request-rpc-disabled-app"
+            definition_path = self._create_definition(app_id, rpc=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.blocked",
+                args={},
+                options={
+                    "ttlMs": 3000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="request-rpc-disabled",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "rpc_disabled"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_request_roundtrip_success(),
             self.test_request_timeout_then_late_respond_expired(),
             self.test_request_client_cancel_then_late_respond_expired(),
+            self.test_request_callee_error_should_return_invocation_failed(),
+            self.test_request_rpc_disabled_should_forbidden(),
             self.test_request_invalid_waittimeout_gt_ttl(),
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),

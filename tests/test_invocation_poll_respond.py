@@ -337,6 +337,107 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         return result
 
+    def test_respond_value_error_xor_validation_should_invalid_params(self):
+        """M2-RESP-002: respond 的 value/error 必须二选一。"""
+        result = TestResult("M2-RESP-002 respond value/error XOR 校验")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = "m2-respond-xor-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("respond-xor")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=23031,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            # 子场景1：value 与 error 同时存在
+            notify_response_1 = client.invoke_notify(
+                app_id=app_id,
+                method="asset.xor1",
+                args={},
+                auto_launch=False,
+                request_id="respond-xor-notify-1",
+            )
+            if not RpcAssertions.expect_success(result, notify_response_1, ["invocationId"]):
+                return result
+
+            poll_response_1 = client.poll_once(instance_id, max_count=1, wait_ms=100)
+            if not RpcAssertions.expect_success(result, poll_response_1, ["items"]):
+                return result
+
+            items_1 = poll_response_1.get("result", {}).get("items", [])
+            if len(items_1) != 1:
+                result.mark_failure(f"❌ XOR 子场景1未取到 invocation: {poll_response_1}")
+                return result
+
+            invocation_id_1 = items_1[0].get("invocationId")
+            response_both = client.call("hub.invoke.respond", {
+                "instanceId": instance_id,
+                "invocationId": invocation_id_1,
+                "value": {"ok": True},
+                "error": {"code": 1001, "message": "app_error"}
+            }, request_id="respond-xor-both")
+            if not RpcAssertions.expect_error(result, response_both, -32602, "invalid_params"):
+                return result
+
+            # 子场景2：value 与 error 同时缺失
+            notify_response_2 = client.invoke_notify(
+                app_id=app_id,
+                method="asset.xor2",
+                args={},
+                auto_launch=False,
+                request_id="respond-xor-notify-2",
+            )
+            if not RpcAssertions.expect_success(result, notify_response_2, ["invocationId"]):
+                return result
+
+            poll_response_2 = client.poll_once(instance_id, max_count=1, wait_ms=100)
+            if not RpcAssertions.expect_success(result, poll_response_2, ["items"]):
+                return result
+
+            items_2 = poll_response_2.get("result", {}).get("items", [])
+            if len(items_2) != 1:
+                result.mark_failure(f"❌ XOR 子场景2未取到 invocation: {poll_response_2}")
+                return result
+
+            invocation_id_2 = items_2[0].get("invocationId")
+            response_none = client.call("hub.invoke.respond", {
+                "instanceId": instance_id,
+                "invocationId": invocation_id_2,
+            }, request_id="respond-xor-none")
+            if not RpcAssertions.expect_error(result, response_none, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def test_lease_expired_should_redeliver_with_attempt_incremented(self):
         """M2-LEASE-001: lease 到期后重投递且 attempt 递增（full-only）"""
         result = TestResult("M2-LEASE-001 lease 到期重投递 attempt 递增")
@@ -457,6 +558,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             self.test_respond_with_respond_disabled_instance_should_fail(),
             self.test_respond_duplicate_should_conflict(),
             self.test_respond_by_non_lease_holder_should_conflict(),
+            self.test_respond_value_error_xor_validation_should_invalid_params(),
         ]
 
         if full:

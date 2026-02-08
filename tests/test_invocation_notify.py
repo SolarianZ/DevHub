@@ -318,6 +318,44 @@ class TestInvocationNotify(unittest.TestCase):
 
         return result
 
+    def test_notify_rpc_disabled_should_forbidden(self):
+        """M2-NOTIFY-003: capabilities.rpc=false 时 notify 返回 forbidden/rpc_disabled。"""
+        result = TestResult("M2-NOTIFY-003 notify rpc_disabled 门禁")
+        definition_path = None
+
+        try:
+            app_id = "m2-notify-rpc-disabled-app"
+            definition_path = self._create_definition(app_id, rpc=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.blocked",
+                args={},
+                queue_if_offline=True,
+                auto_launch=False,
+                request_id="notify-rpc-disabled",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "rpc_disabled"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_notify_online_delivery(),
@@ -326,6 +364,7 @@ class TestInvocationNotify(unittest.TestCase):
             self.test_notify_with_autolaunch_true_and_queue_false_should_fail(),
             self.test_notify_with_ttl_less_than_1000_should_fail(),
             self.test_notify_target_instance_missing_should_return_specific_reason(),
+            self.test_notify_rpc_disabled_should_forbidden(),
         ]
 
 
