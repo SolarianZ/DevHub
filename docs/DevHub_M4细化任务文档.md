@@ -27,11 +27,12 @@
 - [x] 暴露 WebSocket 端点 `/ws`，并保持 `/rpc` 行为不变。
 - [x] 强制 `hub.ws.authenticate` 为首条消息，且必须是 JSON-RPC 请求（带 `id`）。
 - [x] 鉴权前处理符合 Spec §3.3/§4.3：
-  - [x] 非鉴权请求（带 `id`）返回 `-32001 unauthorized`。
+  - [x] 非鉴权请求（带 `id`）返回 `-32001 unauthorized`（实现加严：返回后断连）。
   - [x] 非鉴权通知（无 `id`）关闭连接。
 - [x] 完成 WS 鉴权参数校验与错误映射：
   - [x] token 无效 -> `-32001 unauthorized`。
   - [x] 协议版本不匹配 -> `-32099 not_supported`。
+  - [x] `unauthorized` 的 `error.data.reason` 对齐为 `missing_token/invalid_token`。
 - [x] 落地订阅模型：
   - [x] `hub.events.subscribe` 支持全量/按类型订阅。
   - [x] `hub.events.unsubscribe` 幂等。
@@ -89,8 +90,11 @@
 - [x] JSON 解析失败返回 `-32700 parse_error`（`id:null`），并在未鉴权阶段关闭连接。
 - [x] JSON-RPC 信封非法返回 `-32600 invalid_request`，并在未鉴权阶段关闭连接。
 - [x] 首条非 `hub.ws.authenticate`：
-  - [x] 请求（有 `id`）返回 `-32001 unauthorized`；
+  - [x] 请求（有 `id`）返回 `-32001 unauthorized` 后关闭连接（实现加严）；
   - [x] 通知（无 `id`）直接关闭连接。
+- [x] 未鉴权门禁优先级高于 `hub.*` 参数形态校验：
+  - [x] 未鉴权请求（`params=[]`）仍返回 `unauthorized` 并断连；
+  - [x] 未鉴权通知（`params=[]`）仍直接断连。
 
 ### 2.2 鉴权约束
 - [x] `hub.ws.authenticate` 参数：`token/protocolVersion/clientId/clientSessionId`。
@@ -114,6 +118,7 @@
 ### 3.2 测试与文档
 - [x] 白盒测试：事件总线与发布钩子覆盖已补齐。
 - [x] 黑盒测试：WS 首条认证、断线清理、事件流覆盖已补齐。
+- [x] 黑盒测试补充未鉴权 `params=[]` 防回归用例（M4-WS-009/010）。
 - [x] runner 已纳入 M4 模块执行。
 - [x] 新增 M4 细化与测试拆分文档。
 

@@ -276,6 +276,10 @@ class TestWsEvents:
                 if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-req"):
                     return result
 
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 首条非鉴权请求返回 unauthorized 后连接未关闭")
+                    return result
+
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
@@ -339,9 +343,45 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_004_subscribe_unsubscribe_should_work_after_auth(self):
-        """M4-WS-004: 鉴权后可 subscribe/unsubscribe。"""
-        result = TestResult("M4-WS-004 鉴权后订阅与取消订阅")
+    def test_m4_ws_004_authenticate_unsupported_protocol_should_close(self):
+        """M4-WS-004: 协议版本不匹配应返回 not_supported 并断连。"""
+        result = TestResult("M4-WS-004 协议版本不匹配鉴权")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "bad-protocol-auth",
+                    "method": "hub.ws.authenticate",
+                    "params": {
+                        "token": token,
+                        "protocolVersion": 2,
+                        "clientId": "PyWsTestClient",
+                        "clientSessionId": str(uuid.uuid4())
+                    }
+                })
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32099, "not_supported", expected_id="bad-protocol-auth"):
+                    return result
+
+                if not RpcAssertions.expect_error_data_fields(result, response, {"expected": 1, "reason": "mismatch"}):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 协议版本不匹配鉴权后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(self):
+        """M4-WS-005: 鉴权后可 subscribe/unsubscribe。"""
+        result = TestResult("M4-WS-005 鉴权后订阅与取消订阅")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -385,9 +425,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_005_should_push_registered_delivered_completed_events(self):
-        """M4-WS-005: 订阅后应收到 registered/queued/delivered/completed。"""
-        result = TestResult("M4-WS-005 事件推送 completed 主链路")
+    def test_m4_ws_006_should_push_registered_delivered_completed_events(self):
+        """M4-WS-006: 订阅后应收到 registered/queued/delivered/completed。"""
+        result = TestResult("M4-WS-006 事件推送 completed 主链路")
 
         instance_id = self._new_instance_id("m4-ws-event-completed")
 
@@ -475,9 +515,85 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_006_should_push_failed_event(self):
-        """M4-WS-006: 被调用方回传 error 应触发 invocation.failed。"""
-        result = TestResult("M4-WS-006 事件推送 failed 主链路")
+    def test_m4_ws_007_reconnect_after_disconnect_should_receive_events(self):
+        """M4-WS-007: 断线后重连并重新订阅，事件链路应保持稳定。"""
+        result = TestResult("M4-WS-007 断线后重连订阅稳定性")
+
+        instance_id = self._new_instance_id("m4-ws-reconnect")
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+            app_id = self._new_app_id("reconnect")
+
+            with SimpleWebSocketClient(ws_url) as ws1:
+                auth_response = self._authenticate(ws1, token, request_id="auth-7-1")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws1.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-7-1",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.instance.registered"]
+                    }
+                })
+                subscribe_response = ws1.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+
+            time.sleep(0.2)
+
+            with SimpleWebSocketClient(ws_url) as ws2:
+                auth_response = self._authenticate(ws2, token, request_id="auth-7-2")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws2.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-7-2",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.instance.registered"]
+                    }
+                })
+                subscribe_response = ws2.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+
+                register_response = rpc_client.register_instance(
+                    instance_id=instance_id,
+                    app_id=app_id,
+                    scope=None,
+                    poll=True,
+                    respond=True,
+                    pid=6203,
+                )
+                if not RpcAssertions.expect_success(result, register_response):
+                    return result
+
+                expected_types = {"app.instance.registered"}
+                found_types = self._collect_event_types(ws2, expected_types, timeout_sec=6)
+                if not expected_types.issubset(set(found_types)):
+                    result.mark_failure(f"❌ 重连后未收到预期事件: {found_types}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                http_base_url, _, token = self._runtime_hub_info()
+                RpcClient(http_base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m4_ws_008_should_push_failed_event(self):
+        """M4-WS-008: 被调用方回传 error 应触发 invocation.failed。"""
+        result = TestResult("M4-WS-008 事件推送 failed 主链路")
 
         instance_id = self._new_instance_id("m4-ws-event-failed")
 
@@ -565,17 +681,72 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(self):
+        """M4-WS-009: 未鉴权首条非鉴权请求（params=[]）应 unauthorized 并断连。"""
+        result = TestResult("M4-WS-009 未鉴权请求(params=[])应 unauthorized 并断连")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "pre-auth-array-req",
+                    "method": "hub.ping",
+                    "params": []
+                })
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-array-req"):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 未鉴权请求(params=[])返回 unauthorized 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_010_pre_auth_notification_array_params_should_close(self):
+        """M4-WS-010: 未鉴权非鉴权通知（params=[]）应直接断连。"""
+        result = TestResult("M4-WS-010 未鉴权通知(params=[])应断连")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "method": "hub.events.subscribe",
+                    "params": []
+                })
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 未鉴权通知(params=[])后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_m4_ws_001_first_message_must_authenticate(),
             self.test_m4_ws_002_pre_auth_notification_should_close_connection(),
             self.test_m4_ws_003_authenticate_invalid_token_should_close(),
-            self.test_m4_ws_004_subscribe_unsubscribe_should_work_after_auth(),
-            self.test_m4_ws_005_should_push_registered_delivered_completed_events(),
+            self.test_m4_ws_004_authenticate_unsupported_protocol_should_close(),
+            self.test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(),
+            self.test_m4_ws_006_should_push_registered_delivered_completed_events(),
+            self.test_m4_ws_007_reconnect_after_disconnect_should_receive_events(),
+            self.test_m4_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(),
+            self.test_m4_ws_010_pre_auth_notification_array_params_should_close(),
         ]
 
         if full:
-            results.append(self.test_m4_ws_006_should_push_failed_event())
+            results.append(self.test_m4_ws_008_should_push_failed_event())
 
         return results
 

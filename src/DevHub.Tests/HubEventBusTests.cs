@@ -116,4 +116,45 @@ public class HubEventBusTests
         var deliveriesAfterUnsubscribe = bus.DrainDeliveries("conn-unsub", maxCount: 10);
         Assert.Empty(deliveriesAfterUnsubscribe);
     }
+
+    [Fact]
+    public void RemoveConnection_ShouldClearSubscriptionsAndPendingDeliveries()
+    {
+        var bus = new HubEventBus(_logger.Object);
+        bus.RegisterConnection("conn-remove");
+        Assert.True(bus.TryMarkAuthenticated("conn-remove", "client", Guid.NewGuid().ToString("D")));
+        Assert.True(bus.TrySubscribe("conn-remove", null, out _));
+
+        bus.Publish(new HubEventMessage
+        {
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new { appId = "demo.app", instanceId = "inst-1" }
+        });
+
+        Assert.NotEmpty(bus.DrainDeliveries("conn-remove", maxCount: 10));
+
+        Assert.True(bus.TrySubscribe("conn-remove", null, out _));
+        bus.Publish(new HubEventMessage
+        {
+            Type = "invocation.queued",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new { invocationId = "invk-1" }
+        });
+
+        bus.RemoveConnection("conn-remove");
+
+        var deliveriesAfterRemove = bus.DrainDeliveries("conn-remove", maxCount: 10);
+        Assert.Empty(deliveriesAfterRemove);
+
+        bus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new { invocationId = "invk-2" }
+        });
+
+        var deliveriesAfterNewPublish = bus.DrainDeliveries("conn-remove", maxCount: 10);
+        Assert.Empty(deliveriesAfterNewPublish);
+    }
 }

@@ -423,16 +423,6 @@ namespace DevHub.Host
                             continue;
                         }
 
-                        if (IsHubMethodParamsArray(rpcRequest))
-                        {
-                            if (rpcRequest.Id is not null)
-                            {
-                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
-                            }
-
-                            continue;
-                        }
-
                         if (!firstMessageProcessed)
                         {
                             firstMessageProcessed = true;
@@ -475,6 +465,16 @@ namespace DevHub.Host
                             }
 
                             break;
+                        }
+
+                        if (IsHubMethodParamsArray(rpcRequest))
+                        {
+                            if (rpcRequest.Id is not null)
+                            {
+                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
+                            }
+
+                            continue;
                         }
 
                         JsonRpcResponse? response = null;
@@ -684,7 +684,7 @@ namespace DevHub.Host
             catch
             {
                 closeAfterResponse = true;
-                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "token_verification_failed" });
+                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
             }
 
             if (!eventBus.TryMarkAuthenticated(connectionId, parsedClientId, parsedClientSessionId))
@@ -1060,7 +1060,7 @@ namespace DevHub.Host
                     -32001,
                     "unauthorized",
                     requestId,
-                    new { reason = "token_verification_failed" });
+                    new { reason = "invalid_token" });
                 return false;
             }
 

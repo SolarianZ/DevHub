@@ -20,10 +20,12 @@
 
 ### 0.1 覆盖目标（M4 必测）
 - [x] WS 首条消息必须为 `hub.ws.authenticate`。
-- [x] 鉴权前非鉴权请求返回 `unauthorized`。
+- [x] 鉴权前非鉴权请求返回 `unauthorized` 并断连（实现加严）。
 - [x] 鉴权前非鉴权通知触发断连。
+- [x] 未鉴权门禁优先于 `hub.*` 参数形态校验（`params=[]` 不应绕过断连规则）。
 - [x] 鉴权失败（非法 token / 不支持协议）返回规范错误并断连。
 - [x] 订阅/取消订阅主链路与幂等行为。
+- [x] 断线后重连并重新订阅，事件链路稳定。
 - [x] 事件推送覆盖 `registered`、`delivered`、`completed`、`failed`。
 
 ### 0.2 测试层次
@@ -36,17 +38,22 @@
 
 | 用例编号 | 场景 | 类型 | 责任文件 |
 | --- | --- | --- | --- |
-| `M4-WS-001` | 首条非鉴权请求（带 id）返回 unauthorized | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-001` | 首条非鉴权请求（带 id）返回 unauthorized 并断连 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WS-002` | 鉴权前非鉴权通知（无 id）关闭连接 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WS-003` | 非法 token 鉴权失败并断连 | Python 黑盒 | `tests/test_ws_events.py` |
-| `M4-WS-004` | 鉴权后 subscribe/unsubscribe 成功 | Python 黑盒 | `tests/test_ws_events.py` |
-| `M4-WS-005` | 推送 registered/queued/delivered/completed 事件 | Python 黑盒 | `tests/test_ws_events.py` |
-| `M4-WS-006` | 推送 invocation.failed 事件 | Python 黑盒（full） | `tests/test_ws_events.py` |
+| `M4-WS-004` | 协议版本不匹配鉴权返回 not_supported 并断连 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-005` | 鉴权后 subscribe/unsubscribe 成功 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-006` | 推送 registered/queued/delivered/completed 事件 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-007` | 断线后重连并重新订阅可持续收事件 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-008` | 推送 invocation.failed 事件 | Python 黑盒（full） | `tests/test_ws_events.py` |
+| `M4-WS-009` | 未鉴权首条非鉴权请求（`params=[]`）返回 unauthorized 并断连 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-010` | 未鉴权非鉴权通知（`params=[]`）直接断连 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WB-001` | 支持事件类型集合与过滤匹配 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
 | `M4-WB-002` | 订阅鉴权门禁与取消订阅幂等 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
-| `M4-WB-003` | register/unregister 发布实例事件 | C# 白盒 | `src/DevHub.Tests/AppInstanceEventTests.cs` |
-| `M4-WB-004` | notify->poll->respond 发布 queued/delivered/completed | C# 白盒 | `src/DevHub.Tests/InvocationEventFlowTests.cs` |
-| `M4-WB-005` | notify->poll->respond(error) 发布 failed | C# 白盒 | `src/DevHub.Tests/InvocationEventFlowTests.cs` |
+| `M4-WB-003` | RemoveConnection 后订阅与待投递被清理 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
+| `M4-WB-004` | register/unregister 发布实例事件 | C# 白盒 | `src/DevHub.Tests/AppInstanceEventTests.cs` |
+| `M4-WB-005` | notify->poll->respond 发布 queued/delivered/completed | C# 白盒 | `src/DevHub.Tests/InvocationEventFlowTests.cs` |
+| `M4-WB-006` | notify->poll->respond(error) 发布 failed | C# 白盒 | `src/DevHub.Tests/InvocationEventFlowTests.cs` |
 
 ---
 
@@ -60,6 +67,8 @@
 ### 2.2 事件流测试路径
 - [x] 订阅成功后，通过 HTTP 触发实例注册与 invocation 主链路。
 - [x] 校验 `hub.event` 通知中的 `params.type` 至少覆盖核心事件集。
+- [x] 新增未鉴权 `params=[]` 回归用例，确保不会绕过 unauthorized/断连门禁。
+- [x] 断线后重连并重新订阅，验证事件链路稳定。
 - [x] full 模式增加 `invocation.failed` 验证。
 
 ---
@@ -71,6 +80,7 @@
 - [x] 未鉴权订阅拦截断言。
 - [x] 类型过滤投递断言。
 - [x] 取消订阅幂等与停止投递断言。
+- [x] RemoveConnection 连接清理后不可继续投递断言。
 
 ### 3.2 处理器事件钩子测试
 - [x] `AppInstancesHandler`：注册/注销事件发布断言。
@@ -84,12 +94,15 @@
 
 - [x] `tests/test_runner.py` 增加 `TestWsEvents` 模块导入与执行。
 - [x] runner 标题/覆盖描述升级为 M1~M4。
-- [x] full 模式额外执行 `M4-WS-006`（failed 事件流）。
+- [x] default 模式纳入协议版本不匹配与断线重连场景。
+- [x] full 模式额外执行 `M4-WS-008`（failed 事件流）。
 
 ---
 
 ## 5. 完成定义（DoD）
 
 - [x] M4 必测用例（WS 鉴权 + 订阅 + 事件主链路）具备自动化覆盖。
+- [x] 未鉴权 + `params=[]` 场景已纳入自动化回归，防止校验顺序回归。
 - [x] 白盒与黑盒对同一事件类型集合使用一致断言。
+- [x] 断线清理由白盒确定性 + 黑盒重连场景共同覆盖。
 - [x] 回归入口可一键纳入 M4 模块。
