@@ -16,7 +16,7 @@
   - Python 已具备 invocation / launch / app instance 主链路测试框架。
   - C# 已具备 routing / store / lease / launch 白盒测试骨架。
 - 本轮完成范围：**C# 白盒补齐必要缺口 + Python 黑盒 scope 主链路与 runner 接入已完成并通过（含 `M3-SCOPE-010` 与 full 扩展）**。
-- 当前主要剩余：日志字段规范、测试文件拆分（`InvocationScopeRoutingTests.cs` / `LaunchScopeTests.cs`）与空白字符串 scope 样本待补齐。
+- 当前主要剩余：日志字段规范与空白字符串 scope 样本待补齐。
 
 ---
 
@@ -140,8 +140,8 @@
 
 ### 3.1 文件规划（新增）
 - [x] `src/DevHub.Tests/ScopeParsingTests.cs`
-- [ ] `src/DevHub.Tests/InvocationScopeRoutingTests.cs`
-- [ ] `src/DevHub.Tests/LaunchScopeTests.cs`
+- [x] `src/DevHub.Tests/InvocationScopeRoutingTests.cs`
+- [x] `src/DevHub.Tests/LaunchScopeTests.cs`
 
 ### 3.2 `ScopeParsingTests.cs`
 - [x] `scope` omitted/null 解析为 Global。
@@ -237,9 +237,9 @@
 - [x] 新增 `tests/test_scope_routing.py` 并接入 `tests/test_runner.py`。
 - [x] 扩展 `tests/test_launch_invocation.py` 的 scope dedupe 隔离用例。
 - [x] 新增 `src/DevHub.Tests/ScopeParsingTests.cs`。
-- [ ] 新增 `src/DevHub.Tests/InvocationScopeRoutingTests.cs`。
-- [ ] 新增 `src/DevHub.Tests/LaunchScopeTests.cs`。
+- [x] 新增 `src/DevHub.Tests/InvocationScopeRoutingTests.cs`。
+- [x] 新增 `src/DevHub.Tests/LaunchScopeTests.cs`。
 - [x] 输出回归报告（`temp/test_results.json` / `temp/test_results.txt` / `temp/test_log.txt`）。
 - [x] 与 `DevHub_M3细化任务文档.md` 用例编号一一对应并完成交叉复核。
 
-> 备注：本轮部分条目采用既有测试文件增量覆盖（`InvocationRoutingTests`、`LaunchCoordinatorTests`、`SpecConformanceTests`），后续仍可按原规划拆分为独立文件（`InvocationScopeRoutingTests.cs`、`LaunchScopeTests.cs`）。
+> 备注：本轮已完成白盒测试文件拆分（`InvocationScopeRoutingTests.cs`、`LaunchScopeTests.cs`），未完成项保持待办。

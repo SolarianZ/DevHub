@@ -18,7 +18,7 @@
   - `AppInstances/Launch/Invocation` handlers 与 `InvocationRoutingService` 已完成语义收敛。
   - C# 白盒测试补齐必要缺口并通过（含 omitted/null 等价、Global 默认路由、大小写敏感断言）。
   - Python 黑盒 `test_scope_routing.py` 已落地并接入 `test_runner.py`，`M3-SCOPE-001~012` 已覆盖（含 `M3-SCOPE-010` 与 full 扩展）。
-- 当前主要剩余缺口：日志字段规范、测试文件拆分（`InvocationScopeRoutingTests.cs` / `LaunchScopeTests.cs`）与空白字符串 scope 样本待补齐。
+- 当前主要剩余缺口：日志字段规范与空白字符串 scope 样本待补齐。
 
 ---
 
@@ -291,6 +291,8 @@
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Core/Services/Invocation/InvocationRoutingService.cs`
 - 测试文件：
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/ScopeParsingTests.cs`
+  - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationScopeRoutingTests.cs`
+  - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/LaunchScopeTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationRoutingTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationStoreTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/LaunchCoordinatorTests.cs`
@@ -299,7 +301,7 @@
   - `/Users/qiuyu/projects/DevHub/tests/test_launch_invocation.py`
   - `/Users/qiuyu/projects/DevHub/tests/test_runner.py`
 - 测试命令（已通过）：
-  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~InvocationStoreTests|FullyQualifiedName~LaunchCoordinatorTests"`
+  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~InvocationScopeRoutingTests|FullyQualifiedName~LaunchScopeTests|FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~LaunchCoordinatorTests|FullyQualifiedName~ScopeParsingTests|FullyQualifiedName~InvocationStoreTests"`
   - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_scope_routing.py`
   - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_runner.py --fast --no-header`
   - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_runner.py --full --no-header`

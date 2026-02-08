@@ -76,32 +76,6 @@ public class ScopeParsingTests : IDisposable
         Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
     }
 
-    [Fact]
-    public async Task LaunchHandler_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
-    {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new LaunchHandler(coordinator, Mock.Of<ILogger<LaunchHandler>>());
-
-        var response = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "launch-scope-global",
-            Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "scope-launch-app",
-                scope = "global"
-            })
-        }, CancellationToken.None);
-
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
-    }
 
     [Fact]
     public async Task AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldTreatBothAsGlobal()
@@ -169,48 +143,6 @@ public class ScopeParsingTests : IDisposable
         Assert.Contains(instances, item => item.GetProperty("instanceId").GetString() == "inst-scope-null");
     }
 
-    [Fact]
-    public async Task LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
-    {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new LaunchHandler(coordinator, Mock.Of<ILogger<LaunchHandler>>());
-
-        var omittedScopeResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "launch-omitted-scope",
-            Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "missing-scope-equivalent-app"
-            })
-        }, CancellationToken.None);
-
-        var nullScopeResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "launch-null-scope",
-            Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "missing-scope-equivalent-app",
-                scope = (string?)null
-            })
-        }, CancellationToken.None);
-
-        Assert.NotNull(omittedScopeResponse.Error);
-        Assert.NotNull(nullScopeResponse.Error);
-        Assert.Equal(-32014, omittedScopeResponse.Error.Code);
-        Assert.Equal(-32014, nullScopeResponse.Error.Code);
-        Assert.Equal("app_definition_not_found", omittedScopeResponse.Error.Message);
-        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
-
-        var omittedData = JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data);
-        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
-        Assert.Equal("missing-scope-equivalent-app", omittedData.GetProperty("appId").GetString());
-        Assert.Equal("missing-scope-equivalent-app", nullData.GetProperty("appId").GetString());
-    }
 
     [Fact]
     public async Task InvocationHandler_Notify_WhenTargetScopeGlobal_ShouldReturnInvalidTargetScopeReason()
