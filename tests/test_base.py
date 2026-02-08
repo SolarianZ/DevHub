@@ -468,6 +468,34 @@ class RpcAssertions:
 
         return True
 
+    @staticmethod
+    def assert_invalid_scope_error(result: TestResult, response: dict, reason: str):
+        """断言 scope 相关 invalid_params 错误。"""
+        if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+            return False
+
+        return RpcAssertions.expect_error_data_fields(result, response, {"reason": reason})
+
+    @staticmethod
+    def assert_items_all_match_scope(result: TestResult, items: list, scope):
+        """断言 items 内所有元素都满足给定 scope。"""
+        if not isinstance(items, list):
+            result.mark_failure(f"❌ items 不是数组: {items}")
+            return False
+
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                result.mark_failure(f"❌ items[{index}] 不是对象: {item}")
+                return False
+
+            actual_scope = item.get("scope")
+            if actual_scope != scope:
+                result.mark_failure(
+                    f"❌ items[{index}].scope 不匹配: 期望 {scope!r}，实际 {actual_scope!r}, item={item}")
+                return False
+
+        return True
+
 
 class TestReport:
     """

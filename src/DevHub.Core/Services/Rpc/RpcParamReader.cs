@@ -86,18 +86,28 @@ internal static class RpcParamReader
 
         if (scopeElement.ValueKind != JsonValueKind.String)
         {
-            errorData = new { reason = invalidReason };
+            errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
         }
 
         scope = scopeElement.GetString();
         if (scope is null || scope == string.Empty || scope == "global")
         {
-            errorData = new { reason = invalidReason };
+            errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 构造 scope 非法时的统一错误数据。
+    /// </summary>
+    /// <param name="invalidReason">错误 reason。</param>
+    /// <returns>错误数据对象。</returns>
+    internal static object BuildInvalidScopeErrorData(string invalidReason)
+    {
+        return new { reason = invalidReason };
     }
 
     /// <summary>

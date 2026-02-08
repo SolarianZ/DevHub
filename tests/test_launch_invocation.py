@@ -228,6 +228,9 @@ class TestLaunchInvocation(unittest.TestCase):
                 statuses.append(status)
                 launch_ids.append(launch_id)
 
+            for index, (status, launch_id) in enumerate(zip(statuses, launch_ids)):
+                result.add_detail(f"并发请求[{index}] status={status}, launchId={launch_id}")
+
             started_count = sum(1 for status in statuses if status in ("started", "starting"))
             already_running_count = sum(1 for status in statuses if status == "already_running")
 

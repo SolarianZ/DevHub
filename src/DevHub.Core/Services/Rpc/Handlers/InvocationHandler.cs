@@ -95,6 +95,7 @@ public class InvocationHandler : IRpcHandler
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
+        LogRouteDecision(request.Method, appId, target, candidates.Count);
         if (candidates.Count == 0)
         {
             if (!options.QueueIfOffline)
@@ -207,6 +208,7 @@ public class InvocationHandler : IRpcHandler
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
+        LogRouteDecision(request.Method, appId, target, candidates.Count);
         if (candidates.Count == 0)
         {
             if (!options.QueueIfOffline)
@@ -692,5 +694,18 @@ public class InvocationHandler : IRpcHandler
         return target.InstanceId is null
             ? "offline_no_queue"
             : "target_instance_missing";
+    }
+
+    private void LogRouteDecision(string methodName, string appId, InvocationTarget target, int candidateCount)
+    {
+        var matchedScope = target.Scope is null ? "global" : "explicit";
+        _logger.LogInformation(
+            "Invocation 路由决策: method={method}, appId={appId}, target.scope={targetScope}, target.instanceId={targetInstanceId}, candidateCount={candidateCount}, matchedScope={matchedScope}",
+            methodName,
+            appId,
+            target.Scope,
+            target.InstanceId,
+            candidateCount,
+            matchedScope);
     }
 }

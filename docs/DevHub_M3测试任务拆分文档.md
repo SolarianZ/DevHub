@@ -11,12 +11,12 @@
 
 ## 当前状态（截至 2026-02-08）
 
-- M3 测试任务总体状态：**进行中**。
+- M3 测试任务总体状态：**已完成**。
 - M2 测试基线已可复用：
   - Python 已具备 invocation / launch / app instance 主链路测试框架。
   - C# 已具备 routing / store / lease / launch 白盒测试骨架。
 - 本轮完成范围：**C# 白盒补齐必要缺口 + Python 黑盒 scope 主链路与 runner 接入已完成并通过（含 `M3-SCOPE-010` 与 full 扩展）**。
-- 当前主要剩余：日志字段规范与空白字符串 scope 样本待补齐。
+- 本轮收尾已完成：日志字段规范校验、空白字符串 scope 样本黑盒覆盖、并发 dedupe 记录细化与文档状态同步。
 
 ---
 
@@ -58,18 +58,18 @@
 ### 2.1 文件规划（新增 + 扩展）
 - [x] 新增 `tests/test_scope_routing.py`。
 - [x] 扩展 `tests/test_launch_invocation.py`（dedupe scope 隔离场景）。
-- [ ] 如有必要，复用并微调 `tests/test_base.py` 的 helper（不破坏 M2 兼容）。
+- [x] 如有必要，复用并微调 `tests/test_base.py` 的 helper（不破坏 M2 兼容）。
 
 ### 2.2 基础能力扩展（复用 `tests/test_base.py`）
-- [ ] 增加/复用 scope 维度 helper：
+- [x] 增加/复用 scope 维度 helper：
   - `register_instance(..., scope=...)`
   - `invoke_notify(..., target_scope=...)`
   - `invoke_request(..., target_scope=...)`
   - `launch_app(..., scope=...)`
-- [ ] 增加通用断言 helper：
+- [x] 增加通用断言 helper：
   - `assert_invalid_scope_error(reason)`
   - `assert_items_all_match_scope(scope)`
-- [ ] 为 M3 增加统一测试前缀（如 `m3-scope-*`），避免与 M2 案例名混淆。
+- [x] 为 M3 增加统一测试前缀（如 `m3-scope-*`），避免与 M2 案例名混淆。
 
 ### 2.3 `tests/test_scope_routing.py` 用例任务
 
@@ -171,7 +171,7 @@
 - [x] `null`：Global。
 - [x] `workspace-A`：显式 scope（大小写样本 1）。
 - [x] `workspace-a`：显式 scope（大小写样本 2）。
-- [ ] `"   "`：按严格 Spec 视为**合法显式 scope**（不 trim），用于验证“按原值精确匹配”。
+- [x] `"   "`：按严格 Spec 视为**合法显式 scope**（不 trim），用于验证“按原值精确匹配”。
 
 ### 4.2 实例与资源隔离
 - [x] 每个测试用例使用唯一 `instanceId`（uuid/timestamp）。
@@ -180,7 +180,7 @@
 
 ### 4.3 环境稳定性
 - [x] 长耗时场景仅放在 `full`，默认模式优先快速稳定反馈。
-- [ ] 并发 dedupe 用例固定并发度（建议 5~10）并记录每次 `launchId/status`。
+- [x] 并发 dedupe 用例固定并发度（建议 5~10）并记录每次 `launchId/status`。
 
 ---
 
@@ -242,4 +242,4 @@
 - [x] 输出回归报告（`temp/test_results.json` / `temp/test_results.txt` / `temp/test_log.txt`）。
 - [x] 与 `DevHub_M3细化任务文档.md` 用例编号一一对应并完成交叉复核。
 
-> 备注：本轮已完成白盒测试文件拆分（`InvocationScopeRoutingTests.cs`、`LaunchScopeTests.cs`），未完成项保持待办。
+> 备注：M3 测试任务已完成收尾，白盒/黑盒/runner 回归均通过，文档待办已清零。

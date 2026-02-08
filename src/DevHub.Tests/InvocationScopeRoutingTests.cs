@@ -278,6 +278,136 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Notify_ShouldWriteRouteDecisionLogWithRequiredFields()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        WriteDefinition("route-log-notify.app", rpcEnabled: true);
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "route-log-notify-global",
+            AppId = "route-log-notify.app",
+            Scope = null,
+            Pid = 4201,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var request = new JsonRpcRequest
+        {
+            Id = "route-log-notify",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "route-log-notify.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.rebuild",
+                args = new { sample = true },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        VerifyRouteDecisionLog(
+            logger: _invocationHandlerLogger,
+            expectedMethod: "hub.invoke.notify",
+            expectedAppId: "route-log-notify.app",
+            expectedTargetScope: null,
+            expectedTargetInstanceId: null,
+            expectedCandidateCount: 1,
+            expectedMatchedScope: "global");
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Request_ShouldWriteRouteDecisionLogWithRequiredFields()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        WriteDefinition("route-log-request.app", rpcEnabled: true);
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        var scopedInstance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "route-log-request-scoped",
+            AppId = "route-log-request.app",
+            Scope = "workspace-A",
+            Pid = 4202,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var request = new JsonRpcRequest
+        {
+            Id = "route-log-request",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "route-log-request.app",
+                target = new { scope = "workspace-A", instanceId = (string?)null },
+                method = "asset.build",
+                args = new { sample = true },
+                options = new
+                {
+                    ttlMs = 3000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        };
+
+        var responderTask = Task.Run(async () =>
+        {
+            await Task.Delay(50);
+            var pollResponse = await store.PollAsync(scopedInstance, maxCount: 1, waitMs: 1500, CancellationToken.None);
+            if (pollResponse.Count > 0)
+            {
+                _ = store.Respond("route-log-request-scoped", pollResponse[0].InvocationId, new { ok = true }, null);
+                waiter.CompleteSuccess(pollResponse[0].InvocationId, new { ok = true });
+            }
+        });
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+        await responderTask;
+
+        Assert.Null(response.Error);
+        var responseResult = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(responseResult.GetProperty("ok").GetBoolean());
+        var value = responseResult.GetProperty("value");
+        Assert.True(value.TryGetProperty("ok", out var okValue) && okValue.GetBoolean());
+
+        VerifyRouteDecisionLog(
+            logger: _invocationHandlerLogger,
+            expectedMethod: "hub.invoke.request",
+            expectedAppId: "route-log-request.app",
+            expectedTargetScope: "workspace-A",
+            expectedTargetInstanceId: null,
+            expectedCandidateCount: 1,
+            expectedMatchedScope: "explicit");
+    }
+
+    [Fact]
     public async Task InvocationHandler_Notify_OfflineMatrix_ShouldBeConsistentAcrossGlobalAndScopedTargets()
     {
         foreach (var scopeCase in new (string? TargetScope, string ScopeName, string ScopeTag)[]
@@ -587,5 +717,87 @@ public class InvocationScopeRoutingTests : IDisposable
             },
             State = InvocationState.Created
         };
+    }
+
+    private static void VerifyRouteDecisionLog(
+        Mock<ILogger<InvocationHandler>> logger,
+        string expectedMethod,
+        string expectedAppId,
+        string? expectedTargetScope,
+        string? expectedTargetInstanceId,
+        int expectedCandidateCount,
+        string expectedMatchedScope)
+    {
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => HasRouteLogState(
+                    state,
+                    expectedMethod,
+                    expectedAppId,
+                    expectedTargetScope,
+                    expectedTargetInstanceId,
+                    expectedCandidateCount,
+                    expectedMatchedScope)),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce);
+    }
+
+    private static bool HasRouteLogState(
+        object state,
+        string expectedMethod,
+        string expectedAppId,
+        string? expectedTargetScope,
+        string? expectedTargetInstanceId,
+        int expectedCandidateCount,
+        string expectedMatchedScope)
+    {
+        if (state is not IReadOnlyList<KeyValuePair<string, object?>> pairs)
+        {
+            return false;
+        }
+
+        var values = pairs.ToDictionary(p => p.Key, p => p.Value);
+        if (!values.TryGetValue("method", out var method) || !Equals(method, expectedMethod))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("appId", out var appId) || !Equals(appId, expectedAppId))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("targetScope", out var targetScope) || !Equals(targetScope, expectedTargetScope))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("targetInstanceId", out var targetInstanceId) || !Equals(targetInstanceId, expectedTargetInstanceId))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("candidateCount", out var candidateCount) || !Equals(candidateCount, expectedCandidateCount))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("matchedScope", out var matchedScope) || !Equals(matchedScope, expectedMatchedScope))
+        {
+            return false;
+        }
+
+        if (!values.TryGetValue("{OriginalFormat}", out var originalFormat)
+            || originalFormat is not string format
+            || !format.Contains("target.scope", StringComparison.Ordinal)
+            || !format.Contains("target.instanceId", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
     }
 }

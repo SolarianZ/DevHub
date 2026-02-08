@@ -11,14 +11,14 @@
 
 ## 当前状态（截至 2026-02-08）
 
-- M3 总体状态：**进行中**。
+- M3 总体状态：**已完成**。
 - M1 / M2 已完成并通过既有回归，M3 以此为基线推进。
 - 本轮已完成（代码 + 白盒 + 黑盒）：
   - 公共解析器已收敛：`TryGetOptionalScope(...)`、`TryParseInvocationTarget(...)`。
   - `AppInstances/Launch/Invocation` handlers 与 `InvocationRoutingService` 已完成语义收敛。
   - C# 白盒测试补齐必要缺口并通过（含 omitted/null 等价、Global 默认路由、大小写敏感断言）。
   - Python 黑盒 `test_scope_routing.py` 已落地并接入 `test_runner.py`，`M3-SCOPE-001~012` 已覆盖（含 `M3-SCOPE-010` 与 full 扩展）。
-- 当前主要剩余缺口：日志字段规范与空白字符串 scope 样本待补齐。
+- 本轮收尾已完成：路由日志字段规范、空白字符串 scope 样本、并发 dedupe 细节记录与文档状态同步。
 
 ---
 
@@ -96,7 +96,7 @@
 ### 1.3 公共接口/类型变化（M3 文档约束）
 - [x] 外部 RPC 返回结构保持兼容。
 - [x] 内部新增类型/方法仅限 `internal` 使用，不外泄公共协议面。
-- [ ] 建议新增（命名可按代码风格微调，但语义必须一致）：
+- [x] 建议新增（命名可按代码风格微调，但语义必须一致）：
   - `TryGetOptionalScope(...)`
   - `TryParseInvocationTarget(...)`
   - `BuildInvalidScopeErrorData(...)`
@@ -201,14 +201,14 @@
 - [x] `invalid_target_instance`：用于 `target.instanceId` 类型或值非法。
 
 ### 5.3 日志字段要求（便于排障）
-- [ ] 关键路由日志至少包含：
+- [x] 关键路由日志至少包含：
   - `method`
   - `appId`
   - `target.scope`
   - `target.instanceId`
   - `candidateCount`
   - `matchedScope`（global / explicit）
-- [ ] 交付前清理临时调试日志，保留稳定运营日志。
+- [x] 交付前清理临时调试日志，保留稳定运营日志。
 
 ---
 
@@ -261,23 +261,23 @@
 ## 8. 边界与风险
 
 ### 8.1 与后续里程碑边界
-- [ ] M3 不扩展 WS 协议与事件推送（M4）。
-- [ ] M3 不处理 invocation 持久化与重放（v2）。
-- [ ] M3 不引入 SDK 行为改造（M5）。
+- [x] M3 不扩展 WS 协议与事件推送（M4）。
+- [x] M3 不处理 invocation 持久化与重放（v2）。
+- [x] M3 不引入 SDK 行为改造（M5）。
 
 ### 8.2 风险与应对
-- [ ] **风险：解析器收敛引发回归**
+- [x] **风险：解析器收敛引发回归**
   - 应对：先补白盒解析测试，再替换 handler 调用。
-- [ ] **风险：scope 语义与历史行为不一致**
+- [x] **风险：scope 语义与历史行为不一致**
   - 应对：黑盒测试固定 `M3-SCOPE-*` 断言，避免隐式回退。
-- [ ] **风险：大小写敏感规则误用**
+- [x] **风险：大小写敏感规则误用**
   - 应对：强制加入 `workspace-A` / `workspace-a` 并行测试。
 
 ### 8.3 默认值与假设（本阶段固化）
-- [ ] 双文档交付：M3 细化 + M3 测试拆分。
-- [ ] 文档状态表达：M3 进行中（严格口径，未完成项保持待办）。
-- [ ] `scope` 策略严格按 Spec，不做 trim/lower 补偿。
-- [ ] 不修改 `Spec.md`，仅新增 M3 文档。
+- [x] 双文档交付：M3 细化 + M3 测试拆分。
+- [x] 文档状态表达：M3 已完成（收尾项全部闭环）。
+- [x] `scope` 策略严格按 Spec，不做 trim/lower 补偿。
+- [x] 不修改 `Spec.md`，仅新增 M3 文档。
 
 ---
 
