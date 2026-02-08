@@ -189,6 +189,37 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
+    {
+        WriteDefinition(
+            "launch-scope-isolation.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+
+        var coordinator = CreateCoordinator();
+
+        var scopeA = await coordinator.LaunchAsync(
+            appId: "launch-scope-isolation.app",
+            scope: "workspace-A",
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var scopeB = await coordinator.LaunchAsync(
+            appId: "launch-scope-isolation.app",
+            scope: "workspace-B",
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(scopeA.Ok);
+        Assert.True(scopeB.Ok);
+        Assert.Equal("started", scopeA.Status);
+        Assert.Equal("started", scopeB.Status);
+        Assert.NotEqual(scopeA.LaunchId, scopeB.LaunchId);
+    }
+
+    [Fact]
     public async Task LaunchAsync_WhenHttpBaseUrlChanges_ShouldUseDifferentTemplateKey()
     {
         WriteDefinition(

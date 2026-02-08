@@ -76,7 +76,7 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!TryParseTarget(paramsElement, out var target, out var targetError))
+        if (!RpcParamReader.TryParseInvocationTarget(paramsElement, out var target, out var targetError))
         {
             return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
         }
@@ -188,7 +188,7 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!TryParseTarget(paramsElement, out var target, out var targetError))
+        if (!RpcParamReader.TryParseInvocationTarget(paramsElement, out var target, out var targetError))
         {
             return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
         }
@@ -538,7 +538,7 @@ public class InvocationHandler : IRpcHandler
             TtlMs = DefaultRequestTtlMs,
             WaitTimeoutMs = DefaultRequestWaitTimeoutMs,
             QueueIfOffline = true,
-            AutoLaunch = string.IsNullOrWhiteSpace(target.InstanceId)
+            AutoLaunch = target.InstanceId is null
         };
 
         if (paramsElement.TryGetProperty("options", out var optionsElement))
@@ -594,7 +594,7 @@ public class InvocationHandler : IRpcHandler
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(target.InstanceId) && options.AutoLaunch)
+        if (target.InstanceId is not null && options.AutoLaunch)
         {
             errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
@@ -616,65 +616,6 @@ public class InvocationHandler : IRpcHandler
         return true;
     }
 
-    private static bool TryParseTarget(JsonElement paramsElement, out InvocationTarget target, out object? errorData)
-    {
-        target = new InvocationTarget { Scope = null, InstanceId = null };
-        errorData = null;
-
-        if (!paramsElement.TryGetProperty("target", out var targetElement))
-        {
-            return true;
-        }
-
-        if (targetElement.ValueKind != JsonValueKind.Object)
-        {
-            errorData = new { reason = "invalid_target" };
-            return false;
-        }
-
-        string? scope = null;
-        if (targetElement.TryGetProperty("scope", out var scopeElement))
-        {
-            if (scopeElement.ValueKind == JsonValueKind.String)
-            {
-                scope = scopeElement.GetString();
-            }
-            else if (scopeElement.ValueKind != JsonValueKind.Null)
-            {
-                errorData = new { reason = "invalid_target_scope" };
-                return false;
-            }
-
-            if (scope == string.Empty || scope == "global")
-            {
-                errorData = new { reason = "invalid_target_scope" };
-                return false;
-            }
-        }
-
-        string? instanceId = null;
-        if (targetElement.TryGetProperty("instanceId", out var instanceIdElement))
-        {
-            if (instanceIdElement.ValueKind == JsonValueKind.String)
-            {
-                instanceId = instanceIdElement.GetString();
-                if (string.IsNullOrWhiteSpace(instanceId))
-                {
-                    errorData = new { reason = "invalid_target_instance" };
-                    return false;
-                }
-            }
-            else if (instanceIdElement.ValueKind != JsonValueKind.Null)
-            {
-                errorData = new { reason = "invalid_target_instance" };
-                return false;
-            }
-        }
-
-        target = new InvocationTarget { Scope = scope, InstanceId = instanceId };
-        return true;
-    }
-
     private static bool TryParseNotifyOptions(
         JsonElement paramsElement,
         InvocationTarget target,
@@ -685,7 +626,7 @@ public class InvocationHandler : IRpcHandler
         {
             TtlMs = DefaultNotifyTtlMs,
             QueueIfOffline = true,
-            AutoLaunch = string.IsNullOrWhiteSpace(target.InstanceId)
+            AutoLaunch = target.InstanceId is null
         };
 
         if (paramsElement.TryGetProperty("options", out var optionsElement))
@@ -730,7 +671,7 @@ public class InvocationHandler : IRpcHandler
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(target.InstanceId) && options.AutoLaunch)
+        if (target.InstanceId is not null && options.AutoLaunch)
         {
             errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
@@ -748,7 +689,7 @@ public class InvocationHandler : IRpcHandler
 
     private static string ResolveNoCandidateReason(InvocationTarget target)
     {
-        return string.IsNullOrWhiteSpace(target.InstanceId)
+        return target.InstanceId is null
             ? "offline_no_queue"
             : "target_instance_missing";
     }

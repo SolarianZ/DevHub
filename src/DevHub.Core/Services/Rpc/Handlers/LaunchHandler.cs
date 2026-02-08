@@ -39,9 +39,14 @@ public class LaunchHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!TryParseScope(paramsElement, out var scope))
+        if (!RpcParamReader.TryGetOptionalScope(
+                paramsElement,
+                "scope",
+                "invalid_scope",
+                out var scope,
+                out var scopeErrorData))
         {
-            return RpcErrorFactory.InvalidParams(request.Id);
+            return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData);
         }
 
         if (!TryParseWaitForRegisterMs(paramsElement, out var waitForRegisterMs))
@@ -72,34 +77,6 @@ public class LaunchHandler : IRpcHandler
                 launchId = launchResult.LaunchId
             }
         };
-    }
-
-    private static bool TryParseScope(JsonElement element, out string? scope)
-    {
-        scope = null;
-        if (!element.TryGetProperty("scope", out var scopeElement))
-        {
-            return true;
-        }
-
-        if (scopeElement.ValueKind == JsonValueKind.Null)
-        {
-            scope = null;
-            return true;
-        }
-
-        if (scopeElement.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        scope = scopeElement.GetString();
-        if (scope == string.Empty || scope == "global")
-        {
-            return false;
-        }
-
-        return true;
     }
 
     private static bool TryParseWaitForRegisterMs(JsonElement element, out int waitForRegisterMs)

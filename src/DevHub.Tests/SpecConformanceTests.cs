@@ -229,6 +229,8 @@ public class SpecConformanceTests : IDisposable
 
         Assert.Equal(-32602, invalidScopeResponse.Error?.Code);
         Assert.Equal("invalid_params", invalidScopeResponse.Error?.Message);
+        var invalidScopeData = JsonSerializer.SerializeToElement(invalidScopeResponse.Error?.Data);
+        Assert.Equal("invalid_scope", invalidScopeData.GetProperty("reason").GetString());
 
         Assert.Equal(-32602, missingInvokeResponse.Error?.Code);
         Assert.Equal("invalid_params", missingInvokeResponse.Error?.Message);

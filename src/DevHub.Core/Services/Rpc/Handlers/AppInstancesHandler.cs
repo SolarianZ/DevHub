@@ -68,9 +68,9 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!TryParseInstanceRegistration(instanceElement, request.Id, out var instance))
+            if (!TryParseInstanceRegistration(instanceElement, request.Id, out var instance, out var parseErrorData))
             {
-                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", parseErrorData));
             }
 
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
@@ -254,27 +254,15 @@ public class AppInstancesHandler : IRpcHandler
                     appId = appIdProperty.GetString();
                 }
 
-                if (paramsElement.TryGetProperty("scope", out var scopeProperty))
+                if (!RpcParamReader.TryGetOptionalScope(
+                        paramsElement,
+                        "scope",
+                        "invalid_scope",
+                        out scope,
+                        out var scopeErrorData))
                 {
-                    if (scopeProperty.ValueKind == JsonValueKind.String)
-                    {
-                        scope = scopeProperty.GetString();
-                    }
-                    else if (scopeProperty.ValueKind == JsonValueKind.Null)
-                    {
-                        scope = null;
-                    }
-                    else
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: scope 类型无效, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    if (scope == string.Empty || scope == "global")
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: scope 取值非法, Scope: {Scope}, RequestId: {RequestId}", scope, request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
+                    _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
                 }
 
                 if (paramsElement.TryGetProperty("includeAllScopes", out var includeAllScopesProperty))
@@ -331,9 +319,14 @@ public class AppInstancesHandler : IRpcHandler
     /// <summary>
     /// 解析并校验 instance 注册参数
     /// </summary>
-    private bool TryParseInstanceRegistration(JsonElement instanceElement, object? requestId, out AppInstance instance)
+    private bool TryParseInstanceRegistration(
+        JsonElement instanceElement,
+        object? requestId,
+        out AppInstance instance,
+        out object? errorData)
     {
         instance = null!;
+        errorData = null;
 
         if (!instanceElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
         {
@@ -367,28 +360,15 @@ public class AppInstancesHandler : IRpcHandler
             return false;
         }
 
-        string? scope = null;
-        if (instanceElement.TryGetProperty("scope", out var scopeProperty))
+        if (!RpcParamReader.TryGetOptionalScope(
+                instanceElement,
+                "scope",
+                "invalid_scope",
+                out var scope,
+                out errorData))
         {
-            if (scopeProperty.ValueKind == JsonValueKind.String)
-            {
-                scope = scopeProperty.GetString();
-            }
-            else if (scopeProperty.ValueKind == JsonValueKind.Null)
-            {
-                scope = null;
-            }
-            else
-            {
-                _logger.LogWarning("hub.apps.registerInstance参数无效: scope 类型错误, RequestId: {RequestId}", requestId);
-                return false;
-            }
-
-            if (scope == string.Empty || scope == "global")
-            {
-                _logger.LogWarning("hub.apps.registerInstance参数无效: scope 取值非法, Scope: {Scope}, RequestId: {RequestId}", scope, requestId);
-                return false;
-            }
+            _logger.LogWarning("hub.apps.registerInstance参数无效: scope 非法, RequestId: {RequestId}", requestId);
+            return false;
         }
 
         if (!instanceElement.TryGetProperty("invoke", out var invokeProperty) || invokeProperty.ValueKind != JsonValueKind.Object)

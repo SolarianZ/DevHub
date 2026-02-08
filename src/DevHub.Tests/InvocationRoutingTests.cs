@@ -96,6 +96,37 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public void RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "global-inst",
+            AppId = "space-scope.app",
+            Scope = null,
+            Pid = 2101,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "space-scope-inst",
+            AppId = "space-scope.app",
+            Scope = "   ",
+            Pid = 2102,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var service = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+
+        var candidates = service.GetOnlineCandidates(
+            "space-scope.app",
+            new InvocationTarget { Scope = "   ", InstanceId = null });
+
+        Assert.Single(candidates);
+        Assert.Equal("space-scope-inst", candidates[0].InstanceId);
+    }
+
+    [Fact]
     public async Task InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);

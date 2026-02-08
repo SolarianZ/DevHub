@@ -30,13 +30,13 @@ public class InvocationRoutingService
     {
         var allOnline = _appRegistry.ListInstances(appId, includeAllScopes: true, includeOffline: false).ToList();
 
-        if (!string.IsNullOrWhiteSpace(target.InstanceId))
+        if (target.InstanceId is not null)
         {
             var match = allOnline.FirstOrDefault(i => i.InstanceId == target.InstanceId);
             return match is null ? new List<AppInstance>() : [match];
         }
 
-        if (!string.IsNullOrWhiteSpace(target.Scope))
+        if (target.Scope is not null)
         {
             return allOnline.Where(i => i.Scope == target.Scope).ToList();
         }
@@ -56,12 +56,12 @@ public class InvocationRoutingService
 
         var target = invocation.Target;
 
-        if (!string.IsNullOrWhiteSpace(target.InstanceId))
+        if (target.InstanceId is not null)
         {
             return string.Equals(target.InstanceId, instance.InstanceId, StringComparison.Ordinal);
         }
 
-        if (!string.IsNullOrWhiteSpace(target.Scope))
+        if (target.Scope is not null)
         {
             return string.Equals(target.Scope, instance.Scope, StringComparison.Ordinal);
         }
