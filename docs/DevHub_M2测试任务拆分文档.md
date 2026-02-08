@@ -7,7 +7,7 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_M2细化任务文档.md](./DevHub_M2细化任务文档.md)
 
-## 当前状态（截至 2026-02-07）
+## 当前状态（截至 2026-02-08）
 
 - M2 测试任务总体状态：**已完成**。
 - 本批次完成项（复验日期：2026-02-07）：
@@ -16,6 +16,7 @@
   - C#：`InvocationRoutingTests.cs`、`InvocationStoreTests.cs`、`InvocationLeaseTests.cs`、`InvocationRequestWaiterTests.cs`、`LaunchCoordinatorTests.cs` 已落地并通过。
   - strict 对齐补齐：`target_instance_missing` 语义与 `caller` 头透传相关黑白盒测试已补齐。
   - 回归策略：默认模式已迁移离线判定长耗时场景为 `full-only`，`--fast`/默认模式不再执行 35s 离线等待。
+  - 缺口补齐：新增 `M2-REQ-004`（caller 中断后收口 + 迟到 respond 拒绝）与白盒取消清理回归。
 
 ## 0. 文档目标与使用方式
 
@@ -38,6 +39,7 @@
 | `M2-REQ-001`    | request 成功往返           | Python 黑盒           | `tests/test_invocation_request.py`                                                   |
 | `M2-REQ-002`    | request 超时               | Python 黑盒           | `tests/test_invocation_request.py`                                                   |
 | `M2-REQ-003`    | TTL 过期                   | Python 黑盒           | `tests/test_invocation_request.py`                                                   |
+| `M2-REQ-004`    | caller 中断后收口与清理    | Python 黑盒 + C# 白盒 | `tests/test_invocation_request.py` + `src/DevHub.Tests/InvocationRequestFlowTests.cs` |
 | `M2-NOTIFY-001` | notify 在线投递            | Python 黑盒           | `tests/test_invocation_notify.py`                                                    |
 | `M2-NOTIFY-002` | notify 离线入队后投递      | Python 黑盒           | `tests/test_invocation_notify.py`                                                    |
 | `M2-LAUNCH-001` | autoLaunch 触发            | Python 黑盒           | `tests/test_launch_invocation.py`                                                    |
@@ -108,6 +110,11 @@
 - [x] 前置：构造较短超时窗口并在 timeout 后不立即 respond。
 - [x] 步骤：发 request 超时后，再尝试迟到 respond。
 - [x] 断言：迟到 respond 返回 `-32011 invocation_expired`。
+
+#### `M2-REQ-004` caller 中断收口
+- [x] 前置：注册支持 `poll/respond` 的实例。
+- [x] 步骤：caller 发起 `hub.invoke.request` 并在等待阶段中断（请求侧超时/断开）；callee 随后尝试迟到 respond。
+- [x] 断言：caller 侧中断后调用进入 timeout/cancel 收口；迟到 respond 返回 `-32011 invocation_expired`。
 
 #### request 参数边界
 - [x] `waitTimeoutMs > ttlMs` -> `-32602 invalid_params`。
@@ -196,6 +203,7 @@
 - [x] waiter 在超时/取消时完成异常并移除。
 - [x] waiter 清理后不残留内存引用（避免泄漏）。
 - [x] 扫描器触发 timeout/expired 时，request waiter 完成并移除。
+- [x] `InvocationHandler.RequestAsync` 绑定 `cancellationToken` 后，取消路径可及时清理 waiter（白盒回归已覆盖）。
 
 ### 3.6 `LaunchCoordinatorTests.cs`
 - [x] `dedupeKeyTemplate` 占位符替换正确：`{appId}`、`{scope}`、`{scopeOrGlobal}`、`{httpBaseUrl}`。

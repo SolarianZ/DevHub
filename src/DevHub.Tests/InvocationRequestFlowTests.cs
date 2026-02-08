@@ -273,6 +273,93 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Request_WhenCallerCanceled_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
+    {
+        const string appId = "request-canceled.app";
+        const string instanceId = "request-canceled-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = instanceId,
+            AppId = appId,
+            Scope = null,
+            Pid = 6104,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-canceled",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.cancel",
+                args = new { x = 2 },
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 3000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-canceled",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+
+        cts.Cancel();
+
+        var requestResponse = await requestTask;
+        Assert.NotNull(requestResponse.Error);
+        Assert.Equal(-32012, requestResponse.Error.Code);
+        Assert.Equal("invocation_timeout", requestResponse.Error.Message);
+
+        var timeoutData = JsonSerializer.SerializeToElement(requestResponse.Error.Data);
+        Assert.Equal(invocationId, timeoutData.GetProperty("invocationId").GetString());
+
+        Assert.False(waiter.Cleanup(invocationId!), "waiter 应在 caller 取消后被及时清理");
+
+        var lateRespondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-canceled-late",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                invocationId,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(lateRespondResponse.Error);
+        Assert.Equal(-32011, lateRespondResponse.Error.Code);
+        Assert.Equal("invocation_expired", lateRespondResponse.Error.Message);
+    }
+
+    [Fact]
     public async Task Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
     {
         WriteDefinition("request-invalid.app", rpcEnabled: true);

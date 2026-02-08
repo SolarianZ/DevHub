@@ -13,6 +13,7 @@
 - M4 测试任务总体状态：**首轮已完成并接入回归入口**。
 - 已新增 WS 黑盒模块与白盒事件链路测试，覆盖 M4 必测主路径。
 - runner 已由 M1~M3 扩展为 M1~M4。
+- 已补齐缺口回归：`M4-WS-011`（unknown event type）与 `M4-WS-012`（unregistered 事件）。
 
 ---
 
@@ -27,6 +28,8 @@
 - [x] 订阅/取消订阅主链路与幂等行为。
 - [x] 断线后重连并重新订阅，事件链路稳定。
 - [x] 事件推送覆盖 `registered`、`delivered`、`completed`、`failed`。
+- [x] 订阅未知事件类型返回 `-32602 invalid_params`，并包含 `reason=unsupported_event_type`。
+- [x] 事件推送单列覆盖 `app.instance.unregistered`。
 
 ### 0.2 测试层次
 - 白盒（C#）：校验事件总线与处理器事件发布钩子。
@@ -48,6 +51,8 @@
 | `M4-WS-008` | 推送 invocation.failed 事件 | Python 黑盒（full） | `tests/test_ws_events.py` |
 | `M4-WS-009` | 未鉴权首条非鉴权请求（`params=[]`）返回 unauthorized 并断连 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WS-010` | 未鉴权非鉴权通知（`params=[]`）直接断连 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-011` | 订阅 `types=["unknown.type"]` 返回 `-32602 invalid_params` | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-012` | 注册后注销触发 `app.instance.unregistered` 事件推送 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WB-001` | 支持事件类型集合与过滤匹配 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
 | `M4-WB-002` | 订阅鉴权门禁与取消订阅幂等 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
 | `M4-WB-003` | RemoveConnection 后订阅与待投递被清理 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
@@ -70,6 +75,7 @@
 - [x] 新增未鉴权 `params=[]` 回归用例，确保不会绕过 unauthorized/断连门禁。
 - [x] 断线后重连并重新订阅，验证事件链路稳定。
 - [x] full 模式增加 `invocation.failed` 验证。
+- [x] default 模式增加 `M4-WS-011/012`，补齐 unknown type 与 unregistered 黑盒可见性。
 
 ---
 
@@ -96,6 +102,7 @@
 - [x] runner 标题/覆盖描述升级为 M1~M4。
 - [x] default 模式纳入协议版本不匹配与断线重连场景。
 - [x] full 模式额外执行 `M4-WS-008`（failed 事件流）。
+- [x] default 模式纳入 `M4-WS-011/012`，避免缺口项仅在专项验证中可见。
 
 ---
 

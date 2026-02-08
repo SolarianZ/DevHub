@@ -732,6 +732,133 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(self):
+        """M4-WS-011: 订阅未知事件类型应返回 invalid_params。"""
+        result = TestResult("M4-WS-011 订阅未知事件类型返回 invalid_params")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-11")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-11",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["unknown.type"]
+                    }
+                })
+
+                subscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, subscribe_response, -32602, "invalid_params", expected_id="sub-11"):
+                    return result
+
+                if not RpcAssertions.expect_error_data_fields(result, subscribe_response, {
+                    "reason": "unsupported_event_type",
+                    "type": "unknown.type"
+                }):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_012_should_push_unregistered_event(self):
+        """M4-WS-012: 注销实例应推送 app.instance.unregistered。"""
+        result = TestResult("M4-WS-012 事件推送 app.instance.unregistered")
+
+        instance_id = self._new_instance_id("m4-ws-event-unregistered")
+        app_id = self._new_app_id("unregistered")
+        scope = "workspace-unregistered"
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-12")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-12",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.instance.unregistered"]
+                    }
+                })
+                subscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+
+                register_response = rpc_client.register_instance(
+                    instance_id=instance_id,
+                    app_id=app_id,
+                    scope=scope,
+                    poll=True,
+                    respond=True,
+                    pid=6204,
+                )
+                if not RpcAssertions.expect_success(result, register_response):
+                    return result
+
+                unregister_response = rpc_client.unregister_instance(instance_id)
+                if not RpcAssertions.expect_success(result, unregister_response):
+                    return result
+
+                deadline = time.time() + 6
+                while time.time() < deadline:
+                    timeout = max(0.1, deadline - time.time())
+                    try:
+                        message = ws.recv_json(timeout=timeout)
+                    except TimeoutError:
+                        continue
+
+                    if not isinstance(message, dict) or message.get("method") != "hub.event":
+                        continue
+
+                    event_params = message.get("params", {})
+                    if event_params.get("type") != "app.instance.unregistered":
+                        continue
+
+                    payload = event_params.get("payload", {})
+                    if not isinstance(payload, dict):
+                        result.mark_failure(f"❌ payload 非对象: {message}")
+                        return result
+
+                    if payload.get("appId") != app_id:
+                        result.mark_failure(f"❌ unregistered payload.appId 不匹配: {payload}")
+                        return result
+
+                    if payload.get("instanceId") != instance_id:
+                        result.mark_failure(f"❌ unregistered payload.instanceId 不匹配: {payload}")
+                        return result
+
+                    if payload.get("scope") != scope:
+                        result.mark_failure(f"❌ unregistered payload.scope 不匹配: {payload}")
+                        return result
+
+                    result.mark_success()
+                    return result
+
+                result.mark_failure("❌ 未收到 app.instance.unregistered 事件")
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                http_base_url, _, token = self._runtime_hub_info()
+                RpcClient(http_base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_m4_ws_001_first_message_must_authenticate(),
@@ -743,6 +870,8 @@ class TestWsEvents:
             self.test_m4_ws_007_reconnect_after_disconnect_should_receive_events(),
             self.test_m4_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(),
             self.test_m4_ws_010_pre_auth_notification_array_params_should_close(),
+            self.test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(),
+            self.test_m4_ws_012_should_push_unregistered_event(),
         ]
 
         if full:

@@ -232,6 +232,115 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_client_cancel_then_late_respond_expired(self):
+        """M2-REQ-004: caller 中断后 request 收口且迟到 respond 被拒绝"""
+        result = TestResult("M2-REQ-004 caller 中断后 request 收口")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = "m2-request-cancel-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-cancel")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=24003,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            request_payload = {
+                "jsonrpc": "2.0",
+                "id": "m2-request-cancel",
+                "method": "hub.invoke.request",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "scope": None,
+                        "instanceId": None,
+                    },
+                    "method": "asset.cancel",
+                    "args": {"x": 2},
+                    "options": {
+                        "ttlMs": 5000,
+                        "waitTimeoutMs": 3000,
+                        "queueIfOffline": True,
+                        "autoLaunch": False,
+                    },
+                },
+            }
+
+            request_error_holder = {}
+
+            def caller_worker():
+                try:
+                    _, response = client.post_json(request_payload, timeout=0.15)
+                    request_error_holder["response"] = response
+                except Exception as exc:
+                    request_error_holder["error"] = str(exc)
+
+            caller_thread = threading.Thread(target=caller_worker, daemon=True)
+            caller_thread.start()
+            caller_thread.join(timeout=2)
+
+            if "response" in request_error_holder:
+                result.mark_failure(f"❌ caller 中断场景不应收到同步响应: {request_error_holder['response']}")
+                return result
+
+            if "error" not in request_error_holder or "Read timed out" not in request_error_holder["error"]:
+                result.mark_failure(f"❌ caller 中断未命中预期超时异常: {request_error_holder}")
+                return result
+
+            poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+
+            items = poll_response.get("result", {}).get("items", [])
+            if len(items) == 0:
+                result.mark_success()
+                return result
+
+            if len(items) != 1:
+                result.mark_failure(f"❌ poll 返回异常 items 数量: {poll_response}")
+                return result
+
+            invocation_id = items[0].get("invocationId")
+            if not invocation_id:
+                result.mark_failure(f"❌ poll 返回缺少 invocationId: {poll_response}")
+                return result
+
+            time.sleep(0.35)
+
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            if not RpcAssertions.expect_error(result, late_respond, -32011, "invocation_expired"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def test_request_invalid_waittimeout_gt_ttl(self):
         """request 参数边界: waitTimeoutMs > ttlMs"""
         result = TestResult("request 参数边界 waitTimeoutMs > ttlMs")
@@ -382,6 +491,7 @@ class TestInvocationRequest(unittest.TestCase):
         return [
             self.test_request_roundtrip_success(),
             self.test_request_timeout_then_late_respond_expired(),
+            self.test_request_client_cancel_then_late_respond_expired(),
             self.test_request_invalid_waittimeout_gt_ttl(),
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),

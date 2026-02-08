@@ -291,25 +291,25 @@ public class InvocationHandler : IRpcHandler
         var waitRemaining = Math.Max(1, invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs);
         var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
 
-        var completionTask = await Task.WhenAny(waiterTask, Task.Delay(timeoutWindowMs));
+        var timeoutTask = Task.Delay(timeoutWindowMs, cancellationToken);
+        var completionTask = await Task.WhenAny(waiterTask, timeoutTask);
 
-        if (completionTask != waiterTask)
+        if (completionTask == waiterTask)
         {
-            var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - createdAt).TotalMilliseconds);
-            var ttlReached = elapsedMs >= invocation.Options.TtlMs;
+            var completion = await waiterTask;
+            return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+        }
 
+        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - createdAt).TotalMilliseconds);
+        var ttlReached = elapsedMs >= invocation.Options.TtlMs;
+
+        if (cancellationToken.IsCancellationRequested)
+        {
             if (ttlReached)
             {
-                var markedExpired = _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
-                if (markedExpired)
-                {
-                    _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
-                }
-                else
-                {
-                    var racedCompletion = await waiterTask;
-                    return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
-                }
+                _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
+                _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
+                _requestWaiter.Cleanup(invocation.InvocationId);
 
                 return RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new
                 {
@@ -318,16 +318,9 @@ public class InvocationHandler : IRpcHandler
                 });
             }
 
-            var markedTimeout = _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
-            if (markedTimeout)
-            {
-                _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
-            }
-            else
-            {
-                var racedCompletion = await waiterTask;
-                return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
-            }
+            _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
+            _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
+            _requestWaiter.Cleanup(invocation.InvocationId);
 
             return RpcErrorFactory.Create(request.Id, -32012, "invocation_timeout", new
             {
@@ -336,8 +329,42 @@ public class InvocationHandler : IRpcHandler
             });
         }
 
-        var completion = await waiterTask;
-        return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+        if (ttlReached)
+        {
+            var markedExpired = _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
+            if (markedExpired)
+            {
+                _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
+            }
+            else
+            {
+                var racedCompletion = await waiterTask;
+                return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
+            }
+
+            return RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new
+            {
+                invocationId = invocation.InvocationId,
+                elapsedMs
+            });
+        }
+
+        var markedTimeout = _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
+        if (markedTimeout)
+        {
+            _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
+        }
+        else
+        {
+            var racedCompletion = await waiterTask;
+            return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, racedCompletion);
+        }
+
+        return RpcErrorFactory.Create(request.Id, -32012, "invocation_timeout", new
+        {
+            invocationId = invocation.InvocationId,
+            elapsedMs
+        });
     }
 
     private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)

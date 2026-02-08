@@ -7,6 +7,7 @@ using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System.Net.WebSockets;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -20,7 +21,59 @@ namespace DevHub.Host
     public class Program
     {
         private static Mutex? _singleInstanceMutex;
-        private const string MutexName = "Local\\DevHub_SingleInstance";
+
+        /// <summary>
+        /// 构建当前用户维度的单实例互斥量名称。
+        /// </summary>
+        private static string BuildSingleInstanceMutexName()
+        {
+            var userKey = ResolveCurrentUserKey();
+            return $"Local\\DevHub_{userKey}";
+        }
+
+        /// <summary>
+        /// 解析当前用户标识。
+        /// </summary>
+        private static string ResolveCurrentUserKey()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var identity = WindowsIdentity.GetCurrent();
+                    var sid = identity.User?.Value;
+                    if (!string.IsNullOrWhiteSpace(sid))
+                    {
+                        return NormalizeMutexUserKey(sid);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            var userName = Environment.UserName;
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                userName = "unknown_user";
+            }
+
+            return NormalizeMutexUserKey(userName);
+        }
+
+        /// <summary>
+        /// 将用户标识转换为可用于系统命名对象的安全键。
+        /// </summary>
+        private static string NormalizeMutexUserKey(string rawKey)
+        {
+            var builder = new StringBuilder(rawKey.Length);
+            foreach (var ch in rawKey)
+            {
+                builder.Append(char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '_');
+            }
+
+            return builder.Length > 0 ? builder.ToString() : "UNKNOWN_USER";
+        }
 
         /// <summary>
         /// 应用程序主入口。
@@ -31,7 +84,8 @@ namespace DevHub.Host
             #region 检查是否已有实例在运行
 
             bool createdNew;
-            _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
+            var mutexName = BuildSingleInstanceMutexName();
+            _singleInstanceMutex = new Mutex(true, mutexName, out createdNew);
 
             if (!createdNew)
             {
