@@ -553,7 +553,7 @@ class TestReport:
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("=" * 60 + "\n")
-            f.write("DevHub M1 功能测试报告\n")
+            f.write("DevHub M1~M4 功能测试报告\n")
             f.write("=" * 60 + "\n\n")
             f.write(f"测试时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"完成时间: {self.end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")

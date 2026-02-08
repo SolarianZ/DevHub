@@ -1,10 +1,13 @@
 using DevHub.Core.Extensions;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 
@@ -126,8 +129,35 @@ namespace DevHub.Host
                 }
 
                 app.UseAuthorization();
+                app.UseWebSockets();
 
                 var currentPort = 0;
+
+                app.Map("/ws", async (
+                    HttpContext context,
+                    RpcRouter rpcRouter,
+                    FileSystemManager fsManager,
+                    HubEventBus eventBus,
+                    ILogger<Program> endpointLogger,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!context.WebSockets.IsWebSocketRequest)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        return;
+                    }
+
+                    fsManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
+
+                    using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                    await HandleWebSocketConnectionAsync(
+                        webSocket,
+                        rpcRouter,
+                        fsManager,
+                        eventBus,
+                        endpointLogger,
+                        cancellationToken);
+                });
 
                 // RPC endpoint
                 app.MapPost("/rpc", async (HttpRequest request, RpcRouter rpcRouter, FileSystemManager fsManager, ILogger<Program> endpointLogger, CancellationToken cancellationToken) =>
@@ -293,6 +323,605 @@ namespace DevHub.Host
                 Log.CloseAndFlush();
             }
         }
+
+        /// <summary>
+        /// 处理 WebSocket 连接生命周期。
+        /// </summary>
+        private static async Task HandleWebSocketConnectionAsync(
+            WebSocket webSocket,
+            RpcRouter rpcRouter,
+            FileSystemManager fileSystemManager,
+            HubEventBus eventBus,
+            ILogger<Program> logger,
+            CancellationToken cancellationToken)
+        {
+            var connectionId = $"conn-{Guid.NewGuid():N}";
+            var isAuthenticated = false;
+            var firstMessageProcessed = false;
+            string? authenticatedClientId = null;
+            string? authenticatedClientSessionId = null;
+
+            eventBus.RegisterConnection(connectionId);
+            logger.LogInformation("WS 连接已建立，ConnectionId: {ConnectionId}", connectionId);
+
+            try
+            {
+                while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+                {
+                    var receiveTask = ReceiveTextMessageAsync(webSocket, cancellationToken);
+
+                    while (!receiveTask.IsCompleted)
+                    {
+                        await SendPendingHubEventsAsync(webSocket, eventBus, connectionId, cancellationToken);
+                        var completedTask = await Task.WhenAny(receiveTask, Task.Delay(50, cancellationToken));
+                        if (completedTask == receiveTask)
+                        {
+                            break;
+                        }
+                    }
+
+                    var receiveEnvelope = await receiveTask;
+                    if (receiveEnvelope.IsCloseFrame)
+                    {
+                        logger.LogInformation("WS 收到关闭帧，ConnectionId: {ConnectionId}", connectionId);
+                        break;
+                    }
+
+                    if (!receiveEnvelope.IsTextFrame)
+                    {
+                        logger.LogWarning("WS 收到非文本帧，主动关闭连接，ConnectionId: {ConnectionId}", connectionId);
+                        await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.InvalidMessageType, "text_frame_required", logger, cancellationToken);
+                        break;
+                    }
+
+                    var messageText = receiveEnvelope.Text ?? string.Empty;
+                    logger.LogDebug("收到 WS 消息，ConnectionId: {ConnectionId}, Message: {Message}", connectionId, messageText);
+
+                    JsonDocument requestDocument;
+                    try
+                    {
+                        requestDocument = JsonDocument.Parse(messageText);
+                    }
+                    catch (JsonException ex)
+                    {
+                        logger.LogWarning(ex, "WS JSON 解析失败，ConnectionId: {ConnectionId}", connectionId);
+                        await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
+
+                        if (!isAuthenticated)
+                        {
+                            await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "parse_error", logger, cancellationToken);
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    using (requestDocument)
+                    {
+                        var root = requestDocument.RootElement;
+                        if (root.ValueKind == JsonValueKind.Array || root.ValueKind != JsonValueKind.Object)
+                        {
+                            await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                            if (!isAuthenticated)
+                            {
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", logger, cancellationToken);
+                                break;
+                            }
+
+                            continue;
+                        }
+
+                        if (!TryBuildRpcRequest(root, out var rpcRequest, out var envelopeError))
+                        {
+                            await SendWebSocketJsonAsync(webSocket, envelopeError, cancellationToken);
+                            if (!isAuthenticated)
+                            {
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", logger, cancellationToken);
+                                break;
+                            }
+
+                            continue;
+                        }
+
+                        if (IsHubMethodParamsArray(rpcRequest))
+                        {
+                            if (rpcRequest.Id is not null)
+                            {
+                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
+                            }
+
+                            continue;
+                        }
+
+                        if (!firstMessageProcessed)
+                        {
+                            firstMessageProcessed = true;
+
+                            if (!string.Equals(rpcRequest.Method, "hub.ws.authenticate", StringComparison.Ordinal))
+                            {
+                                if (rpcRequest.Id is not null)
+                                {
+                                    await SendWebSocketJsonAsync(
+                                        webSocket,
+                                        CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                        cancellationToken);
+                                }
+
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_required", logger, cancellationToken);
+                                break;
+                            }
+
+                            if (rpcRequest.Id is null)
+                            {
+                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "auth_request_id_required", logger, cancellationToken);
+                                break;
+                            }
+                        }
+
+                        if (!isAuthenticated && !string.Equals(rpcRequest.Method, "hub.ws.authenticate", StringComparison.Ordinal))
+                        {
+                            if (rpcRequest.Id is not null)
+                            {
+                                await SendWebSocketJsonAsync(
+                                    webSocket,
+                                    CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                    cancellationToken);
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_required", logger, cancellationToken);
+                            }
+                            else
+                            {
+                                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_required", logger, cancellationToken);
+                            }
+
+                            break;
+                        }
+
+                        JsonRpcResponse? response = null;
+                        var closeAfterResponse = false;
+
+                        switch (rpcRequest.Method)
+                        {
+                            case "hub.ws.authenticate":
+                                if (isAuthenticated)
+                                {
+                                    response = CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" });
+                                    break;
+                                }
+
+                                response = HandleWsAuthenticate(
+                                    rpcRequest,
+                                    fileSystemManager,
+                                    eventBus,
+                                    connectionId,
+                                    out var authenticated,
+                                    out var nextClientId,
+                                    out var nextClientSessionId,
+                                    out closeAfterResponse);
+
+                                if (authenticated)
+                                {
+                                    isAuthenticated = true;
+                                    authenticatedClientId = nextClientId;
+                                    authenticatedClientSessionId = nextClientSessionId;
+                                    logger.LogInformation(
+                                        "WS 鉴权成功，ConnectionId: {ConnectionId}, ClientId: {ClientId}, SessionId: {SessionId}",
+                                        connectionId,
+                                        authenticatedClientId,
+                                        authenticatedClientSessionId);
+                                }
+
+                                break;
+
+                            case "hub.events.subscribe":
+                                if (!TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
+                                {
+                                    response = subscribeError;
+                                    break;
+                                }
+
+                                if (!eventBus.TrySubscribe(connectionId, subscriptionTypes, out var subscriptionId))
+                                {
+                                    response = CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" });
+                                    closeAfterResponse = true;
+                                    break;
+                                }
+
+                                response = new JsonRpcResponse
+                                {
+                                    Id = rpcRequest.Id,
+                                    Result = new
+                                    {
+                                        ok = true,
+                                        subscriptionId
+                                    }
+                                };
+                                break;
+
+                            case "hub.events.unsubscribe":
+                                if (!TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
+                                {
+                                    response = unsubscribeError;
+                                    break;
+                                }
+
+                                eventBus.Unsubscribe(connectionId, subscriptionIdToRemove);
+                                response = new JsonRpcResponse
+                                {
+                                    Id = rpcRequest.Id,
+                                    Result = new
+                                    {
+                                        ok = true
+                                    }
+                                };
+                                break;
+
+                            default:
+                                if (IsHttpOnlyMethod(rpcRequest.Method))
+                                {
+                                    response = CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id);
+                                    break;
+                                }
+
+                                rpcRequest.ClientId = authenticatedClientId;
+                                rpcRequest.ClientSessionId = authenticatedClientSessionId;
+                                response = await rpcRouter.RouteAsync(rpcRequest, cancellationToken);
+                                break;
+                        }
+
+                        if (response is not null && rpcRequest.Id is not null)
+                        {
+                            await SendWebSocketJsonAsync(webSocket, response, cancellationToken);
+                        }
+
+                        if (closeAfterResponse)
+                        {
+                            await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_failed", logger, cancellationToken);
+                            break;
+                        }
+                    }
+
+                    await SendPendingHubEventsAsync(webSocket, eventBus, connectionId, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogDebug("WS 连接处理被取消，ConnectionId: {ConnectionId}", connectionId);
+            }
+            catch (WebSocketException ex)
+            {
+                logger.LogWarning(ex, "WS 连接异常，ConnectionId: {ConnectionId}", connectionId);
+            }
+            finally
+            {
+                eventBus.RemoveConnection(connectionId);
+                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "connection_closed", logger, CancellationToken.None);
+                logger.LogInformation("WS 连接已清理，ConnectionId: {ConnectionId}", connectionId);
+            }
+        }
+
+        /// <summary>
+        /// 处理 WS 鉴权请求。
+        /// </summary>
+        private static JsonRpcResponse HandleWsAuthenticate(
+            JsonRpcRequest request,
+            FileSystemManager fileSystemManager,
+            HubEventBus eventBus,
+            string connectionId,
+            out bool authenticated,
+            out string? clientId,
+            out string? clientSessionId,
+            out bool closeAfterResponse)
+        {
+            authenticated = false;
+            clientId = null;
+            clientSessionId = null;
+            closeAfterResponse = false;
+
+            if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
+            {
+                return CreateErrorResponse(-32602, "invalid_params", request.Id);
+            }
+
+            if (!paramsElement.TryGetProperty("token", out var tokenElement) || tokenElement.ValueKind != JsonValueKind.String)
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "missing_token" });
+            }
+
+            var token = tokenElement.GetString();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "missing_token" });
+            }
+
+            if (!paramsElement.TryGetProperty("protocolVersion", out var protocolElement) ||
+                protocolElement.ValueKind != JsonValueKind.Number ||
+                !protocolElement.TryGetInt32(out var protocolVersion))
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32099, "not_supported", request.Id, new { expected = 1, reason = "missing" });
+            }
+
+            if (protocolVersion != 1)
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32099, "not_supported", request.Id, new { expected = 1, received = protocolVersion, reason = "mismatch" });
+            }
+
+            if (!paramsElement.TryGetProperty("clientId", out var clientIdElement) ||
+                clientIdElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(clientIdElement.GetString()))
+            {
+                return CreateErrorResponse(-32602, "invalid_params", request.Id);
+            }
+
+            if (!paramsElement.TryGetProperty("clientSessionId", out var sessionIdElement) ||
+                sessionIdElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(sessionIdElement.GetString()))
+            {
+                return CreateErrorResponse(-32602, "invalid_params", request.Id);
+            }
+
+            var parsedClientId = clientIdElement.GetString()!.Trim();
+            var parsedClientSessionId = sessionIdElement.GetString()!.Trim();
+
+            if (!Guid.TryParseExact(parsedClientSessionId, "D", out _))
+            {
+                return CreateErrorResponse(-32602, "invalid_params", request.Id);
+            }
+
+            try
+            {
+                var currentToken = fileSystemManager.GetToken();
+                if (!string.Equals(token, currentToken, StringComparison.Ordinal))
+                {
+                    closeAfterResponse = true;
+                    return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
+                }
+            }
+            catch
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "token_verification_failed" });
+            }
+
+            if (!eventBus.TryMarkAuthenticated(connectionId, parsedClientId, parsedClientSessionId))
+            {
+                closeAfterResponse = true;
+                return CreateErrorResponse(-32603, "internal_error", request.Id);
+            }
+
+            authenticated = true;
+            clientId = parsedClientId;
+            clientSessionId = parsedClientSessionId;
+
+            return new JsonRpcResponse
+            {
+                Id = request.Id,
+                Result = new
+                {
+                    ok = true,
+                    protocolVersion = 1
+                }
+            };
+        }
+
+        /// <summary>
+        /// 读取订阅参数中的事件类型过滤。
+        /// </summary>
+        private static bool TryReadSubscriptionTypes(JsonRpcRequest request, out IReadOnlyCollection<string>? types, out JsonRpcResponse errorResponse)
+        {
+            types = null;
+
+            if (request.Params is null)
+            {
+                errorResponse = null!;
+                return true;
+            }
+
+            if (request.Params is not JsonElement paramsElement)
+            {
+                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
+                return false;
+            }
+
+            if (paramsElement.ValueKind == JsonValueKind.Null)
+            {
+                errorResponse = null!;
+                return true;
+            }
+
+            if (paramsElement.ValueKind != JsonValueKind.Object)
+            {
+                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
+                return false;
+            }
+
+            if (!paramsElement.TryGetProperty("types", out var typesElement) ||
+                typesElement.ValueKind == JsonValueKind.Null)
+            {
+                errorResponse = null!;
+                return true;
+            }
+
+            if (typesElement.ValueKind != JsonValueKind.Array)
+            {
+                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
+                return false;
+            }
+
+            var parsedTypes = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var typeElement in typesElement.EnumerateArray())
+            {
+                if (typeElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(typeElement.GetString()))
+                {
+                    errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
+                    return false;
+                }
+
+                var eventType = typeElement.GetString()!;
+                if (!HubEventBus.IsSupportedEventType(eventType))
+                {
+                    errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id, new { reason = "unsupported_event_type", type = eventType });
+                    return false;
+                }
+
+                parsedTypes.Add(eventType);
+            }
+
+            types = parsedTypes.Count == 0 ? null : parsedTypes.ToArray();
+            errorResponse = null!;
+            return true;
+        }
+
+        /// <summary>
+        /// 读取 unsubscribe 所需参数。
+        /// </summary>
+        private static bool TryReadUnsubscribeParam(JsonRpcRequest request, out string subscriptionId, out JsonRpcResponse errorResponse)
+        {
+            subscriptionId = string.Empty;
+
+            if (request.Params is not JsonElement paramsElement ||
+                paramsElement.ValueKind != JsonValueKind.Object ||
+                !paramsElement.TryGetProperty("subscriptionId", out var subscriptionIdElement) ||
+                subscriptionIdElement.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(subscriptionIdElement.GetString()))
+            {
+                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
+                return false;
+            }
+
+            subscriptionId = subscriptionIdElement.GetString()!.Trim();
+            errorResponse = null!;
+            return true;
+        }
+
+        /// <summary>
+        /// 判断方法是否仅支持 HTTP 传输。
+        /// </summary>
+        private static bool IsHttpOnlyMethod(string method)
+        {
+            return method is
+                "hub.apps.registerInstance" or
+                "hub.apps.heartbeat" or
+                "hub.apps.unregisterInstance" or
+                "hub.apps.launch" or
+                "hub.invoke.notify" or
+                "hub.invoke.request" or
+                "hub.invoke.poll" or
+                "hub.invoke.respond";
+        }
+
+        /// <summary>
+        /// 发送当前连接待投递的 hub.event 通知。
+        /// </summary>
+        private static async Task SendPendingHubEventsAsync(
+            WebSocket webSocket,
+            HubEventBus eventBus,
+            string connectionId,
+            CancellationToken cancellationToken)
+        {
+            if (webSocket.State != WebSocketState.Open)
+            {
+                return;
+            }
+
+            var deliveries = eventBus.DrainDeliveries(connectionId, maxCount: 32);
+            foreach (var delivery in deliveries)
+            {
+                var notification = new
+                {
+                    jsonrpc = "2.0",
+                    method = "hub.event",
+                    @params = new
+                    {
+                        subscriptionId = delivery.SubscriptionId,
+                        type = delivery.Type,
+                        timeUtc = delivery.TimeUtc.ToString("O"),
+                        payload = delivery.Payload
+                    }
+                };
+
+                await SendWebSocketJsonAsync(webSocket, notification, cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 从 WebSocket 接收完整文本消息（支持分片）。
+        /// </summary>
+        private static async Task<WebSocketReceiveEnvelope> ReceiveTextMessageAsync(WebSocket webSocket, CancellationToken cancellationToken)
+        {
+            var buffer = new byte[4096];
+            using var stream = new MemoryStream();
+
+            while (true)
+            {
+                var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                if (receiveResult.MessageType == WebSocketMessageType.Close)
+                {
+                    return new WebSocketReceiveEnvelope(true, false, null);
+                }
+
+                if (receiveResult.MessageType != WebSocketMessageType.Text)
+                {
+                    return new WebSocketReceiveEnvelope(false, false, null);
+                }
+
+                if (receiveResult.Count > 0)
+                {
+                    stream.Write(buffer, 0, receiveResult.Count);
+                }
+
+                if (receiveResult.EndOfMessage)
+                {
+                    return new WebSocketReceiveEnvelope(false, true, Encoding.UTF8.GetString(stream.ToArray()));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 发送 JSON 文本到 WebSocket。
+        /// </summary>
+        private static async Task SendWebSocketJsonAsync(WebSocket webSocket, object payload, CancellationToken cancellationToken)
+        {
+            if (webSocket.State != WebSocketState.Open)
+            {
+                return;
+            }
+
+            var json = JsonSerializer.Serialize(payload);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+        }
+
+        /// <summary>
+        /// 安全关闭 WebSocket 连接。
+        /// </summary>
+        private static async Task CloseWebSocketAsync(
+            WebSocket webSocket,
+            WebSocketCloseStatus closeStatus,
+            string description,
+            ILogger<Program> logger,
+            CancellationToken cancellationToken)
+        {
+            if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
+            {
+                return;
+            }
+
+            try
+            {
+                await webSocket.CloseAsync(closeStatus, description, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "关闭 WS 连接时发生异常，状态: {State}, Description: {Description}", webSocket.State, description);
+            }
+        }
+
+        private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, string? Text);
 
         /// <summary>
         /// 校验 HTTP 请求头

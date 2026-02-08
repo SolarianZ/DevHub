@@ -1,6 +1,7 @@
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -16,6 +17,7 @@ public class AppInstancesHandler : IRpcHandler
     private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
 
     private readonly AppRegistry _appRegistry;
+    private readonly HubEventBus? _eventBus;
     private readonly ILogger<AppInstancesHandler> _logger;
 
     /// <summary>
@@ -23,9 +25,11 @@ public class AppInstancesHandler : IRpcHandler
     /// </summary>
     /// <param name="appRegistry">应用实例注册表。</param>
     /// <param name="logger">日志记录器。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger)
+    /// <param name="eventBus">Hub 事件总线。</param>
+    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
     {
         _appRegistry = appRegistry;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -77,6 +81,8 @@ public class AppInstancesHandler : IRpcHandler
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
             var registeredInstance = _appRegistry.RegisterInstance(instance);
+
+            PublishInstanceEvent("app.instance.registered", registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
 
             _logger.LogInformation("成功注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 registeredInstance.InstanceId, registeredInstance.AppId, registeredInstance.Scope, registeredInstance.Pid, request.Id);
@@ -198,8 +204,14 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
+            var existingInstance = _appRegistry.GetInstance(instanceId);
             _logger.LogDebug("尝试注销应用程序实例，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            _appRegistry.UnregisterInstance(instanceId);
+            var removed = _appRegistry.UnregisterInstance(instanceId);
+            if (removed && existingInstance is not null)
+            {
+                PublishInstanceEvent("app.instance.unregistered", existingInstance.AppId, existingInstance.InstanceId, existingInstance.Scope);
+            }
+
             _logger.LogInformation("注销应用程序实例完成（幂等），InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
 
             var response = new JsonRpcResponse
@@ -400,6 +412,26 @@ public class AppInstancesHandler : IRpcHandler
         };
 
         return true;
+    }
+
+    private void PublishInstanceEvent(string eventType, string appId, string instanceId, string? scope)
+    {
+        if (_eventBus is null)
+        {
+            return;
+        }
+
+        _eventBus.Publish(new HubEventMessage
+        {
+            Type = eventType,
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId,
+                instanceId,
+                scope
+            }
+        });
     }
 
 }

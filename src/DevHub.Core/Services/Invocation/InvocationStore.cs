@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Models;
+using DevHub.Core.Services.Events;
 using Microsoft.Extensions.Logging;
 using InvocationModel = DevHub.Core.Models.Invocation;
 
@@ -14,14 +15,16 @@ public class InvocationStore
     private readonly ConcurrentDictionary<string, InvocationModel> _all = new();
     private readonly ILogger<InvocationStore> _logger;
     private readonly InvocationRoutingService _routingService;
+    private readonly HubEventBus? _eventBus;
 
     /// <summary>
     /// 初始化存储。
     /// </summary>
-    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService)
+    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, HubEventBus? eventBus = null)
     {
         _logger = logger;
         _routingService = routingService;
+        _eventBus = eventBus;
     }
 
     /// <summary>
@@ -258,6 +261,19 @@ public class InvocationStore
                 invocation.State = InvocationState.Delivered;
                 invocation.LeaseHolderInstanceId = instance.InstanceId;
                 invocation.LeaseExpireAtUtc = now.AddSeconds(invocation.Delivery.LeaseSeconds);
+
+                _eventBus?.Publish(new HubEventMessage
+                {
+                    Type = "invocation.delivered",
+                    TimeUtc = now,
+                    Payload = new
+                    {
+                        invocationId = invocation.InvocationId,
+                        appId = invocation.AppId,
+                        instanceId = instance.InstanceId,
+                        scope = invocation.Target.Scope
+                    }
+                });
             }
 
             return candidates;

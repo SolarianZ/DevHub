@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
@@ -35,6 +36,7 @@ public static class ServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<DefinitionLoader>>();
             return new DefinitionLoader(definitionsPath, logger);
         });
+        services.AddSingleton<HubEventBus>();
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>();
         services.AddSingleton<InvocationRequestWaiter>();

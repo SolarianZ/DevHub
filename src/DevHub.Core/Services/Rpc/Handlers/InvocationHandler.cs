@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,7 @@ public class InvocationHandler : IRpcHandler
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
     private readonly LaunchCoordinator _launchCoordinator;
+    private readonly HubEventBus? _eventBus;
     private readonly ILogger<InvocationHandler> _logger;
 
     /// <summary>
@@ -36,7 +38,8 @@ public class InvocationHandler : IRpcHandler
         InvocationStore store,
         InvocationRequestWaiter requestWaiter,
         LaunchCoordinator launchCoordinator,
-        ILogger<InvocationHandler> logger)
+        ILogger<InvocationHandler> logger,
+        HubEventBus? eventBus = null)
     {
         _appRegistry = appRegistry;
         _definitionLoader = definitionLoader;
@@ -44,6 +47,7 @@ public class InvocationHandler : IRpcHandler
         _store = store;
         _requestWaiter = requestWaiter;
         _launchCoordinator = launchCoordinator;
+        _eventBus = eventBus;
         _logger = logger;
     }
 
@@ -165,6 +169,8 @@ public class InvocationHandler : IRpcHandler
 
         _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
 
+        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
+
         return new JsonRpcResponse
         {
             Id = request.Id,
@@ -278,6 +284,7 @@ public class InvocationHandler : IRpcHandler
         };
 
         _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
+        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
         var waiterTask = _requestWaiter.Register(invocation.InvocationId);
 
         var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(DateTime.UtcNow - createdAt).TotalMilliseconds);
@@ -475,25 +482,40 @@ public class InvocationHandler : IRpcHandler
 
         var status = _store.Respond(instanceId, invocationId, value, error);
 
-        if (_store.TryGet(invocationId, out var invocation) && invocation is not null && invocation.Kind == InvocationKind.Request)
+        if (_store.TryGet(invocationId, out var invocation) && invocation is not null)
         {
-            switch (status)
+            if (status == InvocationRespondStatus.Success)
             {
-                case InvocationRespondStatus.Success:
-                    if (error is null)
-                    {
-                        _requestWaiter.CompleteSuccess(invocationId, value);
-                    }
-                    else
-                    {
-                        _requestWaiter.CompleteFailure(invocationId, error);
-                    }
+                if (error is null)
+                {
+                    PublishInvocationLifecycleEvent("invocation.completed", invocation, instanceId, error: null);
+                }
+                else
+                {
+                    PublishInvocationLifecycleEvent("invocation.failed", invocation, instanceId, error);
+                }
+            }
 
-                    break;
-                case InvocationRespondStatus.Expired:
-                    var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
-                    _requestWaiter.CompleteExpired(invocationId, elapsedMs);
-                    break;
+            if (invocation.Kind == InvocationKind.Request)
+            {
+                switch (status)
+                {
+                    case InvocationRespondStatus.Success:
+                        if (error is null)
+                        {
+                            _requestWaiter.CompleteSuccess(invocationId, value);
+                        }
+                        else
+                        {
+                            _requestWaiter.CompleteFailure(invocationId, error);
+                        }
+
+                        break;
+                    case InvocationRespondStatus.Expired:
+                        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+                        _requestWaiter.CompleteExpired(invocationId, elapsedMs);
+                        break;
+                }
             }
         }
 
@@ -527,6 +549,28 @@ public class InvocationHandler : IRpcHandler
         }
 
         return new { invocationId };
+    }
+
+    private void PublishInvocationLifecycleEvent(string eventType, InvocationModel invocation, string? instanceId, object? error)
+    {
+        if (_eventBus is null)
+        {
+            return;
+        }
+
+        _eventBus.Publish(new HubEventMessage
+        {
+            Type = eventType,
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = invocation.InvocationId,
+                appId = invocation.AppId,
+                instanceId,
+                scope = invocation.Target.Scope,
+                error
+            }
+        });
     }
 
     private static bool TryParseRequestOptions(
