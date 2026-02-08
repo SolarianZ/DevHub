@@ -17,6 +17,7 @@
   - strict 对齐补齐：`target_instance_missing` 语义与 `caller` 头透传相关黑白盒测试已补齐。
   - 回归策略：默认模式已迁移离线判定长耗时场景为 `full-only`，`--fast`/默认模式不再执行 35s 离线等待。
   - 缺口补齐：新增 `M2-REQ-004`（caller 中断后收口 + 迟到 respond 拒绝）与白盒取消清理回归。
+  - 白盒补测（2026-02-08）：新增 `hub.invoke.poll.maxCount` 边界、`hub.invoke.respond` 的 `value/error` 互斥校验与 `hub.apps.getDefinition` not_found（`-32014 app_definition_not_found`）。
 
 ## 0. 文档目标与使用方式
 
@@ -210,6 +211,11 @@
 - [x] dedupe 窗口内重复 launch 返回 already_running。
 - [x] `waitForRegisterMs` 超时后返回 `starting`。
 - [x] 缺失配置时返回 `launch_failed` 语义对象。
+
+### 3.7 Spec 严格性补齐（白盒）
+- [x] `InvocationRoutingTests.cs`：新增 `hub.invoke.poll` 的 `maxCount` 边界（`0`、`101`）返回 `-32602 invalid_params`。
+- [x] `InvocationRoutingTests.cs`：新增 `hub.invoke.respond` 参数互斥约束（`value/error` 同时存在或同时缺失）返回 `-32602 invalid_params`。
+- [x] `SpecConformanceTests.cs`：新增 `hub.apps.getDefinition` not_found 返回 `-32014 app_definition_not_found` 且 `error.data.appId` 精确断言。
 
 ---
 

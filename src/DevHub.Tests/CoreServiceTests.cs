@@ -1,5 +1,6 @@
 ﻿namespace DevHub.Tests;
 
+using System.Text.Json;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
@@ -213,6 +214,13 @@ public class CoreServiceTests
         Assert.Equal("1", response.Id);
         Assert.Null(response.Error);
         Assert.NotNull(response.Result);
+
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+
+        var serverTimeUtc = result.GetProperty("serverTimeUtc").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(serverTimeUtc));
+        Assert.True(DateTime.TryParse(serverTimeUtc, out _));
     }
 
     [Fact]

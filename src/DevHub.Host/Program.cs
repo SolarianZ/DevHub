@@ -4,6 +4,7 @@ using DevHub.Core.Services.Events;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
+using DevHub.Core.Services.Rpc.Transport;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System.Net.WebSockets;
@@ -249,7 +250,7 @@ namespace DevHub.Host
                         catch (JsonException ex)
                         {
                             endpointLogger.LogWarning(ex, "JSON 解析失败，返回 parse_error，ClientId: {ClientId}", clientId);
-                            return Results.Json(CreateErrorResponse(-32700, "parse_error", null));
+                            return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null));
                         }
 
                         using (requestDocument)
@@ -258,16 +259,16 @@ namespace DevHub.Host
                             if (root.ValueKind == JsonValueKind.Array)
                             {
                                 endpointLogger.LogWarning("收到批量请求，按规范拒绝，ClientId: {ClientId}", clientId);
-                                return Results.Json(CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
+                                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
                             }
 
                             if (root.ValueKind != JsonValueKind.Object)
                             {
                                 endpointLogger.LogWarning("收到非对象 JSON-RPC 根节点，ClientId: {ClientId}", clientId);
-                                return Results.Json(CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
+                                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), jsonOptions);
                             }
 
-                            if (!TryBuildRpcRequest(root, out var rpcRequest, out var requestErrorResponse))
+                            if (!DevHubTransportValidator.TryBuildRpcRequest(root, out var rpcRequest, out var requestErrorResponse))
                             {
                                 endpointLogger.LogWarning("JSON-RPC 信封无效，ClientId: {ClientId}", clientId);
                                 return Results.Json(requestErrorResponse, jsonOptions);
@@ -280,10 +281,14 @@ namespace DevHub.Host
                                 rpcRequest.Method, rpcRequest.Id, clientId);
 
                             // 校验请求头
-                            if (!ValidateHeaders(
-                                request,
-                                fsManager,
-                                endpointLogger,
+                            var requestHeaders = request.Headers.ToDictionary(
+                                pair => pair.Key,
+                                pair => pair.Value.ToString(),
+                                StringComparer.OrdinalIgnoreCase);
+                            if (!DevHubTransportValidator.TryValidateHttpHeaders(
+                                request.ContentType,
+                                requestHeaders,
+                                fsManager.GetToken,
                                 rpcRequest.Id,
                                 out var errorResponse,
                                 out var validatedClientId,
@@ -298,11 +303,11 @@ namespace DevHub.Host
                             rpcRequest.ClientSessionId = validatedClientSessionId;
 
                             // Spec: 所有 hub.* 方法 params 为数组时返回 invalid_params
-                            if (IsHubMethodParamsArray(rpcRequest))
+                            if (DevHubTransportValidator.IsHubMethodParamsArray(rpcRequest))
                             {
                                 endpointLogger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",
                                     rpcRequest.Method, rpcRequest.Id);
-                                return Results.Json(CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), jsonOptions);
+                                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), jsonOptions);
                             }
 
                             // Route request
@@ -439,7 +444,7 @@ namespace DevHub.Host
                     catch (JsonException ex)
                     {
                         logger.LogWarning(ex, "WS JSON 解析失败，ConnectionId: {ConnectionId}", connectionId);
-                        await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
+                        await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
 
                         if (!isAuthenticated)
                         {
@@ -455,7 +460,7 @@ namespace DevHub.Host
                         var root = requestDocument.RootElement;
                         if (root.ValueKind == JsonValueKind.Array || root.ValueKind != JsonValueKind.Object)
                         {
-                            await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                            await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
                             if (!isAuthenticated)
                             {
                                 await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", logger, cancellationToken);
@@ -465,7 +470,7 @@ namespace DevHub.Host
                             continue;
                         }
 
-                        if (!TryBuildRpcRequest(root, out var rpcRequest, out var envelopeError))
+                        if (!DevHubTransportValidator.TryBuildRpcRequest(root, out var rpcRequest, out var envelopeError))
                         {
                             await SendWebSocketJsonAsync(webSocket, envelopeError, cancellationToken);
                             if (!isAuthenticated)
@@ -487,7 +492,7 @@ namespace DevHub.Host
                                 {
                                     await SendWebSocketJsonAsync(
                                         webSocket,
-                                        CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                        DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
                                         cancellationToken);
                                 }
 
@@ -497,7 +502,7 @@ namespace DevHub.Host
 
                             if (rpcRequest.Id is null)
                             {
-                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                                await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
                                 await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "auth_request_id_required", logger, cancellationToken);
                                 break;
                             }
@@ -509,7 +514,7 @@ namespace DevHub.Host
                             {
                                 await SendWebSocketJsonAsync(
                                     webSocket,
-                                    CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                    DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
                                     cancellationToken);
                                 await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_required", logger, cancellationToken);
                             }
@@ -521,11 +526,11 @@ namespace DevHub.Host
                             break;
                         }
 
-                        if (IsHubMethodParamsArray(rpcRequest))
+                        if (DevHubTransportValidator.IsHubMethodParamsArray(rpcRequest))
                         {
                             if (rpcRequest.Id is not null)
                             {
-                                await SendWebSocketJsonAsync(webSocket, CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
+                                await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
                             }
 
                             continue;
@@ -539,15 +544,14 @@ namespace DevHub.Host
                             case "hub.ws.authenticate":
                                 if (isAuthenticated)
                                 {
-                                    response = CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" });
+                                    response = DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" });
                                     break;
                                 }
 
-                                response = HandleWsAuthenticate(
+                                response = DevHubTransportValidator.HandleWsAuthenticate(
                                     rpcRequest,
-                                    fileSystemManager,
-                                    eventBus,
-                                    connectionId,
+                                    fileSystemManager.GetToken,
+                                    (clientId, sessionId) => eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
                                     out var authenticated,
                                     out var nextClientId,
                                     out var nextClientSessionId,
@@ -568,7 +572,7 @@ namespace DevHub.Host
                                 break;
 
                             case "hub.events.subscribe":
-                                if (!TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
+                                if (!DevHubTransportValidator.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
                                 {
                                     response = subscribeError;
                                     break;
@@ -576,7 +580,7 @@ namespace DevHub.Host
 
                                 if (!eventBus.TrySubscribe(connectionId, subscriptionTypes, out var subscriptionId))
                                 {
-                                    response = CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" });
+                                    response = DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" });
                                     closeAfterResponse = true;
                                     break;
                                 }
@@ -593,7 +597,7 @@ namespace DevHub.Host
                                 break;
 
                             case "hub.events.unsubscribe":
-                                if (!TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
+                                if (!DevHubTransportValidator.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
                                 {
                                     response = unsubscribeError;
                                     break;
@@ -611,9 +615,9 @@ namespace DevHub.Host
                                 break;
 
                             default:
-                                if (IsHttpOnlyMethod(rpcRequest.Method))
+                                if (DevHubTransportValidator.IsHttpOnlyMethod(rpcRequest.Method))
                                 {
-                                    response = CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id);
+                                    response = DevHubTransportValidator.CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id);
                                     break;
                                 }
 
@@ -655,220 +659,6 @@ namespace DevHub.Host
         }
 
         /// <summary>
-        /// 处理 WS 鉴权请求。
-        /// </summary>
-        private static JsonRpcResponse HandleWsAuthenticate(
-            JsonRpcRequest request,
-            FileSystemManager fileSystemManager,
-            HubEventBus eventBus,
-            string connectionId,
-            out bool authenticated,
-            out string? clientId,
-            out string? clientSessionId,
-            out bool closeAfterResponse)
-        {
-            authenticated = false;
-            clientId = null;
-            clientSessionId = null;
-            closeAfterResponse = false;
-
-            if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
-            {
-                return CreateErrorResponse(-32602, "invalid_params", request.Id);
-            }
-
-            if (!paramsElement.TryGetProperty("token", out var tokenElement) || tokenElement.ValueKind != JsonValueKind.String)
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "missing_token" });
-            }
-
-            var token = tokenElement.GetString();
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "missing_token" });
-            }
-
-            if (!paramsElement.TryGetProperty("protocolVersion", out var protocolElement) ||
-                protocolElement.ValueKind != JsonValueKind.Number ||
-                !protocolElement.TryGetInt32(out var protocolVersion))
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32099, "not_supported", request.Id, new { expected = 1, reason = "missing" });
-            }
-
-            if (protocolVersion != 1)
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32099, "not_supported", request.Id, new { expected = 1, received = protocolVersion, reason = "mismatch" });
-            }
-
-            if (!paramsElement.TryGetProperty("clientId", out var clientIdElement) ||
-                clientIdElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(clientIdElement.GetString()))
-            {
-                return CreateErrorResponse(-32602, "invalid_params", request.Id);
-            }
-
-            if (!paramsElement.TryGetProperty("clientSessionId", out var sessionIdElement) ||
-                sessionIdElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(sessionIdElement.GetString()))
-            {
-                return CreateErrorResponse(-32602, "invalid_params", request.Id);
-            }
-
-            var parsedClientId = clientIdElement.GetString()!.Trim();
-            var parsedClientSessionId = sessionIdElement.GetString()!.Trim();
-
-            if (!Guid.TryParseExact(parsedClientSessionId, "D", out _))
-            {
-                return CreateErrorResponse(-32602, "invalid_params", request.Id);
-            }
-
-            try
-            {
-                var currentToken = fileSystemManager.GetToken();
-                if (!string.Equals(token, currentToken, StringComparison.Ordinal))
-                {
-                    closeAfterResponse = true;
-                    return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
-                }
-            }
-            catch
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
-            }
-
-            if (!eventBus.TryMarkAuthenticated(connectionId, parsedClientId, parsedClientSessionId))
-            {
-                closeAfterResponse = true;
-                return CreateErrorResponse(-32603, "internal_error", request.Id);
-            }
-
-            authenticated = true;
-            clientId = parsedClientId;
-            clientSessionId = parsedClientSessionId;
-
-            return new JsonRpcResponse
-            {
-                Id = request.Id,
-                Result = new
-                {
-                    ok = true,
-                    protocolVersion = 1
-                }
-            };
-        }
-
-        /// <summary>
-        /// 读取订阅参数中的事件类型过滤。
-        /// </summary>
-        private static bool TryReadSubscriptionTypes(JsonRpcRequest request, out IReadOnlyCollection<string>? types, out JsonRpcResponse errorResponse)
-        {
-            types = null;
-
-            if (request.Params is null)
-            {
-                errorResponse = null!;
-                return true;
-            }
-
-            if (request.Params is not JsonElement paramsElement)
-            {
-                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
-                return false;
-            }
-
-            if (paramsElement.ValueKind == JsonValueKind.Null)
-            {
-                errorResponse = null!;
-                return true;
-            }
-
-            if (paramsElement.ValueKind != JsonValueKind.Object)
-            {
-                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
-                return false;
-            }
-
-            if (!paramsElement.TryGetProperty("types", out var typesElement) ||
-                typesElement.ValueKind == JsonValueKind.Null)
-            {
-                errorResponse = null!;
-                return true;
-            }
-
-            if (typesElement.ValueKind != JsonValueKind.Array)
-            {
-                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
-                return false;
-            }
-
-            var parsedTypes = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var typeElement in typesElement.EnumerateArray())
-            {
-                if (typeElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(typeElement.GetString()))
-                {
-                    errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
-                    return false;
-                }
-
-                var eventType = typeElement.GetString()!;
-                if (!HubEventBus.IsSupportedEventType(eventType))
-                {
-                    errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id, new { reason = "unsupported_event_type", type = eventType });
-                    return false;
-                }
-
-                parsedTypes.Add(eventType);
-            }
-
-            types = parsedTypes.Count == 0 ? null : parsedTypes.ToArray();
-            errorResponse = null!;
-            return true;
-        }
-
-        /// <summary>
-        /// 读取 unsubscribe 所需参数。
-        /// </summary>
-        private static bool TryReadUnsubscribeParam(JsonRpcRequest request, out string subscriptionId, out JsonRpcResponse errorResponse)
-        {
-            subscriptionId = string.Empty;
-
-            if (request.Params is not JsonElement paramsElement ||
-                paramsElement.ValueKind != JsonValueKind.Object ||
-                !paramsElement.TryGetProperty("subscriptionId", out var subscriptionIdElement) ||
-                subscriptionIdElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(subscriptionIdElement.GetString()))
-            {
-                errorResponse = CreateErrorResponse(-32602, "invalid_params", request.Id);
-                return false;
-            }
-
-            subscriptionId = subscriptionIdElement.GetString()!.Trim();
-            errorResponse = null!;
-            return true;
-        }
-
-        /// <summary>
-        /// 判断方法是否仅支持 HTTP 传输。
-        /// </summary>
-        private static bool IsHttpOnlyMethod(string method)
-        {
-            return method is
-                "hub.apps.registerInstance" or
-                "hub.apps.heartbeat" or
-                "hub.apps.unregisterInstance" or
-                "hub.apps.launch" or
-                "hub.invoke.notify" or
-                "hub.invoke.request" or
-                "hub.invoke.poll" or
-                "hub.invoke.respond";
-        }
-
-        /// <summary>
         /// 发送当前连接待投递的 hub.event 通知。
         /// </summary>
         private static async Task SendPendingHubEventsAsync(
@@ -885,18 +675,7 @@ namespace DevHub.Host
             var deliveries = eventBus.DrainDeliveries(connectionId, maxCount: 32);
             foreach (var delivery in deliveries)
             {
-                var notification = new
-                {
-                    jsonrpc = "2.0",
-                    method = "hub.event",
-                    @params = new
-                    {
-                        subscriptionId = delivery.SubscriptionId,
-                        type = delivery.Type,
-                        timeUtc = delivery.TimeUtc.ToString("O"),
-                        payload = delivery.Payload
-                    }
-                };
+                var notification = HubEventNotificationFactory.Create(delivery);
 
                 await SendWebSocketJsonAsync(webSocket, notification, cancellationToken);
             }
@@ -976,304 +755,5 @@ namespace DevHub.Host
         }
 
         private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, string? Text);
-
-        /// <summary>
-        /// 校验 HTTP 请求头
-        /// </summary>
-        private static bool ValidateHeaders(
-            HttpRequest request,
-            FileSystemManager fileSystemManager,
-            ILogger<Program> logger,
-            object? requestId,
-            out JsonRpcResponse errorResponse,
-            out string? validatedClientId,
-            out string? validatedClientSessionId)
-        {
-            validatedClientId = null;
-            validatedClientSessionId = null;
-
-            // 校验 Content-Type（必须为 application/json，可带 charset）
-            if (!IsValidJsonContentType(request.ContentType))
-            {
-                logger.LogWarning("Content-Type 校验失败: {ContentType}", request.ContentType);
-                errorResponse = CreateErrorResponse(
-                    -32600,
-                    "invalid_request",
-                    requestId,
-                    new { reason = "invalid_content_type", received = request.ContentType });
-                return false;
-            }
-
-            // 校验协议版本（必须是字符串 "1"）
-            if (!request.Headers.TryGetValue("X-DevHub-Protocol", out var protocolValue) || string.IsNullOrWhiteSpace(protocolValue))
-            {
-                logger.LogWarning("协议版本头缺失");
-                errorResponse = CreateErrorResponse(
-                    -32099,
-                    "not_supported",
-                    requestId,
-                    new { expected = 1, reason = "missing" });
-                return false;
-            }
-
-            var protocol = protocolValue.ToString().Trim();
-            if (!string.Equals(protocol, "1", StringComparison.Ordinal))
-            {
-                logger.LogWarning("协议版本校验失败，请求的版本: {ProtocolVersion}", protocol);
-                errorResponse = CreateErrorResponse(
-                    -32099,
-                    "not_supported",
-                    requestId,
-                    new { expected = 1, received = protocol, reason = "mismatch" });
-                return false;
-            }
-
-            logger.LogDebug("协议版本校验通过: {ProtocolVersion}", protocol);
-
-            // 校验客户端 ID
-            if (!request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue) ||
-                string.IsNullOrWhiteSpace(clientIdValue))
-            {
-                logger.LogWarning("客户端ID校验失败");
-                errorResponse = CreateErrorResponse(
-                    -32600,
-                    "invalid_request",
-                    requestId,
-                    new { reason = "missing_header", header = "X-DevHub-ClientId" });
-                return false;
-            }
-
-            var clientId = clientIdValue.ToString().Trim();
-            validatedClientId = clientId;
-            logger.LogDebug("客户端ID校验通过: {ClientId}", clientId);
-
-            // 校验会话 ID
-            if (!request.Headers.TryGetValue("X-DevHub-ClientSessionId", out var sessionIdValue) ||
-                string.IsNullOrWhiteSpace(sessionIdValue))
-            {
-                logger.LogWarning("会话ID校验失败");
-                errorResponse = CreateErrorResponse(
-                    -32600,
-                    "invalid_request",
-                    requestId,
-                    new { reason = "missing_header", header = "X-DevHub-ClientSessionId" });
-                return false;
-            }
-
-            var sessionId = sessionIdValue.ToString().Trim();
-            if (!Guid.TryParseExact(sessionId, "D", out _))
-            {
-                logger.LogWarning("会话ID格式无效: {SessionId}", sessionId);
-                errorResponse = CreateErrorResponse(
-                    -32600,
-                    "invalid_request",
-                    requestId,
-                    new { reason = "invalid_header", header = "X-DevHub-ClientSessionId" });
-                return false;
-            }
-
-            validatedClientSessionId = sessionId;
-            logger.LogDebug("会话ID校验通过: {SessionId}", sessionId);
-
-            // 校验 Authorization 头
-            if (!request.Headers.TryGetValue("Authorization", out var authorizationValue) ||
-                string.IsNullOrWhiteSpace(authorizationValue) ||
-                !authorizationValue.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                logger.LogWarning("Authorization头校验失败");
-                errorResponse = CreateErrorResponse(
-                    -32001,
-                    "unauthorized",
-                    requestId,
-                    new { reason = "missing_token" });
-                return false;
-            }
-
-            // 校验 token
-            var token = authorizationValue.ToString().Substring("Bearer ".Length).Trim();
-            try
-            {
-                var validToken = fileSystemManager.GetToken();
-                if (token != validToken)
-                {
-                    logger.LogWarning("Token校验失败");
-                    errorResponse = CreateErrorResponse(
-                        -32001,
-                        "unauthorized",
-                        requestId,
-                        new { reason = "invalid_token" });
-                    return false;
-                }
-
-                logger.LogDebug("Token校验通过");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Token验证过程中发生异常");
-                errorResponse = CreateErrorResponse(
-                    -32001,
-                    "unauthorized",
-                    requestId,
-                    new { reason = "invalid_token" });
-                return false;
-            }
-
-            errorResponse = null!;
-            return true;
-        }
-
-        /// <summary>
-        /// 校验 Content-Type 是否为 application/json（允许附带 charset）
-        /// </summary>
-        private static bool IsValidJsonContentType(string? contentType)
-        {
-            if (string.IsNullOrWhiteSpace(contentType))
-            {
-                return false;
-            }
-
-            var separatorIndex = contentType.IndexOf(';');
-            var mediaType = separatorIndex >= 0
-                ? contentType[..separatorIndex].Trim()
-                : contentType.Trim();
-
-            return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// 构建 JSON-RPC 请求模型并进行信封校验
-        /// </summary>
-        private static bool TryBuildRpcRequest(JsonElement root, out JsonRpcRequest request, out JsonRpcResponse errorResponse)
-        {
-            request = null!;
-
-            var canUseRequestId = TryExtractRequestId(root, out var requestId);
-
-            if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
-                jsonRpcElement.ValueKind != JsonValueKind.String ||
-                !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
-            {
-                errorResponse = CreateErrorResponse(-32600, "invalid_request", canUseRequestId ? requestId : null);
-                return false;
-            }
-
-            if (!root.TryGetProperty("method", out var methodElement) ||
-                methodElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(methodElement.GetString()))
-            {
-                errorResponse = CreateErrorResponse(-32600, "invalid_request", canUseRequestId ? requestId : null);
-                return false;
-            }
-
-            if (root.TryGetProperty("id", out var idElement))
-            {
-                if (!TryConvertJsonRpcId(idElement, out requestId))
-                {
-                    errorResponse = CreateErrorResponse(-32600, "invalid_request", null);
-                    return false;
-                }
-            }
-
-            object? requestParams = null;
-            if (root.TryGetProperty("params", out var paramsElement))
-            {
-                if (paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Array and not JsonValueKind.Null)
-                {
-                    errorResponse = CreateErrorResponse(-32600, "invalid_request", requestId);
-                    return false;
-                }
-
-                requestParams = paramsElement.Clone();
-            }
-
-            request = new JsonRpcRequest
-            {
-                Id = requestId,
-                Method = methodElement.GetString()!,
-                Params = requestParams
-            };
-
-            errorResponse = null!;
-            return true;
-        }
-
-        /// <summary>
-        /// 尝试从原始请求提取可用于错误响应的请求ID
-        /// </summary>
-        private static bool TryExtractRequestId(JsonElement root, out object? requestId)
-        {
-            requestId = null;
-
-            if (!root.TryGetProperty("id", out var idElement))
-            {
-                return false;
-            }
-
-            return TryConvertJsonRpcId(idElement, out requestId);
-        }
-
-        /// <summary>
-        /// 将 JSON-RPC id 转换为可序列化对象
-        /// </summary>
-        private static bool TryConvertJsonRpcId(JsonElement idElement, out object? id)
-        {
-            switch (idElement.ValueKind)
-            {
-                case JsonValueKind.String:
-                    id = idElement.GetString();
-                    return true;
-                case JsonValueKind.Number:
-                    if (idElement.TryGetInt64(out var int64Value))
-                    {
-                        id = int64Value;
-                        return true;
-                    }
-
-                    if (idElement.TryGetDouble(out var doubleValue))
-                    {
-                        id = doubleValue;
-                        return true;
-                    }
-
-                    id = null;
-                    return false;
-                case JsonValueKind.Null:
-                    id = null;
-                    return false;
-                default:
-                    id = null;
-                    return false;
-            }
-        }
-
-        /// <summary>
-        /// 判断是否 hub.* 方法且 params 为数组
-        /// </summary>
-        private static bool IsHubMethodParamsArray(JsonRpcRequest request)
-        {
-            if (!request.Method.StartsWith("hub.", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            return request.Params is JsonElement paramsElement && paramsElement.ValueKind == JsonValueKind.Array;
-        }
-
-        /// <summary>
-        /// 创建标准 JSON-RPC 错误响应
-        /// </summary>
-        private static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
-        {
-            return new JsonRpcResponse
-            {
-                Id = id,
-                Error = new JsonRpcError
-                {
-                    Code = code,
-                    Message = message,
-                    Data = data
-                }
-            };
-        }
     }
 }

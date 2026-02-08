@@ -246,6 +246,75 @@ public class InvocationRoutingTests : IDisposable
         var data = JsonSerializer.SerializeToElement(response.Error.Data);
         Assert.Equal("launch_config_missing", data.GetProperty("reason").GetString());
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public async Task InvocationHandler_Poll_MaxCountOutOfRange_ShouldReturnInvalidParams(int maxCount)
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = $"poll-maxCount-{maxCount}",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "poll-instance",
+                maxCount,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Respond_WithValueAndError_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-both",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-instance",
+                invocationId = "invk-both",
+                value = new { ok = true },
+                error = new { code = 1001, message = "app_error" }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Respond_WithoutValueAndError_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-none",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-instance",
+                invocationId = "invk-none"
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -255,6 +324,18 @@ public class InvocationRoutingTests : IDisposable
         {
             Directory.Delete(_tempDirectory, recursive: true);
         }
+    }
+
+    private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry)
+    {
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        return new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)

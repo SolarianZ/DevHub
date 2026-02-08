@@ -14,6 +14,7 @@
 - 已新增 WS 黑盒模块与白盒事件链路测试，覆盖 M4 必测主路径。
 - runner 已由 M1~M3 扩展为 M1~M4。
 - 已补齐缺口回归：`M4-WS-011`（unknown event type）与 `M4-WS-012`（unregistered 事件）。
+- 白盒补测（2026-02-08）：新增传输层校验组件白盒（HTTP/WS/JSON-RPC 信封）、`unsupported_event_type` 细粒度断言与 `hub.event` 通知字段完整性断言。
 
 ---
 
@@ -93,6 +94,13 @@
 - [x] `InvocationHandler + InvocationStore`：
   - [x] queued/delivered/completed 发布断言。
   - [x] queued/delivered/failed 发布断言。
+
+### 3.3 传输与通知结构白盒补齐
+- [x] `TransportValidationTests.cs`：覆盖 HTTP 头校验错误映射（`-32001/-32099/-32600`）与 `error.data.reason/header`。
+- [x] `TransportValidationTests.cs`：覆盖 WS 鉴权错误映射（missing/invalid token、protocol missing/mismatch、`clientSessionId` UUID 校验）。
+- [x] `TransportValidationTests.cs`：覆盖 `hub.*` 的 `params=[] -> -32602`、`hub.events.subscribe` 的 `unsupported_event_type`。
+- [x] `TransportValidationTests.cs`：覆盖可触达错误码的 `error.message` 规范化映射（Spec §8.3）。
+- [x] `HubEventNotificationFactoryTests.cs`：覆盖 `hub.event` 固定字段（`jsonrpc/method/params.subscriptionId/type/timeUtc/payload`）与 `timeUtc` ISO-8601 可解析性。
 
 ---
 

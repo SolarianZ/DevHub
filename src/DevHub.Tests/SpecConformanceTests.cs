@@ -119,6 +119,31 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
+    public async Task AppDefinitionsHandler_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
+    {
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var handler = new AppDefinitionsHandler(
+            definitionLoader,
+            Mock.Of<ILogger<AppDefinitionsHandler>>());
+
+        var request = new JsonRpcRequest
+        {
+            Id = "req-get-missing",
+            Method = "hub.apps.getDefinition",
+            Params = JsonSerializer.SerializeToElement(new { appId = "missing-app" })
+        };
+
+        var response = await handler.HandleAsync(request, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32014, response.Error.Code);
+        Assert.Equal("app_definition_not_found", response.Error.Message);
+
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("missing-app", data.GetProperty("appId").GetString());
+    }
+
+    [Fact]
     public async Task AppInstancesHandler_RegisterInstance_ShouldReturnInstanceInResult()
     {
         // Arrange
