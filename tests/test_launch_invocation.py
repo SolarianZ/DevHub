@@ -256,11 +256,95 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
+    def test_m3_scope_011_launch_dedupe_should_isolate_by_scope(self):
+        """M3-SCOPE-011: launch dedupe 在不同 scope 间隔离"""
+        result = TestResult("M3-SCOPE-011 launch dedupe scope 隔离")
+        definition_path = None
+
+        try:
+            app_id = f"m3-launch-scope-dedupe-{uuid.uuid4().hex[:8]}"
+            definition_path = self._create_definition(
+                app_id,
+                include_launch=True,
+                dedupe_key_template="{appId}:{scopeOrGlobal}",
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            def launch_with_scope(scope, request_id):
+                scoped_client = RpcClient(base_url, token)
+                return scoped_client.launch_app(
+                    app_id=app_id,
+                    scope=scope,
+                    wait_for_register_ms=0,
+                    request_id=request_id,
+                )
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                scope_a_future = executor.submit(launch_with_scope, "workspace-A", "m3-scope-011-launch-a")
+                scope_b_future = executor.submit(launch_with_scope, "workspace-B", "m3-scope-011-launch-b")
+                scope_a_response = scope_a_future.result()
+                scope_b_response = scope_b_future.result()
+
+            if not RpcAssertions.expect_success(result, scope_a_response, ["status", "launchId"]):
+                return result
+
+            if not RpcAssertions.expect_success(result, scope_b_response, ["status", "launchId"]):
+                return result
+
+            status_a = scope_a_response["result"].get("status")
+            status_b = scope_b_response["result"].get("status")
+            launch_id_a = scope_a_response["result"].get("launchId")
+            launch_id_b = scope_b_response["result"].get("launchId")
+
+            if status_a == "already_running" or status_b == "already_running":
+                result.mark_failure(
+                    f"❌ 不同 scope launch 发生错误去重: status_a={status_a}, status_b={status_b}")
+                return result
+
+            if launch_id_a == launch_id_b:
+                result.mark_failure(f"❌ 不同 scope launchId 不应复用: {launch_id_a}")
+                return result
+
+            same_scope_second = client.launch_app(
+                app_id=app_id,
+                scope="workspace-A",
+                wait_for_register_ms=0,
+                request_id="m3-scope-011-launch-a-second",
+            )
+            if not RpcAssertions.expect_success(result, same_scope_second, ["status", "launchId"]):
+                return result
+
+            second_status = same_scope_second["result"].get("status")
+            second_launch_id = same_scope_second["result"].get("launchId")
+            if second_status != "already_running":
+                result.mark_failure(f"❌ 同 scope 二次 launch 未返回 already_running: {same_scope_second}")
+                return result
+
+            if second_launch_id != launch_id_a:
+                result.mark_failure(
+                    f"❌ 同 scope 二次 launch 未复用 launchId: first={launch_id_a}, second={second_launch_id}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_notify_autolaunch_then_register_poll_success(),
             self.test_launch_invalid_wait_for_register_should_fail(),
             self.test_launch_missing_config_should_fail(),
+            self.test_m3_scope_011_launch_dedupe_should_isolate_by_scope(),
         ]
 
         if full:

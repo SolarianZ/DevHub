@@ -15,6 +15,7 @@ DevHub/
 │   ├── DevHub协议与开发规划.md      # 架构演进与里程碑规划
 │   └── DevHub_M1细化任务文档.md     # M1 阶段任务分解与验收标准
 │   └── DevHub_M2细化任务文档.md     # M2 阶段任务分解与验收标准
+│   └── DevHub_M3细化任务文档.md     # M3 阶段任务分解与验收标准
 ├── src/                           # 核心实现代码（.NET）
 │   ├── DevHub.Core/               # 核心领域模型与基础服务
 │   ├── DevHub.Host/               # 基于 ASP.NET Core 的宿主程序
@@ -105,4 +106,4 @@ DevHub/
 ## 参考资料
 -   [协议规范 (docs/Spec.md)](docs/Spec.md)
 -   [架构与开发规划 (docs/DevHub协议与开发规划.md)](docs/DevHub协议与开发规划.md)
--   [M2 任务细化文档 (docs/DevHub_M2细化任务文档.md)](docs/DevHub_M2细化任务文档.md)
+-   [M3 任务细化文档 (docs/DevHub_M3细化任务文档.md)](docs/DevHub_M3细化任务文档.md)

@@ -13,42 +13,43 @@
 
 - M3 总体状态：**进行中**。
 - M1 / M2 已完成并通过既有回归，M3 以此为基线推进。
-- 本轮已完成（代码 + 白盒）：
+- 本轮已完成（代码 + 白盒 + 黑盒）：
   - 公共解析器已收敛：`TryGetOptionalScope(...)`、`TryParseInvocationTarget(...)`。
   - `AppInstances/Launch/Invocation` handlers 与 `InvocationRoutingService` 已完成语义收敛。
-  - C# 白盒测试已补齐第一批并通过（含 scope/routing/launch/spec 相关过滤集）。
-- 当前主要剩余缺口：Python 黑盒 M3 scope 矩阵与 `test_runner.py` 接入尚未开始。
+  - C# 白盒测试补齐必要缺口并通过（含 omitted/null 等价、Global 默认路由、大小写敏感断言）。
+  - Python 黑盒 `test_scope_routing.py` 已落地并接入 `test_runner.py`，`M3-SCOPE-001~009/011/012` 已覆盖。
+- 当前主要剩余缺口：`M3-SCOPE-010` offline matrix 及其 full 模式扩展场景待补齐。
 
 ---
 
 ## 0. 目标与验收对齐（必须满足）
 
 ### 0.1 M3 必须实现（对齐里程碑验收清单）
-- [ ] 以 Spec §5.5 为准，完整落地 **SCOPE-01 ~ SCOPE-05** 到以下链路：
+- [x] 以 Spec §5.5 为准，完整落地 **SCOPE-01 ~ SCOPE-05** 到以下链路：
   - `hub.apps.registerInstance`
   - `hub.apps.listInstances`
   - `hub.apps.launch`
   - `hub.invoke.notify`
   - `hub.invoke.request`
-- [ ] 调用未指定 `target.scope`（omitted / `null`）时，仅命中 Global（`scope == null`）实例。
-- [ ] 调用显式指定 `target.scope`（非空字符串）时，仅命中该 scope，禁止 fallback 到 Global。
-- [ ] `target.instanceId` 指定时只允许命中该实例，不发生 scope/global 回退。
-- [ ] `scope` / `target.scope` 为 `""` 或 `"global"` 时，统一返回 `-32602 invalid_params`。
-- [ ] 非空字符串 scope 采用**大小写敏感**精确匹配（如 `workspace-A` ≠ `workspace-a`）。
+- [x] 调用未指定 `target.scope`（omitted / `null`）时，仅命中 Global（`scope == null`）实例。
+- [x] 调用显式指定 `target.scope`（非空字符串）时，仅命中该 scope，禁止 fallback 到 Global。
+- [x] `target.instanceId` 指定时只允许命中该实例，不发生 scope/global 回退。
+- [x] `scope` / `target.scope` 为 `""` 或 `"global"` 时，统一返回 `-32602 invalid_params`。
+- [x] 非空字符串 scope 采用**大小写敏感**精确匹配（如 `workspace-A` ≠ `workspace-a`）。
 
 ### 0.2 协议输出约束（M3 继续沿用）
-- [ ] 外部 RPC 协议**不新增方法、不改字段**，仅收紧现有语义。
-- [ ] HTTP 状态码保持 `200`，业务错误走 JSON-RPC `error`。
-- [ ] `error.message` 继续使用 Spec 规范字符串，不引入别名。
-- [ ] `scope` 字面量策略严格按 Spec：
+- [x] 外部 RPC 协议**不新增方法、不改字段**，仅收紧现有语义。
+- [x] HTTP 状态码保持 `200`，业务错误走 JSON-RPC `error`。
+- [x] `error.message` 继续使用 Spec 规范字符串，不引入别名。
+- [x] `scope` 字面量策略严格按 Spec：
   - 非法仅包含 `""` 与 `"global"`
   - 不做 trim/lower 收敛
   - 非空字符串按原值大小写敏感匹配
 
 ### 0.3 非 M3 范围（必须明确）
-- [ ] **M4 范围**：`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 推送。
-- [ ] **M5 范围**：SDK（.NET / JS/TS）与对外契约封装。
-- [ ] **v2 范围**：Invocation 持久化、事件重放、Hub 重启恢复。
+- **M4 范围**：`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 推送。
+- **M5 范围**：SDK（.NET / JS/TS）与对外契约封装。
+- **v2 范围**：Invocation 持久化、事件重放、Hub 重启恢复。
 
 ---
 
@@ -87,7 +88,7 @@
 
 #### `src/DevHub.Core/Services/Invocation/InvocationRoutingService.cs`
 - [x] 移除 `IsNullOrWhiteSpace` 作为 Global 判据。
-- [ ] 明确规则：
+- [x] 明确规则：
   - `target.Scope == null` -> Global 路由（仅 `instance.Scope == null`）
   - `target.Scope != null` -> 显式 scope 路由（精确匹配）
 - [x] 确认 `target.instanceId` 优先于 scope 条件。
@@ -229,11 +230,12 @@
 
 ### Day 2：白盒 + 黑盒补齐
 - [x] 新增/调整 C# 单测覆盖 M3-SCOPE 核心路径。
-- [ ] 新增 Python `test_scope_routing.py` 并接入 runner。
+- [x] 新增 Python `test_scope_routing.py` 并接入 runner。
 
 ### Day 3：回归与文档闭环
 - [ ] 运行 `dotnet test` + Python `default/fast/full` 回归。
-- [ ] 更新 M3 文档中的状态/风险/DoD 实际结果。
+- [x] 运行 `dotnet test` + Python scope 专项 + `test_runner --fast` 回归。
+- [x] 更新 M3 文档中的状态/风险/DoD 实际结果。
 
 ---
 
@@ -241,18 +243,18 @@
 
 > 详见《[DevHub_M3测试任务拆分文档](./DevHub_M3测试任务拆分文档.md)》编号明细。
 
-- [ ] `M3-SCOPE-001` register: scope omitted/null => Global 生效
-- [ ] `M3-SCOPE-002` register: 显式 scope 精确匹配
-- [ ] `M3-SCOPE-003` register/list/launch: scope=`""` -> `-32602`
-- [ ] `M3-SCOPE-004` register/list/launch: scope=`"global"` -> `-32602`
-- [ ] `M3-SCOPE-005` notify/request: target.scope omitted/null 仅命中 Global
-- [ ] `M3-SCOPE-006` notify/request: target.scope 显式仅命中该 scope，不回退 Global
-- [ ] `M3-SCOPE-007` notify/request: target.scope 非法值返回 `-32602`
-- [ ] `M3-SCOPE-008` case-sensitive 精确匹配（`workspace-A` ≠ `workspace-a`）
-- [ ] `M3-SCOPE-009` `target.instanceId` 优先，不发生 scope/global 回退
+- [x] `M3-SCOPE-001` register: scope omitted/null => Global 生效
+- [x] `M3-SCOPE-002` register: 显式 scope 精确匹配
+- [x] `M3-SCOPE-003` register/list/launch: scope=`""` -> `-32602`
+- [x] `M3-SCOPE-004` register/list/launch: scope=`"global"` -> `-32602`
+- [x] `M3-SCOPE-005` notify/request: target.scope omitted/null 仅命中 Global
+- [x] `M3-SCOPE-006` notify/request: target.scope 显式仅命中该 scope，不回退 Global
+- [x] `M3-SCOPE-007` notify/request: target.scope 非法值返回 `-32602`
+- [x] `M3-SCOPE-008` case-sensitive 精确匹配（`workspace-A` ≠ `workspace-a`）
+- [x] `M3-SCOPE-009` `target.instanceId` 优先，不发生 scope/global 回退
 - [ ] `M3-SCOPE-010` offline matrix 在不同 scope 下行为一致
-- [ ] `M3-SCOPE-011` launch dedupe 在不同 scope 隔离
-- [ ] `M3-SCOPE-012` poll 投递不跨 scope 泄漏
+- [x] `M3-SCOPE-011` launch dedupe 在不同 scope 隔离
+- [x] `M3-SCOPE-012` poll 投递不跨 scope 泄漏
 
 ---
 
@@ -292,5 +294,11 @@
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationRoutingTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/LaunchCoordinatorTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/SpecConformanceTests.cs`
+  - `/Users/qiuyu/projects/DevHub/tests/test_scope_routing.py`
+  - `/Users/qiuyu/projects/DevHub/tests/test_launch_invocation.py`
+  - `/Users/qiuyu/projects/DevHub/tests/test_runner.py`
 - 测试命令（已通过）：
-  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~ScopeParsingTests|FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~LaunchCoordinatorTests|FullyQualifiedName~SpecConformanceTests"`
+  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~ScopeParsingTests|FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~LaunchCoordinatorTests"`
+  - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_scope_routing.py`
+  - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_launch_invocation.py`
+  - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_runner.py --fast --no-header`

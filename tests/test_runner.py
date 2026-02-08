@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2 测试运行器
+DevHub M2/M3 测试运行器
 """
 
 import os
@@ -15,6 +15,7 @@ from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_app_definitions import TestAppDefinitions
 from tests.test_app_instances import TestAppInstances
+from tests.test_scope_routing import TestScopeRouting
 from tests.test_invocation_notify import TestInvocationNotify
 from tests.test_invocation_request import TestInvocationRequest
 from tests.test_invocation_poll_respond import TestInvocationPollRespond
@@ -45,14 +46,14 @@ def run_all_tests(full=False, fast=False):
 
     if full:
         mode = "full"
-        coverage = "M2 严格覆盖（含 lease(30s)/并发去重等扩展耗时场景）"
+        coverage = "M2/M3 严格覆盖（含 lease(30s)/并发去重与 scope 扩展场景）"
     elif fast:
         mode = "fast"
-        coverage = "M2 快速回归（跳过 lease(30s) 与并发压力等长耗时场景）"
+        coverage = "M2/M3 快速回归（跳过 lease(30s) 与并发压力等长耗时场景）"
     else:
         mode = "default"
-        coverage = "M2 默认回归（核心链路 + Spec MUST，离线判定等长耗时场景归入 full）"
-    logger.info("开始 DevHub M2 功能测试，模式: %s", mode)
+        coverage = "M2/M3 默认回归（核心链路 + Spec MUST，长耗时场景归入 full）"
+    logger.info("开始 DevHub M2/M3 功能测试，模式: %s", mode)
 
     # 创建测试报告
     report = TestReport(mode=mode, coverage=coverage)
@@ -73,6 +74,10 @@ def run_all_tests(full=False, fast=False):
     logger.info("=== 运行 AppInstance 测试 ===")
     app_instances_tests = TestAppInstances()
     report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=full))
+
+    logger.info("=== 运行 Scope 路由测试 ===")
+    scope_routing_tests = TestScopeRouting()
+    report.results.extend(scope_routing_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 Invocation Notify 测试 ===")
     invocation_notify_tests = TestInvocationNotify()
@@ -141,7 +146,7 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="DevHub M2 功能测试运行器")
+    parser = argparse.ArgumentParser(description="DevHub M2/M3 功能测试运行器")
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -152,7 +157,7 @@ def main():
 
     if not args.no_header:
         print("=" * 60)
-        print("DevHub M2 功能测试")
+        print("DevHub M2/M3 功能测试")
         print("=" * 60)
         print()
 

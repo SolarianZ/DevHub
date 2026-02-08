@@ -1,0 +1,949 @@
+#!/usr/bin/env python3
+"""
+DevHub M3 Scope 路由专项测试
+"""
+
+import os
+import sys
+import uuid
+import json
+import threading
+import unittest
+
+# 添加项目根目录到 Python 模块搜索路径
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+
+
+class TestScopeRouting(unittest.TestCase):
+    """M3 Scope 路由测试类"""
+
+    def _definitions_dir(self):
+        if "DEVHUB_APPDEFS_DIR" in os.environ:
+            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
+        else:
+            runtime_dir = DiscoveryService.get_runtime_directory()
+            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+
+        os.makedirs(definitions_dir, exist_ok=True)
+        return definitions_dir
+
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
+        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
+        payload = {
+            "appId": app_id,
+            "displayName": app_id,
+            "capabilities": {
+                "rpc": True,
+                "events": False
+            }
+        }
+
+        if include_launch:
+            launch_config = {
+                "exePath": "python3",
+                "argsTemplate": os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py")),
+            }
+            if dedupe_key_template is not None:
+                launch_config["dedupeKeyTemplate"] = dedupe_key_template
+            payload["launch"] = launch_config
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        return path
+
+    @staticmethod
+    def _instance_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+    @staticmethod
+    def _app_id(suffix):
+        return f"m3-scope-{suffix}-{uuid.uuid4().hex[:6]}"
+
+    @staticmethod
+    def _extract_invocation_ids(items):
+        return [item.get("invocationId") for item in items if item.get("invocationId")]
+
+    def _poll_invocation_ids(self, client, instance_id, wait_ms=100):
+        poll_response = client.poll_once(instance_id, max_count=10, wait_ms=wait_ms)
+        return poll_response, self._extract_invocation_ids(poll_response.get("result", {}).get("items", []))
+
+    def test_m3_scope_001_register_omitted_and_null_should_both_be_global(self):
+        """M3-SCOPE-001: register scope omitted/null => Global 生效"""
+        result = TestResult("M3-SCOPE-001 register omitted/null => Global")
+        app_id = self._app_id("001")
+
+        omitted_instance = None
+        null_instance = None
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            omitted_instance = self._instance_id("m3-scope-omitted")
+            null_instance = self._instance_id("m3-scope-null")
+
+            omitted_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": omitted_instance,
+                    "appId": app_id,
+                    "pid": 31001,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            }, request_id="m3-scope-001-omitted")
+            if not RpcAssertions.expect_success(result, omitted_response, ["instance"]):
+                return result
+
+            null_response = client.register_instance(
+                instance_id=null_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31002,
+            )
+            if not RpcAssertions.expect_success(result, null_response, ["instance"]):
+                return result
+
+            default_list = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-001-list-default")
+            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+                return result
+
+            instances = default_list["result"].get("instances", [])
+            ids = {item.get("instanceId") for item in instances}
+            if omitted_instance not in ids or null_instance not in ids:
+                result.mark_failure(f"❌ 默认 global 过滤未同时命中 omitted/null 实例: {ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if omitted_instance:
+                    cleanup_client.unregister_instance(omitted_instance)
+                if null_instance:
+                    cleanup_client.unregister_instance(null_instance)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_002_register_scope_should_match_exactly(self):
+        """M3-SCOPE-002: register 显式 scope 精确匹配"""
+        result = TestResult("M3-SCOPE-002 register 显式 scope 精确匹配")
+        app_id = self._app_id("002")
+
+        upper_instance = None
+        lower_instance = None
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            upper_instance = self._instance_id("m3-scope-upper")
+            lower_instance = self._instance_id("m3-scope-lower")
+
+            upper_register = client.register_instance(
+                instance_id=upper_instance,
+                app_id=app_id,
+                scope="workspace-A",
+                poll=True,
+                respond=True,
+                pid=31101,
+            )
+            if not RpcAssertions.expect_success(result, upper_register, ["instance"]):
+                return result
+
+            lower_register = client.register_instance(
+                instance_id=lower_instance,
+                app_id=app_id,
+                scope="workspace-a",
+                poll=True,
+                respond=True,
+                pid=31102,
+            )
+            if not RpcAssertions.expect_success(result, lower_register, ["instance"]):
+                return result
+
+            upper_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-A"}, request_id="m3-scope-002-upper")
+            if not RpcAssertions.expect_success(result, upper_list, ["instances"]):
+                return result
+
+            lower_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-a"}, request_id="m3-scope-002-lower")
+            if not RpcAssertions.expect_success(result, lower_list, ["instances"]):
+                return result
+
+            upper_ids = {item.get("instanceId") for item in upper_list["result"].get("instances", [])}
+            lower_ids = {item.get("instanceId") for item in lower_list["result"].get("instances", [])}
+
+            if upper_instance not in upper_ids or lower_instance in upper_ids:
+                result.mark_failure(f"❌ workspace-A 过滤结果异常: {upper_ids}")
+                return result
+
+            if lower_instance not in lower_ids or upper_instance in lower_ids:
+                result.mark_failure(f"❌ workspace-a 过滤结果异常: {lower_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if upper_instance:
+                    cleanup_client.unregister_instance(upper_instance)
+                if lower_instance:
+                    cleanup_client.unregister_instance(lower_instance)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_003_invalid_empty_scope_should_return_invalid_params(self):
+        """M3-SCOPE-003: register/list/launch scope='' -> -32602"""
+        result = TestResult("M3-SCOPE-003 scope='' -> invalid_params")
+        app_id = self._app_id("003")
+        definition_path = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=True)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            register_response = client.register_instance(
+                instance_id=self._instance_id("m3-scope-empty"),
+                app_id=app_id,
+                scope="",
+                poll=True,
+                respond=True,
+                pid=31201,
+            )
+            if not RpcAssertions.expect_error(result, register_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, register_response, {"reason": "invalid_scope"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="m3-scope-003-list")
+            if not RpcAssertions.expect_error(result, list_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, list_response, {"reason": "invalid_scope"}):
+                return result
+
+            launch_response = client.launch_app(
+                app_id=app_id,
+                scope="",
+                wait_for_register_ms=0,
+                request_id="m3-scope-003-launch",
+            )
+            if not RpcAssertions.expect_error(result, launch_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, launch_response, {"reason": "invalid_scope"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_004_invalid_global_scope_should_return_invalid_params(self):
+        """M3-SCOPE-004: register/list/launch scope='global' -> -32602"""
+        result = TestResult("M3-SCOPE-004 scope='global' -> invalid_params")
+        app_id = self._app_id("004")
+        definition_path = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=True)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            register_response = client.register_instance(
+                instance_id=self._instance_id("m3-scope-global"),
+                app_id=app_id,
+                scope="global",
+                poll=True,
+                respond=True,
+                pid=31301,
+            )
+            if not RpcAssertions.expect_error(result, register_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, register_response, {"reason": "invalid_scope"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="m3-scope-004-list")
+            if not RpcAssertions.expect_error(result, list_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, list_response, {"reason": "invalid_scope"}):
+                return result
+
+            launch_response = client.launch_app(
+                app_id=app_id,
+                scope="global",
+                wait_for_register_ms=0,
+                request_id="m3-scope-004-launch",
+            )
+            if not RpcAssertions.expect_error(result, launch_response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, launch_response, {"reason": "invalid_scope"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_005_notify_request_default_scope_should_only_hit_global(self):
+        """M3-SCOPE-005: notify/request target.scope omitted/null 仅命中 Global"""
+        result = TestResult("M3-SCOPE-005 notify/request 默认 Global 路由")
+        app_id = self._app_id("005")
+        definition_path = None
+
+        global_instance = None
+        scoped_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            global_instance = self._instance_id("m3-scope-global")
+            scoped_instance = self._instance_id("m3-scope-scoped")
+
+            register_global = client.register_instance(
+                instance_id=global_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31401,
+            )
+            if not RpcAssertions.expect_success(result, register_global, ["instance"]):
+                return result
+
+            register_scoped = client.register_instance(
+                instance_id=scoped_instance,
+                app_id=app_id,
+                scope="workspace-A",
+                poll=True,
+                respond=True,
+                pid=31402,
+            )
+            if not RpcAssertions.expect_success(result, register_scoped, ["instance"]):
+                return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                args={"case": "default-global-notify"},
+                target_scope=None,
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-005-notify",
+            )
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            notify_invocation_id = notify_response["result"]["invocationId"]
+
+            global_poll_response, global_ids = self._poll_invocation_ids(client, global_instance)
+            if not RpcAssertions.expect_success(result, global_poll_response, ["items"]):
+                return result
+
+            scoped_poll_response, scoped_ids = self._poll_invocation_ids(client, scoped_instance)
+            if not RpcAssertions.expect_success(result, scoped_poll_response, ["items"]):
+                return result
+
+            if notify_invocation_id not in global_ids:
+                result.mark_failure(f"❌ 默认 Global notify 未被 Global 实例拉取: {global_ids}")
+                return result
+            if notify_invocation_id in scoped_ids:
+                result.mark_failure(f"❌ 默认 Global notify 被 scoped 实例误拉取: {scoped_ids}")
+                return result
+
+            request_holder = {}
+            scoped_request_poll_holder = {}
+
+            def poll_global_and_respond_for_request():
+                poll_client = RpcClient(base_url, token)
+                poll_response = poll_client.poll_once(global_instance, max_count=1, wait_ms=1500)
+                request_holder["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if not items:
+                    return
+
+                invocation_id = items[0].get("invocationId")
+                request_holder["invocationId"] = invocation_id
+                if invocation_id:
+                    request_holder["respond"] = poll_client.respond_value(
+                        global_instance,
+                        invocation_id,
+                        {"handledBy": "global"},
+                    )
+
+            def poll_scoped_for_request():
+                scoped_poll_client = RpcClient(base_url, token)
+                scoped_poll = scoped_poll_client.poll_once(scoped_instance, max_count=10, wait_ms=500)
+                scoped_request_poll_holder["poll"] = scoped_poll
+                if "error" in scoped_poll:
+                    return
+                scoped_request_poll_holder["ids"] = self._extract_invocation_ids(
+                    scoped_poll.get("result", {}).get("items", [])
+                )
+
+            global_worker = threading.Thread(target=poll_global_and_respond_for_request, daemon=True)
+            scoped_worker = threading.Thread(target=poll_scoped_for_request, daemon=True)
+            global_worker.start()
+            scoped_worker.start()
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                args={"case": "default-global-request"},
+                target_scope=None,
+                options={
+                    "ttlMs": 4000,
+                    "waitTimeoutMs": 3000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="m3-scope-005-request",
+            )
+
+            global_worker.join(timeout=3)
+            scoped_worker.join(timeout=3)
+
+            if not RpcAssertions.expect_success(result, request_response, ["value"]):
+                return result
+
+            value = request_response.get("result", {}).get("value", {})
+            if value.get("handledBy") != "global":
+                result.mark_failure(f"❌ 默认 Global request 未由 Global 实例处理: {request_response}")
+                return result
+
+            global_request_invocation_id = request_holder.get("invocationId")
+            if not global_request_invocation_id:
+                result.mark_failure(f"❌ 默认 Global request 未被 Global 实例 poll 到: {request_holder}")
+                return result
+
+            scoped_request_ids = scoped_request_poll_holder.get("ids", [])
+            if global_request_invocation_id in scoped_request_ids:
+                result.mark_failure(f"❌ 默认 Global request 被 scoped 实例误拉取: {scoped_request_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if global_instance:
+                    cleanup_client.unregister_instance(global_instance)
+                if scoped_instance:
+                    cleanup_client.unregister_instance(scoped_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_006_explicit_scope_should_not_fallback_to_global(self):
+        """M3-SCOPE-006: notify/request 显式 scope 不回退 Global"""
+        result = TestResult("M3-SCOPE-006 显式 scope 不回退 Global")
+        app_id = self._app_id("006")
+        definition_path = None
+        global_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            global_instance = self._instance_id("m3-scope-only-global")
+            register_response = client.register_instance(
+                instance_id=global_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31501,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                args={"scope": "workspace-A"},
+                target_scope="workspace-A",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-006-notify",
+            )
+            if not RpcAssertions.expect_error(result, notify_response, -32010, "instance_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, notify_response, {"reason": "offline_no_queue"}):
+                return result
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                args={"scope": "workspace-A"},
+                target_scope="workspace-A",
+                options={
+                    "ttlMs": 3000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="m3-scope-006-request",
+            )
+            if not RpcAssertions.expect_error(result, request_response, -32010, "instance_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, request_response, {"reason": "offline_no_queue"}):
+                return result
+
+            poll_response, invocation_ids = self._poll_invocation_ids(client, global_instance)
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+            if invocation_ids:
+                result.mark_failure(f"❌ 显式 scope 调用错误回退到 Global: {invocation_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if global_instance:
+                    cleanup_client.unregister_instance(global_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_007_invalid_target_scope_should_return_invalid_params(self):
+        """M3-SCOPE-007: target.scope invalid -> -32602 + invalid_target_scope"""
+        result = TestResult("M3-SCOPE-007 target.scope invalid")
+        app_id = self._app_id("007")
+        definition_path = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            notify_empty = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                target_scope="",
+                queue_if_offline=True,
+                auto_launch=False,
+                request_id="m3-scope-007-notify-empty",
+            )
+            if not RpcAssertions.expect_error(result, notify_empty, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, notify_empty, {"reason": "invalid_target_scope"}):
+                return result
+
+            notify_global = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                target_scope="global",
+                queue_if_offline=True,
+                auto_launch=False,
+                request_id="m3-scope-007-notify-global",
+            )
+            if not RpcAssertions.expect_error(result, notify_global, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, notify_global, {"reason": "invalid_target_scope"}):
+                return result
+
+            request_empty = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                target_scope="",
+                options={
+                    "ttlMs": 2000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m3-scope-007-request-empty",
+            )
+            if not RpcAssertions.expect_error(result, request_empty, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, request_empty, {"reason": "invalid_target_scope"}):
+                return result
+
+            request_global = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                target_scope="global",
+                options={
+                    "ttlMs": 2000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m3-scope-007-request-global",
+            )
+            if not RpcAssertions.expect_error(result, request_global, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, request_global, {"reason": "invalid_target_scope"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_008_scope_match_should_be_case_sensitive(self):
+        """M3-SCOPE-008: case-sensitive 精确匹配"""
+        result = TestResult("M3-SCOPE-008 scope 大小写敏感")
+        app_id = self._app_id("008")
+        definition_path = None
+
+        upper_instance = None
+        lower_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            upper_instance = self._instance_id("m3-scope-upper")
+            lower_instance = self._instance_id("m3-scope-lower")
+
+            upper_register = client.register_instance(
+                instance_id=upper_instance,
+                app_id=app_id,
+                scope="workspace-A",
+                poll=True,
+                respond=True,
+                pid=31601,
+            )
+            if not RpcAssertions.expect_success(result, upper_register, ["instance"]):
+                return result
+
+            lower_register = client.register_instance(
+                instance_id=lower_instance,
+                app_id=app_id,
+                scope="workspace-a",
+                poll=True,
+                respond=True,
+                pid=31602,
+            )
+            if not RpcAssertions.expect_success(result, lower_register, ["instance"]):
+                return result
+
+            notify_upper = client.invoke_notify(
+                app_id=app_id,
+                method="asset.upper",
+                args={"scope": "workspace-A"},
+                target_scope="workspace-A",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-008-upper",
+            )
+            if not RpcAssertions.expect_success(result, notify_upper, ["invocationId"]):
+                return result
+
+            notify_lower = client.invoke_notify(
+                app_id=app_id,
+                method="asset.lower",
+                args={"scope": "workspace-a"},
+                target_scope="workspace-a",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-008-lower",
+            )
+            if not RpcAssertions.expect_success(result, notify_lower, ["invocationId"]):
+                return result
+
+            upper_invocation = notify_upper["result"]["invocationId"]
+            lower_invocation = notify_lower["result"]["invocationId"]
+
+            upper_poll, upper_ids = self._poll_invocation_ids(client, upper_instance)
+            if not RpcAssertions.expect_success(result, upper_poll, ["items"]):
+                return result
+
+            lower_poll, lower_ids = self._poll_invocation_ids(client, lower_instance)
+            if not RpcAssertions.expect_success(result, lower_poll, ["items"]):
+                return result
+
+            if upper_invocation not in upper_ids or upper_invocation in lower_ids:
+                result.mark_failure(f"❌ workspace-A invocation 路由异常, upper={upper_ids}, lower={lower_ids}")
+                return result
+
+            if lower_invocation not in lower_ids or lower_invocation in upper_ids:
+                result.mark_failure(f"❌ workspace-a invocation 路由异常, upper={upper_ids}, lower={lower_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if upper_instance:
+                    cleanup_client.unregister_instance(upper_instance)
+                if lower_instance:
+                    cleanup_client.unregister_instance(lower_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_009_target_instance_id_should_take_precedence(self):
+        """M3-SCOPE-009: target.instanceId 优先且不回退"""
+        result = TestResult("M3-SCOPE-009 target.instanceId 优先")
+        app_id = self._app_id("009")
+        definition_path = None
+
+        available_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            available_instance = self._instance_id("m3-scope-available")
+            register_response = client.register_instance(
+                instance_id=available_instance,
+                app_id=app_id,
+                scope="workspace-A",
+                poll=True,
+                respond=True,
+                pid=31701,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            missing_target = self._instance_id("m3-scope-missing")
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                target_scope="workspace-A",
+                target_instance_id=missing_target,
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-009-notify",
+            )
+            if not RpcAssertions.expect_error(result, notify_response, -32010, "instance_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, notify_response, {"reason": "target_instance_missing"}):
+                return result
+
+            request_response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                target_scope="workspace-A",
+                target_instance_id=missing_target,
+                options={
+                    "ttlMs": 2000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="m3-scope-009-request",
+            )
+            if not RpcAssertions.expect_error(result, request_response, -32010, "instance_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, request_response, {"reason": "target_instance_missing"}):
+                return result
+
+            poll_response, invocation_ids = self._poll_invocation_ids(client, available_instance)
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+            if invocation_ids:
+                result.mark_failure(f"❌ target.instanceId 缺失时错误回退投递: {invocation_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if available_instance:
+                    cleanup_client.unregister_instance(available_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def test_m3_scope_012_poll_should_not_leak_between_scopes(self):
+        """M3-SCOPE-012: poll 投递不跨 scope 泄漏"""
+        result = TestResult("M3-SCOPE-012 poll 不跨 scope 泄漏")
+        app_id = self._app_id("012")
+        definition_path = None
+
+        global_instance = None
+        scoped_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            global_instance = self._instance_id("m3-scope-global")
+            scoped_instance = self._instance_id("m3-scope-workspace")
+
+            register_global = client.register_instance(
+                instance_id=global_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31801,
+            )
+            if not RpcAssertions.expect_success(result, register_global, ["instance"]):
+                return result
+
+            register_scoped = client.register_instance(
+                instance_id=scoped_instance,
+                app_id=app_id,
+                scope="workspace-A",
+                poll=True,
+                respond=True,
+                pid=31802,
+            )
+            if not RpcAssertions.expect_success(result, register_scoped, ["instance"]):
+                return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                args={"case": "scope-leak-check"},
+                target_scope="workspace-A",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-012-notify",
+            )
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            target_invocation_id = notify_response["result"]["invocationId"]
+
+            global_poll_response, global_ids = self._poll_invocation_ids(client, global_instance)
+            if not RpcAssertions.expect_success(result, global_poll_response, ["items"]):
+                return result
+            if target_invocation_id in global_ids:
+                result.mark_failure(f"❌ Global 实例误拉取 scoped invocation: {global_ids}")
+                return result
+
+            scoped_poll_response, scoped_ids = self._poll_invocation_ids(client, scoped_instance)
+            if not RpcAssertions.expect_success(result, scoped_poll_response, ["items"]):
+                return result
+            if target_invocation_id not in scoped_ids:
+                result.mark_failure(f"❌ scoped 实例未拉取到目标 invocation: {scoped_ids}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if global_instance:
+                    cleanup_client.unregister_instance(global_instance)
+                if scoped_instance:
+                    cleanup_client.unregister_instance(scoped_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
+    def run_all_tests(self, full=False):
+        """运行所有 M3 scope 测试。"""
+        return [
+            self.test_m3_scope_001_register_omitted_and_null_should_both_be_global(),
+            self.test_m3_scope_002_register_scope_should_match_exactly(),
+            self.test_m3_scope_003_invalid_empty_scope_should_return_invalid_params(),
+            self.test_m3_scope_004_invalid_global_scope_should_return_invalid_params(),
+            self.test_m3_scope_005_notify_request_default_scope_should_only_hit_global(),
+            self.test_m3_scope_006_explicit_scope_should_not_fallback_to_global(),
+            self.test_m3_scope_007_invalid_target_scope_should_return_invalid_params(),
+            self.test_m3_scope_008_scope_match_should_be_case_sensitive(),
+            self.test_m3_scope_009_target_instance_id_should_take_precedence(),
+            self.test_m3_scope_012_poll_should_not_leak_between_scopes(),
+        ]
+
+
+if __name__ == "__main__":
+    test = TestScopeRouting()
+    results = test.run_all_tests()
+
+    for result in results:
+        status = "✅ 通过" if result.success else "❌ 失败"
+        print(f"{status}: {result.test_name}")
+        if result.details:
+            for detail in result.details:
+                print(f"  - {detail}")
+        if result.error_message:
+            print(f"  错误: {result.error_message}")
+        print()

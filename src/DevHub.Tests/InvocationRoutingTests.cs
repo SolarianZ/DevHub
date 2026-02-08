@@ -96,6 +96,74 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public void RoutingService_WithNullTargetScope_ShouldOnlyRouteToGlobalInstances()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "global-only-inst",
+            AppId = "scope-null.app",
+            Scope = null,
+            Pid = 2051,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scoped-only-inst",
+            AppId = "scope-null.app",
+            Scope = "workspace-A",
+            Pid = 2052,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var service = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+
+        var candidates = service.GetOnlineCandidates(
+            "scope-null.app",
+            new InvocationTarget { Scope = null, InstanceId = null });
+
+        Assert.Single(candidates);
+        Assert.Equal("global-only-inst", candidates[0].InstanceId);
+    }
+
+    [Fact]
+    public void RoutingService_WithCaseSensitiveScopeMatching_ShouldNotCrossRoute()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-upper-inst",
+            AppId = "scope-case.app",
+            Scope = "workspace-A",
+            Pid = 2061,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-lower-inst",
+            AppId = "scope-case.app",
+            Scope = "workspace-a",
+            Pid = 2062,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var service = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+
+        var upperCandidates = service.GetOnlineCandidates(
+            "scope-case.app",
+            new InvocationTarget { Scope = "workspace-A", InstanceId = null });
+        var lowerCandidates = service.GetOnlineCandidates(
+            "scope-case.app",
+            new InvocationTarget { Scope = "workspace-a", InstanceId = null });
+
+        Assert.Single(upperCandidates);
+        Assert.Single(lowerCandidates);
+        Assert.Equal("scope-upper-inst", upperCandidates[0].InstanceId);
+        Assert.Equal("scope-lower-inst", lowerCandidates[0].InstanceId);
+        Assert.NotEqual(upperCandidates[0].InstanceId, lowerCandidates[0].InstanceId);
+    }
+
+    [Fact]
     public void RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
