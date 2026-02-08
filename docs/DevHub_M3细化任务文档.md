@@ -17,8 +17,8 @@
   - 公共解析器已收敛：`TryGetOptionalScope(...)`、`TryParseInvocationTarget(...)`。
   - `AppInstances/Launch/Invocation` handlers 与 `InvocationRoutingService` 已完成语义收敛。
   - C# 白盒测试补齐必要缺口并通过（含 omitted/null 等价、Global 默认路由、大小写敏感断言）。
-  - Python 黑盒 `test_scope_routing.py` 已落地并接入 `test_runner.py`，`M3-SCOPE-001~009/011/012` 已覆盖。
-- 当前主要剩余缺口：`M3-SCOPE-010` offline matrix 及其 full 模式扩展场景待补齐。
+  - Python 黑盒 `test_scope_routing.py` 已落地并接入 `test_runner.py`，`M3-SCOPE-001~012` 已覆盖（含 `M3-SCOPE-010` 与 full 扩展）。
+- 当前主要剩余缺口：日志字段规范、测试文件拆分（`InvocationScopeRoutingTests.cs` / `LaunchScopeTests.cs`）与空白字符串 scope 样本待补齐。
 
 ---
 
@@ -160,10 +160,10 @@
 - [x] 不指定 `target.instanceId` 时：按 `target.scope`（含 Global 默认）筛选候选实例。
 
 #### 离线矩阵（沿用 M2，补齐 scope 维度）
-- [ ] `queueIfOffline=false`：无候选实例直接 `instance_not_found`。
-- [ ] `queueIfOffline=true && autoLaunch=false`：进入 Pending（需 AppDefinition 存在）。
-- [ ] `queueIfOffline=true && autoLaunch=true`：按**相同 scope**触发 launch。
-- [ ] 任意 scope 下均遵守“无定义不入队”规则。
+- [x] `queueIfOffline=false`：无候选实例直接 `instance_not_found`。
+- [x] `queueIfOffline=true && autoLaunch=false`：进入 Pending（需 AppDefinition 存在）。
+- [x] `queueIfOffline=true && autoLaunch=true`：按**相同 scope**触发 launch。
+- [x] 任意 scope 下均遵守“无定义不入队”规则。
 
 ---
 
@@ -183,9 +183,9 @@
 | `target.scope="workspace-A"` | 仅 `instance.scope == "workspace-A"` | fallback 到 Global | `instance_not_found` |
 
 ### 4.3 冲突边界
-- [ ] `poll` 投递不得跨 scope 泄漏（Global 实例不得认领显式 scoped invocation）。
-- [ ] lease 到期重投递后仍需遵守同一 scope 路由条件。
-- [ ] `queueIfOffline + autoLaunch` 的 launch scope 必须与 invocation target scope 一致。
+- [x] `poll` 投递不得跨 scope 泄漏（Global 实例不得认领显式 scoped invocation）。
+- [x] lease 到期重投递后仍需遵守同一 scope 路由条件。
+- [x] `queueIfOffline + autoLaunch` 的 launch scope 必须与 invocation target scope 一致。
 
 ---
 
@@ -233,7 +233,7 @@
 - [x] 新增 Python `test_scope_routing.py` 并接入 runner。
 
 ### Day 3：回归与文档闭环
-- [ ] 运行 `dotnet test` + Python `default/fast/full` 回归。
+- [x] 运行 `dotnet test` + Python `default/fast/full` 回归。
 - [x] 运行 `dotnet test` + Python scope 专项 + `test_runner --fast` 回归。
 - [x] 更新 M3 文档中的状态/风险/DoD 实际结果。
 
@@ -252,7 +252,7 @@
 - [x] `M3-SCOPE-007` notify/request: target.scope 非法值返回 `-32602`
 - [x] `M3-SCOPE-008` case-sensitive 精确匹配（`workspace-A` ≠ `workspace-a`）
 - [x] `M3-SCOPE-009` `target.instanceId` 优先，不发生 scope/global 回退
-- [ ] `M3-SCOPE-010` offline matrix 在不同 scope 下行为一致
+- [x] `M3-SCOPE-010` offline matrix 在不同 scope 下行为一致
 - [x] `M3-SCOPE-011` launch dedupe 在不同 scope 隔离
 - [x] `M3-SCOPE-012` poll 投递不跨 scope 泄漏
 
@@ -292,13 +292,14 @@
 - 测试文件：
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/ScopeParsingTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationRoutingTests.cs`
+  - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/InvocationStoreTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/LaunchCoordinatorTests.cs`
   - `/Users/qiuyu/projects/DevHub/src/DevHub.Tests/SpecConformanceTests.cs`
   - `/Users/qiuyu/projects/DevHub/tests/test_scope_routing.py`
   - `/Users/qiuyu/projects/DevHub/tests/test_launch_invocation.py`
   - `/Users/qiuyu/projects/DevHub/tests/test_runner.py`
 - 测试命令（已通过）：
-  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~ScopeParsingTests|FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~LaunchCoordinatorTests"`
+  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj --filter "FullyQualifiedName~InvocationRoutingTests|FullyQualifiedName~InvocationStoreTests|FullyQualifiedName~LaunchCoordinatorTests"`
   - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_scope_routing.py`
-  - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_launch_invocation.py`
   - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_runner.py --fast --no-header`
+  - `DEVHUB_RUNTIME_DIR=/tmp/devhub-m3-runtime-launch001 DEVHUB_APPDEFS_DIR=/tmp/devhub-m3-appdefs-launch001 python3 tests/test_runner.py --full --no-header`

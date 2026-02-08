@@ -15,8 +15,8 @@
 - M2 测试基线已可复用：
   - Python 已具备 invocation / launch / app instance 主链路测试框架。
   - C# 已具备 routing / store / lease / launch 白盒测试骨架。
-- 本轮完成范围：**C# 白盒补齐必要缺口 + Python 黑盒 scope 主链路与 runner 接入已完成并通过**。
-- 当前主要剩余：`M3-SCOPE-010` offline matrix 及 full 模式扩展场景待补齐。
+- 本轮完成范围：**C# 白盒补齐必要缺口 + Python 黑盒 scope 主链路与 runner 接入已完成并通过（含 `M3-SCOPE-010` 与 full 扩展）**。
+- 当前主要剩余：日志字段规范、测试文件拆分（`InvocationScopeRoutingTests.cs` / `LaunchScopeTests.cs`）与空白字符串 scope 样本待补齐。
 
 ---
 
@@ -114,8 +114,8 @@
 - [x] 断言不回退到其它实例，返回 `target_instance_missing`。
 
 #### `M3-SCOPE-010` offline matrix scope 一致性
-- [ ] 在 Global 与显式 scope 各执行一次 `queueIfOffline/autoLaunch` 组合矩阵。
-- [ ] 两者行为应一致，仅目标 scope 不同。
+- [x] 在 Global 与显式 scope 各执行一次 `queueIfOffline/autoLaunch` 组合矩阵。
+- [x] 两者行为应一致，仅目标 scope 不同。
 
 #### `M3-SCOPE-012` poll 不跨 scope 泄漏
 - [x] 构造 scoped invocation 后由 Global 实例 poll，断言 items 为空。
@@ -132,7 +132,7 @@
 - [x] 新增 `TestScopeRouting` 模块导入与执行入口。
 - [x] 执行顺序建议：`app_instances -> scope_routing -> invocation -> launch_invocation`。
 - [x] `--fast` 跳过长耗时 lease/offline 等场景，但保留核心 scope 断言。
-- [ ] `--full` 增加矩阵与并发扩展（含 dedupe scope 隔离压力）。
+- [x] `--full` 增加矩阵与并发扩展（含 dedupe scope 隔离压力）。
 
 ---
 
@@ -155,13 +155,13 @@
 - [x] 显式 scope 不回退 Global。
 - [x] `target.instanceId` 优先，不回退到 scope/global。
 - [x] `workspace-A` 与 `workspace-a` 区分大小写。
-- [ ] lease 重投递后仍受 scope 过滤约束。
+- [x] lease 重投递后仍受 scope 过滤约束。
 
 ### 3.4 `LaunchScopeTests.cs`
 - [x] `launch(scope=null)` 与 omitted 行为一致。
 - [x] `scope=""` / `"global"` 返回 `-32602 invalid_params`。
 - [x] dedupe key 在不同 scope 间隔离。
-- [ ] `autoLaunch` 场景调用 `LaunchCoordinator` 时 scope 透传正确。
+- [x] `autoLaunch` 场景调用 `LaunchCoordinator` 时 scope 透传正确。
 
 ---
 
@@ -179,7 +179,7 @@
 - [x] 按 appId 前缀隔离 M2 与 M3 测试数据。
 
 ### 4.3 环境稳定性
-- [ ] 长耗时场景仅放在 `full`，默认模式优先快速稳定反馈。
+- [x] 长耗时场景仅放在 `full`，默认模式优先快速稳定反馈。
 - [ ] 并发 dedupe 用例固定并发度（建议 5~10）并记录每次 `launchId/status`。
 
 ---
@@ -202,13 +202,13 @@
 ## 6. 完成定义（DoD）
 
 ### 6.1 功能覆盖
-- [ ] `M3-SCOPE-001 ~ M3-SCOPE-012` 全部落地并可重复执行。
-- [ ] 黑盒与白盒覆盖矩阵一致，无孤立用例编号。
+- [x] `M3-SCOPE-001 ~ M3-SCOPE-012` 全部落地并可重复执行。
+- [x] 黑盒与白盒覆盖矩阵一致，无孤立用例编号。
 
 ### 6.2 协议一致性
-- [ ] `scope` 行为与 Spec §5.5 完全一致。
-- [ ] 相关错误码与 `error.message` 使用规范字符串。
-- [ ] `invalid_params` 场景覆盖统一 `error.data.reason` 断言。
+- [x] `scope` 行为与 Spec §5.5 完全一致。
+- [x] 相关错误码与 `error.message` 使用规范字符串。
+- [x] `invalid_params` 场景覆盖统一 `error.data.reason` 断言。
 
 ### 6.3 可维护性
 - [x] 新增测试按 M3 专用文件分层，不污染 M1/M2 历史用例结构。

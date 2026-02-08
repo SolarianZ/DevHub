@@ -7,6 +7,7 @@ import os
 import sys
 import uuid
 import json
+import time
 import threading
 import unittest
 
@@ -829,6 +830,146 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
+    def test_m3_scope_010_offline_matrix_should_be_consistent_across_scopes(self):
+        """M3-SCOPE-010: offline matrix 在 Global 与显式 scope 下一致"""
+        result = TestResult("M3-SCOPE-010 offline matrix scope 一致性")
+
+        definition_paths = []
+        registered_instances = []
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            scope_cases = [
+                (None, "global", "global"),
+                ("workspace-A", "workspace-A", "scoped"),
+            ]
+
+            for target_scope, scope_name, scope_tag in scope_cases:
+                queue_off_app = self._app_id(f"010-{scope_tag}-noqueue")
+                definition_paths.append(self._create_definition(queue_off_app, include_launch=False))
+                queue_off_resp = client.invoke_notify(
+                    app_id=queue_off_app,
+                    method="asset.rebuild",
+                    args={"case": f"{scope_name}-queue-false"},
+                    target_scope=target_scope,
+                    queue_if_offline=False,
+                    auto_launch=False,
+                    request_id=f"m3-scope-010-{scope_tag}-noqueue",
+                )
+                if not RpcAssertions.expect_error(result, queue_off_resp, -32010, "instance_not_found"):
+                    return result
+                if not RpcAssertions.expect_error_data_fields(result, queue_off_resp, {"reason": "offline_no_queue"}):
+                    return result
+
+                pending_app = self._app_id(f"010-{scope_tag}-pending")
+                definition_paths.append(self._create_definition(pending_app, include_launch=False))
+                pending_resp = client.invoke_notify(
+                    app_id=pending_app,
+                    method="asset.rebuild",
+                    args={"case": f"{scope_name}-queue-true-autolaunch-false"},
+                    target_scope=target_scope,
+                    queue_if_offline=True,
+                    auto_launch=False,
+                    request_id=f"m3-scope-010-{scope_tag}-pending",
+                )
+                if not RpcAssertions.expect_success(result, pending_resp, ["invocationId"]):
+                    return result
+
+                pending_invocation_id = pending_resp["result"]["invocationId"]
+                pending_instance = self._instance_id(f"m3-scope-010-{scope_tag}-pending")
+                registered_instances.append(pending_instance)
+
+                register_pending = client.register_instance(
+                    instance_id=pending_instance,
+                    app_id=pending_app,
+                    scope=target_scope,
+                    poll=True,
+                    respond=True,
+                    pid=31901,
+                )
+                if not RpcAssertions.expect_success(result, register_pending, ["instance"]):
+                    return result
+
+                pending_poll_resp, pending_ids = self._poll_invocation_ids(client, pending_instance, wait_ms=500)
+                if not RpcAssertions.expect_success(result, pending_poll_resp, ["items"]):
+                    return result
+                if pending_invocation_id not in pending_ids:
+                    result.mark_failure(
+                        f"❌ {scope_name} 下 queueIfOffline=true, autoLaunch=false 未进入待投递链路: {pending_ids}")
+                    return result
+
+                autolaunch_app = self._app_id(f"010-{scope_tag}-autolaunch")
+                definition_paths.append(self._create_definition(
+                    autolaunch_app,
+                    include_launch=True,
+                    dedupe_key_template="{appId}:{scopeOrGlobal}",
+                ))
+
+                autolaunch_resp = client.invoke_notify(
+                    app_id=autolaunch_app,
+                    method="asset.rebuild",
+                    args={"case": f"{scope_name}-queue-true-autolaunch-true"},
+                    target_scope=target_scope,
+                    queue_if_offline=True,
+                    auto_launch=True,
+                    request_id=f"m3-scope-010-{scope_tag}-autolaunch",
+                )
+                if not RpcAssertions.expect_success(result, autolaunch_resp, ["invocationId"]):
+                    return result
+
+                launch_after_autolaunch = client.launch_app(
+                    app_id=autolaunch_app,
+                    scope=target_scope,
+                    wait_for_register_ms=0,
+                    request_id=f"m3-scope-010-{scope_tag}-launch-check",
+                )
+                if not RpcAssertions.expect_success(result, launch_after_autolaunch, ["status", "launchId"]):
+                    return result
+
+                launch_status = launch_after_autolaunch["result"].get("status")
+                if launch_status != "already_running":
+                    result.mark_failure(
+                        f"❌ {scope_name} 下 autoLaunch 未按同 scope 透传去重: {launch_after_autolaunch}")
+                    return result
+
+                missing_def_app = self._app_id(f"010-{scope_tag}-nodef")
+                no_definition_resp = client.invoke_notify(
+                    app_id=missing_def_app,
+                    method="asset.rebuild",
+                    args={"case": f"{scope_name}-no-definition"},
+                    target_scope=target_scope,
+                    queue_if_offline=True,
+                    auto_launch=False,
+                    request_id=f"m3-scope-010-{scope_tag}-nodef",
+                )
+                if not RpcAssertions.expect_error(result, no_definition_resp, -32010, "instance_not_found"):
+                    return result
+                if not RpcAssertions.expect_error_data_fields(result, no_definition_resp, {"reason": "offline_no_queue"}):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                for instance_id in registered_instances:
+                    cleanup_client.unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            for definition_path in definition_paths:
+                try:
+                    if definition_path and os.path.exists(definition_path):
+                        os.remove(definition_path)
+                except Exception:
+                    pass
+
+        return result
+
     def test_m3_scope_012_poll_should_not_leak_between_scopes(self):
         """M3-SCOPE-012: poll 投递不跨 scope 泄漏"""
         result = TestResult("M3-SCOPE-012 poll 不跨 scope 泄漏")
@@ -918,9 +1059,141 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
+    def test_m3_scope_full_lease_redelivery_should_respect_scope(self):
+        """full-only: lease 到期重投递后仍严格遵守 scope 过滤"""
+        result = TestResult("M3-SCOPE-FULL lease 重投递 scope 过滤")
+        app_id = self._app_id("010-full-lease")
+        definition_path = None
+
+        holder_instance = None
+        same_scope_receiver = None
+        global_instance = None
+        other_scope_instance = None
+
+        try:
+            definition_path = self._create_definition(app_id, include_launch=False)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            holder_instance = self._instance_id("m3-scope-full-holder")
+            same_scope_receiver = self._instance_id("m3-scope-full-receiver")
+            global_instance = self._instance_id("m3-scope-full-global")
+            other_scope_instance = self._instance_id("m3-scope-full-other")
+
+            for instance_id, scope, pid in [
+                (holder_instance, "workspace-A", 31911),
+                (same_scope_receiver, "workspace-A", 31912),
+                (global_instance, None, 31913),
+                (other_scope_instance, "workspace-B", 31914),
+            ]:
+                register_response = client.register_instance(
+                    instance_id=instance_id,
+                    app_id=app_id,
+                    scope=scope,
+                    poll=True,
+                    respond=True,
+                    pid=pid,
+                )
+                if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                    return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                args={"case": "full-lease-redelivery"},
+                target_scope="workspace-A",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="m3-scope-full-lease-notify",
+            )
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            invocation_id = notify_response["result"]["invocationId"]
+
+            first_poll = client.poll_once(holder_instance, max_count=10, wait_ms=200)
+            if not RpcAssertions.expect_success(result, first_poll, ["items"]):
+                return result
+
+            first_item = None
+            for item in first_poll.get("result", {}).get("items", []):
+                if item.get("invocationId") == invocation_id:
+                    first_item = item
+                    break
+
+            if not first_item:
+                result.mark_failure("❌ 首次 poll 未拿到目标 scoped invocation")
+                return result
+
+            first_attempt = first_item.get("delivery", {}).get("attempt")
+            if first_attempt != 1:
+                result.mark_failure(f"❌ 首次 delivery.attempt 非 1: {first_item.get('delivery')}")
+                return result
+
+            time.sleep(31.0)
+
+            global_poll, global_ids = self._poll_invocation_ids(client, global_instance, wait_ms=500)
+            if not RpcAssertions.expect_success(result, global_poll, ["items"]):
+                return result
+            if invocation_id in global_ids:
+                result.mark_failure(f"❌ lease 重投递后 Global 实例误拉取 scoped invocation: {global_ids}")
+                return result
+
+            other_scope_poll, other_scope_ids = self._poll_invocation_ids(client, other_scope_instance, wait_ms=500)
+            if not RpcAssertions.expect_success(result, other_scope_poll, ["items"]):
+                return result
+            if invocation_id in other_scope_ids:
+                result.mark_failure(f"❌ lease 重投递后非匹配 scope 实例误拉取: {other_scope_ids}")
+                return result
+
+            receiver_poll = client.poll_once(same_scope_receiver, max_count=10, wait_ms=1000)
+            if not RpcAssertions.expect_success(result, receiver_poll, ["items"]):
+                return result
+
+            receiver_item = None
+            for item in receiver_poll.get("result", {}).get("items", []):
+                if item.get("invocationId") == invocation_id:
+                    receiver_item = item
+                    break
+
+            if not receiver_item:
+                result.mark_failure("❌ lease 到期后同 scope 实例未接收到重投递 invocation")
+                return result
+
+            second_attempt = receiver_item.get("delivery", {}).get("attempt")
+            if not isinstance(second_attempt, int) or second_attempt < 2:
+                result.mark_failure(f"❌ 重投递 delivery.attempt 未递增: {receiver_item.get('delivery')}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if holder_instance:
+                    cleanup_client.unregister_instance(holder_instance)
+                if same_scope_receiver:
+                    cleanup_client.unregister_instance(same_scope_receiver)
+                if global_instance:
+                    cleanup_client.unregister_instance(global_instance)
+                if other_scope_instance:
+                    cleanup_client.unregister_instance(other_scope_instance)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有 M3 scope 测试。"""
-        return [
+        results = [
             self.test_m3_scope_001_register_omitted_and_null_should_both_be_global(),
             self.test_m3_scope_002_register_scope_should_match_exactly(),
             self.test_m3_scope_003_invalid_empty_scope_should_return_invalid_params(),
@@ -930,8 +1203,14 @@ class TestScopeRouting(unittest.TestCase):
             self.test_m3_scope_007_invalid_target_scope_should_return_invalid_params(),
             self.test_m3_scope_008_scope_match_should_be_case_sensitive(),
             self.test_m3_scope_009_target_instance_id_should_take_precedence(),
+            self.test_m3_scope_010_offline_matrix_should_be_consistent_across_scopes(),
             self.test_m3_scope_012_poll_should_not_leak_between_scopes(),
         ]
+
+        if full:
+            results.append(self.test_m3_scope_full_lease_redelivery_should_respect_scope())
+
+        return results
 
 
 if __name__ == "__main__":

@@ -491,6 +491,164 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal("launch_config_missing", data.GetProperty("reason").GetString());
     }
 
+    [Fact]
+    public async Task InvocationHandler_Notify_OfflineMatrix_ShouldBeConsistentAcrossGlobalAndScopedTargets()
+    {
+        foreach (var scopeCase in new (string? TargetScope, string ScopeName, string ScopeTag)[]
+                 {
+                     (null, "global", "global"),
+                     ("workspace-A", "workspace-A", "scoped")
+                 })
+        {
+            var targetScope = scopeCase.TargetScope;
+            var scopeName = scopeCase.ScopeName;
+            var scopeTag = scopeCase.ScopeTag;
+            var appRegistry = new AppRegistry(_registryLogger.Object);
+            var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+            var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+            var store = new InvocationStore(_storeLogger.Object, routingService);
+            var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+            var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+            var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+            var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+            var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
+
+            static JsonRpcRequest BuildNotifyRequest(
+                string id,
+                string appId,
+                string? scope,
+                bool queueIfOffline,
+                bool autoLaunch,
+                string caseName)
+            {
+                return new JsonRpcRequest
+                {
+                    Id = id,
+                    Method = "hub.invoke.notify",
+                    Params = JsonSerializer.SerializeToElement(new
+                    {
+                        appId,
+                        target = new { scope, instanceId = (string?)null },
+                        method = "asset.rebuild",
+                        args = new { @case = caseName },
+                        options = new
+                        {
+                            ttlMs = 60000,
+                            queueIfOffline,
+                            autoLaunch
+                        }
+                    })
+                };
+            }
+
+            var noQueueAppId = $"m3-scope-010-noqueue-{scopeTag}";
+            WriteDefinition(noQueueAppId, rpcEnabled: true);
+            definitionLoader.Load();
+
+            var noQueueResponse = await invocationHandler.HandleAsync(
+                BuildNotifyRequest(
+                    id: $"scope010-{scopeTag}-noqueue",
+                    appId: noQueueAppId,
+                    scope: targetScope,
+                    queueIfOffline: false,
+                    autoLaunch: false,
+                    caseName: "queue-false"),
+                CancellationToken.None);
+
+            Assert.NotNull(noQueueResponse.Error);
+            Assert.Equal(-32010, noQueueResponse.Error.Code);
+            Assert.Equal("instance_not_found", noQueueResponse.Error.Message);
+            var noQueueData = JsonSerializer.SerializeToElement(noQueueResponse.Error.Data);
+            Assert.Equal("offline_no_queue", noQueueData.GetProperty("reason").GetString());
+
+            var pendingAppId = $"m3-scope-010-pending-{scopeTag}";
+            WriteDefinition(pendingAppId, rpcEnabled: true);
+            definitionLoader.Load();
+
+            var pendingResponse = await invocationHandler.HandleAsync(
+                BuildNotifyRequest(
+                    id: $"scope010-{scopeTag}-pending",
+                    appId: pendingAppId,
+                    scope: targetScope,
+                    queueIfOffline: true,
+                    autoLaunch: false,
+                    caseName: "queue-true-autolaunch-false"),
+                CancellationToken.None);
+
+            Assert.Null(pendingResponse.Error);
+            var pendingResult = JsonSerializer.SerializeToElement(pendingResponse.Result);
+            var pendingInvocationId = pendingResult.GetProperty("invocationId").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(pendingInvocationId));
+
+            var matchingInstance = appRegistry.RegisterInstance(new AppInstance
+            {
+                InstanceId = $"m3-scope-010-pending-inst-{scopeName}",
+                AppId = pendingAppId,
+                Scope = targetScope,
+                Pid = 6021,
+                Invoke = new InvokeCapability { Poll = true, Respond = true }
+            });
+
+            var pendingPoll = await store.PollAsync(matchingInstance, maxCount: 10, waitMs: 0, CancellationToken.None);
+            Assert.Contains(pendingPoll, item => item.InvocationId == pendingInvocationId);
+
+            var autoLaunchAppId = $"m3-scope-010-autolaunch-{scopeTag}";
+            WriteDefinition(
+                autoLaunchAppId,
+                rpcEnabled: true,
+                includeLaunch: true,
+                dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+            definitionLoader.Load();
+
+            var autoLaunchResponse = await invocationHandler.HandleAsync(
+                BuildNotifyRequest(
+                    id: $"scope010-{scopeTag}-autolaunch",
+                    appId: autoLaunchAppId,
+                    scope: targetScope,
+                    queueIfOffline: true,
+                    autoLaunch: true,
+                    caseName: "queue-true-autolaunch-true"),
+                CancellationToken.None);
+
+            Assert.Null(autoLaunchResponse.Error);
+            var autoLaunchResult = JsonSerializer.SerializeToElement(autoLaunchResponse.Result);
+            Assert.False(string.IsNullOrWhiteSpace(autoLaunchResult.GetProperty("invocationId").GetString()));
+
+            var launchAfterAutoLaunch = await launchHandler.HandleAsync(new JsonRpcRequest
+            {
+                Id = $"scope010-{scopeName}-launch-check",
+                Method = "hub.apps.launch",
+                Params = JsonSerializer.SerializeToElement(new
+                {
+                    appId = autoLaunchAppId,
+                    scope = targetScope,
+                    waitForRegisterMs = 0
+                })
+            }, CancellationToken.None);
+
+            Assert.Null(launchAfterAutoLaunch.Error);
+            var launchResult = JsonSerializer.SerializeToElement(launchAfterAutoLaunch.Result);
+            Assert.Equal("already_running", launchResult.GetProperty("status").GetString());
+
+            var noDefinitionAppId = $"m3-scope-010-nodef-{scopeTag}";
+            var noDefinitionResponse = await invocationHandler.HandleAsync(
+                BuildNotifyRequest(
+                    id: $"scope010-{scopeTag}-nodef",
+                    appId: noDefinitionAppId,
+                    scope: targetScope,
+                    queueIfOffline: true,
+                    autoLaunch: false,
+                    caseName: "nodef"),
+                CancellationToken.None);
+
+            Assert.NotNull(noDefinitionResponse.Error);
+            Assert.Equal(-32010, noDefinitionResponse.Error.Code);
+            Assert.Equal("instance_not_found", noDefinitionResponse.Error.Message);
+            var noDefinitionData = JsonSerializer.SerializeToElement(noDefinitionResponse.Error.Data);
+            Assert.Equal("offline_no_queue", noDefinitionData.GetProperty("reason").GetString());
+        }
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -502,18 +660,36 @@ public class InvocationRoutingTests : IDisposable
         }
     }
 
-    private void WriteDefinition(string appId, bool rpcEnabled)
+    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
-        File.WriteAllText(filePath, JsonSerializer.Serialize(new
+        var payload = new Dictionary<string, object?>
         {
-            appId,
-            displayName = appId,
-            capabilities = new
+            ["appId"] = appId,
+            ["displayName"] = appId,
+            ["capabilities"] = new Dictionary<string, object?>
             {
-                rpc = rpcEnabled,
-                events = false
+                ["rpc"] = rpcEnabled,
+                ["events"] = false
             }
-        }));
+        };
+
+        if (includeLaunch)
+        {
+            var launch = new Dictionary<string, object?>
+            {
+                ["exePath"] = "dotnet",
+                ["argsTemplate"] = "--version"
+            };
+
+            if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))
+            {
+                launch["dedupeKeyTemplate"] = dedupeKeyTemplate;
+            }
+
+            payload["launch"] = launch;
+        }
+
+        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
