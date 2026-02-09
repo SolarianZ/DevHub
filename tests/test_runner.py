@@ -14,13 +14,16 @@ from tests.test_base import TestReport, create_temp_directory
 from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_ws_events import TestWsEvents
+from tests.test_ws_transport_matrix import TestWsTransportMatrix
 from tests.test_app_definitions import TestAppDefinitions
 from tests.test_app_instances import TestAppInstances
 from tests.test_scope_routing import TestScopeRouting
 from tests.test_invocation_notify import TestInvocationNotify
 from tests.test_invocation_request import TestInvocationRequest
 from tests.test_invocation_poll_respond import TestInvocationPollRespond
+from tests.test_invoke_poll_respond_edges import TestInvokePollRespondEdges
 from tests.test_launch_invocation import TestLaunchInvocation
+from tests.test_launch_spec_edges import TestLaunchSpecEdges
 from tests.test_invalid_params import TestInvalidParams
 from tests.test_internal_errors import TestInternalErrors
 
@@ -72,6 +75,10 @@ def run_all_tests(full=False, fast=False):
     ws_events_tests = TestWsEvents()
     report.results.extend(ws_events_tests.run_all_tests(full=full))
 
+    logger.info("=== 运行 WebSocket 传输矩阵测试 ===")
+    ws_transport_matrix_tests = TestWsTransportMatrix()
+    report.results.extend(ws_transport_matrix_tests.run_all_tests(full=full))
+
     logger.info("=== 运行 AppDefinition 测试 ===")
     app_definitions_tests = TestAppDefinitions()
     report.results.extend(app_definitions_tests.run_all_tests(full=full))
@@ -96,9 +103,17 @@ def run_all_tests(full=False, fast=False):
     invocation_poll_respond_tests = TestInvocationPollRespond()
     report.results.extend(invocation_poll_respond_tests.run_all_tests(full=full))
 
+    logger.info("=== 运行 Invocation Poll/Respond 规范边界测试 ===")
+    invoke_poll_respond_edges_tests = TestInvokePollRespondEdges()
+    report.results.extend(invoke_poll_respond_edges_tests.run_all_tests(full=full))
+
     logger.info("=== 运行 Launch + Invocation 测试 ===")
     launch_invocation_tests = TestLaunchInvocation()
     report.results.extend(launch_invocation_tests.run_all_tests(full=full))
+
+    logger.info("=== 运行 Launch 规范边界测试 ===")
+    launch_spec_edges_tests = TestLaunchSpecEdges()
+    report.results.extend(launch_spec_edges_tests.run_all_tests(full=full))
 
     logger.info("=== 运行 invalid_params 参数验证测试 ===")
     invalid_params_tests = TestInvalidParams()

@@ -862,6 +862,36 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(self):
+        """M4-WS-012B: 取消订阅未知 subscriptionId 仍应返回 ok。"""
+        result = TestResult("M4-WS-012B unknown subscriptionId 取消订阅幂等")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-12b")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "unsub-12b",
+                    "method": "hub.events.unsubscribe",
+                    "params": {
+                        "subscriptionId": "sub-unknown-idempotent-001"
+                    }
+                })
+
+                unsubscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, unsubscribe_response):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_m4_ws_013_pre_auth_invalid_json_should_parse_error(self):
         """M4-WS-013: 鉴权前非法 JSON 应返回 parse_error 并断连。"""
         result = TestResult("M4-WS-013 鉴权前非法JSON返回 parse_error")
@@ -945,6 +975,7 @@ class TestWsEvents:
             self.test_m4_ws_010_pre_auth_notification_array_params_should_close(),
             self.test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(),
             self.test_m4_ws_012_should_push_unregistered_event(),
+            self.test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
             self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
             self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
         ]
