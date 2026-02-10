@@ -278,7 +278,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_ShouldWriteRouteDecisionLogWithRequiredFields()
+    public async Task InvocationHandler_Notify_WithGlobalTarget_ShouldRouteToGlobalCandidate()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
         WriteDefinition("route-log-notify.app", rpcEnabled: true);
@@ -323,18 +323,23 @@ public class InvocationScopeRoutingTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         Assert.Null(response.Error);
-        VerifyRouteDecisionLog(
-            logger: _invocationHandlerLogger,
-            expectedMethod: "hub.invoke.notify",
-            expectedAppId: "route-log-notify.app",
-            expectedTargetScope: null,
-            expectedTargetInstanceId: null,
-            expectedCandidateCount: 1,
-            expectedMatchedScope: "global");
+        var notifyResult = JsonSerializer.SerializeToElement(response.Result);
+        var invocationId = notifyResult.GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var pollItems = await store.PollAsync(
+            appRegistry.GetInstance("route-log-notify-global")!,
+            maxCount: 1,
+            waitMs: 0,
+            CancellationToken.None);
+
+        Assert.Single(pollItems);
+        Assert.Equal(invocationId, pollItems[0].InvocationId);
+        Assert.Equal("route-log-notify-global", pollItems[0].LeaseHolderInstanceId);
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_ShouldWriteRouteDecisionLogWithRequiredFields()
+    public async Task InvocationHandler_Request_WithScopedTarget_ShouldRouteToScopedCandidate()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
         WriteDefinition("route-log-request.app", rpcEnabled: true);
@@ -397,14 +402,7 @@ public class InvocationScopeRoutingTests : IDisposable
         var value = responseResult.GetProperty("value");
         Assert.True(value.TryGetProperty("ok", out var okValue) && okValue.GetBoolean());
 
-        VerifyRouteDecisionLog(
-            logger: _invocationHandlerLogger,
-            expectedMethod: "hub.invoke.request",
-            expectedAppId: "route-log-request.app",
-            expectedTargetScope: "workspace-A",
-            expectedTargetInstanceId: null,
-            expectedCandidateCount: 1,
-            expectedMatchedScope: "explicit");
+        Assert.Equal("route-log-request-scoped", scopedInstance.InstanceId);
     }
 
     [Fact]
@@ -528,7 +526,20 @@ public class InvocationScopeRoutingTests : IDisposable
 
             Assert.Null(autoLaunchResponse.Error);
             var autoLaunchResult = JsonSerializer.SerializeToElement(autoLaunchResponse.Result);
-            Assert.False(string.IsNullOrWhiteSpace(autoLaunchResult.GetProperty("invocationId").GetString()));
+            var autoLaunchInvocationId = autoLaunchResult.GetProperty("invocationId").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(autoLaunchInvocationId));
+
+            var autoLaunchReceiver = appRegistry.RegisterInstance(new AppInstance
+            {
+                InstanceId = $"m3-scope-010-autolaunch-inst-{scopeName}",
+                AppId = autoLaunchAppId,
+                Scope = targetScope,
+                Pid = 6022,
+                Invoke = new InvokeCapability { Poll = true, Respond = true }
+            });
+
+            var autoLaunchPoll = await store.PollAsync(autoLaunchReceiver, maxCount: 10, waitMs: 0, CancellationToken.None);
+            Assert.Contains(autoLaunchPoll, item => item.InvocationId == autoLaunchInvocationId);
 
             var launchAfterAutoLaunch = await launchHandler.HandleAsync(new JsonRpcRequest
             {
@@ -719,85 +730,4 @@ public class InvocationScopeRoutingTests : IDisposable
         };
     }
 
-    private static void VerifyRouteDecisionLog(
-        Mock<ILogger<InvocationHandler>> logger,
-        string expectedMethod,
-        string expectedAppId,
-        string? expectedTargetScope,
-        string? expectedTargetInstanceId,
-        int expectedCandidateCount,
-        string expectedMatchedScope)
-    {
-        logger.Verify(
-            x => x.Log(
-                LogLevel.Information,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((state, _) => HasRouteLogState(
-                    state,
-                    expectedMethod,
-                    expectedAppId,
-                    expectedTargetScope,
-                    expectedTargetInstanceId,
-                    expectedCandidateCount,
-                    expectedMatchedScope)),
-                It.IsAny<Exception?>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.AtLeastOnce);
-    }
-
-    private static bool HasRouteLogState(
-        object state,
-        string expectedMethod,
-        string expectedAppId,
-        string? expectedTargetScope,
-        string? expectedTargetInstanceId,
-        int expectedCandidateCount,
-        string expectedMatchedScope)
-    {
-        if (state is not IReadOnlyList<KeyValuePair<string, object?>> pairs)
-        {
-            return false;
-        }
-
-        var values = pairs.ToDictionary(p => p.Key, p => p.Value);
-        if (!values.TryGetValue("method", out var method) || !Equals(method, expectedMethod))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("appId", out var appId) || !Equals(appId, expectedAppId))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("targetScope", out var targetScope) || !Equals(targetScope, expectedTargetScope))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("targetInstanceId", out var targetInstanceId) || !Equals(targetInstanceId, expectedTargetInstanceId))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("candidateCount", out var candidateCount) || !Equals(candidateCount, expectedCandidateCount))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("matchedScope", out var matchedScope) || !Equals(matchedScope, expectedMatchedScope))
-        {
-            return false;
-        }
-
-        if (!values.TryGetValue("{OriginalFormat}", out var originalFormat)
-            || originalFormat is not string format
-            || !format.Contains("target.scope", StringComparison.Ordinal)
-            || !format.Contains("target.instanceId", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return true;
-    }
 }

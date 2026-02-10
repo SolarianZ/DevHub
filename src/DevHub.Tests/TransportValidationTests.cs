@@ -141,6 +141,28 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_4_2_HttpHeaders_MissingClientSessionId_ShouldReturnInvalidRequest()
+    {
+        var headers = BuildValidHeaders();
+        headers.Remove("X-DevHub-ClientSessionId");
+
+        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+            "application/json",
+            headers,
+            () => "token-1",
+            "req-client-session-id",
+            out var errorResponse,
+            out _,
+            out _);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", "req-client-session-id");
+        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
+        Assert.Equal("missing_header", data.GetProperty("reason").GetString());
+        Assert.Equal("X-DevHub-ClientSessionId", data.GetProperty("header").GetString());
+    }
+
+    [Fact]
     public void Spec_4_2_HttpHeaders_InvalidSessionIdFormat_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();

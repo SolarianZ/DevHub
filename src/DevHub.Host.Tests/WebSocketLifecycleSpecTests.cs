@@ -2,7 +2,6 @@ namespace DevHub.Host.Tests;
 
 using System.Net.WebSockets;
 using System.Globalization;
-using System.Reflection;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -602,7 +601,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { types = new[] { "invocation.completed" } }
         });
 
-        var socket = new ScriptedWebSocket([auth, subscribe]);
+        var socket = new ScriptedWebSocket([auth, subscribe], closeFrameDelay: TimeSpan.FromMilliseconds(400));
         await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
 
         var responses = ParseSentMessages(socket);
@@ -611,18 +610,6 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
         var subscriptionId = subscribeResult.GetProperty("subscriptionId").GetString();
         Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
-
-        var connectionsField = typeof(HubEventBus).GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(connectionsField);
-
-        var connections = connectionsField!.GetValue(context.EventBus);
-        Assert.NotNull(connections);
-
-        var countProperty = connections!.GetType().GetProperty("Count", BindingFlags.Instance | BindingFlags.Public);
-        Assert.NotNull(countProperty);
-
-        var count = Assert.IsType<int>(countProperty!.GetValue(connections));
-        Assert.Equal(0, count);
 
         context.EventBus.Publish(new HubEventMessage
         {
@@ -635,6 +622,13 @@ public class WebSocketLifecycleSpecTests : IDisposable
                 instanceId = "inst-after-close"
             }
         });
+
+        await Task.Delay(80);
+        var responsesAfterClose = ParseSentMessages(socket);
+        Assert.DoesNotContain(
+            responsesAfterClose,
+            m => m.TryGetProperty("method", out var method)
+                 && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
     }
 
     /// <summary>

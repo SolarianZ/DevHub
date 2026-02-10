@@ -221,6 +221,76 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotEqual(first.LaunchId, second.LaunchId);
     }
 
+    [Fact]
+    public async Task LaunchAsync_ArgsTemplate_ShouldRenderSpecPlaceholders()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var argsOutputPath = Path.Combine(_tempDirectory, "args-output.txt");
+        var escapedOutputPath = argsOutputPath.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+        WriteDefinition(
+            "launch-args-template.app",
+            includeLaunch: true,
+            exePath: "/bin/sh",
+            argsTemplate: $"-c \"printf '%s' '{{appId}}|{{scope}}|{{scopeOrGlobal}}|{{httpBaseUrl}}' > \\\"{escapedOutputPath}\\\"\"");
+
+        WriteHubRuntime("http://127.0.0.1:63001");
+        var coordinator = CreateCoordinator();
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template.app",
+            scope: "workspace-A",
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+
+        await WaitUntilFileExistsAsync(argsOutputPath, TimeSpan.FromSeconds(3));
+        var rendered = File.ReadAllText(argsOutputPath);
+        Assert.Equal("launch-args-template.app|workspace-A|workspace-A|http://127.0.0.1:63001", rendered);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_ArgsTemplate_WithNullScope_ShouldRenderEmptyScopeAndGlobalScopeOrGlobal()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var argsOutputPath = Path.Combine(_tempDirectory, "args-output-global.txt");
+        var escapedOutputPath = argsOutputPath.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+
+        WriteDefinition(
+            "launch-args-template-global.app",
+            includeLaunch: true,
+            exePath: "/bin/sh",
+            argsTemplate: $"-c \"printf '%s' '{{appId}}|{{scope}}|{{scopeOrGlobal}}|{{httpBaseUrl}}' > \\\"{escapedOutputPath}\\\"\"");
+
+        WriteHubRuntime("http://127.0.0.1:63002");
+        var coordinator = CreateCoordinator();
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-global.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+
+        await WaitUntilFileExistsAsync(argsOutputPath, TimeSpan.FromSeconds(3));
+        var rendered = File.ReadAllText(argsOutputPath);
+        Assert.Equal("launch-args-template-global.app||global|http://127.0.0.1:63002", rendered);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -263,7 +333,7 @@ public class LaunchCoordinatorTests : IDisposable
         File.WriteAllText(hubJsonPath, JsonSerializer.Serialize(payload));
     }
 
-    private void WriteDefinition(string appId, bool includeLaunch, string? dedupeKeyTemplate = null)
+    private void WriteDefinition(string appId, bool includeLaunch, string? dedupeKeyTemplate = null, string? argsTemplate = null, string? exePath = null)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -280,8 +350,8 @@ public class LaunchCoordinatorTests : IDisposable
         {
             var launch = new Dictionary<string, object?>
             {
-                ["exePath"] = "dotnet",
-                ["argsTemplate"] = "--version"
+                ["exePath"] = exePath ?? "dotnet",
+                ["argsTemplate"] = argsTemplate ?? "--version"
             };
 
             if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))
@@ -294,5 +364,21 @@ public class LaunchCoordinatorTests : IDisposable
 
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+    }
+
+    private static async Task WaitUntilFileExistsAsync(string filePath, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout);
+        while (DateTime.UtcNow <= deadline)
+        {
+            if (File.Exists(filePath))
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new Xunit.Sdk.XunitException($"等待文件生成超时: {filePath}");
     }
 }

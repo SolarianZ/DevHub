@@ -8,6 +8,9 @@ using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 public class CoreServiceTests
 {
@@ -38,9 +41,11 @@ public class CoreServiceTests
 
             var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
             var token = fileSystemManager.GetToken();
+            var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
 
             Assert.False(string.IsNullOrWhiteSpace(token));
-            Assert.True(File.Exists(Path.Combine(runtimeDirectory, "token.txt")));
+            Assert.True(File.Exists(tokenPath));
+            AssertUnixUserOnlyMode(tokenPath);
         }
         finally
         {
@@ -133,6 +138,9 @@ public class CoreServiceTests
             Assert.False(string.IsNullOrWhiteSpace(tokenFile));
             Assert.True(Path.IsPathFullyQualified(tokenFile!));
             Assert.Equal(Path.Combine(runtimeDirectory, "token.txt"), tokenFile);
+
+            AssertUnixUserOnlyMode(hubJsonPath);
+            AssertUnixUserOnlyMode(tokenFile!);
         }
         finally
         {
@@ -326,6 +334,54 @@ public class CoreServiceTests
                 Directory.Delete(testDirectory, recursive: true);
             }
         }
+    }
+
+    private static void AssertUnixUserOnlyMode(string filePath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            AssertWindowsUserOnlyAcl(filePath);
+            return;
+        }
+
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        var mode = File.GetUnixFileMode(filePath);
+        var effective = mode &
+            (UnixFileMode.UserRead
+            | UnixFileMode.UserWrite
+            | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead
+            | UnixFileMode.GroupWrite
+            | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead
+            | UnixFileMode.OtherWrite
+            | UnixFileMode.OtherExecute);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, effective);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AssertWindowsUserOnlyAcl(string filePath)
+    {
+        var security = new FileInfo(filePath).GetAccessControl(AccessControlSections.Access);
+        var rules = security
+            .GetAccessRules(true, true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .Where(rule => rule.AccessControlType == AccessControlType.Allow)
+            .ToList();
+
+        var currentUserSid = WindowsIdentity.GetCurrent().User;
+        Assert.NotNull(currentUserSid);
+        Assert.Contains(rules, rule => Equals(rule.IdentityReference, currentUserSid));
+
+        var worldSid = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+        var builtinUsersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+        Assert.DoesNotContain(rules, rule => Equals(rule.IdentityReference, worldSid));
+        Assert.DoesNotContain(rules, rule => Equals(rule.IdentityReference, builtinUsersSid));
     }
 }
 
