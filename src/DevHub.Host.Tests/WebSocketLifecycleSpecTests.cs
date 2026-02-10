@@ -1,20 +1,14 @@
 namespace DevHub.Host.Tests;
 
 using System.Net.WebSockets;
-using System.Reflection;
-using System.Text.Json;
 using System.Globalization;
+using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
-using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
-using DevHub.Core.Services.Invocation;
-using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Handlers;
-using DevHub.Host;
 using DevHub.Host.Tests.TestHelpers;
-using Microsoft.Extensions.Logging;
-using Moq;
+using static DevHub.Host.Tests.TestHelpers.HostWebSocketTestInvoker;
+using static DevHub.Host.Tests.TestHelpers.JsonRpcTestMessageHelper;
 
 /// <summary>
 /// Host 层 WebSocket 生命周期规范白盒测试。
@@ -386,47 +380,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         }
     }
 
-    private HostContext CreateHostContext()
-    {
-        var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), _definitionsDirectory);
-        fileSystemManager.InitializeDirectories();
-        var token = fileSystemManager.GetToken();
-
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        definitionLoader.Load();
-        var eventBus = new HubEventBus(Mock.Of<ILogger<HubEventBus>>());
-
-        var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, eventBus);
-        var requestWaiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(
-            definitionLoader,
-            appRegistry,
-            runtimeHttpBaseUrlProvider,
-            Mock.Of<ILogger<LaunchCoordinator>>());
-
-        var handlers = new IRpcHandler[]
-        {
-            new HubPingHandler(Mock.Of<ILogger<HubPingHandler>>()),
-            new AppDefinitionsHandler(definitionLoader, Mock.Of<ILogger<AppDefinitionsHandler>>()),
-            new AppInstancesHandler(appRegistry, Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
-            new InvocationHandler(
-                appRegistry,
-                definitionLoader,
-                routingService,
-                invocationStore,
-                requestWaiter,
-                launchCoordinator,
-                Mock.Of<ILogger<InvocationHandler>>(),
-                eventBus),
-            new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>())
-        };
-
-        var router = new RpcRouter(handlers, Mock.Of<ILogger<RpcRouter>>());
-        return new HostContext(router, fileSystemManager, eventBus, token);
-    }
+    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_definitionsDirectory);
 
     private void WriteDefinition(string appId)
     {
@@ -443,64 +397,4 @@ public class WebSocketLifecycleSpecTests : IDisposable
         }));
     }
 
-    private static async Task InvokeHandleWebSocketConnectionAsync(
-        ScriptedWebSocket socket,
-        RpcRouter router,
-        FileSystemManager fileSystemManager,
-        HubEventBus eventBus)
-    {
-        var method = typeof(Program).GetMethod("HandleWebSocketConnectionAsync", BindingFlags.Static | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-
-        var task = method!.Invoke(
-            null,
-            [
-                socket,
-                router,
-                fileSystemManager,
-                eventBus,
-                Mock.Of<ILogger<Program>>(),
-                CancellationToken.None
-            ]) as Task;
-
-        Assert.NotNull(task);
-        await task!;
-    }
-
-    private static string CreateJson(object payload)
-    {
-        return JsonSerializer.Serialize(payload);
-    }
-
-    private static List<JsonElement> ParseSentMessages(ScriptedWebSocket socket)
-    {
-        var messages = new List<JsonElement>();
-        foreach (var text in socket.SentTexts)
-        {
-            using var document = JsonDocument.Parse(text);
-            messages.Add(document.RootElement.Clone());
-        }
-
-        return messages;
-    }
-
-    private static JsonElement FindResponseById(IEnumerable<JsonElement> messages, string id)
-    {
-        foreach (var message in messages)
-        {
-            if (!message.TryGetProperty("id", out var idProperty) || idProperty.ValueKind != JsonValueKind.String)
-            {
-                continue;
-            }
-
-            if (string.Equals(idProperty.GetString(), id, StringComparison.Ordinal))
-            {
-                return message;
-            }
-        }
-
-        return default;
-    }
-
-    private sealed record HostContext(RpcRouter Router, FileSystemManager FileSystemManager, HubEventBus EventBus, string Token);
 }
