@@ -322,6 +322,129 @@ public class SpecConformanceTests : IDisposable
         Assert.DoesNotContain(instancesElement.EnumerateArray(), i => i.GetProperty("instanceId").GetString() == "test-instance-unregister");
     }
 
+    [Fact]
+    public async Task AppInstancesHandler_ListInstances_DefaultIncludeOfflineFalse_ShouldFilterOfflineInstances()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+
+        await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-register-online",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "instance-online",
+                    appId = "list-offline-default.app",
+                    scope = (string?)null,
+                    pid = 5101,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+
+        await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-register-offline",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "instance-offline",
+                    appId = "list-offline-default.app",
+                    scope = (string?)null,
+                    pid = 5102,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+
+        var offline = appRegistry.GetInstance("instance-offline");
+        Assert.NotNull(offline);
+        offline!.LastSeenUtc = DateTime.UtcNow.AddSeconds(-31);
+
+        var defaultListResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-list-default",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "list-offline-default.app"
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(defaultListResponse.Error);
+        var defaultListResult = JsonSerializer.SerializeToElement(defaultListResponse.Result);
+        var defaultInstances = defaultListResult.GetProperty("instances").EnumerateArray().ToList();
+
+        Assert.Contains(defaultInstances, i => i.GetProperty("instanceId").GetString() == "instance-online");
+        Assert.DoesNotContain(defaultInstances, i => i.GetProperty("instanceId").GetString() == "instance-offline");
+    }
+
+    [Fact]
+    public async Task AppInstancesHandler_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScopeFilter()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+
+        await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-register-global",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "instance-global",
+                    appId = "list-all-scopes.app",
+                    scope = (string?)null,
+                    pid = 5201,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+
+        await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-register-scoped",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "instance-scoped",
+                    appId = "list-all-scopes.app",
+                    scope = "workspace-A",
+                    pid = 5202,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+
+        var listResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-list-all-scopes-ignore-scope",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "list-all-scopes.app",
+                scope = "workspace-B",
+                includeAllScopes = true,
+                includeOffline = true
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(listResponse.Error);
+        var listResult = JsonSerializer.SerializeToElement(listResponse.Result);
+        var instances = listResult.GetProperty("instances").EnumerateArray().ToList();
+
+        Assert.Contains(instances, i => i.GetProperty("instanceId").GetString() == "instance-global");
+        Assert.Contains(instances, i => i.GetProperty("instanceId").GetString() == "instance-scoped");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

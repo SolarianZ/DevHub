@@ -135,6 +135,31 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
+    public async Task LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
+    {
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "launch-negative-wait",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-launch-app",
+                waitForRegisterMs = -1
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
     public async Task LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
     {
         WriteDefinition(

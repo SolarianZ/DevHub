@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -109,6 +110,26 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Poll_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-unknown-instance",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance", maxCount = 1, waitMs = 0 })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32010, response.Error.Code);
+        Assert.Equal("instance_not_found", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("unknown_instance", data.GetProperty("reason").GetString());
+        Assert.Equal("missing-instance", data.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Respond_WithRespondDisabledInstance_ShouldReturnForbidden()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
@@ -148,6 +169,31 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal("forbidden", response.Error.Message);
         var data = JsonSerializer.SerializeToElement(response.Error.Data);
         Assert.Equal("respond_not_enabled", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Respond_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-unknown-instance",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "missing-instance",
+                invocationId = "invk-missing",
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32010, response.Error.Code);
+        Assert.Equal("instance_not_found", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("unknown_instance", data.GetProperty("reason").GetString());
+        Assert.Equal("missing-instance", data.GetProperty("instanceId").GetString());
     }
 
     [Fact]
@@ -247,6 +293,65 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal("launch_config_missing", data.GetProperty("reason").GetString());
     }
 
+    [Fact]
+    public async Task InvocationHandler_Notify_TtlBelowMinimum_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-ttl-below-minimum",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "notify-ttl-below-min.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 999,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Request_TtlBelowMinimum_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-ttl-below-minimum",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "request-ttl-below-min.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 999,
+                    waitTimeoutMs = 500,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(101)]
@@ -316,6 +421,91 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Respond_ByNonLeaseHolder_ShouldReturnDeliveryConflictWithCurrentLeaseHolder()
+    {
+        const string appId = "respond-delivery-conflict.app";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "respond-holder",
+            AppId = appId,
+            Scope = null,
+            Pid = 3303,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "respond-other",
+            AppId = appId,
+            Scope = null,
+            Pid = 3304,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-delivery-conflict",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = "respond-holder" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(notifyResponse.Error);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-delivery-conflict",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-holder",
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var conflictResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-delivery-conflict",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-other",
+                invocationId,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(conflictResponse.Error);
+        Assert.Equal(-32030, conflictResponse.Error.Code);
+        Assert.Equal("delivery_conflict", conflictResponse.Error.Message);
+
+        var conflictData = JsonSerializer.SerializeToElement(conflictResponse.Error.Data);
+        Assert.Equal(invocationId, conflictData.GetProperty("invocationId").GetString());
+        Assert.Equal("respond-holder", conflictData.GetProperty("currentLeaseHolder").GetString());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Notify_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
@@ -375,6 +565,90 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Notify_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-auto-launch-target-instance",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "notify-target-instance.app",
+                target = new { scope = (string?)null, instanceId = "instance-001" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Request_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-auto-launch-target-instance",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "request-target-instance.app",
+                target = new { scope = (string?)null, instanceId = "instance-002" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = true,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Request_WithTargetInstanceIdAndOptionsOmitted_ShouldUseAutoLaunchFalseByDefault()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-target-instance-default-options",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "request-target-instance-default-options.app",
+                target = new { scope = (string?)null, instanceId = "missing-instance" },
+                method = "task.run",
+                args = new { }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32010, response.Error.Code);
+        Assert.Equal("instance_not_found", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("target_instance_missing", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
@@ -408,6 +682,45 @@ public class InvocationRoutingTests : IDisposable
         Assert.Null(response.Error);
         var afterPoll = appRegistry.GetInstance("poll-last-seen")!.LastSeenUtc;
         Assert.True(afterPoll > beforePoll);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Poll_WhenQueueEmpty_ShouldWaitUntilWaitMsAndReturnEmptyItems()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "poll-empty-wait",
+            AppId = "poll-empty-wait.app",
+            Scope = null,
+            Pid = 3305,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry);
+        var stopwatch = Stopwatch.StartNew();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-empty-wait",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "poll-empty-wait",
+                maxCount = 1,
+                waitMs = 150
+            })
+        }, CancellationToken.None);
+
+        stopwatch.Stop();
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.True(result.TryGetProperty("serverTimeUtc", out var serverTimeUtc));
+        Assert.False(string.IsNullOrWhiteSpace(serverTimeUtc.GetString()));
+        Assert.Empty(result.GetProperty("items").EnumerateArray());
+        Assert.True(stopwatch.ElapsedMilliseconds >= 80);
     }
 
     [Fact]

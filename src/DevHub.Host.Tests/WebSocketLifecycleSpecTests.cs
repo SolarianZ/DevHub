@@ -2,6 +2,7 @@ namespace DevHub.Host.Tests;
 
 using System.Net.WebSockets;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -189,6 +190,14 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { }
         });
 
+        var getDefinition = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ws-get-definition",
+            method = "hub.apps.getDefinition",
+            @params = new { appId = "ws-supported.app" }
+        });
+
         var listInstances = CreateJson(new
         {
             jsonrpc = "2.0",
@@ -197,7 +206,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { includeAllScopes = true, includeOffline = true }
         });
 
-        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, listInstances]);
+        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances]);
         await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
 
         var responses = ParseSentMessages(socket);
@@ -214,6 +223,12 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(listDefinitionsResponse.TryGetProperty("result", out var listDefinitionsResult));
         Assert.True(listDefinitionsResult.GetProperty("ok").GetBoolean());
         Assert.True(listDefinitionsResult.TryGetProperty("definitions", out _));
+
+        var getDefinitionResponse = FindResponseById(responses, "ws-get-definition");
+        Assert.True(getDefinitionResponse.TryGetProperty("result", out var getDefinitionResult));
+        Assert.True(getDefinitionResult.GetProperty("ok").GetBoolean());
+        var definition = getDefinitionResult.GetProperty("definition");
+        Assert.Equal("ws-supported.app", definition.GetProperty("appId").GetString());
 
         var listInstancesResponse = FindResponseById(responses, "ws-list-instances");
         Assert.True(listInstancesResponse.TryGetProperty("result", out var listInstancesResult));
@@ -238,6 +253,108 @@ public class WebSocketLifecycleSpecTests : IDisposable
         var responses = ParseSentMessages(socket);
         Assert.Empty(responses);
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    public async Task Spec_3_3_UnauthenticatedInvalidJson_ShouldReturnParseErrorWithNullIdAndClose()
+    {
+        var context = CreateHostContext();
+        var invalidJson = "{\"jsonrpc\":\"2.0\",\"id\":\"bad\",\"method\":\"hub.ping\",\"params\":";
+
+        var socket = new ScriptedWebSocket([invalidJson]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+        Assert.Single(responses);
+
+        var response = responses[0];
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("id").ValueKind);
+        Assert.True(response.TryGetProperty("error", out var error));
+        Assert.Equal(-32700, error.GetProperty("code").GetInt32());
+        Assert.Equal("parse_error", error.GetProperty("message").GetString());
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    public async Task Spec_3_1_BatchRequestOverWs_ShouldReturnInvalidRequestWithNullIdAndClose()
+    {
+        var context = CreateHostContext();
+        var batchRequest = """
+        [
+          {
+            "jsonrpc": "2.0",
+            "id": "batch-1",
+            "method": "hub.ws.authenticate",
+            "params": {
+              "token": "token-from-batch",
+              "protocolVersion": 1,
+              "clientId": "batch-client",
+              "clientSessionId": "11111111-1111-1111-1111-111111111111"
+            }
+          }
+        ]
+        """;
+
+        var socket = new ScriptedWebSocket([batchRequest]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+        Assert.Single(responses);
+
+        var response = responses[0];
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("id").ValueKind);
+        Assert.True(response.TryGetProperty("error", out var error));
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    public async Task Spec_6_2_AfterAuthenticate_HttpOnlyMethodOverWs_ShouldReturnMethodNotFound()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-http-only",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-http-only-client",
+                clientSessionId = "44444444-4444-4444-4444-444444444444"
+            }
+        });
+
+        var pollOverWs = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ws-http-only-poll",
+            method = "hub.invoke.poll",
+            @params = new
+            {
+                instanceId = "inst-http-only",
+                maxCount = 1,
+                waitMs = 0
+            }
+        });
+
+        var socket = new ScriptedWebSocket([auth, pollOverWs]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+
+        var authResponse = FindResponseById(responses, "auth-http-only");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var pollResponse = FindResponseById(responses, "ws-http-only-poll");
+        Assert.NotEqual(JsonValueKind.Undefined, pollResponse.ValueKind);
+        Assert.True(pollResponse.TryGetProperty("error", out var pollError));
+        Assert.Equal(-32601, pollError.GetProperty("code").GetInt32());
+        Assert.Equal("method_not_found", pollError.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -292,6 +409,97 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
 
         var unsubscribeResponse = FindResponseById(responses, "unsub-1");
+        Assert.True(unsubscribeResponse.TryGetProperty("result", out var unsubscribeResult));
+        Assert.True(unsubscribeResult.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Spec_6_3_14_SubscribeWithEmptyTypes_ShouldSubscribeAllEvents()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-sub-all",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-sub-all-client",
+                clientSessionId = "66666666-6666-6666-6666-666666666666"
+            }
+        });
+
+        var subscribeAll = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-all",
+            method = "hub.events.subscribe",
+            @params = new { types = Array.Empty<string>() }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        await Task.Delay(120);
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "all-events.app",
+                instanceId = "inst-all-events"
+            }
+        });
+
+        await runTask;
+
+        var messages = ParseSentMessages(socket);
+        var hubEvent = messages.FirstOrDefault(m =>
+            m.TryGetProperty("method", out var method)
+            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
+
+        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
+        var parameters = hubEvent.GetProperty("params");
+        Assert.Equal("app.instance.registered", parameters.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Spec_6_3_15_UnsubscribeUnknownSubscription_ShouldReturnOk()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-unsub-unknown",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-unsub-unknown-client",
+                clientSessionId = "77777777-7777-7777-7777-777777777777"
+            }
+        });
+
+        var unsubscribeUnknown = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "unsub-unknown",
+            method = "hub.events.unsubscribe",
+            @params = new { subscriptionId = "sub-not-exists" }
+        });
+
+        var socket = new ScriptedWebSocket([auth, unsubscribeUnknown]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+        var unsubscribeResponse = FindResponseById(responses, "unsub-unknown");
         Assert.True(unsubscribeResponse.TryGetProperty("result", out var unsubscribeResult));
         Assert.True(unsubscribeResult.GetProperty("ok").GetBoolean());
     }
@@ -365,6 +573,68 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.Equal("invk-ws-event-1", payload.GetProperty("invocationId").GetString());
         Assert.Equal("ws-event.app", payload.GetProperty("appId").GetString());
         Assert.Equal("inst-ws-event-1", payload.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
+    public async Task Spec_6_3_15_AfterConnectionClosed_SubscriptionsShouldBeCleanedAndNoFurtherDelivery()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-cleanup",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-cleanup-client",
+                clientSessionId = "55555555-5555-5555-5555-555555555555"
+            }
+        });
+
+        var subscribe = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-cleanup",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribe]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+        var subscribeResponse = FindResponseById(responses, "sub-cleanup");
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
+        var subscriptionId = subscribeResult.GetProperty("subscriptionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
+
+        var connectionsField = typeof(HubEventBus).GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(connectionsField);
+
+        var connections = connectionsField!.GetValue(context.EventBus);
+        Assert.NotNull(connections);
+
+        var countProperty = connections!.GetType().GetProperty("Count", BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(countProperty);
+
+        var count = Assert.IsType<int>(countProperty!.GetValue(connections));
+        Assert.Equal(0, count);
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-after-close",
+                appId = "after-close.app",
+                instanceId = "inst-after-close"
+            }
+        });
     }
 
     /// <summary>

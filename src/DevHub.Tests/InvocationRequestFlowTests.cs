@@ -423,6 +423,64 @@ public class InvocationRequestFlowTests : IDisposable
         Assert.Equal("offline_no_queue", errorData.GetProperty("reason").GetString());
     }
 
+    [Fact]
+    public async Task Request_WhenOptionsOmitted_ShouldApplySpecDefaultsAndReturnTimeout()
+    {
+        const string appId = "request-default-options.app";
+        const string instanceId = "request-default-options-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = instanceId,
+            AppId = appId,
+            Scope = null,
+            Pid = 6110,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-default-options",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.default",
+                args = new { x = 1 }
+            })
+        }, cts.Token);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-default-options",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var requestResponse = await requestTask;
+        Assert.NotNull(requestResponse.Error);
+        Assert.Equal(-32012, requestResponse.Error.Code);
+        Assert.Equal("invocation_timeout", requestResponse.Error.Message);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
