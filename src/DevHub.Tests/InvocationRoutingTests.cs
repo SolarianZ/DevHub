@@ -315,6 +315,174 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal("invalid_params", response.Error.Message);
     }
 
+    [Fact]
+    public async Task InvocationHandler_Notify_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-auto-launch-no-queue",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "notify-auto-launch.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Request_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    {
+        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-auto-launch-no-queue",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "request-auto-launch.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = false,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "poll-last-seen",
+            AppId = "poll-last-seen.app",
+            Scope = null,
+            Pid = 3301,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        instance.LastSeenUtc = DateTime.UtcNow.AddMinutes(-1);
+
+        var handler = CreateInvocationHandler(appRegistry);
+        var beforePoll = appRegistry.GetInstance("poll-last-seen")!.LastSeenUtc;
+
+        await Task.Delay(10);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-refresh-last-seen",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "poll-last-seen",
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var afterPoll = appRegistry.GetInstance("poll-last-seen")!.LastSeenUtc;
+        Assert.True(afterPoll > beforePoll);
+    }
+
+    [Fact]
+    public async Task InvocationHandler_Respond_Success_ShouldRefreshInstanceLastSeenUtc()
+    {
+        var appRegistry = new AppRegistry(_registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "respond-last-seen",
+            AppId = "respond-last-seen.app",
+            Scope = null,
+            Pid = 3302,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-last-seen",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "respond-last-seen.app",
+                target = new { scope = (string?)null, instanceId = "respond-last-seen" },
+                method = "task.run",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(notifyResponse.Error);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-last-seen",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-last-seen",
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var beforeRespond = appRegistry.GetInstance("respond-last-seen")!.LastSeenUtc;
+        await Task.Delay(10);
+
+        var respondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-last-seen",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "respond-last-seen",
+                invocationId,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(respondResponse.Error);
+        var afterRespond = appRegistry.GetInstance("respond-last-seen")!.LastSeenUtc;
+        Assert.True(afterRespond > beforeRespond);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>

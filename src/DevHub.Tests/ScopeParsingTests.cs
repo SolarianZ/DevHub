@@ -181,6 +181,42 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Notify_WhenTargetScopeEmpty_ShouldReturnInvalidTargetScopeReason()
+    {
+        WriteDefinition("scope-invoke-app-empty", rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
+        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        definitionLoader.Load();
+        var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
+        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-target-scope-empty",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-invoke-app-empty",
+                target = new { scope = string.Empty, instanceId = (string?)null },
+                method = "asset.rebuild",
+                args = new { },
+                options = new { ttlMs = 60000, queueIfOffline = true, autoLaunch = false }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+        var data = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("invalid_target_scope", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Request_WhenTargetInstanceIdWhitespace_ShouldReturnInvalidTargetInstanceReason()
     {
         WriteDefinition("scope-invoke-app-2", rpcEnabled: true);

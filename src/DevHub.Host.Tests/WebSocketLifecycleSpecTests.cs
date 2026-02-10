@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
@@ -226,6 +227,152 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(listInstancesResult.TryGetProperty("instances", out _));
     }
 
+    [Fact]
+    public async Task Spec_3_3_UnauthenticatedNotification_ShouldCloseWithoutErrorResponse()
+    {
+        var context = CreateHostContext();
+        var unauthNotify = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var socket = new ScriptedWebSocket([unauthNotify]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+        Assert.Empty(responses);
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    public async Task Spec_6_3_14_And_6_3_15_SubscribeThenUnsubscribe_ShouldReturnOkAndSubscriptionId()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-sub",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-sub-client",
+                clientSessionId = "22222222-2222-2222-2222-222222222222"
+            }
+        });
+
+        var subscribe = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-1",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var unsubscribe = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "unsub-1",
+            method = "hub.events.unsubscribe",
+            @params = new { subscriptionId = "sub-override-by-test" }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribe, unsubscribe]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var responses = ParseSentMessages(socket);
+
+        var authResponse = FindResponseById(responses, "auth-sub");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var subscribeResponse = FindResponseById(responses, "sub-1");
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
+        Assert.True(subscribeResult.TryGetProperty("subscriptionId", out var subscriptionIdElement));
+        var subscriptionId = subscriptionIdElement.GetString();
+        Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
+
+        var unsubscribeResponse = FindResponseById(responses, "unsub-1");
+        Assert.True(unsubscribeResponse.TryGetProperty("result", out var unsubscribeResult));
+        Assert.True(unsubscribeResult.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Spec_6_3_16_AfterSubscribe_ShouldReceiveHubEventNotification()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-event",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-event-client",
+                clientSessionId = "33333333-3333-3333-3333-333333333333"
+            }
+        });
+
+        var subscribe = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-event",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribe], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        await Task.Delay(120);
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-ws-event-1",
+                appId = "ws-event.app",
+                instanceId = "inst-ws-event-1"
+            }
+        });
+
+        await runTask;
+
+        var messages = ParseSentMessages(socket);
+        var hubEvent = messages.FirstOrDefault(m =>
+            m.TryGetProperty("method", out var method)
+            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
+
+        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
+        Assert.False(hubEvent.TryGetProperty("id", out _));
+
+        var parameters = hubEvent.GetProperty("params");
+        var subscriptionId = parameters.GetProperty("subscriptionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
+        Assert.StartsWith("sub-", subscriptionId!);
+
+        var timeUtc = parameters.GetProperty("timeUtc").GetString();
+        Assert.NotNull(timeUtc);
+        Assert.True(DateTime.TryParse(timeUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _));
+
+        Assert.Equal("invocation.completed", parameters.GetProperty("type").GetString());
+
+        var payload = parameters.GetProperty("payload");
+        Assert.Equal("invk-ws-event-1", payload.GetProperty("invocationId").GetString());
+        Assert.Equal("ws-event.app", payload.GetProperty("appId").GetString());
+        Assert.Equal("inst-ws-event-1", payload.GetProperty("instanceId").GetString());
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -363,14 +510,16 @@ public class WebSocketLifecycleSpecTests : IDisposable
     private sealed class ScriptedWebSocket : WebSocket
     {
         private readonly Queue<SocketFrame> _frames;
+        private readonly TimeSpan _closeFrameDelay;
         private WebSocketState _state;
         private WebSocketCloseStatus? _closeStatus;
         private string? _closeStatusDescription;
 
-        public ScriptedWebSocket(IEnumerable<string> textMessages)
+        public ScriptedWebSocket(IEnumerable<string> textMessages, TimeSpan? closeFrameDelay = null)
         {
             _frames = new Queue<SocketFrame>(textMessages.Select(text => SocketFrame.Text(text)));
             _frames.Enqueue(SocketFrame.Close());
+            _closeFrameDelay = closeFrameDelay ?? TimeSpan.Zero;
             _state = WebSocketState.Open;
         }
 
@@ -410,26 +559,31 @@ public class WebSocketLifecycleSpecTests : IDisposable
             _state = WebSocketState.Closed;
         }
 
-        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken)
+        public override async Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (_state is not (WebSocketState.Open or WebSocketState.CloseReceived))
             {
-                return Task.FromResult(new WebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+                return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
             }
 
             if (_frames.Count == 0)
             {
                 _state = WebSocketState.CloseReceived;
-                return Task.FromResult(new WebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+                return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
             }
 
             var frame = _frames.Dequeue();
             if (frame.MessageType == WebSocketMessageType.Close)
             {
+                if (_closeFrameDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(_closeFrameDelay, cancellationToken);
+                }
+
                 _state = WebSocketState.CloseReceived;
-                return Task.FromResult(new WebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+                return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
             }
 
             if (buffer.Array is null)
@@ -438,7 +592,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
 
             frame.Payload.CopyTo(buffer.Array, buffer.Offset);
-            return Task.FromResult(new WebSocketReceiveResult(frame.Payload.Length, frame.MessageType, true));
+            return new WebSocketReceiveResult(frame.Payload.Length, frame.MessageType, true);
         }
 
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)

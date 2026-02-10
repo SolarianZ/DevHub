@@ -107,6 +107,76 @@ public class CoreServiceTests
     }
 
     [Fact]
+    public void FileSystemManager_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
+    {
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+
+        try
+        {
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            _ = fileSystemManager.GetToken();
+            fileSystemManager.WriteHubJson(47231, "test-hub");
+
+            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
+            Assert.True(File.Exists(hubJsonPath));
+            Assert.False(File.Exists(hubJsonPath + ".tmp"));
+
+            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
+            Assert.Equal(1, hubJson.GetProperty("protocolVersion").GetInt32());
+            Assert.Equal("http://127.0.0.1:47231", hubJson.GetProperty("httpBaseUrl").GetString());
+            Assert.Equal("ws://127.0.0.1:47231/ws", hubJson.GetProperty("wsUrl").GetString());
+
+            var tokenFile = hubJson.GetProperty("tokenFile").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(tokenFile));
+            Assert.True(Path.IsPathFullyQualified(tokenFile!));
+            Assert.Equal(Path.Combine(runtimeDirectory, "token.txt"), tokenFile);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void FileSystemManager_WriteHubJson_WhenOverwritten_ShouldKeepSingleRuntimeFile()
+    {
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+
+        try
+        {
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            _ = fileSystemManager.GetToken();
+
+            fileSystemManager.WriteHubJson(48001, "v1");
+            fileSystemManager.WriteHubJson(48002, "v2");
+
+            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
+            Assert.True(File.Exists(hubJsonPath));
+            Assert.False(File.Exists(hubJsonPath + ".tmp"));
+
+            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
+            Assert.Equal("http://127.0.0.1:48002", hubJson.GetProperty("httpBaseUrl").GetString());
+            Assert.Equal("ws://127.0.0.1:48002/ws", hubJson.GetProperty("wsUrl").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void AppRegistry_RegisterInstance_ShouldAddOrUpdateInstance()
     {
         // Arrange
