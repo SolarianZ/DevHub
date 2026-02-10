@@ -629,6 +629,166 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_defaults_should_follow_spec_when_options_omitted(self):
+        """request 默认值: 省略 options 时应采用 Spec 默认语义。"""
+        result = TestResult("request 默认值语义校验")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = f"m2-request-defaults-app-{uuid.uuid4().hex[:8]}"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-defaults")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=24011,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            request_result_holder = {}
+
+            def callee_worker():
+                poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                request_result_holder["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if not items:
+                    return
+
+                item = items[0]
+                request_result_holder["item"] = item
+                invocation_id = item.get("invocationId")
+                if invocation_id:
+                    request_result_holder["respond"] = client.respond_value(
+                        callee_instance_id,
+                        invocation_id,
+                        {"handledBy": "defaults"},
+                    )
+
+            worker = threading.Thread(target=callee_worker, daemon=True)
+            worker.start()
+
+            payload_no_options = {
+                "jsonrpc": "2.0",
+                "id": "request-defaults-no-options",
+                "method": "hub.invoke.request",
+                "params": {
+                    "appId": app_id,
+                    "target": {},
+                    "method": "asset.defaults.request",
+                    "args": {"case": "no-options"}
+                }
+            }
+            _, request_response = client.post_json(payload_no_options, timeout=30)
+
+            worker.join(timeout=5)
+
+            if not RpcAssertions.expect_success(result, request_response, ["invocationId", "value"]):
+                return result
+
+            value = request_response.get("result", {}).get("value", {})
+            if value.get("handledBy") != "defaults":
+                result.mark_failure(f"❌ 省略 options 的 request 未正确完成: {request_response}")
+                return result
+
+            item = request_result_holder.get("item")
+            if not isinstance(item, dict):
+                result.mark_failure(f"❌ 未捕获 request poll 条目: {request_result_holder}")
+                return result
+
+            ttl_ms = ((item.get("options") or {}).get("ttlMs"))
+            if ttl_ms != 300000:
+                result.mark_failure(f"❌ request 默认 ttlMs 非 300000: item={item}")
+                return result
+
+            respond_response = request_result_holder.get("respond")
+            if not RpcAssertions.expect_success(result, respond_response or {}):
+                return result
+
+            missing_target_instance_id = self._instance_id("request-defaults-missing")
+
+            payload_target_instance_no_autolaunch_option = {
+                "jsonrpc": "2.0",
+                "id": "request-defaults-target-instance-no-autolaunch-option",
+                "method": "hub.invoke.request",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "instanceId": missing_target_instance_id,
+                    },
+                    "method": "asset.defaults.target-instance",
+                    "args": {"case": "target-instance-no-autolaunch-option"},
+                    "options": {
+                        "ttlMs": 2000,
+                        "waitTimeoutMs": 1000,
+                        "queueIfOffline": False,
+                    }
+                }
+            }
+            _, response_target_instance_no_autolaunch_option = client.post_json(
+                payload_target_instance_no_autolaunch_option,
+                timeout=30,
+            )
+            if not RpcAssertions.expect_error(result, response_target_instance_no_autolaunch_option, -32010, "instance_not_found"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(
+                result,
+                response_target_instance_no_autolaunch_option,
+                {"reason": "target_instance_missing"},
+            ):
+                return result
+
+            payload_target_instance_autolaunch_true = {
+                "jsonrpc": "2.0",
+                "id": "request-defaults-target-instance-autolaunch-true",
+                "method": "hub.invoke.request",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "instanceId": missing_target_instance_id,
+                    },
+                    "method": "asset.defaults.target-instance-auto",
+                    "args": {"case": "target-instance-autolaunch-true"},
+                    "options": {
+                        "autoLaunch": True,
+                        "queueIfOffline": False,
+                    }
+                }
+            }
+            _, response_target_instance_autolaunch_true = client.post_json(payload_target_instance_autolaunch_true, timeout=30)
+            if not RpcAssertions.expect_error(result, response_target_instance_autolaunch_true, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_request_roundtrip_success(),
@@ -636,6 +796,7 @@ class TestInvocationRequest(unittest.TestCase):
             self.test_request_client_cancel_then_late_respond_expired(),
             self.test_request_callee_error_should_return_invocation_failed(),
             self.test_request_rpc_disabled_should_forbidden(),
+            self.test_request_defaults_should_follow_spec_when_options_omitted(),
             self.test_request_invalid_waittimeout_gt_ttl(),
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),

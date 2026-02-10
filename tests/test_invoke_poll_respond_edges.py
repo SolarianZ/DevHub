@@ -296,8 +296,86 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
         return result
 
+    def test_invoke_edge_004_poll_success_should_refresh_last_seen(self):
+        """M2-INVOKE-EDGE-004: poll 成功后应更新实例 lastSeenUtc。"""
+        result = TestResult("M2-INVOKE-EDGE-004 poll 刷新 lastSeenUtc")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = self._new_app_id("poll-lastseen")
+            definition_path = self._create_definition(app_id)
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._new_instance_id("poll-lastseen")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=6404,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            before_last_seen = register_response["result"]["instance"].get("lastSeenUtc")
+            if not isinstance(before_last_seen, str):
+                result.mark_failure(f"❌ 注册返回缺少 lastSeenUtc: {register_response}")
+                return result
+
+            time.sleep(1)
+            poll_response = client.poll_once(instance_id, max_count=1, wait_ms=100)
+            if not RpcAssertions.expect_success(result, poll_response, ["items", "serverTimeUtc"]):
+                return result
+
+            list_response = client.call(
+                "hub.apps.listInstances",
+                {"appId": app_id, "includeAllScopes": True, "includeOffline": True},
+                request_id="invoke-edge-004-list",
+            )
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            instances = list_response.get("result", {}).get("instances", [])
+            instance = next((item for item in instances if item.get("instanceId") == instance_id), None)
+            if instance is None:
+                result.mark_failure(f"❌ listInstances 未返回目标实例: {instances}")
+                return result
+
+            after_last_seen = instance.get("lastSeenUtc")
+            if not isinstance(after_last_seen, str):
+                result.mark_failure(f"❌ listInstances 缺少 lastSeenUtc: {instance}")
+                return result
+
+            if after_last_seen <= before_last_seen:
+                result.mark_failure(f"❌ poll 未刷新 lastSeenUtc: before={before_last_seen}, after={after_last_seen}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
+            self.test_invoke_edge_004_poll_success_should_refresh_last_seen(),
             self.test_invoke_edge_002_respond_success_should_refresh_last_seen(),
             self.test_invoke_edge_003_respond_after_unregister_should_instance_not_found(),
         ]

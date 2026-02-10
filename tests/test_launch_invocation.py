@@ -185,6 +185,35 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
+    def test_launch_missing_definition_should_return_app_definition_not_found(self):
+        """launch 缺失定义: app_definition_not_found"""
+        result = TestResult("launch 缺失定义返回 app_definition_not_found")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            missing_app_id = f"m2-launch-missing-def-{uuid.uuid4().hex[:8]}"
+            response = client.launch_app(
+                app_id=missing_app_id,
+                wait_for_register_ms=0,
+                request_id="m2-launch-missing-definition",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            if isinstance(error_data, dict) and error_data.get("appId") not in (None, missing_app_id):
+                result.mark_failure(f"❌ app_definition_not_found 返回 appId 不匹配: {response}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_launch_dedupe_concurrent_should_return_already_running(self):
         """M2-LAUNCH-002: dedupe 窗口并发去重（full-only）"""
         result = TestResult("M2-LAUNCH-002 dedupe 窗口并发去重")
@@ -347,6 +376,7 @@ class TestLaunchInvocation(unittest.TestCase):
             self.test_notify_autolaunch_then_register_poll_success(),
             self.test_launch_invalid_wait_for_register_should_fail(),
             self.test_launch_missing_config_should_fail(),
+            self.test_launch_missing_definition_should_return_app_definition_not_found(),
             self.test_m3_scope_011_launch_dedupe_should_isolate_by_scope(),
         ]
 

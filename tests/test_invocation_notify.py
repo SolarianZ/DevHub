@@ -356,6 +356,117 @@ class TestInvocationNotify(unittest.TestCase):
 
         return result
 
+    def test_notify_defaults_should_follow_spec_when_options_omitted(self):
+        """notify 默认值: 省略 options 时应采用 Spec 默认语义。"""
+        result = TestResult("notify 默认值语义校验")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = f"m2-notify-defaults-app-{uuid.uuid4().hex[:8]}"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("notify-defaults")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=22021,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            payload_default_target = {
+                "jsonrpc": "2.0",
+                "id": "notify-defaults-no-options",
+                "method": "hub.invoke.notify",
+                "params": {
+                    "appId": app_id,
+                    "target": {},
+                    "method": "asset.defaults.notify",
+                    "args": {"case": "no-options"}
+                }
+            }
+            _, notify_response = client.post_json(payload_default_target)
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            invocation_id = notify_response["result"]["invocationId"]
+            poll_response = client.poll_once(callee_instance_id, max_count=10, wait_ms=100)
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+
+            items = poll_response["result"].get("items", [])
+            matched = next((item for item in items if item.get("invocationId") == invocation_id), None)
+            if matched is None:
+                result.mark_failure(f"❌ 省略 options 的 notify 未投递到 Global 实例: {poll_response}")
+                return result
+
+            ttl_ms = ((matched.get("options") or {}).get("ttlMs"))
+            if ttl_ms != 60000:
+                result.mark_failure(f"❌ notify 默认 ttlMs 非 60000: item={matched}")
+                return result
+
+            payload_target_instance_no_options = {
+                "jsonrpc": "2.0",
+                "id": "notify-defaults-target-instance-no-options",
+                "method": "hub.invoke.notify",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "instanceId": callee_instance_id,
+                    },
+                    "method": "asset.defaults.target-instance",
+                    "args": {"case": "target-instance-no-options"}
+                }
+            }
+            _, response_target_instance_no_options = client.post_json(payload_target_instance_no_options)
+            if not RpcAssertions.expect_success(result, response_target_instance_no_options, ["invocationId"]):
+                return result
+
+            payload_target_instance_autolaunch_true = {
+                "jsonrpc": "2.0",
+                "id": "notify-defaults-target-instance-autolaunch-true",
+                "method": "hub.invoke.notify",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "instanceId": callee_instance_id,
+                    },
+                    "method": "asset.defaults.target-instance-auto",
+                    "args": {"case": "target-instance-autolaunch-true"},
+                    "options": {
+                        "autoLaunch": True,
+                    }
+                }
+            }
+            _, response_target_instance_autolaunch_true = client.post_json(payload_target_instance_autolaunch_true)
+            if not RpcAssertions.expect_error(result, response_target_instance_autolaunch_true, -32602, "invalid_params"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if callee_instance_id:
+                    base_url, token = DiscoveryService.get_hub_info()
+                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
+            except Exception:
+                pass
+
+            try:
+                if definition_path and os.path.exists(definition_path):
+                    os.remove(definition_path)
+            except Exception:
+                pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_notify_online_delivery(),
@@ -365,6 +476,7 @@ class TestInvocationNotify(unittest.TestCase):
             self.test_notify_with_ttl_less_than_1000_should_fail(),
             self.test_notify_target_instance_missing_should_return_specific_reason(),
             self.test_notify_rpc_disabled_should_forbidden(),
+            self.test_notify_defaults_should_follow_spec_when_options_omitted(),
         ]
 
 

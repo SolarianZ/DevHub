@@ -91,6 +91,32 @@ class TestWsTransportMatrix(unittest.TestCase):
         })
         return ws.recv_json(timeout=3)
 
+    @staticmethod
+    def _expect_transport_rejected(result, response, request_id):
+        if "error" not in response or not isinstance(response["error"], dict):
+            result.mark_failure(f"❌ 期望传输受限错误，但响应缺少 error: {response}")
+            return False
+
+        if response.get("id") != request_id:
+            result.mark_failure(f"❌ 传输受限错误 id 不匹配: {response}")
+            return False
+
+        if isinstance(response.get("result"), dict) and response["result"].get("ok") is True:
+            result.mark_failure(f"❌ 期望传输受限错误，但返回了成功结果: {response}")
+            return False
+
+        code = response["error"].get("code")
+        if not isinstance(code, int):
+            result.mark_failure(f"❌ 传输受限错误码非法: {response}")
+            return False
+
+        allowed_codes = {-32600, -32601, -32002, -32099}
+        if code not in allowed_codes:
+            result.mark_failure(f"❌ 传输受限错误码不在允许集合: code={code}, response={response}")
+            return False
+
+        return True
+
     def test_m4_ws_matrix_001_ping_should_work_after_auth(self):
         """M4-WS-MATRIX-001: 鉴权后 hub.ping 可在 WS 调用。"""
         result = TestResult("M4-WS-MATRIX-001 鉴权后 WS hub.ping")
@@ -269,6 +295,102 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
+    def test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(self):
+        """M4-WS-MATRIX-006: HTTP-only 方法在 WS 下必须被拒绝。"""
+        result = TestResult("M4-WS-MATRIX-006 WS 调用 HTTP-only 方法应拒绝")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-006")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                poll_response = self._ws_call(
+                    ws,
+                    "matrix-ws-http-only-poll",
+                    "hub.invoke.poll",
+                    {
+                        "instanceId": "matrix-ws-http-only-instance",
+                        "maxCount": 1,
+                        "waitMs": 0,
+                    },
+                )
+                if not self._expect_transport_rejected(result, poll_response, "matrix-ws-http-only-poll"):
+                    return result
+
+                poll_error_code = poll_response.get("error", {}).get("code")
+                if poll_error_code == -32010:
+                    result.mark_failure(f"❌ WS 端错误执行了 poll 业务分支: {poll_response}")
+                    return result
+
+                launch_response = self._ws_call(
+                    ws,
+                    "matrix-ws-http-only-launch",
+                    "hub.apps.launch",
+                    {
+                        "appId": "matrix-ws-http-only-launch-app",
+                        "scope": None,
+                        "waitForRegisterMs": 0,
+                    },
+                )
+                if not self._expect_transport_rejected(result, launch_response, "matrix-ws-http-only-launch"):
+                    return result
+
+                launch_error_code = launch_response.get("error", {}).get("code")
+                if launch_error_code in {-32014, -32020}:
+                    result.mark_failure(f"❌ WS 端错误执行了 launch 业务分支: {launch_response}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(self):
+        """M4-WS-MATRIX-007: WS-only 方法在 HTTP 下必须被拒绝。"""
+        result = TestResult("M4-WS-MATRIX-007 HTTP 调用 WS-only 方法应拒绝")
+
+        try:
+            http_base_url, _, token = self._runtime_hub_info()
+            client = RpcClient(http_base_url, token)
+
+            auth_response = client.call(
+                "hub.ws.authenticate",
+                {
+                    "token": token,
+                    "protocolVersion": 1,
+                    "clientId": "PyWsTransportMatrix",
+                    "clientSessionId": str(uuid.uuid4()),
+                },
+                request_id="matrix-http-ws-auth",
+            )
+            if not self._expect_transport_rejected(result, auth_response, "matrix-http-ws-auth"):
+                return result
+
+            subscribe_response = client.call(
+                "hub.events.subscribe",
+                {"types": ["app.instance.registered"]},
+                request_id="matrix-http-ws-subscribe",
+            )
+            if not self._expect_transport_rejected(result, subscribe_response, "matrix-http-ws-subscribe"):
+                return result
+
+            unsubscribe_response = client.call(
+                "hub.events.unsubscribe",
+                {"subscriptionId": "sub-http-unsupported"},
+                request_id="matrix-http-ws-unsubscribe",
+            )
+            if not self._expect_transport_rejected(result, unsubscribe_response, "matrix-http-ws-unsubscribe"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_m4_ws_matrix_001_ping_should_work_after_auth(),
@@ -276,6 +398,8 @@ class TestWsTransportMatrix(unittest.TestCase):
             self.test_m4_ws_matrix_003_get_definition_should_work_after_auth(),
             self.test_m4_ws_matrix_004_list_instances_should_work_after_auth(),
             self.test_m4_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
+            self.test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
+            self.test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ]
 
 

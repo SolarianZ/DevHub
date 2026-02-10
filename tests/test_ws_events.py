@@ -241,6 +241,56 @@ class TestWsEvents:
         return ws.recv_json(timeout=3)
 
     @staticmethod
+    def _assert_event_notification_contract(result: TestResult, message: dict, expected_subscription_id=None):
+        if not isinstance(message, dict):
+            result.mark_failure(f"❌ 事件消息不是对象: {message}")
+            return None
+
+        if message.get("jsonrpc") != "2.0":
+            result.mark_failure(f"❌ 事件消息 jsonrpc 非 2.0: {message}")
+            return None
+
+        if message.get("method") != "hub.event":
+            result.mark_failure(f"❌ 事件消息 method 非 hub.event: {message}")
+            return None
+
+        params = message.get("params")
+        if not isinstance(params, dict):
+            result.mark_failure(f"❌ 事件消息 params 非对象: {message}")
+            return None
+
+        subscription_id = params.get("subscriptionId")
+        if not isinstance(subscription_id, str) or not subscription_id:
+            result.mark_failure(f"❌ 事件消息缺少有效 subscriptionId: {message}")
+            return None
+
+        if expected_subscription_id is not None and subscription_id != expected_subscription_id:
+            result.mark_failure(
+                f"❌ 事件消息 subscriptionId 不匹配: expected={expected_subscription_id}, actual={subscription_id}, message={message}")
+            return None
+
+        event_type = params.get("type")
+        if not isinstance(event_type, str) or not event_type:
+            result.mark_failure(f"❌ 事件消息缺少有效 type: {message}")
+            return None
+
+        time_utc = params.get("timeUtc")
+        if not isinstance(time_utc, str) or not time_utc:
+            result.mark_failure(f"❌ 事件消息缺少有效 timeUtc: {message}")
+            return None
+
+        if not time_utc.endswith("Z"):
+            result.mark_failure(f"❌ 事件消息 timeUtc 非 UTC RFC3339 格式: {message}")
+            return None
+
+        payload = params.get("payload")
+        if not isinstance(payload, dict):
+            result.mark_failure(f"❌ 事件消息 payload 非对象: {message}")
+            return None
+
+        return params
+
+    @staticmethod
     def _collect_event_types(ws, expected_types, timeout_sec=6):
         deadline = time.time() + timeout_sec
         found_types = []
@@ -258,6 +308,32 @@ class TestWsEvents:
                 event_type = message.get("params", {}).get("type")
                 if isinstance(event_type, str):
                     found_types.append(event_type)
+
+        return found_types
+
+    def _collect_and_validate_event_types(self, result: TestResult, ws, expected_types, expected_subscription_id=None, timeout_sec=6):
+        deadline = time.time() + timeout_sec
+        found_types = []
+
+        while time.time() < deadline and not expected_types.issubset(set(found_types)):
+            timeout = max(0.1, deadline - time.time())
+            try:
+                message = ws.recv_json(timeout=timeout)
+            except TimeoutError:
+                continue
+            except WebSocketClosed:
+                break
+
+            if not isinstance(message, dict) or message.get("method") != "hub.event":
+                continue
+
+            params = self._assert_event_notification_contract(result, message, expected_subscription_id)
+            if params is None:
+                return None
+
+            event_type = params.get("type")
+            if isinstance(event_type, str):
+                found_types.append(event_type)
 
         return found_types
 
@@ -454,6 +530,7 @@ class TestWsEvents:
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
 
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
@@ -500,7 +577,15 @@ class TestWsEvents:
                     "invocation.delivered",
                     "invocation.completed",
                 }
-                found_types = self._collect_event_types(ws, expected_types, timeout_sec=6)
+                found_types = self._collect_and_validate_event_types(
+                    result,
+                    ws,
+                    expected_types,
+                    expected_subscription_id=subscription_id,
+                    timeout_sec=6,
+                )
+                if found_types is None:
+                    return result
 
                 if not expected_types.issubset(set(found_types)):
                     result.mark_failure(f"❌ 事件类型不完整: expected={sorted(expected_types)}, actual={found_types}")
@@ -564,6 +649,7 @@ class TestWsEvents:
                 subscribe_response = ws2.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
 
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
@@ -577,7 +663,15 @@ class TestWsEvents:
                     return result
 
                 expected_types = {"app.instance.registered"}
-                found_types = self._collect_event_types(ws2, expected_types, timeout_sec=6)
+                found_types = self._collect_and_validate_event_types(
+                    result,
+                    ws2,
+                    expected_types,
+                    expected_subscription_id=subscription_id,
+                    timeout_sec=6,
+                )
+                if found_types is None:
+                    return result
                 if not expected_types.issubset(set(found_types)):
                     result.mark_failure(f"❌ 重连后未收到预期事件: {found_types}")
                     return result
@@ -622,6 +716,7 @@ class TestWsEvents:
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
 
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
@@ -667,7 +762,15 @@ class TestWsEvents:
                     return result
 
                 expected_types = {"invocation.failed"}
-                found_types = self._collect_event_types(ws, expected_types, timeout_sec=6)
+                found_types = self._collect_and_validate_event_types(
+                    result,
+                    ws,
+                    expected_types,
+                    expected_subscription_id=subscription_id,
+                    timeout_sec=6,
+                )
+                if found_types is None:
+                    return result
                 if not expected_types.issubset(set(found_types)):
                     result.mark_failure(f"❌ 未收到 invocation.failed: {found_types}")
                     return result
@@ -799,6 +902,7 @@ class TestWsEvents:
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
 
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
@@ -826,7 +930,14 @@ class TestWsEvents:
                     if not isinstance(message, dict) or message.get("method") != "hub.event":
                         continue
 
-                    event_params = message.get("params", {})
+                    event_params = self._assert_event_notification_contract(
+                        result,
+                        message,
+                        expected_subscription_id=subscription_id,
+                    )
+                    if event_params is None:
+                        return result
+
                     if event_params.get("type") != "app.instance.unregistered":
                         continue
 
