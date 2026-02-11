@@ -485,70 +485,128 @@ class TestAppInstances(unittest.TestCase):
         return result
 
     def test_register_instance_with_global_scope(self):
-        """测试注册 scope='global' 被拒绝"""
-        result = TestResult("测试注册 scope='global' 被拒绝")
+        """测试注册 scope='global' 作为显式作用域"""
+        result = TestResult("测试注册 scope='global' 作为显式作用域")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            instance_id = self.generate_unique_instance_id()
+            scoped_global_instance_id = self.generate_unique_instance_id()
+            null_global_instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-scope-global-explicit"
 
-            response = client.call("hub.apps.registerInstance", {
+            scoped_global_response = client.call("hub.apps.registerInstance", {
                 "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-invalid-scope",
+                    "instanceId": scoped_global_instance_id,
+                    "appId": app_id,
                     "scope": "global",
                     "pid": 12355,
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-
-            if not RpcAssertions.expect_error(
-                result,
-                response,
-                expected_code=-32602,
-                expected_message="invalid_params"
-            ):
+            if not RpcAssertions.expect_success(result, scoped_global_response, ["instance"]):
                 return result
 
-            result.mark_success()
-
-        except Exception as e:
-            result.mark_failure(str(e))
-
-        return result
-
-    def test_register_instance_empty_scope(self):
-        """测试注册 scope='' 被拒绝"""
-        result = TestResult("测试注册 scope='' 被拒绝")
-
-        try:
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
-            instance_id = self.generate_unique_instance_id()
-
-            response = client.call("hub.apps.registerInstance", {
+            null_global_response = client.call("hub.apps.registerInstance", {
                 "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-invalid-scope",
-                    "scope": "",
+                    "instanceId": null_global_instance_id,
+                    "appId": app_id,
+                    "scope": None,
                     "pid": 12356,
                     "invoke": {"poll": True, "respond": True}
                 }
             })
+            if not RpcAssertions.expect_success(result, null_global_response, ["instance"]):
+                return result
 
-            if not RpcAssertions.expect_error(
-                result,
-                response,
-                expected_code=-32602,
-                expected_message="invalid_params"
-            ):
+            default_list = client.call("hub.apps.listInstances", {"appId": app_id})
+            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+                return result
+
+            default_ids = {inst.get("instanceId") for inst in default_list["result"]["instances"]}
+            if null_global_instance_id not in default_ids:
+                result.mark_failure("❌ 默认 Global 过滤未返回 null/global 实例")
+                return result
+            if scoped_global_instance_id in default_ids:
+                result.mark_failure("❌ 默认 Global 过滤错误命中了 scope='global' 实例")
+                return result
+
+            scoped_global_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"})
+            if not RpcAssertions.expect_success(result, scoped_global_list, ["instances"]):
+                return result
+
+            scoped_global_ids = {inst.get("instanceId") for inst in scoped_global_list["result"]["instances"]}
+            if scoped_global_instance_id not in scoped_global_ids:
+                result.mark_failure("❌ scope='global' 过滤未命中显式作用域实例")
+                return result
+            if null_global_instance_id in scoped_global_ids:
+                result.mark_failure("❌ scope='global' 过滤错误命中了默认 Global 实例")
                 return result
 
             result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances(["test-app-scope-global-explicit"])
+
+        return result
+
+    def test_register_instance_empty_scope(self):
+        """测试注册 scope='' 等价于 Global"""
+        result = TestResult("测试注册 scope='' 等价于 Global")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            empty_scope_instance_id = self.generate_unique_instance_id()
+            null_scope_instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-empty-scope-global"
+
+            empty_scope_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": empty_scope_instance_id,
+                    "appId": app_id,
+                    "scope": "",
+                    "pid": 12357,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            })
+            if not RpcAssertions.expect_success(result, empty_scope_response, ["instance"]):
+                return result
+
+            null_scope_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": null_scope_instance_id,
+                    "appId": app_id,
+                    "scope": None,
+                    "pid": 12358,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            })
+            if not RpcAssertions.expect_success(result, null_scope_response, ["instance"]):
+                return result
+
+            empty_scope_instance = empty_scope_response["result"]["instance"]
+            if empty_scope_instance.get("scope", "unexpected-non-null") is not None:
+                result.mark_failure(f"❌ scope='' 注册后未被归一化为 null: {empty_scope_instance}")
+                return result
+
+            default_list = client.call("hub.apps.listInstances", {"appId": app_id})
+            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+                return result
+
+            default_ids = {inst.get("instanceId") for inst in default_list["result"]["instances"]}
+            if empty_scope_instance_id not in default_ids or null_scope_instance_id not in default_ids:
+                result.mark_failure(f"❌ scope='' 与 scope=null 未同时落入 Global: {default_ids}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances(["test-app-empty-scope-global"])
 
         return result
 

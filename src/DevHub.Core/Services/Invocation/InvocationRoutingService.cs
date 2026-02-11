@@ -41,7 +41,8 @@ public class InvocationRoutingService
             return allOnline.Where(i => i.Scope == target.Scope).ToList();
         }
 
-        return allOnline.Where(i => i.Scope is null).ToList();
+        // 兼容历史数据：空字符串等价于 Global
+        return allOnline.Where(i => i.Scope is null or "").ToList();
     }
 
     /// <summary>
@@ -66,6 +67,7 @@ public class InvocationRoutingService
             return string.Equals(target.Scope, instance.Scope, StringComparison.Ordinal);
         }
 
-        return instance.Scope is null;
+        // 兼容历史数据：空字符串等价于 Global
+        return instance.Scope is null or "";
     }
 }

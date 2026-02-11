@@ -26,11 +26,12 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
+    public async Task AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldTreatAsExplicitScope()
     {
-        var handler = new AppInstancesHandler(new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>()), new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
 
-        var response = await handler.HandleAsync(new JsonRpcRequest
+        var scopedGlobalResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "scope-global",
             Method = "hub.apps.registerInstance",
@@ -47,33 +48,115 @@ public class ScopeParsingTests : IDisposable
             })
         }, CancellationToken.None);
 
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
-    }
-
-    [Fact]
-    public async Task AppInstancesHandler_ListInstances_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
-    {
-        var handler = new AppInstancesHandler(new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>()), new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
-
-        var response = await handler.HandleAsync(new JsonRpcRequest
+        var nullGlobalResponse = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "list-scope-global",
-            Method = "hub.apps.listInstances",
+            Id = "scope-null",
+            Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
-                scope = "global"
+                instance = new
+                {
+                    instanceId = "inst-scope-null",
+                    appId = "scope-test-app",
+                    scope = (string?)null,
+                    pid = 12346,
+                    invoke = new { poll = true, respond = true }
+                }
             })
         }, CancellationToken.None);
 
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
+        Assert.Null(scopedGlobalResponse.Error);
+        Assert.Null(nullGlobalResponse.Error);
+
+        var scopedGlobalInstance = appRegistry.GetInstance("inst-scope-global");
+        var nullGlobalInstance = appRegistry.GetInstance("inst-scope-null");
+        Assert.NotNull(scopedGlobalInstance);
+        Assert.NotNull(nullGlobalInstance);
+        Assert.Equal("global", scopedGlobalInstance!.Scope);
+        Assert.Null(nullGlobalInstance!.Scope);
+
+        var defaultListResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "list-default",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-test-app"
+            })
+        }, CancellationToken.None);
+        Assert.Null(defaultListResponse.Error);
+
+        var scopedListResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "list-global-scope",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-test-app",
+                scope = "global"
+            })
+        }, CancellationToken.None);
+        Assert.Null(scopedListResponse.Error);
+
+        var defaultListInstances = JsonSerializer.SerializeToElement(defaultListResponse.Result)
+            .GetProperty("instances")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("instanceId").GetString())
+            .ToHashSet(StringComparer.Ordinal);
+        var scopedListInstances = JsonSerializer.SerializeToElement(scopedListResponse.Result)
+            .GetProperty("instances")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("instanceId").GetString())
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains("inst-scope-null", defaultListInstances);
+        Assert.DoesNotContain("inst-scope-global", defaultListInstances);
+        Assert.Contains("inst-scope-global", scopedListInstances);
+        Assert.DoesNotContain("inst-scope-null", scopedListInstances);
+    }
+
+    [Fact]
+    public async Task AppInstancesHandler_ListInstances_WhenScopeEmpty_ShouldTreatAsGlobal()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
+
+        var registerResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-for-empty-scope",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "inst-empty-scope-global",
+                    appId = "scope-empty-list-app",
+                    scope = (string?)null,
+                    pid = 12347,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(registerResponse.Error);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "list-scope-empty",
+            Method = "hub.apps.listInstances",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-empty-list-app",
+                scope = string.Empty
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        var instances = result.GetProperty("instances").EnumerateArray().ToList();
+        Assert.Single(instances);
+        Assert.Equal("inst-empty-scope-global", instances[0].GetProperty("instanceId").GetString());
+        Assert.True(instances[0].TryGetProperty("scope", out var scopeElement));
+        Assert.Equal(JsonValueKind.Null, scopeElement.ValueKind);
     }
 
 
@@ -145,7 +228,7 @@ public class ScopeParsingTests : IDisposable
 
 
     [Fact]
-    public async Task InvocationHandler_Notify_WhenTargetScopeGlobal_ShouldReturnInvalidTargetScopeReason()
+    public async Task InvocationHandler_Notify_WhenTargetScopeGlobal_ShouldRouteToExplicitGlobalScope()
     {
         WriteDefinition("scope-invoke-app", rpcEnabled: true);
 
@@ -159,6 +242,23 @@ public class ScopeParsingTests : IDisposable
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
         var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
         var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
+
+        var nullGlobal = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-invoke-app-global-null",
+            AppId = "scope-invoke-app",
+            Scope = null,
+            Pid = 22001,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        var explicitGlobal = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-invoke-app-global-explicit",
+            AppId = "scope-invoke-app",
+            Scope = "global",
+            Pid = 22002,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -174,15 +274,20 @@ public class ScopeParsingTests : IDisposable
             })
         }, CancellationToken.None);
 
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_target_scope", data.GetProperty("reason").GetString());
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        var invocationId = result.GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var explicitGlobalPoll = await store.PollAsync(explicitGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.Contains(explicitGlobalPoll, item => item.InvocationId == invocationId);
+
+        var nullGlobalPoll = await store.PollAsync(nullGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.DoesNotContain(nullGlobalPoll, item => item.InvocationId == invocationId);
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WhenTargetScopeEmpty_ShouldReturnInvalidTargetScopeReason()
+    public async Task InvocationHandler_Notify_WhenTargetScopeEmpty_ShouldRouteToDefaultGlobal()
     {
         WriteDefinition("scope-invoke-app-empty", rpcEnabled: true);
 
@@ -196,6 +301,23 @@ public class ScopeParsingTests : IDisposable
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
         var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
         var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
+
+        var nullGlobal = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-invoke-app-empty-global-null",
+            AppId = "scope-invoke-app-empty",
+            Scope = null,
+            Pid = 22003,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+        var explicitGlobal = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scope-invoke-app-empty-global-explicit",
+            AppId = "scope-invoke-app-empty",
+            Scope = "global",
+            Pid = 22004,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -211,11 +333,16 @@ public class ScopeParsingTests : IDisposable
             })
         }, CancellationToken.None);
 
-        Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_target_scope", data.GetProperty("reason").GetString());
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        var invocationId = result.GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var nullGlobalPoll = await store.PollAsync(nullGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.Contains(nullGlobalPoll, item => item.InvocationId == invocationId);
+
+        var explicitGlobalPoll = await store.PollAsync(explicitGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.DoesNotContain(explicitGlobalPoll, item => item.InvocationId == invocationId);
     }
 
     [Fact]
@@ -287,5 +414,4 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
-
 

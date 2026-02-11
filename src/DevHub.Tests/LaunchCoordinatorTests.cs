@@ -1,7 +1,9 @@
 ﻿namespace DevHub.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -156,6 +158,72 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("already_running", second.Status);
         Assert.Equal(first.LaunchId, second.LaunchId);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WhenDedupeWindowOverridden_ShouldRespectConfiguredWindow()
+    {
+        using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "1");
+        var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
+
+        WriteDefinition(
+            "launch-dedupe-window-override.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object, tuningOptions);
+        var runtimeProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:65001");
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeProvider.Object,
+            processLauncher.Object,
+            clock,
+            tuningOptions,
+            _launchLogger.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-dedupe-window-override.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-dedupe-window-override.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        var third = await coordinator.LaunchAsync(
+            appId: "launch-dedupe-window-override.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(third.Ok);
+        Assert.Equal("started", third.Status);
+        Assert.NotEqual(first.LaunchId, third.LaunchId);
     }
 
     [Fact]
@@ -330,7 +398,13 @@ public class LaunchCoordinatorTests : IDisposable
             httpBaseUrl,
             wsUrl = httpBaseUrl.Replace("http://", "ws://", StringComparison.Ordinal) + "/ws",
             tokenFile,
-            startedAtUtc = DateTime.UtcNow.ToString("O")
+            startedAtUtc = DateTime.UtcNow.ToString("O"),
+            runtimeTuning = new
+            {
+                leaseSeconds = 30,
+                onlineThresholdSeconds = 30,
+                launchDedupeWindowSeconds = 30
+            }
         };
 
         var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
@@ -385,6 +459,19 @@ public class LaunchCoordinatorTests : IDisposable
 
         throw new Xunit.Sdk.XunitException($"等待文件生成超时: {filePath}");
     }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
+    }
 }
-
-

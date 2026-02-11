@@ -121,7 +121,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_InvalidScope_ShouldReturnError()
+    public async Task AppInstancesHandler_RegisterInstance_InvalidScopeType_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -136,7 +136,7 @@ public class NegativeTests : IDisposable
                     {
                         { "instanceId", "test-instance" },
                         { "appId", "test-app" },
-                        { "scope", "global" }
+                        { "scope", 123 }
                     }
                 }
             }
@@ -154,7 +154,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_ListInstances_InvalidScope_ShouldReturnError()
+    public async Task AppInstancesHandler_ListInstances_InvalidScopeType_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -163,7 +163,7 @@ public class NegativeTests : IDisposable
         {
             Id = "3",
             Method = "hub.apps.listInstances",
-            Params = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(@"{""scope"": ""global""}")
+            Params = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(@"{""scope"": 123}")
         };
 
         // Act
@@ -233,4 +233,3 @@ public class NegativeTests : IDisposable
         }
     }
 }
-

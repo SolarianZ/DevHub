@@ -140,6 +140,11 @@ public class CoreServiceTests
             Assert.True(Path.IsPathFullyQualified(tokenFile!));
             Assert.Equal(Path.Combine(runtimeDirectory, "token.txt"), tokenFile);
 
+            var runtimeTuning = hubJson.GetProperty("runtimeTuning");
+            Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
+            Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
+            Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
+
             AssertUnixUserOnlyMode(hubJsonPath);
             AssertUnixUserOnlyMode(tokenFile!);
         }
@@ -183,6 +188,87 @@ public class CoreServiceTests
                 Directory.Delete(testRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreValid_ShouldApplyOverridesToHubRuntime()
+    {
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+
+        try
+        {
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
+            using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
+            using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
+
+            var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
+            Assert.Equal(45, tuningOptions.LeaseSeconds);
+            Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
+            Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
+
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot), tuningOptions);
+            _ = fileSystemManager.GetToken();
+            fileSystemManager.WriteHubJson(49001, "runtime-override");
+
+            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
+            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
+            var runtimeTuning = hubJson.GetProperty("runtimeTuning");
+            Assert.Equal(45, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
+            Assert.Equal(20, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
+            Assert.Equal(55, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreInvalid_ShouldFallbackToDefaults()
+    {
+        using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "0");
+        using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "-1");
+        using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "abc");
+
+        var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
+
+        Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, tuningOptions.LeaseSeconds);
+        Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, tuningOptions.OnlineThresholdSeconds);
+        Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, tuningOptions.LaunchDedupeWindowSeconds);
+    }
+
+    [Fact]
+    public void AppRegistry_ListInstances_WhenOnlineThresholdOverridden_ShouldUseConfiguredThreshold()
+    {
+        using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "2");
+        var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
+
+        var now = DateTime.UtcNow;
+        var clock = new Mock<IClock>();
+        clock.SetupGet(c => c.UtcNow).Returns(() => now);
+
+        var appRegistry = new AppRegistry(clock.Object, _mockRegistryLogger.Object, tuningOptions);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "online-threshold-instance",
+            AppId = "online-threshold-app",
+            Scope = null,
+            Pid = 14001,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        now = now.AddSeconds(1);
+        var onlineInstances = appRegistry.ListInstances("online-threshold-app", includeAllScopes: true, includeOffline: false).ToList();
+        Assert.Single(onlineInstances);
+
+        now = now.AddSeconds(2);
+        var offlineInstances = appRegistry.ListInstances("online-threshold-app", includeAllScopes: true, includeOffline: false).ToList();
+        Assert.Empty(offlineInstances);
     }
 
     [Fact]
@@ -397,4 +483,3 @@ public static class TestHelpers
         return testDirectory;
     }
 }
-

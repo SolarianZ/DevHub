@@ -38,7 +38,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
+    public async Task LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -60,14 +60,14 @@ public class LaunchScopeTests : IDisposable
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
+        Assert.Equal(-32014, response.Error.Code);
+        Assert.Equal("app_definition_not_found", response.Error.Message);
         var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
+        Assert.Equal("scope-launch-app", data.GetProperty("appId").GetString());
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenScopeEmpty_ShouldReturnInvalidScopeReason()
+    public async Task LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -88,11 +88,28 @@ public class LaunchScopeTests : IDisposable
             })
         }, CancellationToken.None);
 
+        var nullScopeResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "launch-scope-null",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-launch-app",
+                scope = (string?)null
+            })
+        }, CancellationToken.None);
+
         Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
-        var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
+        Assert.NotNull(nullScopeResponse.Error);
+        Assert.Equal(-32014, response.Error.Code);
+        Assert.Equal(-32014, nullScopeResponse.Error.Code);
+        Assert.Equal("app_definition_not_found", response.Error.Message);
+        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
+
+        var emptyData = JsonSerializer.SerializeToElement(response.Error.Data);
+        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
+        Assert.Equal("scope-launch-app", emptyData.GetProperty("appId").GetString());
+        Assert.Equal("scope-launch-app", nullData.GetProperty("appId").GetString());
     }
 
     [Fact]
@@ -319,6 +336,5 @@ public class LaunchScopeTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 
 

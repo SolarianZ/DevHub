@@ -159,7 +159,12 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
   "httpBaseUrl": "http://127.0.0.1:47231",
   "wsUrl": "ws://127.0.0.1:47231/ws",
   "tokenFile": "C:/Users/me/AppData/Local/DevHub/runtime/token.txt",
-  "startedAtUtc": "2026-01-30T12:34:56Z"
+  "startedAtUtc": "2026-01-30T12:34:56Z",
+  "runtimeTuning": {
+    "leaseSeconds": 30,
+    "onlineThresholdSeconds": 30,
+    "launchDedupeWindowSeconds": 30
+  }
 }
 ```
 
@@ -169,6 +174,7 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
 - `tokenFile` **必须**是绝对路径。
+- `runtimeTuning` **必须**存在，且 `leaseSeconds`、`onlineThresholdSeconds`、`launchDedupeWindowSeconds` **必须**为大于等于 1 的整数；未显式配置时默认值均为 `30`。
 - Hub **必须**原子化地更新 `hub.json`（先写临时文件再替换）以避免读取不完整。
 - `hub.json` **必须**具有 OS ACL，限制仅当前用户可访问。
 - 客户端**必须**将 `hub.json` 作为权威端点来源，**禁止**假设固定的端口或固定的 WS 路径。
@@ -407,7 +413,7 @@ sequenceDiagram
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://devhub.spec/v1/hub-runtime.json",
   "type": "object",
-  "required": ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"],
+  "required": ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"],
   "properties": {
     "protocolVersion": { "type": "integer", "enum": [1] },
     "hubVersion": { "type": "string" },
@@ -415,7 +421,16 @@ sequenceDiagram
     "httpBaseUrl": { "type": "string", "format": "uri" },
     "wsUrl": { "type": "string", "format": "uri" },
     "tokenFile": { "type": "string" },
-    "startedAtUtc": { "type": "string", "format": "date-time" }
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "runtimeTuning": {
+      "type": "object",
+      "required": ["leaseSeconds", "onlineThresholdSeconds", "launchDedupeWindowSeconds"],
+      "properties": {
+        "leaseSeconds": { "type": "integer", "minimum": 1 },
+        "onlineThresholdSeconds": { "type": "integer", "minimum": 1 },
+        "launchDedupeWindowSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
   }
 }
 ```
@@ -424,10 +439,10 @@ sequenceDiagram
 
 ### 5.5 作用域 (Scope) 规则（规范性）
 
-- **SCOPE-01（App 生效作用域）**：对于 `hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 字段，省略或为 `null` 时生效为 Global；为非空字符串时生效为该字符串对应作用域。
-- **SCOPE-02（调用默认作用域）**：对于 `hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope`，省略或为 `null` 时，Hub **必须**仅在 Global 作用域内匹配与投递，**禁止**命中任何非 Global 作用域实例。
+- **SCOPE-01（App 生效作用域）**：对于 `hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 字段，省略、`null` 或 `""` 时生效为 Global；为非空字符串时生效为该字符串对应作用域（包括字面量 `"global"`）。
+- **SCOPE-02（调用默认作用域）**：对于 `hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope`，省略、`null` 或 `""` 时，Hub **必须**仅在 Global 作用域内匹配与投递，**禁止**命中任何非 Global 作用域实例。
 - **SCOPE-03（调用显式作用域）**：当 `target.scope` 为非空字符串时，Hub **必须**仅路由到该字符串对应作用域；若不存在匹配实例，**禁止**回退到 Global。
-- **SCOPE-04（非法值）**：`scope` 或 `target.scope` 为 `""` 或 `"global"` 字符串字面量时，Hub **必须**返回 `-32602 invalid_params`。
+- **SCOPE-04（非法值）**：`scope` 或 `target.scope` 若存在且类型不是 `string|null`，Hub **必须**返回 `-32602 invalid_params`。
 - **SCOPE-05（匹配规则）**：非空字符串作用域 **必须**按区分大小写的精确匹配处理。
 
 ---
@@ -538,7 +553,7 @@ sequenceDiagram
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
 - Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
-- Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 非法（例如 `""` 或 `"global"`），**必须**返回 `-32602 invalid_params`。
+- Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 类型非法（非 `string|null`），**必须**返回 `-32602 invalid_params`。
 
 **结果**：
 ```json
@@ -649,7 +664,7 @@ sequenceDiagram
 - `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
 - 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
 - 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
-- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅在 Global 作用域中路由该调用。
+- 如果 `target.scope` 省略、为 `null` 或为 `""`，Hub **必须**仅在 Global 作用域中路由该调用。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
 #### 6.3.11 `hub.invoke.request` (仅限 HTTP)
@@ -680,7 +695,7 @@ sequenceDiagram
 - `autoLaunch` 默认为 `true`，**除非**指定了 `target.instanceId`（非 null 字符串），此时默认为 `false`。
 - 如果指定了 `target.instanceId` 且 `options.autoLaunch` 被显式设为 `true`，Hub **必须**返回 `-32602 invalid_params`。
 - 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
-- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅在 Global 作用域中路由该调用。
+- 如果 `target.scope` 省略、为 `null` 或为 `""`，Hub **必须**仅在 Global 作用域中路由该调用。
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
@@ -834,7 +849,7 @@ flowchart TD
 
 路由规则：
 - 如果提供了 `target.instanceId`，Hub **必须**仅路由到该 instanceId（不回退）。
-- 如果 `target.scope` 省略或为 `null`，Hub **必须**仅路由到 Global 作用域（不命中非 Global 作用域实例）。
+- 如果 `target.scope` 省略、为 `null` 或为 `""`，Hub **必须**仅路由到 Global 作用域（不命中非 Global 作用域实例）。
 - 如果 `target.scope` 是非空字符串，Hub **必须**仅路由到该作用域（不回退）。
 - 当多个实例匹配一个作用域/全局队列时，交付遵循“先轮询者得”原则。
 - **挂起队列约束**：如果 `appId` 不存在 `AppDefinition`，即使 `queueIfOffline` 为 true，Hub 中也**禁止**将调用入队。在这种情况下，**必须**返回 `-32010 instance_not_found`。
@@ -874,9 +889,9 @@ stateDiagram-v2
 | ----------------------- | --------------- | ---------------- | --------------------------------------------- |
 | `ttlMs`                 | 60,000 ms       | 300,000 ms       | **必须** ≥ 1,000 ms                           |
 | `waitTimeoutMs`         | N/A             | 120,000 ms       | **必须** ≤ `ttlMs`                            |
-| `leaseSeconds`          | 30 s (固定)     | 30 s (固定)      | 由 Hub 在 `poll` 时分配                       |
-| 在线阈值                | 30 s            | 30 s             | `now - lastSeenUtc ≤ 30s`                     |
-| 去重窗口                | 30 s            | 30 s             | 启动去重窗口                                  |
+| `leaseSeconds`          | 30 s (默认)     | 30 s (默认)      | 由 Hub 在 `poll` 时分配；可配置，见 `hub.json.runtimeTuning.leaseSeconds` |
+| 在线阈值                | 30 s (默认)     | 30 s (默认)      | `now - lastSeenUtc ≤ 在线阈值`；可配置，见 `hub.json.runtimeTuning.onlineThresholdSeconds` |
+| 去重窗口                | 30 s (默认)     | 30 s (默认)      | 启动去重窗口；可配置，见 `hub.json.runtimeTuning.launchDedupeWindowSeconds` |
 | `maxCount` (轮询默认值) | 10              | 10               | **必须**在 1..100 (超出范围 = invalid_params) |
 
 ---

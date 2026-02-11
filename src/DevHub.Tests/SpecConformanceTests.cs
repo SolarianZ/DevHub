@@ -212,7 +212,7 @@ public class SpecConformanceTests : IDisposable
             })
         };
 
-        // scope 为空字符串
+        // scope 类型非法（非 string/null）
         var invalidScopeRequest = new JsonRpcRequest
         {
             Id = "req-3",
@@ -223,7 +223,7 @@ public class SpecConformanceTests : IDisposable
                 {
                     instanceId = "test-instance-003",
                     appId = "test-app",
-                    scope = "",
+                    scope = 123,
                     pid = 123,
                     invoke = new { poll = true, respond = true }
                 }
@@ -462,4 +462,3 @@ public class SpecConformanceTests : IDisposable
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }
-

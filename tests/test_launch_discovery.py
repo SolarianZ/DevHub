@@ -37,12 +37,28 @@ class TestLaunchDiscovery(unittest.TestCase):
                 import json
                 hub_info = json.load(f)
 
-            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"]
+            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
             for field in required_fields:
                 if field in hub_info:
                     result.add_detail(f"✅ hub.json 包含 {field} 字段")
                 else:
                     result.mark_failure(f"❌ hub.json 缺少 {field} 字段")
+                    return result
+
+            runtime_tuning = hub_info.get("runtimeTuning")
+            if not isinstance(runtime_tuning, dict):
+                result.mark_failure(f"❌ runtimeTuning 必须是对象: {runtime_tuning}")
+                return result
+
+            runtime_tuning_fields = [
+                "leaseSeconds",
+                "onlineThresholdSeconds",
+                "launchDedupeWindowSeconds",
+            ]
+            for field in runtime_tuning_fields:
+                value = runtime_tuning.get(field)
+                if not isinstance(value, int) or value < 1:
+                    result.mark_failure(f"❌ runtimeTuning.{field} 必须是 >=1 的整数: {runtime_tuning}")
                     return result
 
             # 验证协议版本
@@ -257,7 +273,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                 result.mark_failure("❌ hub.json 文件不存在")
                 return result
 
-            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"]
+            required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
             # 不依赖实现细节（例如临时文件命名），只验证可观察到的原子性：
             # 在多次快速读取期间，hub.json 始终可解析且字段完整。
             for i in range(20):
@@ -309,7 +325,12 @@ class TestLaunchDiscovery(unittest.TestCase):
                             "httpBaseUrl": "http://127.0.0.1:12345",
                             "wsUrl": "ws://127.0.0.1:12345/ws",
                             "tokenFile": os.path.join(temp_dir, "token.txt"),
-                            "startedAtUtc": "2026-01-30T12:34:56Z"
+                            "startedAtUtc": "2026-01-30T12:34:56Z",
+                            "runtimeTuning": {
+                                "leaseSeconds": 30,
+                                "onlineThresholdSeconds": 30,
+                                "launchDedupeWindowSeconds": 30
+                            }
                         }, f)
 
                     with open(os.path.join(temp_dir, "token.txt"), "w", encoding="utf-8") as f:

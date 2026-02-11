@@ -49,5 +49,34 @@ public class HubRuntime
     /// </summary>
     [JsonPropertyName("startedAtUtc")]
     public required DateTime StartedAtUtc { get; set; }
+
+    /// <summary>
+    /// 运行时调优参数（当前生效值）。
+    /// </summary>
+    [JsonPropertyName("runtimeTuning")]
+    public required HubRuntimeTuning RuntimeTuning { get; set; }
 }
 
+/// <summary>
+/// hub.json 中的运行时调优参数。
+/// </summary>
+public class HubRuntimeTuning
+{
+    /// <summary>
+    /// 调用租约秒数。
+    /// </summary>
+    [JsonPropertyName("leaseSeconds")]
+    public required int LeaseSeconds { get; set; }
+
+    /// <summary>
+    /// 在线阈值秒数。
+    /// </summary>
+    [JsonPropertyName("onlineThresholdSeconds")]
+    public required int OnlineThresholdSeconds { get; set; }
+
+    /// <summary>
+    /// 启动去重窗口秒数。
+    /// </summary>
+    [JsonPropertyName("launchDedupeWindowSeconds")]
+    public required int LaunchDedupeWindowSeconds { get; set; }
+}

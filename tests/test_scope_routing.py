@@ -196,9 +196,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_003_invalid_empty_scope_should_return_invalid_params(self):
-        """M3-SCOPE-003: register/list/launch scope='' -> -32602"""
-        result = TestResult("M3-SCOPE-003 scope='' -> invalid_params")
+    def test_m3_scope_003_empty_scope_should_be_global_equivalent(self):
+        """M3-SCOPE-003: register/list/launch scope='' 与 Global 等价"""
+        result = TestResult("M3-SCOPE-003 scope='' 等价 Global")
         app_id = self._app_id("003")
         definition_path = None
 
@@ -207,28 +207,70 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            register_response = client.register_instance(
-                instance_id=self._instance_id("m3-scope-empty"),
+            empty_instance = self._instance_id("m3-scope-empty")
+            null_instance = self._instance_id("m3-scope-null")
+
+            register_empty_response = client.register_instance(
+                instance_id=empty_instance,
                 app_id=app_id,
                 scope="",
                 poll=True,
                 respond=True,
                 pid=31201,
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, register_response):
+            if not RpcAssertions.expect_success(result, register_empty_response, ["instance"]):
                 return result
 
-            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="m3-scope-003-list")
-            if not RpcAssertions.assert_invalid_scope_error(result, list_response):
+            register_null_response = client.register_instance(
+                instance_id=null_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31202,
+            )
+            if not RpcAssertions.expect_success(result, register_null_response, ["instance"]):
                 return result
 
-            launch_response = client.launch_app(
+            empty_registered_scope = register_empty_response["result"]["instance"].get("scope", "unexpected-non-null")
+            if empty_registered_scope is not None:
+                result.mark_failure(f"❌ scope='' 注册后未归一化为 Global(null): {register_empty_response}")
+                return result
+
+            list_default = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-003-list-default")
+            if not RpcAssertions.expect_success(result, list_default, ["instances"]):
+                return result
+
+            default_ids = {item.get("instanceId") for item in list_default["result"].get("instances", [])}
+            if empty_instance not in default_ids or null_instance not in default_ids:
+                result.mark_failure(f"❌ 默认 Global 过滤未命中 scope='' 与 scope=null 实例: {default_ids}")
+                return result
+
+            list_empty_scope = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="m3-scope-003-list-empty")
+            if not RpcAssertions.expect_success(result, list_empty_scope, ["instances"]):
+                return result
+
+            empty_scope_ids = {item.get("instanceId") for item in list_empty_scope["result"].get("instances", [])}
+            if empty_instance not in empty_scope_ids or null_instance not in empty_scope_ids:
+                result.mark_failure(f"❌ scope='' 查询未按 Global 处理: {empty_scope_ids}")
+                return result
+
+            launch_empty_scope = client.launch_app(
                 app_id=app_id,
                 scope="",
                 wait_for_register_ms=0,
-                request_id="m3-scope-003-launch",
+                request_id="m3-scope-003-launch-empty",
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, launch_response):
+            if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "launchId"]):
+                return result
+
+            launch_null_scope = client.launch_app(
+                app_id=app_id,
+                scope=None,
+                wait_for_register_ms=0,
+                request_id="m3-scope-003-launch-null",
+            )
+            if not RpcAssertions.expect_success(result, launch_null_scope, ["status", "launchId"]):
                 return result
 
             result.mark_success()
@@ -239,9 +281,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_004_invalid_global_scope_should_return_invalid_params(self):
-        """M3-SCOPE-004: register/list/launch scope='global' -> -32602"""
-        result = TestResult("M3-SCOPE-004 scope='global' -> invalid_params")
+    def test_m3_scope_004_global_literal_should_be_explicit_scope(self):
+        """M3-SCOPE-004: scope='global' 作为显式作用域，不回退默认 Global"""
+        result = TestResult("M3-SCOPE-004 scope='global' 显式作用域")
         app_id = self._app_id("004")
         definition_path = None
 
@@ -250,19 +292,53 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            register_response = client.register_instance(
-                instance_id=self._instance_id("m3-scope-global"),
+            scoped_global_instance = self._instance_id("m3-scope-global")
+            null_global_instance = self._instance_id("m3-scope-null")
+
+            register_global_literal = client.register_instance(
+                instance_id=scoped_global_instance,
                 app_id=app_id,
                 scope="global",
                 poll=True,
                 respond=True,
                 pid=31301,
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, register_response):
+            if not RpcAssertions.expect_success(result, register_global_literal, ["instance"]):
+                return result
+
+            register_null_global = client.register_instance(
+                instance_id=null_global_instance,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=31302,
+            )
+            if not RpcAssertions.expect_success(result, register_null_global, ["instance"]):
                 return result
 
             list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="m3-scope-004-list")
-            if not RpcAssertions.assert_invalid_scope_error(result, list_response):
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            scoped_global_ids = {item.get("instanceId") for item in list_response["result"].get("instances", [])}
+            if scoped_global_instance not in scoped_global_ids:
+                result.mark_failure(f"❌ scope='global' 查询未命中显式作用域实例: {scoped_global_ids}")
+                return result
+            if null_global_instance in scoped_global_ids:
+                result.mark_failure(f"❌ scope='global' 查询错误回退到默认 Global: {scoped_global_ids}")
+                return result
+
+            default_list_response = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-004-list-default")
+            if not RpcAssertions.expect_success(result, default_list_response, ["instances"]):
+                return result
+
+            default_ids = {item.get("instanceId") for item in default_list_response["result"].get("instances", [])}
+            if null_global_instance not in default_ids:
+                result.mark_failure(f"❌ 默认 Global 查询未命中 null/global 实例: {default_ids}")
+                return result
+            if scoped_global_instance in default_ids:
+                result.mark_failure(f"❌ 默认 Global 查询错误命中 scope='global' 实例: {default_ids}")
                 return result
 
             launch_response = client.launch_app(
@@ -271,7 +347,16 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="m3-scope-004-launch",
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, launch_response):
+            if not RpcAssertions.expect_success(result, launch_response, ["status", "launchId"]):
+                return result
+
+            launch_global_default = client.launch_app(
+                app_id=app_id,
+                scope=None,
+                wait_for_register_ms=0,
+                request_id="m3-scope-004-launch-default",
+            )
+            if not RpcAssertions.expect_success(result, launch_global_default, ["status", "launchId"]):
                 return result
 
             result.mark_success()
@@ -520,9 +605,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_007_invalid_target_scope_should_return_invalid_params(self):
-        """M3-SCOPE-007: target.scope invalid -> -32602 invalid_params"""
-        result = TestResult("M3-SCOPE-007 target.scope invalid")
+    def test_m3_scope_007_invalid_target_scope_type_should_return_invalid_params(self):
+        """M3-SCOPE-007: target.scope 类型非法 -> -32602 invalid_params"""
+        result = TestResult("M3-SCOPE-007 target.scope 类型非法")
         app_id = self._app_id("007")
         definition_path = None
 
@@ -531,57 +616,43 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            notify_empty = client.invoke_notify(
-                app_id=app_id,
-                method="asset.rebuild",
-                target_scope="",
-                queue_if_offline=True,
-                auto_launch=False,
-                request_id="m3-scope-007-notify-empty",
-            )
-            if not RpcAssertions.expect_error(result, notify_empty, -32602, "invalid_params"):
-                return result
+            invalid_notify_cases = [
+                ("m3-scope-007-notify-int", 123),
+                ("m3-scope-007-notify-bool", True),
+                ("m3-scope-007-notify-object", {"scope": "workspace-a"}),
+            ]
+            for request_id, target_scope in invalid_notify_cases:
+                notify_response = client.invoke_notify(
+                    app_id=app_id,
+                    method="asset.rebuild",
+                    target_scope=target_scope,
+                    queue_if_offline=True,
+                    auto_launch=False,
+                    request_id=request_id,
+                )
+                if not RpcAssertions.expect_error(result, notify_response, -32602, "invalid_params"):
+                    return result
 
-            notify_global = client.invoke_notify(
-                app_id=app_id,
-                method="asset.rebuild",
-                target_scope="global",
-                queue_if_offline=True,
-                auto_launch=False,
-                request_id="m3-scope-007-notify-global",
-            )
-            if not RpcAssertions.expect_error(result, notify_global, -32602, "invalid_params"):
-                return result
-
-            request_empty = client.invoke_request(
-                app_id=app_id,
-                method="asset.build",
-                target_scope="",
-                options={
-                    "ttlMs": 2000,
-                    "waitTimeoutMs": 1000,
-                    "queueIfOffline": True,
-                    "autoLaunch": False,
-                },
-                request_id="m3-scope-007-request-empty",
-            )
-            if not RpcAssertions.expect_error(result, request_empty, -32602, "invalid_params"):
-                return result
-
-            request_global = client.invoke_request(
-                app_id=app_id,
-                method="asset.build",
-                target_scope="global",
-                options={
-                    "ttlMs": 2000,
-                    "waitTimeoutMs": 1000,
-                    "queueIfOffline": True,
-                    "autoLaunch": False,
-                },
-                request_id="m3-scope-007-request-global",
-            )
-            if not RpcAssertions.expect_error(result, request_global, -32602, "invalid_params"):
-                return result
+            invalid_request_cases = [
+                ("m3-scope-007-request-int", 123),
+                ("m3-scope-007-request-bool", True),
+                ("m3-scope-007-request-object", {"scope": "workspace-a"}),
+            ]
+            for request_id, target_scope in invalid_request_cases:
+                request_response = client.invoke_request(
+                    app_id=app_id,
+                    method="asset.build",
+                    target_scope=target_scope,
+                    options={
+                        "ttlMs": 2000,
+                        "waitTimeoutMs": 1000,
+                        "queueIfOffline": True,
+                        "autoLaunch": False,
+                    },
+                    request_id=request_id,
+                )
+                if not RpcAssertions.expect_error(result, request_response, -32602, "invalid_params"):
+                    return result
 
             result.mark_success()
         except Exception as e:
@@ -1305,11 +1376,11 @@ class TestScopeRouting(unittest.TestCase):
         results = [
             self.test_m3_scope_001_register_omitted_and_null_should_both_be_global(),
             self.test_m3_scope_002_register_scope_should_match_exactly(),
-            self.test_m3_scope_003_invalid_empty_scope_should_return_invalid_params(),
-            self.test_m3_scope_004_invalid_global_scope_should_return_invalid_params(),
+            self.test_m3_scope_003_empty_scope_should_be_global_equivalent(),
+            self.test_m3_scope_004_global_literal_should_be_explicit_scope(),
             self.test_m3_scope_005_notify_request_default_scope_should_only_hit_global(),
             self.test_m3_scope_006_explicit_scope_should_not_fallback_to_global(),
-            self.test_m3_scope_007_invalid_target_scope_should_return_invalid_params(),
+            self.test_m3_scope_007_invalid_target_scope_type_should_return_invalid_params(),
             self.test_m3_scope_008_scope_match_should_be_case_sensitive(),
             self.test_m3_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(),
             self.test_m3_scope_009_target_instance_id_should_take_precedence(),

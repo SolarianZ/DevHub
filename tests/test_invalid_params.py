@@ -291,24 +291,36 @@ class TestInvalidParams(unittest.TestCase):
 
             cases = [
                 {
-                    "name": "scope 空字符串",
+                    "name": "scope 非字符串（数字）",
                     "payload": {
                         "instance": {
-                            "instanceId": "test-instance",
+                            "instanceId": "test-instance-scope-1",
                             "appId": "test-app",
-                            "scope": "",
+                            "scope": 123,
                             "pid": 12345,
                             "invoke": {"poll": True, "respond": True}
                         }
                     }
                 },
                 {
-                    "name": "scope='global'",
+                    "name": "scope 非字符串（布尔）",
                     "payload": {
                         "instance": {
-                            "instanceId": "test-instance",
+                            "instanceId": "test-instance-scope-2",
                             "appId": "test-app",
-                            "scope": "global",
+                            "scope": True,
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "scope 非字符串（对象）",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance-scope-3",
+                            "appId": "test-app",
+                            "scope": {"name": "workspace-a"},
                             "pid": 12345,
                             "invoke": {"poll": True, "respond": True}
                         }
@@ -483,8 +495,6 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "scope 非字符串/非null", "payload": {"scope": 123}},
                 {"name": "includeAllScopes 非布尔", "payload": {"includeAllScopes": "true"}},
                 {"name": "includeOffline 非布尔", "payload": {"includeOffline": "true"}},
-                {"name": "scope 空字符串", "payload": {"scope": ""}},
-                {"name": "scope=global", "payload": {"scope": "global"}},
             ]
 
             for case in cases:

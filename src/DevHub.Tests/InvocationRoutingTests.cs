@@ -74,6 +74,67 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
+    public async Task InvocationHandler_Poll_WhenLeaseSecondsOverridden_ShouldExposeConfiguredLeaseSeconds()
+    {
+        using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
+        var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
+
+        const string appId = "lease-override.app";
+        const string instanceId = "lease-override-inst";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object, tuningOptions);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = instanceId,
+            AppId = appId,
+            Scope = null,
+            Pid = 3010,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry, tuningOptions);
+
+        var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "lease-override-notify",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "lease.override",
+                args = new { ok = true },
+                options = new { queueIfOffline = false, autoLaunch = false, ttlMs = 60000 }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(notifyResponse.Error);
+        var notifyResult = JsonSerializer.SerializeToElement(notifyResponse.Result);
+        var invocationId = notifyResult.GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "lease-override-poll",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var items = pollResult.GetProperty("items").EnumerateArray().ToList();
+        Assert.Single(items);
+        Assert.Equal(invocationId, items[0].GetProperty("invocationId").GetString());
+        Assert.Equal(45, items[0].GetProperty("delivery").GetProperty("leaseSeconds").GetInt32());
+    }
+
+    [Fact]
     public async Task InvocationHandler_Poll_WithPollDisabledInstance_ShouldReturnForbidden()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -869,8 +930,9 @@ public class InvocationRoutingTests : IDisposable
         }
     }
 
-    private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry)
+    private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry, RuntimeTuningOptions? runtimeTuningOptions = null)
     {
+        runtimeTuningOptions ??= RuntimeTuningOptions.Default;
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
@@ -878,8 +940,24 @@ public class InvocationRoutingTests : IDisposable
         var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
-        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider,
+            new ProcessLauncher(),
+            new SystemClock(),
+            runtimeTuningOptions,
+            _launchLogger.Object);
+        return new InvocationHandler(
+            appRegistry,
+            definitionProvider,
+            routingService,
+            store,
+            waiter,
+            launchCoordinator,
+            new SystemClock(),
+            _invocationHandlerLogger.Object,
+            runtimeTuningOptions);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
@@ -915,5 +993,4 @@ public class InvocationRoutingTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 

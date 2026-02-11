@@ -61,7 +61,7 @@ internal static class RpcParamReader
     /// <param name="element">参数对象。</param>
     /// <param name="propertyName">字段名。</param>
     /// <param name="invalidReason">非法时使用的 reason。</param>
-    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。</param>
+    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。空字符串会被归一化为 null。</param>
     /// <param name="errorData">解析失败时的错误附加数据。</param>
     /// <returns>解析成功返回 true，否则返回 false。</returns>
     public static bool TryGetOptionalScope(
@@ -91,10 +91,15 @@ internal static class RpcParamReader
         }
 
         scope = scopeElement.GetString();
-        if (scope is null || scope == string.Empty || scope == "global")
+        if (scope is null)
         {
             errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
+        }
+
+        if (scope == string.Empty)
+        {
+            scope = null;
         }
 
         return true;

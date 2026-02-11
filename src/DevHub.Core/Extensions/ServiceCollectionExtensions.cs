@@ -28,6 +28,8 @@ public static class ServiceCollectionExtensions
         var runtimePathOptions = RuntimePathOptions.Resolve(definitionsPath);
 
         services.AddSingleton(runtimePathOptions);
+        services.AddSingleton<RuntimeTuningOptions>(sp =>
+            RuntimeTuningOptions.Resolve(sp.GetRequiredService<ILogger<RuntimeTuningOptions>>()));
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IProcessLauncher, ProcessLauncher>();
 
@@ -35,11 +37,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<FileSystemManager>(sp =>
             new FileSystemManager(
                 sp.GetRequiredService<ILogger<FileSystemManager>>(),
-                sp.GetRequiredService<RuntimePathOptions>()));
+                sp.GetRequiredService<RuntimePathOptions>(),
+                sp.GetRequiredService<RuntimeTuningOptions>()));
         services.AddSingleton<AppRegistry>(sp =>
             new AppRegistry(
                 sp.GetRequiredService<IClock>(),
-                sp.GetRequiredService<ILogger<AppRegistry>>()));
+                sp.GetRequiredService<ILogger<AppRegistry>>(),
+                sp.GetRequiredService<RuntimeTuningOptions>()));
         services.AddSingleton<DefinitionLoader>(sp =>
             new DefinitionLoader(
                 sp.GetRequiredService<RuntimePathOptions>().DefinitionsPath,
@@ -71,6 +75,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IRuntimeHttpBaseUrlProvider>(),
                 sp.GetRequiredService<IProcessLauncher>(),
                 sp.GetRequiredService<IClock>(),
+                sp.GetRequiredService<RuntimeTuningOptions>(),
                 sp.GetRequiredService<ILogger<LaunchCoordinator>>()));
 
         // 注册RPC处理器
@@ -95,6 +100,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<LaunchCoordinator>(),
                 sp.GetRequiredService<IClock>(),
                 sp.GetRequiredService<ILogger<InvocationHandler>>(),
+                sp.GetRequiredService<RuntimeTuningOptions>(),
                 sp.GetService<HubEventBus>()));
         services.AddSingleton<IRpcHandler, LaunchHandler>();
 

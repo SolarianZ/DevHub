@@ -12,7 +12,7 @@ namespace DevHub.Core.Services;
 public class AppRegistry : IDisposable
 {
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
-    private readonly TimeSpan _onlineThreshold = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _onlineThreshold;
     private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
     private readonly IClock _clock;
     private readonly ILogger<AppRegistry> _logger;
@@ -25,9 +25,21 @@ public class AppRegistry : IDisposable
     /// <param name="clock">系统时钟。</param>
     /// <param name="logger">日志记录器。</param>
     public AppRegistry(IClock clock, ILogger<AppRegistry> logger)
+        : this(clock, logger, RuntimeTuningOptions.Default)
+    {
+    }
+
+    /// <summary>
+    /// 初始化应用程序实例注册表。
+    /// </summary>
+    /// <param name="clock">系统时钟。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="runtimeTuningOptions">运行时调优参数。</param>
+    public AppRegistry(IClock clock, ILogger<AppRegistry> logger, RuntimeTuningOptions runtimeTuningOptions)
     {
         _clock = clock;
         _logger = logger;
+        _onlineThreshold = TimeSpan.FromSeconds(runtimeTuningOptions.OnlineThresholdSeconds);
         // 每60秒执行一次清理
         _cleanupTimer = new Timer(OnCleanupTimer, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
@@ -184,7 +196,8 @@ public class AppRegistry : IDisposable
         {
             if (scope == null)
             {
-                instances = instances.Where(i => i.Scope == null);
+                // 兼容历史数据：空字符串也视为 Global
+                instances = instances.Where(i => i.Scope is null or "");
             }
             else
             {

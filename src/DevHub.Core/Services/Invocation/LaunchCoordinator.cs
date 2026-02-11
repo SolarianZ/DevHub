@@ -11,7 +11,6 @@ namespace DevHub.Core.Services.Invocation;
 /// </summary>
 public class LaunchCoordinator
 {
-    private const int DedupeWindowSeconds = 30;
     private const string DefaultDedupeKeyTemplate = "{appId}:{scopeOrGlobal}";
 
     private readonly object _dedupeSyncRoot = new();
@@ -20,8 +19,30 @@ public class LaunchCoordinator
     private readonly AppRegistry _appRegistry;
     private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
     private readonly IProcessLauncher _processLauncher;
+    private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly IClock _clock;
     private readonly ILogger<LaunchCoordinator> _logger;
+
+    /// <summary>
+    /// 初始化启动协调器。
+    /// </summary>
+    public LaunchCoordinator(
+        IDefinitionProvider definitionProvider,
+        AppRegistry appRegistry,
+        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        IProcessLauncher processLauncher,
+        IClock clock,
+        ILogger<LaunchCoordinator> logger)
+        : this(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider,
+            processLauncher,
+            clock,
+            RuntimeTuningOptions.Default,
+            logger)
+    {
+    }
 
     /// <summary>
     /// 初始化启动协调器。
@@ -33,6 +54,7 @@ public class LaunchCoordinator
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
         IProcessLauncher processLauncher,
         IClock clock,
+        RuntimeTuningOptions runtimeTuningOptions,
         ILogger<LaunchCoordinator> logger)
     {
         _definitionProvider = definitionProvider;
@@ -40,6 +62,7 @@ public class LaunchCoordinator
         _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
         _processLauncher = processLauncher;
         _clock = clock;
+        _runtimeTuningOptions = runtimeTuningOptions;
         _logger = logger;
     }
 
@@ -297,7 +320,7 @@ public class LaunchCoordinator
     private void CleanupExpiredDedupeRecords(DateTime now)
     {
         var expiredKeys = _dedupeRecords
-            .Where(entry => now > entry.Value.CreatedAtUtc.AddSeconds(DedupeWindowSeconds))
+            .Where(entry => now > entry.Value.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds))
             .Select(entry => entry.Key)
             .ToList();
 

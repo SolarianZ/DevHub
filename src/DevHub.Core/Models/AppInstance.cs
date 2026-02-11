@@ -21,8 +21,7 @@ public class AppInstance
     public required string AppId { get; set; }
 
     /// <summary>
-    /// 作用域（null 表示全局作用域，非空字符串表示工作区作用域）
-    /// 注意：不允许使用字符串 "global"
+    /// 作用域（null 表示全局作用域，非空字符串表示显式作用域）
     /// </summary>
     [JsonPropertyName("scope")]
     public string? Scope { get; set; }
@@ -41,7 +40,7 @@ public class AppInstance
 
     /// <summary>
     /// 最后活跃时间（UTC，由 Hub 更新）
-    /// 用于在线判定：now - lastSeenUtc <= 30s 表示在线
+    /// 用于在线判定：now - lastSeenUtc <= 在线阈值 表示在线
     /// </summary>
     [JsonPropertyName("lastSeenUtc")]
     public DateTime? LastSeenUtc { get; set; }
@@ -84,4 +83,3 @@ public class InvokeCapability
     [JsonPropertyName("respond")]
     public bool Respond { get; set; }
 }
-

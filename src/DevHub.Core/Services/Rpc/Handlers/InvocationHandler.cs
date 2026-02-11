@@ -20,7 +20,6 @@ public class InvocationHandler : IRpcHandler
     private const int DefaultNotifyTtlMs = 60000;
     private const int DefaultRequestTtlMs = 300000;
     private const int DefaultRequestWaitTimeoutMs = 120000;
-    private const int LeaseSeconds = 30;
 
     private enum InvocationMode
     {
@@ -34,9 +33,37 @@ public class InvocationHandler : IRpcHandler
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
     private readonly LaunchCoordinator _launchCoordinator;
+    private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly HubEventBus? _eventBus;
     private readonly IClock _clock;
     private readonly ILogger<InvocationHandler> _logger;
+
+    /// <summary>
+    /// 初始化处理器。
+    /// </summary>
+    public InvocationHandler(
+        AppRegistry appRegistry,
+        IDefinitionProvider definitionProvider,
+        InvocationRoutingService routingService,
+        InvocationStore store,
+        InvocationRequestWaiter requestWaiter,
+        LaunchCoordinator launchCoordinator,
+        IClock clock,
+        ILogger<InvocationHandler> logger,
+        HubEventBus? eventBus = null)
+        : this(
+            appRegistry,
+            definitionProvider,
+            routingService,
+            store,
+            requestWaiter,
+            launchCoordinator,
+            clock,
+            logger,
+            RuntimeTuningOptions.Default,
+            eventBus)
+    {
+    }
 
     /// <summary>
     /// 初始化处理器。
@@ -51,6 +78,7 @@ public class InvocationHandler : IRpcHandler
         LaunchCoordinator launchCoordinator,
         IClock clock,
         ILogger<InvocationHandler> logger,
+        RuntimeTuningOptions runtimeTuningOptions,
         HubEventBus? eventBus = null)
     {
         _appRegistry = appRegistry;
@@ -59,6 +87,7 @@ public class InvocationHandler : IRpcHandler
         _store = store;
         _requestWaiter = requestWaiter;
         _launchCoordinator = launchCoordinator;
+        _runtimeTuningOptions = runtimeTuningOptions;
         _eventBus = eventBus;
         _clock = clock;
         _logger = logger;
@@ -307,7 +336,7 @@ public class InvocationHandler : IRpcHandler
             Options = options,
             Delivery = new InvocationDelivery
             {
-                LeaseSeconds = LeaseSeconds,
+                LeaseSeconds = _runtimeTuningOptions.LeaseSeconds,
                 Attempt = 1
             },
             Caller = new InvocationCaller

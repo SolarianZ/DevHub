@@ -14,6 +14,7 @@ namespace DevHub.Core.Services;
 public class FileSystemManager
 {
     private readonly ILogger<FileSystemManager> _logger;
+    private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
     private readonly string _rootPath;
     private readonly string _runtimePath;
@@ -33,8 +34,23 @@ public class FileSystemManager
     /// <param name="logger">日志记录器。</param>
     /// <param name="runtimePathOptions">运行时路径选项。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger, RuntimePathOptions runtimePathOptions)
+        : this(logger, runtimePathOptions, RuntimeTuningOptions.Default)
+    {
+    }
+
+    /// <summary>
+    /// 使用统一路径选项和运行时调优参数初始化文件系统管理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="runtimePathOptions">运行时路径选项。</param>
+    /// <param name="runtimeTuningOptions">运行时调优参数。</param>
+    public FileSystemManager(
+        ILogger<FileSystemManager> logger,
+        RuntimePathOptions runtimePathOptions,
+        RuntimeTuningOptions runtimeTuningOptions)
     {
         _logger = logger;
+        _runtimeTuningOptions = runtimeTuningOptions;
         _rootPath = runtimePathOptions.RootPath;
         _runtimePath = runtimePathOptions.RuntimePath;
         _definitionsPath = runtimePathOptions.DefinitionsPath;
@@ -224,7 +240,13 @@ public class FileSystemManager
                 HttpBaseUrl = $"http://127.0.0.1:{port}",
                 WsUrl = $"ws://127.0.0.1:{port}/ws",
                 TokenFile = _tokenFilePath,
-                StartedAtUtc = DateTime.UtcNow
+                StartedAtUtc = DateTime.UtcNow,
+                RuntimeTuning = new HubRuntimeTuning
+                {
+                    LeaseSeconds = _runtimeTuningOptions.LeaseSeconds,
+                    OnlineThresholdSeconds = _runtimeTuningOptions.OnlineThresholdSeconds,
+                    LaunchDedupeWindowSeconds = _runtimeTuningOptions.LaunchDedupeWindowSeconds
+                }
             };
 
             var tempPath = _hubJsonPath + ".tmp";
