@@ -12,24 +12,21 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    new_instance_id,
+    safe_remove,
+    write_definition,
+)
 
 
 class TestInvocationNotify(unittest.TestCase):
     """Invocation notify 测试类"""
 
-    def _definitions_dir(self):
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
-
     def _create_definition(self, app_id, rpc=True):
-        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
             "displayName": app_id,
@@ -38,13 +35,11 @@ class TestInvocationNotify(unittest.TestCase):
                 "events": False
             }
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        return path
+        return write_definition(app_id, payload)
 
     @staticmethod
     def _instance_id(prefix):
-        return f"{prefix}-{uuid.uuid4().hex[:10]}"
+        return new_instance_id(prefix)
 
     def test_notify_online_delivery(self):
         """M2-NOTIFY-001: 在线 notify 后可被 poll 拉取"""
@@ -133,11 +128,7 @@ class TestInvocationNotify(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -200,11 +191,7 @@ class TestInvocationNotify(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -310,11 +297,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -348,11 +331,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -459,11 +438,7 @@ class TestInvocationNotify(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 

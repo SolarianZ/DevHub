@@ -16,7 +16,13 @@ from urllib.parse import urlparse
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    get_runtime_hub_info,
+    new_instance_id,
+)
 
 
 class WebSocketClosed(Exception):
@@ -207,20 +213,11 @@ class TestWsEvents:
 
     @staticmethod
     def _runtime_hub_info():
-        runtime_dir = DiscoveryService.get_runtime_directory()
-        hub_json_path = os.path.join(runtime_dir, "hub.json")
-
-        with open(hub_json_path, "r", encoding="utf-8") as f:
-            hub_info = json.load(f)
-
-        with open(hub_info["tokenFile"], "r", encoding="utf-8") as f:
-            token = f.read().strip()
-
-        return hub_info["httpBaseUrl"], hub_info["wsUrl"], token
+        return get_runtime_hub_info()
 
     @staticmethod
     def _new_instance_id(prefix):
-        return f"{prefix}-{uuid.uuid4().hex[:10]}"
+        return new_instance_id(prefix)
 
     @staticmethod
     def _new_app_id(suffix):

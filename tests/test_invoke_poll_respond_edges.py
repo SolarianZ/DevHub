@@ -12,24 +12,21 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    new_instance_id,
+    safe_remove,
+    write_definition,
+)
 
 
 class TestInvokePollRespondEdges(unittest.TestCase):
     """Invocation poll/respond 规范边界测试。"""
 
-    def _definitions_dir(self):
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
-
     def _create_definition(self, app_id):
-        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
             "displayName": app_id,
@@ -38,9 +35,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
                 "events": False,
             },
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        return path
+        return write_definition(app_id, payload)
 
     @staticmethod
     def _new_app_id(suffix):
@@ -48,7 +43,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
     @staticmethod
     def _new_instance_id(suffix):
-        return f"m2-invoke-edge-{suffix}-{uuid.uuid4().hex[:10]}"
+        return new_instance_id(f"m2-invoke-edge-{suffix}")
 
     def test_invoke_edge_001_poll_long_wait_semantics_and_server_time(self):
         """M2-INVOKE-EDGE-001: poll 无可用项时应长轮询并返回 serverTimeUtc。"""
@@ -103,11 +98,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -204,11 +195,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -288,11 +275,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -365,11 +348,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 

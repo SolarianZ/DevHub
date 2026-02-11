@@ -12,21 +12,18 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    safe_remove,
+    write_definition,
+)
 
 
 class TestLaunchSpecEdges(unittest.TestCase):
     """Launch 规范边界测试类。"""
-
-    def _definitions_dir(self):
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
 
     @staticmethod
     def _new_app_id(suffix):
@@ -36,7 +33,6 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
 
     def _create_definition(self, app_id, launch_config):
-        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
             "displayName": app_id,
@@ -46,10 +42,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             },
             "launch": launch_config,
         }
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        return path
+        return write_definition(app_id, payload)
 
     def test_launch_edge_001_default_dedupe_template_should_apply(self):
         """M2-LAUNCH-EDGE-001: 未配置 dedupeKeyTemplate 时使用默认模板。"""
@@ -108,11 +101,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -167,11 +156,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -219,11 +204,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -292,11 +273,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 

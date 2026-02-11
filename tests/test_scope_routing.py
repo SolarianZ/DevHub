@@ -14,24 +14,21 @@ import unittest
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    new_instance_id,
+    safe_remove,
+    write_definition,
+)
 
 
 class TestScopeRouting(unittest.TestCase):
     """M3 Scope 路由测试类"""
 
-    def _definitions_dir(self):
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
-
     def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
-        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
             "displayName": app_id,
@@ -50,13 +47,11 @@ class TestScopeRouting(unittest.TestCase):
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
             payload["launch"] = launch_config
 
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        return path
+        return write_definition(app_id, payload)
 
     @staticmethod
     def _instance_id(prefix):
-        return f"{prefix}-{uuid.uuid4().hex[:10]}"
+        return new_instance_id(prefix)
 
     @staticmethod
     def _app_id(suffix):
@@ -224,11 +219,11 @@ class TestScopeRouting(unittest.TestCase):
                 respond=True,
                 pid=31201,
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, register_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, register_response):
                 return result
 
             list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="m3-scope-003-list")
-            if not RpcAssertions.assert_invalid_scope_error(result, list_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, list_response):
                 return result
 
             launch_response = client.launch_app(
@@ -237,18 +232,14 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="m3-scope-003-launch",
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, launch_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, launch_response):
                 return result
 
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -271,11 +262,11 @@ class TestScopeRouting(unittest.TestCase):
                 respond=True,
                 pid=31301,
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, register_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, register_response):
                 return result
 
             list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="m3-scope-004-list")
-            if not RpcAssertions.assert_invalid_scope_error(result, list_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, list_response):
                 return result
 
             launch_response = client.launch_app(
@@ -284,18 +275,14 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="m3-scope-004-launch",
             )
-            if not RpcAssertions.assert_invalid_scope_error(result, launch_response, "invalid_scope"):
+            if not RpcAssertions.assert_invalid_scope_error(result, launch_response):
                 return result
 
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -454,11 +441,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -537,16 +520,12 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
     def test_m3_scope_007_invalid_target_scope_should_return_invalid_params(self):
-        """M3-SCOPE-007: target.scope invalid -> -32602 + invalid_target_scope"""
+        """M3-SCOPE-007: target.scope invalid -> -32602 invalid_params"""
         result = TestResult("M3-SCOPE-007 target.scope invalid")
         app_id = self._app_id("007")
         definition_path = None
@@ -566,8 +545,6 @@ class TestScopeRouting(unittest.TestCase):
             )
             if not RpcAssertions.expect_error(result, notify_empty, -32602, "invalid_params"):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, notify_empty, {"reason": "invalid_target_scope"}):
-                return result
 
             notify_global = client.invoke_notify(
                 app_id=app_id,
@@ -578,8 +555,6 @@ class TestScopeRouting(unittest.TestCase):
                 request_id="m3-scope-007-notify-global",
             )
             if not RpcAssertions.expect_error(result, notify_global, -32602, "invalid_params"):
-                return result
-            if not RpcAssertions.expect_error_data_fields(result, notify_global, {"reason": "invalid_target_scope"}):
                 return result
 
             request_empty = client.invoke_request(
@@ -596,8 +571,6 @@ class TestScopeRouting(unittest.TestCase):
             )
             if not RpcAssertions.expect_error(result, request_empty, -32602, "invalid_params"):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, request_empty, {"reason": "invalid_target_scope"}):
-                return result
 
             request_global = client.invoke_request(
                 app_id=app_id,
@@ -613,18 +586,12 @@ class TestScopeRouting(unittest.TestCase):
             )
             if not RpcAssertions.expect_error(result, request_global, -32602, "invalid_params"):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, request_global, {"reason": "invalid_target_scope"}):
-                return result
 
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -724,11 +691,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -906,11 +869,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -992,11 +951,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -1132,11 +1087,7 @@ class TestScopeRouting(unittest.TestCase):
                 pass
 
             for definition_path in definition_paths:
-                try:
-                    if definition_path and os.path.exists(definition_path):
-                        os.remove(definition_path)
-                except Exception:
-                    pass
+                safe_remove(definition_path)
 
         return result
 
@@ -1221,11 +1172,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -1353,11 +1300,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 

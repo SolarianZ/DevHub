@@ -10,7 +10,7 @@ import requests
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @contextmanager
@@ -83,6 +83,68 @@ class DiscoveryService:
             token = f.read().strip()
 
         return hub_info["httpBaseUrl"], token
+
+
+def get_definitions_dir() -> str:
+    """获取应用定义目录（按 Spec 与环境变量约定）。"""
+    if "DEVHUB_APPDEFS_DIR" in os.environ:
+        definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
+    else:
+        runtime_dir = DiscoveryService.get_runtime_directory()
+        definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
+
+    os.makedirs(definitions_dir, exist_ok=True)
+    return definitions_dir
+
+
+def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
+    """写入测试 AppDefinition 并返回文件路径。"""
+    definition_path = os.path.join(get_definitions_dir(), f"{app_id}.json")
+    with open(definition_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return definition_path
+
+
+def safe_remove(path: Optional[str]):
+    """安全删除文件（不存在或删除失败时忽略）。"""
+    if not path:
+        return
+
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def new_instance_id(prefix: str) -> str:
+    """生成统一格式实例 ID。"""
+    return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+
+def get_runtime_hub_info() -> Tuple[str, str, str]:
+    """读取运行时 HTTP/WS 地址与 token。"""
+    runtime_dir = DiscoveryService.get_runtime_directory()
+    hub_json_path = os.path.join(runtime_dir, "hub.json")
+
+    if not os.path.exists(hub_json_path):
+        raise FileNotFoundError(f"hub.json not found: {hub_json_path}")
+
+    with open(hub_json_path, "r", encoding="utf-8") as f:
+        hub_info = json.load(f)
+
+    ws_url = hub_info.get("wsUrl")
+    if not ws_url:
+        raise ValueError("hub.json 缺少 wsUrl")
+
+    token_path = hub_info.get("tokenFile")
+    if not token_path or not os.path.exists(token_path):
+        raise FileNotFoundError(f"Token file not found: {token_path}")
+
+    with open(token_path, "r", encoding="utf-8") as f:
+        token = f.read().strip()
+
+    return hub_info["httpBaseUrl"], ws_url, token
 
 
 class RpcClient:
@@ -469,10 +531,13 @@ class RpcAssertions:
         return True
 
     @staticmethod
-    def assert_invalid_scope_error(result: TestResult, response: dict, reason: str):
+    def assert_invalid_scope_error(result: TestResult, response: dict, reason: Optional[str] = None):
         """断言 scope 相关 invalid_params 错误。"""
         if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
             return False
+
+        if reason is None:
+            return True
 
         return RpcAssertions.expect_error_data_fields(result, response, {"reason": reason})
 

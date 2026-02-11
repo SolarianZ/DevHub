@@ -32,6 +32,11 @@ class TestInvalidParams(unittest.TestCase):
                 ("hub.apps.heartbeat", ["invalid"]),
                 ("hub.apps.unregisterInstance", ["invalid"]),
                 ("hub.apps.listInstances", ["invalid"]),
+                ("hub.apps.launch", ["invalid"]),
+                ("hub.invoke.notify", ["invalid"]),
+                ("hub.invoke.request", ["invalid"]),
+                ("hub.invoke.poll", ["invalid"]),
+                ("hub.invoke.respond", ["invalid"]),
             ]
 
             for method, params in cases:

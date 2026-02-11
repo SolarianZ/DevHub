@@ -309,9 +309,7 @@ class TestAppInstances(unittest.TestCase):
             ):
                 return result
 
-            error_data = response.get("error", {}).get("data", {})
-            if error_data and error_data.get("reason") not in ["offline_no_queue", "unknown_instance", "target_instance_missing"]:
-                result.mark_failure(f"❌ reason 不在规范允许范围: {error_data}")
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "unknown_instance"}):
                 return result
 
             result.mark_success()

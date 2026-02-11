@@ -5,13 +5,20 @@ DevHub M4 WS 传输矩阵补充测试
 
 import os
 import sys
-import json
 import uuid
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    RpcClient,
+    RpcAssertions,
+    TestResult,
+    get_runtime_hub_info,
+    new_instance_id,
+    safe_remove,
+    write_definition,
+)
 from tests.test_ws_events import SimpleWebSocketClient
 
 
@@ -21,18 +28,7 @@ class TestWsTransportMatrix(unittest.TestCase):
     @staticmethod
     def _runtime_hub_info():
         """读取运行时 HTTP/WS 地址与 token。"""
-        http_base_url, token = DiscoveryService.get_hub_info()
-        runtime_dir = DiscoveryService.get_runtime_directory()
-        hub_json_path = os.path.join(runtime_dir, "hub.json")
-
-        with open(hub_json_path, "r", encoding="utf-8") as f:
-            hub_info = json.load(f)
-
-        ws_url = hub_info.get("wsUrl")
-        if not ws_url:
-            raise ValueError("hub.json 缺少 wsUrl")
-
-        return http_base_url, ws_url, token
+        return get_runtime_hub_info()
 
     @staticmethod
     def _new_app_id(suffix):
@@ -40,20 +36,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
     @staticmethod
     def _new_instance_id(suffix):
-        return f"m4-ws-transport-{suffix}-{uuid.uuid4().hex[:10]}"
-
-    def _definitions_dir(self):
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
+        return new_instance_id(f"m4-ws-transport-{suffix}")
 
     def _create_definition(self, app_id):
-        path = os.path.join(self._definitions_dir(), f"{app_id}.json")
         payload = {
             "appId": app_id,
             "displayName": app_id,
@@ -62,9 +47,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                 "events": False,
             },
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        return path
+        return write_definition(app_id, payload)
 
     @staticmethod
     def _authenticate(ws, token, request_id):
@@ -192,11 +175,7 @@ class TestWsTransportMatrix(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if definition_path and os.path.exists(definition_path):
-                    os.remove(definition_path)
-            except Exception:
-                pass
+            safe_remove(definition_path)
 
         return result
 
@@ -270,24 +249,25 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                invalid_get_def = self._ws_call(ws, "matrix-invalid-get-def", "hub.apps.getDefinition", {})
-                if not RpcAssertions.expect_error(result, invalid_get_def, -32602, "invalid_params", expected_id="matrix-invalid-get-def"):
-                    return result
+                cases = [
+                    ("matrix-invalid-ping-array", "hub.ping"),
+                    ("matrix-invalid-list-def-array", "hub.apps.listDefinitions"),
+                    ("matrix-invalid-get-def-array", "hub.apps.getDefinition"),
+                    ("matrix-invalid-list-instances-array", "hub.apps.listInstances"),
+                    ("matrix-invalid-subscribe-array", "hub.events.subscribe"),
+                    ("matrix-invalid-unsubscribe-array", "hub.events.unsubscribe"),
+                ]
 
-                invalid_list_instances = self._ws_call(
-                    ws,
-                    "matrix-invalid-list-instances",
-                    "hub.apps.listInstances",
-                    {"scope": ""},
-                )
-                if not RpcAssertions.expect_error(
-                    result,
-                    invalid_list_instances,
-                    -32602,
-                    "invalid_params",
-                    expected_id="matrix-invalid-list-instances",
-                ):
-                    return result
+                for request_id, method in cases:
+                    response = self._ws_call(ws, request_id, method, [])
+                    if not RpcAssertions.expect_error(
+                        result,
+                        response,
+                        -32602,
+                        "invalid_params",
+                        expected_id=request_id,
+                    ):
+                        return result
 
             result.mark_success()
         except Exception as e:
