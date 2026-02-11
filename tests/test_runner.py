@@ -6,6 +6,8 @@ DevHub M1~M4 测试运行器
 import os
 import sys
 import logging
+import threading
+import time
 
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -50,6 +52,65 @@ def setup_logging(log_file):
         force=True
     )
     return logging.getLogger(__name__)
+
+
+class StageSpinner:
+    """命令行原地旋转进度指示器。"""
+
+    def __init__(self, stage_name, interval_seconds=0.2, stream=None):
+        self.stage_name = stage_name
+        self.interval_seconds = interval_seconds
+        self.stream = stream or sys.stdout
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._start_monotonic = 0.0
+        self._last_render_length = 0
+
+    def start(self):
+        """启动 spinner 线程。"""
+        self._stop_event.clear()
+        self._start_monotonic = time.monotonic()
+        self._thread = threading.Thread(target=self._render_loop, name="devhub-test-spinner", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        """停止 spinner 并清理当前行。"""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+        if self._last_render_length > 0:
+            clear_width = max(self._last_render_length, 120)
+            self.stream.write("\r" + (" " * clear_width) + "\r")
+            self.stream.flush()
+            self._last_render_length = 0
+
+    def _render_loop(self):
+        frames = ("|", "/", "-", "\\")
+        frame_index = 0
+        while not self._stop_event.is_set():
+            elapsed_seconds = int(time.monotonic() - self._start_monotonic)
+            content = f"{frames[frame_index]} {self.stage_name} 进行中... {elapsed_seconds}s"
+            self._last_render_length = max(self._last_render_length, len(content))
+            self.stream.write("\r" + content)
+            self.stream.flush()
+            frame_index = (frame_index + 1) % len(frames)
+            self._stop_event.wait(self.interval_seconds)
+
+
+def run_suite_with_spinner(logger, stage_name, runner):
+    """在执行长耗时测试套件时显示活动状态。"""
+    logger.info("=== %s ===", stage_name)
+    spinner = StageSpinner(stage_name)
+    started_at = time.monotonic()
+    spinner.start()
+    try:
+        return runner()
+    finally:
+        spinner.stop()
+        elapsed_seconds = time.monotonic() - started_at
+        logger.info("=== %s 完成，用时 %.1fs ===", stage_name, elapsed_seconds)
 
 
 def run_all_tests(full=False, fast=False):
@@ -98,9 +159,12 @@ def run_all_tests(full=False, fast=False):
     app_instances_tests = TestAppInstances()
     report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=full))
 
-    logger.info("=== 运行 Scope 路由测试 ===")
     scope_routing_tests = TestScopeRouting()
-    report.results.extend(scope_routing_tests.run_all_tests(full=full))
+    report.results.extend(
+        run_suite_with_spinner(
+            logger,
+            "运行 Scope 路由测试",
+            lambda: scope_routing_tests.run_all_tests(full=full)))
 
     logger.info("=== 运行 Invocation Notify 测试 ===")
     invocation_notify_tests = TestInvocationNotify()
@@ -110,13 +174,19 @@ def run_all_tests(full=False, fast=False):
     invocation_request_tests = TestInvocationRequest()
     report.results.extend(invocation_request_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 Invocation Poll/Respond 测试 ===")
     invocation_poll_respond_tests = TestInvocationPollRespond()
-    report.results.extend(invocation_poll_respond_tests.run_all_tests(full=full))
+    report.results.extend(
+        run_suite_with_spinner(
+            logger,
+            "运行 Invocation Poll/Respond 测试",
+            lambda: invocation_poll_respond_tests.run_all_tests(full=full)))
 
-    logger.info("=== 运行 Invocation Poll/Respond 规范边界测试 ===")
     invoke_poll_respond_edges_tests = TestInvokePollRespondEdges()
-    report.results.extend(invoke_poll_respond_edges_tests.run_all_tests(full=full))
+    report.results.extend(
+        run_suite_with_spinner(
+            logger,
+            "运行 Invocation Poll/Respond 规范边界测试",
+            lambda: invoke_poll_respond_edges_tests.run_all_tests(full=full)))
 
     logger.info("=== 运行 Launch + Invocation 测试 ===")
     launch_invocation_tests = TestLaunchInvocation()

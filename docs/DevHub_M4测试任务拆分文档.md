@@ -8,11 +8,12 @@
 > - [DevHub_M4细化任务文档.md](./DevHub_M4细化任务文档.md)
 > - [DevHub_M3测试任务拆分文档.md](./DevHub_M3测试任务拆分文档.md)
 
-## 当前状态（截至 2026-02-08）
+## 当前状态（截至 2026-02-11）
 
 - M4 测试任务总体状态：**首轮已完成并接入回归入口**。
 - 已新增 WS 黑盒模块与白盒事件链路测试，覆盖 M4 必测主路径。
 - runner 已由 M1~M3 扩展为 M1~M4。
+- runner 已为长耗时静默阶段（Scope 路由、Invocation Poll/Respond、Invocation Poll/Respond 规范边界）增加 spinner 活动进度指示，降低误判卡死风险。
 - 已补齐缺口回归：`M4-WS-011`（unknown event type）与 `M4-WS-012`（unregistered 事件）。
 - 白盒补测（2026-02-08）：新增传输层校验组件白盒（HTTP/WS/JSON-RPC 信封）、`unsupported_event_type` 细粒度断言与 `hub.event` 通知字段完整性断言。
 
@@ -111,6 +112,7 @@
 - [x] default 模式纳入协议版本不匹配与断线重连场景。
 - [x] full 模式额外执行 `M4-WS-008`（failed 事件流）。
 - [x] default 模式纳入 `M4-WS-011/012`，避免缺口项仅在专项验证中可见。
+- [x] 为 `Scope 路由`、`Invocation Poll/Respond`、`Invocation Poll/Respond 规范边界` 三个长耗时静默阶段增加 runner 侧 spinner 活动状态指示与阶段耗时日志。
 
 ---
 
