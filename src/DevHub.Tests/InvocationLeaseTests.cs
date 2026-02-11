@@ -18,7 +18,7 @@ public class InvocationLeaseTests
     [Fact]
     public async Task Respond_ByNonLeaseHolder_ShouldReturnConflict()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceA = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-a",
@@ -37,7 +37,7 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("lease.app"), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instanceA, maxCount: 10, waitMs: 0, CancellationToken.None);
@@ -51,7 +51,7 @@ public class InvocationLeaseTests
     [Fact]
     public async Task Respond_DuplicateSubmission_ShouldReturnConflict()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-owner",
@@ -62,7 +62,7 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("lease.app"), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 10, waitMs: 0, CancellationToken.None);
@@ -79,7 +79,7 @@ public class InvocationLeaseTests
     [Fact]
     public async Task LeaseExpired_ShouldBeRequeuedAndAttemptIncremented()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceA = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-requeue-a",
@@ -98,7 +98,7 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
         var firstPoll = await store.PollAsync(instanceA, maxCount: 1, waitMs: 0, CancellationToken.None);
@@ -122,7 +122,7 @@ public class InvocationLeaseTests
     [Fact]
     public async Task Respond_AfterLeaseExpired_ShouldReturnDeliveryConflict()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-expired-owner",
@@ -133,7 +133,7 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
         var firstPoll = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);

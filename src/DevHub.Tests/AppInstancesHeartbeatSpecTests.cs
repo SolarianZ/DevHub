@@ -20,7 +20,7 @@ public class AppInstancesHeartbeatSpecTests
     [Fact]
     public async Task Spec_6_3_6_Heartbeat_ShouldReturnOkAndRefreshLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var initialLastSeen = DateTime.UtcNow.AddSeconds(-10);
 
         appRegistry.RegisterInstance(new AppInstance
@@ -34,7 +34,7 @@ public class AppInstancesHeartbeatSpecTests
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
 
-        var handler = new AppInstancesHandler(appRegistry, _handlerLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
 
         var firstResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -80,8 +80,8 @@ public class AppInstancesHeartbeatSpecTests
     [Fact]
     public async Task Spec_6_3_6_Heartbeat_UnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _handlerLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {

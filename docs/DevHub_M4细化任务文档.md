@@ -129,3 +129,41 @@
 - 在 full 回归中持续观察 WS 连接高并发下的事件丢弃行为。
 - 评估是否在 v1.x 增加可选 `maxPendingEvents` 保护参数（不改协议字段）。
 - 为 M5 SDK 增加统一 WS 客户端封装（鉴权、重连、订阅恢复策略）。
+
+---
+
+## 5. M4 收尾补充：DI 兼容构造收敛（2026-02-11）
+
+### 5.1 完成项
+- [x] 删除 Core 侧 8 个兼容构造，统一仅保留主构造（显式依赖注入）：
+  - [x] `AppRegistry(ILogger<...>)`
+  - [x] `AppInstancesHandler(AppRegistry, ILogger, eventBus?)`
+  - [x] `InvocationStore(ILogger, routingService, eventBus?)`
+  - [x] `InvocationHandler(..., ILogger, eventBus?)`
+  - [x] `FileSystemManager(ILogger, string? definitionsPath)`
+  - [x] `FileSystemManager(ILogger)`
+  - [x] `RuntimeHttpBaseUrlProvider(ILogger)`
+  - [x] `LaunchCoordinator(..., ILogger)`（内部默认 `ProcessLauncher/SystemClock`）
+- [x] 全量迁移仓内调用点到主构造，测试与 Host 测试均改为显式传入 `SystemClock`、`ProcessLauncher`、`RuntimePathOptions`。
+- [x] 新增 `src/DevHub.Tests/GlobalUsings.cs`，统一测试工程对 `DevHub.Core.Services.Abstractions` 的可见性，避免重复 `using`。
+
+### 5.2 影响范围
+- Core 改造文件：
+  - `src/DevHub.Core/Services/AppRegistry.cs`
+  - `src/DevHub.Core/Services/Rpc/Handlers/AppInstancesHandler.cs`
+  - `src/DevHub.Core/Services/Invocation/InvocationStore.cs`
+  - `src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs`
+  - `src/DevHub.Core/Services/FileSystemManager.cs`
+  - `src/DevHub.Core/Services/Invocation/RuntimeHttpBaseUrlProvider.cs`
+  - `src/DevHub.Core/Services/Invocation/LaunchCoordinator.cs`
+- 测试与辅助构造文件：`src/DevHub.Tests/*`、`src/DevHub.Host.Tests/TestHelpers/HostTestContextFactory.cs`。
+- 本次未修改 `Spec.md`，未改变协议字段、错误码语义与运行时数据格式。
+
+### 5.3 验证记录
+- 已执行并通过：
+  - `dotnet build src/DevHub.slnx -c Release`
+  - `dotnet test src/DevHub.Tests/DevHub.Tests.csproj -c Release --no-build`
+  - `dotnet test src/DevHub.Host.Tests/DevHub.Host.Tests.csproj -c Release --no-build`
+- 黑盒 `python3 tests/test_runner.py --fast --no-header`：
+  - 在当前沙箱环境下连接本地 Host 端口时报 `Operation not permitted/Connection refused`，未形成可用结果；
+  - 该失败表现为环境限制，不属于本次 DI 收敛改造引入的编译/单测回归。

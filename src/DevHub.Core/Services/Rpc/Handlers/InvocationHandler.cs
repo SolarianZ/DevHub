@@ -64,39 +64,6 @@ public class InvocationHandler : IRpcHandler
         _logger = logger;
     }
 
-    /// <summary>
-    /// 初始化处理器（使用系统时钟）。
-    /// </summary>
-    /// <param name="appRegistry">应用实例注册表。</param>
-    /// <param name="definitionProvider">定义提供器。</param>
-    /// <param name="routingService">路由服务。</param>
-    /// <param name="store">调用存储。</param>
-    /// <param name="requestWaiter">请求等待器。</param>
-    /// <param name="launchCoordinator">启动协调器。</param>
-    /// <param name="logger">日志记录器。</param>
-    /// <param name="eventBus">事件总线。</param>
-    public InvocationHandler(
-        AppRegistry appRegistry,
-        IDefinitionProvider definitionProvider,
-        InvocationRoutingService routingService,
-        InvocationStore store,
-        InvocationRequestWaiter requestWaiter,
-        LaunchCoordinator launchCoordinator,
-        ILogger<InvocationHandler> logger,
-        HubEventBus? eventBus = null)
-        : this(
-            appRegistry,
-            definitionProvider,
-            routingService,
-            store,
-            requestWaiter,
-            launchCoordinator,
-            new SystemClock(),
-            logger,
-            eventBus)
-    {
-    }
-
     /// <inheritdoc />
     public string Method => "hub.invoke";
 

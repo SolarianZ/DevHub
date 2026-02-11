@@ -33,15 +33,6 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 初始化应用程序实例注册表（兼容构造）。
-    /// </summary>
-    /// <param name="logger">日志记录器。</param>
-    public AppRegistry(ILogger<AppRegistry> logger)
-        : this(new SystemClock(), logger)
-    {
-    }
-
-    /// <summary>
     /// 清理过期实例的定时器回调
     /// </summary>
     /// <param name="state">状态参数</param>

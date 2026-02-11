@@ -28,14 +28,6 @@ public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
     private readonly ILogger<RuntimeHttpBaseUrlProvider> _logger;
 
     /// <summary>
-    /// 初始化运行时 HTTP 基础地址提供器。
-    /// </summary>
-    public RuntimeHttpBaseUrlProvider(ILogger<RuntimeHttpBaseUrlProvider> logger)
-        : this(logger, RuntimePathOptions.Resolve())
-    {
-    }
-
-    /// <summary>
     /// 使用统一路径选项初始化运行时 HTTP 基础地址提供器。
     /// </summary>
     /// <param name="logger">日志记录器。</param>

@@ -150,8 +150,8 @@ public class SpecConformanceTests : IDisposable
     public async Task AppInstancesHandler_RegisterInstance_ShouldReturnInstanceInResult()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "req-1",
@@ -192,8 +192,8 @@ public class SpecConformanceTests : IDisposable
     public async Task AppInstancesHandler_RegisterInstance_InvalidInputs_ShouldReturnInvalidParams()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
 
         // pid 非法
         var invalidPidRequest = new JsonRpcRequest
@@ -267,8 +267,8 @@ public class SpecConformanceTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_UnregisterInstance_ShouldBeIdempotent()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
 
         var registerRequest = new JsonRpcRequest
         {
@@ -328,8 +328,8 @@ public class SpecConformanceTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_ListInstances_DefaultIncludeOfflineFalse_ShouldFilterOfflineInstances()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
 
         await handler.HandleAsync(new JsonRpcRequest
         {
@@ -390,8 +390,8 @@ public class SpecConformanceTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScopeFilter()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _instancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
 
         await handler.HandleAsync(new JsonRpcRequest
         {

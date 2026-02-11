@@ -21,9 +21,9 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public async Task SweepOnce_ShouldNotifyWaiterTimeout_ForRequestTimeout()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 
@@ -45,9 +45,9 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public async Task SweepOnce_ShouldNotifyWaiterExpired_ForRequestTtlElapsed()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 
@@ -69,9 +69,9 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public void SweepOnce_ShouldIgnoreNotifyTimeoutTransitions_ForWaiterCompletion()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 

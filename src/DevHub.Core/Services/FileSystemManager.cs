@@ -27,16 +27,6 @@ public class FileSystemManager
     private string? _sessionToken;
 
     /// <summary>
-    /// 初始化文件系统管理器。
-    /// </summary>
-    /// <param name="logger">日志记录器。</param>
-    /// <param name="definitionsPath">可选的应用定义目录路径覆盖。</param>
-    public FileSystemManager(ILogger<FileSystemManager> logger, string? definitionsPath = null)
-        : this(logger, RuntimePathOptions.Resolve(definitionsPath))
-    {
-    }
-
-    /// <summary>
     /// 使用统一路径选项初始化文件系统管理器。
     /// </summary>
     /// <param name="logger">日志记录器。</param>
@@ -51,15 +41,6 @@ public class FileSystemManager
         _logsPath = runtimePathOptions.LogsPath;
         _tokenFilePath = runtimePathOptions.TokenFilePath;
         _hubJsonPath = runtimePathOptions.HubJsonPath;
-    }
-
-    /// <summary>
-    /// 使用默认配置初始化文件系统管理器。
-    /// </summary>
-    /// <param name="logger">日志记录器。</param>
-    public FileSystemManager(ILogger<FileSystemManager> logger)
-        : this(logger, RuntimePathOptions.Resolve())
-    {
     }
 
     /// <summary>

@@ -26,27 +26,29 @@ internal static class HostTestContextFactory
         fileSystemManager.InitializeDirectories();
         var token = fileSystemManager.GetToken();
 
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var eventBus = new HubEventBus(Mock.Of<ILogger<HubEventBus>>());
 
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, eventBus);
+        var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock(), eventBus);
         var requestWaiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), runtimePathOptions);
         var launchCoordinator = new LaunchCoordinator(
             definitionProvider,
             appRegistry,
             runtimeHttpBaseUrlProvider,
+            new ProcessLauncher(),
+            new SystemClock(),
             Mock.Of<ILogger<LaunchCoordinator>>());
 
         var handlers = new IRpcHandler[]
         {
             new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>()),
             new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>()),
-            new AppInstancesHandler(appRegistry, Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
+            new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
             new InvocationHandler(
                 appRegistry,
                 definitionProvider,
@@ -54,6 +56,7 @@ internal static class HostTestContextFactory
                 invocationStore,
                 requestWaiter,
                 launchCoordinator,
+                new SystemClock(),
                 Mock.Of<ILogger<InvocationHandler>>(),
                 eventBus),
             new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>())
@@ -76,5 +79,4 @@ internal sealed record HostTestContext(
     FileSystemManager FileSystemManager,
     HubEventBus EventBus,
     string Token);
-
 

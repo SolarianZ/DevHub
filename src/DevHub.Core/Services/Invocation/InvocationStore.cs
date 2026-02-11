@@ -32,14 +32,6 @@ public class InvocationStore
     }
 
     /// <summary>
-    /// 初始化存储（兼容构造）。
-    /// </summary>
-    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, HubEventBus? eventBus = null)
-        : this(logger, routingService, new SystemClock(), eventBus)
-    {
-    }
-
-    /// <summary>
     /// 创建并存储调用。
     /// </summary>
     /// <param name="invocation">调用对象。</param>

@@ -37,7 +37,7 @@ public class InvocationEventFlowTests : IDisposable
     [Fact]
     public async Task NotifyPollRespondValue_ShouldPublishQueuedDeliveredCompleted()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-event-success",
@@ -124,7 +124,7 @@ public class InvocationEventFlowTests : IDisposable
     [Fact]
     public async Task NotifyPollRespondError_ShouldPublishFailed()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-event-failed",
@@ -229,11 +229,11 @@ public class InvocationEventFlowTests : IDisposable
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, eventBus);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock(), eventBus);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationLogger.Object, eventBus);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationLogger.Object, eventBus);
         return (handler, eventBus);
     }
 

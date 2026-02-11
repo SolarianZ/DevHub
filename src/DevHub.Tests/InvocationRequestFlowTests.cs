@@ -39,7 +39,7 @@ public class InvocationRequestFlowTests : IDisposable
         const string instanceId = "request-success-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
@@ -121,7 +121,7 @@ public class InvocationRequestFlowTests : IDisposable
         const string instanceId = "request-failed-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
@@ -203,7 +203,7 @@ public class InvocationRequestFlowTests : IDisposable
         const string instanceId = "request-timeout-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
@@ -279,7 +279,7 @@ public class InvocationRequestFlowTests : IDisposable
         const string instanceId = "request-canceled-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
@@ -293,11 +293,11 @@ public class InvocationRequestFlowTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
         using var cts = new CancellationTokenSource();
 
         var requestTask = handler.HandleAsync(new JsonRpcRequest
@@ -364,7 +364,7 @@ public class InvocationRequestFlowTests : IDisposable
     public async Task Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
     {
         WriteDefinition("request-invalid.app", rpcEnabled: true);
-        var handler = CreateHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -395,7 +395,7 @@ public class InvocationRequestFlowTests : IDisposable
     public async Task Request_WhenOfflineAndQueueIfOfflineFalse_ShouldReturnInstanceNotFound()
     {
         WriteDefinition("request-offline.app", rpcEnabled: true);
-        var handler = CreateHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -431,7 +431,7 @@ public class InvocationRequestFlowTests : IDisposable
         const string instanceId = "request-default-options-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
@@ -445,11 +445,11 @@ public class InvocationRequestFlowTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var requestTask = handler.HandleAsync(new JsonRpcRequest
@@ -500,11 +500,11 @@ public class InvocationRequestFlowTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled)

@@ -40,7 +40,7 @@ public class CoreServiceTests
         {
             using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
             var token = fileSystemManager.GetToken();
             var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
 
@@ -67,7 +67,7 @@ public class CoreServiceTests
         {
             using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
             var token1 = fileSystemManager.GetToken();
             var token2 = fileSystemManager.GetToken();
 
@@ -93,8 +93,8 @@ public class CoreServiceTests
         {
             using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, testRoot);
-            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
 
             var token1 = fileSystemManager1.GetToken();
             var token2 = fileSystemManager2.GetToken();
@@ -122,7 +122,7 @@ public class CoreServiceTests
         {
             using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
             _ = fileSystemManager.GetToken();
             fileSystemManager.WriteHubJson(47231, "test-hub");
 
@@ -162,7 +162,7 @@ public class CoreServiceTests
         {
             using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, testRoot);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
             _ = fileSystemManager.GetToken();
 
             fileSystemManager.WriteHubJson(48001, "v1");
@@ -189,7 +189,7 @@ public class CoreServiceTests
     public void AppRegistry_RegisterInstance_ShouldAddOrUpdateInstance()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
         var instance = new AppInstance
         {
             InstanceId = "test-instance-1",
@@ -214,7 +214,7 @@ public class CoreServiceTests
     public void AppRegistry_Heartbeat_ShouldUpdateLastSeen()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
         var instance = new AppInstance
         {
             InstanceId = "test-instance-2",
@@ -240,7 +240,7 @@ public class CoreServiceTests
     public void AppRegistry_ListInstances_ShouldFilterByScope()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
         var globalInstance = new AppInstance
         {
             InstanceId = "test-instance-3",

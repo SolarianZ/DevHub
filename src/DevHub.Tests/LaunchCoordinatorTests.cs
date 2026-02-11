@@ -36,9 +36,9 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "missing.app",
@@ -62,9 +62,9 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-missing.app",
@@ -88,9 +88,9 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-started.app",
@@ -312,9 +312,9 @@ public class LaunchCoordinatorTests : IDisposable
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(_registryLogger.Object);
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        return new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        return new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
     }
 
     private void WriteHubRuntime(string httpBaseUrl)
@@ -386,6 +386,5 @@ public class LaunchCoordinatorTests : IDisposable
         throw new Xunit.Sdk.XunitException($"等待文件生成超时: {filePath}");
     }
 }
-
 
 

@@ -39,16 +39,16 @@ public class InvocationRoutingTests : IDisposable
     {
         WriteDefinition("disabled-app", rpcEnabled: false);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -76,7 +76,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Poll_WithPollDisabledInstance_ShouldReturnForbidden()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "poll-disabled",
@@ -90,11 +90,11 @@ public class InvocationRoutingTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -115,7 +115,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Poll_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -135,7 +135,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Respond_WithRespondDisabledInstance_ShouldReturnForbidden()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "respond-disabled",
@@ -149,11 +149,11 @@ public class InvocationRoutingTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -179,7 +179,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Respond_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -204,16 +204,16 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
         var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
         var requestResponse = await invocationHandler.HandleAsync(new JsonRpcRequest
@@ -261,16 +261,16 @@ public class InvocationRoutingTests : IDisposable
     {
         WriteDefinition("notify-launch-missing", rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -303,7 +303,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_TtlBelowMinimum_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -332,7 +332,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_TtlBelowMinimum_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -364,7 +364,7 @@ public class InvocationRoutingTests : IDisposable
     [InlineData(101)]
     public async Task InvocationHandler_Poll_MaxCountOutOfRange_ShouldReturnInvalidParams(int maxCount)
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -386,7 +386,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Respond_WithValueAndError_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -409,7 +409,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Respond_WithoutValueAndError_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -433,7 +433,7 @@ public class InvocationRoutingTests : IDisposable
         const string appId = "respond-delivery-conflict.app";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "respond-holder",
@@ -515,7 +515,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -544,7 +544,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -574,7 +574,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -603,7 +603,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -633,7 +633,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_WithTargetInstanceIdAndOptionsOmitted_ShouldUseAutoLaunchFalseByDefault()
     {
-        var handler = CreateInvocationHandler(new AppRegistry(_registryLogger.Object));
+        var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -658,7 +658,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "poll-last-seen",
@@ -694,7 +694,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Poll_WhenQueueEmpty_ShouldWaitUntilWaitMsAndReturnEmptyItems()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "poll-empty-wait",
@@ -733,7 +733,7 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Respond_Success_ShouldRefreshInstanceLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "respond-last-seen",
@@ -820,11 +820,11 @@ public class InvocationRoutingTests : IDisposable
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)

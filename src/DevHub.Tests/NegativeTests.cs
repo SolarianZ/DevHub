@@ -32,7 +32,7 @@ public class NegativeTests : IDisposable
     public void AppRegistry_Heartbeat_NonExistentInstance_ShouldReturnFalse()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
 
         // Act
         var result = appRegistry.Heartbeat("non-existent-instance", out _);
@@ -45,7 +45,7 @@ public class NegativeTests : IDisposable
     public void AppRegistry_Unregister_NonExistentInstance_ShouldReturnFalse()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
 
         // Act
         var result = appRegistry.UnregisterInstance("non-existent-instance");
@@ -58,7 +58,7 @@ public class NegativeTests : IDisposable
     public void AppRegistry_GetInstance_NonExistentInstance_ShouldReturnNull()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
 
         // Act
         var result = appRegistry.GetInstance("non-existent-instance");
@@ -87,7 +87,7 @@ public class NegativeTests : IDisposable
         var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
 
         using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
-        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, _testDirectory);
+        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(_testDirectory));
 
         // Act
         fileSystemManager.InitializeDirectories();
@@ -101,8 +101,8 @@ public class NegativeTests : IDisposable
     public async Task AppInstancesHandler_RegisterInstance_MissingParams_ShouldReturnError()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "1",
@@ -124,8 +124,8 @@ public class NegativeTests : IDisposable
     public async Task AppInstancesHandler_RegisterInstance_InvalidScope_ShouldReturnError()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "2",
@@ -157,8 +157,8 @@ public class NegativeTests : IDisposable
     public async Task AppInstancesHandler_ListInstances_InvalidScope_ShouldReturnError()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "3",
@@ -181,8 +181,8 @@ public class NegativeTests : IDisposable
     public async Task AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
     {
         // Arrange
-        var appRegistry = new AppRegistry(_mockRegistryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _mockInstancesLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _mockInstancesLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "2",

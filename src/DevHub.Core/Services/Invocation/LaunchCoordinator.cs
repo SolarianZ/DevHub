@@ -44,28 +44,6 @@ public class LaunchCoordinator
     }
 
     /// <summary>
-    /// 初始化启动协调器（使用默认进程拉起器与系统时钟）。
-    /// </summary>
-    /// <param name="definitionProvider">定义提供器。</param>
-    /// <param name="appRegistry">应用实例注册表。</param>
-    /// <param name="runtimeHttpBaseUrlProvider">运行时 HTTP 地址提供器。</param>
-    /// <param name="logger">日志记录器。</param>
-    public LaunchCoordinator(
-        IDefinitionProvider definitionProvider,
-        AppRegistry appRegistry,
-        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
-        ILogger<LaunchCoordinator> logger)
-        : this(
-            definitionProvider,
-            appRegistry,
-            runtimeHttpBaseUrlProvider,
-            new ProcessLauncher(),
-            new SystemClock(),
-            logger)
-    {
-    }
-
-    /// <summary>
     /// 执行一次应用启动。
     /// </summary>
     public async Task<LaunchOperationResult> LaunchAsync(

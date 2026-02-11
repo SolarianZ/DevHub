@@ -28,7 +28,7 @@ public class ScopeParsingTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
     {
-        var handler = new AppInstancesHandler(new AppRegistry(Mock.Of<ILogger<AppRegistry>>()), Mock.Of<ILogger<AppInstancesHandler>>());
+        var handler = new AppInstancesHandler(new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>()), new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -57,7 +57,7 @@ public class ScopeParsingTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_ListInstances_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
     {
-        var handler = new AppInstancesHandler(new AppRegistry(Mock.Of<ILogger<AppRegistry>>()), Mock.Of<ILogger<AppInstancesHandler>>());
+        var handler = new AppInstancesHandler(new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>()), new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -80,8 +80,8 @@ public class ScopeParsingTests : IDisposable
     [Fact]
     public async Task AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldTreatBothAsGlobal()
     {
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
-        var handler = new AppInstancesHandler(appRegistry, Mock.Of<ILogger<AppInstancesHandler>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
 
         var omittedScopeResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -149,16 +149,16 @@ public class ScopeParsingTests : IDisposable
     {
         WriteDefinition("scope-invoke-app", rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
+        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -186,16 +186,16 @@ public class ScopeParsingTests : IDisposable
     {
         WriteDefinition("scope-invoke-app-empty", rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
+        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -223,16 +223,16 @@ public class ScopeParsingTests : IDisposable
     {
         WriteDefinition("scope-invoke-app-2", rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
+        var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {

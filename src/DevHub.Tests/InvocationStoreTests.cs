@@ -18,7 +18,7 @@ public class InvocationStoreTests
     [Fact]
     public async Task NotifyLifecycle_ShouldTransitionFromQueuedToDeliveredToCompleted()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-lifecycle",
@@ -29,7 +29,7 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("lifecycle.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         Assert.Equal(InvocationState.Queued, created.State);
@@ -51,9 +51,9 @@ public class InvocationStoreTests
     [Fact]
     public async Task PendingNotify_ShouldBeDeliveredAfterInstanceComesOnline()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var pending = store.CreateInvocation(CreateNotify("pending.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: false);
         Assert.Equal(InvocationState.Pending, pending.State);
@@ -76,7 +76,7 @@ public class InvocationStoreTests
     [Fact]
     public async Task DeliveredRespondWithError_ShouldTransitionToFailed()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-failed",
@@ -87,7 +87,7 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("failed.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
@@ -104,7 +104,7 @@ public class InvocationStoreTests
     [Fact]
     public async Task DeliveredMarkedTimeout_ShouldRejectLateRespondAsExpired()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-timeout",
@@ -115,7 +115,7 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("timeout.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
@@ -131,7 +131,7 @@ public class InvocationStoreTests
     [Fact]
     public async Task DeliveredMarkedExpired_ShouldRejectLateRespondAsExpired()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-expired",
@@ -142,7 +142,7 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("expired.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
@@ -158,9 +158,9 @@ public class InvocationStoreTests
     [Fact]
     public void Sweep_ShouldMarkNotifyAsExpired_WhenTtlElapsed()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var notify = CreateNotify("sweep-expired.app", targetScope: null, targetInstanceId: null);
         notify.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
@@ -182,9 +182,9 @@ public class InvocationStoreTests
     [Fact]
     public void Sweep_ShouldMarkRequestAsTimeout_WhenWaitTimeoutElapsed()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var request = CreateRequest("sweep-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
         request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
@@ -205,7 +205,7 @@ public class InvocationStoreTests
     [Fact]
     public async Task Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-sweep-lease",
@@ -216,7 +216,7 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var created = store.CreateInvocation(CreateNotify("sweep-lease.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
 

@@ -36,17 +36,6 @@ public class AppInstancesHandler : IRpcHandler
         _logger = logger;
     }
 
-    /// <summary>
-    /// 初始化应用实例 RPC 处理器（兼容构造）。
-    /// </summary>
-    /// <param name="appRegistry">应用实例注册表。</param>
-    /// <param name="logger">日志记录器。</param>
-    /// <param name="eventBus">Hub 事件总线。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
-        : this(appRegistry, new SystemClock(), logger, eventBus)
-    {
-    }
-
     /// <inheritdoc />
     public string Method => "hub.apps";
 

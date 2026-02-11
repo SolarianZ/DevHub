@@ -36,7 +36,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public void RoutingService_WithTargetInstanceId_ShouldNotFallbackToOtherInstances()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-a",
@@ -67,7 +67,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public void RoutingService_WithTargetScope_ShouldNotFallbackToGlobal()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "global-inst",
@@ -98,7 +98,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public void RoutingService_WithNullTargetScope_ShouldOnlyRouteToGlobalInstances()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "global-only-inst",
@@ -129,7 +129,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public void RoutingService_WithCaseSensitiveScopeMatching_ShouldNotCrossRoute()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "scope-upper-inst",
@@ -166,7 +166,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public void RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "global-inst",
@@ -197,16 +197,16 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -240,16 +240,16 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -282,18 +282,18 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Notify_WithGlobalTarget_ShouldRouteToGlobalCandidate()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-notify.app", rpcEnabled: true);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         appRegistry.RegisterInstance(new AppInstance
         {
@@ -344,18 +344,18 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task InvocationHandler_Request_WithScopedTarget_ShouldRouteToScopedCandidate()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-request.app", rpcEnabled: true);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
 
         var scopedInstance = appRegistry.RegisterInstance(new AppInstance
         {
@@ -421,16 +421,16 @@ public class InvocationScopeRoutingTests : IDisposable
             var targetScope = scopeCase.TargetScope;
             var scopeName = scopeCase.ScopeName;
             var scopeTag = scopeCase.ScopeTag;
-            var appRegistry = new AppRegistry(_registryLogger.Object);
+            var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
             var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
             var definitionProvider = new DefinitionProvider(definitionLoader);
             definitionProvider.Refresh();
             var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-            var store = new InvocationStore(_storeLogger.Object, routingService);
+            var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
             var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-            var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-            var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-            var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+            var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+            var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+            var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
             var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
             static JsonRpcRequest BuildNotifyRequest(
@@ -585,7 +585,7 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task Sweep_RequeueScopedInvocation_ShouldNotLeakAcrossScopes()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var holderInstance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-scope-requeue-holder",
@@ -623,7 +623,7 @@ public class InvocationScopeRoutingTests : IDisposable
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
 
         var scopedInvocation = store.CreateInvocation(
             CreateNotify("scope-requeue.app", targetScope: "workspace-A", targetInstanceId: null),

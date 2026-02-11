@@ -20,9 +20,9 @@ public class AppInstanceEventTests
     [Fact]
     public async Task RegisterAndUnregister_ShouldPublishRegisteredAndUnregisteredEvents()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _handlerLogger.Object, eventBus);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventBus);
 
         eventBus.RegisterConnection("conn-instance-events");
         Assert.True(eventBus.TryMarkAuthenticated("conn-instance-events", "test-client", Guid.NewGuid().ToString("D")));
@@ -73,9 +73,9 @@ public class AppInstanceEventTests
     [Fact]
     public async Task UnregisterUnknownInstance_ShouldNotPublishEvent()
     {
-        var appRegistry = new AppRegistry(_registryLogger.Object);
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, _handlerLogger.Object, eventBus);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventBus);
 
         eventBus.RegisterConnection("conn-unregister-idempotent");
         Assert.True(eventBus.TryMarkAuthenticated("conn-unregister-idempotent", "test-client", Guid.NewGuid().ToString("D")));
