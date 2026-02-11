@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models;
@@ -290,13 +290,14 @@ public class InvocationRequestFlowTests : IDisposable
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
         using var cts = new CancellationTokenSource();
 
         var requestTask = handler.HandleAsync(new JsonRpcRequest
@@ -441,13 +442,14 @@ public class InvocationRequestFlowTests : IDisposable
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var requestTask = handler.HandleAsync(new JsonRpcRequest
@@ -495,13 +497,14 @@ public class InvocationRequestFlowTests : IDisposable
     private InvocationHandler CreateHandler(AppRegistry appRegistry)
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        return new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        return new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled)
@@ -519,3 +522,6 @@ public class InvocationRequestFlowTests : IDisposable
         }));
     }
 }
+
+
+

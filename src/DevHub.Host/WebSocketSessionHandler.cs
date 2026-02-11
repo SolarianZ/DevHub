@@ -2,7 +2,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Transport;
+using DevHub.Host.Transport;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -158,7 +158,7 @@ public class WebSocketSessionHandler
                     {
                         firstMessageProcessed = true;
 
-                        if (!string.Equals(rpcRequest.Method, "hub.ws.authenticate", StringComparison.Ordinal))
+                        if (!string.Equals(rpcRequest.Method, HubRpcMethods.HubWsAuthenticate, StringComparison.Ordinal))
                         {
                             if (rpcRequest.Id is not null)
                             {
@@ -180,7 +180,7 @@ public class WebSocketSessionHandler
                         }
                     }
 
-                    if (!isAuthenticated && !string.Equals(rpcRequest.Method, "hub.ws.authenticate", StringComparison.Ordinal))
+                    if (!isAuthenticated && !string.Equals(rpcRequest.Method, HubRpcMethods.HubWsAuthenticate, StringComparison.Ordinal))
                     {
                         if (rpcRequest.Id is not null)
                         {
@@ -213,7 +213,7 @@ public class WebSocketSessionHandler
 
                     switch (rpcRequest.Method)
                     {
-                        case "hub.ws.authenticate":
+                        case HubRpcMethods.HubWsAuthenticate:
                             if (isAuthenticated)
                             {
                                 response = DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" });
@@ -243,7 +243,7 @@ public class WebSocketSessionHandler
 
                             break;
 
-                        case "hub.events.subscribe":
+                        case HubRpcMethods.HubEventsSubscribe:
                             if (!DevHubTransportValidator.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
                             {
                                 response = subscribeError;
@@ -260,7 +260,7 @@ public class WebSocketSessionHandler
                             response = DevHubTransportValidator.CreateSubscribeSuccessResponse(rpcRequest.Id, subscriptionId);
                             break;
 
-                        case "hub.events.unsubscribe":
+                        case HubRpcMethods.HubEventsUnsubscribe:
                             if (!DevHubTransportValidator.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
                             {
                                 response = unsubscribeError;

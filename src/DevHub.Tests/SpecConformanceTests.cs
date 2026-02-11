@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -64,8 +64,9 @@ public class SpecConformanceTests : IDisposable
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppDefinitionsHandler(
-            definitionLoader,
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var handler = new AppDefinitionsHandler(definitionProvider,
             Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var request = new JsonRpcRequest
@@ -96,8 +97,9 @@ public class SpecConformanceTests : IDisposable
         });
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppDefinitionsHandler(
-            definitionLoader,
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var handler = new AppDefinitionsHandler(definitionProvider,
             Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var request = new JsonRpcRequest
@@ -122,8 +124,9 @@ public class SpecConformanceTests : IDisposable
     public async Task AppDefinitionsHandler_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var handler = new AppDefinitionsHandler(
-            definitionLoader,
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var handler = new AppDefinitionsHandler(definitionProvider,
             Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var request = new JsonRpcRequest
@@ -459,3 +462,4 @@ public class SpecConformanceTests : IDisposable
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }
+

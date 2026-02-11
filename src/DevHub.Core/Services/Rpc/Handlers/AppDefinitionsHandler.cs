@@ -27,16 +27,6 @@ public class AppDefinitionsHandler : IRpcHandler
         _logger = logger;
     }
 
-    /// <summary>
-    /// 使用定义加载器初始化应用定义 RPC 处理器。
-    /// </summary>
-    /// <param name="definitionLoader">应用定义加载器。</param>
-    /// <param name="logger">日志记录器。</param>
-    public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILogger<AppDefinitionsHandler> logger)
-        : this(new DefinitionProvider(definitionLoader), logger)
-    {
-    }
-
     /// <inheritdoc />
     public string Method => "hub.apps";
 
@@ -47,8 +37,8 @@ public class AppDefinitionsHandler : IRpcHandler
 
         return request.Method switch
         {
-            "hub.apps.listDefinitions" => await ListDefinitionsAsync(request, cancellationToken),
-            "hub.apps.getDefinition" => await GetDefinitionAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsListDefinitions => await ListDefinitionsAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsGetDefinition => await GetDefinitionAsync(request, cancellationToken),
             _ => RpcErrorFactory.MethodNotFound(request.Id)
         };
     }

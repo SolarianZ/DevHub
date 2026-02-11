@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models;
@@ -151,13 +151,14 @@ public class ScopeParsingTests : IDisposable
 
         var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
         var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -187,13 +188,14 @@ public class ScopeParsingTests : IDisposable
 
         var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
         var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -223,13 +225,14 @@ public class ScopeParsingTests : IDisposable
 
         var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
         var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
         var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, Mock.Of<ILogger<LaunchCoordinator>>());
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, Mock.Of<ILogger<InvocationHandler>>());
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -284,3 +287,5 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
+
+

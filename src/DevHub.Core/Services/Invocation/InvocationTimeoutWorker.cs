@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using DevHub.Core.Services.Abstractions;
 
 namespace DevHub.Core.Services.Invocation;
 
@@ -11,6 +12,7 @@ public class InvocationTimeoutWorker : IDisposable
 
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
+    private readonly IClock _clock;
     private readonly ILogger<InvocationTimeoutWorker> _logger;
     private readonly Timer _timer;
     private bool _disposed;
@@ -21,12 +23,25 @@ public class InvocationTimeoutWorker : IDisposable
     public InvocationTimeoutWorker(
         InvocationStore store,
         InvocationRequestWaiter requestWaiter,
+        IClock clock,
         ILogger<InvocationTimeoutWorker> logger)
     {
         _store = store;
         _requestWaiter = requestWaiter;
+        _clock = clock;
         _logger = logger;
         _timer = new Timer(OnTimer, null, DefaultInterval, DefaultInterval);
+    }
+
+    /// <summary>
+    /// 初始化扫描器（兼容构造）。
+    /// </summary>
+    public InvocationTimeoutWorker(
+        InvocationStore store,
+        InvocationRequestWaiter requestWaiter,
+        ILogger<InvocationTimeoutWorker> logger)
+        : this(store, requestWaiter, new SystemClock(), logger)
+    {
     }
 
     /// <summary>
@@ -62,7 +77,7 @@ public class InvocationTimeoutWorker : IDisposable
     {
         try
         {
-            SweepOnce(DateTime.UtcNow);
+            SweepOnce(_clock.UtcNow);
         }
         catch (Exception ex)
         {

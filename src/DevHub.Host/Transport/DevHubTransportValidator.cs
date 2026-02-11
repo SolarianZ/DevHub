@@ -1,15 +1,15 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
-using DevHub.Core.Services.Rpc;
 
-namespace DevHub.Core.Services.Rpc.Transport;
+namespace DevHub.Host.Transport;
 
 /// <summary>
 /// DevHub 传输层协议校验器。
 /// 统一承载 HTTP/WS 的入站协议校验，确保错误码与消息文本符合 Spec 要求。
 /// </summary>
-internal static class DevHubTransportValidator
+public static class DevHubTransportValidator
 {
     /// <summary>
     /// 创建标准 JSON-RPC 错误响应。
@@ -18,9 +18,18 @@ internal static class DevHubTransportValidator
     /// <param name="message">错误消息。</param>
     /// <param name="id">请求 ID。</param>
     /// <param name="data">错误附加数据。</param>
-    internal static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
+    public static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
     {
-        return RpcErrorFactory.Create(id, code, message, data);
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Error = new JsonRpcError
+            {
+                Code = code,
+                Message = message,
+                Data = data
+            }
+        };
     }
 
     /// <summary>
@@ -29,7 +38,7 @@ internal static class DevHubTransportValidator
     /// <param name="id">请求 ID。</param>
     /// <param name="subscriptionId">订阅 ID。</param>
     /// <returns>JSON-RPC 成功响应。</returns>
-    internal static JsonRpcResponse CreateSubscribeSuccessResponse(object? id, string subscriptionId)
+    public static JsonRpcResponse CreateSubscribeSuccessResponse(object? id, string subscriptionId)
     {
         return new JsonRpcResponse
         {
@@ -47,7 +56,7 @@ internal static class DevHubTransportValidator
     /// </summary>
     /// <param name="id">请求 ID。</param>
     /// <returns>JSON-RPC 成功响应。</returns>
-    internal static JsonRpcResponse CreateUnsubscribeSuccessResponse(object? id)
+    public static JsonRpcResponse CreateUnsubscribeSuccessResponse(object? id)
     {
         return new JsonRpcResponse
         {
@@ -70,7 +79,7 @@ internal static class DevHubTransportValidator
     /// <param name="validatedClientId">校验后的客户端 ID。</param>
     /// <param name="validatedClientSessionId">校验后的客户端会话 ID。</param>
     /// <returns>校验通过返回 true。</returns>
-    internal static bool TryValidateHttpHeaders(
+    public static bool TryValidateHttpHeaders(
         string? contentType,
         IReadOnlyDictionary<string, string> headers,
         Func<string> tokenProvider,
@@ -200,7 +209,7 @@ internal static class DevHubTransportValidator
     /// <param name="clientSessionId">认证成功后的客户端会话 ID。</param>
     /// <param name="closeAfterResponse">是否应在响应后关闭连接。</param>
     /// <returns>JSON-RPC 响应。</returns>
-    internal static JsonRpcResponse HandleWsAuthenticate(
+    public static JsonRpcResponse HandleWsAuthenticate(
         JsonRpcRequest request,
         Func<string> tokenProvider,
         Func<string, string, bool> markAuthenticated,
@@ -310,7 +319,7 @@ internal static class DevHubTransportValidator
     /// <param name="request">解析出的请求。</param>
     /// <param name="errorResponse">解析失败时的错误响应。</param>
     /// <returns>解析成功返回 true。</returns>
-    internal static bool TryBuildRpcRequest(JsonElement root, out JsonRpcRequest request, out JsonRpcResponse errorResponse)
+    public static bool TryBuildRpcRequest(JsonElement root, out JsonRpcRequest request, out JsonRpcResponse errorResponse)
     {
         request = null!;
 
@@ -368,7 +377,7 @@ internal static class DevHubTransportValidator
     /// </summary>
     /// <param name="request">请求对象。</param>
     /// <returns>若是 hub.* 且 params 为数组返回 true。</returns>
-    internal static bool IsHubMethodParamsArray(JsonRpcRequest request)
+    public static bool IsHubMethodParamsArray(JsonRpcRequest request)
     {
         if (!request.Method.StartsWith("hub.", StringComparison.Ordinal))
         {
@@ -385,7 +394,7 @@ internal static class DevHubTransportValidator
     /// <param name="types">解析出的类型列表，null 表示订阅全部。</param>
     /// <param name="errorResponse">解析失败时的错误响应。</param>
     /// <returns>解析成功返回 true。</returns>
-    internal static bool TryReadSubscriptionTypes(JsonRpcRequest request, out IReadOnlyCollection<string>? types, out JsonRpcResponse errorResponse)
+    public static bool TryReadSubscriptionTypes(JsonRpcRequest request, out IReadOnlyCollection<string>? types, out JsonRpcResponse errorResponse)
     {
         types = null;
 
@@ -456,7 +465,7 @@ internal static class DevHubTransportValidator
     /// <param name="subscriptionId">订阅 ID。</param>
     /// <param name="errorResponse">解析失败时的错误响应。</param>
     /// <returns>解析成功返回 true。</returns>
-    internal static bool TryReadUnsubscribeParam(JsonRpcRequest request, out string subscriptionId, out JsonRpcResponse errorResponse)
+    public static bool TryReadUnsubscribeParam(JsonRpcRequest request, out string subscriptionId, out JsonRpcResponse errorResponse)
     {
         subscriptionId = string.Empty;
 
@@ -480,17 +489,17 @@ internal static class DevHubTransportValidator
     /// </summary>
     /// <param name="method">RPC 方法名。</param>
     /// <returns>仅支持 HTTP 返回 true。</returns>
-    internal static bool IsHttpOnlyMethod(string method)
+    public static bool IsHttpOnlyMethod(string method)
     {
         return method is
-            "hub.apps.registerInstance" or
-            "hub.apps.heartbeat" or
-            "hub.apps.unregisterInstance" or
-            "hub.apps.launch" or
-            "hub.invoke.notify" or
-            "hub.invoke.request" or
-            "hub.invoke.poll" or
-            "hub.invoke.respond";
+            HubRpcMethods.HubAppsRegisterInstance or
+            HubRpcMethods.HubAppsHeartbeat or
+            HubRpcMethods.HubAppsUnregisterInstance or
+            HubRpcMethods.HubAppsLaunch or
+            HubRpcMethods.HubInvokeNotify or
+            HubRpcMethods.HubInvokeRequest or
+            HubRpcMethods.HubInvokePoll or
+            HubRpcMethods.HubInvokeRespond;
     }
 
     private static bool TryGetHeader(IReadOnlyDictionary<string, string> headers, string key, out string value)

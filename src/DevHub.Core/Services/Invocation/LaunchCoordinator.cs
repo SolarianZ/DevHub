@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +19,8 @@ public class LaunchCoordinator
     private readonly IDefinitionProvider _definitionProvider;
     private readonly AppRegistry _appRegistry;
     private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
+    private readonly IProcessLauncher _processLauncher;
+    private readonly IClock _clock;
     private readonly ILogger<LaunchCoordinator> _logger;
 
     /// <summary>
@@ -29,27 +31,37 @@ public class LaunchCoordinator
         IDefinitionProvider definitionProvider,
         AppRegistry appRegistry,
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        IProcessLauncher processLauncher,
+        IClock clock,
         ILogger<LaunchCoordinator> logger)
     {
         _definitionProvider = definitionProvider;
         _appRegistry = appRegistry;
         _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
+        _processLauncher = processLauncher;
+        _clock = clock;
         _logger = logger;
     }
 
     /// <summary>
-    /// 使用定义加载器初始化启动协调器。
+    /// 初始化启动协调器（使用默认进程拉起器与系统时钟）。
     /// </summary>
-    /// <param name="definitionLoader">定义加载器。</param>
+    /// <param name="definitionProvider">定义提供器。</param>
     /// <param name="appRegistry">应用实例注册表。</param>
     /// <param name="runtimeHttpBaseUrlProvider">运行时 HTTP 地址提供器。</param>
     /// <param name="logger">日志记录器。</param>
     public LaunchCoordinator(
-        DefinitionLoader definitionLoader,
+        IDefinitionProvider definitionProvider,
         AppRegistry appRegistry,
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
         ILogger<LaunchCoordinator> logger)
-        : this(new DefinitionProvider(definitionLoader), appRegistry, runtimeHttpBaseUrlProvider, logger)
+        : this(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider,
+            new ProcessLauncher(),
+            new SystemClock(),
+            logger)
     {
     }
 
@@ -93,7 +105,7 @@ public class LaunchCoordinator
         var httpBaseUrl = _runtimeHttpBaseUrlProvider.GetHttpBaseUrl();
         var resolvedDedupeKey = ResolveDedupeKey(definition, appId, scope, dedupeKey, httpBaseUrl);
 
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
         DedupeLaunchRecord? existingRecord;
         lock (_dedupeSyncRoot)
         {
@@ -119,7 +131,7 @@ public class LaunchCoordinator
         var launchId = BuildLaunchId();
         lock (_dedupeSyncRoot)
         {
-            CleanupExpiredDedupeRecords(DateTime.UtcNow);
+            CleanupExpiredDedupeRecords(_clock.UtcNow);
             if (_dedupeRecords.TryGetValue(resolvedDedupeKey, out var record))
             {
                 return LaunchOperationResult.CreateSuccess(
@@ -131,12 +143,12 @@ public class LaunchCoordinator
             _dedupeRecords[resolvedDedupeKey] = new DedupeLaunchRecord
             {
                 LaunchId = launchId,
-                CreatedAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = _clock.UtcNow,
                 Pid = null
             };
         }
 
-        Process? process;
+        System.Diagnostics.Process? process;
         try
         {
             process = StartProcess(launchConfig!, appId, scope, httpBaseUrl, resolvedDedupeKey);
@@ -198,7 +210,7 @@ public class LaunchCoordinator
         return true;
     }
 
-    private static Process? StartProcess(
+    private System.Diagnostics.Process? StartProcess(
         LaunchConfiguration launchConfig,
         string appId,
         string? scope,
@@ -212,25 +224,13 @@ public class LaunchCoordinator
             httpBaseUrl,
             dedupeKey);
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = launchConfig.ExePath!,
-            Arguments = arguments ?? string.Empty,
-            UseShellExecute = false
-        };
-
-        if (!string.IsNullOrWhiteSpace(launchConfig.WorkingDirectory))
-        {
-            startInfo.WorkingDirectory = launchConfig.WorkingDirectory;
-        }
-
-        return Process.Start(startInfo);
+        return _processLauncher.Start(launchConfig, arguments);
     }
 
     private async Task<bool> WaitForRegistrationAsync(string appId, string? scope, int waitForRegisterMs, CancellationToken cancellationToken)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(waitForRegisterMs);
-        while (DateTime.UtcNow <= deadline)
+        var deadline = _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
+        while (_clock.UtcNow <= deadline)
         {
             var hasOnline = _appRegistry
                 .ListInstances(appId, scope, includeAllScopes: false, includeOffline: false)
@@ -300,7 +300,7 @@ public class LaunchCoordinator
             if (_dedupeRecords.TryGetValue(dedupeKey, out var record) && record.LaunchId == launchId)
             {
                 record.Pid = pid;
-                record.CreatedAtUtc = DateTime.UtcNow;
+                record.CreatedAtUtc = _clock.UtcNow;
             }
         }
     }

@@ -204,8 +204,10 @@ public class NegativeTests : IDisposable
     public async Task AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
     {
         // Arrange
-        var mockDefinitionLoader = new Mock<DefinitionLoader>(_testDirectory, _mockDefinitionLogger.Object);
-        var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsLogger.Object);
+        var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var handler = new AppDefinitionsHandler(definitionProvider, _mockDefinitionsLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "3",
@@ -231,3 +233,4 @@ public class NegativeTests : IDisposable
         }
     }
 }
+

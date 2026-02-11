@@ -2,7 +2,7 @@ namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
-using DevHub.Core.Services.Rpc.Transport;
+using DevHub.Host.Transport;
 
 /// <summary>
 /// 传输层与 JSON-RPC 信封校验白盒测试。

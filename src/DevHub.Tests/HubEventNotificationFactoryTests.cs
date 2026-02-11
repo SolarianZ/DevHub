@@ -3,6 +3,7 @@ namespace DevHub.Tests;
 using System.Globalization;
 using System.Text.Json;
 using DevHub.Core.Services.Events;
+using DevHub.Host.Transport;
 
 /// <summary>
 /// hub.event 通知构造器白盒测试。

@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DevHub.Core\DevHub.Core.csproj" />
+    <ProjectReference Include="..\DevHub.Host\DevHub.Host.csproj" />
   </ItemGroup>
 
   <ItemGroup>

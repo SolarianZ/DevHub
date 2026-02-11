@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using DevHub.Core.Services;
 using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services.Events;
@@ -10,12 +11,12 @@ public sealed class HubEventBus
 {
     private static readonly string[] SupportedEventTypes =
     [
-        "app.instance.registered",
-        "app.instance.unregistered",
-        "invocation.queued",
-        "invocation.delivered",
-        "invocation.completed",
-        "invocation.failed"
+        HubEventTypes.AppInstanceRegistered,
+        HubEventTypes.AppInstanceUnregistered,
+        HubEventTypes.InvocationQueued,
+        HubEventTypes.InvocationDelivered,
+        HubEventTypes.InvocationCompleted,
+        HubEventTypes.InvocationFailed
     ];
 
     private readonly ConcurrentDictionary<string, ConnectionState> _connections = new();

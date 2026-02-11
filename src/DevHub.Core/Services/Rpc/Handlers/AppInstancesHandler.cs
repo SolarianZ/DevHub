@@ -1,6 +1,7 @@
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ public class AppInstancesHandler : IRpcHandler
 
     private readonly AppRegistry _appRegistry;
     private readonly HubEventBus? _eventBus;
+    private readonly IClock _clock;
     private readonly ILogger<AppInstancesHandler> _logger;
 
     /// <summary>
@@ -26,11 +28,23 @@ public class AppInstancesHandler : IRpcHandler
     /// <param name="appRegistry">应用实例注册表。</param>
     /// <param name="logger">日志记录器。</param>
     /// <param name="eventBus">Hub 事件总线。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
+    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
     {
         _appRegistry = appRegistry;
+        _clock = clock;
         _eventBus = eventBus;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 初始化应用实例 RPC 处理器（兼容构造）。
+    /// </summary>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="eventBus">Hub 事件总线。</param>
+    public AppInstancesHandler(AppRegistry appRegistry, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
+        : this(appRegistry, new SystemClock(), logger, eventBus)
+    {
     }
 
     /// <inheritdoc />
@@ -43,10 +57,10 @@ public class AppInstancesHandler : IRpcHandler
 
         return request.Method switch
         {
-            "hub.apps.registerInstance" => await RegisterInstanceAsync(request, cancellationToken),
-            "hub.apps.heartbeat" => await HeartbeatAsync(request, cancellationToken),
-            "hub.apps.unregisterInstance" => await UnregisterInstanceAsync(request, cancellationToken),
-            "hub.apps.listInstances" => await ListInstancesAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsRegisterInstance => await RegisterInstanceAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsHeartbeat => await HeartbeatAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsUnregisterInstance => await UnregisterInstanceAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsListInstances => await ListInstancesAsync(request, cancellationToken),
             _ => RpcErrorFactory.MethodNotFound(request.Id)
         };
     }
@@ -82,7 +96,7 @@ public class AppInstancesHandler : IRpcHandler
 
             var registeredInstance = _appRegistry.RegisterInstance(instance);
 
-            PublishInstanceEvent("app.instance.registered", registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
+            PublishInstanceEvent(HubEventTypes.AppInstanceRegistered, registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
 
             _logger.LogInformation("成功注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 registeredInstance.InstanceId, registeredInstance.AppId, registeredInstance.Scope, registeredInstance.Pid, request.Id);
@@ -209,7 +223,7 @@ public class AppInstancesHandler : IRpcHandler
             var removed = _appRegistry.UnregisterInstance(instanceId);
             if (removed && existingInstance is not null)
             {
-                PublishInstanceEvent("app.instance.unregistered", existingInstance.AppId, existingInstance.InstanceId, existingInstance.Scope);
+                PublishInstanceEvent(HubEventTypes.AppInstanceUnregistered, existingInstance.AppId, existingInstance.InstanceId, existingInstance.Scope);
             }
 
             _logger.LogInformation("注销应用程序实例完成（幂等），InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
@@ -424,7 +438,7 @@ public class AppInstancesHandler : IRpcHandler
         _eventBus.Publish(new HubEventMessage
         {
             Type = eventType,
-            TimeUtc = DateTime.UtcNow,
+            TimeUtc = _clock.UtcNow,
             Payload = new
             {
                 appId,

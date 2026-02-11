@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Models;
+using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using Microsoft.Extensions.Logging;
 using InvocationModel = DevHub.Core.Models.Invocation;
@@ -16,15 +18,25 @@ public class InvocationStore
     private readonly ILogger<InvocationStore> _logger;
     private readonly InvocationRoutingService _routingService;
     private readonly HubEventBus? _eventBus;
+    private readonly IClock _clock;
 
     /// <summary>
     /// 初始化存储。
     /// </summary>
-    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, HubEventBus? eventBus = null)
+    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, IClock clock, HubEventBus? eventBus = null)
     {
         _logger = logger;
         _routingService = routingService;
+        _clock = clock;
         _eventBus = eventBus;
+    }
+
+    /// <summary>
+    /// 初始化存储（兼容构造）。
+    /// </summary>
+    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, HubEventBus? eventBus = null)
+        : this(logger, routingService, new SystemClock(), eventBus)
+    {
     }
 
     /// <summary>
@@ -57,11 +69,11 @@ public class InvocationStore
     /// </summary>
     public async Task<IReadOnlyList<InvocationModel>> PollAsync(AppInstance instance, int maxCount, int waitMs, CancellationToken cancellationToken)
     {
-        var startAt = DateTime.UtcNow;
+        var startAt = _clock.UtcNow;
 
         while (true)
         {
-            var now = DateTime.UtcNow;
+            var now = _clock.UtcNow;
             SweepExpiredLeases(now);
             var leased = TryLease(instance, maxCount, now);
             if (leased.Count > 0)
@@ -69,12 +81,12 @@ public class InvocationStore
                 return leased;
             }
 
-            if (waitMs <= 0 || (DateTime.UtcNow - startAt).TotalMilliseconds >= waitMs)
+            if (waitMs <= 0 || (_clock.UtcNow - startAt).TotalMilliseconds >= waitMs)
             {
                 return [];
             }
 
-            var remaining = waitMs - (int)(DateTime.UtcNow - startAt).TotalMilliseconds;
+            var remaining = waitMs - (int)(_clock.UtcNow - startAt).TotalMilliseconds;
             var delayMs = Math.Clamp(remaining, 1, 100);
             await Task.Delay(delayMs, cancellationToken);
         }
@@ -87,14 +99,14 @@ public class InvocationStore
     {
         lock (_syncRoot)
         {
-            SweepExpiredLeases(DateTime.UtcNow);
+            SweepExpiredLeases(_clock.UtcNow);
 
             if (!_all.TryGetValue(invocationId, out var invocation))
             {
                 return InvocationRespondStatus.NotFound;
             }
 
-            var now = DateTime.UtcNow;
+            var now = _clock.UtcNow;
             if (now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs))
             {
                 invocation.State = InvocationState.Expired;
@@ -264,7 +276,7 @@ public class InvocationStore
 
                 _eventBus?.Publish(new HubEventMessage
                 {
-                    Type = "invocation.delivered",
+                    Type = HubEventTypes.InvocationDelivered,
                     TimeUtc = now,
                     Payload = new
                     {

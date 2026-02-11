@@ -1,7 +1,7 @@
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Transport;
+using DevHub.Host.Transport;
 using System.Text.Json;
 
 namespace DevHub.Host;
@@ -143,7 +143,7 @@ public class RpcHttpEndpointHandler
             stopwatch.Stop();
             _logger.LogError(ex, "处理RPC请求时发生未捕获的异常，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                 method, requestId, clientId, stopwatch.ElapsedMilliseconds);
-            return Results.Json(RpcErrorFactory.InternalError(requestId));
+            return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions);
         }
     }
 }

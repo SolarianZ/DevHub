@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Services;
@@ -34,10 +34,11 @@ public class LaunchCoordinatorTests : IDisposable
     public async Task LaunchAsync_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "missing.app",
@@ -59,10 +60,11 @@ public class LaunchCoordinatorTests : IDisposable
         WriteDefinition("launch-missing.app", includeLaunch: false);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-missing.app",
@@ -84,10 +86,11 @@ public class LaunchCoordinatorTests : IDisposable
         WriteDefinition("launch-started.app", includeLaunch: true);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-started.app",
@@ -307,10 +310,11 @@ public class LaunchCoordinatorTests : IDisposable
     private LaunchCoordinator CreateCoordinator()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        return new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        return new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
     }
 
     private void WriteHubRuntime(string httpBaseUrl)
@@ -382,3 +386,6 @@ public class LaunchCoordinatorTests : IDisposable
         throw new Xunit.Sdk.XunitException($"等待文件生成超时: {filePath}");
     }
 }
+
+
+

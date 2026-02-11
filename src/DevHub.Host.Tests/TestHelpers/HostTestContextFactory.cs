@@ -1,4 +1,4 @@
-namespace DevHub.Host.Tests.TestHelpers;
+﻿namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
@@ -75,3 +75,5 @@ internal sealed record HostTestContext(
     FileSystemManager FileSystemManager,
     HubEventBus EventBus,
     string Token);
+
+

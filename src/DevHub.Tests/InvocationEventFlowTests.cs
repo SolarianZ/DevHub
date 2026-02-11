@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models;
@@ -225,14 +225,15 @@ public class InvocationEventFlowTests : IDisposable
     private (InvocationHandler Handler, HubEventBus EventBus) CreateHandler(AppRegistry appRegistry)
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService, eventBus);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationLogger.Object, eventBus);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationLogger.Object, eventBus);
         return (handler, eventBus);
     }
 
@@ -243,3 +244,6 @@ public class InvocationEventFlowTests : IDisposable
         Assert.True(eventBus.TrySubscribe(connectionId, null, out _));
     }
 }
+
+
+

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services.Abstractions;
+using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
@@ -33,6 +35,7 @@ public class InvocationHandler : IRpcHandler
     private readonly InvocationRequestWaiter _requestWaiter;
     private readonly LaunchCoordinator _launchCoordinator;
     private readonly HubEventBus? _eventBus;
+    private readonly IClock _clock;
     private readonly ILogger<InvocationHandler> _logger;
 
     /// <summary>
@@ -46,6 +49,7 @@ public class InvocationHandler : IRpcHandler
         InvocationStore store,
         InvocationRequestWaiter requestWaiter,
         LaunchCoordinator launchCoordinator,
+        IClock clock,
         ILogger<InvocationHandler> logger,
         HubEventBus? eventBus = null)
     {
@@ -56,14 +60,15 @@ public class InvocationHandler : IRpcHandler
         _requestWaiter = requestWaiter;
         _launchCoordinator = launchCoordinator;
         _eventBus = eventBus;
+        _clock = clock;
         _logger = logger;
     }
 
     /// <summary>
-    /// 使用定义加载器初始化处理器。
+    /// 初始化处理器（使用系统时钟）。
     /// </summary>
     /// <param name="appRegistry">应用实例注册表。</param>
-    /// <param name="definitionLoader">定义加载器。</param>
+    /// <param name="definitionProvider">定义提供器。</param>
     /// <param name="routingService">路由服务。</param>
     /// <param name="store">调用存储。</param>
     /// <param name="requestWaiter">请求等待器。</param>
@@ -72,7 +77,7 @@ public class InvocationHandler : IRpcHandler
     /// <param name="eventBus">事件总线。</param>
     public InvocationHandler(
         AppRegistry appRegistry,
-        DefinitionLoader definitionLoader,
+        IDefinitionProvider definitionProvider,
         InvocationRoutingService routingService,
         InvocationStore store,
         InvocationRequestWaiter requestWaiter,
@@ -81,11 +86,12 @@ public class InvocationHandler : IRpcHandler
         HubEventBus? eventBus = null)
         : this(
             appRegistry,
-            new DefinitionProvider(definitionLoader),
+            definitionProvider,
             routingService,
             store,
             requestWaiter,
             launchCoordinator,
+            new SystemClock(),
             logger,
             eventBus)
     {
@@ -99,10 +105,10 @@ public class InvocationHandler : IRpcHandler
     {
         return request.Method switch
         {
-            "hub.invoke.notify" => NotifyAsync(request, cancellationToken),
-            "hub.invoke.request" => RequestAsync(request, cancellationToken),
-            "hub.invoke.poll" => PollAsync(request, cancellationToken),
-            "hub.invoke.respond" => RespondAsync(request),
+            HubRpcMethods.HubInvokeNotify => NotifyAsync(request, cancellationToken),
+            HubRpcMethods.HubInvokeRequest => RequestAsync(request, cancellationToken),
+            HubRpcMethods.HubInvokePoll => PollAsync(request, cancellationToken),
+            HubRpcMethods.HubInvokeRespond => RespondAsync(request),
             _ => Task.FromResult(RpcErrorFactory.MethodNotFound(request.Id))
         };
     }
@@ -137,7 +143,7 @@ public class InvocationHandler : IRpcHandler
         var invocation = enqueueResult.Invocation!;
         var waiterTask = _requestWaiter.Register(invocation.InvocationId);
 
-        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var waitRemaining = Math.Max(1, invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs);
         var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
 
@@ -150,14 +156,14 @@ public class InvocationHandler : IRpcHandler
             return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
         }
 
-        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+        var elapsedMs = (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var ttlReached = elapsedMs >= invocation.Options.TtlMs;
 
         if (cancellationToken.IsCancellationRequested)
         {
             if (ttlReached)
             {
-                _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
+                _store.MarkExpired(invocation.InvocationId, _clock.UtcNow);
                 _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
                 _requestWaiter.Cleanup(invocation.InvocationId);
 
@@ -168,7 +174,7 @@ public class InvocationHandler : IRpcHandler
                 });
             }
 
-            _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
+            _store.MarkTimeout(invocation.InvocationId, _clock.UtcNow);
             _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
             _requestWaiter.Cleanup(invocation.InvocationId);
 
@@ -181,7 +187,7 @@ public class InvocationHandler : IRpcHandler
 
         if (ttlReached)
         {
-            var markedExpired = _store.MarkExpired(invocation.InvocationId, DateTime.UtcNow);
+            var markedExpired = _store.MarkExpired(invocation.InvocationId, _clock.UtcNow);
             if (markedExpired)
             {
                 _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
@@ -199,7 +205,7 @@ public class InvocationHandler : IRpcHandler
             });
         }
 
-        var markedTimeout = _store.MarkTimeout(invocation.InvocationId, DateTime.UtcNow);
+        var markedTimeout = _store.MarkTimeout(invocation.InvocationId, _clock.UtcNow);
         if (markedTimeout)
         {
             _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
@@ -311,7 +317,7 @@ public class InvocationHandler : IRpcHandler
                 ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
                 : new Dictionary<string, object?>(),
             Kind = mode == InvocationMode.Notify ? InvocationKind.Notify : InvocationKind.Request,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = _clock.UtcNow,
             Options = options,
             Delivery = new InvocationDelivery
             {
@@ -329,7 +335,7 @@ public class InvocationHandler : IRpcHandler
         };
 
         _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
-        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
+        PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
         return new InvocationBuildResult(invocation, null);
     }
 
@@ -416,7 +422,7 @@ public class InvocationHandler : IRpcHandler
             Result = new
             {
                 ok = true,
-                serverTimeUtc = DateTime.UtcNow.ToString("O"),
+                serverTimeUtc = _clock.UtcNow.ToString("O"),
                 items = items.Select(i => new
                 {
                     invocationId = i.InvocationId,
@@ -481,11 +487,11 @@ public class InvocationHandler : IRpcHandler
             {
                 if (error is null)
                 {
-                    PublishInvocationLifecycleEvent("invocation.completed", invocation, instanceId, error: null);
+                    PublishInvocationLifecycleEvent(HubEventTypes.InvocationCompleted, invocation, instanceId, error: null);
                 }
                 else
                 {
-                    PublishInvocationLifecycleEvent("invocation.failed", invocation, instanceId, error);
+                    PublishInvocationLifecycleEvent(HubEventTypes.InvocationFailed, invocation, instanceId, error);
                 }
             }
 
@@ -505,7 +511,7 @@ public class InvocationHandler : IRpcHandler
 
                         break;
                     case InvocationRespondStatus.Expired:
-                        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+                        var elapsedMs = (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
                         _requestWaiter.CompleteExpired(invocationId, elapsedMs);
                         break;
                 }
@@ -554,7 +560,7 @@ public class InvocationHandler : IRpcHandler
         _eventBus.Publish(new HubEventMessage
         {
             Type = eventType,
-            TimeUtc = DateTime.UtcNow,
+            TimeUtc = _clock.UtcNow,
             Payload = new
             {
                 invocationId = invocation.InvocationId,

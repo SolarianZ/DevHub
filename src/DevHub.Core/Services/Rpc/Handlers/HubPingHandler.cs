@@ -1,4 +1,6 @@
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -9,19 +11,31 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 /// </summary>
 public class HubPingHandler : IRpcHandler
 {
+    private readonly IClock _clock;
     private readonly ILogger<HubPingHandler> _logger;
 
     /// <summary>
     /// 初始化 hub.ping RPC 处理器。
     /// </summary>
+    /// <param name="clock">系统时钟。</param>
     /// <param name="logger">日志记录器。</param>
-    public HubPingHandler(ILogger<HubPingHandler> logger)
+    public HubPingHandler(IClock clock, ILogger<HubPingHandler> logger)
     {
+        _clock = clock;
         _logger = logger;
     }
 
+    /// <summary>
+    /// 初始化 hub.ping RPC 处理器（兼容构造）。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    public HubPingHandler(ILogger<HubPingHandler> logger)
+        : this(new SystemClock(), logger)
+    {
+    }
+
     /// <inheritdoc />
-    public string Method => "hub.ping";
+    public string Method => HubRpcMethods.HubPing;
 
     /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
@@ -34,7 +48,7 @@ public class HubPingHandler : IRpcHandler
             Result = new
             {
                 ok = true,
-                serverTimeUtc = DateTime.UtcNow.ToString("O")
+                serverTimeUtc = _clock.UtcNow.ToString("O")
             }
         };
 

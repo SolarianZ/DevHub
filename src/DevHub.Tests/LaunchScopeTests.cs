@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -41,9 +41,11 @@ public class LaunchScopeTests : IDisposable
     public async Task LaunchHandler_WhenScopeGlobal_ShouldReturnInvalidScopeReason()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
         var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
 
         var response = await handler.HandleAsync(new JsonRpcRequest
@@ -68,9 +70,11 @@ public class LaunchScopeTests : IDisposable
     public async Task LaunchHandler_WhenScopeEmpty_ShouldReturnInvalidScopeReason()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
         var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
 
         var response = await handler.HandleAsync(new JsonRpcRequest
@@ -95,9 +99,11 @@ public class LaunchScopeTests : IDisposable
     public async Task LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
         var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
 
         var omittedScopeResponse = await handler.HandleAsync(new JsonRpcRequest
@@ -138,9 +144,11 @@ public class LaunchScopeTests : IDisposable
     public async Task LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var coordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
         var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
 
         var response = await handler.HandleAsync(new JsonRpcRequest
@@ -205,13 +213,14 @@ public class LaunchScopeTests : IDisposable
 
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
-        var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
+        var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
         var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
         var notifyResponse = await invocationHandler.HandleAsync(new JsonRpcRequest
@@ -270,10 +279,11 @@ public class LaunchScopeTests : IDisposable
     private LaunchCoordinator CreateCoordinator()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        return new LaunchCoordinator(definitionLoader, appRegistry, provider, _launchLogger.Object);
+        return new LaunchCoordinator(definitionProvider, appRegistry, provider, _launchLogger.Object);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch, string? dedupeKeyTemplate = null)
@@ -309,3 +319,6 @@ public class LaunchScopeTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
+
+
+

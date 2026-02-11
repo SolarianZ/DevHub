@@ -309,8 +309,10 @@ public class CoreServiceTests
 
         try
         {
-            var mockDefinitionLoader = new Mock<DefinitionLoader>(testDirectory, _mockDefinitionLogger.Object);
-            var handler = new AppDefinitionsHandler(mockDefinitionLoader.Object, _mockDefinitionsHandlerLogger.Object);
+            var definitionLoader = new DefinitionLoader(testDirectory, _mockDefinitionLogger.Object);
+            var definitionProvider = new DefinitionProvider(definitionLoader);
+            definitionProvider.Refresh();
+            var handler = new AppDefinitionsHandler(definitionProvider, _mockDefinitionsHandlerLogger.Object);
             var request = new JsonRpcRequest
             {
                 Id = "2",
@@ -394,3 +396,4 @@ public static class TestHelpers
         return testDirectory;
     }
 }
+

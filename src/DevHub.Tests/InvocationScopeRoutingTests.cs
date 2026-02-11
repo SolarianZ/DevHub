@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models;
@@ -199,13 +199,14 @@ public class InvocationScopeRoutingTests : IDisposable
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -241,13 +242,14 @@ public class InvocationScopeRoutingTests : IDisposable
     {
         var appRegistry = new AppRegistry(_registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var request = new JsonRpcRequest
         {
@@ -284,13 +286,14 @@ public class InvocationScopeRoutingTests : IDisposable
         WriteDefinition("route-log-notify.app", rpcEnabled: true);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         appRegistry.RegisterInstance(new AppInstance
         {
@@ -345,13 +348,14 @@ public class InvocationScopeRoutingTests : IDisposable
         WriteDefinition("route-log-request.app", rpcEnabled: true);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        definitionLoader.Load();
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-        var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
 
         var scopedInstance = appRegistry.RegisterInstance(new AppInstance
         {
@@ -419,12 +423,14 @@ public class InvocationScopeRoutingTests : IDisposable
             var scopeTag = scopeCase.ScopeTag;
             var appRegistry = new AppRegistry(_registryLogger.Object);
             var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+            var definitionProvider = new DefinitionProvider(definitionLoader);
+            definitionProvider.Refresh();
             var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
             var store = new InvocationStore(_storeLogger.Object, routingService);
             var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
             var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
-            var launchCoordinator = new LaunchCoordinator(definitionLoader, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
-            var invocationHandler = new InvocationHandler(appRegistry, definitionLoader, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
+            var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, _launchLogger.Object);
+            var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, _invocationHandlerLogger.Object);
             var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
             static JsonRpcRequest BuildNotifyRequest(
@@ -457,7 +463,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
             var noQueueAppId = $"m3-scope-010-noqueue-{scopeTag}";
             WriteDefinition(noQueueAppId, rpcEnabled: true);
-            definitionLoader.Load();
+            definitionProvider.Refresh();
 
             var noQueueResponse = await invocationHandler.HandleAsync(
                 BuildNotifyRequest(
@@ -477,7 +483,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
             var pendingAppId = $"m3-scope-010-pending-{scopeTag}";
             WriteDefinition(pendingAppId, rpcEnabled: true);
-            definitionLoader.Load();
+            definitionProvider.Refresh();
 
             var pendingResponse = await invocationHandler.HandleAsync(
                 BuildNotifyRequest(
@@ -512,7 +518,7 @@ public class InvocationScopeRoutingTests : IDisposable
                 rpcEnabled: true,
                 includeLaunch: true,
                 dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
-            definitionLoader.Load();
+            definitionProvider.Refresh();
 
             var autoLaunchResponse = await invocationHandler.HandleAsync(
                 BuildNotifyRequest(
@@ -731,3 +737,6 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
 }
+
+
+
