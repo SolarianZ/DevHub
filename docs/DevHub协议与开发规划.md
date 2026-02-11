@@ -417,12 +417,11 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-02-08）
+## 17. 当前里程碑状态（截至 2026-02-11）
 
 - M0：已完成。
 - M1：已完成。
 - M2：已完成。
 - M3：已完成。
-- M4：已启动并完成首轮实现（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送与首轮测试接入）。
+- M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送，白盒/黑盒回归通过）。
 - M5：未启动。
-

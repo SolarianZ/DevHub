@@ -17,9 +17,9 @@
 
 ### 1.2 实测命令快照
 - 白盒：`dotnet test src/DevHub.slnx -c Release`
-  - 结果：`90 passed / 0 failed / 0 skipped`
+  - 结果：`168 passed / 0 failed / 0 skipped`
 - 黑盒：`python3 tests/test_runner.py --full --no-header`
-  - 结果：`109 passed / 0 failed`
+  - 结果：`137 passed / 0 failed`
   - 报告：`temp/test_results.txt`、`temp/test_results.json`
 
 ### 1.3 风险等级定义
@@ -146,3 +146,20 @@
 - **里程碑完成度**：M1~M4 均可判定为“已完成”。
 - **测试覆盖充分性**：可判定为“充分（可验收）”。
 - **后续动作优先级**：本次缺口项已处理完成；后续维持回归执行并继续按里程碑增量审计。
+
+---
+
+## 8. 对外发布工程化补齐（2026-02-11）
+
+- 已新增 CI 工作流：`.github/workflows/ci.yml`
+  - 覆盖 `restore/build/test` 与黑盒 `--fast` 回归。
+- 已新增发布打包工作流：`.github/workflows/release.yml`
+  - 支持 `workflow_dispatch` 与 `v*` tag 触发，输出 `linux-x64/win-x64/osx-arm64` 工件。
+- 已新增对外交付文档：
+  - `README.md`
+  - `CHANGELOG.md`
+- 已补齐版本元数据：
+  - `src/DevHub.Core/DevHub.Core.csproj`
+  - `src/DevHub.Host/DevHub.Host.csproj`
+- 已处理平台分析器告警（CA1416）：
+  - `src/DevHub.Core/Services/FileSystemManager.cs` 增加 Windows 平台注解，消除 Windows ACL 调用误报。
