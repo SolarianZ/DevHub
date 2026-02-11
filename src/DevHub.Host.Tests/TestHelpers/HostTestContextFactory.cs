@@ -20,21 +20,23 @@ internal static class HostTestContextFactory
     /// <returns>可用于调用 Host WS 入口的上下文。</returns>
     internal static HostTestContext Create(string definitionsDirectory)
     {
-        var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), definitionsDirectory);
+        var runtimePathOptions = RuntimePathOptions.Resolve(definitionsDirectory);
+        var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), runtimePathOptions);
         fileSystemManager.InitializeDirectories();
         var token = fileSystemManager.GetToken();
 
         var appRegistry = new AppRegistry(Mock.Of<ILogger<AppRegistry>>());
-        var definitionLoader = new DefinitionLoader(definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
-        definitionLoader.Load();
+        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
         var eventBus = new HubEventBus(Mock.Of<ILogger<HubEventBus>>());
 
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
         var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, eventBus);
         var requestWaiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), runtimePathOptions);
         var launchCoordinator = new LaunchCoordinator(
-            definitionLoader,
+            definitionProvider,
             appRegistry,
             runtimeHttpBaseUrlProvider,
             Mock.Of<ILogger<LaunchCoordinator>>());
@@ -42,11 +44,11 @@ internal static class HostTestContextFactory
         var handlers = new IRpcHandler[]
         {
             new HubPingHandler(Mock.Of<ILogger<HubPingHandler>>()),
-            new AppDefinitionsHandler(definitionLoader, Mock.Of<ILogger<AppDefinitionsHandler>>()),
+            new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>()),
             new AppInstancesHandler(appRegistry, Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
             new InvocationHandler(
                 appRegistry,
-                definitionLoader,
+                definitionProvider,
                 routingService,
                 invocationStore,
                 requestWaiter,

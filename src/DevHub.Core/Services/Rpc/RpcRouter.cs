@@ -67,7 +67,7 @@ public class RpcRouter
                         request.Method, request.Id, JsonSerializer.Serialize(request.Params));
                 }
             }
-            return CreateErrorResponse(request, -32603, "internal_error");
+            return RpcErrorFactory.Create(request.Id, -32603, "internal_error");
         }
         else
         {
@@ -101,23 +101,7 @@ public class RpcRouter
 
             _logger.LogWarning("未找到RPC方法: {Method}, RequestId: {RequestId}, 可用前缀: {AvailablePrefixes}, 参数: {Params}",
                 request.Method, request.Id, string.Join(", ", _handlers.Keys), JsonSerializer.Serialize(request.Params));
-            return CreateErrorResponse(request, -32601, "method_not_found");
+            return RpcErrorFactory.Create(request.Id, -32601, "method_not_found");
         }
-    }
-
-    /// <summary>
-    /// 创建错误响应
-    /// </summary>
-    private JsonRpcResponse CreateErrorResponse(JsonRpcRequest request, int code, string message)
-    {
-        return new JsonRpcResponse
-        {
-            Id = request.Id,
-            Error = new JsonRpcError
-            {
-                Code = code,
-                Message = message
-            }
-        };
     }
 }

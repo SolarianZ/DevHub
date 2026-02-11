@@ -24,7 +24,6 @@ public interface IRuntimeHttpBaseUrlProvider
 /// </summary>
 public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
 {
-    private readonly string _runtimeDirectory;
     private readonly string _hubJsonPath;
     private readonly ILogger<RuntimeHttpBaseUrlProvider> _logger;
 
@@ -32,9 +31,18 @@ public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
     /// 初始化运行时 HTTP 基础地址提供器。
     /// </summary>
     public RuntimeHttpBaseUrlProvider(ILogger<RuntimeHttpBaseUrlProvider> logger)
+        : this(logger, RuntimePathOptions.Resolve())
     {
-        _runtimeDirectory = ResolveRuntimeDirectory();
-        _hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+    }
+
+    /// <summary>
+    /// 使用统一路径选项初始化运行时 HTTP 基础地址提供器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="runtimePathOptions">运行时路径选项。</param>
+    public RuntimeHttpBaseUrlProvider(ILogger<RuntimeHttpBaseUrlProvider> logger, RuntimePathOptions runtimePathOptions)
+    {
+        _hubJsonPath = runtimePathOptions.HubJsonPath;
         _logger = logger;
     }
 
@@ -70,16 +78,5 @@ public class RuntimeHttpBaseUrlProvider : IRuntimeHttpBaseUrlProvider
             _logger.LogWarning(ex, "读取 hub.json 的 httpBaseUrl 失败，路径: {HubJsonPath}", _hubJsonPath);
             return string.Empty;
         }
-    }
-
-    private static string ResolveRuntimeDirectory()
-    {
-        var runtimeOverride = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
-        if (!string.IsNullOrWhiteSpace(runtimeOverride))
-        {
-            return runtimeOverride;
-        }
-
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub", "runtime");
     }
 }

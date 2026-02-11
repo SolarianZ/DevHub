@@ -1,6 +1,7 @@
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -11,18 +12,29 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 /// </summary>
 public class AppDefinitionsHandler : IRpcHandler
 {
-    private readonly DefinitionLoader _definitionLoader;
+    private readonly IDefinitionProvider _definitionProvider;
     private readonly ILogger<AppDefinitionsHandler> _logger;
 
     /// <summary>
     /// 初始化应用定义 RPC 处理器。
     /// </summary>
+    /// <param name="definitionProvider">应用定义提供器。</param>
+    /// <param name="logger">日志记录器。</param>
+    [ActivatorUtilitiesConstructor]
+    public AppDefinitionsHandler(IDefinitionProvider definitionProvider, ILogger<AppDefinitionsHandler> logger)
+    {
+        _definitionProvider = definitionProvider;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// 使用定义加载器初始化应用定义 RPC 处理器。
+    /// </summary>
     /// <param name="definitionLoader">应用定义加载器。</param>
     /// <param name="logger">日志记录器。</param>
     public AppDefinitionsHandler(DefinitionLoader definitionLoader, ILogger<AppDefinitionsHandler> logger)
+        : this(new DefinitionProvider(definitionLoader), logger)
     {
-        _definitionLoader = definitionLoader;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -51,9 +63,9 @@ public class AppDefinitionsHandler : IRpcHandler
             _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
             // 每次查询前重新加载，反映测试期间新增/修改的定义文件
-            _definitionLoader.Load();
+            _definitionProvider.Refresh();
 
-            var definitions = _definitionLoader.GetAllDefinitions();
+            var definitions = _definitionProvider.GetAllDefinitions();
             _logger.LogInformation("成功获取应用程序定义列表，数量: {Count}, RequestId: {RequestId}", definitions.Count, request.Id);
 
             var response = new JsonRpcResponse
@@ -86,7 +98,7 @@ public class AppDefinitionsHandler : IRpcHandler
             _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
             // 每次查询前重新加载，反映测试期间新增/修改的定义文件
-            _definitionLoader.Load();
+            _definitionProvider.Refresh();
 
             // 解析参数
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
@@ -109,7 +121,7 @@ public class AppDefinitionsHandler : IRpcHandler
             }
 
             _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
-            var definition = _definitionLoader.GetDefinition(appId);
+            var definition = _definitionProvider.GetDefinition(appId);
 
             if (definition == null)
             {

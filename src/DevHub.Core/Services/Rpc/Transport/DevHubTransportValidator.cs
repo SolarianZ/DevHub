@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Events;
+using DevHub.Core.Services.Rpc;
 
 namespace DevHub.Core.Services.Rpc.Transport;
 
@@ -19,14 +20,41 @@ internal static class DevHubTransportValidator
     /// <param name="data">错误附加数据。</param>
     internal static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
     {
+        return RpcErrorFactory.Create(id, code, message, data);
+    }
+
+    /// <summary>
+    /// 创建订阅成功响应。
+    /// </summary>
+    /// <param name="id">请求 ID。</param>
+    /// <param name="subscriptionId">订阅 ID。</param>
+    /// <returns>JSON-RPC 成功响应。</returns>
+    internal static JsonRpcResponse CreateSubscribeSuccessResponse(object? id, string subscriptionId)
+    {
         return new JsonRpcResponse
         {
             Id = id,
-            Error = new JsonRpcError
+            Result = new
             {
-                Code = code,
-                Message = message,
-                Data = data
+                ok = true,
+                subscriptionId
+            }
+        };
+    }
+
+    /// <summary>
+    /// 创建取消订阅成功响应。
+    /// </summary>
+    /// <param name="id">请求 ID。</param>
+    /// <returns>JSON-RPC 成功响应。</returns>
+    internal static JsonRpcResponse CreateUnsubscribeSuccessResponse(object? id)
+    {
+        return new JsonRpcResponse
+        {
+            Id = id,
+            Result = new
+            {
+                ok = true
             }
         };
     }

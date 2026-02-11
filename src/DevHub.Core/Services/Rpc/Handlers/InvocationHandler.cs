@@ -4,6 +4,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using InvocationModel = DevHub.Core.Models.Invocation;
 
@@ -19,8 +20,14 @@ public class InvocationHandler : IRpcHandler
     private const int DefaultRequestWaitTimeoutMs = 120000;
     private const int LeaseSeconds = 30;
 
+    private enum InvocationMode
+    {
+        Notify,
+        Request
+    }
+
     private readonly AppRegistry _appRegistry;
-    private readonly DefinitionLoader _definitionLoader;
+    private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationRoutingService _routingService;
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
@@ -31,6 +38,38 @@ public class InvocationHandler : IRpcHandler
     /// <summary>
     /// 初始化处理器。
     /// </summary>
+    [ActivatorUtilitiesConstructor]
+    public InvocationHandler(
+        AppRegistry appRegistry,
+        IDefinitionProvider definitionProvider,
+        InvocationRoutingService routingService,
+        InvocationStore store,
+        InvocationRequestWaiter requestWaiter,
+        LaunchCoordinator launchCoordinator,
+        ILogger<InvocationHandler> logger,
+        HubEventBus? eventBus = null)
+    {
+        _appRegistry = appRegistry;
+        _definitionProvider = definitionProvider;
+        _routingService = routingService;
+        _store = store;
+        _requestWaiter = requestWaiter;
+        _launchCoordinator = launchCoordinator;
+        _eventBus = eventBus;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// 使用定义加载器初始化处理器。
+    /// </summary>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="definitionLoader">定义加载器。</param>
+    /// <param name="routingService">路由服务。</param>
+    /// <param name="store">调用存储。</param>
+    /// <param name="requestWaiter">请求等待器。</param>
+    /// <param name="launchCoordinator">启动协调器。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="eventBus">事件总线。</param>
     public InvocationHandler(
         AppRegistry appRegistry,
         DefinitionLoader definitionLoader,
@@ -40,15 +79,16 @@ public class InvocationHandler : IRpcHandler
         LaunchCoordinator launchCoordinator,
         ILogger<InvocationHandler> logger,
         HubEventBus? eventBus = null)
+        : this(
+            appRegistry,
+            new DefinitionProvider(definitionLoader),
+            routingService,
+            store,
+            requestWaiter,
+            launchCoordinator,
+            logger,
+            eventBus)
     {
-        _appRegistry = appRegistry;
-        _definitionLoader = definitionLoader;
-        _routingService = routingService;
-        _store = store;
-        _requestWaiter = requestWaiter;
-        _launchCoordinator = launchCoordinator;
-        _eventBus = eventBus;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -69,107 +109,11 @@ public class InvocationHandler : IRpcHandler
 
     private async Task<JsonRpcResponse> NotifyAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        var enqueueResult = await BuildAndEnqueueInvocationAsync(request, InvocationMode.Notify, cancellationToken);
+        if (enqueueResult.ErrorResponse is not null)
         {
-            return paramsError;
+            return enqueueResult.ErrorResponse;
         }
-
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
-            !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
-        {
-            return RpcErrorFactory.InvalidParams(request.Id);
-        }
-
-        if (!RpcParamReader.TryParseInvocationTarget(paramsElement, out var target, out var targetError))
-        {
-            return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
-        }
-
-        if (!TryParseNotifyOptions(paramsElement, target, out var options, out var optionErrorResponse))
-        {
-            optionErrorResponse.Id = request.Id;
-            return optionErrorResponse;
-        }
-
-        _definitionLoader.Load();
-        var definition = _definitionLoader.GetDefinition(appId);
-        if (definition is not null && definition.Capabilities?.Rpc == false)
-        {
-            return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
-        }
-
-        var candidates = _routingService.GetOnlineCandidates(appId, target);
-        LogRouteDecision(request.Method, appId, target, candidates.Count);
-        if (candidates.Count == 0)
-        {
-            if (!options.QueueIfOffline)
-            {
-                return RpcErrorFactory.Create(
-                    request.Id,
-                    -32010,
-                    "instance_not_found",
-                    new { reason = ResolveNoCandidateReason(target) });
-            }
-
-            if (definition is null)
-            {
-                return RpcErrorFactory.Create(
-                    request.Id,
-                    -32010,
-                    "instance_not_found",
-                    new { reason = ResolveNoCandidateReason(target) });
-            }
-
-            if (options.AutoLaunch)
-            {
-                var launchResult = await _launchCoordinator.LaunchAsync(
-                    appId,
-                    target.Scope,
-                    dedupeKey: null,
-                    waitForRegisterMs: 0,
-                    cancellationToken);
-
-                if (!launchResult.Ok)
-                {
-                    return RpcErrorFactory.Create(
-                        request.Id,
-                        launchResult.ErrorCode ?? -32603,
-                        launchResult.ErrorMessage ?? "internal_error",
-                        launchResult.ErrorData);
-                }
-            }
-        }
-
-        var invocation = new InvocationModel
-        {
-            InvocationId = $"invk-{Guid.NewGuid():N}",
-            AppId = appId,
-            Target = target,
-            Method = method,
-            Args = paramsElement.TryGetProperty("args", out var argsElement)
-                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
-                : new Dictionary<string, object?>(),
-            Kind = InvocationKind.Notify,
-            CreatedAtUtc = DateTime.UtcNow,
-            Options = options,
-            Delivery = new InvocationDelivery
-            {
-                LeaseSeconds = LeaseSeconds,
-                Attempt = 1
-            },
-            Caller = new InvocationCaller
-            {
-                ClientId = string.IsNullOrWhiteSpace(request.ClientId) ? "unknown" : request.ClientId,
-                ClientSessionId = string.IsNullOrWhiteSpace(request.ClientSessionId)
-                    ? Guid.Empty.ToString("D")
-                    : request.ClientSessionId
-            },
-            State = InvocationState.Created
-        };
-
-        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
-
-        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
 
         return new JsonRpcResponse
         {
@@ -177,117 +121,23 @@ public class InvocationHandler : IRpcHandler
             Result = new
             {
                 ok = true,
-                invocationId = invocation.InvocationId
+                invocationId = enqueueResult.Invocation!.InvocationId
             }
         };
     }
 
     private async Task<JsonRpcResponse> RequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        var enqueueResult = await BuildAndEnqueueInvocationAsync(request, InvocationMode.Request, cancellationToken);
+        if (enqueueResult.ErrorResponse is not null)
         {
-            return paramsError;
+            return enqueueResult.ErrorResponse;
         }
 
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
-            !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
-        {
-            return RpcErrorFactory.InvalidParams(request.Id);
-        }
-
-        if (!RpcParamReader.TryParseInvocationTarget(paramsElement, out var target, out var targetError))
-        {
-            return RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError);
-        }
-
-        if (!TryParseRequestOptions(paramsElement, target, out var options, out var optionErrorResponse))
-        {
-            optionErrorResponse.Id = request.Id;
-            return optionErrorResponse;
-        }
-
-        _definitionLoader.Load();
-        var definition = _definitionLoader.GetDefinition(appId);
-        if (definition is not null && definition.Capabilities?.Rpc == false)
-        {
-            return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" });
-        }
-
-        var candidates = _routingService.GetOnlineCandidates(appId, target);
-        LogRouteDecision(request.Method, appId, target, candidates.Count);
-        if (candidates.Count == 0)
-        {
-            if (!options.QueueIfOffline)
-            {
-                return RpcErrorFactory.Create(
-                    request.Id,
-                    -32010,
-                    "instance_not_found",
-                    new { reason = ResolveNoCandidateReason(target) });
-            }
-
-            if (definition is null)
-            {
-                return RpcErrorFactory.Create(
-                    request.Id,
-                    -32010,
-                    "instance_not_found",
-                    new { reason = ResolveNoCandidateReason(target) });
-            }
-
-            if (options.AutoLaunch)
-            {
-                var launchResult = await _launchCoordinator.LaunchAsync(
-                    appId,
-                    target.Scope,
-                    dedupeKey: null,
-                    waitForRegisterMs: 0,
-                    cancellationToken);
-
-                if (!launchResult.Ok)
-                {
-                    return RpcErrorFactory.Create(
-                        request.Id,
-                        launchResult.ErrorCode ?? -32603,
-                        launchResult.ErrorMessage ?? "internal_error",
-                        launchResult.ErrorData);
-                }
-            }
-        }
-
-        var createdAt = DateTime.UtcNow;
-        var invocation = new InvocationModel
-        {
-            InvocationId = $"invk-{Guid.NewGuid():N}",
-            AppId = appId,
-            Target = target,
-            Method = method,
-            Args = paramsElement.TryGetProperty("args", out var argsElement)
-                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
-                : new Dictionary<string, object?>(),
-            Kind = InvocationKind.Request,
-            CreatedAtUtc = createdAt,
-            Options = options,
-            Delivery = new InvocationDelivery
-            {
-                LeaseSeconds = LeaseSeconds,
-                Attempt = 1
-            },
-            Caller = new InvocationCaller
-            {
-                ClientId = string.IsNullOrWhiteSpace(request.ClientId) ? "unknown" : request.ClientId,
-                ClientSessionId = string.IsNullOrWhiteSpace(request.ClientSessionId)
-                    ? Guid.Empty.ToString("D")
-                    : request.ClientSessionId
-            },
-            State = InvocationState.Created
-        };
-
-        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
-        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
+        var invocation = enqueueResult.Invocation!;
         var waiterTask = _requestWaiter.Register(invocation.InvocationId);
 
-        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(DateTime.UtcNow - createdAt).TotalMilliseconds);
+        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var waitRemaining = Math.Max(1, invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs);
         var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
 
@@ -300,7 +150,7 @@ public class InvocationHandler : IRpcHandler
             return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
         }
 
-        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - createdAt).TotalMilliseconds);
+        var elapsedMs = (int)Math.Max(0, (DateTime.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var ttlReached = elapsedMs >= invocation.Options.TtlMs;
 
         if (cancellationToken.IsCancellationRequested)
@@ -365,6 +215,122 @@ public class InvocationHandler : IRpcHandler
             invocationId = invocation.InvocationId,
             elapsedMs
         });
+    }
+
+    private async Task<InvocationBuildResult> BuildAndEnqueueInvocationAsync(
+        JsonRpcRequest request,
+        InvocationMode mode,
+        CancellationToken cancellationToken)
+    {
+        if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var paramsError))
+        {
+            return new InvocationBuildResult(null, paramsError);
+        }
+
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
+            !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
+        {
+            return new InvocationBuildResult(null, RpcErrorFactory.InvalidParams(request.Id));
+        }
+
+        if (!RpcParamReader.TryParseInvocationTarget(paramsElement, out var target, out var targetError))
+        {
+            return new InvocationBuildResult(null, RpcErrorFactory.Create(request.Id, -32602, "invalid_params", targetError));
+        }
+
+        if (!TryParseInvocationOptions(mode, paramsElement, target, out var options, out var optionErrorResponse))
+        {
+            optionErrorResponse.Id = request.Id;
+            return new InvocationBuildResult(null, optionErrorResponse);
+        }
+
+        _definitionProvider.Refresh();
+        var definition = _definitionProvider.GetDefinition(appId);
+        if (definition is not null && definition.Capabilities?.Rpc == false)
+        {
+            return new InvocationBuildResult(
+                null,
+                RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" }));
+        }
+
+        var candidates = _routingService.GetOnlineCandidates(appId, target);
+        LogRouteDecision(request.Method, appId, target, candidates.Count);
+        if (candidates.Count == 0)
+        {
+            if (!options.QueueIfOffline)
+            {
+                return new InvocationBuildResult(
+                    null,
+                    RpcErrorFactory.Create(
+                        request.Id,
+                        -32010,
+                        "instance_not_found",
+                        new { reason = ResolveNoCandidateReason(target) }));
+            }
+
+            if (definition is null)
+            {
+                return new InvocationBuildResult(
+                    null,
+                    RpcErrorFactory.Create(
+                        request.Id,
+                        -32010,
+                        "instance_not_found",
+                        new { reason = ResolveNoCandidateReason(target) }));
+            }
+
+            if (options.AutoLaunch)
+            {
+                var launchResult = await _launchCoordinator.LaunchAsync(
+                    appId,
+                    target.Scope,
+                    dedupeKey: null,
+                    waitForRegisterMs: 0,
+                    cancellationToken);
+
+                if (!launchResult.Ok)
+                {
+                    return new InvocationBuildResult(
+                        null,
+                        RpcErrorFactory.Create(
+                            request.Id,
+                            launchResult.ErrorCode ?? -32603,
+                            launchResult.ErrorMessage ?? "internal_error",
+                            launchResult.ErrorData));
+                }
+            }
+        }
+
+        var invocation = new InvocationModel
+        {
+            InvocationId = $"invk-{Guid.NewGuid():N}",
+            AppId = appId,
+            Target = target,
+            Method = method,
+            Args = paramsElement.TryGetProperty("args", out var argsElement)
+                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
+                : new Dictionary<string, object?>(),
+            Kind = mode == InvocationMode.Notify ? InvocationKind.Notify : InvocationKind.Request,
+            CreatedAtUtc = DateTime.UtcNow,
+            Options = options,
+            Delivery = new InvocationDelivery
+            {
+                LeaseSeconds = LeaseSeconds,
+                Attempt = 1
+            },
+            Caller = new InvocationCaller
+            {
+                ClientId = string.IsNullOrWhiteSpace(request.ClientId) ? "unknown" : request.ClientId,
+                ClientSessionId = string.IsNullOrWhiteSpace(request.ClientSessionId)
+                    ? Guid.Empty.ToString("D")
+                    : request.ClientSessionId
+            },
+            State = InvocationState.Created
+        };
+
+        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
+        PublishInvocationLifecycleEvent("invocation.queued", invocation, null, error: null);
+        return new InvocationBuildResult(invocation, null);
     }
 
     private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)
@@ -600,16 +566,18 @@ public class InvocationHandler : IRpcHandler
         });
     }
 
-    private static bool TryParseRequestOptions(
+    private static bool TryParseInvocationOptions(
+        InvocationMode mode,
         JsonElement paramsElement,
         InvocationTarget target,
         out InvocationOptions options,
         out JsonRpcResponse errorResponse)
     {
+        var isRequestMode = mode == InvocationMode.Request;
         options = new InvocationOptions
         {
-            TtlMs = DefaultRequestTtlMs,
-            WaitTimeoutMs = DefaultRequestWaitTimeoutMs,
+            TtlMs = isRequestMode ? DefaultRequestTtlMs : DefaultNotifyTtlMs,
+            WaitTimeoutMs = isRequestMode ? DefaultRequestWaitTimeoutMs : null,
             QueueIfOffline = true,
             AutoLaunch = target.InstanceId is null
         };
@@ -635,7 +603,7 @@ public class InvocationHandler : IRpcHandler
 
             if (optionsElement.TryGetProperty("waitTimeoutMs", out var waitElement))
             {
-                if (waitElement.ValueKind != JsonValueKind.Number || !waitElement.TryGetInt32(out var waitMs) || waitMs < 1)
+                if (!isRequestMode || waitElement.ValueKind != JsonValueKind.Number || !waitElement.TryGetInt32(out var waitMs) || waitMs < 1)
                 {
                     errorResponse = RpcErrorFactory.InvalidParams(null);
                     return false;
@@ -679,7 +647,7 @@ public class InvocationHandler : IRpcHandler
             return false;
         }
 
-        if (options.WaitTimeoutMs is null || options.WaitTimeoutMs > options.TtlMs)
+        if (isRequestMode && (options.WaitTimeoutMs is null || options.WaitTimeoutMs > options.TtlMs))
         {
             errorResponse = RpcErrorFactory.InvalidParams(null);
             return false;
@@ -689,76 +657,7 @@ public class InvocationHandler : IRpcHandler
         return true;
     }
 
-    private static bool TryParseNotifyOptions(
-        JsonElement paramsElement,
-        InvocationTarget target,
-        out InvocationOptions options,
-        out JsonRpcResponse errorResponse)
-    {
-        options = new InvocationOptions
-        {
-            TtlMs = DefaultNotifyTtlMs,
-            QueueIfOffline = true,
-            AutoLaunch = target.InstanceId is null
-        };
-
-        if (paramsElement.TryGetProperty("options", out var optionsElement))
-        {
-            if (optionsElement.ValueKind != JsonValueKind.Object)
-            {
-                errorResponse = RpcErrorFactory.InvalidParams(null);
-                return false;
-            }
-
-            if (optionsElement.TryGetProperty("ttlMs", out var ttlElement))
-            {
-                if (ttlElement.ValueKind != JsonValueKind.Number || !ttlElement.TryGetInt32(out var ttlMs) || ttlMs < 1000)
-                {
-                    errorResponse = RpcErrorFactory.InvalidParams(null);
-                    return false;
-                }
-
-                options.TtlMs = ttlMs;
-            }
-
-            if (optionsElement.TryGetProperty("queueIfOffline", out var queueElement))
-            {
-                if (queueElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                {
-                    errorResponse = RpcErrorFactory.InvalidParams(null);
-                    return false;
-                }
-
-                options.QueueIfOffline = queueElement.GetBoolean();
-            }
-
-            if (optionsElement.TryGetProperty("autoLaunch", out var autoLaunchElement))
-            {
-                if (autoLaunchElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                {
-                    errorResponse = RpcErrorFactory.InvalidParams(null);
-                    return false;
-                }
-
-                options.AutoLaunch = autoLaunchElement.GetBoolean();
-            }
-        }
-
-        if (target.InstanceId is not null && options.AutoLaunch)
-        {
-            errorResponse = RpcErrorFactory.InvalidParams(null);
-            return false;
-        }
-
-        if (options.AutoLaunch && !options.QueueIfOffline)
-        {
-            errorResponse = RpcErrorFactory.InvalidParams(null);
-            return false;
-        }
-
-        errorResponse = null!;
-        return true;
-    }
+    private sealed record InvocationBuildResult(InvocationModel? Invocation, JsonRpcResponse? ErrorResponse);
 
     private static string ResolveNoCandidateReason(InvocationTarget target)
     {

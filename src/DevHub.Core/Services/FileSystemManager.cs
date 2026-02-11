@@ -17,6 +17,8 @@ public class FileSystemManager
     private readonly string _rootPath;
     private readonly string _runtimePath;
     private readonly string _definitionsPath;
+    private readonly string _instancesPath;
+    private readonly string _logsPath;
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
     private bool _tokenPermissionEnsured;
@@ -30,35 +32,25 @@ public class FileSystemManager
     /// <param name="logger">日志记录器。</param>
     /// <param name="definitionsPath">可选的应用定义目录路径覆盖。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger, string? definitionsPath = null)
+        : this(logger, RuntimePathOptions.Resolve(definitionsPath))
+    {
+    }
+
+    /// <summary>
+    /// 使用统一路径选项初始化文件系统管理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="runtimePathOptions">运行时路径选项。</param>
+    public FileSystemManager(ILogger<FileSystemManager> logger, RuntimePathOptions runtimePathOptions)
     {
         _logger = logger;
-
-        // 计算数据目录路径
-        var defaultRootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
-        _rootPath = defaultRootPath;
-
-        // DEVHUB_RUNTIME_DIR 仅覆盖 runtime 目录（Spec 约束）
-        var runtimeOverride = Environment.GetEnvironmentVariable("DEVHUB_RUNTIME_DIR");
-        _runtimePath = string.IsNullOrWhiteSpace(runtimeOverride)
-            ? Path.Combine(defaultRootPath, "runtime")
-            : runtimeOverride;
-
-        // 优先使用参数，然后检查环境变量，最后使用默认路径
-        if (!string.IsNullOrEmpty(definitionsPath))
-        {
-            _definitionsPath = definitionsPath;
-        }
-        else if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVHUB_APPDEFS_DIR")))
-        {
-            _definitionsPath = Environment.GetEnvironmentVariable("DEVHUB_APPDEFS_DIR")!;
-        }
-        else
-        {
-            _definitionsPath = Path.Combine(defaultRootPath, "apps", "definitions");
-        }
-
-        _tokenFilePath = Path.Combine(_runtimePath, "token.txt");
-        _hubJsonPath = Path.Combine(_runtimePath, "hub.json");
+        _rootPath = runtimePathOptions.RootPath;
+        _runtimePath = runtimePathOptions.RuntimePath;
+        _definitionsPath = runtimePathOptions.DefinitionsPath;
+        _instancesPath = runtimePathOptions.InstancesPath;
+        _logsPath = runtimePathOptions.LogsPath;
+        _tokenFilePath = runtimePathOptions.TokenFilePath;
+        _hubJsonPath = runtimePathOptions.HubJsonPath;
     }
 
     /// <summary>
@@ -66,7 +58,7 @@ public class FileSystemManager
     /// </summary>
     /// <param name="logger">日志记录器。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger)
-        : this(logger, null)
+        : this(logger, RuntimePathOptions.Resolve())
     {
     }
 
@@ -109,26 +101,24 @@ public class FileSystemManager
                 _logger.LogDebug("应用程序定义目录已存在: {Path}", _definitionsPath);
             }
 
-            var instancesPath = Path.Combine(_rootPath, "apps", "instances");
-            if (!Directory.Exists(instancesPath))
+            if (!Directory.Exists(_instancesPath))
             {
-                Directory.CreateDirectory(instancesPath);
-                _logger.LogInformation("成功创建实例目录: {Path}", instancesPath);
+                Directory.CreateDirectory(_instancesPath);
+                _logger.LogInformation("成功创建实例目录: {Path}", _instancesPath);
             }
             else
             {
-                _logger.LogDebug("实例目录已存在: {Path}", instancesPath);
+                _logger.LogDebug("实例目录已存在: {Path}", _instancesPath);
             }
 
-            var logsPath = Path.Combine(_rootPath, "logs");
-            if (!Directory.Exists(logsPath))
+            if (!Directory.Exists(_logsPath))
             {
-                Directory.CreateDirectory(logsPath);
-                _logger.LogInformation("成功创建日志目录: {Path}", logsPath);
+                Directory.CreateDirectory(_logsPath);
+                _logger.LogInformation("成功创建日志目录: {Path}", _logsPath);
             }
             else
             {
-                _logger.LogDebug("日志目录已存在: {Path}", logsPath);
+                _logger.LogDebug("日志目录已存在: {Path}", _logsPath);
             }
 
             _logger.LogDebug("文件系统目录结构初始化完成");

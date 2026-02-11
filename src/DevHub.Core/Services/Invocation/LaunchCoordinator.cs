@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services.Invocation;
@@ -15,7 +16,7 @@ public class LaunchCoordinator
 
     private readonly object _dedupeSyncRoot = new();
     private readonly Dictionary<string, DedupeLaunchRecord> _dedupeRecords = new();
-    private readonly DefinitionLoader _definitionLoader;
+    private readonly IDefinitionProvider _definitionProvider;
     private readonly AppRegistry _appRegistry;
     private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
     private readonly ILogger<LaunchCoordinator> _logger;
@@ -23,16 +24,33 @@ public class LaunchCoordinator
     /// <summary>
     /// 初始化启动协调器。
     /// </summary>
+    [ActivatorUtilitiesConstructor]
+    public LaunchCoordinator(
+        IDefinitionProvider definitionProvider,
+        AppRegistry appRegistry,
+        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        ILogger<LaunchCoordinator> logger)
+    {
+        _definitionProvider = definitionProvider;
+        _appRegistry = appRegistry;
+        _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// 使用定义加载器初始化启动协调器。
+    /// </summary>
+    /// <param name="definitionLoader">定义加载器。</param>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="runtimeHttpBaseUrlProvider">运行时 HTTP 地址提供器。</param>
+    /// <param name="logger">日志记录器。</param>
     public LaunchCoordinator(
         DefinitionLoader definitionLoader,
         AppRegistry appRegistry,
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
         ILogger<LaunchCoordinator> logger)
+        : this(new DefinitionProvider(definitionLoader), appRegistry, runtimeHttpBaseUrlProvider, logger)
     {
-        _definitionLoader = definitionLoader;
-        _appRegistry = appRegistry;
-        _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
-        _logger = logger;
     }
 
     /// <summary>
@@ -45,8 +63,8 @@ public class LaunchCoordinator
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
-        _definitionLoader.Load();
-        var definition = _definitionLoader.GetDefinition(appId);
+        _definitionProvider.Refresh();
+        var definition = _definitionProvider.GetDefinition(appId);
         if (definition is null)
         {
             return LaunchOperationResult.CreateError(
