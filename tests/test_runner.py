@@ -30,13 +30,24 @@ from tests.test_internal_errors import TestInternalErrors
 
 def setup_logging(log_file):
     """设置日志"""
+    # Windows 下默认控制台编码可能是 gbk，写入 emoji 会触发 UnicodeEncodeError。
+    # 优先切换到 UTF-8；若失败则使用 backslashreplace 保证日志不中断。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="backslashreplace")
+            except OSError:
+                reconfigure(errors="backslashreplace")
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
+            logging.FileHandler(log_file, encoding="utf-8"),
             logging.StreamHandler(sys.stdout)
-        ]
+        ],
+        force=True
     )
     return logging.getLogger(__name__)
 
