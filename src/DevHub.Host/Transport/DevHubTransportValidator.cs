@@ -2,6 +2,7 @@ using System.Text.Json;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
+using DevHub.Core.Services.Rpc;
 
 namespace DevHub.Host.Transport;
 
@@ -20,16 +21,7 @@ public static class DevHubTransportValidator
     /// <param name="data">错误附加数据。</param>
     public static JsonRpcResponse CreateErrorResponse(int code, string message, object? id, object? data = null)
     {
-        return new JsonRpcResponse
-        {
-            Id = id,
-            Error = new JsonRpcError
-            {
-                Code = code,
-                Message = message,
-                Data = data
-            }
-        };
+        return RpcErrorFactory.Create(id, code, message, data);
     }
 
     /// <summary>

@@ -210,79 +210,20 @@ public class WebSocketSessionHandler
 
                     JsonRpcResponse? response = null;
                     var closeAfterResponse = false;
-
-                    switch (rpcRequest.Method)
-                    {
-                        case HubRpcMethods.HubWsAuthenticate:
-                            if (isAuthenticated)
-                            {
-                                response = DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" });
-                                break;
-                            }
-
-                            response = DevHubTransportValidator.HandleWsAuthenticate(
-                                rpcRequest,
-                                _fileSystemManager.GetToken,
-                                (clientId, sessionId) => _eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
-                                out var authenticated,
-                                out var nextClientId,
-                                out var nextClientSessionId,
-                                out closeAfterResponse);
-
-                            if (authenticated)
-                            {
-                                isAuthenticated = true;
-                                authenticatedClientId = nextClientId;
-                                authenticatedClientSessionId = nextClientSessionId;
-                                _logger.LogInformation(
-                                    "WS 鉴权成功，ConnectionId: {ConnectionId}, ClientId: {ClientId}, SessionId: {SessionId}",
-                                    connectionId,
-                                    authenticatedClientId,
-                                    authenticatedClientSessionId);
-                            }
-
-                            break;
-
-                        case HubRpcMethods.HubEventsSubscribe:
-                            if (!DevHubTransportValidator.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
-                            {
-                                response = subscribeError;
-                                break;
-                            }
-
-                            if (!_eventBus.TrySubscribe(connectionId, subscriptionTypes, out var subscriptionId))
-                            {
-                                response = DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" });
-                                closeAfterResponse = true;
-                                break;
-                            }
-
-                            response = DevHubTransportValidator.CreateSubscribeSuccessResponse(rpcRequest.Id, subscriptionId);
-                            break;
-
-                        case HubRpcMethods.HubEventsUnsubscribe:
-                            if (!DevHubTransportValidator.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
-                            {
-                                response = unsubscribeError;
-                                break;
-                            }
-
-                            _eventBus.Unsubscribe(connectionId, subscriptionIdToRemove);
-                            response = DevHubTransportValidator.CreateUnsubscribeSuccessResponse(rpcRequest.Id);
-                            break;
-
-                        default:
-                            if (DevHubTransportValidator.IsHttpOnlyMethod(rpcRequest.Method))
-                            {
-                                response = DevHubTransportValidator.CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id);
-                                break;
-                            }
-
-                            rpcRequest.ClientId = authenticatedClientId;
-                            rpcRequest.ClientSessionId = authenticatedClientSessionId;
-                            response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
-                            break;
-                    }
+                    (response, closeAfterResponse) = await DispatchWebSocketRpcAsync(
+                        webSocket,
+                        connectionId,
+                        rpcRequest,
+                        isAuthenticated,
+                        authenticatedClientId,
+                        authenticatedClientSessionId,
+                        cancellationToken,
+                        onAuthenticated: (nextClientId, nextSessionId) =>
+                        {
+                            isAuthenticated = true;
+                            authenticatedClientId = nextClientId;
+                            authenticatedClientSessionId = nextSessionId;
+                        });
 
                     if (response is not null && rpcRequest.Id is not null)
                     {
@@ -332,6 +273,102 @@ public class WebSocketSessionHandler
 
             await SendWebSocketJsonAsync(webSocket, notification, cancellationToken);
         }
+    }
+
+    private async Task<(JsonRpcResponse? Response, bool CloseAfterResponse)> DispatchWebSocketRpcAsync(
+        WebSocket webSocket,
+        string connectionId,
+        JsonRpcRequest rpcRequest,
+        bool isAuthenticated,
+        string? authenticatedClientId,
+        string? authenticatedClientSessionId,
+        CancellationToken cancellationToken,
+        Action<string?, string?> onAuthenticated)
+    {
+        switch (rpcRequest.Method)
+        {
+            case HubRpcMethods.HubWsAuthenticate:
+                return HandleAuthenticate(
+                    connectionId,
+                    rpcRequest,
+                    isAuthenticated,
+                    onAuthenticated);
+
+            case HubRpcMethods.HubEventsSubscribe:
+                return HandleSubscribe(connectionId, rpcRequest);
+
+            case HubRpcMethods.HubEventsUnsubscribe:
+                return (HandleUnsubscribe(connectionId, rpcRequest), false);
+
+            default:
+                if (DevHubTransportValidator.IsHttpOnlyMethod(rpcRequest.Method))
+                {
+                    return (DevHubTransportValidator.CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id), false);
+                }
+
+                rpcRequest.ClientId = authenticatedClientId;
+                rpcRequest.ClientSessionId = authenticatedClientSessionId;
+                return (await _rpcRouter.RouteAsync(rpcRequest, cancellationToken), false);
+        }
+    }
+
+    private (JsonRpcResponse Response, bool CloseAfterResponse) HandleAuthenticate(
+        string connectionId,
+        JsonRpcRequest rpcRequest,
+        bool isAuthenticated,
+        Action<string?, string?> onAuthenticated)
+    {
+        if (isAuthenticated)
+        {
+            return (DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" }), false);
+        }
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            rpcRequest,
+            _fileSystemManager.GetToken,
+            (clientId, sessionId) => _eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
+            out var authenticated,
+            out var nextClientId,
+            out var nextClientSessionId,
+            out var closeAfterResponse);
+
+        if (authenticated)
+        {
+            onAuthenticated(nextClientId, nextClientSessionId);
+            _logger.LogInformation(
+                "WS 鉴权成功，ConnectionId: {ConnectionId}, ClientId: {ClientId}, SessionId: {SessionId}",
+                connectionId,
+                nextClientId,
+                nextClientSessionId);
+        }
+
+        return (response, closeAfterResponse);
+    }
+
+    private (JsonRpcResponse Response, bool CloseAfterResponse) HandleSubscribe(string connectionId, JsonRpcRequest rpcRequest)
+    {
+        if (!DevHubTransportValidator.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
+        {
+            return (subscribeError, false);
+        }
+
+        if (!_eventBus.TrySubscribe(connectionId, subscriptionTypes, out var subscriptionId))
+        {
+            return (DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }), true);
+        }
+
+        return (DevHubTransportValidator.CreateSubscribeSuccessResponse(rpcRequest.Id, subscriptionId), false);
+    }
+
+    private JsonRpcResponse HandleUnsubscribe(string connectionId, JsonRpcRequest rpcRequest)
+    {
+        if (!DevHubTransportValidator.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
+        {
+            return unsubscribeError;
+        }
+
+        _eventBus.Unsubscribe(connectionId, subscriptionIdToRemove);
+        return DevHubTransportValidator.CreateUnsubscribeSuccessResponse(rpcRequest.Id);
     }
 
     private static async Task<WebSocketReceiveEnvelope> ReceiveTextMessageAsync(WebSocket webSocket, CancellationToken cancellationToken)

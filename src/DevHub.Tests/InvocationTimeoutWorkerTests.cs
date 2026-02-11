@@ -2,6 +2,7 @@ namespace DevHub.Tests;
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -24,7 +25,7 @@ public class InvocationTimeoutWorkerTests
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 
         var request = CreateRequest("worker-timeout.app", ttlMs: 5000, waitTimeoutMs: 1000);
         request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
@@ -48,7 +49,7 @@ public class InvocationTimeoutWorkerTests
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 
         var request = CreateRequest("worker-expired.app", ttlMs: 1000, waitTimeoutMs: 5000);
         request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
@@ -72,7 +73,7 @@ public class InvocationTimeoutWorkerTests
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
         var store = new InvocationStore(_storeLogger.Object, routingService);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
 
         var notify = CreateNotify("worker-notify.app", ttlMs: 1000);
         notify.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);

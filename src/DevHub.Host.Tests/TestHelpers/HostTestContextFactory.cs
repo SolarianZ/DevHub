@@ -1,6 +1,7 @@
 ﻿namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
@@ -43,7 +44,7 @@ internal static class HostTestContextFactory
 
         var handlers = new IRpcHandler[]
         {
-            new HubPingHandler(Mock.Of<ILogger<HubPingHandler>>()),
+            new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>()),
             new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>()),
             new AppInstancesHandler(appRegistry, Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
             new InvocationHandler(

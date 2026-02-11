@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Models;
+using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -13,6 +14,7 @@ public class AppRegistry : IDisposable
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
     private readonly TimeSpan _onlineThreshold = TimeSpan.FromSeconds(30);
     private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
+    private readonly IClock _clock;
     private readonly ILogger<AppRegistry> _logger;
     private readonly Timer _cleanupTimer;
     private bool _disposed = false;
@@ -20,12 +22,23 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 初始化应用程序实例注册表。
     /// </summary>
+    /// <param name="clock">系统时钟。</param>
     /// <param name="logger">日志记录器。</param>
-    public AppRegistry(ILogger<AppRegistry> logger)
+    public AppRegistry(IClock clock, ILogger<AppRegistry> logger)
     {
+        _clock = clock;
         _logger = logger;
         // 每60秒执行一次清理
         _cleanupTimer = new Timer(OnCleanupTimer, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    /// <summary>
+    /// 初始化应用程序实例注册表（兼容构造）。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
+    public AppRegistry(ILogger<AppRegistry> logger)
+        : this(new SystemClock(), logger)
+    {
     }
 
     /// <summary>
@@ -43,7 +56,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     private void CleanupExpiredInstances()
     {
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
         _logger.LogDebug("当前实例数量: {Count}", _instances.Count);
 
         var expiredInstanceIds = _instances.Values
@@ -80,7 +93,7 @@ public class AppRegistry : IDisposable
         _logger.LogDebug("尝试注册/更新应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, 详细信息: {InstanceDetails}",
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, JsonSerializer.Serialize(instance));
 
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
 
         var instanceToRegister = new AppInstance
         {
@@ -125,7 +138,7 @@ public class AppRegistry : IDisposable
 
         if (_instances.TryGetValue(instanceId, out var instance))
         {
-            var now = DateTime.UtcNow;
+            var now = _clock.UtcNow;
             instance.LastSeenUtc = now;
             lastSeenUtc = now;
             _logger.LogDebug("成功更新实例心跳: {InstanceId}", instanceId);
@@ -163,7 +176,7 @@ public class AppRegistry : IDisposable
         _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}, IncludeOffline: {IncludeOffline}",
             appId, scope, includeAllScopes, includeOffline);
 
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
         var instances = _instances.Values.AsEnumerable();
 
         if (!includeOffline)

@@ -36,7 +36,10 @@ public static class ServiceCollectionExtensions
             new FileSystemManager(
                 sp.GetRequiredService<ILogger<FileSystemManager>>(),
                 sp.GetRequiredService<RuntimePathOptions>()));
-        services.AddSingleton<AppRegistry>();
+        services.AddSingleton<AppRegistry>(sp =>
+            new AppRegistry(
+                sp.GetRequiredService<IClock>(),
+                sp.GetRequiredService<ILogger<AppRegistry>>()));
         services.AddSingleton<DefinitionLoader>(sp =>
             new DefinitionLoader(
                 sp.GetRequiredService<RuntimePathOptions>().DefinitionsPath,

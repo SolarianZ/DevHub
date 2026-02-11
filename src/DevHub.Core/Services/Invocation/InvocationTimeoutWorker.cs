@@ -34,17 +34,6 @@ public class InvocationTimeoutWorker : IDisposable
     }
 
     /// <summary>
-    /// 初始化扫描器（兼容构造）。
-    /// </summary>
-    public InvocationTimeoutWorker(
-        InvocationStore store,
-        InvocationRequestWaiter requestWaiter,
-        ILogger<InvocationTimeoutWorker> logger)
-        : this(store, requestWaiter, new SystemClock(), logger)
-    {
-    }
-
-    /// <summary>
     /// 单次扫描（用于测试或手动触发）。
     /// </summary>
     /// <param name="now">当前 UTC 时间。</param>

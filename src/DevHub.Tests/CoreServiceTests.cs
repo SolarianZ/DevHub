@@ -2,6 +2,7 @@
 
 using System.Text.Json;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
 using DevHub.Core.Models;
@@ -276,7 +277,7 @@ public class CoreServiceTests
     public async Task HubPingHandler_ShouldReturnCorrectResponse()
     {
         // Arrange
-        var handler = new HubPingHandler(_mockHubPingLogger.Object);
+        var handler = new HubPingHandler(new SystemClock(), _mockHubPingLogger.Object);
         var request = new JsonRpcRequest
         {
             Id = "1",

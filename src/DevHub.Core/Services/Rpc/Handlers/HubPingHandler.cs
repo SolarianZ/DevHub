@@ -25,15 +25,6 @@ public class HubPingHandler : IRpcHandler
         _logger = logger;
     }
 
-    /// <summary>
-    /// 初始化 hub.ping RPC 处理器（兼容构造）。
-    /// </summary>
-    /// <param name="logger">日志记录器。</param>
-    public HubPingHandler(ILogger<HubPingHandler> logger)
-        : this(new SystemClock(), logger)
-    {
-    }
-
     /// <inheritdoc />
     public string Method => HubRpcMethods.HubPing;
 

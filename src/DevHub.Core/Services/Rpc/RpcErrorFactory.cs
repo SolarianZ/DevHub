@@ -5,7 +5,7 @@ namespace DevHub.Core.Services.Rpc;
 /// <summary>
 /// RPC 标准错误响应工厂。
 /// </summary>
-internal static class RpcErrorFactory
+public static class RpcErrorFactory
 {
     /// <summary>
     /// 构建 JSON-RPC 错误响应。

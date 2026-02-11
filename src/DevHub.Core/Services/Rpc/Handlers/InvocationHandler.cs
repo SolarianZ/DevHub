@@ -156,7 +156,26 @@ public class InvocationHandler : IRpcHandler
             return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
         }
 
+        return await HandleRequestTimeoutAsync(
+            request,
+            invocation,
+            waiterTask,
+            timeoutTask,
+            timeoutWindowMs,
+            cancellationToken);
+    }
+
+    private async Task<JsonRpcResponse> HandleRequestTimeoutAsync(
+        JsonRpcRequest request,
+        InvocationModel invocation,
+        Task<InvocationRequestCompletion> waiterTask,
+        Task timeoutTask,
+        int timeoutWindowMs,
+        CancellationToken cancellationToken)
+    {
+        
         var elapsedMs = (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+        var timeoutElapsedMs = timeoutTask.IsCanceled ? elapsedMs : Math.Max(elapsedMs, timeoutWindowMs);
         var ttlReached = elapsedMs >= invocation.Options.TtlMs;
 
         if (cancellationToken.IsCancellationRequested)
@@ -208,7 +227,7 @@ public class InvocationHandler : IRpcHandler
         var markedTimeout = _store.MarkTimeout(invocation.InvocationId, _clock.UtcNow);
         if (markedTimeout)
         {
-            _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
+            _requestWaiter.CompleteTimeout(invocation.InvocationId, timeoutElapsedMs);
         }
         else
         {
@@ -219,7 +238,7 @@ public class InvocationHandler : IRpcHandler
         return RpcErrorFactory.Create(request.Id, -32012, "invocation_timeout", new
         {
             invocationId = invocation.InvocationId,
-            elapsedMs
+            elapsedMs = timeoutElapsedMs
         });
     }
 
