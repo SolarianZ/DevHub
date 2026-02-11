@@ -18,7 +18,7 @@ from tests.test_base import (
     RpcAssertions,
     TestResult,
     safe_remove,
-    write_definition,
+    write_app_definition,
 )
 
 
@@ -33,16 +33,12 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
 
     def _create_definition(self, app_id, launch_config):
-        payload = {
-            "appId": app_id,
-            "displayName": app_id,
-            "capabilities": {
-                "rpc": True,
-                "events": False,
-            },
-            "launch": launch_config,
-        }
-        return write_definition(app_id, payload)
+        return write_app_definition(
+            app_id,
+            rpc=True,
+            events=False,
+            launch=launch_config,
+        )
 
     def test_launch_edge_001_default_dedupe_template_should_apply(self):
         """M2-LAUNCH-EDGE-001: 未配置 dedupeKeyTemplate 时使用默认模板。"""

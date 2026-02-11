@@ -19,7 +19,8 @@ from tests.test_base import (
     TestResult,
     new_instance_id,
     safe_remove,
-    write_definition,
+    unregister_instances,
+    write_app_definition,
 )
 
 
@@ -27,15 +28,7 @@ class TestInvocationPollRespond(unittest.TestCase):
     """Invocation poll/respond 测试类"""
 
     def _create_definition(self, app_id):
-        payload = {
-            "appId": app_id,
-            "displayName": app_id,
-            "capabilities": {
-                "rpc": True,
-                "events": False
-            }
-        }
-        return write_definition(app_id, payload)
+        return write_app_definition(app_id, rpc=True, events=False)
 
     @staticmethod
     def _instance_id(prefix):
@@ -116,13 +109,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([instance_id])
             safe_remove(definition_path)
 
         return result
@@ -162,13 +149,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([instance_id])
             safe_remove(definition_path)
 
         return result
@@ -302,16 +283,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                base_url, token = DiscoveryService.get_hub_info()
-                cleanup_client = RpcClient(base_url, token)
-                if instance_a:
-                    cleanup_client.unregister_instance(instance_a)
-                if instance_b:
-                    cleanup_client.unregister_instance(instance_b)
-            except Exception:
-                pass
-
+            unregister_instances([instance_a, instance_b])
             safe_remove(definition_path)
 
         return result
@@ -402,13 +374,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([instance_id])
             safe_remove(definition_path)
 
         return result
@@ -507,16 +473,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                base_url, token = DiscoveryService.get_hub_info()
-                cleanup_client = RpcClient(base_url, token)
-                if instance_a:
-                    cleanup_client.unregister_instance(instance_a)
-                if instance_b:
-                    cleanup_client.unregister_instance(instance_b)
-            except Exception:
-                pass
-
+            unregister_instances([instance_a, instance_b])
             safe_remove(definition_path)
 
         return result

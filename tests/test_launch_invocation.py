@@ -19,7 +19,8 @@ from tests.test_base import (
     TestResult,
     new_instance_id,
     safe_remove,
-    write_definition,
+    unregister_instances,
+    write_app_definition,
 )
 
 
@@ -30,15 +31,7 @@ class TestLaunchInvocation(unittest.TestCase):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
 
     def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
-        payload = {
-            "appId": app_id,
-            "displayName": app_id,
-            "capabilities": {
-                "rpc": True,
-                "events": False
-            }
-        }
-
+        launch_config = None
         if include_launch:
             launch_config = {
                 "exePath": "python3",
@@ -47,9 +40,12 @@ class TestLaunchInvocation(unittest.TestCase):
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
 
-            payload["launch"] = launch_config
-
-        return write_definition(app_id, payload)
+        return write_app_definition(
+            app_id,
+            rpc=True,
+            events=False,
+            launch=launch_config,
+        )
 
     @staticmethod
     def _instance_id(prefix):
@@ -106,13 +102,7 @@ class TestLaunchInvocation(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([instance_id])
             safe_remove(definition_path)
 
         return result

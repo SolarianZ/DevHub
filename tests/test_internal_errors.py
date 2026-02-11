@@ -12,7 +12,14 @@ import requests
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcAssertions,
+    RpcClient,
+    TestResult,
+    get_definitions_dir,
+    safe_remove,
+)
 
 
 class TestInternalErrors(unittest.TestCase):
@@ -334,12 +341,10 @@ class TestInternalErrors(unittest.TestCase):
     def test_invalid_app_definition_files(self):
         """测试无效定义文件不导致服务不可用"""
         result = TestResult("测试处理无效应用定义文件")
+        invalid_app_path = None
 
         try:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-            os.makedirs(definitions_dir, exist_ok=True)
-
+            definitions_dir = get_definitions_dir()
             invalid_app_path = os.path.join(definitions_dir, "invalid-app-definition.json")
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid": "json"')
@@ -356,11 +361,7 @@ class TestInternalErrors(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if "invalid_app_path" in locals() and os.path.exists(invalid_app_path):
-                    os.remove(invalid_app_path)
-            except Exception:
-                pass
+            safe_remove(invalid_app_path)
 
         return result
 

@@ -7,7 +7,6 @@ import os
 import sys
 import time
 import uuid
-import json
 import unittest
 
 # 添加项目根目录到 Python 模块搜索路径
@@ -36,29 +35,6 @@ class TestAppInstances(unittest.TestCase):
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""
         return f"test-instance-{uuid.uuid4().hex[:10]}"
-
-    def _get_definitions_dir(self):
-        """获取应用定义目录。"""
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
-
-    def _create_definition(self, app_id):
-        """创建应用定义文件。"""
-        definitions_dir = self._get_definitions_dir()
-        definition_path = os.path.join(definitions_dir, f"{app_id}.json")
-        definition = {
-            "appId": app_id,
-            "displayName": app_id
-        }
-        with open(definition_path, "w", encoding="utf-8") as f:
-            json.dump(definition, f, ensure_ascii=False, indent=2)
-        return definition_path
 
     def _cleanup_test_instances(self, app_ids):
         """清理测试实例"""

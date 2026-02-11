@@ -21,7 +21,7 @@ from tests.test_base import (
     TestResult,
     new_instance_id,
     safe_remove,
-    write_definition,
+    write_app_definition,
 )
 
 
@@ -29,15 +29,7 @@ class TestScopeRouting(unittest.TestCase):
     """M3 Scope 路由测试类"""
 
     def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
-        payload = {
-            "appId": app_id,
-            "displayName": app_id,
-            "capabilities": {
-                "rpc": True,
-                "events": False
-            }
-        }
-
+        launch_config = None
         if include_launch:
             launch_config = {
                 "exePath": "python3",
@@ -45,9 +37,13 @@ class TestScopeRouting(unittest.TestCase):
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
-            payload["launch"] = launch_config
 
-        return write_definition(app_id, payload)
+        return write_app_definition(
+            app_id,
+            rpc=True,
+            events=False,
+            launch=launch_config,
+        )
 
     @staticmethod
     def _instance_id(prefix):

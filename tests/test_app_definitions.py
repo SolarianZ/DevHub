@@ -11,53 +11,35 @@ import json
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.test_base import (
+    DiscoveryService,
+    RpcAssertions,
+    RpcClient,
+    TestResult,
+    get_definitions_dir,
+    safe_remove,
+    write_app_definition,
+)
 
 
 class TestAppDefinitions(unittest.TestCase):
     """AppDefinition 测试类"""
 
-    def _safe_remove_file(self, file_path):
-        """仅删除当前测试创建的文件，避免误删运行时根目录"""
-        if not file_path:
-            return
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception:
-            pass
-
-    def get_test_app_definition_path(self):
-        """获取应用程序定义文件夹路径（使用规范目录）"""
-        if "DEVHUB_APPDEFS_DIR" in os.environ:
-            definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-        else:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
-        os.makedirs(definitions_dir, exist_ok=True)
-        return definitions_dir
-
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
-        definitions_dir = self.get_test_app_definition_path()
-        test_app_path = os.path.join(definitions_dir, "test-app-1.json")
-
-        test_app = {
-            "appId": "test-app-1",
-            "displayName": "Test Application",
-            "description": "This is a test application",
-            "launch": {
+        app_id = "test-app-1"
+        test_app_path = write_app_definition(
+            app_id,
+            display_name="Test Application",
+            description="This is a test application",
+            rpc=True,
+            events=False,
+            launch={
                 "exePath": "echo",
-                "argsTemplate": "Hello from Test Application"
+                "argsTemplate": "Hello from Test Application",
             },
-            "capabilities": {"rpc": True, "events": False}
-        }
-
-        with open(test_app_path, "w", encoding="utf-8") as f:
-            json.dump(test_app, f, ensure_ascii=False, indent=2)
-
-        return "test-app-1", test_app_path
+        )
+        return app_id, test_app_path
 
     def test_list_definitions(self):
         """测试列出所有应用程序定义"""
@@ -88,7 +70,7 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._safe_remove_file(test_app_path)
+            safe_remove(test_app_path)
 
         return result
 
@@ -119,7 +101,7 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._safe_remove_file(test_app_path)
+            safe_remove(test_app_path)
 
         return result
 
@@ -157,7 +139,7 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试无效格式的应用程序定义文件")
 
         try:
-            definitions_dir = self.get_test_app_definition_path()
+            definitions_dir = get_definitions_dir()
             invalid_app_path = os.path.join(definitions_dir, "invalid-app.json")
 
             # 缺少 appId/displayName
@@ -182,7 +164,7 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._safe_remove_file(locals().get("invalid_app_path"))
+            safe_remove(locals().get("invalid_app_path"))
 
         return result
 
@@ -191,7 +173,7 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试应用程序定义 appId 格式验证")
 
         try:
-            definitions_dir = self.get_test_app_definition_path()
+            definitions_dir = get_definitions_dir()
             invalid_app_path = os.path.join(definitions_dir, "invalid app id.json")
 
             invalid_app = {
@@ -220,7 +202,7 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._safe_remove_file(locals().get("invalid_app_path"))
+            safe_remove(locals().get("invalid_app_path"))
 
         return result
 
@@ -229,7 +211,7 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试文件名与 appId 不一致时应被忽略")
 
         try:
-            definitions_dir = self.get_test_app_definition_path()
+            definitions_dir = get_definitions_dir()
             mismatch_path = os.path.join(definitions_dir, "mismatch-name.json")
 
             mismatch_app = {
@@ -258,7 +240,7 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._safe_remove_file(locals().get("mismatch_path"))
+            safe_remove(locals().get("mismatch_path"))
 
         return result
 

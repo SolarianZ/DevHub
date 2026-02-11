@@ -10,7 +10,7 @@ import requests
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 @contextmanager
@@ -105,6 +105,54 @@ def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
     return definition_path
 
 
+def build_app_definition(
+    app_id: str,
+    *,
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    rpc: bool = True,
+    events: bool = False,
+    launch: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构造标准测试 AppDefinition 负载。"""
+    payload: Dict[str, Any] = {
+        "appId": app_id,
+        "displayName": display_name or app_id,
+        "capabilities": {
+            "rpc": rpc,
+            "events": events,
+        },
+    }
+    if description is not None:
+        payload["description"] = description
+    if launch is not None:
+        payload["launch"] = launch
+    return payload
+
+
+def write_app_definition(
+    app_id: str,
+    *,
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    rpc: bool = True,
+    events: bool = False,
+    launch: Optional[Dict[str, Any]] = None,
+) -> str:
+    """按统一结构写入 AppDefinition。"""
+    return write_definition(
+        app_id,
+        build_app_definition(
+            app_id=app_id,
+            display_name=display_name,
+            description=description,
+            rpc=rpc,
+            events=events,
+            launch=launch,
+        ),
+    )
+
+
 def safe_remove(path: Optional[str]):
     """安全删除文件（不存在或删除失败时忽略）。"""
     if not path:
@@ -120,6 +168,21 @@ def safe_remove(path: Optional[str]):
 def new_instance_id(prefix: str) -> str:
     """生成统一格式实例 ID。"""
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
+
+
+def unregister_instances(instance_ids: Iterable[Optional[str]]):
+    """按实例 ID 列表执行幂等注销（用于测试清理）。"""
+    ids = [instance_id for instance_id in instance_ids if instance_id]
+    if not ids:
+        return
+
+    try:
+        base_url, token = DiscoveryService.get_hub_info()
+        client = RpcClient(base_url, token)
+        for instance_id in ids:
+            client.unregister_instance(instance_id)
+    except Exception:
+        pass
 
 
 def get_runtime_hub_info() -> Tuple[str, str, str]:
@@ -353,6 +416,7 @@ class RpcClient:
         request_id="1",
     ):
         """调用 hub.invoke.request。"""
+        default_auto_launch = target_instance_id is None
         params = {
             "appId": app_id,
             "target": {
@@ -365,7 +429,7 @@ class RpcClient:
                 "ttlMs": 300000,
                 "waitTimeoutMs": 120000,
                 "queueIfOffline": True,
-                "autoLaunch": True
+                "autoLaunch": default_auto_launch
             }
         }
         return self.call("hub.invoke.request", params=params, request_id=request_id)

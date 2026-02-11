@@ -19,7 +19,8 @@ from tests.test_base import (
     TestResult,
     new_instance_id,
     safe_remove,
-    write_definition,
+    unregister_instances,
+    write_app_definition,
 )
 
 
@@ -27,15 +28,7 @@ class TestInvocationNotify(unittest.TestCase):
     """Invocation notify 测试类"""
 
     def _create_definition(self, app_id, rpc=True):
-        payload = {
-            "appId": app_id,
-            "displayName": app_id,
-            "capabilities": {
-                "rpc": rpc,
-                "events": False
-            }
-        }
-        return write_definition(app_id, payload)
+        return write_app_definition(app_id, rpc=rpc, events=False)
 
     @staticmethod
     def _instance_id(prefix):
@@ -121,13 +114,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if callee_instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([callee_instance_id])
             safe_remove(definition_path)
 
         return result
@@ -184,13 +171,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if callee_instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([callee_instance_id])
             safe_remove(definition_path)
 
         return result
@@ -431,13 +412,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            try:
-                if callee_instance_id:
-                    base_url, token = DiscoveryService.get_hub_info()
-                    RpcClient(base_url, token).unregister_instance(callee_instance_id)
-            except Exception:
-                pass
-
+            unregister_instances([callee_instance_id])
             safe_remove(definition_path)
 
         return result

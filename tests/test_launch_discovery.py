@@ -17,7 +17,7 @@ class TestLaunchDiscovery(unittest.TestCase):
     """启动与发现测试类"""
 
     def test_discovery_files_exist(self):
-        """测试 hub.json 和 token.txt 文件是否存在"""
+        """测试 hub.json 与 tokenFile 发现链路是否符合 Spec"""
         result = TestResult("测试发现文件是否存在")
 
         try:
@@ -30,14 +30,6 @@ class TestLaunchDiscovery(unittest.TestCase):
                 result.add_detail("✅ hub.json 文件存在")
             else:
                 result.mark_failure(f"❌ hub.json 文件不存在: {hub_json_path}")
-                return result
-
-            # 检查 token.txt 是否存在
-            token_path = os.path.join(runtime_dir, "token.txt")
-            if os.path.exists(token_path):
-                result.add_detail("✅ token.txt 文件存在")
-            else:
-                result.mark_failure(f"❌ token.txt 文件不存在: {token_path}")
                 return result
 
             # 验证 hub.json 格式
@@ -99,6 +91,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             if not os.path.exists(token_file):
                 result.mark_failure(f"❌ tokenFile 指向的文件不存在: {token_file}")
                 return result
+            result.add_detail("✅ tokenFile 指向文件存在")
 
             # 检查 token 文件内容
             with open(token_file, "r", encoding="utf-8") as f:
@@ -150,8 +143,14 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         try:
             runtime_dir = DiscoveryService.get_runtime_directory()
-            token_path = os.path.join(runtime_dir, "token.txt")
             hub_json_path = os.path.join(runtime_dir, "hub.json")
+            with open(hub_json_path, "r", encoding="utf-8") as f:
+                import json
+                hub_info = json.load(f)
+            token_path = hub_info.get("tokenFile")
+            if not token_path or not os.path.exists(token_path):
+                result.mark_failure(f"❌ tokenFile 指向路径不存在: {token_path}")
+                return result
 
             # 检查 token.txt 权限
             if os.name == "nt":  # Windows 系统
@@ -218,23 +217,21 @@ class TestLaunchDiscovery(unittest.TestCase):
 
             else:  # 非 Windows 系统，简化检查
                 try:
-                    import stat
-
-                    # 检查 token.txt 权限是否为 0o600（仅用户可读写）
+                    # Spec 要求“仅当前用户可访问”，因此只要求 group/other 位为 0。
                     st_mode_token = os.stat(token_path).st_mode
-                    if (st_mode_token & 0o777) == 0o600:
-                        result.add_detail("✅ Token 文件权限正确（0o600）")
-                    else:
+                    token_perm = st_mode_token & 0o777
+                    if (token_perm & 0o077) != 0 or (token_perm & 0o400) == 0:
                         result.mark_failure(f"❌ Token 文件权限不正确: 0o{oct(st_mode_token & 0o777)[2:]}")
                         return result
+                    result.add_detail(f"✅ Token 文件权限符合仅当前用户可访问约束: 0o{oct(token_perm)[2:]}")
 
-                    # 检查 hub.json 权限是否为 0o600（仅用户可读写）
+                    # hub.json 同样要求仅当前用户可访问。
                     st_mode_hub = os.stat(hub_json_path).st_mode
-                    if (st_mode_hub & 0o777) == 0o600:
-                        result.add_detail("✅ hub.json 文件权限正确（0o600）")
-                    else:
+                    hub_perm = st_mode_hub & 0o777
+                    if (hub_perm & 0o077) != 0 or (hub_perm & 0o400) == 0:
                         result.mark_failure(f"❌ hub.json 文件权限不正确: 0o{oct(st_mode_hub & 0o777)[2:]}")
                         return result
+                    result.add_detail(f"✅ hub.json 文件权限符合仅当前用户可访问约束: 0o{oct(hub_perm)[2:]}")
 
                 except Exception as e:
                     result.add_detail(f"⚠️  检查文件权限时出错：{e}")
@@ -253,37 +250,28 @@ class TestLaunchDiscovery(unittest.TestCase):
         try:
             runtime_dir = DiscoveryService.get_runtime_directory()
             hub_json_path = os.path.join(runtime_dir, "hub.json")
-            hub_json_tmp_path = os.path.join(runtime_dir, "hub.json.tmp")
-
-            # 验证原子写入的实现方式：应该先写临时文件再替换
-            # 我们可以通过检查文件的修改时间和存在性来推断
             import time
-
-            # 首先检查是否存在临时文件
-            if os.path.exists(hub_json_tmp_path):
-                result.mark_failure("❌ 发现临时文件，原子写入过程可能失败")
-                return result
 
             # 检查 hub.json 是否存在
             if not os.path.exists(hub_json_path):
                 result.mark_failure("❌ hub.json 文件不存在")
                 return result
 
-            # 尝试读取 hub.json 内容以验证其完整性
-            with open(hub_json_path, "r", encoding="utf-8") as f:
-                import json
-                hub_info = json.load(f)
-
-            # 验证 hub.json 内容的完整性
             required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"]
-            for field in required_fields:
-                if field not in hub_info:
-                    result.mark_failure(f"❌ hub.json 缺少 {field} 字段，可能是原子写入失败导致的")
-                    return result
+            # 不依赖实现细节（例如临时文件命名），只验证可观察到的原子性：
+            # 在多次快速读取期间，hub.json 始终可解析且字段完整。
+            for i in range(20):
+                with open(hub_json_path, "r", encoding="utf-8") as f:
+                    import json
+                    hub_info = json.load(f)
 
-            # 原子写入的一个重要特性是文件内容的完整性，因为如果在写入过程中失败，
-            # 临时文件不会被重命名为目标文件，从而避免了部分写入的问题
-            result.add_detail("✅ hub.json 内容完整，原子写入特性正常")
+                for field in required_fields:
+                    if field not in hub_info:
+                        result.mark_failure(f"❌ 第{i + 1}次读取时 hub.json 缺少 {field} 字段")
+                        return result
+                time.sleep(0.01)
+
+            result.add_detail("✅ 连续读取均可完整解析 hub.json，符合原子更新可观察行为")
             result.mark_success()
 
         except Exception as e:
@@ -297,7 +285,6 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         try:
             import tempfile
-            import shutil
 
             # 创建临时目录作为自定义运行时目录
             with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-") as temp_dir:
