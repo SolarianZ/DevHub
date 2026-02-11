@@ -12,6 +12,8 @@ All notable changes to this project are documented in this file.
 ### Changed
 - Added explicit version metadata to Host/Core project files (`1.0.1`)
 - Annotated Windows-only ACL method with platform attribute to eliminate CA1416 analyzer warnings
+- Relaxed Spec invocation `args` model to allow any JSON value (`object/array/string/number/boolean/null`)
+- HTTP JSON-RPC notifications (requests without `id`) now return `200` with empty body (no JSON-RPC response payload)
 
 ## [1.0.1] - 2026-02-11
 

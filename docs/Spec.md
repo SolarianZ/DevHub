@@ -366,7 +366,9 @@ sequenceDiagram
       }
     },
     "method": { "type": "string" },
-    "args": { "type": ["object", "array"] },
+    "args": {
+      "description": "Any valid JSON value is allowed (object/array/string/number/boolean/null)."
+    },
     "kind": { "type": "string", "enum": ["request", "notify"] },
     "createdAtUtc": { "type": "string", "format": "date-time" },
     "options": {
@@ -434,6 +436,7 @@ sequenceDiagram
 
 ### 6.1 约定（规范性）
 - 所有 `hub.*` 方法**必须**使用**对象**参数（具名参数）。如果参数是数组，Hub **必须**返回 `-32602 invalid_params`。
+- `hub.invoke.notify` / `hub.invoke.request` 的 `args` **可以**是任意 JSON 值（`object | array | string | number | boolean | null`）。
 - 对于所有成功的 `hub.*` 调用，`result` **必须**是一个至少包含以下内容的 JSON 对象：
   ```json
   { "ok": true }

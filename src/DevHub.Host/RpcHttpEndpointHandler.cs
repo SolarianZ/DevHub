@@ -49,6 +49,7 @@ public class RpcHttpEndpointHandler
         string? clientId = null;
         object? requestId = null;
         string? method = null;
+        var suppressJsonRpcResponse = false;
 
         try
         {
@@ -96,6 +97,7 @@ public class RpcHttpEndpointHandler
 
                 requestId = rpcRequest.Id;
                 method = rpcRequest.Method;
+                suppressJsonRpcResponse = rpcRequest.Id is null;
 
                 _logger.LogInformation("处理RPC请求: {Method}, RequestId: {RequestId}, ClientId: {ClientId}",
                     rpcRequest.Method, rpcRequest.Id, clientId);
@@ -115,6 +117,12 @@ public class RpcHttpEndpointHandler
                 {
                     _logger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
                         rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
+
+                    if (suppressJsonRpcResponse)
+                    {
+                        return Results.Empty;
+                    }
+
                     return Results.Json(errorResponse, JsonOptions);
                 }
 
@@ -125,10 +133,23 @@ public class RpcHttpEndpointHandler
                 {
                     _logger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",
                         rpcRequest.Method, rpcRequest.Id);
+
+                    if (suppressJsonRpcResponse)
+                    {
+                        return Results.Empty;
+                    }
+
                     return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions);
                 }
 
                 var response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
+                if (suppressJsonRpcResponse)
+                {
+                    stopwatch.Stop();
+                    _logger.LogInformation("通知请求已处理（无 id，不返回 JSON-RPC 响应）: {Method}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
+                        rpcRequest.Method, clientId, stopwatch.ElapsedMilliseconds);
+                    return Results.Empty;
+                }
 
                 stopwatch.Stop();
                 _logger.LogInformation("RPC请求处理成功: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
@@ -143,6 +164,12 @@ public class RpcHttpEndpointHandler
             stopwatch.Stop();
             _logger.LogError(ex, "处理RPC请求时发生未捕获的异常，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                 method, requestId, clientId, stopwatch.ElapsedMilliseconds);
+
+            if (suppressJsonRpcResponse)
+            {
+                return Results.Empty;
+            }
+
             return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions);
         }
     }

@@ -167,3 +167,18 @@
 - 黑盒 `python3 tests/test_runner.py --fast --no-header`：
   - 在当前沙箱环境下连接本地 Host 端口时报 `Operation not permitted/Connection refused`，未形成可用结果；
   - 该失败表现为环境限制，不属于本次 DI 收敛改造引入的编译/单测回归。
+
+---
+
+## 6. M4 收尾补充：协议一致性收敛（2026-02-11）
+
+### 6.1 完成项
+- [x] `docs/Spec.md` 调整 Invocation 模型：`args` 允许任意 JSON 值（`object/array/string/number/boolean/null`）。
+- [x] `src/DevHub.Host/RpcHttpEndpointHandler.cs` 对 HTTP 通知（无 `id`）改为“不返回 JSON-RPC 响应”，仅保留服务端处理与日志。
+
+### 6.2 影响范围
+- 协议文档：
+  - `docs/Spec.md`
+- Host 接入层：
+  - `src/DevHub.Host/RpcHttpEndpointHandler.cs`
+- 本次未改动调用路由、错误码映射与 WS 行为。

@@ -803,6 +803,61 @@ public class InvocationRoutingTests : IDisposable
         Assert.True(afterRespond > beforeRespond);
     }
 
+    [Fact]
+    public async Task InvocationHandler_Notify_WithScalarArgs_ShouldAllowAndPreserveValue()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "scalar-args-inst",
+            AppId = "scalar-args.app",
+            Scope = null,
+            Pid = 3621,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-scalar-args",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scalar-args.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "scalar.echo",
+                args = "hello-scalar",
+                options = new { ttlMs = 60000, queueIfOffline = true, autoLaunch = false }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(notifyResponse.Error);
+        var notifyResult = JsonSerializer.SerializeToElement(notifyResponse.Result);
+        var invocationId = notifyResult.GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-scalar-args",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "scalar-args-inst",
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var items = pollResult.GetProperty("items").EnumerateArray().ToList();
+        Assert.Single(items);
+        Assert.Equal(invocationId, items[0].GetProperty("invocationId").GetString());
+        Assert.Equal(JsonValueKind.String, items[0].GetProperty("args").ValueKind);
+        Assert.Equal("hello-scalar", items[0].GetProperty("args").GetString());
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -860,6 +915,5 @@ public class InvocationRoutingTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 
 
