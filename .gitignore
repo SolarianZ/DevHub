@@ -71,6 +71,7 @@ Migrations/
 # Test results
 [Xx]Unit/
 [Vv]STestResults/
+**/TestResults/
 [Cc]overage/
 *.coverage
 *.coveragexml

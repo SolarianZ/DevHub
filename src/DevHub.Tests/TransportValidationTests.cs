@@ -74,6 +74,26 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_4_2_HttpHeaders_TokenProviderThrows_ShouldReturnUnauthorizedInvalidToken()
+    {
+        var headers = BuildValidHeaders();
+
+        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+            "application/json",
+            headers,
+            () => throw new InvalidOperationException("token provider failed"),
+            "req-auth-provider-exception",
+            out var errorResponse,
+            out _,
+            out _);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32001, "unauthorized", "req-auth-provider-exception");
+        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
+        Assert.Equal("invalid_token", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public void Spec_4_2_HttpHeaders_MissingProtocol_ShouldReturnNotSupportedMissing()
     {
         var headers = BuildValidHeaders();
@@ -206,6 +226,24 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_4_2_HttpHeaders_MissingContentType_ShouldReturnInvalidRequest()
+    {
+        var headers = BuildValidHeaders();
+
+        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+            null,
+            headers,
+            () => "token-1",
+            "req-empty-content-type",
+            out var errorResponse,
+            out _,
+            out _);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", "req-empty-content-type");
+    }
+
+    [Fact]
     public void Spec_4_3_WsAuthenticate_MissingToken_ShouldReturnUnauthorizedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -229,6 +267,127 @@ public class TransportValidationTests
         AssertError(response, -32001, "unauthorized", "ws-auth");
         var data = JsonSerializer.SerializeToElement(response.Error!.Data);
         Assert.Equal("missing_token", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_ParamsNotObject_ShouldReturnInvalidParams()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "ws-auth-params",
+            Method = "hub.ws.authenticate",
+            Params = JsonSerializer.SerializeToElement("bad")
+        };
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.False(closeAfterResponse);
+        AssertError(response, -32602, "invalid_params", "ws-auth-params");
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_EmptyToken_ShouldReturnUnauthorizedAndClose()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = " ",
+            protocolVersion = 1,
+            clientId = "client-a",
+            clientSessionId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.True(closeAfterResponse);
+        AssertError(response, -32001, "unauthorized", "ws-auth");
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_MissingProtocol_ShouldReturnNotSupportedAndClose()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = "token-1",
+            clientId = "client-a",
+            clientSessionId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.True(closeAfterResponse);
+        AssertError(response, -32099, "not_supported", "ws-auth");
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_MissingClientId_ShouldReturnInvalidParams()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = "token-1",
+            protocolVersion = 1,
+            clientSessionId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.False(closeAfterResponse);
+        AssertError(response, -32602, "invalid_params", "ws-auth");
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_MissingClientSessionId_ShouldReturnInvalidParams()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = "token-1",
+            protocolVersion = 1,
+            clientId = "client-a"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.False(closeAfterResponse);
+        AssertError(response, -32602, "invalid_params", "ws-auth");
     }
 
     [Fact]
@@ -312,6 +471,56 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_4_3_WsAuthenticate_TokenProviderThrows_ShouldReturnUnauthorizedAndClose()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = "token-1",
+            protocolVersion = 1,
+            clientId = "client-a",
+            clientSessionId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => throw new InvalidOperationException("token provider failed"),
+            (_, _) => true,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.True(closeAfterResponse);
+        AssertError(response, -32001, "unauthorized", "ws-auth");
+    }
+
+    [Fact]
+    public void Spec_4_3_WsAuthenticate_MarkAuthenticatedFailed_ShouldReturnInternalErrorAndClose()
+    {
+        var request = CreateWsAuthenticateRequest(new
+        {
+            token = "token-1",
+            protocolVersion = 1,
+            clientId = "client-a",
+            clientSessionId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        var response = DevHubTransportValidator.HandleWsAuthenticate(
+            request,
+            () => "token-1",
+            (_, _) => false,
+            out var authenticated,
+            out _,
+            out _,
+            out var closeAfterResponse);
+
+        Assert.False(authenticated);
+        Assert.True(closeAfterResponse);
+        AssertError(response, -32603, "internal_error", "ws-auth");
+    }
+
+    [Fact]
     public void Spec_4_3_WsAuthenticate_Success_ShouldReturnOkAndAuthenticatedContext()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -384,6 +593,57 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_6_1_TryBuildRpcRequest_MissingMethod_ShouldReturnInvalidRequest()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": "req-missing-method"
+        }
+        """);
+
+        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", "req-missing-method");
+    }
+
+    [Fact]
+    public void Spec_6_1_TryBuildRpcRequest_InvalidIdType_ShouldReturnInvalidRequestWithNullId()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": true,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", null);
+    }
+
+    [Fact]
+    public void Spec_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": 1.5,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out var request, out var errorResponse);
+
+        Assert.True(ok);
+        Assert.Null(errorResponse);
+        Assert.Equal(1.5, Assert.IsType<double>(request.Id));
+    }
+
+    [Fact]
     public void Spec_6_1_TryBuildRpcRequest_ValidEnvelope_ShouldReturnRpcRequest()
     {
         var root = ParseJsonElement("""
@@ -447,6 +707,88 @@ public class TransportValidationTests
     }
 
     [Fact]
+    public void Spec_6_3_14_Subscribe_WhenParamsNull_ShouldAllowSubscribeAll()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "req-subscribe-null",
+            Method = "hub.events.subscribe",
+            Params = null
+        };
+
+        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
+
+        Assert.True(ok);
+        Assert.Null(types);
+        Assert.Null(errorResponse);
+    }
+
+    [Fact]
+    public void Spec_6_3_14_Subscribe_WhenParamsIsRawObject_ShouldReturnInvalidParams()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "req-subscribe-raw-object",
+            Method = "hub.events.subscribe",
+            Params = new object()
+        };
+
+        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-raw-object");
+    }
+
+    [Fact]
+    public void Spec_6_3_14_Subscribe_WhenParamsJsonNull_ShouldAllowSubscribeAll()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "req-subscribe-json-null",
+            Method = "hub.events.subscribe",
+            Params = ParseJsonElement("null")
+        };
+
+        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
+
+        Assert.True(ok);
+        Assert.Null(types);
+        Assert.Null(errorResponse);
+    }
+
+    [Fact]
+    public void Spec_6_3_14_Subscribe_TypesNotArray_ShouldReturnInvalidParams()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "req-subscribe-types-not-array",
+            Method = "hub.events.subscribe",
+            Params = ParseJsonElement("""{ "types": "invocation.completed" }""")
+        };
+
+        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-types-not-array");
+    }
+
+    [Fact]
+    public void Spec_6_3_14_Subscribe_TypesContainEmptyString_ShouldReturnInvalidParams()
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = "req-subscribe-empty-type",
+            Method = "hub.events.subscribe",
+            Params = ParseJsonElement("""{ "types": [""] }""")
+        };
+
+        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-empty-type");
+    }
+
+    [Fact]
     public void Spec_6_3_15_Unsubscribe_MissingSubscriptionId_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -493,6 +835,32 @@ public class TransportValidationTests
         Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.events.unsubscribe"));
         Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ping"));
         Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.invoke.request"));
+    }
+
+    [Fact]
+    public void Spec_4_2_HttpHeaders_WithCaseSensitiveDictionary_ShouldSupportCaseInsensitiveLookup()
+    {
+        var headers = new Dictionary<string, string>
+        {
+            ["x-devhub-protocol"] = "1",
+            ["x-devhub-clientid"] = "client-a",
+            ["x-devhub-clientsessionid"] = "11111111-1111-1111-1111-111111111111",
+            ["authorization"] = "Bearer token-1"
+        };
+
+        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+            "application/json",
+            headers,
+            () => "token-1",
+            "req-case-sensitive-headers",
+            out var errorResponse,
+            out var clientId,
+            out var clientSessionId);
+
+        Assert.True(ok);
+        Assert.Null(errorResponse);
+        Assert.Equal("client-a", clientId);
+        Assert.Equal("11111111-1111-1111-1111-111111111111", clientSessionId);
     }
 
     private static Dictionary<string, string> BuildValidHeaders()

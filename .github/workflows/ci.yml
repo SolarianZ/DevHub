@@ -41,8 +41,11 @@ jobs:
       - name: Build
         run: dotnet build src/DevHub.slnx -c Release --no-restore
 
+      - name: Clean test result artifacts
+        run: find src -type d -name TestResults -prune -exec rm -rf {} +
+
       - name: Unit tests with coverage
-        run: dotnet test src/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --verbosity normal
+        run: dotnet test src/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings tests/coverage.runsettings --verbosity normal
 
       - name: Verify coverage thresholds (line>=90%, branch>=80%)
         run: python3 tests/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80

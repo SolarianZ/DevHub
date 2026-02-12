@@ -362,6 +362,123 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.Equal("launch-args-template-global.app||global|http://127.0.0.1:63002", rendered);
     }
 
+    [Fact]
+    public async Task LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
+    {
+        WriteDefinition("launch-null-process.app", includeLaunch: true);
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns((System.Diagnostics.Process?)null);
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-null-process.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("process_start_failed", errorData.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WhenProcessLauncherThrows_ShouldReturnLaunchFailedWithStderr()
+    {
+        WriteDefinition("launch-throws-process.app", includeLaunch: true);
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Throws(new InvalidOperationException("mock launcher failed"));
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-throws-process.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("process_start_failed", errorData.GetProperty("reason").GetString());
+        Assert.Equal("mock launcher failed", errorData.GetProperty("stderr").GetString());
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WhenWaitForRegisterAndInstanceAppears_ShouldReturnStarted()
+    {
+        WriteDefinition("launch-wait-register.app", includeLaunch: true);
+
+        var clock = new SystemClock();
+        using var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(clock, processLauncher.Object, appRegistry);
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(50);
+            appRegistry.RegisterInstance(new AppInstance
+            {
+                InstanceId = "launch-wait-register-instance",
+                AppId = "launch-wait-register.app",
+                Scope = null,
+                Pid = 6501,
+                Invoke = new InvokeCapability { Poll = true, Respond = true }
+            });
+        });
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-wait-register.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 600,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+    }
+
+    [Fact]
+    public async Task LaunchAsync_WhenArgsTemplateMissing_ShouldPassNullArgumentsToProcessLauncher()
+    {
+        WriteDefinitionWithoutArgsTemplate("launch-null-args-template.app");
+
+        string? capturedArguments = "sentinel";
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, args) => capturedArguments = args)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-null-args-template.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+        Assert.Null(capturedArguments);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -375,14 +492,24 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 
-    private LaunchCoordinator CreateCoordinator()
+    private LaunchCoordinator CreateCoordinator(
+        IClock? clock = null,
+        IProcessLauncher? processLauncher = null,
+        AppRegistry? appRegistry = null)
     {
+        var effectiveClock = clock ?? new SystemClock();
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var effectiveAppRegistry = appRegistry ?? new AppRegistry(effectiveClock, _registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        return new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        return new LaunchCoordinator(
+            definitionProvider,
+            effectiveAppRegistry,
+            provider,
+            processLauncher ?? new ProcessLauncher(),
+            effectiveClock,
+            _launchLogger.Object);
     }
 
     private void WriteHubRuntime(string httpBaseUrl)
@@ -439,6 +566,27 @@ public class LaunchCoordinatorTests : IDisposable
 
             payload["launch"] = launch;
         }
+
+        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+    }
+
+    private void WriteDefinitionWithoutArgsTemplate(string appId)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["appId"] = appId,
+            ["displayName"] = appId,
+            ["capabilities"] = new Dictionary<string, object?>
+            {
+                ["rpc"] = true,
+                ["events"] = false
+            },
+            ["launch"] = new Dictionary<string, object?>
+            {
+                ["exePath"] = "dotnet"
+            }
+        };
 
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
