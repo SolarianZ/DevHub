@@ -261,15 +261,30 @@
 
 ## 5. 文档完善度
 
-- [ ] README 完整覆盖：启动、鉴权、调用、订阅、错误排查、已知限制。
-- [ ] CHANGELOG 与版本号一致，记录对外可感知变化。
-- [ ] 补充发布说明：升级影响、兼容策略、回滚说明。
-- [ ] 补充运维排障文档：常见故障、日志定位、恢复步骤。
-- [ ] 校验文档与实际代码/测试数据一致（命令、路径、字段名）。
+- [x] README 完整覆盖：启动、鉴权、调用、订阅、错误排查、已知限制。
+- [x] CHANGELOG 与版本号一致，记录对外可感知变化。
+- [x] 补充发布说明：升级影响、兼容策略、回滚说明。
+- [x] 补充运维排障文档：常见故障、日志定位、恢复步骤。
+- [x] 校验文档与实际代码/测试数据一致（命令、路径、字段名）。
 
 验收标准：
 - 新用户可仅依赖文档完成启动与基础调用。
 - 文档无过期命令与过期字段。
+
+### 5.1 收口记录
+
+- 完成日期：2026-02-12
+- 完成分支：`m4`
+
+### 5.2 证据与校验结果
+
+| 验收项 | 文档证据 | 一致性校验锚点 | 结论 |
+| --- | --- | --- | --- |
+| README 覆盖启动/鉴权/调用/订阅/排障/已知限制 | `README.md` | `docs/Spec.md` §3/§4/§6/§8；`src/DevHub.Core/Services/HubConstants.cs` | 通过 |
+| CHANGELOG 与版本号一致 | `CHANGELOG.md` | `src/DevHub.Host/DevHub.Host.csproj`（`Version=1.0.1`）；`src/DevHub.Core/DevHub.Core.csproj`（`Version=1.0.1`） | 通过 |
+| 发布说明（升级影响/兼容策略/回滚） | `docs/DevHub_v1.0.1_发布说明.md` | `docs/Spec.md` §4.3、§9.2；`src/DevHub.Host/WebSocketSessionHandler.cs`；`src/DevHub.Host/RpcHttpEndpointHandler.cs` | 通过 |
+| 运维排障文档（常见故障/日志定位/恢复步骤） | `docs/运维排障手册.md` | `src/DevHub.Host/Transport/DevHubTransportValidator.cs`（错误码与 reason）；`src/DevHub.Core/Services/FileSystemManager.cs`（运行时文件） | 通过 |
+| 命令/路径/字段名与代码测试一致 | `README.md`、`docs/DevHub_v1.0.1_发布说明.md`、`docs/运维排障手册.md` | `dotnet build src/DevHub.slnx -c Release`；`python3 tests/test_runner.py --smoke --no-header`；`tests/test_runner.py`（参数口径） | 通过 |
 
 ## 6. 发布工程与制品质量
 
