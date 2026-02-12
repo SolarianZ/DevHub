@@ -206,3 +206,18 @@ python3 tests/test_runner.py --full --no-header
   - 尚有 4 项 `P1` 缺口阻碍“全 MUST 严格断言”口径。
 
 > 建议先落地第 7 章 `P1` 补测，再进行一次 full 回归并重新出具“100% MUST 严格断言”结论。
+
+---
+
+## 10. 增量更新（2026-02-12）
+
+本次基于 `m4` 分支进行了增量收口，结论如下：
+
+- 已关闭：
+  - `Windows ACL` 缺依赖仅告警的问题：`tests/test_launch_discovery.py` 在缺少 `pywin32` 时改为直接失败。
+  - internal error/压力场景“允许错误码集合”断言：`tests/test_internal_errors.py` 改为仅验证可解析性与恢复性。
+  - 传输矩阵“多错误码允许集合”：`tests/test_ws_transport_matrix.py` 传输不匹配固定断言 `-32099 not_supported`。
+  - 宿主行为已对齐：HTTP/WS 传输不匹配统一返回 `-32099 not_supported`（`src/DevHub.Host` 已同步）。
+- 已接入但未完成闭环：
+  - 覆盖率门禁已纳入 CI（line>=90%、branch>=80%），当前本地基线尚未达标（见 `temp/coverage_verify.log`）。
+  - 三平台 smoke（Linux/Windows/macOS）已纳入 CI 矩阵，待首轮流水线通过产出审计证据。

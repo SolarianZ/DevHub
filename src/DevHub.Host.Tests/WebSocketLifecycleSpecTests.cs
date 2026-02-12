@@ -306,7 +306,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
-    public async Task Spec_6_2_AfterAuthenticate_HttpOnlyMethodOverWs_ShouldReturnMethodNotFound()
+    public async Task Spec_6_2_AfterAuthenticate_HttpOnlyMethodOverWs_ShouldReturnNotSupported()
     {
         var context = CreateHostContext();
 
@@ -349,8 +349,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
         var pollResponse = FindResponseById(responses, "ws-http-only-poll");
         Assert.NotEqual(JsonValueKind.Undefined, pollResponse.ValueKind);
         Assert.True(pollResponse.TryGetProperty("error", out var pollError));
-        Assert.Equal(-32601, pollError.GetProperty("code").GetInt32());
-        Assert.Equal("method_not_found", pollError.GetProperty("message").GetString());
+        Assert.Equal(-32099, pollError.GetProperty("code").GetInt32());
+        Assert.Equal("not_supported", pollError.GetProperty("message").GetString());
     }
 
     [Fact]

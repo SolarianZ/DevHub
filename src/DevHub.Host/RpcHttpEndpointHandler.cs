@@ -142,6 +142,25 @@ public class RpcHttpEndpointHandler
                     return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions);
                 }
 
+                if (DevHubTransportValidator.IsWebSocketOnlyMethod(rpcRequest.Method))
+                {
+                    _logger.LogWarning("HTTP 调用了 WS-only 方法，返回 not_supported，Method: {Method}, RequestId: {RequestId}",
+                        rpcRequest.Method, rpcRequest.Id);
+
+                    if (suppressJsonRpcResponse)
+                    {
+                        return Results.Empty;
+                    }
+
+                    return Results.Json(
+                        DevHubTransportValidator.CreateErrorResponse(
+                            -32099,
+                            "not_supported",
+                            rpcRequest.Id,
+                            new { reason = "transport_mismatch", expected = "ws" }),
+                        JsonOptions);
+                }
+
                 var response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
                 if (suppressJsonRpcResponse)
                 {

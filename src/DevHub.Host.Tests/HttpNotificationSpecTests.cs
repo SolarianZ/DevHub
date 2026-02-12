@@ -1,9 +1,11 @@
 namespace DevHub.Host.Tests;
 
 using System.Text;
+using System.Text.Json;
 using DevHub.Host;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -61,6 +63,49 @@ public class HttpNotificationSpecTests : IDisposable
         using var reader = new StreamReader(httpContext.Response.Body, Encoding.UTF8, leaveOpen: true);
         var bodyText = await reader.ReadToEndAsync();
         Assert.True(string.IsNullOrEmpty(bodyText));
+    }
+
+    [Fact]
+    public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
+    {
+        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var handler = new RpcHttpEndpointHandler(
+            hostContext.Router,
+            hostContext.FileSystemManager,
+            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = HttpMethods.Post;
+        httpContext.Request.ContentType = "application/json";
+        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
+        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
+        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-ws-only-client";
+        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
+        httpContext.RequestServices = new ServiceCollection()
+            .AddLogging()
+            .AddOptions()
+            .BuildServiceProvider();
+        httpContext.Response.Body = new MemoryStream();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-ws-only","method":"hub.events.subscribe","params":{}}
+            """;
+        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
+
+        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+        httpContext.Response.Body.Position = 0;
+        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-ws-only", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32099, error.GetProperty("code").GetInt32());
+        Assert.Equal("not_supported", error.GetProperty("message").GetString());
+        Assert.Equal("transport_mismatch", error.GetProperty("data").GetProperty("reason").GetString());
+        Assert.Equal("ws", error.GetProperty("data").GetProperty("expected").GetString());
     }
 
     /// <summary>

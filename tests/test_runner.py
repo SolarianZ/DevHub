@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1~M4 测试运行器
+DevHub M1~M4 测试运行器（default/smoke/fast/full）
 """
 
 import os
@@ -113,14 +113,17 @@ def run_suite_with_spinner(logger, stage_name, runner):
         logger.info("=== %s 完成，用时 %.1fs ===", stage_name, elapsed_seconds)
 
 
-def run_all_tests(full=False, fast=False):
+def run_all_tests(full=False, fast=False, smoke=False):
     """运行所有测试"""
     # 创建 temp 目录
     temp_dir = create_temp_directory()
     log_file = os.path.join(temp_dir, "test_log.txt")
     logger = setup_logging(log_file)
 
-    if full:
+    if smoke:
+        mode = "smoke"
+        coverage = "跨平台最小冒烟回归（发现/鉴权/WS 传输矩阵/request 主链路）"
+    elif full:
         mode = "full"
         coverage = "M1~M4 严格覆盖（含 lease(30s)/并发去重/scope 扩展与 WS failed 事件场景）"
     elif fast:
@@ -134,75 +137,109 @@ def run_all_tests(full=False, fast=False):
     # 创建测试报告
     report = TestReport(mode=mode, coverage=coverage)
 
-    # 运行各个模块的测试
-    logger.info("=== 运行启动与发现测试 ===")
-    launch_discovery_tests = TestLaunchDiscovery()
-    report.results.extend(launch_discovery_tests.run_all_tests(full=full))
+    if smoke:
+        logger.info("=== 运行启动与发现 smoke 测试 ===")
+        launch_discovery_tests = TestLaunchDiscovery()
+        report.results.extend(launch_discovery_tests.run_all_tests(full=False))
 
-    logger.info("=== 运行鉴权与协议版本测试 ===")
-    auth_protocol_tests = TestAuthProtocol()
-    report.results.extend(auth_protocol_tests.run_all_tests(full=full))
+        logger.info("=== 运行鉴权 smoke 测试 ===")
+        auth_protocol_tests = TestAuthProtocol()
+        report.results.extend([
+            auth_protocol_tests.test_ping_with_valid_credentials(),
+            auth_protocol_tests.test_ping_with_invalid_token(),
+            auth_protocol_tests.test_ping_without_protocol_header(),
+        ])
 
-    logger.info("=== 运行 WebSocket 事件测试 ===")
-    ws_events_tests = TestWsEvents()
-    report.results.extend(ws_events_tests.run_all_tests(full=full))
+        logger.info("=== 运行 WebSocket 事件 smoke 测试 ===")
+        ws_events_tests = TestWsEvents()
+        report.results.extend([
+            ws_events_tests.test_m4_ws_001_first_message_must_authenticate(),
+            ws_events_tests.test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(),
+        ])
 
-    logger.info("=== 运行 WebSocket 传输矩阵测试 ===")
-    ws_transport_matrix_tests = TestWsTransportMatrix()
-    report.results.extend(ws_transport_matrix_tests.run_all_tests(full=full))
+        logger.info("=== 运行 WebSocket 传输矩阵 smoke 测试 ===")
+        ws_transport_matrix_tests = TestWsTransportMatrix()
+        report.results.extend([
+            ws_transport_matrix_tests.test_m4_ws_matrix_001_ping_should_work_after_auth(),
+            ws_transport_matrix_tests.test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
+            ws_transport_matrix_tests.test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
+        ])
 
-    logger.info("=== 运行 AppDefinition 测试 ===")
-    app_definitions_tests = TestAppDefinitions()
-    report.results.extend(app_definitions_tests.run_all_tests(full=full))
+        logger.info("=== 运行 Invocation Request smoke 测试 ===")
+        invocation_request_tests = TestInvocationRequest()
+        report.results.extend([
+            invocation_request_tests.test_request_roundtrip_success(),
+        ])
+    else:
+        # 运行各个模块的测试
+        logger.info("=== 运行启动与发现测试 ===")
+        launch_discovery_tests = TestLaunchDiscovery()
+        report.results.extend(launch_discovery_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 AppInstance 测试 ===")
-    app_instances_tests = TestAppInstances()
-    report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=full))
+        logger.info("=== 运行鉴权与协议版本测试 ===")
+        auth_protocol_tests = TestAuthProtocol()
+        report.results.extend(auth_protocol_tests.run_all_tests(full=full))
 
-    scope_routing_tests = TestScopeRouting()
-    report.results.extend(
-        run_suite_with_spinner(
-            logger,
-            "运行 Scope 路由测试",
-            lambda: scope_routing_tests.run_all_tests(full=full)))
+        logger.info("=== 运行 WebSocket 事件测试 ===")
+        ws_events_tests = TestWsEvents()
+        report.results.extend(ws_events_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 Invocation Notify 测试 ===")
-    invocation_notify_tests = TestInvocationNotify()
-    report.results.extend(invocation_notify_tests.run_all_tests(full=full))
+        logger.info("=== 运行 WebSocket 传输矩阵测试 ===")
+        ws_transport_matrix_tests = TestWsTransportMatrix()
+        report.results.extend(ws_transport_matrix_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 Invocation Request 测试 ===")
-    invocation_request_tests = TestInvocationRequest()
-    report.results.extend(invocation_request_tests.run_all_tests(full=full))
+        logger.info("=== 运行 AppDefinition 测试 ===")
+        app_definitions_tests = TestAppDefinitions()
+        report.results.extend(app_definitions_tests.run_all_tests(full=full))
 
-    invocation_poll_respond_tests = TestInvocationPollRespond()
-    report.results.extend(
-        run_suite_with_spinner(
-            logger,
-            "运行 Invocation Poll/Respond 测试",
-            lambda: invocation_poll_respond_tests.run_all_tests(full=full)))
+        logger.info("=== 运行 AppInstance 测试 ===")
+        app_instances_tests = TestAppInstances()
+        report.results.extend(app_instances_tests.run_all_tests(full=full, run_timeout_tests=full))
 
-    invoke_poll_respond_edges_tests = TestInvokePollRespondEdges()
-    report.results.extend(
-        run_suite_with_spinner(
-            logger,
-            "运行 Invocation Poll/Respond 规范边界测试",
-            lambda: invoke_poll_respond_edges_tests.run_all_tests(full=full)))
+        scope_routing_tests = TestScopeRouting()
+        report.results.extend(
+            run_suite_with_spinner(
+                logger,
+                "运行 Scope 路由测试",
+                lambda: scope_routing_tests.run_all_tests(full=full)))
 
-    logger.info("=== 运行 Launch + Invocation 测试 ===")
-    launch_invocation_tests = TestLaunchInvocation()
-    report.results.extend(launch_invocation_tests.run_all_tests(full=full))
+        logger.info("=== 运行 Invocation Notify 测试 ===")
+        invocation_notify_tests = TestInvocationNotify()
+        report.results.extend(invocation_notify_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 Launch 规范边界测试 ===")
-    launch_spec_edges_tests = TestLaunchSpecEdges()
-    report.results.extend(launch_spec_edges_tests.run_all_tests(full=full))
+        logger.info("=== 运行 Invocation Request 测试 ===")
+        invocation_request_tests = TestInvocationRequest()
+        report.results.extend(invocation_request_tests.run_all_tests(full=full))
 
-    logger.info("=== 运行 invalid_params 参数验证测试 ===")
-    invalid_params_tests = TestInvalidParams()
-    report.results.extend(invalid_params_tests.run_all_tests(full=full))
+        invocation_poll_respond_tests = TestInvocationPollRespond()
+        report.results.extend(
+            run_suite_with_spinner(
+                logger,
+                "运行 Invocation Poll/Respond 测试",
+                lambda: invocation_poll_respond_tests.run_all_tests(full=full)))
 
-    logger.info("=== 运行 internal_error 内部服务器错误测试 ===")
-    internal_errors_tests = TestInternalErrors()
-    report.results.extend(internal_errors_tests.run_all_tests(full=full))
+        invoke_poll_respond_edges_tests = TestInvokePollRespondEdges()
+        report.results.extend(
+            run_suite_with_spinner(
+                logger,
+                "运行 Invocation Poll/Respond 规范边界测试",
+                lambda: invoke_poll_respond_edges_tests.run_all_tests(full=full)))
+
+        logger.info("=== 运行 Launch + Invocation 测试 ===")
+        launch_invocation_tests = TestLaunchInvocation()
+        report.results.extend(launch_invocation_tests.run_all_tests(full=full))
+
+        logger.info("=== 运行 Launch 规范边界测试 ===")
+        launch_spec_edges_tests = TestLaunchSpecEdges()
+        report.results.extend(launch_spec_edges_tests.run_all_tests(full=full))
+
+        logger.info("=== 运行 invalid_params 参数验证测试 ===")
+        invalid_params_tests = TestInvalidParams()
+        report.results.extend(invalid_params_tests.run_all_tests(full=full))
+
+        logger.info("=== 运行 internal_error 内部服务器错误测试 ===")
+        internal_errors_tests = TestInternalErrors()
+        report.results.extend(internal_errors_tests.run_all_tests(full=full))
 
     # 保存报告
     json_report_path = os.path.join(temp_dir, "test_results.json")
@@ -239,6 +276,7 @@ def print_usage():
     print("Options:")
     print("  -h, --help    Show this help message and exit")
     print("  --no-header   Don't print test header")
+    print("  --smoke       Run minimal cross-platform smoke suite")
     print("  --fast        Run fast suite (skip timeout/offline long tests)")
     print("  --full        Run full suite including timeout/offline long tests")
 
@@ -251,6 +289,7 @@ def main():
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
 
     mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--smoke", action="store_true", help="Run minimal cross-platform smoke suite")
     mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout/offline long tests)")
     mode_group.add_argument("--full", action="store_true", help="Run full suite including timeout/offline long tests")
 
@@ -263,7 +302,7 @@ def main():
         print()
 
     # 运行测试
-    return run_all_tests(full=args.full, fast=args.fast)
+    return run_all_tests(full=args.full, fast=args.fast, smoke=args.smoke)
 
 
 if __name__ == "__main__":

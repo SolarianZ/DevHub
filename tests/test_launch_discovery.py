@@ -225,11 +225,11 @@ class TestLaunchDiscovery(unittest.TestCase):
                         return result
 
                 except ImportError:
-                    result.add_detail("⚠️  无法检查 Windows 文件权限：缺少 pywin32 库")
-                    result.add_detail("   请运行 'pip install pywin32' 安装所需库")
-                    # 不将缺少库视为测试失败，而是作为警告
+                    result.mark_failure("❌ 无法检查 Windows 文件权限：缺少 pywin32 库，请运行 'pip install pywin32'")
+                    return result
                 except Exception as e:
-                    result.add_detail(f"⚠️  检查 Windows 文件权限时出错：{e}")
+                    result.mark_failure(f"❌ 检查 Windows 文件权限时出错：{e}")
+                    return result
 
             else:  # 非 Windows 系统，简化检查
                 try:
@@ -250,7 +250,8 @@ class TestLaunchDiscovery(unittest.TestCase):
                     result.add_detail(f"✅ hub.json 文件权限符合仅当前用户可访问约束: 0o{oct(hub_perm)[2:]}")
 
                 except Exception as e:
-                    result.add_detail(f"⚠️  检查文件权限时出错：{e}")
+                    result.mark_failure(f"❌ 检查文件权限时出错：{e}")
+                    return result
 
             result.mark_success()
 

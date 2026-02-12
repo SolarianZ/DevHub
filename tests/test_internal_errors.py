@@ -25,6 +25,25 @@ from tests.test_base import (
 class TestInternalErrors(unittest.TestCase):
     """错误处理与恢复测试类"""
 
+    @staticmethod
+    def _expect_jsonrpc_shape(result: TestResult, response, context: str):
+        """断言响应满足 JSON-RPC 的基础可解析形态。"""
+        if not isinstance(response, dict):
+            result.mark_failure(f"❌ {context} 响应不是对象: {response}")
+            return False
+
+        has_result = "result" in response
+        has_error = "error" in response
+        if has_result == has_error:
+            result.mark_failure(f"❌ {context} 响应必须且只能包含 result 或 error: {response}")
+            return False
+
+        if has_error and not isinstance(response.get("error"), dict):
+            result.mark_failure(f"❌ {context} 的 error 不是对象: {response}")
+            return False
+
+        return True
+
     def _headers(self, token):
         """构造标准头"""
         return {
@@ -173,12 +192,11 @@ class TestInternalErrors(unittest.TestCase):
                 complex_params["nested"][f"deep_{index}"] = {"very": {"complex": "structure" * 300}}
 
             response = client.call("hub.ping", complex_params)
+            if not self._expect_jsonrpc_shape(result, response, "复杂参数场景"):
+                return result
+
             if "error" in response:
-                code = response["error"].get("code")
-                if code not in [-32602, -32603]:
-                    result.mark_failure(f"❌ 复杂参数返回了意外错误码: {code}")
-                    return result
-                result.add_detail(f"✅ 复杂参数返回可接受错误码: {code}")
+                result.add_detail("✅ 复杂参数场景返回可解析错误响应")
             else:
                 if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
                     return result
@@ -228,23 +246,32 @@ class TestInternalErrors(unittest.TestCase):
                 result.mark_failure("❌ 未收到任何响应")
                 return result
 
-            # 至少要有可解析结果；错误码允许 -32603/-32040
+            # 该场景聚焦稳定性与恢复能力，不对错误码取值做规范断言。
             acceptable = True
+            success_count = 0
+            error_count = 0
             for resp in responses:
                 if "exception" in resp:
                     acceptable = False
                     break
+                if not self._expect_jsonrpc_shape(result, resp, "并发压力子请求"):
+                    acceptable = False
+                    break
                 if "error" in resp:
-                    code = resp["error"].get("code")
-                    if code not in [-32603, -32040]:
-                        acceptable = False
-                        break
+                    error_count += 1
+                else:
+                    success_count += 1
 
             if not acceptable:
                 result.mark_failure("❌ 并发压力场景出现不可接受响应")
                 return result
 
-            result.add_detail("✅ 并发压力场景响应符合预期范围")
+            ping_response = client.call("hub.ping")
+            if not RpcAssertions.expect_success(result, ping_response, ["serverTimeUtc"]):
+                return result
+
+            result.add_detail(f"✅ 并发压力场景响应可解析（success={success_count}, error={error_count}）")
+            result.add_detail("✅ 并发压力场景后服务仍可正常响应")
             result.mark_success()
 
         except Exception as e:
@@ -263,12 +290,11 @@ class TestInternalErrors(unittest.TestCase):
             large_payload = "x" * 1024 * 1024
             response = client.call("hub.ping", {"echo": large_payload})
 
+            if not self._expect_jsonrpc_shape(result, response, "超大负载场景"):
+                return result
+
             if "error" in response:
-                code = response["error"].get("code")
-                if code not in [-32602, -32603]:
-                    result.mark_failure(f"❌ 超大负载返回意外错误码: {code}")
-                    return result
-                result.add_detail(f"✅ 超大负载返回可接受错误码: {code}")
+                result.add_detail("✅ 超大负载场景返回可解析错误响应")
             else:
                 if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
                     return result

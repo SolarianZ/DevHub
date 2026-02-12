@@ -485,6 +485,16 @@ public class TransportValidationTests
         Assert.False(DevHubTransportValidator.IsHttpOnlyMethod("hub.ws.authenticate"));
     }
 
+    [Fact]
+    public void Spec_6_2_IsWebSocketOnlyMethod_ShouldMatchTransportBoundary()
+    {
+        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ws.authenticate"));
+        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.events.subscribe"));
+        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.events.unsubscribe"));
+        Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ping"));
+        Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.invoke.request"));
+    }
+
     private static Dictionary<string, string> BuildValidHeaders()
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

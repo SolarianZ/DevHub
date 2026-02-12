@@ -69,26 +69,17 @@ class TestWsTransportMatrix(unittest.TestCase):
 
     @staticmethod
     def _expect_transport_rejected(result, response, request_id):
-        if "error" not in response or not isinstance(response["error"], dict):
-            result.mark_failure(f"❌ 期望传输受限错误，但响应缺少 error: {response}")
-            return False
-
-        if response.get("id") != request_id:
-            result.mark_failure(f"❌ 传输受限错误 id 不匹配: {response}")
+        if not RpcAssertions.expect_error(
+            result,
+            response,
+            -32099,
+            "not_supported",
+            expected_id=request_id,
+        ):
             return False
 
         if isinstance(response.get("result"), dict) and response["result"].get("ok") is True:
             result.mark_failure(f"❌ 期望传输受限错误，但返回了成功结果: {response}")
-            return False
-
-        code = response["error"].get("code")
-        if not isinstance(code, int):
-            result.mark_failure(f"❌ 传输受限错误码非法: {response}")
-            return False
-
-        allowed_codes = {-32600, -32601, -32002, -32099}
-        if code not in allowed_codes:
-            result.mark_failure(f"❌ 传输受限错误码不在允许集合: code={code}, response={response}")
             return False
 
         return True

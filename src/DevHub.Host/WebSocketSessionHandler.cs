@@ -303,7 +303,13 @@ public class WebSocketSessionHandler
             default:
                 if (DevHubTransportValidator.IsHttpOnlyMethod(rpcRequest.Method))
                 {
-                    return (DevHubTransportValidator.CreateErrorResponse(-32601, "method_not_found", rpcRequest.Id), false);
+                    return (
+                        DevHubTransportValidator.CreateErrorResponse(
+                            -32099,
+                            "not_supported",
+                            rpcRequest.Id,
+                            new { reason = "transport_mismatch", expected = "http" }),
+                        false);
                 }
 
                 rpcRequest.ClientId = authenticatedClientId;

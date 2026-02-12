@@ -494,6 +494,19 @@ public static class DevHubTransportValidator
             HubRpcMethods.HubInvokeRespond;
     }
 
+    /// <summary>
+    /// 判断方法是否仅支持 WebSocket 传输。
+    /// </summary>
+    /// <param name="method">RPC 方法名。</param>
+    /// <returns>仅支持 WebSocket 返回 true。</returns>
+    public static bool IsWebSocketOnlyMethod(string method)
+    {
+        return method is
+            HubRpcMethods.HubWsAuthenticate or
+            HubRpcMethods.HubEventsSubscribe or
+            HubRpcMethods.HubEventsUnsubscribe;
+    }
+
     private static bool TryGetHeader(IReadOnlyDictionary<string, string> headers, string key, out string value)
     {
         if (headers.TryGetValue(key, out value!))

@@ -1,4 +1,4 @@
-# DevHub Python 集成测试说明（M1~M4 三模式）
+# DevHub Python 集成测试说明（M1~M4 四模式）
 
 - 测试以 `docs/Spec.md` 为最高优先级规范。
 - 测试只覆盖应当前里程碑（参考当前Git分支）的内容，不应覆盖未来里程碑的内容。
@@ -8,6 +8,7 @@
 - .NET SDK 10.0+
 - Python 3.9+
 - Python 依赖：`pip install requests`
+- Windows ACL 严格校验依赖：`pip install pywin32`
 
 ## 运行方式
 
@@ -41,6 +42,14 @@ python3 tests/test_runner.py --fast
 python3 tests/test_runner.py --full
 ```
 
+#### Smoke 模式
+
+跨平台最小冒烟回归，覆盖发现/鉴权/WS/Request 主链路，推荐用于 CI 三平台快速门禁。
+
+```bash
+python3 tests/test_runner.py --smoke
+```
+
 ## 报告输出
 
 - 文本报告：`temp/test_results.txt`
@@ -49,5 +58,5 @@ python3 tests/test_runner.py --full
 
 报告中会标注：
 
-- `mode`: `default` / `fast` / `full`
+- `mode`: `default` / `smoke` / `fast` / `full`
 - `coverage`: 覆盖级别描述
