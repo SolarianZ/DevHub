@@ -406,7 +406,14 @@ class TestWsEvents:
                 })
 
                 response = ws.recv_json(timeout=3)
-                if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="bad-auth"):
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    -32001,
+                    "unauthorized",
+                    expected_id="bad-auth",
+                    expected_data={"reason": "invalid_token"},
+                ):
                     return result
 
                 if not ws.wait_for_close(timeout=2):
@@ -1070,6 +1077,72 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_015_first_authenticate_without_id_should_invalid_request(self):
+        """M4-WS-015: 首条 hub.ws.authenticate 缺失 id 应 invalid_request 并断连。"""
+        result = TestResult("M4-WS-015 首条鉴权缺失id返回 invalid_request")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "method": "hub.ws.authenticate",
+                    "params": {
+                        "token": token,
+                        "protocolVersion": 1,
+                        "clientId": "PyWsTestClient",
+                        "clientSessionId": str(uuid.uuid4())
+                    }
+                })
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id=None):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 首条鉴权缺失 id 返回 invalid_request 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request(self):
+        """M4-WS-016: 鉴权前根数组 batch 应返回单一 invalid_request 并断连。"""
+        result = TestResult("M4-WS-016 鉴权前根数组batch返回 invalid_request")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json([
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "batch-16",
+                        "method": "hub.ping",
+                        "params": {}
+                    }
+                ])
+
+                response = ws.recv_json(timeout=3)
+                if not isinstance(response, dict):
+                    result.mark_failure(f"❌ 根数组 batch 响应不是单一 JSON-RPC 对象: {response}")
+                    return result
+
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id=None):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 根数组 batch 返回 invalid_request 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_m4_ws_001_first_message_must_authenticate(),
@@ -1086,6 +1159,8 @@ class TestWsEvents:
             self.test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
             self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
             self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
+            self.test_m4_ws_015_first_authenticate_without_id_should_invalid_request(),
+            self.test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request(),
         ]
 
         if full:

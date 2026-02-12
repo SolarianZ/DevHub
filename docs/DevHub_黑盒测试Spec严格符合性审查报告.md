@@ -221,3 +221,38 @@ python3 tests/test_runner.py --full --no-header
 - 已接入但未完成闭环：
   - 覆盖率门禁已纳入 CI（line>=90%、branch>=80%），当前本地基线尚未达标（见 `temp/coverage_verify.log`）。
   - 三平台 smoke（Linux/Windows/macOS）已纳入 CI 矩阵，待首轮流水线通过产出审计证据。
+
+---
+
+## 11. 增量更新（2026-02-12，第二轮：Spec 严格符合性收口）
+
+本轮执行“**三测一豁免**”收口策略，结果如下：
+
+- 已关闭（黑盒补测）：
+  - `WS 鉴权必须为请求（含 id）`
+    - 新增：`tests/test_ws_events.py` -> `test_m4_ws_015_first_authenticate_without_id_should_invalid_request`
+    - 断言：`-32600 invalid_request`、`id:null`、连接关闭。
+  - `WS 根数组 batch`
+    - 新增：`tests/test_ws_events.py` -> `test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request`
+    - 断言：单一错误对象、`-32600 invalid_request`、`id:null`、连接关闭。
+  - `非法 token 鉴权 error.data.reason`
+    - 强化：`tests/test_ws_events.py` -> `test_m4_ws_003_authenticate_invalid_token_should_close`
+    - 断言：`error.data.reason=invalid_token`。
+
+- 显式豁免（M4 范围）：
+  - `-32040 rate_limited`：当前里程碑未提供可重复触发的限流能力/注入入口，暂不纳入严格命中断言。
+
+- 保持恢复性测试口径：
+  - `-32603 internal_error`：继续以“响应可解析 + 服务可恢复”为主，不引入不可重复故障注入型强制命中用例。
+
+本轮定向验证：
+- 命令：`python tests/test_ws_events.py`
+- 方式：隔离 runtime/appdefs 启动本地 Host 后执行端到端黑盒
+- 结果：`M4-WS-001~016` + full 用例 `M4-WS-008` 全部通过（17/17）
+
+本轮全量回归验证：
+- 命令：`python tests/test_runner.py --full --no-header`
+- 结果：`139/139` 通过，`0` 失败（见 `temp/black_full_after_changes.log` 与 `temp/test_results.json`）
+
+**更新后的判定（覆盖 §9 旧结论）**：  
+在 M4 当前实现范围内，黑盒对 MUST 条款的严格符合性收口完成；`-32040` 作为范围外能力已显式豁免并记录依据。

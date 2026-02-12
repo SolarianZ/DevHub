@@ -8,13 +8,14 @@
 > - [DevHub_M4细化任务文档.md](./DevHub_M4细化任务文档.md)
 > - [DevHub_M3测试任务拆分文档.md](./DevHub_M3测试任务拆分文档.md)
 
-## 当前状态（截至 2026-02-11）
+## 当前状态（截至 2026-02-12）
 
 - M4 测试任务总体状态：**首轮已完成并接入回归入口**。
 - 已新增 WS 黑盒模块与白盒事件链路测试，覆盖 M4 必测主路径。
 - runner 已由 M1~M3 扩展为 M1~M4。
 - runner 已为长耗时静默阶段（Scope 路由、Invocation Poll/Respond、Invocation Poll/Respond 规范边界）增加 spinner 活动进度指示，降低误判卡死风险。
 - 已补齐缺口回归：`M4-WS-011`（unknown event type）与 `M4-WS-012`（unregistered 事件）。
+- 已完成 Spec 严格符合性收口补测：`M4-WS-015`（首条鉴权缺失 `id`）与 `M4-WS-016`（WS 根数组 batch）。
 - 白盒补测（2026-02-08）：新增传输层校验组件白盒（HTTP/WS/JSON-RPC 信封）、`unsupported_event_type` 细粒度断言与 `hub.event` 通知字段完整性断言。
 
 ---
@@ -27,11 +28,14 @@
 - [x] 鉴权前非鉴权通知触发断连。
 - [x] 未鉴权门禁优先于 `hub.*` 参数形态校验（`params=[]` 不应绕过断连规则）。
 - [x] 鉴权失败（非法 token / 不支持协议）返回规范错误并断连。
+- [x] 非法 token 鉴权必须断言 `error.data.reason=invalid_token`。
 - [x] 订阅/取消订阅主链路与幂等行为。
 - [x] 断线后重连并重新订阅，事件链路稳定。
 - [x] 事件推送覆盖 `registered`、`delivered`、`completed`、`failed`。
 - [x] 订阅未知事件类型返回 `-32602 invalid_params`，并包含 `reason=unsupported_event_type`。
 - [x] 事件推送单列覆盖 `app.instance.unregistered`。
+- [x] 首条 `hub.ws.authenticate` 缺失 `id` 必须返回 `-32600 invalid_request` 并断连。
+- [x] WS 根数组 batch 必须返回单一 `-32600 invalid_request` 且 `id:null`，并断连。
 
 ### 0.2 测试层次
 - 白盒（C#）：校验事件总线与处理器事件发布钩子。
@@ -55,6 +59,8 @@
 | `M4-WS-010` | 未鉴权非鉴权通知（`params=[]`）直接断连 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WS-011` | 订阅 `types=["unknown.type"]` 返回 `-32602 invalid_params` | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WS-012` | 注册后注销触发 `app.instance.unregistered` 事件推送 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-015` | 首条 `hub.ws.authenticate` 缺失 `id` 返回 `-32600 invalid_request` 并断连 | Python 黑盒 | `tests/test_ws_events.py` |
+| `M4-WS-016` | WS 根数组 batch 返回单一 `-32600 invalid_request`（`id:null`）并断连 | Python 黑盒 | `tests/test_ws_events.py` |
 | `M4-WB-001` | 支持事件类型集合与过滤匹配 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
 | `M4-WB-002` | 订阅鉴权门禁与取消订阅幂等 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
 | `M4-WB-003` | RemoveConnection 后订阅与待投递被清理 | C# 白盒 | `src/DevHub.Tests/HubEventBusTests.cs` |
@@ -75,6 +81,9 @@
 - [x] 订阅成功后，通过 HTTP 触发实例注册与 invocation 主链路。
 - [x] 校验 `hub.event` 通知中的 `params.type` 至少覆盖核心事件集。
 - [x] 新增未鉴权 `params=[]` 回归用例，确保不会绕过 unauthorized/断连门禁。
+- [x] 新增首条鉴权缺失 `id` 回归用例，锁定“鉴权必须为请求”。
+- [x] 新增 WS 根数组 batch 回归用例，锁定 `-32600 + id:null`。
+- [x] 强化非法 token 场景，严格断言 `error.data.reason=invalid_token`。
 - [x] 断线后重连并重新订阅，验证事件链路稳定。
 - [x] full 模式增加 `invocation.failed` 验证。
 - [x] default 模式增加 `M4-WS-011/012`，补齐 unknown type 与 unregistered 黑盒可见性。
@@ -120,6 +129,7 @@
 
 - [x] M4 必测用例（WS 鉴权 + 订阅 + 事件主链路）具备自动化覆盖。
 - [x] 未鉴权 + `params=[]` 场景已纳入自动化回归，防止校验顺序回归。
+- [x] 首条鉴权缺失 `id` 与 WS 根数组 batch 场景已纳入自动化回归。
 - [x] 白盒与黑盒对同一事件类型集合使用一致断言。
 - [x] 断线清理由白盒确定性 + 黑盒重连场景共同覆盖。
 - [x] 回归入口可一键纳入 M4 模块。
