@@ -13,6 +13,7 @@ namespace DevHub.Core.Services.Invocation;
 /// </summary>
 public class InvocationStore
 {
+    private static readonly TimeSpan TerminalInvocationRetention = TimeSpan.FromMinutes(10);
     private readonly object _syncRoot = new();
     private readonly ConcurrentDictionary<string, InvocationModel> _all = new();
     private readonly ILogger<InvocationStore> _logger;
@@ -70,6 +71,7 @@ public class InvocationStore
             var leased = TryLease(instance, maxCount, now);
             if (leased.Count > 0)
             {
+                PublishDeliveredEvents(leased, instance, now);
                 return leased;
             }
 
@@ -243,6 +245,8 @@ public class InvocationStore
                     });
                 }
             }
+
+            CleanupTerminalInvocations(now);
         }
 
         return transitions;
@@ -265,22 +269,33 @@ public class InvocationStore
                 invocation.State = InvocationState.Delivered;
                 invocation.LeaseHolderInstanceId = instance.InstanceId;
                 invocation.LeaseExpireAtUtc = now.AddSeconds(invocation.Delivery.LeaseSeconds);
-
-                _eventBus?.Publish(new HubEventMessage
-                {
-                    Type = HubEventTypes.InvocationDelivered,
-                    TimeUtc = now,
-                    Payload = new
-                    {
-                        invocationId = invocation.InvocationId,
-                        appId = invocation.AppId,
-                        instanceId = instance.InstanceId,
-                        scope = invocation.Target.Scope
-                    }
-                });
             }
 
             return candidates;
+        }
+    }
+
+    private void PublishDeliveredEvents(IReadOnlyList<InvocationModel> leased, AppInstance instance, DateTime deliveredAtUtc)
+    {
+        if (_eventBus is null || leased.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var invocation in leased)
+        {
+            _eventBus.Publish(new HubEventMessage
+            {
+                Type = HubEventTypes.InvocationDelivered,
+                TimeUtc = deliveredAtUtc,
+                Payload = new
+                {
+                    invocationId = invocation.InvocationId,
+                    appId = invocation.AppId,
+                    instanceId = instance.InstanceId,
+                    scope = invocation.Target.Scope
+                }
+            });
         }
     }
 
@@ -335,6 +350,26 @@ public class InvocationStore
                     ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
                 });
             }
+        }
+    }
+
+    private void CleanupTerminalInvocations(DateTime now)
+    {
+        var expireBefore = now - TerminalInvocationRetention;
+        var toRemove = _all.Values
+            .Where(i => i.State is InvocationState.Completed or InvocationState.Failed or InvocationState.Timeout or InvocationState.Expired)
+            .Where(i => (i.CompletedAtUtc ?? i.CreatedAtUtc) <= expireBefore)
+            .Select(i => i.InvocationId)
+            .ToList();
+
+        foreach (var invocationId in toRemove)
+        {
+            _all.TryRemove(invocationId, out _);
+        }
+
+        if (toRemove.Count > 0)
+        {
+            _logger.LogDebug("已清理终态 Invocation，Count: {Count}, RetentionMinutes: {RetentionMinutes}", toRemove.Count, TerminalInvocationRetention.TotalMinutes);
         }
     }
 }

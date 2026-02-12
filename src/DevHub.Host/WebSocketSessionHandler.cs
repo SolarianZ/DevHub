@@ -106,7 +106,7 @@ public class WebSocketSessionHandler
                 }
 
                 var messageText = receiveEnvelope.Text ?? string.Empty;
-                _logger.LogDebug("收到 WS 消息，ConnectionId: {ConnectionId}, Message: {Message}", connectionId, messageText);
+                _logger.LogDebug("收到 WS 消息，ConnectionId: {ConnectionId}, 消息长度: {MessageLength}", connectionId, messageText.Length);
 
                 JsonDocument requestDocument;
                 try

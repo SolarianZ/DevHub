@@ -157,4 +157,26 @@ public class HubEventBusTests
         var deliveriesAfterNewPublish = bus.DrainDeliveries("conn-remove", maxCount: 10);
         Assert.Empty(deliveriesAfterNewPublish);
     }
+
+    [Fact]
+    public void Publish_ShouldDropWhenConnectionQueueExceedsLimit()
+    {
+        var bus = new HubEventBus(_logger.Object);
+        bus.RegisterConnection("conn-bounded");
+        Assert.True(bus.TryMarkAuthenticated("conn-bounded", "client", Guid.NewGuid().ToString("D")));
+        Assert.True(bus.TrySubscribe("conn-bounded", null, out _));
+
+        for (var i = 0; i < HubEventBus.MaxPendingDeliveriesPerConnection + 128; i++)
+        {
+            bus.Publish(new HubEventMessage
+            {
+                Type = "invocation.queued",
+                TimeUtc = DateTime.UtcNow,
+                Payload = new { invocationId = $"invk-{i}" }
+            });
+        }
+
+        var deliveries = bus.DrainDeliveries("conn-bounded", maxCount: HubEventBus.MaxPendingDeliveriesPerConnection + 256);
+        Assert.Equal(HubEventBus.MaxPendingDeliveriesPerConnection, deliveries.Count);
+    }
 }

@@ -61,7 +61,7 @@ public class RpcHttpEndpointHandler
             using var reader = new StreamReader(request.Body);
             var body = await reader.ReadToEndAsync(cancellationToken);
 
-            _logger.LogDebug("收到RPC请求，客户端ID: {ClientId}，请求体: {RequestBody}", clientId, body);
+            _logger.LogDebug("收到RPC请求，客户端ID: {ClientId}，请求体长度: {BodyLength}", clientId, body.Length);
 
             JsonDocument requestDocument;
             try
@@ -155,7 +155,8 @@ public class RpcHttpEndpointHandler
                 _logger.LogInformation("RPC请求处理成功: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                     rpcRequest.Method, rpcRequest.Id, clientId, stopwatch.ElapsedMilliseconds);
 
-                _logger.LogDebug("RPC响应内容: {Response}", JsonSerializer.Serialize(response, JsonOptions));
+                _logger.LogDebug("RPC响应已生成，Method: {Method}, RequestId: {RequestId}, 响应长度: {ResponseLength}",
+                    rpcRequest.Method, rpcRequest.Id, JsonSerializer.Serialize(response, JsonOptions).Length);
                 return Results.Json(response, JsonOptions);
             }
         }

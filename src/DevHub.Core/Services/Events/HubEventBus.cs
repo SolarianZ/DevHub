@@ -9,6 +9,9 @@ namespace DevHub.Core.Services.Events;
 /// </summary>
 public sealed class HubEventBus
 {
+    internal const int MaxPendingDeliveriesPerConnection = 1024;
+    internal const int MaxPendingDeliveriesTotal = 16384;
+
     private static readonly string[] SupportedEventTypes =
     [
         HubEventTypes.AppInstanceRegistered,
@@ -147,6 +150,8 @@ public sealed class HubEventBus
     /// <param name="message">事件消息。</param>
     public void Publish(HubEventMessage message)
     {
+        var totalPendingEstimate = GetTotalPendingDeliveriesEstimate();
+
         foreach (var (connectionId, state) in _connections)
         {
             if (!state.IsAuthenticated || state.Subscriptions.IsEmpty)
@@ -161,6 +166,26 @@ public sealed class HubEventBus
                     continue;
                 }
 
+                if (state.PendingDeliveries.Count >= MaxPendingDeliveriesPerConnection)
+                {
+                    _logger.LogWarning(
+                        "事件投递队列达到连接级上限，已丢弃。ConnectionId: {ConnectionId}, EventType: {EventType}, Limit: {Limit}",
+                        connectionId,
+                        message.Type,
+                        MaxPendingDeliveriesPerConnection);
+                    continue;
+                }
+
+                if (totalPendingEstimate >= MaxPendingDeliveriesTotal)
+                {
+                    _logger.LogWarning(
+                        "事件投递队列达到全局上限，已丢弃。ConnectionId: {ConnectionId}, EventType: {EventType}, Limit: {Limit}",
+                        connectionId,
+                        message.Type,
+                        MaxPendingDeliveriesTotal);
+                    continue;
+                }
+
                 state.PendingDeliveries.Enqueue(new HubEventDelivery
                 {
                     ConnectionId = connectionId,
@@ -169,6 +194,7 @@ public sealed class HubEventBus
                     TimeUtc = message.TimeUtc,
                     Payload = message.Payload
                 });
+                totalPendingEstimate += 1;
             }
         }
     }
@@ -222,6 +248,21 @@ public sealed class HubEventBus
     private static bool MatchesType(HubEventSubscription subscription, string eventType)
     {
         return subscription.Types is null || subscription.Types.Contains(eventType);
+    }
+
+    private int GetTotalPendingDeliveriesEstimate()
+    {
+        var total = 0;
+        foreach (var state in _connections.Values)
+        {
+            total += state.PendingDeliveries.Count;
+            if (total >= MaxPendingDeliveriesTotal)
+            {
+                break;
+            }
+        }
+
+        return total;
     }
 
     private sealed class ConnectionState

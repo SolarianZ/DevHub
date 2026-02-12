@@ -236,6 +236,40 @@ public class InvocationStoreTests
         Assert.Equal(2, current.Delivery.Attempt);
     }
 
+    [Fact]
+    public async Task Sweep_ShouldCleanupTerminalInvocation_AfterRetentionWindow()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-terminal-cleanup",
+            AppId = "terminal-cleanup.app",
+            Scope = null,
+            Pid = 4011,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+
+        var created = store.CreateInvocation(CreateNotify("terminal-cleanup.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(polled);
+
+        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        Assert.Equal(InvocationRespondStatus.Success, respondStatus);
+        Assert.True(store.TryGet(created.InvocationId, out var terminalInvocation));
+        Assert.Equal(InvocationState.Completed, terminalInvocation!.State);
+
+        clock.Advance(TimeSpan.FromMinutes(11));
+        _ = store.Sweep(clock.UtcNow);
+
+        Assert.False(store.TryGet(created.InvocationId, out _));
+    }
+
 
     private static Invocation CreateNotify(string appId, string? targetScope, string? targetInstanceId)
     {
@@ -306,5 +340,20 @@ public class InvocationStoreTests
             },
             State = InvocationState.Created
         };
+    }
+
+    private sealed class MutableClock : DevHub.Core.Services.Abstractions.IClock
+    {
+        public MutableClock(DateTime now)
+        {
+            UtcNow = now;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan delta)
+        {
+            UtcNow = UtcNow.Add(delta);
+        }
     }
 }
