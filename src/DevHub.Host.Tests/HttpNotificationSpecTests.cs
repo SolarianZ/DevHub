@@ -15,7 +15,6 @@ public class HttpNotificationSpecTests : IDisposable
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;
-    private readonly EnvironmentVariableScope _runtimeScope;
 
     /// <summary>
     /// 初始化测试上下文。
@@ -29,14 +28,12 @@ public class HttpNotificationSpecTests : IDisposable
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
         Directory.CreateDirectory(_definitionsDirectory);
-
-        _runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", _runtimeDirectory);
     }
 
     [Fact]
     public async Task Spec_3_1_HttpNotification_ShouldReturn200WithEmptyBody()
     {
-        var hostContext = HostTestContextFactory.Create(_definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,
@@ -71,8 +68,6 @@ public class HttpNotificationSpecTests : IDisposable
     /// </summary>
     public void Dispose()
     {
-        _runtimeScope.Dispose();
-
         if (Directory.Exists(_tempRoot))
         {
             Directory.Delete(_tempRoot, recursive: true);

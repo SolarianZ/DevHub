@@ -50,6 +50,41 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.Equal(definitionsFromArg, options.DefinitionsPath);
     }
 
+    [Fact]
+    public void Create_WithEquivalentInputs_ShouldMatchResolveOverlappingFields_AndKeepIsolatedLayout()
+    {
+        var root = Path.Combine(_tempRoot, "root");
+        var runtime = Path.Combine(root, "runtime-custom");
+        var definitions = Path.Combine(root, "definitions-custom");
+        var logs = Path.Combine(root, "logs-custom");
+        var defaultRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DevHub");
+
+        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtime);
+        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitions);
+        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, logs);
+
+        var resolved = RuntimePathOptions.Resolve();
+        var created = RuntimePathOptions.Create(
+            rootPath: root,
+            runtimePath: runtime,
+            definitionsPath: definitions,
+            logsPath: logs);
+
+        Assert.Equal(created.RuntimePath, resolved.RuntimePath);
+        Assert.Equal(created.DefinitionsPath, resolved.DefinitionsPath);
+        Assert.Equal(created.LogsPath, resolved.LogsPath);
+        Assert.Equal(created.TokenFilePath, resolved.TokenFilePath);
+        Assert.Equal(created.HubJsonPath, resolved.HubJsonPath);
+
+        Assert.Equal(Path.Combine(root, "apps", "instances"), created.InstancesPath);
+        Assert.Equal(Path.Combine(defaultRoot, "apps", "instances"), resolved.InstancesPath);
+
+        Assert.Equal(Path.Combine(created.RuntimePath, "token.txt"), created.TokenFilePath);
+        Assert.Equal(Path.Combine(created.RuntimePath, "hub.json"), created.HubJsonPath);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

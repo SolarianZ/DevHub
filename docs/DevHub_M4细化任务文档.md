@@ -182,3 +182,40 @@
 - Host 接入层：
   - `src/DevHub.Host/RpcHttpEndpointHandler.cs`
 - 本次未改动调用路由、错误码映射与 WS 行为。
+
+---
+
+## 7. M4 收尾补充：Host 白盒测试并发隔离修复（2026-02-12）
+
+### 7.1 问题现象
+- 在执行 `dotnet test src\DevHub.slnx --configuration Release` 时，`DevHub.Host.Tests` 偶发失败：
+  - `System.IO.IOException: token.txt is being used by another process`
+- 失败位置集中在 `FileSystemManager.GetToken()` 首次写入 token 阶段（`File.WriteAllText`）。
+
+### 7.2 根因分析
+- `DevHub.Host.Tests` 多个测试类通过 `EnvironmentVariableScope` 读写进程级 `DEVHUB_RUNTIME_DIR`。
+- xUnit 并行执行下，不同测试类会互相覆盖该环境变量，导致上下文工厂解析到错误 runtime 路径。
+- 最终表现为不同测试并发写入同一 `runtime/token.txt`，触发 Windows 文件占用冲突。
+
+### 7.3 完成项
+- [x] 在 `RuntimePathOptions` 新增显式路径构造入口 `Create(...)`，支持直接传入 `root/runtime/definitions`。
+- [x] 将 `RuntimePathOptions.Create(...)` 收敛为 `internal`，并在注释中明确“仅测试场景使用，生产代码统一走 `Resolve(...)`”。
+- [x] `HostTestContextFactory` 改为显式接收测试路径，不再依赖 `DEVHUB_RUNTIME_DIR`。
+- [x] `WebSocketLifecycleSpecTests` 与 `HttpNotificationSpecTests` 移除环境变量作用域，统一改为显式传参创建上下文。
+- [x] 删除 `src/DevHub.Host.Tests/EnvironmentVariableScope.cs`（该工程已无引用）。
+- [x] 新增 `RuntimePathOptions` 防漂移测试，锁定 `Create` 与 `Resolve` 的重叠语义一致性，并显式断言 `instances` 路径差异属于设计预期。
+
+### 7.4 影响范围
+- Core：`src/DevHub.Core/Services/RuntimePathOptions.cs`
+- Host 测试：
+  - `src/DevHub.Host.Tests/TestHelpers/HostTestContextFactory.cs`
+  - `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs`
+  - `src/DevHub.Host.Tests/HttpNotificationSpecTests.cs`
+  - `src/DevHub.Host.Tests/EnvironmentVariableScope.cs`（删除）
+- 本次未改动 `docs/Spec.md`，未改变任何协议字段、错误码或线上运行时行为。
+
+### 7.5 验证记录
+- 已执行并通过：
+  - `dotnet test src\DevHub.Tests\DevHub.Tests.csproj --configuration Release --filter FullyQualifiedName~RuntimePathOptionsTests -v minimal`
+  - `dotnet test src\DevHub.Host.Tests\DevHub.Host.Tests.csproj --configuration Release -v minimal`
+  - `dotnet test src\DevHub.slnx --configuration Release`

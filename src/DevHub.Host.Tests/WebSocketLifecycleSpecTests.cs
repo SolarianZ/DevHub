@@ -18,7 +18,6 @@ public class WebSocketLifecycleSpecTests : IDisposable
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;
-    private readonly EnvironmentVariableScope _runtimeScope;
 
     /// <summary>
     /// 初始化测试上下文。
@@ -32,8 +31,6 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
         Directory.CreateDirectory(_definitionsDirectory);
-
-        _runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", _runtimeDirectory);
     }
 
     [Theory]
@@ -636,15 +633,13 @@ public class WebSocketLifecycleSpecTests : IDisposable
     /// </summary>
     public void Dispose()
     {
-        _runtimeScope.Dispose();
-
         if (Directory.Exists(_tempRoot))
         {
             Directory.Delete(_tempRoot, recursive: true);
         }
     }
 
-    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_definitionsDirectory);
+    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
 
     private void WriteDefinition(string appId)
     {

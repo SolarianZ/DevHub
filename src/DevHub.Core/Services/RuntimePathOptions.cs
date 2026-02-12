@@ -115,4 +115,51 @@ public sealed class RuntimePathOptions
             instancesPath: Path.Combine(defaultRootPath, "apps", "instances"),
             logsPath: logsPath);
     }
+
+    /// <summary>
+    /// 使用显式路径创建路径选项（仅测试场景）。
+    /// </summary>
+    /// <remarks>
+    /// 该方法仅用于测试工程构造完全隔离的运行时目录，
+    /// 生产代码应统一通过 <see cref="Resolve(string?)"/> 解析路径，避免规则分叉。
+    /// </remarks>
+    /// <param name="rootPath">DevHub 数据根目录。</param>
+    /// <param name="runtimePath">运行时目录。</param>
+    /// <param name="definitionsPath">应用定义目录。</param>
+    /// <param name="instancesPath">实例目录（可选，未提供时默认使用 root/apps/instances）。</param>
+    /// <param name="logsPath">日志目录（可选，未提供时默认使用 root/logs）。</param>
+    /// <returns>解析后的路径配置。</returns>
+    internal static RuntimePathOptions Create(
+        string rootPath,
+        string runtimePath,
+        string definitionsPath,
+        string? instancesPath = null,
+        string? logsPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+        {
+            throw new ArgumentException("根目录不能为空。", nameof(rootPath));
+        }
+
+        if (string.IsNullOrWhiteSpace(runtimePath))
+        {
+            throw new ArgumentException("运行时目录不能为空。", nameof(runtimePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(definitionsPath))
+        {
+            throw new ArgumentException("应用定义目录不能为空。", nameof(definitionsPath));
+        }
+
+        return new RuntimePathOptions(
+            rootPath: rootPath,
+            runtimePath: runtimePath,
+            definitionsPath: definitionsPath,
+            instancesPath: string.IsNullOrWhiteSpace(instancesPath)
+                ? Path.Combine(rootPath, "apps", "instances")
+                : instancesPath,
+            logsPath: string.IsNullOrWhiteSpace(logsPath)
+                ? Path.Combine(rootPath, "logs")
+                : logsPath);
+    }
 }

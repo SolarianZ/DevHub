@@ -17,11 +17,19 @@ internal static class HostTestContextFactory
     /// <summary>
     /// 创建 Host WS 生命周期测试所需上下文。
     /// </summary>
+    /// <param name="rootDirectory">测试专用根目录。</param>
+    /// <param name="runtimeDirectory">测试专用运行时目录。</param>
     /// <param name="definitionsDirectory">AppDefinition 目录。</param>
     /// <returns>可用于调用 Host WS 入口的上下文。</returns>
-    internal static HostTestContext Create(string definitionsDirectory)
+    internal static HostTestContext Create(
+        string rootDirectory,
+        string runtimeDirectory,
+        string definitionsDirectory)
     {
-        var runtimePathOptions = RuntimePathOptions.Resolve(definitionsDirectory);
+        var runtimePathOptions = RuntimePathOptions.Create(
+            rootPath: rootDirectory,
+            runtimePath: runtimeDirectory,
+            definitionsPath: definitionsDirectory);
         var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), runtimePathOptions);
         fileSystemManager.InitializeDirectories();
         var token = fileSystemManager.GetToken();
