@@ -1,10 +1,11 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Services;
 
 /// <summary>
 /// <see cref="RuntimePathOptions"/> 测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class RuntimePathOptionsTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -19,7 +20,7 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
-    public void Resolve_WithOverrides_ShouldUseEnvironmentOverrides()
+    public void Impl_Resolve_WithOverrides_ShouldUseEnvironmentOverrides()
     {
         var runtimeOverride = Path.Combine(_tempRoot, "runtime-env");
         var definitionsOverride = Path.Combine(_tempRoot, "definitions-env");
@@ -39,7 +40,7 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
-    public void Resolve_WithDefinitionsOverride_ShouldPreferArgument()
+    public void Impl_Resolve_WithDefinitionsOverride_ShouldPreferArgument()
     {
         var definitionsFromEnv = Path.Combine(_tempRoot, "definitions-env");
         var definitionsFromArg = Path.Combine(_tempRoot, "definitions-arg");
@@ -51,7 +52,7 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
-    public void Create_WithEquivalentInputs_ShouldMatchResolveOverlappingFields_AndKeepIsolatedLayout()
+    public void Impl_Create_WithEquivalentInputs_ShouldMatchResolveOverlappingFields_AndKeepIsolatedLayout()
     {
         var root = Path.Combine(_tempRoot, "root");
         var runtime = Path.Combine(root, "runtime-custom");
@@ -100,3 +101,6 @@ public class RuntimePathOptionsTests : IDisposable
         }
     }
 }
+
+
+

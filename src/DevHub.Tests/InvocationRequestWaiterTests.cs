@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Services.Invocation;
 using Microsoft.Extensions.Logging;
@@ -7,12 +7,13 @@ using Moq;
 /// <summary>
 /// InvocationRequestWaiter 生命周期测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationRequestWaiterTests
 {
     private readonly Mock<ILogger<InvocationRequestWaiter>> _waiterLogger = new();
 
     [Fact]
-    public async Task Register_ThenCompleteSuccess_ShouldReturnSuccessAndCleanup()
+    public async Task Impl_Register_ThenCompleteSuccess_ShouldReturnSuccessAndCleanup()
     {
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
 
@@ -30,7 +31,7 @@ public class InvocationRequestWaiterTests
     }
 
     [Fact]
-    public async Task Register_ThenCompleteTimeout_ShouldReturnTimeoutAndCleanup()
+    public async Task Impl_Register_ThenCompleteTimeout_ShouldReturnTimeoutAndCleanup()
     {
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
 
@@ -48,7 +49,7 @@ public class InvocationRequestWaiterTests
     }
 
     [Fact]
-    public async Task Register_ThenCompleteFailure_ShouldReturnFailedAndCleanup()
+    public async Task Impl_Register_ThenCompleteFailure_ShouldReturnFailedAndCleanup()
     {
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
 
@@ -71,7 +72,7 @@ public class InvocationRequestWaiterTests
     }
 
     [Fact]
-    public async Task Cleanup_ShouldRemoveWaiterAndAllowReRegister()
+    public async Task Impl_Cleanup_ShouldRemoveWaiterAndAllowReRegister()
     {
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
 
@@ -91,3 +92,6 @@ public class InvocationRequestWaiterTests
         _ = pendingTask;
     }
 }
+
+
+

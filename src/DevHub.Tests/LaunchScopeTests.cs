@@ -12,6 +12,7 @@ using Moq;
 /// <summary>
 /// Launch scope 语义专项测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class LaunchScopeTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -38,7 +39,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
+    public async Task Impl_LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -67,7 +68,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
+    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -113,7 +114,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
+    public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -158,7 +159,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
+    public async Task Impl_LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -185,7 +186,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
+    public async Task Impl_LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
     {
         WriteDefinition(
             "launch-scope-isolation.app",
@@ -217,7 +218,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_AutoLaunch_ShouldPassTargetScopeToLaunch()
+    public async Task Impl_InvocationHandler_Notify_AutoLaunch_ShouldPassTargetScopeToLaunch()
     {
         const string appId = "launch-scope-auto-pass.app";
         const string targetScope = "workspace-A";
@@ -336,5 +337,8 @@ public class LaunchScopeTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
+
+
+
 
 

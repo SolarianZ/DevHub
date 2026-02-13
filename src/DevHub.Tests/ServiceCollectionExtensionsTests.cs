@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Extensions;
 using DevHub.Core.Services;
@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 /// <summary>
 /// ServiceCollectionExtensions 注册行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class ServiceCollectionExtensionsTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -26,7 +27,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     }
 
     [Fact]
-    public void AddDevHubCore_ShouldRegisterAndResolveCoreServices()
+    public void Impl_AddDevHubCore_ShouldRegisterAndResolveCoreServices()
     {
         var runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
         var definitionsDirectory = Path.Combine(_tempDirectory, "definitions");
@@ -87,3 +88,6 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         }
     }
 }
+
+
+

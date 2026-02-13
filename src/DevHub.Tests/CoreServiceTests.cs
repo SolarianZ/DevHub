@@ -13,6 +13,7 @@ using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
+[Trait("Category", "Impl")]
 public class CoreServiceTests
 {
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
@@ -31,7 +32,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void FileSystemManager_GetToken_ShouldWriteTokenToRuntimeOverrideDirectory()
+    public void Impl_FileSystemManager_GetToken_ShouldWriteTokenToRuntimeOverrideDirectory()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -58,7 +59,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void FileSystemManager_GetToken_ShouldGenerateValidToken()
+    public void Impl_FileSystemManager_GetToken_ShouldGenerateValidToken()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -84,7 +85,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
+    public void Impl_FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -113,7 +114,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void FileSystemManager_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
+    public void Impl_FileSystemManager_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -158,7 +159,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void FileSystemManager_WriteHubJson_WhenOverwritten_ShouldKeepSingleRuntimeFile()
+    public void Impl_FileSystemManager_WriteHubJson_WhenOverwritten_ShouldKeepSingleRuntimeFile()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -191,7 +192,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreValid_ShouldApplyOverridesToHubRuntime()
+    public void Impl_RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreValid_ShouldApplyOverridesToHubRuntime()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
@@ -229,7 +230,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreInvalid_ShouldFallbackToDefaults()
+    public void Impl_RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreInvalid_ShouldFallbackToDefaults()
     {
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "0");
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "-1");
@@ -243,7 +244,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void AppRegistry_ListInstances_WhenOnlineThresholdOverridden_ShouldUseConfiguredThreshold()
+    public void Impl_AppRegistry_ListInstances_WhenOnlineThresholdOverridden_ShouldUseConfiguredThreshold()
     {
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "2");
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
@@ -272,7 +273,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void AppRegistry_RegisterInstance_ShouldAddOrUpdateInstance()
+    public void Impl_AppRegistry_RegisterInstance_ShouldAddOrUpdateInstance()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -297,7 +298,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void AppRegistry_Heartbeat_ShouldUpdateLastSeen()
+    public void Impl_AppRegistry_Heartbeat_ShouldUpdateLastSeen()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -323,7 +324,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void AppRegistry_ListInstances_ShouldFilterByScope()
+    public void Impl_AppRegistry_ListInstances_ShouldFilterByScope()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -360,7 +361,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public async Task HubPingHandler_ShouldReturnCorrectResponse()
+    public async Task Impl_HubPingHandler_ShouldReturnCorrectResponse()
     {
         // Arrange
         var handler = new HubPingHandler(new SystemClock(), _mockHubPingLogger.Object);
@@ -389,7 +390,7 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public async Task AppDefinitionsHandler_MethodNotFound_ShouldReturnError()
+    public async Task Impl_AppDefinitionsHandler_MethodNotFound_ShouldReturnError()
     {
         // Arrange
         var testDirectory = TestHelpers.GetTestDirectory();
@@ -483,3 +484,6 @@ public static class TestHelpers
         return testDirectory;
     }
 }
+
+
+

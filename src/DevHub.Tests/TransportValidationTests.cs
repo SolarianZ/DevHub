@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -7,9 +7,11 @@ using DevHub.Host.Transport;
 /// <summary>
 /// 传输层与 JSON-RPC 信封校验白盒测试。
 /// </summary>
+[Trait("Category", "Spec")]
 public class TransportValidationTests
 {
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_ShouldValidateAndReturnTrimmedClientIdentity()
     {
         var headers = BuildValidHeaders();
@@ -32,6 +34,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingAuthorization_ShouldReturnUnauthorizedMissingToken()
     {
         var headers = BuildValidHeaders();
@@ -53,6 +56,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_InvalidToken_ShouldReturnUnauthorizedInvalidToken()
     {
         var headers = BuildValidHeaders();
@@ -74,6 +78,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_TokenProviderThrows_ShouldReturnUnauthorizedInvalidToken()
     {
         var headers = BuildValidHeaders();
@@ -94,6 +99,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingProtocol_ShouldReturnNotSupportedMissing()
     {
         var headers = BuildValidHeaders();
@@ -116,6 +122,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_ProtocolMismatch_ShouldReturnNotSupportedMismatch()
     {
         var headers = BuildValidHeaders();
@@ -139,6 +146,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingClientId_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();
@@ -161,6 +169,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingClientSessionId_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();
@@ -183,6 +192,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_InvalidSessionIdFormat_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();
@@ -205,6 +215,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_InvalidContentType_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();
@@ -226,6 +237,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingContentType_ShouldReturnInvalidRequest()
     {
         var headers = BuildValidHeaders();
@@ -244,6 +256,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_MissingToken_ShouldReturnUnauthorizedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -270,6 +283,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_ParamsNotObject_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -294,6 +308,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_EmptyToken_ShouldReturnUnauthorizedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -319,6 +334,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_MissingProtocol_ShouldReturnNotSupportedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -343,6 +359,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_MissingClientId_ShouldReturnInvalidParams()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -367,6 +384,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_MissingClientSessionId_ShouldReturnInvalidParams()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -391,6 +409,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_ProtocolMismatch_ShouldReturnNotSupportedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -419,6 +438,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_InvalidSessionId_ShouldReturnInvalidParams()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -444,6 +464,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_InvalidToken_ShouldReturnUnauthorizedInvalidTokenAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -471,6 +492,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_TokenProviderThrows_ShouldReturnUnauthorizedAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -496,6 +518,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_MarkAuthenticatedFailed_ShouldReturnInternalErrorAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -521,6 +544,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_Success_ShouldReturnOkAndAuthenticatedContext()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -558,6 +582,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_InvalidEnvelope_ShouldReturnInvalidRequest()
     {
         var root = ParseJsonElement("""
@@ -575,6 +600,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_InvalidParamsType_ShouldReturnInvalidRequest()
     {
         var root = ParseJsonElement("""
@@ -593,6 +619,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_MissingMethod_ShouldReturnInvalidRequest()
     {
         var root = ParseJsonElement("""
@@ -609,6 +636,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_InvalidIdType_ShouldReturnInvalidRequestWithNullId()
     {
         var root = ParseJsonElement("""
@@ -626,6 +654,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
     {
         var root = ParseJsonElement("""
@@ -644,6 +673,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_ValidEnvelope_ShouldReturnRpcRequest()
     {
         var root = ParseJsonElement("""
@@ -665,6 +695,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_HubParamsArray_ShouldRejectHubMethodOnly()
     {
         var arrayParams = ParseJsonElement("[1,2,3]");
@@ -688,6 +719,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_UnsupportedEventType_ShouldReturnInvalidParamsWithReason()
     {
         var request = new JsonRpcRequest
@@ -707,6 +739,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_WhenParamsNull_ShouldAllowSubscribeAll()
     {
         var request = new JsonRpcRequest
@@ -724,6 +757,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_WhenParamsIsRawObject_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -740,6 +774,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_WhenParamsJsonNull_ShouldAllowSubscribeAll()
     {
         var request = new JsonRpcRequest
@@ -757,6 +792,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_TypesNotArray_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -773,6 +809,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_TypesContainEmptyString_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -789,6 +826,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.15")]
     public void Spec_6_3_15_Unsubscribe_MissingSubscriptionId_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
@@ -812,6 +850,7 @@ public class TransportValidationTests
     [InlineData(-32603, "internal_error")]
     [InlineData(-32001, "unauthorized")]
     [InlineData(-32099, "not_supported")]
+    [Trait("SpecRef", "8.3")]
     public void Spec_8_3_ErrorMessage_ShouldMatchCodeMapping(int code, string message)
     {
         var response = DevHubTransportValidator.CreateErrorResponse(code, message, "req-error-map");
@@ -819,6 +858,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
     public void Spec_6_2_IsHttpOnlyMethod_ShouldMatchTransportBoundary()
     {
         Assert.True(DevHubTransportValidator.IsHttpOnlyMethod("hub.invoke.request"));
@@ -828,6 +868,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
     public void Spec_6_2_IsWebSocketOnlyMethod_ShouldMatchTransportBoundary()
     {
         Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ws.authenticate"));
@@ -838,6 +879,7 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_WithCaseSensitiveDictionary_ShouldSupportCaseInsensitiveLookup()
     {
         var headers = new Dictionary<string, string>
@@ -898,3 +940,6 @@ public class TransportValidationTests
         Assert.Equal(id, response.Id);
     }
 }
+
+
+

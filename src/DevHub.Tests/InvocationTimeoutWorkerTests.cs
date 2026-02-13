@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -10,6 +10,7 @@ using Moq;
 /// <summary>
 /// InvocationTimeoutWorker 扫描与 waiter 通知测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationTimeoutWorkerTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
@@ -19,7 +20,7 @@ public class InvocationTimeoutWorkerTests
     private readonly Mock<ILogger<InvocationTimeoutWorker>> _workerLogger = new();
 
     [Fact]
-    public async Task SweepOnce_ShouldNotifyWaiterTimeout_ForRequestTimeout()
+    public async Task Impl_SweepOnce_ShouldNotifyWaiterTimeout_ForRequestTimeout()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -43,7 +44,7 @@ public class InvocationTimeoutWorkerTests
     }
 
     [Fact]
-    public async Task SweepOnce_ShouldNotifyWaiterExpired_ForRequestTtlElapsed()
+    public async Task Impl_SweepOnce_ShouldNotifyWaiterExpired_ForRequestTtlElapsed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -67,7 +68,7 @@ public class InvocationTimeoutWorkerTests
     }
 
     [Fact]
-    public void SweepOnce_ShouldIgnoreNotifyTimeoutTransitions_ForWaiterCompletion()
+    public void Impl_SweepOnce_ShouldIgnoreNotifyTimeoutTransitions_ForWaiterCompletion()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -142,3 +143,6 @@ public class InvocationTimeoutWorkerTests
         };
     }
 }
+
+
+

@@ -14,6 +14,7 @@ using Moq;
 /// <summary>
 /// Invocation 路由与门禁相关测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationRoutingTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -35,7 +36,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WithRpcDisabledDefinition_ShouldReturnForbidden()
+    public async Task Impl_InvocationHandler_Notify_WithRpcDisabledDefinition_ShouldReturnForbidden()
     {
         WriteDefinition("disabled-app", rpcEnabled: false);
 
@@ -74,7 +75,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Poll_WhenLeaseSecondsOverridden_ShouldExposeConfiguredLeaseSeconds()
+    public async Task Impl_InvocationHandler_Poll_WhenLeaseSecondsOverridden_ShouldExposeConfiguredLeaseSeconds()
     {
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
@@ -135,7 +136,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Poll_WithPollDisabledInstance_ShouldReturnForbidden()
+    public async Task Impl_InvocationHandler_Poll_WithPollDisabledInstance_ShouldReturnForbidden()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -174,7 +175,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Poll_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
+    public async Task Impl_InvocationHandler_Poll_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -194,7 +195,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_WithRespondDisabledInstance_ShouldReturnForbidden()
+    public async Task Impl_InvocationHandler_Respond_WithRespondDisabledInstance_ShouldReturnForbidden()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -238,7 +239,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
+    public async Task Impl_InvocationHandler_Respond_WithUnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -263,7 +264,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
+    public async Task Impl_InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -318,7 +319,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_AutoLaunchWithoutLaunchConfig_ShouldReturnLaunchFailed()
+    public async Task Impl_InvocationHandler_Notify_AutoLaunchWithoutLaunchConfig_ShouldReturnLaunchFailed()
     {
         WriteDefinition("notify-launch-missing", rpcEnabled: true);
 
@@ -362,7 +363,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_TtlBelowMinimum_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Notify_TtlBelowMinimum_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -391,7 +392,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_TtlBelowMinimum_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Request_TtlBelowMinimum_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -423,7 +424,7 @@ public class InvocationRoutingTests : IDisposable
     [Theory]
     [InlineData(0)]
     [InlineData(101)]
-    public async Task InvocationHandler_Poll_MaxCountOutOfRange_ShouldReturnInvalidParams(int maxCount)
+    public async Task Impl_InvocationHandler_Poll_MaxCountOutOfRange_ShouldReturnInvalidParams(int maxCount)
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -445,7 +446,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_WithValueAndError_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Respond_WithValueAndError_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -468,7 +469,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_WithoutValueAndError_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Respond_WithoutValueAndError_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -489,7 +490,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_ByNonLeaseHolder_ShouldReturnDeliveryConflictWithCurrentLeaseHolder()
+    public async Task Impl_InvocationHandler_Respond_ByNonLeaseHolder_ShouldReturnDeliveryConflictWithCurrentLeaseHolder()
     {
         const string appId = "respond-delivery-conflict.app";
         WriteDefinition(appId, rpcEnabled: true);
@@ -574,7 +575,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Notify_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -603,7 +604,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Request_AutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -633,7 +634,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Notify_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -662,7 +663,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    public async Task Impl_InvocationHandler_Request_WithTargetInstanceIdAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -692,7 +693,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_WithTargetInstanceIdAndOptionsOmitted_ShouldUseAutoLaunchFalseByDefault()
+    public async Task Impl_InvocationHandler_Request_WithTargetInstanceIdAndOptionsOmitted_ShouldUseAutoLaunchFalseByDefault()
     {
         var handler = CreateInvocationHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
 
@@ -717,7 +718,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
+    public async Task Impl_InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -753,7 +754,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Poll_WhenQueueEmpty_ShouldWaitUntilWaitMsAndReturnEmptyItems()
+    public async Task Impl_InvocationHandler_Poll_WhenQueueEmpty_ShouldWaitUntilWaitMsAndReturnEmptyItems()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -792,7 +793,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Respond_Success_ShouldRefreshInstanceLastSeenUtc()
+    public async Task Impl_InvocationHandler_Respond_Success_ShouldRefreshInstanceLastSeenUtc()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -865,7 +866,7 @@ public class InvocationRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WithScalarArgs_ShouldAllowAndPreserveValue()
+    public async Task Impl_InvocationHandler_Notify_WithScalarArgs_ShouldAllowAndPreserveValue()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -993,4 +994,7 @@ public class InvocationRoutingTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
+
+
+
 

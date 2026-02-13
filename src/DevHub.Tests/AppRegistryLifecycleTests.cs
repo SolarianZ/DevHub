@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -9,10 +9,11 @@ using Moq;
 /// <summary>
 /// AppRegistry 生命周期与清理行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class AppRegistryLifecycleTests
 {
     [Fact]
-    public async Task CleanupTimer_ShouldRemoveOnlyExpiredEntries()
+    public async Task Impl_CleanupTimer_ShouldRemoveOnlyExpiredEntries()
     {
         var clock = new MutableClock(DateTime.UtcNow);
         using var registry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
@@ -30,7 +31,7 @@ public sealed class AppRegistryLifecycleTests
     }
 
     [Fact]
-    public void HeartbeatAndUnregister_WhenInstanceMissing_ShouldReturnFalse()
+    public void Impl_HeartbeatAndUnregister_WhenInstanceMissing_ShouldReturnFalse()
     {
         using var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
 
@@ -40,7 +41,7 @@ public sealed class AppRegistryLifecycleTests
     }
 
     [Fact]
-    public void RegisterInstance_WhenSameInstanceRegisteredTwice_ShouldUpdateExistingEntry()
+    public void Impl_RegisterInstance_WhenSameInstanceRegisteredTwice_ShouldUpdateExistingEntry()
     {
         var clock = new MutableClock(DateTime.UtcNow);
         using var registry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
@@ -57,7 +58,7 @@ public sealed class AppRegistryLifecycleTests
     }
 
     [Fact]
-    public void Dispose_CalledMultipleTimes_ShouldBeIdempotent()
+    public void Impl_Dispose_CalledMultipleTimes_ShouldBeIdempotent()
     {
         var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
 
@@ -114,3 +115,6 @@ public sealed class AppRegistryLifecycleTests
         }
     }
 }
+
+
+

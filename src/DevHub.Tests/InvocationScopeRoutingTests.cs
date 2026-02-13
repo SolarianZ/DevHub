@@ -13,6 +13,7 @@ using Moq;
 /// <summary>
 /// Invocation scope 路由专项测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationScopeRoutingTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -34,7 +35,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RoutingService_WithTargetInstanceId_ShouldNotFallbackToOtherInstances()
+    public void Impl_RoutingService_WithTargetInstanceId_ShouldNotFallbackToOtherInstances()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -65,7 +66,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RoutingService_WithTargetScope_ShouldNotFallbackToGlobal()
+    public void Impl_RoutingService_WithTargetScope_ShouldNotFallbackToGlobal()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -96,7 +97,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RoutingService_WithNullTargetScope_ShouldOnlyRouteToGlobalInstances()
+    public void Impl_RoutingService_WithNullTargetScope_ShouldOnlyRouteToGlobalInstances()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -127,7 +128,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RoutingService_WithCaseSensitiveScopeMatching_ShouldNotCrossRoute()
+    public void Impl_RoutingService_WithCaseSensitiveScopeMatching_ShouldNotCrossRoute()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -164,7 +165,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
+    public void Impl_RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -195,7 +196,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
+    public async Task Impl_InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -238,7 +239,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
+    public async Task Impl_InvocationHandler_Notify_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -280,7 +281,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WithGlobalTarget_ShouldRouteToGlobalCandidate()
+    public async Task Impl_InvocationHandler_Notify_WithGlobalTarget_ShouldRouteToGlobalCandidate()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-notify.app", rpcEnabled: true);
@@ -342,7 +343,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_WithScopedTarget_ShouldRouteToScopedCandidate()
+    public async Task Impl_InvocationHandler_Request_WithScopedTarget_ShouldRouteToScopedCandidate()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-request.app", rpcEnabled: true);
@@ -410,7 +411,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_OfflineMatrix_ShouldBeConsistentAcrossGlobalAndScopedTargets()
+    public async Task Impl_InvocationHandler_Notify_OfflineMatrix_ShouldBeConsistentAcrossGlobalAndScopedTargets()
     {
         foreach (var scopeCase in new (string? TargetScope, string ScopeName, string ScopeTag)[]
                  {
@@ -583,7 +584,7 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public async Task Sweep_RequeueScopedInvocation_ShouldNotLeakAcrossScopes()
+    public async Task Impl_Sweep_RequeueScopedInvocation_ShouldNotLeakAcrossScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var holderInstance = appRegistry.RegisterInstance(new AppInstance
@@ -737,6 +738,9 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
 }
+
+
+
 
 
 

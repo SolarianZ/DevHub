@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -9,6 +9,7 @@ using Moq;
 /// <summary>
 /// Invocation 租约冲突测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationLeaseTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
@@ -16,7 +17,7 @@ public class InvocationLeaseTests
     private readonly Mock<ILogger<InvocationStore>> _storeLogger = new();
 
     [Fact]
-    public async Task Respond_ByNonLeaseHolder_ShouldReturnConflict()
+    public async Task Impl_Respond_ByNonLeaseHolder_ShouldReturnConflict()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceA = appRegistry.RegisterInstance(new AppInstance
@@ -49,7 +50,7 @@ public class InvocationLeaseTests
     }
 
     [Fact]
-    public async Task Respond_DuplicateSubmission_ShouldReturnConflict()
+    public async Task Impl_Respond_DuplicateSubmission_ShouldReturnConflict()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -77,7 +78,7 @@ public class InvocationLeaseTests
     }
 
     [Fact]
-    public async Task LeaseExpired_ShouldBeRequeuedAndAttemptIncremented()
+    public async Task Impl_LeaseExpired_ShouldBeRequeuedAndAttemptIncremented()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceA = appRegistry.RegisterInstance(new AppInstance
@@ -120,7 +121,7 @@ public class InvocationLeaseTests
     }
 
     [Fact]
-    public async Task Respond_AfterLeaseExpired_ShouldReturnDeliveryConflict()
+    public async Task Impl_Respond_AfterLeaseExpired_ShouldReturnDeliveryConflict()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -184,3 +185,6 @@ public class InvocationLeaseTests
         };
     }
 }
+
+
+

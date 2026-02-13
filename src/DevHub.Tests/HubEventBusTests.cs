@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Services.Events;
 using Microsoft.Extensions.Logging;
@@ -7,12 +7,13 @@ using Moq;
 /// <summary>
 /// HubEventBus 行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class HubEventBusTests
 {
     private readonly Mock<ILogger<HubEventBus>> _logger = new();
 
     [Fact]
-    public void GetSupportedEventTypes_ShouldMatchSpecDefinitions()
+    public void Impl_GetSupportedEventTypes_ShouldMatchSpecDefinitions()
     {
         var eventTypes = HubEventBus.GetSupportedEventTypes();
 
@@ -29,7 +30,7 @@ public class HubEventBusTests
     }
 
     [Fact]
-    public void TrySubscribe_ShouldRequireAuthenticatedConnection()
+    public void Impl_TrySubscribe_ShouldRequireAuthenticatedConnection()
     {
         var bus = new HubEventBus(_logger.Object);
         bus.RegisterConnection("conn-auth");
@@ -46,7 +47,7 @@ public class HubEventBusTests
     }
 
     [Fact]
-    public void Publish_ShouldDeliverOnlyMatchingSubscriptions()
+    public void Impl_Publish_ShouldDeliverOnlyMatchingSubscriptions()
     {
         var bus = new HubEventBus(_logger.Object);
 
@@ -87,7 +88,7 @@ public class HubEventBusTests
     }
 
     [Fact]
-    public void Unsubscribe_ShouldBeIdempotentAndStopFutureDelivery()
+    public void Impl_Unsubscribe_ShouldBeIdempotentAndStopFutureDelivery()
     {
         var bus = new HubEventBus(_logger.Object);
         bus.RegisterConnection("conn-unsub");
@@ -118,7 +119,7 @@ public class HubEventBusTests
     }
 
     [Fact]
-    public void RemoveConnection_ShouldClearSubscriptionsAndPendingDeliveries()
+    public void Impl_RemoveConnection_ShouldClearSubscriptionsAndPendingDeliveries()
     {
         var bus = new HubEventBus(_logger.Object);
         bus.RegisterConnection("conn-remove");
@@ -159,7 +160,7 @@ public class HubEventBusTests
     }
 
     [Fact]
-    public void Publish_ShouldDropWhenConnectionQueueExceedsLimit()
+    public void Impl_Publish_ShouldDropWhenConnectionQueueExceedsLimit()
     {
         var bus = new HubEventBus(_logger.Object);
         bus.RegisterConnection("conn-bounded");
@@ -180,3 +181,6 @@ public class HubEventBusTests
         Assert.Equal(HubEventBus.MaxPendingDeliveriesPerConnection, deliveries.Count);
     }
 }
+
+
+

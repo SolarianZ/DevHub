@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using FluentAssertions;
 
+[Trait("Category", "Impl")]
 public class NegativeTests : IDisposable
 {
     private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
@@ -29,7 +30,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public void AppRegistry_Heartbeat_NonExistentInstance_ShouldReturnFalse()
+    public void Impl_AppRegistry_Heartbeat_NonExistentInstance_ShouldReturnFalse()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -42,7 +43,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public void AppRegistry_Unregister_NonExistentInstance_ShouldReturnFalse()
+    public void Impl_AppRegistry_Unregister_NonExistentInstance_ShouldReturnFalse()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -55,7 +56,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public void AppRegistry_GetInstance_NonExistentInstance_ShouldReturnNull()
+    public void Impl_AppRegistry_GetInstance_NonExistentInstance_ShouldReturnNull()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -68,7 +69,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public void DefinitionLoader_GetDefinition_NonExistentAppId_ShouldReturnNull()
+    public void Impl_DefinitionLoader_GetDefinition_NonExistentAppId_ShouldReturnNull()
     {
         // Arrange
         var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
@@ -81,7 +82,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public void FileSystemManager_InitializeDirectories_ShouldCreateConfiguredDirectories()
+    public void Impl_FileSystemManager_InitializeDirectories_ShouldCreateConfiguredDirectories()
     {
         // Arrange
         var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
@@ -98,7 +99,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_MissingParams_ShouldReturnError()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_MissingParams_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -121,7 +122,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_InvalidScopeType_ShouldReturnError()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_InvalidScopeType_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -154,7 +155,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_ListInstances_InvalidScopeType_ShouldReturnError()
+    public async Task Impl_AppInstancesHandler_ListInstances_InvalidScopeType_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -178,7 +179,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
+    public async Task Impl_AppInstancesHandler_Heartbeat_MissingParams_ShouldReturnError()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
@@ -201,7 +202,7 @@ public class NegativeTests : IDisposable
     }
 
     [Fact]
-    public async Task AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
+    public async Task Impl_AppDefinitionsHandler_GetDefinition_MissingParams_ShouldReturnError()
     {
         // Arrange
         var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
@@ -233,3 +234,6 @@ public class NegativeTests : IDisposable
         }
     }
 }
+
+
+

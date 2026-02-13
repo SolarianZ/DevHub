@@ -7,6 +7,7 @@ using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
 
+[Trait("Category", "Impl")]
 public class SpecConformanceTests : IDisposable
 {
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
@@ -21,7 +22,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public void DefinitionLoader_Load_ShouldIgnoreInvalidDefinitionFiles()
+    public void Impl_DefinitionLoader_Load_ShouldIgnoreInvalidDefinitionFiles()
     {
         // Arrange
         WriteJson("valid-app.json", new
@@ -55,7 +56,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppDefinitionsHandler_ListDefinitions_ShouldReturnDefinitions()
+    public async Task Impl_AppDefinitionsHandler_ListDefinitions_ShouldReturnDefinitions()
     {
         WriteJson("list-target.json", new
         {
@@ -88,7 +89,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppDefinitionsHandler_GetDefinition_ShouldReturnDefinitionWhenExists()
+    public async Task Impl_AppDefinitionsHandler_GetDefinition_ShouldReturnDefinitionWhenExists()
     {
         WriteJson("get-target.json", new
         {
@@ -121,7 +122,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppDefinitionsHandler_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
+    public async Task Impl_AppDefinitionsHandler_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -147,7 +148,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_ShouldReturnInstanceInResult()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_ShouldReturnInstanceInResult()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -189,7 +190,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_InvalidInputs_ShouldReturnInvalidParams()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_InvalidInputs_ShouldReturnInvalidParams()
     {
         // Arrange
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -265,7 +266,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_UnregisterInstance_ShouldBeIdempotent()
+    public async Task Impl_AppInstancesHandler_UnregisterInstance_ShouldBeIdempotent()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -326,7 +327,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_ListInstances_DefaultIncludeOfflineFalse_ShouldFilterOfflineInstances()
+    public async Task Impl_AppInstancesHandler_ListInstances_DefaultIncludeOfflineFalse_ShouldFilterOfflineInstances()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -388,7 +389,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScopeFilter()
+    public async Task Impl_AppInstancesHandler_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScopeFilter()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -462,3 +463,6 @@ public class SpecConformanceTests : IDisposable
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }
+
+
+

@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Globalization;
 using System.Text.Json;
@@ -12,12 +12,14 @@ using Moq;
 /// <summary>
 /// hub.apps.heartbeat 规范白盒测试。
 /// </summary>
+[Trait("Category", "Spec")]
 public class AppInstancesHeartbeatSpecTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _handlerLogger = new();
 
     [Fact]
+    [Trait("SpecRef", "6.3.6")]
     public async Task Spec_6_3_6_Heartbeat_ShouldReturnOkAndRefreshLastSeenUtc()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -78,6 +80,7 @@ public class AppInstancesHeartbeatSpecTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.6")]
     public async Task Spec_6_3_6_Heartbeat_UnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -102,3 +105,6 @@ public class AppInstancesHeartbeatSpecTests
         Assert.Equal("missing-inst", errorData.GetProperty("instanceId").GetString());
     }
 }
+
+
+

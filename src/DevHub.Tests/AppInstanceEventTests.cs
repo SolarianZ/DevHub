@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -11,6 +11,7 @@ using Moq;
 /// <summary>
 /// AppInstance 事件发布测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class AppInstanceEventTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
@@ -18,7 +19,7 @@ public class AppInstanceEventTests
     private readonly Mock<ILogger<HubEventBus>> _eventBusLogger = new();
 
     [Fact]
-    public async Task RegisterAndUnregister_ShouldPublishRegisteredAndUnregisteredEvents()
+    public async Task Impl_RegisterAndUnregister_ShouldPublishRegisteredAndUnregisteredEvents()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
@@ -71,7 +72,7 @@ public class AppInstanceEventTests
     }
 
     [Fact]
-    public async Task UnregisterUnknownInstance_ShouldNotPublishEvent()
+    public async Task Impl_UnregisterUnknownInstance_ShouldNotPublishEvent()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
@@ -97,3 +98,6 @@ public class AppInstanceEventTests
         Assert.Empty(deliveries);
     }
 }
+
+
+

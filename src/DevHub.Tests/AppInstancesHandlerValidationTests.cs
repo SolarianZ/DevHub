@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models;
@@ -11,12 +11,13 @@ using Moq;
 /// <summary>
 /// AppInstancesHandler 参数校验测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class AppInstancesHandlerValidationTests
 {
     private readonly Mock<ILogger<AppInstancesHandler>> _handlerLogger = new();
 
     [Fact]
-    public async Task RegisterInstance_WhenParamsNotObject_ShouldReturnInvalidParams()
+    public async Task Impl_RegisterInstance_WhenParamsNotObject_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -31,7 +32,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task RegisterInstance_WhenInstanceMissing_ShouldReturnInvalidParams()
+    public async Task Impl_RegisterInstance_WhenInstanceMissing_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -46,7 +47,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task RegisterInstance_WhenInstanceIdInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_RegisterInstance_WhenInstanceIdInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -70,7 +71,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task RegisterInstance_WhenAppIdInvalidOrInvokeInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_RegisterInstance_WhenAppIdInvalidOrInvokeInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -126,7 +127,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task RegisterInstance_WhenScopeInvalid_ShouldReturnInvalidParamsWithReason()
+    public async Task Impl_RegisterInstance_WhenScopeInvalid_ShouldReturnInvalidParamsWithReason()
     {
         var handler = CreateHandler();
 
@@ -153,7 +154,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Heartbeat_WhenUnknownInstance_ShouldReturnInstanceNotFound()
+    public async Task Impl_Heartbeat_WhenUnknownInstance_ShouldReturnInstanceNotFound()
     {
         var handler = CreateHandler();
 
@@ -168,7 +169,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Heartbeat_WhenInstanceIdInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_Heartbeat_WhenInstanceIdInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -190,7 +191,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Unregister_WhenParamsInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_Unregister_WhenParamsInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -205,7 +206,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Unregister_WhenParamsNotObject_ShouldReturnInvalidParams()
+    public async Task Impl_Unregister_WhenParamsNotObject_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -220,7 +221,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task ListInstances_WhenScopeAndFlagsInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_ListInstances_WhenScopeAndFlagsInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -258,7 +259,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task ListInstances_WhenParamsNotObject_ShouldReturnInvalidParams()
+    public async Task Impl_ListInstances_WhenParamsNotObject_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
 
@@ -273,7 +274,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Methods_WhenLoggerThrowsInTry_ShouldReturnInternalError()
+    public async Task Impl_Methods_WhenLoggerThrowsInTry_ShouldReturnInternalError()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), new ThrowOnDebugLogger<AppInstancesHandler>());
@@ -321,7 +322,7 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task RegisterAndUnregisterWithoutEventBus_ShouldReturnOk()
+    public async Task Impl_RegisterAndUnregisterWithoutEventBus_ShouldReturnOk()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventBus: null);
@@ -397,3 +398,6 @@ public sealed class AppInstancesHandlerValidationTests
         }
     }
 }
+
+
+

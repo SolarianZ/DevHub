@@ -12,6 +12,7 @@ using Moq;
 /// <summary>
 /// Invocation request 闭环测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationRequestFlowTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -33,7 +34,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_Poll_RespondValue_ShouldReturnSuccessWithValue()
+    public async Task Impl_Request_Poll_RespondValue_ShouldReturnSuccessWithValue()
     {
         const string appId = "request-success.app";
         const string instanceId = "request-success-instance";
@@ -115,7 +116,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
+    public async Task Impl_Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
     {
         const string appId = "request-failed.app";
         const string instanceId = "request-failed-instance";
@@ -197,7 +198,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenWaitTimeoutElapsed_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
+    public async Task Impl_Request_WhenWaitTimeoutElapsed_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
     {
         const string appId = "request-timeout.app";
         const string instanceId = "request-timeout-instance";
@@ -273,7 +274,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenCallerCanceled_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
+    public async Task Impl_Request_WhenCallerCanceled_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
     {
         const string appId = "request-canceled.app";
         const string instanceId = "request-canceled-instance";
@@ -361,7 +362,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
+    public async Task Impl_Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
     {
         WriteDefinition("request-invalid.app", rpcEnabled: true);
         var handler = CreateHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
@@ -392,7 +393,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenOfflineAndQueueIfOfflineFalse_ShouldReturnInstanceNotFound()
+    public async Task Impl_Request_WhenOfflineAndQueueIfOfflineFalse_ShouldReturnInstanceNotFound()
     {
         WriteDefinition("request-offline.app", rpcEnabled: true);
         var handler = CreateHandler(new AppRegistry(new SystemClock(), _registryLogger.Object));
@@ -425,7 +426,7 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenOptionsOmitted_ShouldApplySpecDefaultsAndReturnTimeout()
+    public async Task Impl_Request_WhenOptionsOmitted_ShouldApplySpecDefaultsAndReturnTimeout()
     {
         const string appId = "request-default-options.app";
         const string instanceId = "request-default-options-instance";
@@ -522,6 +523,9 @@ public class InvocationRequestFlowTests : IDisposable
         }));
     }
 }
+
+
+
 
 
 

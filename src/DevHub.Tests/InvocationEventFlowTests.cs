@@ -13,6 +13,7 @@ using Moq;
 /// <summary>
 /// Invocation 生命周期事件发布测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationEventFlowTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -35,7 +36,7 @@ public class InvocationEventFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task NotifyPollRespondValue_ShouldPublishQueuedDeliveredCompleted()
+    public async Task Impl_NotifyPollRespondValue_ShouldPublishQueuedDeliveredCompleted()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -122,7 +123,7 @@ public class InvocationEventFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task NotifyPollRespondError_ShouldPublishFailed()
+    public async Task Impl_NotifyPollRespondError_ShouldPublishFailed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -244,6 +245,9 @@ public class InvocationEventFlowTests : IDisposable
         Assert.True(eventBus.TrySubscribe(connectionId, null, out _));
     }
 }
+
+
+
 
 
 

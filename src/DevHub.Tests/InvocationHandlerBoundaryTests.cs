@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -12,6 +12,7 @@ using Moq;
 /// <summary>
 /// InvocationHandler 边界行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class InvocationHandlerBoundaryTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -26,7 +27,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Notify_WhenRequiredFieldsMissing_ShouldReturnInvalidParams()
+    public async Task Impl_Notify_WhenRequiredFieldsMissing_ShouldReturnInvalidParams()
     {
         WriteDefinition("invocation-required-fields", rpcEnabled: true);
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -46,7 +47,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Notify_WhenParamsNotObject_ShouldReturnInvalidParams()
+    public async Task Impl_Notify_WhenParamsNotObject_ShouldReturnInvalidParams()
     {
         WriteDefinition("invocation-invalid-params-root", rpcEnabled: true);
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -63,7 +64,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Notify_WhenOptionsContainInvalidTypes_ShouldReturnInvalidParams()
+    public async Task Impl_Notify_WhenOptionsContainInvalidTypes_ShouldReturnInvalidParams()
     {
         WriteDefinition("invocation-notify-options", rpcEnabled: true);
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -107,7 +108,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenOptionsInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_Request_WhenOptionsInvalid_ShouldReturnInvalidParams()
     {
         WriteDefinition("invocation-request-options", rpcEnabled: true);
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -149,7 +150,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Poll_WhenParamsInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_Poll_WhenParamsInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateHandler(appRegistry);
@@ -180,7 +181,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Respond_WhenParamsInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_Respond_WhenParamsInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateHandler(appRegistry);
@@ -221,7 +222,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Respond_WhenInvocationMissing_ShouldReturnInvocationExpired()
+    public async Task Impl_Respond_WhenInvocationMissing_ShouldReturnInvocationExpired()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         appRegistry.RegisterInstance(new DevHub.Core.Models.AppInstance
@@ -255,7 +256,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenCanceledAndTtlReached_ShouldReturnInvocationExpired()
+    public async Task Impl_Request_WhenCanceledAndTtlReached_ShouldReturnInvocationExpired()
     {
         const string appId = "invocation-cancel-ttl";
         WriteDefinition(appId, rpcEnabled: true);
@@ -290,7 +291,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleAsync_WhenMethodUnknown_ShouldReturnMethodNotFound()
+    public async Task Impl_HandleAsync_WhenMethodUnknown_ShouldReturnMethodNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateHandler(appRegistry);
@@ -306,7 +307,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Request_WhenCanceledBeforeTtlReached_ShouldReturnInvocationTimeout()
+    public async Task Impl_Request_WhenCanceledBeforeTtlReached_ShouldReturnInvocationTimeout()
     {
         const string appId = "invocation-cancel-timeout";
         WriteDefinition(appId, rpcEnabled: true);
@@ -341,7 +342,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Respond_WhenLeaseHeldByAnotherInstance_ShouldReturnDeliveryConflict()
+    public async Task Impl_Respond_WhenLeaseHeldByAnotherInstance_ShouldReturnDeliveryConflict()
     {
         const string appId = "invocation-delivery-conflict";
         WriteDefinition(appId, rpcEnabled: true);
@@ -520,3 +521,6 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
     }
 }
+
+
+

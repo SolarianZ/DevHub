@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Services;
@@ -8,6 +8,7 @@ using Moq;
 /// <summary>
 /// FileSystemManager 恢复与自愈行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class FileSystemManagerRecoveryTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -32,7 +33,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void GetToken_WhenHistoricalTokenExists_ShouldRotateForNewSession()
+    public void Impl_GetToken_WhenHistoricalTokenExists_ShouldRotateForNewSession()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -49,7 +50,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void EnsureRuntimeArtifacts_WhenTokenDeleted_ShouldRestoreCurrentSessionToken()
+    public void Impl_EnsureRuntimeArtifacts_WhenTokenDeleted_ShouldRestoreCurrentSessionToken()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -69,7 +70,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void EnsureRuntimeArtifacts_WhenHubJsonMissingAndPortProvided_ShouldRebuildHubRuntimeFile()
+    public void Impl_EnsureRuntimeArtifacts_WhenHubJsonMissingAndPortProvided_ShouldRebuildHubRuntimeFile()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -93,7 +94,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void EnsureRuntimeArtifacts_WhenHubJsonExists_ShouldPreserveRuntimeFile()
+    public void Impl_EnsureRuntimeArtifacts_WhenHubJsonExists_ShouldPreserveRuntimeFile()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -113,7 +114,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void InitializeDirectories_WhenUsingIsolatedRoot_ShouldCreateAllFolders()
+    public void Impl_InitializeDirectories_WhenUsingIsolatedRoot_ShouldCreateAllFolders()
     {
         var isolatedRoot = Path.Combine(_tempDirectory, "isolated-root");
         var isolatedRuntime = Path.Combine(isolatedRoot, "runtime");
@@ -139,7 +140,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void EnsureRuntimeArtifacts_WhenHubJsonMissingAndPortInvalid_ShouldNotCreateHubRuntimeFile()
+    public void Impl_EnsureRuntimeArtifacts_WhenHubJsonMissingAndPortInvalid_ShouldNotCreateHubRuntimeFile()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -157,7 +158,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void WriteHubJson_WhenVersionProvided_ShouldPersistVersionAndRuntimeTuning()
+    public void Impl_WriteHubJson_WhenVersionProvided_ShouldPersistVersionAndRuntimeTuning()
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
@@ -184,7 +185,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void Cleanup_ShouldNotThrow()
+    public void Impl_Cleanup_ShouldNotThrow()
     {
         var manager = new FileSystemManager(
             Mock.Of<ILogger<FileSystemManager>>(),
@@ -210,3 +211,6 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         }
     }
 }
+
+
+

@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -9,6 +9,7 @@ using Moq;
 /// <summary>
 /// InvocationStore 生命周期测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class InvocationStoreTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
@@ -16,7 +17,7 @@ public class InvocationStoreTests
     private readonly Mock<ILogger<InvocationStore>> _storeLogger = new();
 
     [Fact]
-    public async Task NotifyLifecycle_ShouldTransitionFromQueuedToDeliveredToCompleted()
+    public async Task Impl_NotifyLifecycle_ShouldTransitionFromQueuedToDeliveredToCompleted()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -49,7 +50,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task PendingNotify_ShouldBeDeliveredAfterInstanceComesOnline()
+    public async Task Impl_PendingNotify_ShouldBeDeliveredAfterInstanceComesOnline()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -74,7 +75,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task DeliveredRespondWithError_ShouldTransitionToFailed()
+    public async Task Impl_DeliveredRespondWithError_ShouldTransitionToFailed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -102,7 +103,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task DeliveredMarkedTimeout_ShouldRejectLateRespondAsExpired()
+    public async Task Impl_DeliveredMarkedTimeout_ShouldRejectLateRespondAsExpired()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -129,7 +130,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task DeliveredMarkedExpired_ShouldRejectLateRespondAsExpired()
+    public async Task Impl_DeliveredMarkedExpired_ShouldRejectLateRespondAsExpired()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -156,7 +157,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public void Sweep_ShouldMarkNotifyAsExpired_WhenTtlElapsed()
+    public void Impl_Sweep_ShouldMarkNotifyAsExpired_WhenTtlElapsed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -180,7 +181,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public void Sweep_ShouldMarkRequestAsTimeout_WhenWaitTimeoutElapsed()
+    public void Impl_Sweep_ShouldMarkRequestAsTimeout_WhenWaitTimeoutElapsed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -203,7 +204,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
+    public async Task Impl_Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
@@ -237,7 +238,7 @@ public class InvocationStoreTests
     }
 
     [Fact]
-    public async Task Sweep_ShouldCleanupTerminalInvocation_AfterRetentionWindow()
+    public async Task Impl_Sweep_ShouldCleanupTerminalInvocation_AfterRetentionWindow()
     {
         var start = DateTime.UtcNow;
         var clock = new MutableClock(start);
@@ -357,3 +358,6 @@ public class InvocationStoreTests
         }
     }
 }
+
+
+

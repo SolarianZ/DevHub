@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using System.Globalization;
 using System.Text.Json;
@@ -8,9 +8,11 @@ using DevHub.Host.Transport;
 /// <summary>
 /// hub.event 通知构造器白盒测试。
 /// </summary>
+[Trait("Category", "Spec")]
 public class HubEventNotificationFactoryTests
 {
     [Fact]
+    [Trait("SpecRef", "6.3.16")]
     public void Spec_6_3_16_HubEventNotification_ShouldContainRequiredFields()
     {
         var delivery = new HubEventDelivery
@@ -47,6 +49,7 @@ public class HubEventNotificationFactoryTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.16")]
     public void Spec_6_3_16_HubEventNotification_ShouldKeepNullPayload()
     {
         var delivery = new HubEventDelivery
@@ -65,3 +68,6 @@ public class HubEventNotificationFactoryTests
         Assert.Equal(JsonValueKind.Null, parameters.GetProperty("payload").ValueKind);
     }
 }
+
+
+

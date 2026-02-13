@@ -12,6 +12,7 @@ using Moq;
 /// <summary>
 /// Scope 与 target 解析规则测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class ScopeParsingTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -26,7 +27,7 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldTreatAsExplicitScope()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldTreatAsExplicitScope()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
@@ -116,7 +117,7 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task AppInstancesHandler_ListInstances_WhenScopeEmpty_ShouldTreatAsGlobal()
+    public async Task Impl_AppInstancesHandler_ListInstances_WhenScopeEmpty_ShouldTreatAsGlobal()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
@@ -161,7 +162,7 @@ public class ScopeParsingTests : IDisposable
 
 
     [Fact]
-    public async Task AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldTreatBothAsGlobal()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldTreatBothAsGlobal()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
@@ -228,7 +229,7 @@ public class ScopeParsingTests : IDisposable
 
 
     [Fact]
-    public async Task InvocationHandler_Notify_WhenTargetScopeGlobal_ShouldRouteToExplicitGlobalScope()
+    public async Task Impl_InvocationHandler_Notify_WhenTargetScopeGlobal_ShouldRouteToExplicitGlobalScope()
     {
         WriteDefinition("scope-invoke-app", rpcEnabled: true);
 
@@ -287,7 +288,7 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Notify_WhenTargetScopeEmpty_ShouldRouteToDefaultGlobal()
+    public async Task Impl_InvocationHandler_Notify_WhenTargetScopeEmpty_ShouldRouteToDefaultGlobal()
     {
         WriteDefinition("scope-invoke-app-empty", rpcEnabled: true);
 
@@ -346,7 +347,7 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task InvocationHandler_Request_WhenTargetInstanceIdWhitespace_ShouldReturnInvalidTargetInstanceReason()
+    public async Task Impl_InvocationHandler_Request_WhenTargetInstanceIdWhitespace_ShouldReturnInvalidTargetInstanceReason()
     {
         WriteDefinition("scope-invoke-app-2", rpcEnabled: true);
 
@@ -414,4 +415,7 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
+
+
+
 

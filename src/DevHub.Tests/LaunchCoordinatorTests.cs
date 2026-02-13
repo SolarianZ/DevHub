@@ -11,6 +11,7 @@ using Moq;
 /// <summary>
 /// LaunchCoordinator 行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class LaunchCoordinatorTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -33,7 +34,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
+    public async Task Impl_LaunchAsync_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -57,7 +58,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenLaunchConfigMissing_ShouldReturnLaunchFailed()
+    public async Task Impl_LaunchAsync_WhenLaunchConfigMissing_ShouldReturnLaunchFailed()
     {
         WriteDefinition("launch-missing.app", includeLaunch: false);
 
@@ -83,7 +84,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenProcessStarted_ShouldReturnStartedStatus()
+    public async Task Impl_LaunchAsync_WhenProcessStarted_ShouldReturnStartedStatus()
     {
         WriteDefinition("launch-started.app", includeLaunch: true);
 
@@ -109,7 +110,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenWaitForRegisterTimeout_ShouldReturnStartingStatus()
+    public async Task Impl_LaunchAsync_WhenWaitForRegisterTimeout_ShouldReturnStartingStatus()
     {
         WriteDefinition("launch-starting.app", includeLaunch: true);
 
@@ -130,7 +131,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WithSameDedupeKeyWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
+    public async Task Impl_LaunchAsync_WithSameDedupeKeyWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         WriteDefinition(
             "launch-dedupe-window.app",
@@ -161,7 +162,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenDedupeWindowOverridden_ShouldRespectConfiguredWindow()
+    public async Task Impl_LaunchAsync_WhenDedupeWindowOverridden_ShouldRespectConfiguredWindow()
     {
         using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "1");
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
@@ -227,7 +228,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WithExplicitDedupeKey_ShouldOverrideTemplate()
+    public async Task Impl_LaunchAsync_WithExplicitDedupeKey_ShouldOverrideTemplate()
     {
         WriteDefinition(
             "launch-explicit-dedupe.app",
@@ -260,7 +261,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenHttpBaseUrlChanges_ShouldUseDifferentTemplateKey()
+    public async Task Impl_LaunchAsync_WhenHttpBaseUrlChanges_ShouldUseDifferentTemplateKey()
     {
         WriteDefinition(
             "launch-httpbaseurl-template.app",
@@ -293,7 +294,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_ArgsTemplate_ShouldRenderSpecPlaceholders()
+    public async Task Impl_LaunchAsync_ArgsTemplate_ShouldRenderSpecPlaceholders()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -328,7 +329,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_ArgsTemplate_WithNullScope_ShouldRenderEmptyScopeAndGlobalScopeOrGlobal()
+    public async Task Impl_LaunchAsync_ArgsTemplate_WithNullScope_ShouldRenderEmptyScopeAndGlobalScopeOrGlobal()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -363,7 +364,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
+    public async Task Impl_LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
     {
         WriteDefinition("launch-null-process.app", includeLaunch: true);
 
@@ -389,7 +390,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenProcessLauncherThrows_ShouldReturnLaunchFailedWithStderr()
+    public async Task Impl_LaunchAsync_WhenProcessLauncherThrows_ShouldReturnLaunchFailedWithStderr()
     {
         WriteDefinition("launch-throws-process.app", includeLaunch: true);
 
@@ -416,7 +417,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenWaitForRegisterAndInstanceAppears_ShouldReturnStarted()
+    public async Task Impl_LaunchAsync_WhenWaitForRegisterAndInstanceAppears_ShouldReturnStarted()
     {
         WriteDefinition("launch-wait-register.app", includeLaunch: true);
 
@@ -454,7 +455,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task LaunchAsync_WhenArgsTemplateMissing_ShouldPassNullArgumentsToProcessLauncher()
+    public async Task Impl_LaunchAsync_WhenArgsTemplateMissing_ShouldPassNullArgumentsToProcessLauncher()
     {
         WriteDefinitionWithoutArgsTemplate("launch-null-args-template.app");
 
@@ -623,3 +624,6 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
+
+
+

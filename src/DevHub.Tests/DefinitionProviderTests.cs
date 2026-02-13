@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+﻿namespace DevHub.Tests;
 
 using DevHub.Core.Services;
 using Microsoft.Extensions.Logging;
@@ -7,6 +7,7 @@ using Moq;
 /// <summary>
 /// <see cref="DefinitionProvider"/> 测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public class DefinitionProviderTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -21,7 +22,7 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_AfterFileAdded_ShouldExposeUpdatedSnapshot()
+    public void Impl_Refresh_AfterFileAdded_ShouldExposeUpdatedSnapshot()
     {
         var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
@@ -39,7 +40,7 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
-    public void GetDefinition_WhenMissing_ShouldReturnNull()
+    public void Impl_GetDefinition_WhenMissing_ShouldReturnNull()
     {
         var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
@@ -79,3 +80,6 @@ public class DefinitionProviderTests : IDisposable
         File.WriteAllText(Path.Combine(_tempDirectory, $"{appId}.json"), payload);
     }
 }
+
+
+
