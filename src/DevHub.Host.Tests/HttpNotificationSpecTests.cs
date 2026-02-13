@@ -12,6 +12,7 @@ using Moq;
 /// <summary>
 /// HTTP 通知行为规范测试。
 /// </summary>
+[Trait("Category", "Spec")]
 public class HttpNotificationSpecTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -33,6 +34,7 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.1")]
     public async Task Spec_3_1_HttpNotification_ShouldReturn200WithEmptyBody()
     {
         var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
@@ -66,6 +68,7 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
     {
         var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);

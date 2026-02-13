@@ -10,6 +10,7 @@ using Moq;
 /// <summary>
 /// HostBootstrapper 行为测试。
 /// </summary>
+[Trait("Category", "Impl")]
 public sealed class HostBootstrapperTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -37,7 +38,7 @@ public sealed class HostBootstrapperTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_ShouldCreateTokenAndRefreshDefinitions()
+    public void Impl_Initialize_ShouldCreateTokenAndRefreshDefinitions()
     {
         WriteDefinition("bootstrap.init.app");
 
@@ -53,7 +54,7 @@ public sealed class HostBootstrapperTests : IDisposable
     }
 
     [Fact]
-    public void TryPersistHubRuntime_WhenLoopbackAddressExists_ShouldWriteHubJson()
+    public void Impl_TryPersistHubRuntime_WhenLoopbackAddressExists_ShouldWriteHubJson()
     {
         using var context = CreateContext();
         context.Bootstrapper.Initialize();
@@ -77,7 +78,7 @@ public sealed class HostBootstrapperTests : IDisposable
     }
 
     [Fact]
-    public void TryPersistHubRuntime_WhenNoValidAddress_ShouldReturnFalse()
+    public void Impl_TryPersistHubRuntime_WhenNoValidAddress_ShouldReturnFalse()
     {
         using var context = CreateContext();
         context.Bootstrapper.Initialize();

@@ -13,6 +13,7 @@ using static DevHub.Host.Tests.TestHelpers.JsonRpcTestMessageHelper;
 /// <summary>
 /// Host 层 WebSocket 生命周期规范白盒测试。
 /// </summary>
+[Trait("Category", "Spec")]
 public class WebSocketLifecycleSpecTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -34,6 +35,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Theory]
+    [Trait("SpecRef", "4.3")]
     [InlineData("hub.ping")]
     [InlineData("hub.events.subscribe")]
     public async Task Spec_4_3_FirstMessageNotAuthenticate_ShouldReturnUnauthorizedAndClose(string method)
@@ -70,6 +72,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public async Task Spec_4_3_AuthenticateWithoutId_ShouldReturnInvalidRequestAndClose()
     {
         var context = CreateHostContext();
@@ -100,6 +103,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "4.3")]
     public async Task Spec_4_3_ReAuthenticate_ShouldReturnAlreadyAuthenticated()
     {
         var context = CreateHostContext();
@@ -151,6 +155,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_AfterAuthenticate_ShouldAllowWsSupportedMethods()
     {
         WriteDefinition("ws-supported.app");
@@ -233,6 +238,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.3")]
     public async Task Spec_3_3_UnauthenticatedNotification_ShouldCloseWithoutErrorResponse()
     {
         var context = CreateHostContext();
@@ -252,6 +258,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.3")]
     public async Task Spec_3_3_UnauthenticatedInvalidJson_ShouldReturnParseErrorWithNullIdAndClose()
     {
         var context = CreateHostContext();
@@ -272,6 +279,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.1")]
     public async Task Spec_3_1_BatchRequestOverWs_ShouldReturnInvalidRequestWithNullIdAndClose()
     {
         var context = CreateHostContext();
@@ -306,6 +314,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_AfterAuthenticate_HttpOnlyMethodOverWs_ShouldReturnNotSupported()
     {
         var context = CreateHostContext();
@@ -354,6 +363,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public async Task Spec_6_3_14_And_6_3_15_SubscribeThenUnsubscribe_ShouldReturnOkAndSubscriptionId()
     {
         var context = CreateHostContext();
@@ -410,6 +420,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
     public async Task Spec_6_3_14_SubscribeWithEmptyTypes_ShouldSubscribeAllEvents()
     {
         var context = CreateHostContext();
@@ -465,6 +476,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.15")]
     public async Task Spec_6_3_15_UnsubscribeUnknownSubscription_ShouldReturnOk()
     {
         var context = CreateHostContext();
@@ -501,6 +513,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.16")]
     public async Task Spec_6_3_16_AfterSubscribe_ShouldReceiveHubEventNotification()
     {
         var context = CreateHostContext();
@@ -572,6 +585,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.15")]
     public async Task Spec_6_3_15_AfterConnectionClosed_SubscriptionsShouldBeCleanedAndNoFurtherDelivery()
     {
         var context = CreateHostContext();
