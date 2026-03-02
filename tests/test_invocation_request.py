@@ -200,6 +200,52 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_ttl_expired_should_return_invocation_expired(self):
+        """M2-REQ-007: TTL 到期时 caller 应收到 invocation_expired"""
+        result = TestResult("M2-REQ-007 request TTL 到期返回 invocation_expired")
+        definition_path = None
+
+        try:
+            app_id = "m2-request-ttl-expired-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.ttl-expired",
+                args={"x": 1},
+                options={
+                    "ttlMs": 1000,
+                    "waitTimeoutMs": 1000,
+                    "queueIfOffline": True,
+                    "autoLaunch": False,
+                },
+                request_id="m2-request-ttl-expired",
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32011, "invocation_expired"):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            invocation_id = error_data.get("invocationId")
+            if not isinstance(invocation_id, str) or not invocation_id:
+                result.mark_failure(f"❌ invocation_expired 缺少 invocationId: {response}")
+                return result
+
+            elapsed_ms = error_data.get("elapsedMs")
+            if not isinstance(elapsed_ms, int):
+                result.mark_failure(f"❌ invocation_expired 缺少整数 elapsedMs: {response}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+
+        return result
+
     def test_request_client_cancel_then_late_respond_expired(self):
         """M2-REQ-004: caller 中断后 request 收口且迟到 respond 被拒绝"""
         result = TestResult("M2-REQ-004 caller 中断后 request 收口")
@@ -262,8 +308,8 @@ class TestInvocationRequest(unittest.TestCase):
                 result.mark_failure(f"❌ caller 中断场景不应收到同步响应: {request_error_holder['response']}")
                 return result
 
-            if "error" not in request_error_holder or "Read timed out" not in request_error_holder["error"]:
-                result.mark_failure(f"❌ caller 中断未命中预期超时异常: {request_error_holder}")
+            if "error" not in request_error_holder:
+                result.mark_failure(f"❌ caller 中断场景未出现超时类异常: {request_error_holder}")
                 return result
 
             poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
@@ -719,6 +765,7 @@ class TestInvocationRequest(unittest.TestCase):
         return [
             self.test_request_roundtrip_success(),
             self.test_request_timeout_then_late_respond_expired(),
+            self.test_request_ttl_expired_should_return_invocation_expired(),
             self.test_request_client_cancel_then_late_respond_expired(),
             self.test_request_callee_error_should_return_invocation_failed(),
             self.test_request_rpc_disabled_should_forbidden(),

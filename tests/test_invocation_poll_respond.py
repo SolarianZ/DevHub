@@ -5,7 +5,6 @@ DevHub M2 Invocation Poll/Respond 冒烟测试
 
 import os
 import sys
-import time
 import uuid
 import json
 import unittest
@@ -379,9 +378,89 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         return result
 
+    def test_lease_expired_should_redeliver_with_attempt_incremented_lightweight(self):
+        """M2-LEASE-001-LITE: default 轻量 lease 到期重投递"""
+        result = TestResult("M2-LEASE-001-LITE lease 到期重投递（default 轻量）")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = "m2-lease-redelivery-lite-app"
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("lease-redelivery-lite")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=23020,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                args={"mode": "lease-redelivery-lite"},
+                auto_launch=False,
+                request_id="lease-redelivery-lite-notify",
+            )
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            invocation_id = notify_response["result"]["invocationId"]
+
+            first_poll = client.poll_once(instance_id, max_count=1, wait_ms=100)
+            if not RpcAssertions.expect_success(result, first_poll, ["items"]):
+                return result
+
+            first_items = first_poll.get("result", {}).get("items", [])
+            if len(first_items) != 1 or first_items[0].get("invocationId") != invocation_id:
+                result.mark_failure(f"❌ 首次 poll 未拿到目标 invocation: {first_poll}")
+                return result
+
+            first_item = first_items[0]
+            first_attempt = first_item.get("delivery", {}).get("attempt")
+            if first_attempt != 1:
+                result.mark_failure(f"❌ 首次 attempt 不是 1: {first_item.get('delivery')}")
+                return result
+
+            lease_seconds = first_item.get("delivery", {}).get("leaseSeconds")
+            if not isinstance(lease_seconds, int) or lease_seconds < 1:
+                result.mark_failure(f"❌ leaseSeconds 非法: {first_item.get('delivery')}")
+                return result
+
+            second_wait_ms = lease_seconds * 1000 + 1500
+            second_poll = client.poll_once(instance_id, max_count=1, wait_ms=second_wait_ms)
+            if not RpcAssertions.expect_success(result, second_poll, ["items"]):
+                return result
+
+            second_items = second_poll.get("result", {}).get("items", [])
+            if len(second_items) != 1 or second_items[0].get("invocationId") != invocation_id:
+                result.mark_failure("❌ lease 到期后未重投递到同一实例")
+                return result
+
+            second_attempt = second_items[0].get("delivery", {}).get("attempt")
+            if not isinstance(second_attempt, int) or second_attempt < 2:
+                result.mark_failure(f"❌ 重投递 attempt 未递增: {second_items[0].get('delivery')}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+            safe_remove(definition_path)
+
+        return result
+
     def test_lease_expired_should_redeliver_with_attempt_incremented(self):
-        """M2-LEASE-001: lease 到期后重投递且 attempt 递增（full-only）"""
-        result = TestResult("M2-LEASE-001 lease 到期重投递 attempt 递增")
+        """M2-LEASE-001: lease 到期后重投递且 attempt 递增（full）"""
+        result = TestResult("M2-LEASE-001 lease 到期重投递 attempt 递增（full）")
         definition_path = None
         instance_a = None
         instance_b = None
@@ -448,9 +527,13 @@ class TestInvocationPollRespond(unittest.TestCase):
                 result.mark_failure(f"❌ 首次 attempt 不是 1: {first_item.get('delivery')}")
                 return result
 
-            time.sleep(31.0)
+            lease_seconds = first_item.get("delivery", {}).get("leaseSeconds")
+            if not isinstance(lease_seconds, int) or lease_seconds < 1:
+                result.mark_failure(f"❌ leaseSeconds 非法: {first_item.get('delivery')}")
+                return result
 
-            second_poll = client.poll_once(instance_b, max_count=10, wait_ms=500)
+            second_wait_ms = lease_seconds * 1000 + 1500
+            second_poll = client.poll_once(instance_b, max_count=10, wait_ms=second_wait_ms)
             if not RpcAssertions.expect_success(result, second_poll, ["items"]):
                 return result
 
@@ -478,7 +561,7 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         return result
 
-    def run_all_tests(self, full=False):
+    def run_all_tests(self, full=False, fast=False):
         results = [
             self.test_poll_unregistered_instance(),
             self.test_poll_with_invalid_max_count_should_fail(),
@@ -491,6 +574,8 @@ class TestInvocationPollRespond(unittest.TestCase):
 
         if full:
             results.append(self.test_lease_expired_should_redeliver_with_attempt_incremented())
+        elif not fast:
+            results.append(self.test_lease_expired_should_redeliver_with_attempt_incremented_lightweight())
 
         return results
 

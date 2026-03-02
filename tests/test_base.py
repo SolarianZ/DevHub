@@ -326,13 +326,16 @@ class RpcClient:
         """注销实例。"""
         return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
 
-    def poll_once(self, instance_id, max_count=10, wait_ms=25000):
+    def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None):
         """执行一次 poll。"""
-        return self.call("hub.invoke.poll", {
+        if timeout_sec is None:
+            timeout_sec = max(30, wait_ms / 1000 + 5)
+
+        return self.call_with_timeout("hub.invoke.poll", {
             "instanceId": instance_id,
             "maxCount": max_count,
             "waitMs": wait_ms
-        })
+        }, timeout_sec=timeout_sec)
 
     def respond_value(self, instance_id, invocation_id, value):
         """回传 value。"""

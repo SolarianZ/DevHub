@@ -191,13 +191,12 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
-    def test_launch_dedupe_concurrent_should_return_already_running(self):
-        """M2-LAUNCH-002: dedupe 窗口并发去重（full-only）"""
-        result = TestResult("M2-LAUNCH-002 dedupe 窗口并发去重")
+    def _run_launch_dedupe_concurrent_case(self, request_count, case_name):
+        result = TestResult(case_name)
         definition_path = None
 
         try:
-            app_id = "m2-launch-dedupe-app"
+            app_id = f"m2-launch-dedupe-app-{request_count}"
             definition_path = self._create_definition(
                 app_id,
                 include_launch=True,
@@ -205,14 +204,13 @@ class TestLaunchInvocation(unittest.TestCase):
             )
 
             base_url, token = DiscoveryService.get_hub_info()
-            request_count = 8
 
             def send_launch(index):
                 client = RpcClient(base_url, token)
                 return client.launch_app(
                     app_id=app_id,
                     wait_for_register_ms=0,
-                    request_id=f"m2-launch-dedupe-{index}",
+                    request_id=f"m2-launch-dedupe-{request_count}-{index}",
                 )
 
             with ThreadPoolExecutor(max_workers=request_count) as executor:
@@ -260,6 +258,20 @@ class TestLaunchInvocation(unittest.TestCase):
             safe_remove(definition_path)
 
         return result
+
+    def test_launch_dedupe_concurrent_should_return_already_running_lightweight(self):
+        """M2-LAUNCH-002-LITE: default 轻量并发 dedupe"""
+        return self._run_launch_dedupe_concurrent_case(
+            request_count=3,
+            case_name="M2-LAUNCH-002-LITE dedupe 并发去重（default 轻量）",
+        )
+
+    def test_launch_dedupe_concurrent_should_return_already_running(self):
+        """M2-LAUNCH-002: dedupe 窗口并发去重（full）"""
+        return self._run_launch_dedupe_concurrent_case(
+            request_count=8,
+            case_name="M2-LAUNCH-002 dedupe 窗口并发去重（full）",
+        )
 
     def test_m3_scope_011_launch_dedupe_should_isolate_by_scope(self):
         """M3-SCOPE-011: launch dedupe 在不同 scope 间隔离"""
@@ -340,7 +352,7 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
-    def run_all_tests(self, full=False):
+    def run_all_tests(self, full=False, fast=False):
         results = [
             self.test_notify_autolaunch_then_register_poll_success(),
             self.test_launch_invalid_wait_for_register_should_fail(),
@@ -351,6 +363,8 @@ class TestLaunchInvocation(unittest.TestCase):
 
         if full:
             results.append(self.test_launch_dedupe_concurrent_should_return_already_running())
+        elif not fast:
+            results.append(self.test_launch_dedupe_concurrent_should_return_already_running_lightweight())
 
         return results
 

@@ -125,13 +125,13 @@ def run_all_tests(full=False, fast=False, smoke=False):
         coverage = "跨平台最小冒烟回归（发现/鉴权/WS 传输矩阵/request 主链路）"
     elif full:
         mode = "full"
-        coverage = "M1~M4 严格覆盖（含 lease(30s)/并发去重/scope 扩展与 WS failed 事件场景）"
+        coverage = "M1~M4 严格覆盖（含 lease 重投递 full 严格断言/并发去重 full 场景/scope 扩展与 WS failed 事件场景）"
     elif fast:
         mode = "fast"
-        coverage = "M1~M4 快速回归（跳过 lease(30s) 与并发压力等长耗时场景）"
+        coverage = "M1~M4 快速回归（跳过 lease 重投递与并发 dedupe 等长耗时场景）"
     else:
         mode = "default"
-        coverage = "M1~M4 默认回归（核心链路 + Spec MUST，长耗时场景归入 full）"
+        coverage = "M1~M4 默认回归（核心链路 + Spec MUST，含轻量 lease 重投递与轻量并发 dedupe）"
     logger.info("开始 DevHub M1~M4 功能测试，模式: %s", mode)
 
     # 创建测试报告
@@ -216,7 +216,7 @@ def run_all_tests(full=False, fast=False, smoke=False):
             run_suite_with_spinner(
                 logger,
                 "运行 Invocation Poll/Respond 测试",
-                lambda: invocation_poll_respond_tests.run_all_tests(full=full)))
+                lambda: invocation_poll_respond_tests.run_all_tests(full=full, fast=fast)))
 
         invoke_poll_respond_edges_tests = TestInvokePollRespondEdges()
         report.results.extend(
@@ -227,7 +227,7 @@ def run_all_tests(full=False, fast=False, smoke=False):
 
         logger.info("=== 运行 Launch + Invocation 测试 ===")
         launch_invocation_tests = TestLaunchInvocation()
-        report.results.extend(launch_invocation_tests.run_all_tests(full=full))
+        report.results.extend(launch_invocation_tests.run_all_tests(full=full, fast=fast))
 
         logger.info("=== 运行 Launch 规范边界测试 ===")
         launch_spec_edges_tests = TestLaunchSpecEdges()
