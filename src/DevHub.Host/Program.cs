@@ -13,6 +13,7 @@ namespace DevHub.Host;
 public class Program
 {
     private static Mutex? _singleInstanceMutex;
+    private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 
     /// <summary>
     /// 构建当前用户维度的单实例互斥量名称。
@@ -20,7 +21,14 @@ public class Program
     private static string BuildSingleInstanceMutexName()
     {
         var userKey = ResolveCurrentUserKey();
-        return $"Local\\DevHub_{userKey}";
+        var slot = Environment.GetEnvironmentVariable(SingleInstanceSlotEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(slot))
+        {
+            return $"Local\\DevHub_{userKey}";
+        }
+
+        var slotKey = NormalizeMutexUserKey(slot);
+        return $"Local\\DevHub_{userKey}_{slotKey}";
     }
 
     /// <summary>

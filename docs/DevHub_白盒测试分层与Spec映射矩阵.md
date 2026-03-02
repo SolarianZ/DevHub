@@ -26,13 +26,18 @@
 | 4.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 12 |
 | 6.1 | `src/DevHub.Tests/TransportValidationTests.cs` | 7 |
 | 6.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 2 |
+| 6.3.3 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 1 |
+| 6.3.4 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
+| 6.3.5 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
 | 6.3.6 | `src/DevHub.Tests/AppInstancesHeartbeatSpecTests.cs` | 2 |
+| 6.3.7 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 1 |
+| 6.3.8 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
 | 6.3.14 | `src/DevHub.Tests/TransportValidationTests.cs` | 6 |
 | 6.3.15 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
 | 6.3.16 | `src/DevHub.Tests/HubEventNotificationFactoryTests.cs` | 2 |
 | 8.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
 
-总计：45 个 `Spec_*` 白盒测试用例。
+总计：53 个 `Spec_*` 白盒测试用例。
 
 ## 4. 说明
 

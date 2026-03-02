@@ -5,16 +5,87 @@ DevHub M1 启动与发现测试
 
 import os
 import sys
+import json
+import time
+import uuid
+import tempfile
+import subprocess
 import unittest
 
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, TestResult, temporary_env_var
+from tests.test_base import DiscoveryService, RpcClient, TestResult, temporary_env_var
 
 
 class TestLaunchDiscovery(unittest.TestCase):
     """启动与发现测试类"""
+
+    @staticmethod
+    def _read_process_output(process):
+        """读取子进程输出（仅在进程结束后调用）。"""
+        if process.stdout is None or process.poll() is None:
+            return ""
+
+        try:
+            output = process.stdout.read()
+        except Exception:
+            return ""
+
+        if not output:
+            return ""
+        output = output.strip()
+        if len(output) > 2000:
+            output = output[-2000:]
+        return output
+
+    @staticmethod
+    def _stop_process(process):
+        """安全停止子进程。"""
+        if process is None or process.poll() is not None:
+            return
+
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    @staticmethod
+    def _wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds):
+        """等待 Hub 在目标运行时目录写出发现文件。"""
+        hub_json_path = os.path.join(runtime_dir, "hub.json")
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if process.poll() is not None:
+                return False
+            if os.path.exists(hub_json_path):
+                return True
+            time.sleep(0.2)
+        return False
+
+    @staticmethod
+    def _wait_for_hub_ping(process, base_url, token, timeout_seconds):
+        """等待 Hub 对 hub.ping 可达。"""
+        deadline = time.time() + timeout_seconds
+        last_error = "unknown"
+        client = RpcClient(base_url, token)
+        while time.time() < deadline:
+            if process.poll() is not None:
+                return False, "Hub 进程已退出"
+
+            try:
+                response = client.call("hub.ping")
+                if "result" in response and response["result"].get("ok") is True:
+                    return True, None
+                last_error = f"响应异常: {response}"
+            except Exception as e:
+                last_error = str(e)
+
+            time.sleep(0.3)
+
+        return False, last_error
 
     def test_discovery_files_exist(self):
         """测试 hub.json 与 tokenFile 发现链路是否符合 Spec"""
@@ -34,7 +105,6 @@ class TestLaunchDiscovery(unittest.TestCase):
 
             # 验证 hub.json 格式
             with open(hub_json_path, "r", encoding="utf-8") as f:
-                import json
                 hub_info = json.load(f)
 
             required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
@@ -131,8 +201,6 @@ class TestLaunchDiscovery(unittest.TestCase):
         result = TestResult("测试 HTTP 服务器可访问性")
 
         try:
-            from tests.test_base import RpcClient
-
             # 从 hub.json 获取服务信息
             base_url, token = DiscoveryService.get_hub_info()
             result.add_detail(f"服务器地址: {base_url}")
@@ -161,7 +229,6 @@ class TestLaunchDiscovery(unittest.TestCase):
             runtime_dir = DiscoveryService.get_runtime_directory()
             hub_json_path = os.path.join(runtime_dir, "hub.json")
             with open(hub_json_path, "r", encoding="utf-8") as f:
-                import json
                 hub_info = json.load(f)
             token_path = hub_info.get("tokenFile")
             if not token_path or not os.path.exists(token_path):
@@ -267,7 +334,6 @@ class TestLaunchDiscovery(unittest.TestCase):
         try:
             runtime_dir = DiscoveryService.get_runtime_directory()
             hub_json_path = os.path.join(runtime_dir, "hub.json")
-            import time
 
             # 检查 hub.json 是否存在
             if not os.path.exists(hub_json_path):
@@ -279,7 +345,6 @@ class TestLaunchDiscovery(unittest.TestCase):
             # 在多次快速读取期间，hub.json 始终可解析且字段完整。
             for i in range(20):
                 with open(hub_json_path, "r", encoding="utf-8") as f:
-                    import json
                     hub_info = json.load(f)
 
                 for field in required_fields:
@@ -296,30 +361,21 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         return result
 
-    def test_custom_runtime_dir(self):
-        """测试 DEVHUB_RUNTIME_DIR 环境变量的支持"""
-        result = TestResult("测试 DEVHUB_RUNTIME_DIR 环境变量的支持")
+    def test_custom_runtime_dir_discovery_helper(self):
+        """测试 Discovery helper 可读取 DEVHUB_RUNTIME_DIR（辅助逻辑层）"""
+        result = TestResult("测试 DEVHUB_RUNTIME_DIR Discovery helper")
 
         try:
-            import tempfile
-
-            # 创建临时目录作为自定义运行时目录
-            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-helper-") as temp_dir:
                 with temporary_env_var("DEVHUB_RUNTIME_DIR", temp_dir):
-                    # 验证 DiscoveryService 能够读取环境变量
                     discovery_dir = DiscoveryService.get_runtime_directory()
                     if discovery_dir == temp_dir:
-                        result.add_detail(f"✅ DiscoveryService 正确读取了 DEVHUB_RUNTIME_DIR: {temp_dir}")
+                        result.add_detail(f"✅ DiscoveryService 正确读取 DEVHUB_RUNTIME_DIR: {temp_dir}")
                     else:
-                        result.mark_failure(f"❌ DiscoveryService 未正确读取 DEVHUB_RUNTIME_DIR: 实际值 {discovery_dir}, 预期值 {temp_dir}")
+                        result.mark_failure(f"❌ DiscoveryService 读取 DEVHUB_RUNTIME_DIR 错误: 实际值 {discovery_dir}, 预期值 {temp_dir}")
                         return result
 
-                    # 创建所需的子目录和文件
-                    os.makedirs(os.path.join(temp_dir, "apps", "definitions"), exist_ok=True)
-
-                    # 创建临时的 hub.json 和 token.txt
                     with open(os.path.join(temp_dir, "hub.json"), "w", encoding="utf-8") as f:
-                        import json
                         json.dump({
                             "protocolVersion": 1,
                             "pid": 12345,
@@ -337,17 +393,93 @@ class TestLaunchDiscovery(unittest.TestCase):
                     with open(os.path.join(temp_dir, "token.txt"), "w", encoding="utf-8") as f:
                         f.write("test-token-123")
 
-                    # 测试获取 hub 信息
                     base_url, token = DiscoveryService.get_hub_info()
-                    if base_url == "http://127.0.0.1:12345" and token == "test-token-123":
-                        result.add_detail("✅ 成功从自定义运行时目录获取 hub 信息")
-                    else:
-                        result.mark_failure(f"❌ 从自定义运行时目录获取的 hub 信息不正确: base_url={base_url}, token={token}")
+                    if base_url != "http://127.0.0.1:12345" or token != "test-token-123":
+                        result.mark_failure(f"❌ Discovery helper 返回值不正确: base_url={base_url}, token={token}")
+                        return result
 
                     result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
+
+        return result
+
+    def test_custom_runtime_dir_real_hub_files(self):
+        """测试 DEVHUB_RUNTIME_DIR 下 Hub 实际生成发现文件并可访问"""
+        result = TestResult("测试 DEVHUB_RUNTIME_DIR Hub 实际行为")
+        process = None
+
+        try:
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            host_project = os.path.join(project_root, "src", "DevHub.Host", "DevHub.Host.csproj")
+            if not os.path.exists(host_project):
+                result.mark_failure(f"❌ 未找到 DevHub.Host.csproj: {host_project}")
+                return result
+
+            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-real-") as temp_root:
+                runtime_dir = os.path.join(temp_root, "runtime")
+                definitions_dir = os.path.join(temp_root, "apps", "definitions")
+                os.makedirs(definitions_dir, exist_ok=True)
+
+                single_instance_slot = f"test-runtime-{uuid.uuid4().hex[:8]}"
+                with temporary_env_var("DEVHUB_RUNTIME_DIR", runtime_dir):
+                    with temporary_env_var("DEVHUB_APPDEFS_DIR", definitions_dir):
+                        with temporary_env_var("DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS", single_instance_slot):
+                            process = subprocess.Popen(
+                                [
+                                    "dotnet",
+                                    "run",
+                                    "--project",
+                                    host_project,
+                                    "-c",
+                                    "Release",
+                                    "--no-launch-profile"
+                                ],
+                                cwd=project_root,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True)
+
+                            if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=30):
+                                process_output = self._read_process_output(process)
+                                if process.poll() is None:
+                                    result.mark_failure("❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json")
+                                else:
+                                    result.mark_failure(
+                                        f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
+                                return result
+
+                            hub_json_path = os.path.join(runtime_dir, "hub.json")
+                            with open(hub_json_path, "r", encoding="utf-8") as f:
+                                hub_info = json.load(f)
+
+                            token_file = hub_info.get("tokenFile")
+                            if not token_file or not os.path.exists(token_file):
+                                result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
+                                return result
+                            result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
+
+                            runtime_token = os.path.join(runtime_dir, "token.txt")
+                            if os.path.abspath(token_file) != os.path.abspath(runtime_token):
+                                result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
+                                return result
+
+                            base_url, token = DiscoveryService.get_hub_info()
+                            ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
+                            if not ok:
+                                process_output = self._read_process_output(process)
+                                result.mark_failure(
+                                    f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
+                                return result
+
+                            result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
+                            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._stop_process(process)
 
         return result
 
@@ -383,7 +515,8 @@ class TestLaunchDiscovery(unittest.TestCase):
             results.append(result)
 
         # 测试 DEVHUB_RUNTIME_DIR 环境变量支持（无论其他测试是否成功）
-        results.append(self.test_custom_runtime_dir())
+        results.append(self.test_custom_runtime_dir_discovery_helper())
+        results.append(self.test_custom_runtime_dir_real_hub_files())
 
         return results
 

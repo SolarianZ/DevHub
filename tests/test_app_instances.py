@@ -5,6 +5,7 @@ DevHub M1 AppInstance 测试
 
 import os
 import sys
+import json
 import time
 import uuid
 import unittest
@@ -35,6 +36,24 @@ class TestAppInstances(unittest.TestCase):
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""
         return f"test-instance-{uuid.uuid4().hex[:10]}"
+
+    @staticmethod
+    def _get_online_threshold_seconds():
+        """从 hub.json 读取 onlineThresholdSeconds。"""
+        runtime_dir = DiscoveryService.get_runtime_directory()
+        hub_json_path = os.path.join(runtime_dir, "hub.json")
+        with open(hub_json_path, "r", encoding="utf-8") as f:
+            hub_info = json.load(f)
+
+        runtime_tuning = hub_info.get("runtimeTuning")
+        if not isinstance(runtime_tuning, dict):
+            raise ValueError(f"hub.json.runtimeTuning 必须是对象: {runtime_tuning}")
+
+        threshold = runtime_tuning.get("onlineThresholdSeconds")
+        if not isinstance(threshold, int) or threshold < 1:
+            raise ValueError(f"hub.json.runtimeTuning.onlineThresholdSeconds 必须是 >=1 的整数: {runtime_tuning}")
+
+        return threshold
 
     def _cleanup_test_instances(self, app_ids):
         """清理测试实例"""
@@ -561,7 +580,9 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             empty_scope_instance_id = self.generate_unique_instance_id()
             null_scope_instance_id = self.generate_unique_instance_id()
+            scoped_instance_id = self.generate_unique_instance_id()
             app_id = "test-app-empty-scope-global"
+            scoped_value = "workspace-empty-scope"
 
             empty_scope_response = client.call("hub.apps.registerInstance", {
                 "instance": {
@@ -587,18 +608,46 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, null_scope_response, ["instance"]):
                 return result
 
-            empty_scope_instance = empty_scope_response["result"]["instance"]
-            if empty_scope_instance.get("scope", "unexpected-non-null") is not None:
-                result.mark_failure(f"❌ scope='' 注册后未被归一化为 null: {empty_scope_instance}")
+            scoped_response = client.call("hub.apps.registerInstance", {
+                "instance": {
+                    "instanceId": scoped_instance_id,
+                    "appId": app_id,
+                    "scope": scoped_value,
+                    "pid": 12359,
+                    "invoke": {"poll": True, "respond": True}
+                }
+            })
+            if not RpcAssertions.expect_success(result, scoped_response, ["instance"]):
                 return result
 
-            default_list = client.call("hub.apps.listInstances", {"appId": app_id})
-            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+            global_query_params = [
+                {"appId": app_id},
+                {"appId": app_id, "scope": None},
+                {"appId": app_id, "scope": ""}
+            ]
+            for params in global_query_params:
+                response = client.call("hub.apps.listInstances", params)
+                if not RpcAssertions.expect_success(result, response, ["instances"]):
+                    return result
+
+                instance_ids = {inst.get("instanceId") for inst in response["result"]["instances"]}
+                if empty_scope_instance_id not in instance_ids or null_scope_instance_id not in instance_ids:
+                    result.mark_failure(f"❌ Global 查询未同时命中 scope='' 与 scope=null 实例: params={params}, ids={instance_ids}")
+                    return result
+                if scoped_instance_id in instance_ids:
+                    result.mark_failure(f"❌ Global 查询错误命中显式作用域实例: params={params}, ids={instance_ids}")
+                    return result
+
+            scoped_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": scoped_value})
+            if not RpcAssertions.expect_success(result, scoped_list, ["instances"]):
                 return result
 
-            default_ids = {inst.get("instanceId") for inst in default_list["result"]["instances"]}
-            if empty_scope_instance_id not in default_ids or null_scope_instance_id not in default_ids:
-                result.mark_failure(f"❌ scope='' 与 scope=null 未同时落入 Global: {default_ids}")
+            scoped_ids = {inst.get("instanceId") for inst in scoped_list["result"]["instances"]}
+            if scoped_instance_id not in scoped_ids:
+                result.mark_failure(f"❌ 显式作用域查询未命中目标实例: {scoped_ids}")
+                return result
+            if empty_scope_instance_id in scoped_ids or null_scope_instance_id in scoped_ids:
+                result.mark_failure(f"❌ 显式作用域查询错误回退命中 Global 实例: {scoped_ids}")
                 return result
 
             result.mark_success()
@@ -725,8 +774,9 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ 注册后实例未在线显示")
                 return result
 
-            wait_seconds = 35
-            result.add_detail(f"⏳ 等待 {wait_seconds}s 触发离线")
+            online_threshold_seconds = self._get_online_threshold_seconds()
+            wait_seconds = online_threshold_seconds + 5
+            result.add_detail(f"⏳ 读取 runtimeTuning.onlineThresholdSeconds={online_threshold_seconds}，等待 {wait_seconds}s 触发离线")
             self._wait_with_progress(wait_seconds, "离线判定等待中")
 
             list_after = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
@@ -734,7 +784,7 @@ class TestAppInstances(unittest.TestCase):
                 return result
 
             if any(inst.get("instanceId") == instance_id for inst in list_after["result"]["instances"]):
-                result.mark_failure("❌ 超过30s无心跳后实例仍在线")
+                result.mark_failure(f"❌ 超过 onlineThresholdSeconds({online_threshold_seconds}) 无心跳后实例仍在线")
                 return result
 
             list_after_explicit = client.call("hub.apps.listInstances", {
@@ -778,8 +828,9 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            wait_seconds = 35
-            result.add_detail(f"⏳ 等待 {wait_seconds}s 触发离线")
+            online_threshold_seconds = self._get_online_threshold_seconds()
+            wait_seconds = online_threshold_seconds + 5
+            result.add_detail(f"⏳ 读取 runtimeTuning.onlineThresholdSeconds={online_threshold_seconds}，等待 {wait_seconds}s 触发离线")
             self._wait_with_progress(wait_seconds, "离线实例等待中")
 
             list_default = client.call("hub.apps.listInstances", {"appId": "test-app-offline-include"})
