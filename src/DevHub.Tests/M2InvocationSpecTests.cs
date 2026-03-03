@@ -385,6 +385,74 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.11")]
+    public async Task Spec_6_3_11_Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
+    {
+        const string appId = "spec-6.3.11-invocation-failed";
+        const string instanceId = "spec-6.3.11-invocation-failed-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7200);
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-invocation-failed-request",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.request.failed",
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 2000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        var poll = await PollAsync(handler, instanceId, maxCount: 1, waitMs: 800);
+        AssertSuccess(poll);
+        var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
+        Assert.Single(pollItems);
+        var invocationId = pollItems[0].GetProperty("invocationId").GetString();
+
+        var respond = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-invocation-failed-respond",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                invocationId,
+                error = new
+                {
+                    code = 1001,
+                    message = "callee_error",
+                    data = new
+                    {
+                        reason = "bad_input"
+                    }
+                }
+            })
+        }, CancellationToken.None);
+        AssertSuccess(respond);
+
+        var requestResponse = await requestTask;
+        AssertError(requestResponse, -32050, "invocation_failed");
+        var errorData = JsonSerializer.SerializeToElement(requestResponse.Error!.Data);
+        Assert.Equal(invocationId, errorData.GetProperty("invocationId").GetString());
+        var calleeError = errorData.GetProperty("calleeError");
+        Assert.Equal(1001, calleeError.GetProperty("code").GetInt32());
+        Assert.Equal("callee_error", calleeError.GetProperty("message").GetString());
+        Assert.Equal("bad_input", calleeError.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.11")]
     public async Task Spec_6_3_11_Request_WhenScopeOmittedNullOrEmpty_ShouldRouteOnlyToGlobal()
     {
         const string appId = "spec-6.3.11-scope-normalization";

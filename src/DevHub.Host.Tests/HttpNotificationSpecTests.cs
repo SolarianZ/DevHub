@@ -111,6 +111,88 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.Equal("ws", error.GetProperty("data").GetProperty("expected").GetString());
     }
 
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public async Task Spec_6_1_HttpHubMethod_WhenParamsIsArray_ShouldReturnInvalidParams()
+    {
+        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var handler = new RpcHttpEndpointHandler(
+            hostContext.Router,
+            hostContext.FileSystemManager,
+            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = HttpMethods.Post;
+        httpContext.Request.ContentType = "application/json";
+        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
+        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
+        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-array-client";
+        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
+        httpContext.RequestServices = new ServiceCollection()
+            .AddLogging()
+            .AddOptions()
+            .BuildServiceProvider();
+        httpContext.Response.Body = new MemoryStream();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-array-params","method":"hub.ping","params":[1,2,3]}
+            """;
+        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
+
+        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+        httpContext.Response.Body.Position = 0;
+        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        var root = responseDocument.RootElement;
+        Assert.Equal("http-array-params", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Theory]
+    [Trait("SpecRef", "6.1")]
+    [InlineData("7", 7d)]
+    [InlineData("1.5", 1.5d)]
+    public async Task Spec_6_1_HttpRequest_WhenIdIsNumber_ShouldKeepIdCorrelation(string requestIdLiteral, double expectedId)
+    {
+        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var handler = new RpcHttpEndpointHandler(
+            hostContext.Router,
+            hostContext.FileSystemManager,
+            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = HttpMethods.Post;
+        httpContext.Request.ContentType = "application/json";
+        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
+        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
+        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-numeric-id-client";
+        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
+        httpContext.RequestServices = new ServiceCollection()
+            .AddLogging()
+            .AddOptions()
+            .BuildServiceProvider();
+        httpContext.Response.Body = new MemoryStream();
+
+        var requestJson = $"{{\"jsonrpc\":\"2.0\",\"id\":{requestIdLiteral},\"method\":\"hub.ping\",\"params\":{{}}}}";
+        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
+
+        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+        httpContext.Response.Body.Position = 0;
+        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        var root = responseDocument.RootElement;
+        var responseId = root.GetProperty("id");
+        Assert.Equal(JsonValueKind.Number, responseId.ValueKind);
+        Assert.Equal(expectedId, responseId.GetDouble(), precision: 6);
+        Assert.True(root.GetProperty("result").GetProperty("ok").GetBoolean());
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
