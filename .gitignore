@@ -95,7 +95,7 @@ Thumbs.db
 *.tmp
 *.temp
 *.log
-docs/m*_review.md
+docs/*review.md
 
 # Runtime data
 *.db

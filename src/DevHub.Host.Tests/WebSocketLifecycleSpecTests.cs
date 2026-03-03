@@ -363,7 +363,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_And_6_3_15_SubscribeThenUnsubscribe_ShouldReturnOkAndSubscriptionId()
+    [Trait("SpecRef", "6.3.15")]
+    public async Task Spec_6_3_14_And_6_3_15_SubscribeThenUnsubscribe_ShouldStopEventDelivery()
     {
         var context = CreateHostContext();
 
@@ -389,33 +390,53 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { types = new[] { "invocation.completed" } }
         });
 
-        var unsubscribe = CreateJson(new
-        {
-            jsonrpc = "2.0",
-            id = "unsub-1",
-            method = "hub.events.unsubscribe",
-            @params = new { subscriptionId = "sub-override-by-test" }
-        });
+        var socket = new ScriptedWebSocket([auth, subscribe], autoCloseWhenQueueDrained: false);
+        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
 
-        var socket = new ScriptedWebSocket([auth, subscribe, unsubscribe]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
-
-        var responses = ParseSentMessages(socket);
-
-        var authResponse = FindResponseById(responses, "auth-sub");
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub", TimeSpan.FromSeconds(2));
         Assert.True(authResponse.TryGetProperty("result", out var authResult));
         Assert.True(authResult.GetProperty("ok").GetBoolean());
 
-        var subscribeResponse = FindResponseById(responses, "sub-1");
+        var subscribeResponse = await WaitForResponseByIdAsync(socket, "sub-1", TimeSpan.FromSeconds(2));
         Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
         Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
         Assert.True(subscribeResult.TryGetProperty("subscriptionId", out var subscriptionIdElement));
         var subscriptionId = subscriptionIdElement.GetString();
         Assert.False(string.IsNullOrWhiteSpace(subscriptionId));
 
-        var unsubscribeResponse = FindResponseById(responses, "unsub-1");
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "unsub-1",
+            method = "hub.events.unsubscribe",
+            @params = new { subscriptionId }
+        }));
+
+        var unsubscribeResponse = await WaitForResponseByIdAsync(socket, "unsub-1", TimeSpan.FromSeconds(2));
         Assert.True(unsubscribeResponse.TryGetProperty("result", out var unsubscribeResult));
         Assert.True(unsubscribeResult.GetProperty("ok").GetBoolean());
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-after-unsubscribe",
+                appId = "ws-sub-client.app",
+                instanceId = "inst-ws-sub-client"
+            }
+        });
+
+        await Task.Delay(120);
+        socket.EnqueueClose();
+        await runTask;
+
+        var responses = ParseSentMessages(socket);
+        Assert.DoesNotContain(
+            responses,
+            message => message.TryGetProperty("method", out var method)
+                       && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -650,6 +671,23 @@ public class WebSocketLifecycleSpecTests : IDisposable
         {
             Directory.Delete(_tempRoot, recursive: true);
         }
+    }
+
+    private static async Task<JsonElement> WaitForResponseByIdAsync(ScriptedWebSocket socket, string id, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var response = FindResponseById(ParseSentMessages(socket), id);
+            if (response.ValueKind != JsonValueKind.Undefined)
+            {
+                return response;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
     }
 
     private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);

@@ -25,7 +25,7 @@ internal static class JsonRpcTestMessageHelper
     internal static List<JsonElement> ParseSentMessages(ScriptedWebSocket socket)
     {
         var messages = new List<JsonElement>();
-        foreach (var text in socket.SentTexts)
+        foreach (var text in socket.GetSentTextsSnapshot())
         {
             using var document = JsonDocument.Parse(text);
             messages.Add(document.RootElement.Clone());

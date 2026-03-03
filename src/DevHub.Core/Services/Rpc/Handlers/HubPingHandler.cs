@@ -33,18 +33,47 @@ public class HubPingHandler : IRpcHandler
     {
         _logger.LogDebug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
+        var result = new Dictionary<string, object?>
+        {
+            ["ok"] = true,
+            ["serverTimeUtc"] = _clock.UtcNow.ToString("O")
+        };
+
+        if (TryReadEcho(request.Params, out var echo))
+        {
+            result["echo"] = echo;
+        }
+
         var response = new JsonRpcResponse
         {
             Id = request.Id,
-            Result = new
-            {
-                ok = true,
-                serverTimeUtc = _clock.UtcNow.ToString("O")
-            }
+            Result = result
         };
 
         _logger.LogInformation("处理 hub.ping 请求成功，RequestId: {RequestId}", request.Id);
         _logger.LogDebug("hub.ping 响应内容: {Response}", JsonSerializer.Serialize(response));
         return Task.FromResult(response);
+    }
+
+    private static bool TryReadEcho(object? parameters, out object? echo)
+    {
+        echo = null;
+
+        if (parameters is JsonElement paramsElement
+            && paramsElement.ValueKind == JsonValueKind.Object
+            && paramsElement.TryGetProperty("echo", out var echoElement))
+        {
+            echo = echoElement.Clone();
+            return true;
+        }
+
+        if (parameters is IDictionary<string, object?> dictionary
+            && dictionary.TryGetValue("echo", out var dictionaryEcho))
+        {
+            echo = dictionaryEcho;
+            return true;
+        }
+
+        return false;
     }
 }

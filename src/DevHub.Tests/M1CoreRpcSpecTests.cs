@@ -27,6 +27,58 @@ public class M1CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_HubPing_WhenEchoOmitted_ShouldReturnOkAndServerTime()
+    {
+        var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1-no-echo",
+            Method = "hub.ping",
+            Params = JsonSerializer.SerializeToElement(new { })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+
+        var serverTimeUtc = result.GetProperty("serverTimeUtc").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(serverTimeUtc));
+        Assert.True(DateTimeOffset.TryParse(serverTimeUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedServerTime));
+        Assert.Equal(TimeSpan.Zero, parsedServerTime.Offset);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_HubPing_WhenEchoProvided_ShouldEchoBack()
+    {
+        var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
+        var parameters = JsonSerializer.SerializeToElement(new
+        {
+            echo = new
+            {
+                message = "pong",
+                id = 1001,
+                tags = new[] { "spec", "ping" }
+            }
+        });
+        var expectedEcho = parameters.GetProperty("echo").Clone();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1-with-echo",
+            Method = "hub.ping",
+            Params = parameters
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.True(result.TryGetProperty("echo", out var actualEcho));
+        Assert.True(JsonElement.DeepEquals(expectedEcho, actualEcho));
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.3")]
     public async Task Spec_6_3_3_ListDefinitions_ShouldReturnDefinitions()
     {

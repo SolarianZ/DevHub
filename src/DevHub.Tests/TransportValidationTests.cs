@@ -755,19 +755,19 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.3.14")]
-    public void Spec_6_3_14_Subscribe_WhenParamsIsRawObject_ShouldReturnInvalidParams()
+    public void Spec_6_3_14_Subscribe_TypesContainNonString_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
         {
-            Id = "req-subscribe-raw-object",
+            Id = "req-subscribe-non-string-type",
             Method = "hub.events.subscribe",
-            Params = new object()
+            Params = ParseJsonElement("""{ "types": [1] }""")
         };
 
         var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
         Assert.False(ok);
-        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-raw-object");
+        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-non-string-type");
     }
 
     [Fact]
@@ -937,6 +937,5 @@ public class TransportValidationTests
         Assert.Equal(id, response.Id);
     }
 }
-
 
 

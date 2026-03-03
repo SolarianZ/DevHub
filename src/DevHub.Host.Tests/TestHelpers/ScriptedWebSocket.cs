@@ -8,29 +8,74 @@ using System.Text;
 /// </summary>
 internal sealed class ScriptedWebSocket : WebSocket
 {
-    private readonly Queue<SocketFrame> _frames;
+    private readonly Queue<SocketFrame> _frames = new();
+    private readonly SemaphoreSlim _frameSignal = new(0);
     private readonly TimeSpan _closeFrameDelay;
+    private readonly object _framesLock = new();
+    private readonly object _sentTextsLock = new();
     private WebSocketState _state;
     private WebSocketCloseStatus? _closeStatus;
     private string? _closeStatusDescription;
+    private bool _closeFrameQueued;
 
     /// <summary>
     /// 初始化脚本化 WebSocket。
     /// </summary>
     /// <param name="textMessages">按顺序返回的文本帧列表。</param>
     /// <param name="closeFrameDelay">文本帧耗尽后返回 close 帧前的延迟。</param>
-    public ScriptedWebSocket(IEnumerable<string> textMessages, TimeSpan? closeFrameDelay = null)
+    /// <param name="autoCloseWhenQueueDrained">是否在初始帧消费完后自动返回 close 帧。</param>
+    public ScriptedWebSocket(
+        IEnumerable<string> textMessages,
+        TimeSpan? closeFrameDelay = null,
+        bool autoCloseWhenQueueDrained = true)
     {
-        _frames = new Queue<SocketFrame>(textMessages.Select(text => SocketFrame.Text(text)));
-        _frames.Enqueue(SocketFrame.Close());
         _closeFrameDelay = closeFrameDelay ?? TimeSpan.Zero;
         _state = WebSocketState.Open;
+
+        foreach (var text in textMessages)
+        {
+            EnqueueFrame(SocketFrame.Text(text));
+        }
+
+        if (autoCloseWhenQueueDrained)
+        {
+            EnqueueClose();
+        }
     }
 
     /// <summary>
     /// 获取服务端发送到该套接字的文本消息。
     /// </summary>
     public List<string> SentTexts { get; } = [];
+
+    /// <summary>
+    /// 向输入脚本追加文本消息。
+    /// </summary>
+    /// <param name="text">文本消息。</param>
+    public void EnqueueText(string text)
+    {
+        EnqueueFrame(SocketFrame.Text(text));
+    }
+
+    /// <summary>
+    /// 向输入脚本追加 close 帧。
+    /// </summary>
+    public void EnqueueClose()
+    {
+        EnqueueFrame(SocketFrame.Close());
+    }
+
+    /// <summary>
+    /// 获取当前已发送文本快照。
+    /// </summary>
+    /// <returns>文本消息快照。</returns>
+    public IReadOnlyList<string> GetSentTextsSnapshot()
+    {
+        lock (_sentTextsLock)
+        {
+            return SentTexts.ToArray();
+        }
+    }
 
     /// <inheritdoc />
     public override WebSocketCloseStatus? CloseStatus => _closeStatus;
@@ -48,6 +93,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     public override void Abort()
     {
         _state = WebSocketState.Aborted;
+        _frameSignal.Release();
     }
 
     /// <inheritdoc />
@@ -72,6 +118,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     public override void Dispose()
     {
         _state = WebSocketState.Closed;
+        _frameSignal.Release();
     }
 
     /// <inheritdoc />
@@ -84,13 +131,29 @@ internal sealed class ScriptedWebSocket : WebSocket
             return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
         }
 
-        if (_frames.Count == 0)
+        SocketFrame frame;
+
+        while (true)
         {
-            _state = WebSocketState.CloseReceived;
-            return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
+            await _frameSignal.WaitAsync(cancellationToken);
+
+            lock (_framesLock)
+            {
+                if (_frames.Count == 0)
+                {
+                    if (_state != WebSocketState.Open)
+                    {
+                        return new WebSocketReceiveResult(0, WebSocketMessageType.Close, true);
+                    }
+
+                    continue;
+                }
+
+                frame = _frames.Dequeue();
+                break;
+            }
         }
 
-        var frame = _frames.Dequeue();
         if (frame.MessageType == WebSocketMessageType.Close)
         {
             if (_closeFrameDelay > TimeSpan.Zero)
@@ -118,10 +181,33 @@ internal sealed class ScriptedWebSocket : WebSocket
 
         if (messageType == WebSocketMessageType.Text && buffer.Array is not null)
         {
-            SentTexts.Add(Encoding.UTF8.GetString(buffer.Array, buffer.Offset, buffer.Count));
+            lock (_sentTextsLock)
+            {
+                SentTexts.Add(Encoding.UTF8.GetString(buffer.Array, buffer.Offset, buffer.Count));
+            }
         }
 
         return Task.CompletedTask;
+    }
+
+    private void EnqueueFrame(SocketFrame frame)
+    {
+        lock (_framesLock)
+        {
+            if (frame.MessageType == WebSocketMessageType.Close)
+            {
+                if (_closeFrameQueued)
+                {
+                    return;
+                }
+
+                _closeFrameQueued = true;
+            }
+
+            _frames.Enqueue(frame);
+        }
+
+        _frameSignal.Release();
     }
 
     private sealed record SocketFrame(WebSocketMessageType MessageType, byte[] Payload)
