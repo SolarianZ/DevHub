@@ -291,6 +291,38 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Request_WhenWaitTimeoutEqualsTtl_ShouldPreferInvocationExpired()
+    {
+        const string appId = "invocation-timeout-equals-ttl";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(1));
+        using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry, clock);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-timeout-equals-ttl",
+            Method = HubRpcMethods.HubInvokeRequest,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                options = new
+                {
+                    ttlMs = 1000,
+                    waitTimeoutMs = 1000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32011, "invocation_expired");
+    }
+
+    [Fact]
     public async Task Impl_HandleAsync_WhenMethodUnknown_ShouldReturnMethodNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -521,6 +553,5 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
     }
 }
-
 
 

@@ -27,6 +27,12 @@ public class InvocationHandler : IRpcHandler
         Request
     }
 
+    private enum RequestTimeoutResolution
+    {
+        Timeout,
+        Expired
+    }
+
     private readonly AppRegistry _appRegistry;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationRoutingService _routingService;
@@ -140,8 +146,12 @@ public class InvocationHandler : IRpcHandler
         var waiterTask = _requestWaiter.Register(invocation.InvocationId);
 
         var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
-        var waitRemaining = Math.Max(1, invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs);
+        var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
+        var waitRemaining = Math.Max(1, waitTimeoutMs);
         var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
+        var timeoutResolution = waitTimeoutMs < invocation.Options.TtlMs
+            ? RequestTimeoutResolution.Timeout
+            : RequestTimeoutResolution.Expired;
 
         var timeoutTask = Task.Delay(timeoutWindowMs, cancellationToken);
         var completionTask = await Task.WhenAny(waiterTask, timeoutTask);
@@ -158,6 +168,7 @@ public class InvocationHandler : IRpcHandler
             waiterTask,
             timeoutTask,
             timeoutWindowMs,
+            timeoutResolution,
             cancellationToken);
     }
 
@@ -167,12 +178,13 @@ public class InvocationHandler : IRpcHandler
         Task<InvocationRequestCompletion> waiterTask,
         Task timeoutTask,
         int timeoutWindowMs,
+        RequestTimeoutResolution timeoutResolution,
         CancellationToken cancellationToken)
     {
-        
         var elapsedMs = (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var timeoutElapsedMs = timeoutTask.IsCanceled ? elapsedMs : Math.Max(elapsedMs, timeoutWindowMs);
         var ttlReached = elapsedMs >= invocation.Options.TtlMs;
+        var preferExpired = timeoutResolution == RequestTimeoutResolution.Expired;
 
         if (cancellationToken.IsCancellationRequested)
         {
@@ -200,7 +212,7 @@ public class InvocationHandler : IRpcHandler
             });
         }
 
-        if (ttlReached)
+        if (ttlReached || preferExpired)
         {
             var markedExpired = _store.MarkExpired(invocation.InvocationId, _clock.UtcNow);
             if (markedExpired)
