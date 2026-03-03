@@ -154,6 +154,65 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.2")]
+    public async Task Spec_6_3_2_Authenticate_WhenValid_ShouldReturnOkWithProtocolVersion()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-6.3.2-ok",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-spec-6.3.2-client",
+                clientSessionId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            }
+        });
+
+        var socket = new ScriptedWebSocket([auth]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var response = FindResponseById(ParseSentMessages(socket), "auth-6.3.2-ok");
+        Assert.NotEqual(JsonValueKind.Undefined, response.ValueKind);
+        Assert.True(response.TryGetProperty("result", out var result));
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, result.GetProperty("protocolVersion").GetInt32());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.2")]
+    public async Task Spec_6_3_2_Authenticate_WhenMissingRequiredParameter_ShouldReturnInvalidParams()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-6.3.2-missing-client-id",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientSessionId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            }
+        });
+
+        var socket = new ScriptedWebSocket([auth]);
+        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var response = FindResponseById(ParseSentMessages(socket), "auth-6.3.2-missing-client-id");
+        Assert.NotEqual(JsonValueKind.Undefined, response.ValueKind);
+        Assert.True(response.TryGetProperty("error", out var error));
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_AfterAuthenticate_ShouldAllowWsSupportedMethods()
     {
@@ -590,6 +649,88 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
         var parameters = hubEvent.GetProperty("params");
         Assert.Equal("invocation.failed", parameters.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.14")]
+    public async Task Spec_6_3_14_Subscribe_WithTypeFilter_ShouldNotReceiveUnsubscribedType()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-sub-filter",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-sub-filter-client",
+                clientSessionId = "12121212-1212-1212-1212-121212121212"
+            }
+        });
+
+        var subscribe = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-filter",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribe], autoCloseWhenQueueDrained: false);
+        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub-filter", TimeSpan.FromSeconds(2));
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var subscribeResponse = await WaitForResponseByIdAsync(socket, "sub-filter", TimeSpan.FromSeconds(2));
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "sub-filter.app",
+                instanceId = "inst-filter-ignored"
+            }
+        });
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-filter-hit",
+                appId = "sub-filter.app",
+                instanceId = "inst-filter-hit"
+            }
+        });
+
+        await Task.Delay(120);
+        socket.EnqueueClose();
+        await runTask;
+
+        var eventMessages = ParseSentMessages(socket)
+            .Where(message =>
+                message.TryGetProperty("method", out var method)
+                && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Single(eventMessages);
+        Assert.Equal("invocation.completed", eventMessages[0].GetProperty("params").GetProperty("type").GetString());
+        Assert.DoesNotContain(
+            eventMessages,
+            message => string.Equals(
+                message.GetProperty("params").GetProperty("type").GetString(),
+                "app.instance.registered",
+                StringComparison.Ordinal));
     }
 
     [Fact]

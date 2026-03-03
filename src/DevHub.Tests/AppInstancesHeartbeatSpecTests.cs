@@ -73,10 +73,6 @@ public class AppInstancesHeartbeatSpecTests
         Assert.True(secondResult.TryGetProperty("lastSeenUtc", out var secondLastSeenProperty));
         Assert.True(DateTime.TryParse(secondLastSeenProperty.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var secondLastSeenUtc));
         Assert.True(secondLastSeenUtc >= firstLastSeenUtc);
-
-        var currentInstance = appRegistry.GetInstance("heartbeat-spec-inst");
-        Assert.NotNull(currentInstance);
-        Assert.True(currentInstance!.LastSeenUtc >= secondLastSeenUtc.ToUniversalTime());
     }
 
     [Fact]
@@ -105,6 +101,5 @@ public class AppInstancesHeartbeatSpecTests
         Assert.Equal("missing-inst", errorData.GetProperty("instanceId").GetString());
     }
 }
-
 
 

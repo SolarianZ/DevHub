@@ -131,6 +131,37 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_WhenMatchingOnlineInstanceExists_ShouldNotInvokeProcessLauncher()
+    {
+        WriteDefinition("launch-online-instance.app", includeLaunch: true);
+
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "launch-online-instance-1",
+            AppId = "launch-online-instance.app",
+            Scope = "workspace-A",
+            Pid = 6510,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object, appRegistry: appRegistry);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-online-instance.app",
+            scope: "workspace-A",
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("already_running", result.Status);
+        Assert.Equal(6510, result.Pid);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WithSameDedupeKeyWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         WriteDefinition(
@@ -138,7 +169,12 @@ public class LaunchCoordinatorTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
-        var coordinator = CreateCoordinator();
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var first = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window.app",
@@ -159,6 +195,43 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("already_running", second.Status);
         Assert.Equal(first.LaunchId, second.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenScopeEmptyAndNullHitSameDedupeKey_ShouldInvokeProcessLauncherOnce()
+    {
+        WriteDefinition(
+            "launch-global-scope-dedupe.app",
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-global-scope-dedupe.app",
+            scope: string.Empty,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-global-scope-dedupe.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -649,6 +722,5 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
-
 
 

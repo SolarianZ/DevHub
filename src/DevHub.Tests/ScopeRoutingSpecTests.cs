@@ -157,7 +157,6 @@ public class ScopeRoutingSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
-        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]

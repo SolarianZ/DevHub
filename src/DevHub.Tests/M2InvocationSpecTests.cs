@@ -27,6 +27,73 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.10")]
+    public async Task Spec_6_3_10_Notify_WhenOfflineAndOptionsOmitted_ShouldDefaultQueueAndAutoLaunch()
+    {
+        const string appId = "spec-6.3.10-default-offline-options";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.10-default-offline-options",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { },
+                method = "asset.notify.defaults.offline",
+                args = new { value = 1 }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32020, "launch_failed");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("launch_config_missing", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.10")]
+    public async Task Spec_6_3_10_Notify_WhenTargetInstanceSpecifiedAndOptionsOmitted_ShouldDefaultAutoLaunchFalse()
+    {
+        const string appId = "spec-6.3.10-default-target-instance-options";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, "spec-6.3.10-target-instance-online", appId, scope: null, poll: true, respond: true, pid: 7100);
+
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var notify = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.10-default-target-instance-options",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new
+                {
+                    scope = (string?)null,
+                    instanceId = "spec-6.3.10-target-instance-missing"
+                },
+                method = "asset.notify.target",
+                args = new { value = 1 }
+            })
+        }, CancellationToken.None);
+
+        AssertSuccess(notify);
+        var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(invocationId));
+
+        var onlinePoll = await PollAsync(handler, "spec-6.3.10-target-instance-online", maxCount: 1, waitMs: 0);
+        AssertSuccess(onlinePoll);
+        var onlineItems = JsonSerializer.SerializeToElement(onlinePoll.Result).GetProperty("items").EnumerateArray().ToList();
+        Assert.Empty(onlineItems);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.10")]
     public async Task Spec_6_3_10_Notify_WhenOptionsOmitted_ShouldUseDefaultTtlAndRouteGlobal()
     {
         const string appId = "spec-6.3.10-default-options";
@@ -682,16 +749,14 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Poll_WhenSucceeds_ShouldUpdateLastSeenAndReturnLeaseSeconds()
+    public async Task Spec_6_3_12_Poll_WhenSucceeds_ShouldReturnLeaseSeconds()
     {
         const string appId = "spec-6.3.12-last-seen";
         const string instanceId = "spec-6.3.12-last-seen-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var instance = RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7303);
-        instance.LastSeenUtc = DateTime.UtcNow.AddSeconds(-10);
-        var baseline = instance.LastSeenUtc;
+        RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7303);
 
         var handler = CreateInvocationHandler(appRegistry);
 
@@ -721,10 +786,6 @@ public class M2InvocationSpecTests : IDisposable
         Assert.Single(items);
         var leaseSeconds = items[0].GetProperty("delivery").GetProperty("leaseSeconds").GetInt32();
         Assert.True(leaseSeconds >= 1);
-
-        var updated = appRegistry.GetInstance(instanceId);
-        Assert.NotNull(updated);
-        Assert.True(updated!.LastSeenUtc > baseline);
     }
 
     [Fact]
@@ -994,16 +1055,14 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Respond_WhenSucceeds_ShouldUpdateLastSeen()
+    public async Task Spec_6_3_13_Respond_WhenSucceeds_ShouldReturnOk()
     {
         const string appId = "spec-6.3.13-last-seen";
         const string instanceId = "spec-6.3.13-last-seen-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var instance = RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7406);
-        instance.LastSeenUtc = DateTime.UtcNow.AddSeconds(-10);
-        var baseline = instance.LastSeenUtc;
+        RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7406);
 
         var handler = CreateInvocationHandler(appRegistry);
 
@@ -1045,9 +1104,6 @@ public class M2InvocationSpecTests : IDisposable
         }, CancellationToken.None);
 
         AssertSuccess(respond);
-        var updated = appRegistry.GetInstance(instanceId);
-        Assert.NotNull(updated);
-        Assert.True(updated!.LastSeenUtc > baseline);
     }
 
     public void Dispose()

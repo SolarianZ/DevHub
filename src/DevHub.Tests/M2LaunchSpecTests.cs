@@ -219,7 +219,6 @@ public class M2LaunchSpecTests : IDisposable
         Assert.Equal("already_running", result.GetProperty("status").GetString());
         Assert.Equal(7890, result.GetProperty("pid").GetInt32());
         Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
-        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -268,7 +267,6 @@ public class M2LaunchSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
-        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -376,7 +374,6 @@ public class M2LaunchSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
-        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     public void Dispose()
