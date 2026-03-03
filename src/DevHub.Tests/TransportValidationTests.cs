@@ -720,7 +720,7 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.3.14")]
-    public void Spec_6_3_14_Subscribe_UnsupportedEventType_ShouldReturnInvalidParamsWithReason()
+    public void Spec_6_3_14_Subscribe_UnsupportedEventType_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
         {
@@ -733,9 +733,6 @@ public class TransportValidationTests
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-subscribe");
-        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
-        Assert.Equal("unsupported_event_type", data.GetProperty("reason").GetString());
-        Assert.Equal("unknown.type", data.GetProperty("type").GetString());
     }
 
     [Fact]

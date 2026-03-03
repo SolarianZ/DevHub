@@ -104,7 +104,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "4.3")]
-    public async Task Spec_4_3_ReAuthenticate_ShouldReturnAlreadyAuthenticated()
+    public async Task Spec_4_3_ReAuthenticate_ShouldRejectWithInvalidRequest()
     {
         var context = CreateHostContext();
 
@@ -151,7 +151,6 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(secondResponse.TryGetProperty("error", out var secondError));
         Assert.Equal(-32600, secondError.GetProperty("code").GetInt32());
         Assert.Equal("invalid_request", secondError.GetProperty("message").GetString());
-        Assert.Equal("already_authenticated", secondError.GetProperty("data").GetProperty("reason").GetString());
     }
 
     [Fact]

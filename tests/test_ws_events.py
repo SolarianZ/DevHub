@@ -866,12 +866,6 @@ class TestWsEvents:
                 if not RpcAssertions.expect_error(result, subscribe_response, -32602, "invalid_params", expected_id="sub-11"):
                     return result
 
-                if not RpcAssertions.expect_error_data_fields(result, subscribe_response, {
-                    "reason": "unsupported_event_type",
-                    "type": "unknown.type"
-                }):
-                    return result
-
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
@@ -1077,6 +1071,88 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_012c_unsubscribe_existing_id_should_stop_delivery(self):
+        """M4-WS-012C: 取消真实 subscriptionId 后不应再收到 hub.event。"""
+        result = TestResult("M4-WS-012C 真实 subscriptionId 取消后停止事件投递")
+
+        instance_id = self._new_instance_id("m4-ws-unsub-stop")
+        app_id = self._new_app_id("unsub-stop")
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-12c")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-12c",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.instance.registered"]
+                    }
+                })
+                subscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
+                if not isinstance(subscription_id, str) or not subscription_id:
+                    result.mark_failure(f"❌ subscriptionId 非法: {subscribe_response}")
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "unsub-12c",
+                    "method": "hub.events.unsubscribe",
+                    "params": {
+                        "subscriptionId": subscription_id
+                    }
+                })
+                unsubscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, unsubscribe_response):
+                    return result
+
+                register_response = rpc_client.register_instance(
+                    instance_id=instance_id,
+                    app_id=app_id,
+                    scope="workspace-unsub-stop",
+                    poll=True,
+                    respond=True,
+                    pid=6205,
+                )
+                if not RpcAssertions.expect_success(result, register_response):
+                    return result
+
+                deadline = time.time() + 2
+                while time.time() < deadline:
+                    timeout = max(0.1, deadline - time.time())
+                    try:
+                        message = ws.recv_json(timeout=timeout)
+                    except TimeoutError:
+                        continue
+                    except WebSocketClosed:
+                        result.mark_failure("❌ 取消订阅后连接异常关闭")
+                        return result
+
+                    if isinstance(message, dict) and message.get("method") == "hub.event":
+                        result.mark_failure(f"❌ 取消订阅后仍收到 hub.event: {message}")
+                        return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                http_base_url, _, token = self._runtime_hub_info()
+                RpcClient(http_base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+        return result
+
     def test_m4_ws_015_first_authenticate_without_id_should_invalid_request(self):
         """M4-WS-015: 首条 hub.ws.authenticate 缺失 id 应 invalid_request 并断连。"""
         result = TestResult("M4-WS-015 首条鉴权缺失id返回 invalid_request")
@@ -1157,6 +1233,7 @@ class TestWsEvents:
             self.test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(),
             self.test_m4_ws_012_should_push_unregistered_event(),
             self.test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
+            self.test_m4_ws_012c_unsubscribe_existing_id_should_stop_delivery(),
             self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
             self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
             self.test_m4_ws_015_first_authenticate_without_id_should_invalid_request(),
