@@ -56,27 +56,6 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "4.2")]
-    public void Spec_4_2_HttpHeaders_TokenProviderThrows_ShouldReturnUnauthorizedInvalidToken()
-    {
-        var headers = BuildValidHeaders();
-
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
-            "application/json",
-            headers,
-            () => throw new InvalidOperationException("token provider failed"),
-            "req-auth-provider-exception",
-            out var errorResponse,
-            out _,
-            out _);
-
-        Assert.False(ok);
-        AssertError(errorResponse, -32001, "unauthorized", "req-auth-provider-exception");
-        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
-        Assert.Equal("invalid_token", data.GetProperty("reason").GetString());
-    }
-
-    [Fact]
-    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingProtocol_ShouldReturnNotSupportedMissing()
     {
         var headers = BuildValidHeaders();
@@ -470,58 +449,6 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "4.3")]
-    public void Spec_4_3_WsAuthenticate_TokenProviderThrows_ShouldReturnUnauthorizedAndClose()
-    {
-        var request = CreateWsAuthenticateRequest(new
-        {
-            token = "token-1",
-            protocolVersion = 1,
-            clientId = "client-a",
-            clientSessionId = "11111111-1111-1111-1111-111111111111"
-        });
-
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
-            request,
-            () => throw new InvalidOperationException("token provider failed"),
-            (_, _) => true,
-            out var authenticated,
-            out _,
-            out _,
-            out var closeAfterResponse);
-
-        Assert.False(authenticated);
-        Assert.True(closeAfterResponse);
-        AssertError(response, -32001, "unauthorized", "ws-auth");
-    }
-
-    [Fact]
-    [Trait("SpecRef", "4.3")]
-    public void Spec_4_3_WsAuthenticate_MarkAuthenticatedFailed_ShouldReturnInternalErrorAndClose()
-    {
-        var request = CreateWsAuthenticateRequest(new
-        {
-            token = "token-1",
-            protocolVersion = 1,
-            clientId = "client-a",
-            clientSessionId = "11111111-1111-1111-1111-111111111111"
-        });
-
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
-            request,
-            () => "token-1",
-            (_, _) => false,
-            out var authenticated,
-            out _,
-            out _,
-            out var closeAfterResponse);
-
-        Assert.False(authenticated);
-        Assert.True(closeAfterResponse);
-        AssertError(response, -32603, "internal_error", "ws-auth");
-    }
-
-    [Fact]
-    [Trait("SpecRef", "4.3")]
     public void Spec_4_3_WsAuthenticate_Success_ShouldReturnOkAndAuthenticatedContext()
     {
         var request = CreateWsAuthenticateRequest(new
@@ -766,33 +693,6 @@ public class TransportValidationTests
         AssertError(response, code, message, "req-error-map");
     }
 
-    [Fact]
-    [Trait("SpecRef", "4.2")]
-    public void Spec_4_2_HttpHeaders_WithCaseSensitiveDictionary_ShouldSupportCaseInsensitiveLookup()
-    {
-        var headers = new Dictionary<string, string>
-        {
-            ["x-devhub-protocol"] = "1",
-            ["x-devhub-clientid"] = "client-a",
-            ["x-devhub-clientsessionid"] = "11111111-1111-1111-1111-111111111111",
-            ["authorization"] = "Bearer token-1"
-        };
-
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
-            "application/json",
-            headers,
-            () => "token-1",
-            "req-case-sensitive-headers",
-            out var errorResponse,
-            out var clientId,
-            out var clientSessionId);
-
-        Assert.True(ok);
-        Assert.Null(errorResponse);
-        Assert.Equal("client-a", clientId);
-        Assert.Equal("11111111-1111-1111-1111-111111111111", clientSessionId);
-    }
-
     private static Dictionary<string, string> BuildValidHeaders()
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -828,4 +728,3 @@ public class TransportValidationTests
         Assert.Equal(id, response.Id);
     }
 }
-

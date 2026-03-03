@@ -151,6 +151,79 @@ public class M2LaunchSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.9")]
+    public async Task Spec_6_3_9_Launch_WhenProcessStarted_ShouldReturnStarted()
+    {
+        const string appId = "spec-6.3.9-started";
+        WriteDefinition(appId, includeLaunch: true);
+
+        var startedProcess = System.Diagnostics.Process.GetCurrentProcess();
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(startedProcess);
+
+        var handler = CreateLaunchHandler(processLauncher: processLauncher.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.9-started",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertSuccess(response);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.Equal("started", result.GetProperty("status").GetString());
+        Assert.Equal(startedProcess.Id, result.GetProperty("pid").GetInt32());
+        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.9")]
+    public async Task Spec_6_3_9_Launch_WhenMatchingOnlineInstanceExists_ShouldReturnAlreadyRunning()
+    {
+        const string appId = "spec-6.3.9-online-instance";
+        const string scope = "workspace-A";
+        WriteDefinition(appId, includeLaunch: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "spec-6.3.9-online-instance-id",
+            AppId = appId,
+            Scope = scope,
+            Pid = 7890
+        });
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var handler = CreateLaunchHandler(processLauncher: processLauncher.Object, appRegistry: appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.9-online-instance",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                scope,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertSuccess(response);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.Equal("already_running", result.GetProperty("status").GetString());
+        Assert.Equal(7890, result.GetProperty("pid").GetInt32());
+        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.9")]
     public async Task Spec_6_3_9_Launch_WhenDedupeHitsWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         const string appId = "spec-6.3.9-dedupe-hit";

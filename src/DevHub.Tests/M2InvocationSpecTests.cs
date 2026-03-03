@@ -255,6 +255,111 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.11")]
+    public async Task Spec_6_3_11_Request_WhenOptionsOmitted_ShouldApplyDefaults()
+    {
+        const string onlineAppId = "spec-6.3.11-default-options-online";
+        const string onlineInstanceId = "spec-6.3.11-default-options-online-instance";
+        const string offlineAppId = "spec-6.3.11-default-options-offline";
+
+        WriteDefinition(onlineAppId, rpcEnabled: true);
+        WriteDefinition(offlineAppId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, onlineInstanceId, onlineAppId, scope: null, poll: true, respond: true, pid: 7207);
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-default-options-online-request",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = onlineAppId,
+                target = new { },
+                method = "asset.request.defaults",
+                args = new { value = 1 }
+            })
+        }, CancellationToken.None);
+
+        var poll = await PollAsync(handler, onlineInstanceId, maxCount: 1, waitMs: 800);
+        AssertSuccess(poll);
+        var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
+        Assert.Single(pollItems);
+        var invocationId = pollItems[0].GetProperty("invocationId").GetString();
+        Assert.Equal(300000, pollItems[0].GetProperty("options").GetProperty("ttlMs").GetInt32());
+
+        var respond = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-default-options-online-respond",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = onlineInstanceId,
+                invocationId,
+                value = new
+                {
+                    ok = true
+                }
+            })
+        }, CancellationToken.None);
+        AssertSuccess(respond);
+
+        var requestResponse = await requestTask;
+        AssertSuccess(requestResponse);
+        var requestResult = JsonSerializer.SerializeToElement(requestResponse.Result);
+        Assert.Equal(invocationId, requestResult.GetProperty("invocationId").GetString());
+        Assert.True(requestResult.GetProperty("value").GetProperty("ok").GetBoolean());
+
+        var offlineResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-default-options-offline-request",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = offlineAppId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.request.defaults.offline",
+                args = new { value = 2 }
+            })
+        }, CancellationToken.None);
+
+        AssertError(offlineResponse, -32020, "launch_failed");
+        var offlineErrorData = JsonSerializer.SerializeToElement(offlineResponse.Error!.Data);
+        Assert.Equal("launch_config_missing", offlineErrorData.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.11")]
+    public async Task Spec_6_3_11_Request_WhenTargetInstanceSpecifiedAndAutoLaunchOmitted_ShouldDefaultToFalse()
+    {
+        const string appId = "spec-6.3.11-target-instance-default-auto-launch";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateInvocationHandler(appRegistry);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(160));
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.11-target-instance-default-auto-launch",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = "missing-instance" },
+                method = "asset.request.target",
+                args = new { value = 3 }
+            })
+        }, cts.Token);
+
+        AssertError(response, -32012, "invocation_timeout");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.True(data.TryGetProperty("invocationId", out var invocationId));
+        Assert.False(string.IsNullOrWhiteSpace(invocationId.GetString()));
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.11")]
     public async Task Spec_6_3_11_Request_WhenTargetInstanceAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());

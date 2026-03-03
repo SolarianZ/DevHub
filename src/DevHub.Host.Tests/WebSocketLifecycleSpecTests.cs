@@ -536,6 +536,63 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.14")]
+    public async Task Spec_6_3_14_Subscribe_WhenTypesOmitted_ShouldSubscribeAllEvents()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-sub-omitted",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-sub-omitted-client",
+                clientSessionId = "99999999-9999-9999-9999-999999999999"
+            }
+        });
+
+        var subscribeAll = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "sub-omitted",
+            method = "hub.events.subscribe",
+            @params = new { }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+
+        await Task.Delay(120);
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.failed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-omitted-types",
+                appId = "omitted-types.app",
+                instanceId = "inst-omitted-types"
+            }
+        });
+
+        await runTask;
+
+        var messages = ParseSentMessages(socket);
+        var hubEvent = messages.FirstOrDefault(m =>
+            m.TryGetProperty("method", out var method)
+            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
+
+        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
+        var parameters = hubEvent.GetProperty("params");
+        Assert.Equal("invocation.failed", parameters.GetProperty("type").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.15")]
     public async Task Spec_6_3_15_UnsubscribeUnknownSubscription_ShouldReturnOk()
     {
