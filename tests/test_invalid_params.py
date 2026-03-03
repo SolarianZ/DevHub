@@ -341,6 +341,56 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_launch_invalid_scope(self):
+        """测试 hub.apps.launch 使用无效 scope"""
+        result = TestResult("测试 hub.apps.launch 使用无效 scope")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {
+                    "name": "scope 非字符串（数字）",
+                    "payload": {
+                        "appId": "test-launch-invalid-scope",
+                        "scope": 123,
+                        "waitForRegisterMs": 0,
+                    }
+                },
+                {
+                    "name": "scope 非字符串（布尔）",
+                    "payload": {
+                        "appId": "test-launch-invalid-scope",
+                        "scope": True,
+                        "waitForRegisterMs": 0,
+                    }
+                },
+                {
+                    "name": "scope 非字符串（对象）",
+                    "payload": {
+                        "appId": "test-launch-invalid-scope",
+                        "scope": {"name": "workspace-a"},
+                        "waitForRegisterMs": 0,
+                    }
+                }
+            ]
+
+            for case in cases:
+                response = client.call("hub.apps.launch", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_scope"}):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params/invalid_scope")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_apps_heartbeat_missing_instanceid(self):
         """测试 hub.apps.heartbeat 缺少 instanceId 参数"""
         result = TestResult("测试 hub.apps.heartbeat 缺少 instanceId 参数")
@@ -521,6 +571,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_register_instance_invalid_pid(),
             self.test_hub_apps_register_instance_invalid_instanceid(),
             self.test_hub_apps_register_instance_invalid_scope(),
+            self.test_hub_apps_launch_invalid_scope(),
             self.test_hub_apps_heartbeat_missing_instanceid(),
             self.test_hub_apps_register_instance_invalid_invoke(),
             self.test_hub_apps_heartbeat_invalid_instanceid(),

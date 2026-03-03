@@ -1,6 +1,6 @@
 # DevHub 白盒测试分层与 Spec 映射矩阵
 
-更新时间：2026-03-02  
+更新时间：2026-03-03  
 适用分支：`review_before_m5`  
 规范基线：`docs/Spec.md`（v1.0.1，2026-01-31）
 
@@ -24,6 +24,7 @@
 | --- | --- | --- |
 | 4.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 12 |
 | 4.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 12 |
+| 5.5 | `src/DevHub.Tests/ScopeRoutingSpecTests.cs` | 7 |
 | 6.1 | `src/DevHub.Tests/TransportValidationTests.cs` | 7 |
 | 6.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 2 |
 | 6.3.3 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 1 |
@@ -40,9 +41,10 @@
 | 6.3.14 | `src/DevHub.Tests/TransportValidationTests.cs` | 6 |
 | 6.3.15 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
 | 6.3.16 | `src/DevHub.Tests/HubEventNotificationFactoryTests.cs` | 2 |
+| 7.1 | `src/DevHub.Tests/ScopeRoutingSpecTests.cs` | 2 |
 | 8.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
 
-总计：82 个 `Spec_*` 白盒测试用例。
+总计：91 个 `Spec_*` 白盒测试用例。
 
 ## 4. 说明
 

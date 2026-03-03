@@ -22,21 +22,23 @@ class TestLaunchDiscovery(unittest.TestCase):
     """启动与发现测试类"""
 
     @staticmethod
-    def _read_process_output(process):
-        """读取子进程输出（仅在进程结束后调用）。"""
-        if process.stdout is None or process.poll() is None:
+    def _read_open_log_tail(log_file, max_chars=4000):
+        """读取已打开日志句柄的尾部内容，避免 Windows 下文件占用冲突。"""
+        if log_file is None:
             return ""
 
         try:
-            output = process.stdout.read()
+            log_file.flush()
+            log_file.seek(0)
+            output = log_file.read()
         except Exception:
             return ""
 
         if not output:
             return ""
         output = output.strip()
-        if len(output) > 2000:
-            output = output[-2000:]
+        if len(output) > max_chars:
+            output = output[-max_chars:]
         return output
 
     @staticmethod
@@ -423,63 +425,70 @@ class TestLaunchDiscovery(unittest.TestCase):
                 os.makedirs(definitions_dir, exist_ok=True)
 
                 single_instance_slot = f"test-runtime-{uuid.uuid4().hex[:8]}"
-                with temporary_env_var("DEVHUB_RUNTIME_DIR", runtime_dir):
-                    with temporary_env_var("DEVHUB_APPDEFS_DIR", definitions_dir):
-                        with temporary_env_var("DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS", single_instance_slot):
-                            process = subprocess.Popen(
-                                [
-                                    "dotnet",
-                                    "run",
-                                    "--project",
-                                    host_project,
-                                    "-c",
-                                    "Release",
-                                    "--no-launch-profile"
-                                ],
-                                cwd=project_root,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
-                                text=True)
+                try:
+                    with temporary_env_var("DEVHUB_RUNTIME_DIR", runtime_dir):
+                        with temporary_env_var("DEVHUB_APPDEFS_DIR", definitions_dir):
+                            with temporary_env_var("DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS", single_instance_slot):
+                                host_log_path = os.path.join(temp_root, "host-runtime-dir.log")
+                                with open(host_log_path, "w+", encoding="utf-8", errors="backslashreplace") as log_file:
+                                    process = subprocess.Popen(
+                                        [
+                                            "dotnet",
+                                            "run",
+                                            "--project",
+                                            host_project,
+                                            "-c",
+                                            "Release",
+                                            "--no-build",
+                                            "--no-launch-profile"
+                                        ],
+                                        cwd=project_root,
+                                        stdout=log_file,
+                                        stderr=subprocess.STDOUT,
+                                        text=True)
 
-                            if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=30):
-                                process_output = self._read_process_output(process)
-                                if process.poll() is None:
-                                    result.mark_failure("❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json")
-                                else:
-                                    result.mark_failure(
-                                        f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
-                                return result
+                                    if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
+                                        process_output = self._read_open_log_tail(log_file)
+                                        if process.poll() is None:
+                                            result.mark_failure(
+                                                f"❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json。日志片段: {process_output}")
+                                        else:
+                                            result.mark_failure(
+                                                f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
+                                        return result
 
-                            hub_json_path = os.path.join(runtime_dir, "hub.json")
-                            with open(hub_json_path, "r", encoding="utf-8") as f:
-                                hub_info = json.load(f)
+                                    hub_json_path = os.path.join(runtime_dir, "hub.json")
+                                    with open(hub_json_path, "r", encoding="utf-8") as f:
+                                        hub_info = json.load(f)
 
-                            token_file = hub_info.get("tokenFile")
-                            if not token_file or not os.path.exists(token_file):
-                                result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
-                                return result
-                            result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
+                                    token_file = hub_info.get("tokenFile")
+                                    if not token_file or not os.path.exists(token_file):
+                                        result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
+                                        return result
+                                    result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
 
-                            runtime_token = os.path.join(runtime_dir, "token.txt")
-                            if os.path.abspath(token_file) != os.path.abspath(runtime_token):
-                                result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
-                                return result
+                                    runtime_token = os.path.join(runtime_dir, "token.txt")
+                                    if os.path.abspath(token_file) != os.path.abspath(runtime_token):
+                                        result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
+                                        return result
 
-                            base_url, token = DiscoveryService.get_hub_info()
-                            ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
-                            if not ok:
-                                process_output = self._read_process_output(process)
-                                result.mark_failure(
-                                    f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
-                                return result
+                                    base_url, token = DiscoveryService.get_hub_info()
+                                    ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
+                                    if not ok:
+                                        process_output = self._read_open_log_tail(log_file)
+                                        result.mark_failure(
+                                            f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
+                                        return result
 
-                            result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
-                            result.mark_success()
+                                    result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
+                                    result.mark_success()
+                finally:
+                    # 在临时目录回收前停止子进程，避免 Windows 文件句柄占用导致删除失败。
+                    self._stop_process(process)
+                    process = None
 
         except Exception as e:
             result.mark_failure(str(e))
-        finally:
-            self._stop_process(process)
 
         return result
 
