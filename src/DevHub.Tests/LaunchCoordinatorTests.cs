@@ -323,9 +323,8 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(result.Ok);
         Assert.Equal("started", result.Status);
 
-        await WaitUntilFileExistsAsync(argsOutputPath, TimeSpan.FromSeconds(3));
-        var rendered = File.ReadAllText(argsOutputPath);
-        Assert.Equal("launch-args-template.app|workspace-A|workspace-A|http://127.0.0.1:63001", rendered);
+        const string expected = "launch-args-template.app|workspace-A|workspace-A|http://127.0.0.1:63001";
+        await WaitUntilFileContentEqualsAsync(argsOutputPath, expected, TimeSpan.FromSeconds(3));
     }
 
     [Fact]
@@ -358,9 +357,8 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(result.Ok);
         Assert.Equal("started", result.Status);
 
-        await WaitUntilFileExistsAsync(argsOutputPath, TimeSpan.FromSeconds(3));
-        var rendered = File.ReadAllText(argsOutputPath);
-        Assert.Equal("launch-args-template-global.app||global|http://127.0.0.1:63002", rendered);
+        const string expected = "launch-args-template-global.app||global|http://127.0.0.1:63002";
+        await WaitUntilFileContentEqualsAsync(argsOutputPath, expected, TimeSpan.FromSeconds(3));
     }
 
     [Fact]
@@ -593,20 +591,35 @@ public class LaunchCoordinatorTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
-    private static async Task WaitUntilFileExistsAsync(string filePath, TimeSpan timeout)
+    private static async Task WaitUntilFileContentEqualsAsync(string filePath, string expectedContent, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow.Add(timeout);
+        string? lastContent = null;
         while (DateTime.UtcNow <= deadline)
         {
             if (File.Exists(filePath))
             {
-                return;
+                try
+                {
+                    var content = File.ReadAllText(filePath);
+                    if (string.Equals(content, expectedContent, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    lastContent = content;
+                }
+                catch (IOException)
+                {
+                    // 文件可能正在由子进程写入，重试即可。
+                }
             }
 
             await Task.Delay(20);
         }
 
-        throw new Xunit.Sdk.XunitException($"等待文件生成超时: {filePath}");
+        throw new Xunit.Sdk.XunitException(
+            $"等待文件内容匹配超时: {filePath}, expected='{expectedContent}', actual='{lastContent ?? "<missing>"}'");
     }
 
     private sealed class MutableClock : IClock
