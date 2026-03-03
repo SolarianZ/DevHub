@@ -400,12 +400,13 @@ public class M2InvocationSpecTests : IDisposable
     public async Task Spec_6_3_11_Request_WhenTargetInstanceSpecifiedAndAutoLaunchOmitted_ShouldDefaultToFalse()
     {
         const string appId = "spec-6.3.11-target-instance-default-auto-launch";
+        const string observerInstanceId = "spec-6.3.11-target-instance-default-auto-launch-observer";
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, observerInstanceId, appId, scope: null, poll: true, respond: true, pid: 7208);
         var handler = CreateInvocationHandler(appRegistry);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(160));
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.11-target-instance-default-auto-launch",
@@ -415,14 +416,25 @@ public class M2InvocationSpecTests : IDisposable
                 appId,
                 target = new { scope = (string?)null, instanceId = "missing-instance" },
                 method = "asset.request.target",
-                args = new { value = 3 }
+                args = new { value = 3 },
+                options = new
+                {
+                    ttlMs = 2000,
+                    waitTimeoutMs = 120,
+                    queueIfOffline = true
+                }
             })
-        }, cts.Token);
+        }, CancellationToken.None);
 
         AssertError(response, -32012, "invocation_timeout");
         var data = JsonSerializer.SerializeToElement(response.Error!.Data);
         Assert.True(data.TryGetProperty("invocationId", out var invocationId));
         Assert.False(string.IsNullOrWhiteSpace(invocationId.GetString()));
+
+        var observerPoll = await PollAsync(handler, observerInstanceId, maxCount: 1, waitMs: 0);
+        AssertSuccess(observerPoll);
+        var observerItems = JsonSerializer.SerializeToElement(observerPoll.Result).GetProperty("items").EnumerateArray().ToList();
+        Assert.Empty(observerItems);
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -189,6 +190,75 @@ public class M1CoreRpcSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.5")]
+    public async Task Spec_6_3_5_RegisterInstance_WhenSameInstanceRegistersAgain_ShouldRefreshLastSeenUtc()
+    {
+        var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, clock, _instancesLogger.Object);
+
+        var firstResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.5-register-refresh-first",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "spec-6.3.5-refresh-instance",
+                    appId = "spec-6.3.5.refresh.app",
+                    scope = (string?)null,
+                    pid = 6103,
+                    invoke = new
+                    {
+                        poll = true,
+                        respond = true
+                    }
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(firstResponse.Error);
+        var firstResult = JsonSerializer.SerializeToElement(firstResponse.Result);
+        var firstLastSeenUtc = DateTime.Parse(
+            firstResult.GetProperty("instance").GetProperty("lastSeenUtc").GetString()!,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        var secondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.5-register-refresh-second",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "spec-6.3.5-refresh-instance",
+                    appId = "spec-6.3.5.refresh.app",
+                    scope = (string?)null,
+                    pid = 6103,
+                    invoke = new
+                    {
+                        poll = true,
+                        respond = true
+                    }
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(secondResponse.Error);
+        var secondResult = JsonSerializer.SerializeToElement(secondResponse.Result);
+        var secondLastSeenUtc = DateTime.Parse(
+            secondResult.GetProperty("instance").GetProperty("lastSeenUtc").GetString()!,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind);
+
+        Assert.True(secondLastSeenUtc > firstLastSeenUtc);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.5")]
     public async Task Spec_6_3_5_RegisterInstance_InvalidScope_ShouldReturnInvalidParams()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -280,16 +350,17 @@ public class M1CoreRpcSpecTests : IDisposable
     [Trait("SpecRef", "6.3.8")]
     public async Task Spec_6_3_8_ListInstances_DefaultGlobalScopeAndIncludeOfflineFalse_ShouldApply()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
+        var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, clock, _instancesLogger.Object);
 
         await RegisterInstanceAsync(handler, "spec-6.3.8-global-online", "spec-6.3.8.app", null, 6301);
         await RegisterInstanceAsync(handler, "spec-6.3.8-global-offline", "spec-6.3.8.app", null, 6302);
         await RegisterInstanceAsync(handler, "spec-6.3.8-scoped-online", "spec-6.3.8.app", "workspace-A", 6303);
 
-        var offlineInstance = appRegistry.GetInstance("spec-6.3.8-global-offline");
-        Assert.NotNull(offlineInstance);
-        offlineInstance!.LastSeenUtc = DateTime.UtcNow.AddSeconds(-31);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        await HeartbeatInstanceAsync(handler, "spec-6.3.8-global-online");
+        await HeartbeatInstanceAsync(handler, "spec-6.3.8-scoped-online");
 
         var defaultResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -408,6 +479,36 @@ public class M1CoreRpcSpecTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
+    }
+
+    private async Task HeartbeatInstanceAsync(AppInstancesHandler handler, string instanceId)
+    {
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "heartbeat-" + instanceId,
+            Method = "hub.apps.heartbeat",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 
     private void WriteJson(string fileName, object payload)
