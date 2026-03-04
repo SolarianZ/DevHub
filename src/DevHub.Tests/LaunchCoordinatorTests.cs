@@ -369,22 +369,21 @@ public class LaunchCoordinatorTests : IDisposable
     [Fact]
     public async Task Impl_LaunchAsync_ArgsTemplate_ShouldRenderSpecPlaceholders()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var argsOutputPath = Path.Combine(_tempDirectory, "args-output.txt");
-        var escapedOutputPath = argsOutputPath.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
-
         WriteDefinition(
             "launch-args-template.app",
             includeLaunch: true,
-            exePath: "/bin/sh",
-            argsTemplate: $"-c \"printf '%s' '{{appId}}|{{scope}}|{{scopeOrGlobal}}|{{httpBaseUrl}}' > \\\"{escapedOutputPath}\\\"\"");
+            exePath: "dotnet",
+            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}");
+
+        string? capturedArguments = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, args) => capturedArguments = args)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
 
         WriteHubRuntime("http://127.0.0.1:63001");
-        var coordinator = CreateCoordinator();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-args-template.app",
@@ -397,29 +396,27 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.Equal("started", result.Status);
 
         const string expected = "launch-args-template.app|workspace-A|workspace-A|http://127.0.0.1:63001";
-        // 不能仅等待“文件已创建”：子进程可能先创建文件再写内容，立即读取会拿到空串或半截内容。
-        await WaitUntilFileContentEqualsAsync(argsOutputPath, expected, TimeSpan.FromSeconds(3));
+        Assert.Equal(expected, capturedArguments);
     }
 
     [Fact]
     public async Task Impl_LaunchAsync_ArgsTemplate_WithNullScope_ShouldRenderEmptyScopeAndGlobalScopeOrGlobal()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var argsOutputPath = Path.Combine(_tempDirectory, "args-output-global.txt");
-        var escapedOutputPath = argsOutputPath.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
-
         WriteDefinition(
             "launch-args-template-global.app",
             includeLaunch: true,
-            exePath: "/bin/sh",
-            argsTemplate: $"-c \"printf '%s' '{{appId}}|{{scope}}|{{scopeOrGlobal}}|{{httpBaseUrl}}' > \\\"{escapedOutputPath}\\\"\"");
+            exePath: "dotnet",
+            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}");
+
+        string? capturedArguments = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, args) => capturedArguments = args)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
 
         WriteHubRuntime("http://127.0.0.1:63002");
-        var coordinator = CreateCoordinator();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-args-template-global.app",
@@ -432,8 +429,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.Equal("started", result.Status);
 
         const string expected = "launch-args-template-global.app||global|http://127.0.0.1:63002";
-        // 不能仅等待“文件已创建”：子进程可能先创建文件再写内容，立即读取会拿到空串或半截内容。
-        await WaitUntilFileContentEqualsAsync(argsOutputPath, expected, TimeSpan.FromSeconds(3));
+        Assert.Equal(expected, capturedArguments);
     }
 
     [Fact]
@@ -499,22 +495,20 @@ public class LaunchCoordinatorTests : IDisposable
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, _) =>
+            {
+                appRegistry.RegisterInstance(new AppInstance
+                {
+                    InstanceId = "launch-wait-register-instance",
+                    AppId = "launch-wait-register.app",
+                    Scope = null,
+                    Pid = 6501,
+                    Invoke = new InvokeCapability { Poll = true, Respond = true }
+                });
+            })
             .Returns(System.Diagnostics.Process.GetCurrentProcess());
 
         var coordinator = CreateCoordinator(clock, processLauncher.Object, appRegistry);
-
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(50);
-            appRegistry.RegisterInstance(new AppInstance
-            {
-                InstanceId = "launch-wait-register-instance",
-                AppId = "launch-wait-register.app",
-                Scope = null,
-                Pid = 6501,
-                Invoke = new InvokeCapability { Poll = true, Respond = true }
-            });
-        });
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-wait-register.app",
@@ -664,47 +658,6 @@ public class LaunchCoordinatorTests : IDisposable
 
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
-    }
-
-    /// <summary>
-    /// 等待文件内容与预期完全一致。
-    /// </summary>
-    /// <remarks>
-    /// 这里不能退化成“只要文件存在就通过”。
-    /// 在真实进程调度下，子进程可能先创建文件句柄，再异步写入内容；
-    /// 如果测试在该窗口立即读取，会读到空串/半截内容，形成偶发竞态失败。
-    /// 因此必须轮询“内容匹配”条件，并在写入占用窗口（IOException）时继续重试。
-    /// </remarks>
-    private static async Task WaitUntilFileContentEqualsAsync(string filePath, string expectedContent, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow.Add(timeout);
-        string? lastContent = null;
-        while (DateTime.UtcNow <= deadline)
-        {
-            // File.Exists=true 仅表示目录项可见，不代表写入已完成。
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    var content = File.ReadAllText(filePath);
-                    if (string.Equals(content, expectedContent, StringComparison.Ordinal))
-                    {
-                        return;
-                    }
-
-                    lastContent = content;
-                }
-                catch (IOException)
-                {
-                    // 子进程写入窗口内可能触发共享/读取异常，此时继续等待即可。
-                }
-            }
-
-            await Task.Delay(20);
-        }
-
-        throw new Xunit.Sdk.XunitException(
-            $"等待文件内容匹配超时: {filePath}, expected='{expectedContent}', actual='{lastContent ?? "<missing>"}'");
     }
 
     private sealed class MutableClock : IClock

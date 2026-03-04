@@ -13,18 +13,16 @@ using Moq;
 public sealed class AppRegistryLifecycleTests
 {
     [Fact]
-    public async Task Impl_CleanupTimer_ShouldRemoveOnlyExpiredEntries()
+    public void Impl_CleanupTimer_ShouldRemoveOnlyExpiredEntries()
     {
         var clock = new MutableClock(DateTime.UtcNow);
         using var registry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
 
         registry.RegisterInstance(CreateInstance("inst-expired", "app.cleanup", null, 101));
+        clock.Advance(TimeSpan.FromHours(2));
         registry.RegisterInstance(CreateInstance("inst-active", "app.cleanup", "workspace-A", 102));
 
-        registry.GetInstance("inst-expired")!.LastSeenUtc = clock.UtcNow.AddHours(-2);
-        registry.GetInstance("inst-active")!.LastSeenUtc = clock.UtcNow;
-
-        await WaitUntilAsync(() => registry.GetInstance("inst-expired") is null, TimeSpan.FromSeconds(70));
+        registry.CleanupExpiredInstancesForTesting();
 
         Assert.Null(registry.GetInstance("inst-expired"));
         Assert.NotNull(registry.GetInstance("inst-active"));
@@ -62,10 +60,13 @@ public sealed class AppRegistryLifecycleTests
     {
         var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
 
-        registry.Dispose();
-        registry.Dispose();
+        var exception = Record.Exception(() =>
+        {
+            registry.Dispose();
+            registry.Dispose();
+        });
 
-        Assert.True(true);
+        Assert.Null(exception);
     }
 
     private static AppInstance CreateInstance(string instanceId, string appId, string? scope, int pid)
@@ -82,22 +83,6 @@ public sealed class AppRegistryLifecycleTests
                 Respond = true
             }
         };
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow.Add(timeout);
-        while (DateTime.UtcNow <= deadline)
-        {
-            if (condition())
-            {
-                return;
-            }
-
-            await Task.Delay(100);
-        }
-
-        throw new Xunit.Sdk.XunitException("等待 AppRegistry 定时清理超时。");
     }
 
     private sealed class MutableClock : IClock

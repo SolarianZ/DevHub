@@ -4,6 +4,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
@@ -389,7 +390,6 @@ public class InvocationScopeRoutingTests : IDisposable
 
         var responderTask = Task.Run(async () =>
         {
-            await Task.Delay(50);
             var pollResponse = await store.PollAsync(scopedInstance, maxCount: 1, waitMs: 1500, CancellationToken.None);
             if (pollResponse.Count > 0)
             {
@@ -586,7 +586,8 @@ public class InvocationScopeRoutingTests : IDisposable
     [Fact]
     public async Task Impl_Sweep_RequeueScopedInvocation_ShouldNotLeakAcrossScopes()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var holderInstance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-scope-requeue-holder",
@@ -624,7 +625,7 @@ public class InvocationScopeRoutingTests : IDisposable
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
 
         var scopedInvocation = store.CreateInvocation(
             CreateNotify("scope-requeue.app", targetScope: "workspace-A", targetInstanceId: null),
@@ -633,11 +634,9 @@ public class InvocationScopeRoutingTests : IDisposable
         var firstPoll = await store.PollAsync(holderInstance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(firstPoll);
 
-        var firstDelivered = firstPoll[0];
-        firstDelivered.LeaseExpireAtUtc = DateTime.UtcNow.AddMilliseconds(-1);
-        firstDelivered.Delivery.Attempt = 1;
-
-        _ = store.Sweep(DateTime.UtcNow);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        _ = appRegistry.Heartbeat(sameScopeReceiver.InstanceId, out _);
+        _ = store.Sweep(clock.UtcNow);
 
         Assert.True(store.TryGet(scopedInvocation.InvocationId, out var requeued));
         Assert.Equal(InvocationState.Queued, requeued!.State);
@@ -656,6 +655,21 @@ public class InvocationScopeRoutingTests : IDisposable
         Assert.Equal(scopedInvocation.InvocationId, redelivered.InvocationId);
         Assert.Equal(2, redelivered.Delivery.Attempt);
         Assert.Equal(sameScopeReceiver.InstanceId, redelivered.LeaseHolderInstanceId);
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 
     /// <summary>

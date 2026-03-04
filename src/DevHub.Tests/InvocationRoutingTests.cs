@@ -5,6 +5,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
@@ -720,8 +721,9 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task Impl_InvocationHandler_Poll_ShouldRefreshInstanceLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var instance = appRegistry.RegisterInstance(new AppInstance
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "poll-last-seen",
             AppId = "poll-last-seen.app",
@@ -729,12 +731,11 @@ public class InvocationRoutingTests : IDisposable
             Pid = 3301,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
-        instance.LastSeenUtc = DateTime.UtcNow.AddMinutes(-1);
 
-        var handler = CreateInvocationHandler(appRegistry);
+        var handler = CreateInvocationHandler(appRegistry, clock: clock);
         var beforePoll = appRegistry.GetInstance("poll-last-seen")!.LastSeenUtc;
 
-        await Task.Delay(10);
+        clock.Advance(TimeSpan.FromSeconds(1));
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -795,7 +796,8 @@ public class InvocationRoutingTests : IDisposable
     [Fact]
     public async Task Impl_InvocationHandler_Respond_Success_ShouldRefreshInstanceLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "respond-last-seen",
@@ -805,7 +807,7 @@ public class InvocationRoutingTests : IDisposable
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
 
-        var handler = CreateInvocationHandler(appRegistry);
+        var handler = CreateInvocationHandler(appRegistry, clock: clock);
 
         var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -846,7 +848,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
         var beforeRespond = appRegistry.GetInstance("respond-last-seen")!.LastSeenUtc;
-        await Task.Delay(10);
+        clock.Advance(TimeSpan.FromSeconds(1));
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -931,14 +933,18 @@ public class InvocationRoutingTests : IDisposable
         }
     }
 
-    private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry, RuntimeTuningOptions? runtimeTuningOptions = null)
+    private InvocationHandler CreateInvocationHandler(
+        AppRegistry appRegistry,
+        RuntimeTuningOptions? runtimeTuningOptions = null,
+        IClock? clock = null)
     {
         runtimeTuningOptions ??= RuntimeTuningOptions.Default;
+        var effectiveClock = clock ?? new SystemClock();
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, effectiveClock);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
         var launchCoordinator = new LaunchCoordinator(
@@ -946,7 +952,7 @@ public class InvocationRoutingTests : IDisposable
             appRegistry,
             runtimeHttpBaseUrlProvider,
             new ProcessLauncher(),
-            new SystemClock(),
+            effectiveClock,
             runtimeTuningOptions,
             _launchLogger.Object);
         return new InvocationHandler(
@@ -956,9 +962,24 @@ public class InvocationRoutingTests : IDisposable
             store,
             waiter,
             launchCoordinator,
-            new SystemClock(),
+            effectiveClock,
             _invocationHandlerLogger.Object,
             runtimeTuningOptions);
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)

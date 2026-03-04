@@ -3,6 +3,7 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -329,25 +330,9 @@ public class SpecConformanceTests : IDisposable
     [Fact]
     public async Task Impl_AppInstancesHandler_ListInstances_DefaultIncludeOfflineFalse_ShouldFilterOfflineInstances()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
-
-        await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "req-register-online",
-            Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instance = new
-                {
-                    instanceId = "instance-online",
-                    appId = "list-offline-default.app",
-                    scope = (string?)null,
-                    pid = 5101,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
-        }, CancellationToken.None);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, clock, _instancesLogger.Object);
 
         await handler.HandleAsync(new JsonRpcRequest
         {
@@ -366,9 +351,24 @@ public class SpecConformanceTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var offline = appRegistry.GetInstance("instance-offline");
-        Assert.NotNull(offline);
-        offline!.LastSeenUtc = DateTime.UtcNow.AddSeconds(-31);
+        clock.Advance(TimeSpan.FromSeconds(31));
+
+        await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-register-online",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "instance-online",
+                    appId = "list-offline-default.app",
+                    scope = (string?)null,
+                    pid = 5101,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
 
         var defaultListResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -461,6 +461,21 @@ public class SpecConformanceTests : IDisposable
     {
         var fullPath = Path.Combine(_tempDirectory, fileName);
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 }
 

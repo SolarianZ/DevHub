@@ -191,9 +191,9 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
             Mock.Of<ILogger<FileSystemManager>>(),
             RuntimePathOptions.Resolve(_definitionsDirectory));
 
-        manager.Cleanup();
+        var exception = Record.Exception(() => manager.Cleanup());
 
-        Assert.True(true);
+        Assert.Null(exception);
     }
 
     /// <inheritdoc />

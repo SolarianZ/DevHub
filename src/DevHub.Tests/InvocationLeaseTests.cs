@@ -2,6 +2,7 @@
 
 using DevHub.Core.Models;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -80,7 +81,8 @@ public class InvocationLeaseTests
     [Fact]
     public async Task Impl_LeaseExpired_ShouldBeRequeuedAndAttemptIncremented()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var instanceA = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-requeue-a",
@@ -99,7 +101,7 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
 
         var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
         var firstPoll = await store.PollAsync(instanceA, maxCount: 1, waitMs: 0, CancellationToken.None);
@@ -108,9 +110,9 @@ public class InvocationLeaseTests
         Assert.Equal(1, firstPoll[0].Delivery.Attempt);
         Assert.Equal(instanceA.InstanceId, firstPoll[0].LeaseHolderInstanceId);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(1200));
+        clock.Advance(TimeSpan.FromSeconds(2));
 
-        var secondPoll = await store.PollAsync(instanceB, maxCount: 1, waitMs: 200, CancellationToken.None);
+        var secondPoll = await store.PollAsync(instanceB, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(secondPoll);
 
         var redelivered = secondPoll.Single();
@@ -123,7 +125,8 @@ public class InvocationLeaseTests
     [Fact]
     public async Task Impl_Respond_AfterLeaseExpired_ShouldReturnDeliveryConflict()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "lease-expired-owner",
@@ -134,13 +137,13 @@ public class InvocationLeaseTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
 
         var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
         var firstPoll = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(firstPoll);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(1200));
+        clock.Advance(TimeSpan.FromSeconds(2));
 
         var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.DeliveryConflict, status);
@@ -148,6 +151,21 @@ public class InvocationLeaseTests
         Assert.True(store.TryGet(created.InvocationId, out var current));
         Assert.Equal(InvocationState.Queued, current!.State);
         Assert.Equal(2, current.Delivery.Attempt);
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 
     private static Invocation CreateNotify(string appId, int leaseSeconds = 30)

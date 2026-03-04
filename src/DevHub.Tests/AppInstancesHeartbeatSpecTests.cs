@@ -5,6 +5,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -22,8 +23,9 @@ public class AppInstancesHeartbeatSpecTests
     [Trait("SpecRef", "6.3.6")]
     public async Task Spec_6_3_6_Heartbeat_ShouldReturnOkAndRefreshLastSeenUtc()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var initialLastSeen = DateTime.UtcNow.AddSeconds(-10);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var initialLastSeen = clock.UtcNow.AddSeconds(-10);
 
         appRegistry.RegisterInstance(new AppInstance
         {
@@ -31,12 +33,12 @@ public class AppInstancesHeartbeatSpecTests
             AppId = "heartbeat-spec.app",
             Scope = null,
             Pid = 7011,
-            RegisteredAtUtc = DateTime.UtcNow.AddSeconds(-20),
+            RegisteredAtUtc = clock.UtcNow.AddSeconds(-20),
             LastSeenUtc = initialLastSeen,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
 
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, clock, _handlerLogger.Object);
 
         var firstResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -55,7 +57,7 @@ public class AppInstancesHeartbeatSpecTests
         Assert.True(DateTime.TryParse(firstLastSeenProperty.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var firstLastSeenUtc));
         Assert.True(firstLastSeenUtc > initialLastSeen);
 
-        await Task.Delay(10);
+        clock.Advance(TimeSpan.FromSeconds(1));
 
         var secondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -99,6 +101,21 @@ public class AppInstancesHeartbeatSpecTests
         var errorData = JsonSerializer.SerializeToElement(response.Error.Data);
         Assert.Equal("unknown_instance", errorData.GetProperty("reason").GetString());
         Assert.Equal("missing-inst", errorData.GetProperty("instanceId").GetString());
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; private set; }
+
+        public void Advance(TimeSpan duration)
+        {
+            UtcNow = UtcNow.Add(duration);
+        }
     }
 }
 

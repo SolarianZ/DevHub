@@ -88,6 +88,11 @@ public class AppRegistry : IDisposable
         }
     }
 
+    internal void CleanupExpiredInstancesForTesting()
+    {
+        CleanupExpiredInstances();
+    }
+
     /// <summary>
     /// 注册或更新应用程序实例
     /// </summary>

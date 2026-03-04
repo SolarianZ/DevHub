@@ -206,7 +206,8 @@ public class InvocationStoreTests
     [Fact]
     public async Task Impl_Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-sweep-lease",
@@ -217,18 +218,16 @@ public class InvocationStoreTests
         });
 
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
 
         var created = store.CreateInvocation(CreateNotify("sweep-lease.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
 
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
 
-        var delivered = polled[0];
-        delivered.LeaseExpireAtUtc = DateTime.UtcNow.AddMilliseconds(-1);
-        delivered.Delivery.Attempt = 1;
-
-        _ = store.Sweep(DateTime.UtcNow);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        _ = appRegistry.Heartbeat(instance.InstanceId, out _);
+        _ = store.Sweep(clock.UtcNow);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
         Assert.Equal(InvocationState.Queued, current!.State);
