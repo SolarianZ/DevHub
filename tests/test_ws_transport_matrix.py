@@ -265,41 +265,94 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                poll_response = self._ws_call(
-                    ws,
-                    "matrix-ws-http-only-poll",
-                    "hub.invoke.poll",
-                    {
-                        "instanceId": "matrix-ws-http-only-instance",
-                        "maxCount": 1,
-                        "waitMs": 0,
-                    },
-                )
-                if not self._expect_transport_rejected(result, poll_response, "matrix-ws-http-only-poll"):
-                    return result
+                cases = [
+                    (
+                        "matrix-ws-http-only-register",
+                        "hub.apps.registerInstance",
+                        {
+                            "instance": {
+                                "instanceId": "matrix-ws-http-only-register-instance",
+                                "appId": "matrix-ws-http-only-register-app",
+                                "scope": None,
+                                "pid": 6311,
+                                "invoke": {"poll": True, "respond": True},
+                            }
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-heartbeat",
+                        "hub.apps.heartbeat",
+                        {"instanceId": "matrix-ws-http-only-heartbeat-instance"},
+                    ),
+                    (
+                        "matrix-ws-http-only-unregister",
+                        "hub.apps.unregisterInstance",
+                        {"instanceId": "matrix-ws-http-only-unregister-instance"},
+                    ),
+                    (
+                        "matrix-ws-http-only-launch",
+                        "hub.apps.launch",
+                        {
+                            "appId": "matrix-ws-http-only-launch-app",
+                            "scope": None,
+                            "waitForRegisterMs": 0,
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-notify",
+                        "hub.invoke.notify",
+                        {
+                            "appId": "matrix-ws-http-only-notify-app",
+                            "target": {"scope": None, "instanceId": None},
+                            "method": "test.ping",
+                            "args": {"from": "ws"},
+                            "options": {
+                                "ttlMs": 60000,
+                                "queueIfOffline": True,
+                                "autoLaunch": False,
+                            },
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-request",
+                        "hub.invoke.request",
+                        {
+                            "appId": "matrix-ws-http-only-request-app",
+                            "target": {"scope": None, "instanceId": None},
+                            "method": "test.ping",
+                            "args": {"from": "ws"},
+                            "options": {
+                                "ttlMs": 300000,
+                                "waitTimeoutMs": 1000,
+                                "queueIfOffline": True,
+                                "autoLaunch": False,
+                            },
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-poll",
+                        "hub.invoke.poll",
+                        {
+                            "instanceId": "matrix-ws-http-only-poll-instance",
+                            "maxCount": 1,
+                            "waitMs": 0,
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-respond",
+                        "hub.invoke.respond",
+                        {
+                            "instanceId": "matrix-ws-http-only-respond-instance",
+                            "invocationId": "invk-matrix-ws-http-only-respond",
+                            "value": {"ok": True},
+                        },
+                    ),
+                ]
 
-                poll_error_code = poll_response.get("error", {}).get("code")
-                if poll_error_code == -32010:
-                    result.mark_failure(f"❌ WS 端错误执行了 poll 业务分支: {poll_response}")
-                    return result
-
-                launch_response = self._ws_call(
-                    ws,
-                    "matrix-ws-http-only-launch",
-                    "hub.apps.launch",
-                    {
-                        "appId": "matrix-ws-http-only-launch-app",
-                        "scope": None,
-                        "waitForRegisterMs": 0,
-                    },
-                )
-                if not self._expect_transport_rejected(result, launch_response, "matrix-ws-http-only-launch"):
-                    return result
-
-                launch_error_code = launch_response.get("error", {}).get("code")
-                if launch_error_code in {-32014, -32020}:
-                    result.mark_failure(f"❌ WS 端错误执行了 launch 业务分支: {launch_response}")
-                    return result
+                for request_id, method, params in cases:
+                    response = self._ws_call(ws, request_id, method, params)
+                    if not self._expect_transport_rejected(result, response, request_id):
+                        return result
 
             result.mark_success()
         except Exception as e:
