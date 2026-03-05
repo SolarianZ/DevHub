@@ -19,6 +19,7 @@ from tests.test_base import (
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_test_python_executable,
     new_instance_id,
     safe_remove,
     write_app_definition,
@@ -32,7 +33,7 @@ class TestScopeRouting(unittest.TestCase):
         launch_config = None
         if include_launch:
             launch_config = {
-                "exePath": "python3",
+                "exePath": get_test_python_executable(),
                 "argsTemplate": os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py")),
             }
             if dedupe_key_template is not None:

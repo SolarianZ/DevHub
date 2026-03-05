@@ -17,6 +17,7 @@ from tests.test_base import (
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_test_python_executable,
     new_instance_id,
     safe_remove,
     unregister_instances,
@@ -34,7 +35,7 @@ class TestLaunchInvocation(unittest.TestCase):
         launch_config = None
         if include_launch:
             launch_config = {
-                "exePath": "python3",
+                "exePath": get_test_python_executable(),
                 "argsTemplate": self._launch_script_path(),
             }
             if dedupe_key_template is not None:

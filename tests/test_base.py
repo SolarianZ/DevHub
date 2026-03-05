@@ -6,6 +6,7 @@ DevHub M1 测试基础类和工具函数
 import os
 import json
 import platform
+import sys
 import requests
 import uuid
 from contextlib import contextmanager
@@ -95,6 +96,18 @@ def get_definitions_dir() -> str:
 
     os.makedirs(definitions_dir, exist_ok=True)
     return definitions_dir
+
+
+def get_test_python_executable() -> str:
+    """获取集成测试使用的 Python 解释器路径。"""
+    configured = os.environ.get("DEVHUB_TEST_PYTHON", "").strip()
+    if configured:
+        return configured
+
+    if sys.executable:
+        return sys.executable
+
+    return "python3"
 
 
 def write_definition(app_id: str, payload: Dict[str, Any]) -> str:

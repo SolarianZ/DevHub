@@ -17,6 +17,7 @@ from tests.test_base import (
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_test_python_executable,
     safe_remove,
     write_app_definition,
 )
@@ -31,6 +32,15 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
     def _launch_script_path(self):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
+
+    def _build_launch_config(self, dedupe_key_template=None):
+        launch_config = {
+            "exePath": get_test_python_executable(),
+            "argsTemplate": self._launch_script_path(),
+        }
+        if dedupe_key_template is not None:
+            launch_config["dedupeKeyTemplate"] = dedupe_key_template
+        return launch_config
 
     def _create_definition(self, app_id, launch_config):
         return write_app_definition(
@@ -49,10 +59,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             app_id = self._new_app_id("default-dedupe")
             definition_path = self._create_definition(
                 app_id,
-                {
-                    "exePath": "python3",
-                    "argsTemplate": self._launch_script_path(),
-                },
+                self._build_launch_config(),
             )
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -111,11 +118,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             app_id = self._new_app_id("explicit-dedupe")
             definition_path = self._create_definition(
                 app_id,
-                {
-                    "exePath": "python3",
-                    "argsTemplate": self._launch_script_path(),
-                    "dedupeKeyTemplate": "{appId}:{scopeOrGlobal}:{httpBaseUrl}",
-                },
+                self._build_launch_config("{appId}:{scopeOrGlobal}:{httpBaseUrl}"),
             )
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -167,10 +170,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             app_id = self._new_app_id("wait-positive")
             definition_path = self._create_definition(
                 app_id,
-                {
-                    "exePath": "python3",
-                    "argsTemplate": self._launch_script_path(),
-                },
+                self._build_launch_config(),
             )
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -215,11 +215,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             app_id = self._new_app_id("scope-template")
             definition_path = self._create_definition(
                 app_id,
-                {
-                    "exePath": "python3",
-                    "argsTemplate": self._launch_script_path(),
-                    "dedupeKeyTemplate": "{appId}:{scope}:{scopeOrGlobal}",
-                },
+                self._build_launch_config("{appId}:{scope}:{scopeOrGlobal}"),
             )
 
             base_url, token = DiscoveryService.get_hub_info()
