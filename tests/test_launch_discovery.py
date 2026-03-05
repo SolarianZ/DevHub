@@ -331,112 +331,229 @@ class TestLaunchDiscovery(unittest.TestCase):
         return result
 
     def test_hub_json_atomic_write(self):
-        """测试 hub.json 的原子写入特性"""
-        result = TestResult("测试 hub.json 的原子写入特性")
+        """Validate hub.json atomic update behavior mandated by spec."""
+        result = TestResult("Validate hub.json atomic update behavior")
 
         try:
-            runtime_dir = DiscoveryService.get_runtime_directory()
-            hub_json_path = os.path.join(runtime_dir, "hub.json")
-
-            # 检查 hub.json 是否存在
-            if not os.path.exists(hub_json_path):
-                result.mark_failure("❌ hub.json 文件不存在")
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            host_project = os.path.join(project_root, "src", "DevHub.Host", "DevHub.Host.csproj")
+            if not os.path.exists(host_project):
+                result.mark_failure(f"Host project not found: {host_project}")
                 return result
 
-            base_url, token = DiscoveryService.get_hub_info()
-            client = RpcClient(base_url, token)
             required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
-
+            update_rounds = 6
             read_errors = []
             update_errors = []
             read_count = 0
+            rewrite_observations = []
             stop_event = threading.Event()
-            update_rounds = 20
 
-            def read_hub_runtime_continuously():
-                nonlocal read_count
-                while not stop_event.is_set():
-                    try:
-                        with open(hub_json_path, "r", encoding="utf-8") as f:
-                            hub_info = json.load(f)
-                    except FileNotFoundError:
-                        # 更新过程中的瞬时缺失由触发线程负责收敛；读线程只检查“读到的快照”是否完整可解析。
-                        time.sleep(0.002)
-                        continue
-                    except json.JSONDecodeError as e:
-                        read_errors.append(f"读取到不可解析 JSON: {e}")
-                        stop_event.set()
-                        return
-                    except Exception as e:
-                        read_errors.append(f"读取 hub.json 失败: {e}")
-                        stop_event.set()
-                        return
+            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-atomic-") as temp_root:
+                runtime_dir = os.path.join(temp_root, "runtime")
+                definitions_dir = os.path.join(temp_root, "apps", "definitions")
+                hub_json_path = os.path.join(runtime_dir, "hub.json")
+                host_log_path = os.path.join(temp_root, "host-atomic.log")
+                os.makedirs(definitions_dir, exist_ok=True)
 
+                def validate_hub_runtime_snapshot(hub_info):
                     missing_fields = [field for field in required_fields if field not in hub_info]
                     if missing_fields:
-                        read_errors.append(f"读取到缺失字段的快照: {missing_fields}")
-                        stop_event.set()
-                        return
+                        raise ValueError(f"hub.json missing fields: {missing_fields}")
 
-                    read_count += 1
-                    time.sleep(0.001)
+                    if hub_info.get("protocolVersion") != 1:
+                        raise ValueError(f"protocolVersion is not 1: {hub_info.get('protocolVersion')}")
 
-            def trigger_hub_runtime_rewrite():
-                for i in range(update_rounds):
-                    if stop_event.is_set():
-                        return
+                    runtime_tuning = hub_info.get("runtimeTuning")
+                    if not isinstance(runtime_tuning, dict):
+                        raise ValueError("runtimeTuning is not an object")
 
-                    try:
-                        if os.path.exists(hub_json_path):
-                            os.remove(hub_json_path)
+                    for field in ("leaseSeconds", "onlineThresholdSeconds", "launchDedupeWindowSeconds"):
+                        value = runtime_tuning.get(field)
+                        if not isinstance(value, int) or value < 1:
+                            raise ValueError(f"runtimeTuning.{field} is invalid: {runtime_tuning}")
 
-                        ping_response = client.call("hub.ping", request_id=f"m1-discovery-atomic-{i}")
-                        if "result" not in ping_response or ping_response["result"].get("ok") is not True:
-                            update_errors.append(f"第{i + 1}次触发 hub.json 重建失败: {ping_response}")
+                def read_hub_runtime_continuously():
+                    nonlocal read_count
+
+                    while not stop_event.is_set():
+                        try:
+                            with open(hub_json_path, "r", encoding="utf-8") as f:
+                                hub_info = json.load(f)
+                            validate_hub_runtime_snapshot(hub_info)
+                        except FileNotFoundError:
+                            time.sleep(0.002)
+                            continue
+                        except PermissionError:
+                            time.sleep(0.002)
+                            continue
+                        except json.JSONDecodeError as e:
+                            read_errors.append(f"reader saw invalid JSON: {e}")
+                            stop_event.set()
+                            return
+                        except Exception as e:
+                            read_errors.append(f"reader failed to consume hub.json: {e}")
                             stop_event.set()
                             return
 
-                        wait_deadline = time.time() + 2.0
-                        while time.time() < wait_deadline:
-                            if os.path.exists(hub_json_path):
-                                break
-                            time.sleep(0.005)
-                        else:
-                            update_errors.append(f"第{i + 1}次触发后 hub.json 未在超时内恢复")
+                        read_count += 1
+                        time.sleep(0.001)
+
+                def restart_hub_and_collect_snapshots():
+                    single_instance_slot = f"test-atomic-{uuid.uuid4().hex[:8]}"
+                    last_snapshot = None
+
+                    for i in range(update_rounds):
+                        if stop_event.is_set():
+                            return
+
+                        process = None
+                        try:
+                            env = os.environ.copy()
+                            env["DEVHUB_RUNTIME_DIR"] = runtime_dir
+                            env["DEVHUB_APPDEFS_DIR"] = definitions_dir
+                            env["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = single_instance_slot
+
+                            with open(host_log_path, "a+", encoding="utf-8", errors="backslashreplace") as log_file:
+                                process = subprocess.Popen(
+                                    [
+                                        "dotnet",
+                                        "run",
+                                        "--project",
+                                        host_project,
+                                        "-c",
+                                        "Release",
+                                        "--no-build",
+                                        "--no-launch-profile"
+                                    ],
+                                    cwd=project_root,
+                                    stdout=log_file,
+                                    stderr=subprocess.STDOUT,
+                                    text=True,
+                                    env=env)
+
+                                if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
+                                    process_output = self._read_open_log_tail(log_file)
+                                    update_errors.append(
+                                        f"restart {i + 1}: hub.json was not generated or host exited early, output={process_output}")
+                                    stop_event.set()
+                                    return
+
+                                hub_info = None
+                                snapshot_key = None
+                                wait_deadline = time.time() + 20
+                                while time.time() < wait_deadline:
+                                    if process.poll() is not None:
+                                        process_output = self._read_open_log_tail(log_file)
+                                        update_errors.append(
+                                            f"restart {i + 1}: host exited before writing a fresh snapshot, output={process_output}")
+                                        stop_event.set()
+                                        return
+
+                                    try:
+                                        with open(hub_json_path, "r", encoding="utf-8") as f:
+                                            candidate = json.load(f)
+                                        validate_hub_runtime_snapshot(candidate)
+                                        candidate_key = (
+                                            candidate["pid"],
+                                            candidate["startedAtUtc"],
+                                            candidate["httpBaseUrl"])
+                                    except (FileNotFoundError, PermissionError, json.JSONDecodeError, ValueError):
+                                        time.sleep(0.05)
+                                        continue
+                                    except Exception as e:
+                                        update_errors.append(f"restart {i + 1}: failed to read hub.json snapshot: {e}")
+                                        stop_event.set()
+                                        return
+
+                                    if last_snapshot is None or candidate_key != last_snapshot:
+                                        hub_info = candidate
+                                        snapshot_key = candidate_key
+                                        break
+
+                                    time.sleep(0.05)
+
+                                if hub_info is None or snapshot_key is None:
+                                    process_output = self._read_open_log_tail(log_file)
+                                    update_errors.append(
+                                        f"restart {i + 1}: timed out waiting for a fresh hub.json snapshot, output={process_output}")
+                                    stop_event.set()
+                                    return
+
+                                token_path = hub_info.get("tokenFile")
+                                if not isinstance(token_path, str) or not os.path.isabs(token_path):
+                                    update_errors.append(f"restart {i + 1}: tokenFile is not absolute: {token_path}")
+                                    stop_event.set()
+                                    return
+                                if not os.path.exists(token_path):
+                                    update_errors.append(f"restart {i + 1}: token file does not exist: {token_path}")
+                                    stop_event.set()
+                                    return
+
+                                with open(token_path, "r", encoding="utf-8") as token_file:
+                                    token = token_file.read().strip()
+                                if not token:
+                                    update_errors.append(f"restart {i + 1}: token file is empty")
+                                    stop_event.set()
+                                    return
+
+                                ok, error = self._wait_for_hub_ping(
+                                    process,
+                                    hub_info["httpBaseUrl"],
+                                    token,
+                                    timeout_seconds=20)
+                                if not ok:
+                                    process_output = self._read_open_log_tail(log_file)
+                                    update_errors.append(
+                                        f"restart {i + 1}: hub.ping is unavailable: {error}; output={process_output}")
+                                    stop_event.set()
+                                    return
+
+                                rewrite_observations.append((hub_info["pid"], hub_info["startedAtUtc"]))
+                                last_snapshot = snapshot_key
+                                time.sleep(0.1)
+                        except Exception as e:
+                            update_errors.append(f"restart {i + 1}: unexpected exception: {e}")
                             stop_event.set()
                             return
-                    except Exception as e:
-                        update_errors.append(f"第{i + 1}次触发重建时异常: {e}")
-                        stop_event.set()
-                        return
+                        finally:
+                            self._stop_process(process)
+                            time.sleep(0.1)
 
-            reader_thread = threading.Thread(target=read_hub_runtime_continuously, daemon=True)
-            writer_thread = threading.Thread(target=trigger_hub_runtime_rewrite, daemon=True)
-            reader_thread.start()
-            writer_thread.start()
+                reader_thread = threading.Thread(target=read_hub_runtime_continuously, daemon=True)
+                writer_thread = threading.Thread(target=restart_hub_and_collect_snapshots, daemon=True)
+                reader_thread.start()
+                writer_thread.start()
 
-            writer_thread.join(timeout=20)
-            stop_event.set()
-            reader_thread.join(timeout=5)
+                writer_thread.join(timeout=240)
+                stop_event.set()
+                reader_thread.join(timeout=10)
 
-            if writer_thread.is_alive():
-                result.mark_failure("❌ 并发场景超时：hub.json 重建触发线程未结束")
-                return result
+                if writer_thread.is_alive():
+                    result.mark_failure("Concurrent restart thread timed out")
+                    return result
+
             if update_errors:
-                result.mark_failure(f"❌ 触发 hub.json 更新失败: {update_errors[0]}")
+                result.mark_failure(f"Failed to trigger hub.json updates: {update_errors[0]}")
                 return result
             if read_errors:
-                result.mark_failure(f"❌ 并发读取到不完整快照: {read_errors[0]}")
+                result.mark_failure(f"Observed non-atomic hub.json snapshot: {read_errors[0]}")
                 return result
             if read_count == 0:
-                result.mark_failure("❌ 并发读取未采集到任何 hub.json 快照")
+                result.mark_failure("Reader did not observe any hub.json snapshots")
                 return result
 
-            result.add_detail(f"✅ 触发 {update_rounds} 次 hub.json 更新期间并发读取 {read_count} 次，快照始终可解析且字段完整")
+            unique_snapshots = set(rewrite_observations)
+            if len(unique_snapshots) < 2:
+                result.mark_failure("Did not observe multiple distinct hub.json snapshots")
+                return result
+
+            result.add_detail(
+                f"Triggered {update_rounds} hub restarts and consumed {read_count} snapshots without partial reads")
             result.mark_success()
 
         except Exception as e:
-            result.mark_failure(f"❌ 无法检查原子写入特性: {e}")
+            result.mark_failure(f"Unable to validate atomic write behavior: {e}")
 
         return result
 
