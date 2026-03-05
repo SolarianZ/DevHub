@@ -34,6 +34,14 @@ class TestInvocationNotify(unittest.TestCase):
     def _instance_id(prefix):
         return new_instance_id(prefix)
 
+    @staticmethod
+    def _read_runtime_lease_seconds():
+        runtime_dir = DiscoveryService.get_runtime_directory()
+        hub_json_path = os.path.join(runtime_dir, "hub.json")
+        with open(hub_json_path, "r", encoding="utf-8") as f:
+            hub_info = json.load(f)
+        return hub_info.get("runtimeTuning", {}).get("leaseSeconds")
+
     def test_notify_online_delivery(self):
         """M2-NOTIFY-001: 在线 notify 后可被 poll 拉取"""
         result = TestResult("M2-NOTIFY-001 notify 在线投递")
@@ -93,8 +101,15 @@ class TestInvocationNotify(unittest.TestCase):
                 return result
 
             delivery = found.get("delivery", {})
-            if delivery.get("leaseSeconds") != 30:
-                result.mark_failure(f"❌ leaseSeconds 非 30: {delivery}")
+            expected_lease_seconds = self._read_runtime_lease_seconds()
+            if not isinstance(expected_lease_seconds, int) or expected_lease_seconds < 1:
+                result.mark_failure(f"❌ hub.json.runtimeTuning.leaseSeconds 非法: {expected_lease_seconds}")
+                return result
+
+            if delivery.get("leaseSeconds") != expected_lease_seconds:
+                result.mark_failure(
+                    f"❌ leaseSeconds 不匹配: 期望 {expected_lease_seconds}，实际 {delivery.get('leaseSeconds')}, delivery={delivery}"
+                )
                 return result
 
             if delivery.get("attempt") != 1:

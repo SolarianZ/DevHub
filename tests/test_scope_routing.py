@@ -1334,12 +1334,18 @@ class TestScopeRouting(unittest.TestCase):
                 result.mark_failure("❌ 首次 poll 未拿到目标 scoped invocation")
                 return result
 
-            first_attempt = first_item.get("delivery", {}).get("attempt")
+            first_delivery = first_item.get("delivery", {})
+            first_attempt = first_delivery.get("attempt")
             if first_attempt != 1:
-                result.mark_failure(f"❌ 首次 delivery.attempt 非 1: {first_item.get('delivery')}")
+                result.mark_failure(f"❌ 首次 delivery.attempt 非 1: {first_delivery}")
                 return result
 
-            time.sleep(31.0)
+            lease_seconds = first_delivery.get("leaseSeconds")
+            if not isinstance(lease_seconds, int) or lease_seconds < 1:
+                result.mark_failure(f"❌ 首次 delivery.leaseSeconds 非法: {first_delivery}")
+                return result
+
+            time.sleep(lease_seconds + 1.0)
 
             global_poll, global_ids = self._poll_invocation_ids(client, global_instance, wait_ms=500)
             if not RpcAssertions.expect_success(result, global_poll, ["items"]):
