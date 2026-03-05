@@ -201,6 +201,8 @@ class TestScopeRouting(unittest.TestCase):
         result = TestResult("M3-SCOPE-003 scope='' 等价 Global")
         app_id = self._app_id("003")
         definition_path = None
+        empty_instance = None
+        null_instance = None
 
         try:
             definition_path = self._create_definition(app_id, include_launch=True)
@@ -278,6 +280,16 @@ class TestScopeRouting(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if empty_instance:
+                    cleanup_client.unregister_instance(empty_instance)
+                if null_instance:
+                    cleanup_client.unregister_instance(null_instance)
+            except Exception:
+                pass
+
             safe_remove(definition_path)
 
         return result
@@ -287,6 +299,8 @@ class TestScopeRouting(unittest.TestCase):
         result = TestResult("M3-SCOPE-004 scope='global' 显式作用域")
         app_id = self._app_id("004")
         definition_path = None
+        scoped_global_instance = None
+        null_global_instance = None
 
         try:
             definition_path = self._create_definition(app_id, include_launch=True)
@@ -364,6 +378,16 @@ class TestScopeRouting(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                cleanup_client = RpcClient(base_url, token)
+                if scoped_global_instance:
+                    cleanup_client.unregister_instance(scoped_global_instance)
+                if null_global_instance:
+                    cleanup_client.unregister_instance(null_global_instance)
+            except Exception:
+                pass
+
             safe_remove(definition_path)
 
         return result

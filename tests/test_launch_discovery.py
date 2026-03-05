@@ -10,6 +10,7 @@ import time
 import uuid
 import tempfile
 import subprocess
+import threading
 import unittest
 
 # 添加项目根目录到 Python 模块搜索路径
@@ -342,68 +343,100 @@ class TestLaunchDiscovery(unittest.TestCase):
                 result.mark_failure("❌ hub.json 文件不存在")
                 return result
 
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
             required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
-            # 不依赖实现细节（例如临时文件命名），只验证可观察到的原子性：
-            # 在多次快速读取期间，hub.json 始终可解析且字段完整。
-            for i in range(20):
-                with open(hub_json_path, "r", encoding="utf-8") as f:
-                    hub_info = json.load(f)
 
-                for field in required_fields:
-                    if field not in hub_info:
-                        result.mark_failure(f"❌ 第{i + 1}次读取时 hub.json 缺少 {field} 字段")
-                        return result
-                time.sleep(0.01)
+            read_errors = []
+            update_errors = []
+            read_count = 0
+            stop_event = threading.Event()
+            update_rounds = 20
 
-            result.add_detail("✅ 连续读取均可完整解析 hub.json，符合原子更新可观察行为")
+            def read_hub_runtime_continuously():
+                nonlocal read_count
+                while not stop_event.is_set():
+                    try:
+                        with open(hub_json_path, "r", encoding="utf-8") as f:
+                            hub_info = json.load(f)
+                    except FileNotFoundError:
+                        # 更新过程中的瞬时缺失由触发线程负责收敛；读线程只检查“读到的快照”是否完整可解析。
+                        time.sleep(0.002)
+                        continue
+                    except json.JSONDecodeError as e:
+                        read_errors.append(f"读取到不可解析 JSON: {e}")
+                        stop_event.set()
+                        return
+                    except Exception as e:
+                        read_errors.append(f"读取 hub.json 失败: {e}")
+                        stop_event.set()
+                        return
+
+                    missing_fields = [field for field in required_fields if field not in hub_info]
+                    if missing_fields:
+                        read_errors.append(f"读取到缺失字段的快照: {missing_fields}")
+                        stop_event.set()
+                        return
+
+                    read_count += 1
+                    time.sleep(0.001)
+
+            def trigger_hub_runtime_rewrite():
+                for i in range(update_rounds):
+                    if stop_event.is_set():
+                        return
+
+                    try:
+                        if os.path.exists(hub_json_path):
+                            os.remove(hub_json_path)
+
+                        ping_response = client.call("hub.ping", request_id=f"m1-discovery-atomic-{i}")
+                        if "result" not in ping_response or ping_response["result"].get("ok") is not True:
+                            update_errors.append(f"第{i + 1}次触发 hub.json 重建失败: {ping_response}")
+                            stop_event.set()
+                            return
+
+                        wait_deadline = time.time() + 2.0
+                        while time.time() < wait_deadline:
+                            if os.path.exists(hub_json_path):
+                                break
+                            time.sleep(0.005)
+                        else:
+                            update_errors.append(f"第{i + 1}次触发后 hub.json 未在超时内恢复")
+                            stop_event.set()
+                            return
+                    except Exception as e:
+                        update_errors.append(f"第{i + 1}次触发重建时异常: {e}")
+                        stop_event.set()
+                        return
+
+            reader_thread = threading.Thread(target=read_hub_runtime_continuously, daemon=True)
+            writer_thread = threading.Thread(target=trigger_hub_runtime_rewrite, daemon=True)
+            reader_thread.start()
+            writer_thread.start()
+
+            writer_thread.join(timeout=20)
+            stop_event.set()
+            reader_thread.join(timeout=5)
+
+            if writer_thread.is_alive():
+                result.mark_failure("❌ 并发场景超时：hub.json 重建触发线程未结束")
+                return result
+            if update_errors:
+                result.mark_failure(f"❌ 触发 hub.json 更新失败: {update_errors[0]}")
+                return result
+            if read_errors:
+                result.mark_failure(f"❌ 并发读取到不完整快照: {read_errors[0]}")
+                return result
+            if read_count == 0:
+                result.mark_failure("❌ 并发读取未采集到任何 hub.json 快照")
+                return result
+
+            result.add_detail(f"✅ 触发 {update_rounds} 次 hub.json 更新期间并发读取 {read_count} 次，快照始终可解析且字段完整")
             result.mark_success()
 
         except Exception as e:
             result.mark_failure(f"❌ 无法检查原子写入特性: {e}")
-
-        return result
-
-    def test_custom_runtime_dir_discovery_helper(self):
-        """测试 Discovery helper 可读取 DEVHUB_RUNTIME_DIR（辅助逻辑层）"""
-        result = TestResult("测试 DEVHUB_RUNTIME_DIR Discovery helper")
-
-        try:
-            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-helper-") as temp_dir:
-                with temporary_env_var("DEVHUB_RUNTIME_DIR", temp_dir):
-                    discovery_dir = DiscoveryService.get_runtime_directory()
-                    if discovery_dir == temp_dir:
-                        result.add_detail(f"✅ DiscoveryService 正确读取 DEVHUB_RUNTIME_DIR: {temp_dir}")
-                    else:
-                        result.mark_failure(f"❌ DiscoveryService 读取 DEVHUB_RUNTIME_DIR 错误: 实际值 {discovery_dir}, 预期值 {temp_dir}")
-                        return result
-
-                    with open(os.path.join(temp_dir, "hub.json"), "w", encoding="utf-8") as f:
-                        json.dump({
-                            "protocolVersion": 1,
-                            "pid": 12345,
-                            "httpBaseUrl": "http://127.0.0.1:12345",
-                            "wsUrl": "ws://127.0.0.1:12345/ws",
-                            "tokenFile": os.path.join(temp_dir, "token.txt"),
-                            "startedAtUtc": "2026-01-30T12:34:56Z",
-                            "runtimeTuning": {
-                                "leaseSeconds": 30,
-                                "onlineThresholdSeconds": 30,
-                                "launchDedupeWindowSeconds": 30
-                            }
-                        }, f)
-
-                    with open(os.path.join(temp_dir, "token.txt"), "w", encoding="utf-8") as f:
-                        f.write("test-token-123")
-
-                    base_url, token = DiscoveryService.get_hub_info()
-                    if base_url != "http://127.0.0.1:12345" or token != "test-token-123":
-                        result.mark_failure(f"❌ Discovery helper 返回值不正确: base_url={base_url}, token={token}")
-                        return result
-
-                    result.mark_success()
-
-        except Exception as e:
-            result.mark_failure(str(e))
 
         return result
 
@@ -523,8 +556,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             result.mark_failure("❌ 跳过，因为发现文件不存在")
             results.append(result)
 
-        # 测试 DEVHUB_RUNTIME_DIR 环境变量支持（无论其他测试是否成功）
-        results.append(self.test_custom_runtime_dir_discovery_helper())
+        # 测试 DEVHUB_RUNTIME_DIR 环境变量支持（真实 Hub 进程路径）
         results.append(self.test_custom_runtime_dir_real_hub_files())
 
         return results
