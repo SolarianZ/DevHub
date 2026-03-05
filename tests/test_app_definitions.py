@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 import json
+import uuid
 
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -25,9 +26,13 @@ from tests.test_base import (
 class TestAppDefinitions(unittest.TestCase):
     """AppDefinition 测试类"""
 
+    @staticmethod
+    def _new_app_id(prefix: str) -> str:
+        return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
-        app_id = "test-app-1"
+        app_id = self._new_app_id("test-app")
         test_app_path = write_app_definition(
             app_id,
             display_name="Test Application",
@@ -47,7 +52,7 @@ class TestAppDefinitions(unittest.TestCase):
         test_app_path = None
 
         try:
-            _, test_app_path = self.create_test_app_definition()
+            app_id, test_app_path = self.create_test_app_definition()
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -59,7 +64,7 @@ class TestAppDefinitions(unittest.TestCase):
             definitions = response["result"]["definitions"]
             result.add_detail(f"✅ 返回 {len(definitions)} 个应用程序定义")
 
-            found_test_app = any(d.get("appId") == "test-app-1" for d in definitions)
+            found_test_app = any(d.get("appId") == app_id for d in definitions)
             if not found_test_app:
                 result.mark_failure("❌ 未找到测试应用程序定义")
                 return result
@@ -140,7 +145,9 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             definitions_dir = get_definitions_dir()
-            invalid_app_path = os.path.join(definitions_dir, "invalid-app.json")
+            invalid_filename = f"invalid-app-{uuid.uuid4().hex[:8]}.json"
+            invalid_app_path = os.path.join(definitions_dir, invalid_filename)
+            invalid_app_id = os.path.splitext(invalid_filename)[0]
 
             # 缺少 appId/displayName
             with open(invalid_app_path, "w", encoding="utf-8") as f:
@@ -153,7 +160,7 @@ class TestAppDefinitions(unittest.TestCase):
                 return result
 
             definitions = response["result"]["definitions"]
-            found_invalid_app = any(d.get("appId") == "invalid-app" for d in definitions)
+            found_invalid_app = any(d.get("appId") == invalid_app_id for d in definitions)
             if found_invalid_app:
                 result.mark_failure("❌ DevHub 错误地加载了无效定义")
                 return result
@@ -174,10 +181,11 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             definitions_dir = get_definitions_dir()
-            invalid_app_path = os.path.join(definitions_dir, "invalid app id.json")
+            invalid_app_id = f"invalid app id {uuid.uuid4().hex[:6]}"
+            invalid_app_path = os.path.join(definitions_dir, f"{invalid_app_id}.json")
 
             invalid_app = {
-                "appId": "invalid app id",
+                "appId": invalid_app_id,
                 "displayName": "Invalid AppId Application"
             }
 
@@ -191,7 +199,7 @@ class TestAppDefinitions(unittest.TestCase):
                 return result
 
             definitions = response["result"]["definitions"]
-            found_invalid_app = any(d.get("appId") == "invalid app id" for d in definitions)
+            found_invalid_app = any(d.get("appId") == invalid_app_id for d in definitions)
             if found_invalid_app:
                 result.mark_failure("❌ DevHub 错误地加载了 appId 格式无效的定义")
                 return result
@@ -212,10 +220,11 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             definitions_dir = get_definitions_dir()
-            mismatch_path = os.path.join(definitions_dir, "mismatch-name.json")
+            mismatch_path = os.path.join(definitions_dir, f"mismatch-name-{uuid.uuid4().hex[:8]}.json")
+            real_app_id = f"real-app-id-{uuid.uuid4().hex[:8]}"
 
             mismatch_app = {
-                "appId": "real-app-id",
+                "appId": real_app_id,
                 "displayName": "Mismatch Name Application"
             }
 
@@ -229,7 +238,7 @@ class TestAppDefinitions(unittest.TestCase):
                 return result
 
             definitions = response["result"]["definitions"]
-            found = any(d.get("appId") == "real-app-id" for d in definitions)
+            found = any(d.get("appId") == real_app_id for d in definitions)
             if found:
                 result.mark_failure("❌ 文件名与 appId 不一致的定义不应被加载")
                 return result

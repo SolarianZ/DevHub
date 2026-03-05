@@ -635,26 +635,45 @@ class TestWsEvents:
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
 
-            time.sleep(0.2)
+            reconnect_deadline = time.time() + 3
+            ws2 = None
+            subscription_id = None
 
-            with SimpleWebSocketClient(ws_url) as ws2:
-                auth_response = self._authenticate(ws2, token, request_id="auth-7-2")
-                if not RpcAssertions.expect_success(result, auth_response):
-                    return result
+            while time.time() < reconnect_deadline:
+                try:
+                    ws2 = SimpleWebSocketClient(ws_url)
+                    ws2.connect()
 
-                ws2.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "sub-7-2",
-                    "method": "hub.events.subscribe",
-                    "params": {
-                        "types": ["app.instance.registered"]
-                    }
-                })
-                subscribe_response = ws2.recv_json(timeout=3)
-                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
-                    return result
-                subscription_id = subscribe_response["result"].get("subscriptionId")
+                    auth_response = self._authenticate(ws2, token, request_id="auth-7-2")
+                    if not RpcAssertions.expect_success(result, auth_response):
+                        ws2.close()
+                        return result
 
+                    ws2.send_json({
+                        "jsonrpc": "2.0",
+                        "id": "sub-7-2",
+                        "method": "hub.events.subscribe",
+                        "params": {
+                            "types": ["app.instance.registered"]
+                        }
+                    })
+                    subscribe_response = ws2.recv_json(timeout=3)
+                    if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                        ws2.close()
+                        return result
+
+                    subscription_id = subscribe_response["result"].get("subscriptionId")
+                    break
+                except (TimeoutError, WebSocketClosed, RuntimeError):
+                    if ws2 is not None:
+                        ws2.close()
+                    ws2 = None
+
+            if ws2 is None or not subscription_id:
+                result.mark_failure("Reconnect did not finish before timeout")
+                return result
+
+            try:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
@@ -677,8 +696,10 @@ class TestWsEvents:
                 if found_types is None:
                     return result
                 if not expected_types.issubset(set(found_types)):
-                    result.mark_failure(f"❌ 重连后未收到预期事件: {found_types}")
+                    result.mark_failure(f"Missing expected events after reconnect: {found_types}")
                     return result
+            finally:
+                ws2.close()
 
             result.mark_success()
         except Exception as e:

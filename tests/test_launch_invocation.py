@@ -49,6 +49,10 @@ class TestLaunchInvocation(unittest.TestCase):
         )
 
     @staticmethod
+    def _new_app_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
     def _instance_id(prefix):
         return new_instance_id(prefix)
 
@@ -59,7 +63,7 @@ class TestLaunchInvocation(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-launch-notify-app"
+            app_id = self._new_app_id("m2-launch-notify-app")
             definition_path = self._create_definition(app_id, include_launch=True)
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -137,7 +141,7 @@ class TestLaunchInvocation(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-launch-missing-config"
+            app_id = self._new_app_id("m2-launch-missing-config")
             definition_path = self._create_definition(app_id, include_launch=False)
 
             base_url, token = DiscoveryService.get_hub_info()

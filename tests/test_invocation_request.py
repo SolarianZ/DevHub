@@ -32,6 +32,10 @@ class TestInvocationRequest(unittest.TestCase):
         return write_app_definition(app_id, rpc=rpc, events=False)
 
     @staticmethod
+    def _new_app_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
     def _instance_id(prefix):
         return new_instance_id(prefix)
 
@@ -42,7 +46,7 @@ class TestInvocationRequest(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-request-success-app"
+            app_id = self._new_app_id("m2-request-success-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -126,7 +130,7 @@ class TestInvocationRequest(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-request-timeout-app"
+            app_id = self._new_app_id("m2-request-timeout-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -206,7 +210,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-request-ttl-expired-app"
+            app_id = self._new_app_id("m2-request-ttl-expired-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -253,7 +257,7 @@ class TestInvocationRequest(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-request-cancel-app"
+            app_id = self._new_app_id("m2-request-cancel-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -412,7 +416,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-request-offline-app"
+            app_id = self._new_app_id("m2-request-offline-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -450,7 +454,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-request-target-missing-app"
+            app_id = self._new_app_id("m2-request-target-missing-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -490,7 +494,7 @@ class TestInvocationRequest(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-request-failed-app"
+            app_id = self._new_app_id("m2-request-failed-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -579,7 +583,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-request-rpc-disabled-app"
+            app_id = self._new_app_id("m2-request-rpc-disabled-app")
             definition_path = self._create_definition(app_id, rpc=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)

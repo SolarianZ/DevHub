@@ -31,6 +31,10 @@ class TestInvocationNotify(unittest.TestCase):
         return write_app_definition(app_id, rpc=rpc, events=False)
 
     @staticmethod
+    def _new_app_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
     def _instance_id(prefix):
         return new_instance_id(prefix)
 
@@ -42,6 +46,24 @@ class TestInvocationNotify(unittest.TestCase):
             hub_info = json.load(f)
         return hub_info.get("runtimeTuning", {}).get("leaseSeconds")
 
+    @staticmethod
+    def _poll_until_invocation(client, instance_id, invocation_id, timeout_sec=3):
+        deadline = time.time() + timeout_sec
+        last_response = None
+
+        while time.time() < deadline:
+            remaining_ms = int((deadline - time.time()) * 1000)
+            wait_ms = min(200, max(50, remaining_ms))
+            last_response = client.poll_once(instance_id, max_count=10, wait_ms=wait_ms)
+            if "error" in last_response:
+                return False, last_response
+
+            items = last_response.get("result", {}).get("items", [])
+            if any(item.get("invocationId") == invocation_id for item in items):
+                return True, last_response
+
+        return False, last_response
+
     def test_notify_online_delivery(self):
         """M2-NOTIFY-001: 在线 notify 后可被 poll 拉取"""
         result = TestResult("M2-NOTIFY-001 notify 在线投递")
@@ -49,7 +71,7 @@ class TestInvocationNotify(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-notify-online-app"
+            app_id = self._new_app_id("m2-notify-online-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -141,7 +163,7 @@ class TestInvocationNotify(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = "m2-notify-pending-app"
+            app_id = self._new_app_id("m2-notify-pending-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -171,14 +193,12 @@ class TestInvocationNotify(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            time.sleep(0.1)
-            poll_response = client.poll_once(callee_instance_id, max_count=10, wait_ms=100)
-            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+            delivered, poll_response = self._poll_until_invocation(client, callee_instance_id, invocation_id, timeout_sec=3)
+            if not isinstance(poll_response, dict) or "error" in poll_response:
+                result.mark_failure(f"❌ poll 返回错误: {poll_response}")
                 return result
 
-            items = poll_response["result"]["items"]
-            found = any(item.get("invocationId") == invocation_id for item in items)
-            if not found:
+            if not delivered:
                 result.mark_failure("❌ 实例上线后未拉取到 Pending invocation")
                 return result
 
@@ -269,7 +289,7 @@ class TestInvocationNotify(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-notify-target-missing-app"
+            app_id = self._new_app_id("m2-notify-target-missing-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -303,7 +323,7 @@ class TestInvocationNotify(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = "m2-notify-rpc-disabled-app"
+            app_id = self._new_app_id("m2-notify-rpc-disabled-app")
             definition_path = self._create_definition(app_id, rpc=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)

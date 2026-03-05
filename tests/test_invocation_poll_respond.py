@@ -30,6 +30,10 @@ class TestInvocationPollRespond(unittest.TestCase):
         return write_app_definition(app_id, rpc=True, events=False)
 
     @staticmethod
+    def _new_app_id(prefix):
+        return f"{prefix}-{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
     def _instance_id(prefix):
         return new_instance_id(prefix)
 
@@ -80,7 +84,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-poll-disabled-app"
+            app_id = self._new_app_id("m2-poll-disabled-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -120,7 +124,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-respond-disabled-app"
+            app_id = self._new_app_id("m2-respond-disabled-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -160,7 +164,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-poll-respond-app"
+            app_id = self._new_app_id("m2-poll-respond-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -224,7 +228,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_b = None
 
         try:
-            app_id = "m2-poll-respond-non-holder-app"
+            app_id = self._new_app_id("m2-poll-respond-non-holder-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -294,7 +298,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-respond-xor-app"
+            app_id = self._new_app_id("m2-respond-xor-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -385,7 +389,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = "m2-lease-redelivery-lite-app"
+            app_id = self._new_app_id("m2-lease-redelivery-lite-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -466,7 +470,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_b = None
 
         try:
-            app_id = "m2-lease-redelivery-app"
+            app_id = self._new_app_id("m2-lease-redelivery-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)

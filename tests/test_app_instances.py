@@ -55,20 +55,23 @@ class TestAppInstances(unittest.TestCase):
 
         return threshold
 
-    def _cleanup_test_instances(self, app_ids):
-        """清理测试实例"""
+    def _cleanup_test_instances(self, instance_ids, result=None):
+        """按 instanceId 清理测试实例，并记录清理失败信息。"""
+        targets = [instance_id for instance_id in instance_ids if instance_id]
+        if not targets:
+            return
+
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            list_response = client.call("hub.apps.listInstances", {"includeAllScopes": True, "includeOffline": True})
-            if "result" not in list_response:
-                return
-            instances = list_response["result"].get("instances", [])
-            for instance in instances:
-                if instance.get("appId") in app_ids:
-                    client.call("hub.apps.unregisterInstance", {"instanceId": instance.get("instanceId")})
-        except Exception:
-            pass
+            for instance_id in targets:
+                response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+                error = response.get("error") if isinstance(response, dict) else None
+                if error and error.get("message") != "instance_not_found" and result is not None:
+                    result.add_detail(f"WARN cleanup instance failed: instanceId={instance_id}, error={error}")
+        except Exception as exc:
+            if result is not None:
+                result.add_detail(f"WARN cleanup exception: {exc}")
 
     def _validate_app_instance_fields(self, result, instance):
         """验证 AppInstance 包含必备字段"""
@@ -144,7 +147,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-m1-core"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -180,7 +183,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["app-not-in-definitions"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -236,7 +239,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-upsert"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -282,7 +285,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-heartbeat"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -353,7 +356,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-unregister"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -445,7 +448,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-list-1", "test-app-list-2"])
+            self._cleanup_test_instances([locals().get("instance_id_1"), locals().get("instance_id_2")], result)
 
         return result
 
@@ -499,7 +502,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-default-scope"])
+            self._cleanup_test_instances([locals().get("instance_id_global"), locals().get("instance_id_scoped")], result)
 
         return result
 
@@ -567,7 +570,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-scope-global-explicit"])
+            self._cleanup_test_instances([locals().get("scoped_global_instance_id"), locals().get("null_global_instance_id")], result)
 
         return result
 
@@ -655,7 +658,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-empty-scope-global"])
+            self._cleanup_test_instances([locals().get("empty_scope_instance_id"), locals().get("null_scope_instance_id"), locals().get("scoped_instance_id")], result)
 
         return result
 
@@ -708,7 +711,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-scope-match"])
+            self._cleanup_test_instances([locals().get("instance_id_1"), locals().get("instance_id_2")], result)
 
         return result
 
@@ -742,7 +745,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-invoke"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -803,7 +806,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-offline"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
@@ -855,7 +858,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances(["test-app-offline-include"])
+            self._cleanup_test_instances([locals().get("instance_id")], result)
 
         return result
 
