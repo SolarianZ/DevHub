@@ -430,7 +430,13 @@ public class InvocationScopeRoutingTests : IDisposable
             var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
             var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
             var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-            var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+            string? launchArguments = null;
+            var processLauncher = new Mock<IProcessLauncher>();
+            processLauncher
+                .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+                .Callback<LaunchConfiguration, string?>((_, args) => launchArguments = args)
+                .Returns(System.Diagnostics.Process.GetCurrentProcess());
+            var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, processLauncher.Object, new SystemClock(), _launchLogger.Object);
             var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
             var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
@@ -518,7 +524,8 @@ public class InvocationScopeRoutingTests : IDisposable
                 autoLaunchAppId,
                 rpcEnabled: true,
                 includeLaunch: true,
-                dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+                dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+                argsTemplate: "{scopeOrGlobal}");
             definitionProvider.Refresh();
 
             var autoLaunchResponse = await invocationHandler.HandleAsync(
@@ -563,6 +570,9 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Null(launchAfterAutoLaunch.Error);
             var launchResult = JsonSerializer.SerializeToElement(launchAfterAutoLaunch.Result);
             Assert.Equal("already_running", launchResult.GetProperty("status").GetString());
+            var expectedLaunchArguments = targetScope is null ? "global" : targetScope;
+            Assert.Equal(expectedLaunchArguments, launchArguments);
+            processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
 
             var noDefinitionAppId = $"m3-scope-010-nodef-{scopeTag}";
             var noDefinitionResponse = await invocationHandler.HandleAsync(
@@ -683,7 +693,12 @@ public class InvocationScopeRoutingTests : IDisposable
         }
     }
 
-    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
+    private void WriteDefinition(
+        string appId,
+        bool rpcEnabled,
+        bool includeLaunch = false,
+        string? dedupeKeyTemplate = null,
+        string? argsTemplate = null)
     {
         var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
         var payload = new Dictionary<string, object?>
@@ -702,7 +717,7 @@ public class InvocationScopeRoutingTests : IDisposable
             var launch = new Dictionary<string, object?>
             {
                 ["exePath"] = "dotnet",
-                ["argsTemplate"] = "--version"
+                ["argsTemplate"] = argsTemplate ?? "--version"
             };
 
             if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))

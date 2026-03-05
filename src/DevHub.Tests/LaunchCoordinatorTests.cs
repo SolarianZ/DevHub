@@ -88,12 +88,11 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-started.app", includeLaunch: true);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
-        var definitionProvider = new DefinitionProvider(definitionLoader);
-        definitionProvider.Refresh();
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-started.app",
@@ -107,6 +106,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -114,7 +114,11 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-starting.app", includeLaunch: true);
 
-        var coordinator = CreateCoordinator();
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-starting.app",
@@ -128,6 +132,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -308,8 +313,13 @@ public class LaunchCoordinatorTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{httpBaseUrl}");
 
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
         WriteHubRuntime("http://127.0.0.1:61001");
-        var coordinator = CreateCoordinator();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var first = await coordinator.LaunchAsync(
             appId: "launch-explicit-dedupe.app",
@@ -331,6 +341,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("already_running", second.Status);
         Assert.Equal(first.LaunchId, second.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -341,7 +352,11 @@ public class LaunchCoordinatorTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}:{httpBaseUrl}");
 
-        var coordinator = CreateCoordinator();
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         WriteHubRuntime("http://127.0.0.1:62001");
         var first = await coordinator.LaunchAsync(
@@ -364,6 +379,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("started", second.Status);
         Assert.NotEqual(first.LaunchId, second.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
     }
 
     [Fact]

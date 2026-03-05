@@ -1,8 +1,10 @@
 ﻿namespace DevHub.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
@@ -194,7 +196,11 @@ public class LaunchScopeTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
-        var coordinator = CreateCoordinator();
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher.Object);
 
         var scopeA = await coordinator.LaunchAsync(
             appId: "launch-scope-isolation.app",
@@ -215,6 +221,7 @@ public class LaunchScopeTests : IDisposable
         Assert.Equal("started", scopeA.Status);
         Assert.Equal("started", scopeB.Status);
         Assert.NotEqual(scopeA.LaunchId, scopeB.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -227,7 +234,8 @@ public class LaunchScopeTests : IDisposable
             appId,
             rpcEnabled: true,
             includeLaunch: true,
-            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            argsTemplate: "--scope {scopeOrGlobal}");
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
@@ -237,7 +245,13 @@ public class LaunchScopeTests : IDisposable
         var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        string? launchArguments = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, args) => launchArguments = args)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, processLauncher.Object, new SystemClock(), _launchLogger.Object);
         var invocationHandler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
         var launchHandler = new LaunchHandler(launchCoordinator, _launchHandlerLogger.Object);
 
@@ -279,6 +293,8 @@ public class LaunchScopeTests : IDisposable
         Assert.Null(launchResponse.Error);
         var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
         Assert.Equal("already_running", launchResult.GetProperty("status").GetString());
+        Assert.Equal("--scope workspace-A", launchArguments);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     /// <summary>
@@ -294,17 +310,28 @@ public class LaunchScopeTests : IDisposable
         }
     }
 
-    private LaunchCoordinator CreateCoordinator()
+    private LaunchCoordinator CreateCoordinator(IProcessLauncher? processLauncher = null)
     {
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        return new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        return new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            provider,
+            processLauncher ?? new ProcessLauncher(),
+            new SystemClock(),
+            _launchLogger.Object);
     }
 
-    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch, string? dedupeKeyTemplate = null)
+    private void WriteDefinition(
+        string appId,
+        bool rpcEnabled,
+        bool includeLaunch,
+        string? dedupeKeyTemplate = null,
+        string? argsTemplate = null)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -322,7 +349,7 @@ public class LaunchScopeTests : IDisposable
             var launch = new Dictionary<string, object?>
             {
                 ["exePath"] = "dotnet",
-                ["argsTemplate"] = "--version"
+                ["argsTemplate"] = argsTemplate ?? "--version"
             };
 
             if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))

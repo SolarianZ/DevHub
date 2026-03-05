@@ -7,7 +7,6 @@ using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using FluentAssertions;
 
 [Trait("Category", "Impl")]
 public class NegativeTests : IDisposable
@@ -39,7 +38,7 @@ public class NegativeTests : IDisposable
         var result = appRegistry.Heartbeat("non-existent-instance", out _);
 
         // Assert
-        result.Should().BeFalse();
+        Assert.False(result);
     }
 
     [Fact]
@@ -52,7 +51,7 @@ public class NegativeTests : IDisposable
         var result = appRegistry.UnregisterInstance("non-existent-instance");
 
         // Assert
-        result.Should().BeFalse();
+        Assert.False(result);
     }
 
     [Fact]
@@ -65,7 +64,7 @@ public class NegativeTests : IDisposable
         var result = appRegistry.GetInstance("non-existent-instance");
 
         // Assert
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -78,7 +77,7 @@ public class NegativeTests : IDisposable
         var result = definitionLoader.GetDefinition("non-existent-app-id");
 
         // Assert
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -115,10 +114,10 @@ public class NegativeTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
-        response.Should().NotBeNull();
-        response.Id.Should().Be("1");
-        response.Error.Should().NotBeNull();
-        response.Error.Code.Should().Be(-32602); // Invalid params
+        Assert.NotNull(response);
+        Assert.Equal("1", response.Id);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
     }
 
     [Fact]
@@ -147,11 +146,11 @@ public class NegativeTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
-        response.Should().NotBeNull();
-        response.Id.Should().Be("2");
-        response.Error.Should().NotBeNull();
-        response.Error.Code.Should().Be(-32602); // Invalid params
-        response.Error.Message.Should().Be("invalid_params");
+        Assert.NotNull(response);
+        Assert.Equal("2", response.Id);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
     }
 
     [Fact]
@@ -171,11 +170,11 @@ public class NegativeTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
-        response.Should().NotBeNull();
-        response.Id.Should().Be("3");
-        response.Error.Should().NotBeNull();
-        response.Error.Code.Should().Be(-32602); // Invalid params
-        response.Error.Message.Should().Be("invalid_params");
+        Assert.NotNull(response);
+        Assert.Equal("3", response.Id);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
     }
 
     [Fact]
@@ -195,10 +194,10 @@ public class NegativeTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
-        response.Should().NotBeNull();
-        response.Id.Should().Be("2");
-        response.Error.Should().NotBeNull();
-        response.Error.Code.Should().Be(-32602); // Invalid params
+        Assert.NotNull(response);
+        Assert.Equal("2", response.Id);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
     }
 
     [Fact]
@@ -220,10 +219,10 @@ public class NegativeTests : IDisposable
         var response = await handler.HandleAsync(request, CancellationToken.None);
 
         // Assert
-        response.Should().NotBeNull();
-        response.Id.Should().Be("3");
-        response.Error.Should().NotBeNull();
-        response.Error.Code.Should().Be(-32602); // Invalid params
+        Assert.NotNull(response);
+        Assert.Equal("3", response.Id);
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
     }
 
     public void Dispose()
