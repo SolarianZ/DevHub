@@ -12,7 +12,13 @@ import time
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import TestReport, create_temp_directory
+from tests.test_base import (
+    TEST_HUB_COMMAND_ENV_VAR,
+    TEST_HUB_CWD_ENV_VAR,
+    TEST_HUB_ENV_JSON_ENV_VAR,
+    TestReport,
+    create_temp_directory,
+)
 from tests.test_launch_discovery import TestLaunchDiscovery
 from tests.test_auth_protocol import TestAuthProtocol
 from tests.test_ws_events import TestWsEvents
@@ -279,6 +285,9 @@ def print_usage():
     print("  --smoke       Run minimal cross-platform smoke suite")
     print("  --fast        Run fast suite (skip timeout/offline long tests)")
     print("  --full        Run full suite including timeout/offline long tests")
+    print("  --isolated-hub-command   Override the launcher used by isolated hub tests")
+    print("  --isolated-hub-cwd       Override the working directory used by isolated hub tests")
+    print("  --isolated-hub-env-json  Extra JSON env overrides for isolated hub tests")
 
 
 def main():
@@ -292,8 +301,18 @@ def main():
     mode_group.add_argument("--smoke", action="store_true", help="Run minimal cross-platform smoke suite")
     mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout/offline long tests)")
     mode_group.add_argument("--full", action="store_true", help="Run full suite including timeout/offline long tests")
+    parser.add_argument("--isolated-hub-command", help="Override the launcher used by isolated hub tests")
+    parser.add_argument("--isolated-hub-cwd", help="Override the working directory used by isolated hub tests")
+    parser.add_argument("--isolated-hub-env-json", help="Extra JSON env overrides for isolated hub tests")
 
     args = parser.parse_args()
+
+    if args.isolated_hub_command:
+        os.environ[TEST_HUB_COMMAND_ENV_VAR] = args.isolated_hub_command
+    if args.isolated_hub_cwd:
+        os.environ[TEST_HUB_CWD_ENV_VAR] = args.isolated_hub_cwd
+    if args.isolated_hub_env_json:
+        os.environ[TEST_HUB_ENV_JSON_ENV_VAR] = args.isolated_hub_env_json
 
     if not args.no_header:
         print("=" * 60)

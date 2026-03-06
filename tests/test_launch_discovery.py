@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import time
-import uuid
 import tempfile
 import subprocess
 import threading
@@ -16,7 +15,15 @@ import unittest
 # 添加项目根目录到 Python 模块搜索路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import DiscoveryService, RpcClient, TestResult, temporary_env_var
+from tests.test_base import (
+    DiscoveryService,
+    RpcClient,
+    TestResult,
+    describe_test_hub_command,
+    start_isolated_hub_process,
+    temporary_env_var,
+    validate_current_user_only_file_access,
+)
 
 
 class TestLaunchDiscovery(unittest.TestCase):
@@ -238,90 +245,12 @@ class TestLaunchDiscovery(unittest.TestCase):
                 result.mark_failure(f"❌ tokenFile 指向路径不存在: {token_path}")
                 return result
 
-            # 检查 token.txt 权限
-            if os.name == "nt":  # Windows 系统
-                try:
-                    import win32api
-                    import win32security
-                    import ntsecuritycon as con
-
-                    # 获取文件安全描述符
-                    sd_token = win32security.GetFileSecurity(token_path, win32security.DACL_SECURITY_INFORMATION)
-                    dacl_token = sd_token.GetSecurityDescriptorDacl()
-                    sd_hub = win32security.GetFileSecurity(hub_json_path, win32security.DACL_SECURITY_INFORMATION)
-                    dacl_hub = sd_hub.GetSecurityDescriptorDacl()
-
-                    # 获取当前用户 SID
-                    user_sid = win32security.GetTokenInformation(
-                        win32security.OpenProcessToken(
-                            win32api.GetCurrentProcess(),
-                            win32security.TOKEN_QUERY
-                        ),
-                        win32security.TokenUser
-                    )[0]
-
-                    # 检查 token.txt 是否只有当前用户有访问权限
-                    has_only_user_access_token = True
-                    for i in range(dacl_token.GetAceCount()):
-                        ace = dacl_token.GetAce(i)
-                        ace_type, ace_flags, ace_data = ace
-                        if ace_type == win32security.ACCESS_ALLOWED_ACE_TYPE:
-                            sid = ace_data[0]
-                            if sid != user_sid:
-                                has_only_user_access_token = False
-                                break
-
-                    if has_only_user_access_token:
-                        result.add_detail("✅ Token 文件权限正确（仅当前用户可访问）")
-                    else:
-                        result.mark_failure("❌ Token 文件权限不正确")
-                        return result
-
-                    # 检查 hub.json 是否只有当前用户有访问权限
-                    has_only_user_access_hub = True
-                    for i in range(dacl_hub.GetAceCount()):
-                        ace = dacl_hub.GetAce(i)
-                        ace_type, ace_flags, ace_data = ace
-                        if ace_type == win32security.ACCESS_ALLOWED_ACE_TYPE:
-                            sid = ace_data[0]
-                            if sid != user_sid:
-                                has_only_user_access_hub = False
-                                break
-
-                    if has_only_user_access_hub:
-                        result.add_detail("✅ hub.json 文件权限正确（仅当前用户可访问）")
-                    else:
-                        result.mark_failure("❌ hub.json 文件权限不正确")
-                        return result
-
-                except ImportError:
-                    result.mark_failure("❌ 无法检查 Windows 文件权限：缺少 pywin32 库，请运行 'pip install pywin32'")
+            for display_name, file_path in (("Token 文件", token_path), ("hub.json 文件", hub_json_path)):
+                is_secure, detail = validate_current_user_only_file_access(file_path)
+                if not is_secure:
+                    result.mark_failure(f"❌ {display_name} 权限不正确：{detail}")
                     return result
-                except Exception as e:
-                    result.mark_failure(f"❌ 检查 Windows 文件权限时出错：{e}")
-                    return result
-
-            else:  # 非 Windows 系统，简化检查
-                try:
-                    # Spec 要求“仅当前用户可访问”，因此只要求 group/other 位为 0。
-                    st_mode_token = os.stat(token_path).st_mode
-                    token_perm = st_mode_token & 0o777
-                    if (token_perm & 0o077) != 0 or (token_perm & 0o400) == 0:
-                        result.mark_failure(f"❌ Token 文件权限不正确: 0o{oct(st_mode_token & 0o777)[2:]}")
-                        return result
-                    result.add_detail(f"✅ Token 文件权限符合仅当前用户可访问约束: 0o{oct(token_perm)[2:]}")
-
-                    # hub.json 同样要求仅当前用户可访问。
-                    st_mode_hub = os.stat(hub_json_path).st_mode
-                    hub_perm = st_mode_hub & 0o777
-                    if (hub_perm & 0o077) != 0 or (hub_perm & 0o400) == 0:
-                        result.mark_failure(f"❌ hub.json 文件权限不正确: 0o{oct(st_mode_hub & 0o777)[2:]}")
-                        return result
-                    result.add_detail(f"✅ hub.json 文件权限符合仅当前用户可访问约束: 0o{oct(hub_perm)[2:]}")
-
-                except Exception as e:
-                    result.mark_failure(f"❌ 检查文件权限时出错：{e}")
-                    return result
+                result.add_detail(f"✅ {display_name} 权限正确（仅当前用户可访问）：{detail}")
 
             result.mark_success()
 
@@ -331,16 +260,10 @@ class TestLaunchDiscovery(unittest.TestCase):
         return result
 
     def test_hub_json_atomic_write(self):
-        """Validate hub.json atomic update behavior mandated by spec."""
-        result = TestResult("Validate hub.json atomic update behavior")
+        """测试 Spec 要求的 hub.json 原子更新行为。"""
+        result = TestResult("测试 hub.json 原子更新行为")
 
         try:
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            host_project = os.path.join(project_root, "src", "DevHub.Host", "DevHub.Host.csproj")
-            if not os.path.exists(host_project):
-                result.mark_failure(f"Host project not found: {host_project}")
-                return result
-
             required_fields = ["protocolVersion", "pid", "httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc", "runtimeTuning"]
             update_rounds = 6
             read_errors = []
@@ -348,6 +271,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             read_count = 0
             rewrite_observations = []
             stop_event = threading.Event()
+            result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
 
             with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-atomic-") as temp_root:
                 runtime_dir = os.path.join(temp_root, "runtime")
@@ -400,7 +324,6 @@ class TestLaunchDiscovery(unittest.TestCase):
                         time.sleep(0.001)
 
                 def restart_hub_and_collect_snapshots():
-                    single_instance_slot = f"test-atomic-{uuid.uuid4().hex[:8]}"
                     last_snapshot = None
 
                     for i in range(update_rounds):
@@ -409,28 +332,8 @@ class TestLaunchDiscovery(unittest.TestCase):
 
                         process = None
                         try:
-                            env = os.environ.copy()
-                            env["DEVHUB_RUNTIME_DIR"] = runtime_dir
-                            env["DEVHUB_APPDEFS_DIR"] = definitions_dir
-                            env["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = single_instance_slot
-
                             with open(host_log_path, "a+", encoding="utf-8", errors="backslashreplace") as log_file:
-                                process = subprocess.Popen(
-                                    [
-                                        "dotnet",
-                                        "run",
-                                        "--project",
-                                        host_project,
-                                        "-c",
-                                        "Release",
-                                        "--no-build",
-                                        "--no-launch-profile"
-                                    ],
-                                    cwd=project_root,
-                                    stdout=log_file,
-                                    stderr=subprocess.STDOUT,
-                                    text=True,
-                                    env=env)
+                                process = start_isolated_hub_process(runtime_dir, definitions_dir, log_file)
 
                                 if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
                                     process_output = self._read_open_log_tail(log_file)
@@ -563,75 +466,54 @@ class TestLaunchDiscovery(unittest.TestCase):
         process = None
 
         try:
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            host_project = os.path.join(project_root, "src", "DevHub.Host", "DevHub.Host.csproj")
-            if not os.path.exists(host_project):
-                result.mark_failure(f"❌ 未找到 DevHub.Host.csproj: {host_project}")
-                return result
-
             with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-real-") as temp_root:
                 runtime_dir = os.path.join(temp_root, "runtime")
                 definitions_dir = os.path.join(temp_root, "apps", "definitions")
                 os.makedirs(definitions_dir, exist_ok=True)
+                result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
 
-                single_instance_slot = f"test-runtime-{uuid.uuid4().hex[:8]}"
                 try:
                     with temporary_env_var("DEVHUB_RUNTIME_DIR", runtime_dir):
                         with temporary_env_var("DEVHUB_APPDEFS_DIR", definitions_dir):
-                            with temporary_env_var("DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS", single_instance_slot):
-                                host_log_path = os.path.join(temp_root, "host-runtime-dir.log")
-                                with open(host_log_path, "w+", encoding="utf-8", errors="backslashreplace") as log_file:
-                                    process = subprocess.Popen(
-                                        [
-                                            "dotnet",
-                                            "run",
-                                            "--project",
-                                            host_project,
-                                            "-c",
-                                            "Release",
-                                            "--no-build",
-                                            "--no-launch-profile"
-                                        ],
-                                        cwd=project_root,
-                                        stdout=log_file,
-                                        stderr=subprocess.STDOUT,
-                                        text=True)
+                            host_log_path = os.path.join(temp_root, "host-runtime-dir.log")
+                            with open(host_log_path, "w+", encoding="utf-8", errors="backslashreplace") as log_file:
+                                process = start_isolated_hub_process(runtime_dir, definitions_dir, log_file)
 
-                                    if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
-                                        process_output = self._read_open_log_tail(log_file)
-                                        if process.poll() is None:
-                                            result.mark_failure(
-                                                f"❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json。日志片段: {process_output}")
-                                        else:
-                                            result.mark_failure(
-                                                f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
-                                        return result
-
-                                    hub_json_path = os.path.join(runtime_dir, "hub.json")
-                                    with open(hub_json_path, "r", encoding="utf-8") as f:
-                                        hub_info = json.load(f)
-
-                                    token_file = hub_info.get("tokenFile")
-                                    if not token_file or not os.path.exists(token_file):
-                                        result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
-                                        return result
-                                    result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
-
-                                    runtime_token = os.path.join(runtime_dir, "token.txt")
-                                    if os.path.abspath(token_file) != os.path.abspath(runtime_token):
-                                        result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
-                                        return result
-
-                                    base_url, token = DiscoveryService.get_hub_info()
-                                    ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
-                                    if not ok:
-                                        process_output = self._read_open_log_tail(log_file)
+                                if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
+                                    process_output = self._read_open_log_tail(log_file)
+                                    if process.poll() is None:
                                         result.mark_failure(
-                                            f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
-                                        return result
+                                            f"❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json。日志片段: {process_output}")
+                                    else:
+                                        result.mark_failure(
+                                            f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
+                                    return result
 
-                                    result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
-                                    result.mark_success()
+                                hub_json_path = os.path.join(runtime_dir, "hub.json")
+                                with open(hub_json_path, "r", encoding="utf-8") as f:
+                                    hub_info = json.load(f)
+
+                                token_file = hub_info.get("tokenFile")
+                                if not token_file or not os.path.exists(token_file):
+                                    result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
+                                    return result
+                                result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
+
+                                runtime_token = os.path.join(runtime_dir, "token.txt")
+                                if os.path.abspath(token_file) != os.path.abspath(runtime_token):
+                                    result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
+                                    return result
+
+                                base_url, token = DiscoveryService.get_hub_info()
+                                ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
+                                if not ok:
+                                    process_output = self._read_open_log_tail(log_file)
+                                    result.mark_failure(
+                                        f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
+                                    return result
+
+                                result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
+                                result.mark_success()
                 finally:
                     # 在临时目录回收前停止子进程，避免 Windows 文件句柄占用导致删除失败。
                     self._stop_process(process)

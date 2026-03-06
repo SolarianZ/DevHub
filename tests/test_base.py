@@ -6,12 +6,20 @@ DevHub M1 测试基础类和工具函数
 import os
 import json
 import platform
+import shlex
+import subprocess
 import sys
 import requests
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+
+TEST_HUB_COMMAND_ENV_VAR = "DEVHUB_TEST_HUB_COMMAND"
+TEST_HUB_CWD_ENV_VAR = "DEVHUB_TEST_HUB_CWD"
+TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
+_INTERNAL_SINGLE_INSTANCE_SLOT_ENV_VAR = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"
 
 
 @contextmanager
@@ -108,6 +116,185 @@ def get_test_python_executable() -> str:
         return sys.executable
 
     return "python3"
+
+
+def get_test_project_root() -> str:
+    """获取测试仓库根目录。"""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _parse_command_string(raw_command: str) -> List[str]:
+    """解析命令字符串，兼容 JSON 数组或 shell 风格字符串。"""
+    candidate = raw_command.strip()
+    if not candidate:
+        raise ValueError("Hub 启动命令不能为空")
+
+    if candidate.startswith("["):
+        parsed = json.loads(candidate)
+        if not isinstance(parsed, list) or not parsed or not all(isinstance(item, str) and item for item in parsed):
+            raise ValueError("Hub 启动命令的 JSON 数组格式无效")
+        return parsed
+
+    parsed = shlex.split(candidate, posix=os.name != "nt")
+    if not parsed:
+        raise ValueError("Hub 启动命令不能为空")
+    return parsed
+
+
+def get_default_test_hub_command() -> List[str]:
+    """获取隔离 Hub 测试使用的默认启动命令。"""
+    host_project = os.path.join(get_test_project_root(), "src", "DevHub.Host", "DevHub.Host.csproj")
+    if not os.path.exists(host_project):
+        raise FileNotFoundError(f"未找到 DevHub.Host.csproj: {host_project}")
+
+    return [
+        "dotnet",
+        "run",
+        "--project",
+        host_project,
+        "-c",
+        "Release",
+        "--no-build",
+        "--no-launch-profile",
+    ]
+
+
+def resolve_test_hub_command() -> List[str]:
+    """解析隔离 Hub 测试使用的启动命令。"""
+    configured = os.environ.get(TEST_HUB_COMMAND_ENV_VAR, "").strip()
+    if configured:
+        return _parse_command_string(configured)
+
+    return get_default_test_hub_command()
+
+
+def describe_test_hub_command() -> str:
+    """返回隔离 Hub 启动命令的可读描述。"""
+    return subprocess.list2cmdline(resolve_test_hub_command())
+
+
+def resolve_test_hub_cwd() -> str:
+    """解析隔离 Hub 测试使用的工作目录。"""
+    configured = os.environ.get(TEST_HUB_CWD_ENV_VAR, "").strip()
+    if configured:
+        return configured
+
+    return get_test_project_root()
+
+
+def resolve_test_hub_env_overrides() -> Dict[str, str]:
+    """解析隔离 Hub 进程的额外环境变量覆盖。"""
+    configured = os.environ.get(TEST_HUB_ENV_JSON_ENV_VAR, "").strip()
+    if not configured:
+        return {}
+
+    overrides = json.loads(configured)
+    if not isinstance(overrides, dict):
+        raise ValueError(f"{TEST_HUB_ENV_JSON_ENV_VAR} 必须是 JSON 对象")
+
+    result: Dict[str, str] = {}
+    for key, value in overrides.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"{TEST_HUB_ENV_JSON_ENV_VAR} 包含非法环境变量名: {key}")
+        result[key] = "" if value is None else str(value)
+    return result
+
+
+def build_isolated_hub_environment(runtime_dir: str, definitions_dir: str) -> Dict[str, str]:
+    """构造隔离 Hub 进程环境变量。"""
+    env = os.environ.copy()
+    env["DEVHUB_RUNTIME_DIR"] = runtime_dir
+    env["DEVHUB_APPDEFS_DIR"] = definitions_dir
+    env.update(resolve_test_hub_env_overrides())
+    env.setdefault(_INTERNAL_SINGLE_INSTANCE_SLOT_ENV_VAR, f"test-harness-{uuid.uuid4().hex[:12]}")
+    return env
+
+
+def start_isolated_hub_process(runtime_dir: str, definitions_dir: str, log_file):
+    """启动用于黑盒测试的隔离 Hub 进程。"""
+    return subprocess.Popen(
+        resolve_test_hub_command(),
+        cwd=resolve_test_hub_cwd(),
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=build_isolated_hub_environment(runtime_dir, definitions_dir),
+    )
+
+
+def _parse_windows_ace(ace) -> Tuple[int, int, int, Any]:
+    """兼容 pywin32 不同返回形态，提取 ACE 基础信息。"""
+    if len(ace) >= 3 and isinstance(ace[0], tuple):
+        ace_type, ace_flags = ace[0]
+        access_mask = ace[1]
+        sid = ace[2]
+        return ace_type, ace_flags, access_mask, sid
+
+    if len(ace) == 3:
+        ace_type, ace_flags, ace_data = ace
+        if isinstance(ace_data, tuple):
+            sid = ace_data[0]
+            access_mask = ace_data[1] if len(ace_data) > 1 and isinstance(ace_data[1], int) else 0
+        else:
+            sid = ace_data
+            access_mask = 0
+        return ace_type, ace_flags, access_mask, sid
+
+    raise ValueError(f"无法解析 ACE 结构: {ace}")
+
+
+def _validate_windows_current_user_only_access(path: str) -> Tuple[bool, str]:
+    """基于 ACL 语义验证文件是否仅当前用户可访问。"""
+    try:
+        import win32api
+        import win32security
+    except ImportError:
+        return False, "缺少 pywin32 库，请运行 'pip install pywin32'"
+
+    security_descriptor = win32security.GetFileSecurity(path, win32security.DACL_SECURITY_INFORMATION)
+    dacl = security_descriptor.GetSecurityDescriptorDacl()
+    if dacl is None:
+        return False, "文件缺少 DACL"
+
+    process_token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
+    current_user_sid = win32security.GetTokenInformation(process_token, win32security.TokenUser)[0]
+    current_user_sid_string = win32security.ConvertSidToStringSid(current_user_sid)
+
+    allow_ace_types = {win32security.ACCESS_ALLOWED_ACE_TYPE}
+    object_allow_ace_type = getattr(win32security, "ACCESS_ALLOWED_OBJECT_ACE_TYPE", None)
+    if object_allow_ace_type is not None:
+        allow_ace_types.add(object_allow_ace_type)
+
+    granted_sid_strings = set()
+    for index in range(dacl.GetAceCount()):
+        ace_type, _ace_flags, access_mask, ace_sid = _parse_windows_ace(dacl.GetAce(index))
+        if ace_type not in allow_ace_types:
+            continue
+        if access_mask == 0:
+            continue
+        granted_sid_strings.add(win32security.ConvertSidToStringSid(ace_sid))
+
+    if current_user_sid_string not in granted_sid_strings:
+        return False, "未发现授予当前用户的允许访问项"
+
+    unexpected_subjects = sorted(
+        sid_string for sid_string in granted_sid_strings if sid_string != current_user_sid_string)
+    if unexpected_subjects:
+        return False, f"发现其他主体被授予访问权限: {', '.join(unexpected_subjects)}"
+
+    return True, f"允许访问主体仅包含当前用户 SID: {current_user_sid_string}"
+
+
+def validate_current_user_only_file_access(path: str) -> Tuple[bool, str]:
+    """验证文件是否满足“仅当前用户可访问”的规范语义。"""
+    if os.name == "nt":
+        return _validate_windows_current_user_only_access(path)
+
+    permission = os.stat(path).st_mode & 0o777
+    if (permission & 0o077) != 0 or (permission & 0o400) == 0:
+        return False, f"权限位为 0o{permission:o}"
+
+    return True, f"权限位为 0o{permission:o}"
 
 
 def write_definition(app_id: str, payload: Dict[str, Any]) -> str:

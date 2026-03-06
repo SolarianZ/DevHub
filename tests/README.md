@@ -8,7 +8,7 @@
 - .NET SDK 10.0+
 - Python 3.9+
 - Python 依赖：`pip install requests`
-- Windows ACL 严格校验依赖：`pip install pywin32`
+- Windows ACL 语义校验依赖：`pip install pywin32`
 
 ## 运行方式
 
@@ -20,10 +20,26 @@ dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
 
 ### 2) 运行 Python 集成测试
 
+#### 可选：为隔离 Hub 用例配置启动夹具
+
+`test_launch_discovery.py` 中涉及原子写入与自定义运行时目录的用例，会通过统一测试夹具启动隔离 Hub 进程。默认情况下，夹具会回退到仓库内的 Host 启动命令；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
+
+- `--isolated-hub-command` / `DEVHUB_TEST_HUB_COMMAND`：隔离 Hub 启动命令，支持 shell 字符串或 JSON 数组。
+- `--isolated-hub-cwd` / `DEVHUB_TEST_HUB_CWD`：隔离 Hub 启动命令的工作目录。
+- `--isolated-hub-env-json` / `DEVHUB_TEST_HUB_ENV_JSON`：额外环境变量覆盖，值为 JSON 对象。
+
+如必须通过实现专用环境变量启动隔离实例，应在上述夹具配置中注入，而不是在具体测试用例中写死。
+
 #### Default 模式
 
 ```bash
 python3 tests/test_runner.py
+```
+
+示例：
+
+```bash
+python3 tests/test_runner.py --isolated-hub-command "dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
 ```
 
 #### Fast 模式
