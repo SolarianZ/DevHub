@@ -185,6 +185,38 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task Impl_WriteHubJson_WhenRuntimeFileTemporarilyLocked_ShouldRetryUntilSuccess()
+    {
+        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
+        using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
+        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, _logsDirectory);
+
+        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve(_definitionsDirectory));
+        _ = manager.GetToken();
+        manager.WriteHubJson(48020, "v1");
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        var lockStream = new FileStream(hubJsonPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var writeTask = System.Threading.Tasks.Task.Run(() => manager.WriteHubJson(48021, "v2"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            await System.Threading.Tasks.Task.Delay(200);
+            Assert.False(writeTask.IsCompleted);
+        }
+
+        lockStream.Dispose();
+
+        var completedTask = await System.Threading.Tasks.Task.WhenAny(writeTask, System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(10)));
+        Assert.Same(writeTask, completedTask);
+        await writeTask;
+
+        using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        Assert.Equal("http://127.0.0.1:48021", document.RootElement.GetProperty("httpBaseUrl").GetString());
+        Assert.Equal("ws://127.0.0.1:48021/ws", document.RootElement.GetProperty("wsUrl").GetString());
+    }
+
+    [Fact]
     public void Impl_Cleanup_ShouldNotThrow()
     {
         var manager = new FileSystemManager(

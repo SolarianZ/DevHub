@@ -13,6 +13,8 @@ namespace DevHub.Core.Services;
 /// </summary>
 public class FileSystemManager
 {
+    private const int HubJsonReplaceMaxRetryCount = 40;
+    private static readonly TimeSpan HubJsonReplaceRetryDelay = TimeSpan.FromMilliseconds(50);
     private readonly ILogger<FileSystemManager> _logger;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
@@ -226,6 +228,7 @@ public class FileSystemManager
     /// <param name="hubVersion">Hub 版本号（可选）</param>
     public void WriteHubJson(int port, string? hubVersion = null)
     {
+        var tempPath = _hubJsonPath + ".tmp";
         try
         {
             _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, hubVersion);
@@ -249,23 +252,76 @@ public class FileSystemManager
                 }
             };
 
-            var tempPath = _hubJsonPath + ".tmp";
             File.WriteAllText(tempPath, System.Text.Json.JsonSerializer.Serialize(hubRuntime, new System.Text.Json.JsonSerializerOptions
             {
                 WriteIndented = true
             }));
 
-            // 使用 overwrite = true 实现原子替换（在同一卷上）
-            // 注意：跨卷移动通常不是原子的，但 runtime 目录通常在同一卷
-            File.Move(tempPath, _hubJsonPath, overwrite: true);
+            ReplaceHubJsonAtomically(tempPath);
             EnsureCurrentUserOnlyAccess(_hubJsonPath);
             _hubJsonPermissionEnsured = true;
             _logger.LogInformation("成功写入 hub.json 文件: {Path}", _hubJsonPath);
         }
         catch (Exception ex)
         {
+            TryDeleteTempFile(tempPath);
             _logger.LogError(ex, "写入 hub.json 文件失败，文件路径: {Path}", _hubJsonPath);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 以原子方式替换 hub.json，并对临时文件占用场景执行短时重试。
+    /// </summary>
+    /// <param name="tempPath">临时文件路径。</param>
+    private void ReplaceHubJsonAtomically(string tempPath)
+    {
+        Exception? lastException = null;
+
+        for (var retryIndex = 0; retryIndex < HubJsonReplaceMaxRetryCount; retryIndex++)
+        {
+            try
+            {
+                File.Move(tempPath, _hubJsonPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
+            {
+                lastException = ex;
+                if (retryIndex >= HubJsonReplaceMaxRetryCount - 1)
+                {
+                    break;
+                }
+
+                _logger.LogWarning(
+                    ex,
+                    "hub.json 原子替换失败，将重试，次数: {Retry}/{MaxRetry}，文件路径: {Path}",
+                    retryIndex + 1,
+                    HubJsonReplaceMaxRetryCount,
+                    _hubJsonPath);
+                System.Threading.Thread.Sleep(HubJsonReplaceRetryDelay);
+            }
+        }
+
+        throw new IOException($"hub.json 原子替换失败，已达到最大重试次数: {HubJsonReplaceMaxRetryCount}", lastException);
+    }
+
+    /// <summary>
+    /// 尝试删除临时文件，避免异常流程中残留脏数据。
+    /// </summary>
+    /// <param name="tempPath">临时文件路径。</param>
+    private void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+        catch (Exception cleanupException)
+        {
+            _logger.LogWarning(cleanupException, "删除临时 hub.json 文件失败: {Path}", tempPath);
         }
     }
 
