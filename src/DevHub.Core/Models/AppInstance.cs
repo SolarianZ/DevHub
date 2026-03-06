@@ -55,6 +55,7 @@ public class AppInstance
     /// <summary>
     /// 端点信息
     /// </summary>
+    [JsonIgnore]
     [JsonPropertyName("endpoints")]
     public Dictionary<string, string>? Endpoints { get; set; }
 

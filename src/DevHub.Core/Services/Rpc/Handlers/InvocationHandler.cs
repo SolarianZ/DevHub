@@ -143,7 +143,7 @@ public class InvocationHandler : IRpcHandler
         }
 
         var invocation = enqueueResult.Invocation!;
-        var waiterTask = _requestWaiter.Register(invocation.InvocationId);
+        var waiterTask = enqueueResult.WaiterTask!;
 
         var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
@@ -361,9 +361,15 @@ public class InvocationHandler : IRpcHandler
             State = InvocationState.Created
         };
 
+        Task<InvocationRequestCompletion>? waiterTask = null;
+        if (mode == InvocationMode.Request)
+        {
+            waiterTask = _requestWaiter.Register(invocation.InvocationId);
+        }
+
         _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
         PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
-        return new InvocationBuildResult(invocation, null);
+        return new InvocationBuildResult(invocation, null, waiterTask);
     }
 
     private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)
@@ -690,7 +696,10 @@ public class InvocationHandler : IRpcHandler
         return true;
     }
 
-    private sealed record InvocationBuildResult(InvocationModel? Invocation, JsonRpcResponse? ErrorResponse);
+    private sealed record InvocationBuildResult(
+        InvocationModel? Invocation,
+        JsonRpcResponse? ErrorResponse,
+        Task<InvocationRequestCompletion>? WaiterTask = null);
 
     private static string ResolveNoCandidateReason(InvocationTarget target)
     {

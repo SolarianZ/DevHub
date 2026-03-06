@@ -81,32 +81,30 @@ public sealed class RuntimePathOptions
     /// <returns>解析后的路径配置。</returns>
     public static RuntimePathOptions Resolve(string? definitionsPathOverride = null)
     {
-        var defaultRootPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "DevHub");
+        var defaultRootPath = GetDefaultRootPath();
 
         var runtimeOverride = Environment.GetEnvironmentVariable(RuntimeDirEnvironmentVariable);
-        var runtimePath = string.IsNullOrWhiteSpace(runtimeOverride)
+        var runtimePath = NormalizePath(string.IsNullOrWhiteSpace(runtimeOverride)
             ? Path.Combine(defaultRootPath, "runtime")
-            : runtimeOverride;
+            : runtimeOverride);
 
         string definitionsPath;
         if (!string.IsNullOrWhiteSpace(definitionsPathOverride))
         {
-            definitionsPath = definitionsPathOverride;
+            definitionsPath = NormalizePath(definitionsPathOverride);
         }
         else
         {
             var definitionsOverride = Environment.GetEnvironmentVariable(AppDefinitionsDirEnvironmentVariable);
-            definitionsPath = string.IsNullOrWhiteSpace(definitionsOverride)
+            definitionsPath = NormalizePath(string.IsNullOrWhiteSpace(definitionsOverride)
                 ? Path.Combine(defaultRootPath, "apps", "definitions")
-                : definitionsOverride;
+                : definitionsOverride);
         }
 
         var logOverride = Environment.GetEnvironmentVariable(LogDirEnvironmentVariable);
-        var logsPath = string.IsNullOrWhiteSpace(logOverride)
+        var logsPath = NormalizePath(string.IsNullOrWhiteSpace(logOverride)
             ? Path.Combine(defaultRootPath, "logs")
-            : logOverride;
+            : logOverride);
 
         return new RuntimePathOptions(
             rootPath: defaultRootPath,
@@ -152,14 +150,45 @@ public sealed class RuntimePathOptions
         }
 
         return new RuntimePathOptions(
-            rootPath: rootPath,
-            runtimePath: runtimePath,
-            definitionsPath: definitionsPath,
+            rootPath: NormalizePath(rootPath),
+            runtimePath: NormalizePath(runtimePath),
+            definitionsPath: NormalizePath(definitionsPath),
             instancesPath: string.IsNullOrWhiteSpace(instancesPath)
-                ? Path.Combine(rootPath, "apps", "instances")
-                : instancesPath,
+                ? Path.Combine(NormalizePath(rootPath), "apps", "instances")
+                : NormalizePath(instancesPath),
             logsPath: string.IsNullOrWhiteSpace(logsPath)
-                ? Path.Combine(rootPath, "logs")
-                : logsPath);
+                ? Path.Combine(NormalizePath(rootPath), "logs")
+                : NormalizePath(logsPath));
+    }
+
+    private static string GetDefaultRootPath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return NormalizePath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DevHub"));
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return NormalizePath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                "Library",
+                "Application Support",
+                "DevHub"));
+        }
+
+        var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        var dataHome = string.IsNullOrWhiteSpace(xdgDataHome)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".local", "share")
+            : xdgDataHome;
+
+        return NormalizePath(Path.Combine(dataHome, "DevHub"));
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return Path.GetFullPath(path);
     }
 }

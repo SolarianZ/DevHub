@@ -157,6 +157,12 @@ public class DefinitionLoader
             return false;
         }
 
+        if (definition.Launch is not null && string.IsNullOrWhiteSpace(definition.Launch.ExePath))
+        {
+            reason = "launch.exePath 缺失或为空";
+            return false;
+        }
+
         reason = string.Empty;
         return true;
     }

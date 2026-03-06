@@ -50,6 +50,30 @@ public class DefinitionProviderTests : IDisposable
         Assert.Null(missing);
     }
 
+    [Fact]
+    public void Impl_Refresh_WhenLaunchExePathMissing_ShouldIgnoreInvalidDefinition()
+    {
+        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        var payload = """
+        {
+          "appId": "broken.launch.app",
+          "displayName": "broken.launch.app",
+          "launch": {
+            "argsTemplate": "--serve"
+          }
+        }
+        """;
+
+        File.WriteAllText(Path.Combine(_tempDirectory, "broken.launch.app.json"), payload);
+
+        provider.Refresh();
+
+        Assert.Null(provider.GetDefinition("broken.launch.app"));
+        Assert.Empty(provider.GetAllDefinitions());
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -80,6 +104,5 @@ public class DefinitionProviderTests : IDisposable
         File.WriteAllText(Path.Combine(_tempDirectory, $"{appId}.json"), payload);
     }
 }
-
 
 

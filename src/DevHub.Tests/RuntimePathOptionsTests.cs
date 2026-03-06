@@ -52,15 +52,50 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
+    public void Impl_Resolve_WithoutOverrides_ShouldUsePlatformConventionalRoot()
+    {
+        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, null);
+        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, null);
+        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, null);
+
+        var options = RuntimePathOptions.Resolve();
+        var expectedRoot = GetExpectedDefaultRootPath();
+
+        Assert.Equal(expectedRoot, options.RootPath);
+        Assert.Equal(Path.Combine(expectedRoot, "runtime"), options.RuntimePath);
+        Assert.Equal(Path.Combine(expectedRoot, "apps", "definitions"), options.DefinitionsPath);
+        Assert.Equal(Path.Combine(expectedRoot, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(expectedRoot, "logs"), options.LogsPath);
+        Assert.Equal(Path.Combine(expectedRoot, "runtime", "token.txt"), options.TokenFilePath);
+        Assert.Equal(Path.Combine(expectedRoot, "runtime", "hub.json"), options.HubJsonPath);
+    }
+
+    [Fact]
+    public void Impl_Resolve_WithRelativeRuntimeOverride_ShouldNormalizeToAbsolutePath()
+    {
+        var currentDirectory = Directory.GetCurrentDirectory();
+        var relativeRuntimeOverride = Path.Combine(".", "temp", "runtime-relative");
+
+        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, relativeRuntimeOverride);
+        var options = RuntimePathOptions.Resolve();
+
+        var expectedRuntimePath = Path.GetFullPath(relativeRuntimeOverride, currentDirectory);
+        Assert.Equal(expectedRuntimePath, options.RuntimePath);
+        Assert.True(Path.IsPathFullyQualified(options.RuntimePath));
+        Assert.True(Path.IsPathFullyQualified(options.TokenFilePath));
+        Assert.True(Path.IsPathFullyQualified(options.HubJsonPath));
+        Assert.Equal(Path.Combine(expectedRuntimePath, "token.txt"), options.TokenFilePath);
+        Assert.Equal(Path.Combine(expectedRuntimePath, "hub.json"), options.HubJsonPath);
+    }
+
+    [Fact]
     public void Impl_Create_WithEquivalentInputs_ShouldMatchResolveOverlappingFields_AndKeepIsolatedLayout()
     {
         var root = Path.Combine(_tempRoot, "root");
         var runtime = Path.Combine(root, "runtime-custom");
         var definitions = Path.Combine(root, "definitions-custom");
         var logs = Path.Combine(root, "logs-custom");
-        var defaultRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "DevHub");
+        var defaultRoot = GetExpectedDefaultRootPath();
 
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtime);
         using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitions);
@@ -100,7 +135,29 @@ public class RuntimePathOptionsTests : IDisposable
         {
         }
     }
+
+    private static string GetExpectedDefaultRootPath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevHub");
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                "Library",
+                "Application Support",
+                "DevHub");
+        }
+
+        var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        var dataHome = string.IsNullOrWhiteSpace(xdgDataHome)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".local", "share")
+            : xdgDataHome;
+
+        return Path.Combine(dataHome, "DevHub");
+    }
 }
-
-
 
