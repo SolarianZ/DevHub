@@ -188,6 +188,40 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchHandler_WhenDedupeKeyTypeInvalid_ShouldReturnInvalidParams()
+    {
+        WriteDefinition(
+            "scope-launch-app",
+            rpcEnabled: true,
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var provider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var coordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
+        var handler = new LaunchHandler(coordinator, _launchHandlerLogger.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "launch-invalid-dedupe-key-type",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "scope-launch-app",
+                dedupeKey = 123,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
     {
         WriteDefinition(
@@ -364,7 +398,6 @@ public class LaunchScopeTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 
 
 
