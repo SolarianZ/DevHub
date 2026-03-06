@@ -93,6 +93,7 @@ public class DefinitionLoader
         }
         catch (Exception ex)
         {
+            _definitions = new List<AppDefinition>();
             _logger.LogError(ex, "加载应用程序定义失败，目录: {Path}", _definitionsPath);
         }
     }

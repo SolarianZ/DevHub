@@ -53,6 +53,31 @@ public class TransportValidationImplTests
     }
 
     [Fact]
+    public void Impl_4_2_HttpHeaders_WhenAuthorizationAndClientHeadersAreBothMissing_ShouldPreferUnauthorized()
+    {
+        var headers = BuildValidHeaders();
+        headers.Remove("Authorization");
+        headers.Remove("X-DevHub-ClientId");
+
+        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+            "application/json",
+            headers,
+            () => "token-1",
+            "req-auth-precedence",
+            out var errorResponse,
+            out var clientId,
+            out var clientSessionId);
+
+        Assert.False(ok);
+        Assert.Null(clientId);
+        Assert.Null(clientSessionId);
+        AssertError(errorResponse, -32001, "unauthorized", "req-auth-precedence");
+
+        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
+        Assert.Equal("missing_token", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
     {
         var root = ParseJsonElement("""

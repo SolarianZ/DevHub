@@ -114,42 +114,6 @@ public static class DevHubTransportValidator
             return false;
         }
 
-        if (!TryGetHeader(headers, "X-DevHub-ClientId", out var clientIdRaw) || string.IsNullOrWhiteSpace(clientIdRaw))
-        {
-            errorResponse = CreateErrorResponse(
-                -32600,
-                "invalid_request",
-                requestId,
-                new { reason = "missing_header", header = "X-DevHub-ClientId" });
-            return false;
-        }
-
-        var clientId = clientIdRaw.Trim();
-        validatedClientId = clientId;
-
-        if (!TryGetHeader(headers, "X-DevHub-ClientSessionId", out var sessionIdRaw) || string.IsNullOrWhiteSpace(sessionIdRaw))
-        {
-            errorResponse = CreateErrorResponse(
-                -32600,
-                "invalid_request",
-                requestId,
-                new { reason = "missing_header", header = "X-DevHub-ClientSessionId" });
-            return false;
-        }
-
-        var sessionId = sessionIdRaw.Trim();
-        if (!Guid.TryParseExact(sessionId, "D", out _))
-        {
-            errorResponse = CreateErrorResponse(
-                -32600,
-                "invalid_request",
-                requestId,
-                new { reason = "invalid_header", header = "X-DevHub-ClientSessionId" });
-            return false;
-        }
-
-        validatedClientSessionId = sessionId;
-
         if (!TryGetHeader(headers, "Authorization", out var authorizationRaw)
             || string.IsNullOrWhiteSpace(authorizationRaw)
             || !authorizationRaw.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
@@ -185,6 +149,42 @@ public static class DevHubTransportValidator
                 new { reason = "invalid_token" });
             return false;
         }
+
+        if (!TryGetHeader(headers, "X-DevHub-ClientId", out var clientIdRaw) || string.IsNullOrWhiteSpace(clientIdRaw))
+        {
+            errorResponse = CreateErrorResponse(
+                -32600,
+                "invalid_request",
+                requestId,
+                new { reason = "missing_header", header = "X-DevHub-ClientId" });
+            return false;
+        }
+
+        var clientId = clientIdRaw.Trim();
+        validatedClientId = clientId;
+
+        if (!TryGetHeader(headers, "X-DevHub-ClientSessionId", out var sessionIdRaw) || string.IsNullOrWhiteSpace(sessionIdRaw))
+        {
+            errorResponse = CreateErrorResponse(
+                -32600,
+                "invalid_request",
+                requestId,
+                new { reason = "missing_header", header = "X-DevHub-ClientSessionId" });
+            return false;
+        }
+
+        var sessionId = sessionIdRaw.Trim();
+        if (!Guid.TryParseExact(sessionId, "D", out _))
+        {
+            errorResponse = CreateErrorResponse(
+                -32600,
+                "invalid_request",
+                requestId,
+                new { reason = "invalid_header", header = "X-DevHub-ClientSessionId" });
+            return false;
+        }
+
+        validatedClientSessionId = sessionId;
 
         errorResponse = null!;
         return true;

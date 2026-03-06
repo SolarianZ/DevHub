@@ -74,6 +74,38 @@ public class DefinitionProviderTests : IDisposable
         Assert.Empty(provider.GetAllDefinitions());
     }
 
+    [Fact]
+    public void Impl_Refresh_WhenLoadFails_ShouldClearStaleSnapshot()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        WriteDefinition("provider.app");
+        provider.Refresh();
+        Assert.Single(provider.GetAllDefinitions());
+
+        var originalMode = File.GetUnixFileMode(_tempDirectory);
+
+        try
+        {
+            File.SetUnixFileMode(_tempDirectory, UnixFileMode.None);
+
+            provider.Refresh();
+
+            Assert.Empty(provider.GetAllDefinitions());
+            Assert.Null(provider.GetDefinition("provider.app"));
+        }
+        finally
+        {
+            File.SetUnixFileMode(_tempDirectory, originalMode);
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -104,5 +136,3 @@ public class DefinitionProviderTests : IDisposable
         File.WriteAllText(Path.Combine(_tempDirectory, $"{appId}.json"), payload);
     }
 }
-
-
