@@ -401,6 +401,18 @@ public class AppInstancesHandler : IRpcHandler
             return false;
         }
 
+        Dictionary<string, object?>? meta = null;
+        if (instanceElement.TryGetProperty("meta", out var metaProperty))
+        {
+            if (metaProperty.ValueKind != JsonValueKind.Object)
+            {
+                _logger.LogWarning("hub.apps.registerInstance参数无效: meta 必须为对象, RequestId: {RequestId}", requestId);
+                return false;
+            }
+
+            meta = JsonSerializer.Deserialize<Dictionary<string, object?>>(metaProperty.GetRawText());
+        }
+
         instance = new AppInstance
         {
             InstanceId = instanceId,
@@ -411,7 +423,8 @@ public class AppInstancesHandler : IRpcHandler
             {
                 Poll = pollProperty.GetBoolean(),
                 Respond = respondProperty.GetBoolean()
-            }
+            },
+            Meta = meta
         };
 
         return true;

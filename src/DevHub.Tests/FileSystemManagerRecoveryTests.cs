@@ -114,6 +114,32 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void Impl_EnsureRuntimeArtifacts_WhenHubJsonRebuilt_ShouldPreserveSessionStartedAtUtc()
+    {
+        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, _runtimeDirectory);
+        using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
+        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, _logsDirectory);
+
+        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve(_definitionsDirectory));
+        _ = manager.GetToken();
+        manager.WriteHubJson(48030, "v1");
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        using var beforeDocument = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        var beforeStartedAtUtc = beforeDocument.RootElement.GetProperty("startedAtUtc").GetString();
+
+        Thread.Sleep(20);
+        File.Delete(hubJsonPath);
+
+        manager.EnsureRuntimeArtifacts(port: 48031);
+
+        using var afterDocument = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        var afterRoot = afterDocument.RootElement;
+        Assert.Equal(beforeStartedAtUtc, afterRoot.GetProperty("startedAtUtc").GetString());
+        Assert.Equal("http://127.0.0.1:48031", afterRoot.GetProperty("httpBaseUrl").GetString());
+    }
+
+    [Fact]
     public void Impl_InitializeDirectories_WhenUsingIsolatedRoot_ShouldCreateAllFolders()
     {
         var isolatedRoot = Path.Combine(_tempDirectory, "isolated-root");
@@ -243,6 +269,5 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         }
     }
 }
-
 
 

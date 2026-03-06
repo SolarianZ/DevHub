@@ -25,6 +25,7 @@ public class FileSystemManager
     private readonly string _logsPath;
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
+    private readonly DateTime _sessionStartedAtUtc;
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
     private bool _sessionTokenInitialized;
@@ -60,6 +61,7 @@ public class FileSystemManager
         _logsPath = runtimePathOptions.LogsPath;
         _tokenFilePath = runtimePathOptions.TokenFilePath;
         _hubJsonPath = runtimePathOptions.HubJsonPath;
+        _sessionStartedAtUtc = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -234,6 +236,7 @@ public class FileSystemManager
             _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, hubVersion);
 
             Directory.CreateDirectory(_runtimePath);
+            _ = GetToken();
 
             var hubRuntime = new HubRuntime
             {
@@ -243,7 +246,7 @@ public class FileSystemManager
                 HttpBaseUrl = $"http://127.0.0.1:{port}",
                 WsUrl = $"ws://127.0.0.1:{port}/ws",
                 TokenFile = _tokenFilePath,
-                StartedAtUtc = DateTime.UtcNow,
+                StartedAtUtc = _sessionStartedAtUtc,
                 RuntimeTuning = new HubRuntimeTuning
                 {
                     LeaseSeconds = _runtimeTuningOptions.LeaseSeconds,

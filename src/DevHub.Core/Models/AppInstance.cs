@@ -63,7 +63,7 @@ public class AppInstance
     /// 元数据
     /// </summary>
     [JsonPropertyName("meta")]
-    public Dictionary<string, object>? Meta { get; set; }
+    public Dictionary<string, object?>? Meta { get; set; }
 }
 
 /// <summary>

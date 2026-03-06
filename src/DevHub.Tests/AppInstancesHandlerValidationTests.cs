@@ -154,6 +154,67 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenMetaProvided_ShouldPersistMeta()
+    {
+        var handler = CreateHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-with-meta",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "inst-with-meta",
+                    appId = "app.validation",
+                    pid = 102,
+                    invoke = new { poll = true, respond = true },
+                    meta = new
+                    {
+                        env = "test",
+                        priority = 7,
+                        enabled = true
+                    }
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        var meta = result.GetProperty("instance").GetProperty("meta");
+        Assert.Equal("test", meta.GetProperty("env").GetString());
+        Assert.Equal(7, meta.GetProperty("priority").GetInt32());
+        Assert.True(meta.GetProperty("enabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Impl_RegisterInstance_WhenMetaIsNotObject_ShouldReturnInvalidParams()
+    {
+        var handler = CreateHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-invalid-meta",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instance = new
+                {
+                    instanceId = "inst-invalid-meta",
+                    appId = "app.validation",
+                    pid = 102,
+                    invoke = new { poll = true, respond = true },
+                    meta = "bad"
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+    }
+
+    [Fact]
     public async Task Impl_Heartbeat_WhenUnknownInstance_ShouldReturnInstanceNotFound()
     {
         var handler = CreateHandler();
@@ -398,6 +459,5 @@ public sealed class AppInstancesHandlerValidationTests
         }
     }
 }
-
 
 
