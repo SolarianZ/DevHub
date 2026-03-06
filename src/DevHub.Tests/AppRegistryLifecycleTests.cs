@@ -56,6 +56,28 @@ public sealed class AppRegistryLifecycleTests
     }
 
     [Fact]
+    public void Impl_RegisterInstance_WhenSameInstanceRegisteredTwice_ShouldReturnStoredInstanceWithOriginalRegisteredAtUtc()
+    {
+        var startedAt = DateTime.UtcNow;
+        var clock = new MutableClock(startedAt);
+        using var registry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
+
+        var first = registry.RegisterInstance(CreateInstance("inst-return", "app.first", null, 301));
+        clock.Advance(TimeSpan.FromSeconds(10));
+
+        var second = registry.RegisterInstance(CreateInstance("inst-return", "app.second", "workspace-C", 302));
+        var stored = registry.GetInstance("inst-return");
+
+        Assert.NotNull(stored);
+        Assert.Equal(first.RegisteredAtUtc, second.RegisteredAtUtc);
+        Assert.Equal(stored!.RegisteredAtUtc, second.RegisteredAtUtc);
+        Assert.Equal(stored.LastSeenUtc, second.LastSeenUtc);
+        Assert.Equal("app.second", second.AppId);
+        Assert.Equal("workspace-C", second.Scope);
+        Assert.Equal(302, second.Pid);
+    }
+
+    [Fact]
     public void Impl_Dispose_CalledMultipleTimes_ShouldBeIdempotent()
     {
         var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -100,6 +122,5 @@ public sealed class AppRegistryLifecycleTests
         }
     }
 }
-
 
 

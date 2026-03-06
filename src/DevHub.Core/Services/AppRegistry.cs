@@ -116,7 +116,7 @@ public class AppRegistry : IDisposable
             Meta = instance.Meta
         };
 
-        _instances.AddOrUpdate(instance.InstanceId, instanceToRegister, (_, existing) =>
+        var registeredInstance = _instances.AddOrUpdate(instance.InstanceId, instanceToRegister, (_, existing) =>
         {
             // 更新现有实例
             existing.AppId = instance.AppId;
@@ -134,7 +134,7 @@ public class AppRegistry : IDisposable
 
         _logger.LogInformation("已注册应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid);
-        return instanceToRegister;
+        return registeredInstance;
     }
 
     /// <summary>

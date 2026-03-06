@@ -5,6 +5,7 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Invocation;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Text.Json;
 
 /// <summary>
 /// InvocationStore 生命周期测试。
@@ -270,6 +271,16 @@ public class InvocationStoreTests
         Assert.False(store.TryGet(created.InvocationId, out _));
     }
 
+    [Fact]
+    public void Impl_SerializedInvocation_ShouldUseLowerCaseKindValue()
+    {
+        var invocation = CreateNotify("serialize-kind.app", targetScope: null, targetInstanceId: null);
+
+        var json = JsonSerializer.SerializeToElement(invocation);
+
+        Assert.Equal("notify", json.GetProperty("kind").GetString());
+    }
+
 
     private static Invocation CreateNotify(string appId, string? targetScope, string? targetInstanceId)
     {
@@ -357,6 +368,5 @@ public class InvocationStoreTests
         }
     }
 }
-
 
 

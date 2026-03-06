@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace DevHub.Core.Models;
 
@@ -191,7 +192,7 @@ public class InvocationCaller
 /// <summary>
 /// 调用类型。
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<InvocationKind>))]
+[JsonConverter(typeof(InvocationKindJsonConverter))]
 public enum InvocationKind
 {
     /// <summary>
@@ -203,6 +204,20 @@ public enum InvocationKind
     /// 通知。
     /// </summary>
     Notify
+}
+
+/// <summary>
+/// InvocationKind JSON 转换器。
+/// </summary>
+public sealed class InvocationKindJsonConverter : JsonStringEnumConverter<InvocationKind>
+{
+    /// <summary>
+    /// 初始化转换器，按 Spec 使用小写枚举值。
+    /// </summary>
+    public InvocationKindJsonConverter()
+        : base(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
+    {
+    }
 }
 
 /// <summary>
