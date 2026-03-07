@@ -8,6 +8,7 @@
 """
 
 import argparse
+from collections import defaultdict
 import glob
 import os
 import re
@@ -113,6 +114,64 @@ def format_percent(numerator, denominator):
     return f"{(numerator / denominator) * 100:.2f}%"
 
 
+def build_source_label(package_name, file_name):
+    normalized_file_name = (file_name or "").replace("\\", "/")
+    normalized_package_name = (package_name or "").strip()
+
+    if normalized_file_name and normalized_package_name:
+        return f"{normalized_package_name}/{normalized_file_name}"
+    if normalized_file_name:
+        return normalized_file_name
+    if normalized_package_name:
+        return normalized_package_name
+    return "<unknown>"
+
+
+def build_file_coverage_stats(line_total, line_covered, branch_total, branch_covered):
+    stats = defaultdict(lambda: {
+        "line_total": 0,
+        "line_covered": 0,
+        "branch_total": 0,
+        "branch_covered": 0,
+    })
+
+    for package_name, file_name, _ in line_total:
+        stats[build_source_label(package_name, file_name)]["line_total"] += 1
+    for package_name, file_name, _ in line_covered:
+        stats[build_source_label(package_name, file_name)]["line_covered"] += 1
+    for package_name, file_name, _, _ in branch_total:
+        stats[build_source_label(package_name, file_name)]["branch_total"] += 1
+    for package_name, file_name, _, _ in branch_covered:
+        stats[build_source_label(package_name, file_name)]["branch_covered"] += 1
+
+    return stats
+
+
+def print_low_coverage_files(stats, metric_name, covered_key, total_key, max_items=10):
+    candidates = []
+    for source_label, values in stats.items():
+        total = values[total_key]
+        covered = values[covered_key]
+        if total <= 0:
+            continue
+
+        uncovered = total - covered
+        candidates.append((covered / total, -uncovered, source_label, covered, total))
+
+    if not candidates:
+        print(f"No per-file {metric_name} coverage data found.")
+        return
+
+    candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+    print(f"Lowest {metric_name} coverage files (top {min(max_items, len(candidates))}):")
+    for _, _, source_label, covered, total in candidates[:max_items]:
+        uncovered = total - covered
+        print(
+            f"- {source_label}: {metric_name}={format_percent(covered, total)} "
+            f"({covered}/{total}), uncovered={uncovered}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="校验覆盖率阈值")
     parser.add_argument("--root", default=".", help="仓库根目录")
@@ -155,6 +214,12 @@ def main():
 
     line_rate = line_covered_count / line_valid
     branch_rate = branch_covered_count / branch_valid
+    file_coverage_stats = build_file_coverage_stats(
+        merged_line_total,
+        merged_line_covered,
+        merged_branch_total,
+        merged_branch_covered,
+    )
 
     print(
         "Merged coverage: "
@@ -170,9 +235,11 @@ def main():
     failed = False
     if line_rate < args.line_threshold:
         print("ERROR: line coverage below threshold.")
+        print_low_coverage_files(file_coverage_stats, "line", "line_covered", "line_total")
         failed = True
     if branch_rate < args.branch_threshold:
         print("ERROR: branch coverage below threshold.")
+        print_low_coverage_files(file_coverage_stats, "branch", "branch_covered", "branch_total")
         failed = True
 
     if failed:

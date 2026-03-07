@@ -119,6 +119,23 @@ def run_suite_with_spinner(logger, stage_name, runner):
         logger.info("=== %s 完成，用时 %.1fs ===", stage_name, elapsed_seconds)
 
 
+def emit_failure_summary(text_report_path, json_report_path, failed_results):
+    """向标准输出打印失败摘要，确保 CI 日志中可直接看到失败原因。"""
+    print("=== FAILURE SUMMARY BEGIN ===")
+    print(f"文本报告: {text_report_path}")
+    print(f"JSON 报告: {json_report_path}")
+
+    for index, result in enumerate(failed_results, start=1):
+        print(f"[{index}] {result.test_name}")
+        if result.error_message:
+            print(f"  错误: {result.error_message}")
+        for detail in result.details:
+            print(f"  详情: {detail}")
+
+    print("=== FAILURE SUMMARY END ===")
+    sys.stdout.flush()
+
+
 def run_all_tests(full=False, fast=False, smoke=False):
     """运行所有测试"""
     # 创建 temp 目录
@@ -268,14 +285,9 @@ def run_all_tests(full=False, fast=False, smoke=False):
 
     # 如果有失败的测试，返回 1
     if summary['failed'] > 0:
+        failed_results = [item for item in report.results if not item.success]
         logger.warning("⚠️  测试中有失败的用例")
-        logger.warning("失败详情:")
-        for index, result in enumerate((item for item in report.results if not item.success), start=1):
-            logger.warning("  %d. %s", index, result.test_name)
-            if result.error_message:
-                logger.warning("     错误: %s", result.error_message)
-            for detail in result.details:
-                logger.warning("     详情: %s", detail)
+        emit_failure_summary(text_report_path, json_report_path, failed_results)
         return 1
 
     logger.info("✅ 所有测试通过")
