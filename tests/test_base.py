@@ -123,6 +123,29 @@ def get_test_project_root() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
+def normalize_path_for_comparison(path: str) -> str:
+    """将路径规整为便于比较的稳定形式。"""
+    normalized = os.path.abspath(path)
+
+    try:
+        normalized = os.path.realpath(normalized)
+    except OSError:
+        pass
+
+    return os.path.normcase(os.path.normpath(normalized))
+
+
+def paths_refer_to_same_location(left: str, right: str) -> bool:
+    """判断两个路径是否指向同一位置，兼容 Windows 8.3 短路径与大小写差异。"""
+    if not left or not right:
+        return False
+
+    try:
+        return os.path.samefile(left, right)
+    except (FileNotFoundError, OSError, ValueError):
+        return normalize_path_for_comparison(left) == normalize_path_for_comparison(right)
+
+
 def _parse_command_string(raw_command: str) -> List[str]:
     """解析命令字符串，兼容 JSON 数组或 shell 风格字符串。"""
     candidate = raw_command.strip()

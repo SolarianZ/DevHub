@@ -28,6 +28,8 @@ dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
 - `--isolated-hub-cwd` / `DEVHUB_TEST_HUB_CWD`：隔离 Hub 启动命令的工作目录。
 - `--isolated-hub-env-json` / `DEVHUB_TEST_HUB_ENV_JSON`：额外环境变量覆盖，值为 JSON 对象。
 
+说明：Windows 上若临时目录同时出现 8.3 短路径与长路径表示，启动与发现夹具会按“同一文件位置”而非字符串字面值进行比较，避免 `DEVHUB_RUNTIME_DIR` 用例出现误报。
+
 如必须通过实现专用环境变量启动隔离实例，应在上述夹具配置中注入，而不是在具体测试用例中写死。
 
 #### Default 模式

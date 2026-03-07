@@ -20,6 +20,7 @@ from tests.test_base import (
     RpcClient,
     TestResult,
     describe_test_hub_command,
+    paths_refer_to_same_location,
     start_isolated_hub_process,
     temporary_env_var,
     validate_current_user_only_file_access,
@@ -500,7 +501,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                                 result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
 
                                 runtime_token = os.path.join(runtime_dir, "token.txt")
-                                if os.path.abspath(token_file) != os.path.abspath(runtime_token):
+                                if not paths_refer_to_same_location(token_file, runtime_token):
                                     result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
                                     return result
 
