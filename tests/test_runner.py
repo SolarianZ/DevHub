@@ -269,6 +269,13 @@ def run_all_tests(full=False, fast=False, smoke=False):
     # 如果有失败的测试，返回 1
     if summary['failed'] > 0:
         logger.warning("⚠️  测试中有失败的用例")
+        logger.warning("失败详情:")
+        for index, result in enumerate((item for item in report.results if not item.success), start=1):
+            logger.warning("  %d. %s", index, result.test_name)
+            if result.error_message:
+                logger.warning("     错误: %s", result.error_message)
+            for detail in result.details:
+                logger.warning("     详情: %s", detail)
         return 1
 
     logger.info("✅ 所有测试通过")

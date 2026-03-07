@@ -1,5 +1,6 @@
 using DevHub.Core.Models;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -356,6 +357,7 @@ public class FileSystemManager
     /// 在 Windows 平台设置 ACL，仅当前用户可访问
     /// </summary>
     [SupportedOSPlatform("windows")]
+    [ExcludeFromCodeCoverage]
     private void EnsureCurrentUserOnlyAccessOnWindows(string filePath)
     {
         _logger.LogDebug("尝试设置 Windows 文件 ACL，文件路径: {FilePath}", filePath);
