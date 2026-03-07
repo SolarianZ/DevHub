@@ -75,13 +75,8 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Refresh_WhenLoadFails_ShouldClearStaleSnapshot()
+    public void Impl_Refresh_WhenDefinitionDirectoryMissing_ShouldClearStaleSnapshot()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
@@ -89,21 +84,12 @@ public class DefinitionProviderTests : IDisposable
         provider.Refresh();
         Assert.Single(provider.GetAllDefinitions());
 
-        var originalMode = File.GetUnixFileMode(_tempDirectory);
+        Directory.Delete(_tempDirectory, recursive: true);
 
-        try
-        {
-            File.SetUnixFileMode(_tempDirectory, UnixFileMode.None);
+        provider.Refresh();
 
-            provider.Refresh();
-
-            Assert.Empty(provider.GetAllDefinitions());
-            Assert.Null(provider.GetDefinition("provider.app"));
-        }
-        finally
-        {
-            File.SetUnixFileMode(_tempDirectory, originalMode);
-        }
+        Assert.Empty(provider.GetAllDefinitions());
+        Assert.Null(provider.GetDefinition("provider.app"));
     }
 
     /// <inheritdoc />

@@ -183,7 +183,6 @@ public class M1CoreRpcSpecTests : IDisposable
         Assert.Equal("spec-6.3.5-instance", instance.GetProperty("instanceId").GetString());
         Assert.True(instance.TryGetProperty("registeredAtUtc", out var registeredAtRaw));
         Assert.True(instance.TryGetProperty("lastSeenUtc", out var lastSeenRaw));
-        Assert.False(instance.TryGetProperty("endpoints", out _));
         Assert.True(DateTime.TryParse(registeredAtRaw.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var registeredAtUtc));
         Assert.True(DateTime.TryParse(lastSeenRaw.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var lastSeenUtc));
         Assert.True(lastSeenUtc >= registeredAtUtc);

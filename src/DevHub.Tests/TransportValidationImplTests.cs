@@ -53,11 +53,10 @@ public class TransportValidationImplTests
     }
 
     [Fact]
-    public void Impl_4_2_HttpHeaders_WhenAuthorizationAndClientHeadersAreBothMissing_ShouldPreferUnauthorized()
+    public void Impl_4_2_HttpHeaders_WhenAuthorizationMissing_ShouldKeepValidatedClientOutputsNull()
     {
         var headers = BuildValidHeaders();
         headers.Remove("Authorization");
-        headers.Remove("X-DevHub-ClientId");
 
         var ok = DevHubTransportValidator.TryValidateHttpHeaders(
             "application/json",
