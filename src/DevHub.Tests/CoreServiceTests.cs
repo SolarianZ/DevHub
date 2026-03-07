@@ -85,6 +85,52 @@ public class CoreServiceTests
     }
 
     [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Impl_FileSystemManager_GetToken_OnWindows_ShouldRemoveExplicitAllowRulesForOtherPrincipals()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var testRoot = TestHelpers.GetTestDirectory();
+        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+
+        try
+        {
+            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+
+            Directory.CreateDirectory(runtimeDirectory);
+            var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
+            File.WriteAllText(tokenPath, "legacy-token");
+
+            var currentUserSid = WindowsIdentity.GetCurrent().User;
+            Assert.NotNull(currentUserSid);
+
+            var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            var tokenFile = new FileInfo(tokenPath);
+            var security = tokenFile.GetAccessControl(AccessControlSections.Access);
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+            security.AddAccessRule(new FileSystemAccessRule(currentUserSid!, FileSystemRights.FullControl, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(administratorsSid, FileSystemRights.Read, AccessControlType.Allow));
+            tokenFile.SetAccessControl(security);
+
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var token = fileSystemManager.GetToken();
+
+            Assert.False(string.IsNullOrWhiteSpace(token));
+            AssertWindowsUserOnlyAcl(tokenPath);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Impl_FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
     {
         var testRoot = TestHelpers.GetTestDirectory();
@@ -467,11 +513,7 @@ public class CoreServiceTests
         var currentUserSid = WindowsIdentity.GetCurrent().User;
         Assert.NotNull(currentUserSid);
         Assert.Contains(rules, rule => Equals(rule.IdentityReference, currentUserSid));
-
-        var worldSid = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
-        var builtinUsersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
-        Assert.DoesNotContain(rules, rule => Equals(rule.IdentityReference, worldSid));
-        Assert.DoesNotContain(rules, rule => Equals(rule.IdentityReference, builtinUsersSid));
+        Assert.DoesNotContain(rules, rule => !Equals(rule.IdentityReference, currentUserSid));
     }
 }
 

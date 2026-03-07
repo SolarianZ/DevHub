@@ -362,11 +362,23 @@ public class FileSystemManager
 
         var fileInfo = new FileInfo(filePath);
         var security = fileInfo.GetAccessControl(AccessControlSections.Access);
-        var currentUser = WindowsIdentity.GetCurrent().Name;
-        var rule = new FileSystemAccessRule(currentUser, FileSystemRights.FullControl, AccessControlType.Allow);
+        var currentUserSid = WindowsIdentity.GetCurrent().User
+            ?? throw new InvalidOperationException("无法解析当前 Windows 用户 SID。");
 
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        security.ResetAccessRule(rule);
+
+        var explicitRules = security
+            .GetAccessRules(includeExplicit: true, includeInherited: false, targetType: typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .ToArray();
+
+        foreach (var explicitRule in explicitRules)
+        {
+            security.RemoveAccessRuleSpecific(explicitRule);
+        }
+
+        var rule = new FileSystemAccessRule(currentUserSid, FileSystemRights.FullControl, AccessControlType.Allow);
+        security.AddAccessRule(rule);
         fileInfo.SetAccessControl(security);
 
         _logger.LogInformation("已成功设置 Windows 文件 ACL（仅当前用户可访问），文件路径: {FilePath}", filePath);
