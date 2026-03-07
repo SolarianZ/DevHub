@@ -146,7 +146,7 @@ public class RuntimePathOptionsTests : IDisposable
         if (OperatingSystem.IsMacOS())
         {
             return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                GetExpectedUserHomePath(),
                 "Library",
                 "Application Support",
                 "DevHub");
@@ -154,10 +154,32 @@ public class RuntimePathOptionsTests : IDisposable
 
         var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
         var dataHome = string.IsNullOrWhiteSpace(xdgDataHome)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".local", "share")
+            ? Path.Combine(GetExpectedUserHomePath(), ".local", "share")
             : xdgDataHome;
 
         return Path.Combine(dataHome, "DevHub");
     }
-}
 
+    private static string GetExpectedUserHomePath()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+        {
+            return Path.GetFullPath(userProfile);
+        }
+
+        var personal = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        if (!string.IsNullOrWhiteSpace(personal))
+        {
+            return Path.GetFullPath(personal);
+        }
+
+        var home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            return Path.GetFullPath(home);
+        }
+
+        throw new InvalidOperationException("测试环境未提供可用的用户主目录。");
+    }
+}

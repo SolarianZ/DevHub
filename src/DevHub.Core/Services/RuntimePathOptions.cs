@@ -173,7 +173,7 @@ public sealed class RuntimePathOptions
         if (OperatingSystem.IsMacOS())
         {
             return NormalizePath(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                GetUserHomePath(),
                 "Library",
                 "Application Support",
                 "DevHub"));
@@ -181,10 +181,33 @@ public sealed class RuntimePathOptions
 
         var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
         var dataHome = string.IsNullOrWhiteSpace(xdgDataHome)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".local", "share")
+            ? Path.Combine(GetUserHomePath(), ".local", "share")
             : xdgDataHome;
 
         return NormalizePath(Path.Combine(dataHome, "DevHub"));
+    }
+
+    private static string GetUserHomePath()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+        {
+            return NormalizePath(userProfile);
+        }
+
+        var personal = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        if (!string.IsNullOrWhiteSpace(personal))
+        {
+            return NormalizePath(personal);
+        }
+
+        var home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            return NormalizePath(home);
+        }
+
+        throw new InvalidOperationException("无法解析当前用户主目录。");
     }
 
     private static string NormalizePath(string path)
