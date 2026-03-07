@@ -12,6 +12,8 @@ namespace DevHub.Host;
 /// </summary>
 public class Program
 {
+    private const int SuccessExitCode = 0;
+    private const int FatalStartupExitCode = 1;
     private static Mutex? _singleInstanceMutex;
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 
@@ -79,7 +81,8 @@ public class Program
     /// 应用程序主入口。
     /// </summary>
     /// <param name="args">命令行参数。</param>
-    public static void Main(string[] args)
+    /// <returns>进程退出码。</returns>
+    public static int Main(string[] args)
     {
         var mutexName = BuildSingleInstanceMutexName();
         _singleInstanceMutex = new Mutex(true, mutexName, out var createdNew);
@@ -87,25 +90,27 @@ public class Program
         if (!createdNew)
         {
             Console.WriteLine("DevHub 已在运行中");
-            return;
+            return SuccessExitCode;
         }
 
+        var contentRootPath = ResolveContentRootPath();
         var runtimePathOptions = RuntimePathOptions.Resolve();
         Environment.SetEnvironmentVariable(RuntimePathOptions.LogDirEnvironmentVariable, runtimePathOptions.LogsPath);
 
         Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json")
-                .AddEnvironmentVariables()
-                .Build())
+            .ReadFrom.Configuration(BuildBootstrapConfiguration(contentRootPath))
             .CreateLogger();
 
         try
         {
             Log.Information("DevHub 启动初始化...");
 
-            var builder = WebApplication.CreateBuilder(args);
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = contentRootPath
+            });
+
             builder.Host.UseSerilog();
             builder.Services.AddAuthorization();
             builder.Services.AddOpenApi();
@@ -153,14 +158,47 @@ public class Program
             });
 
             app.Run();
+            return SuccessExitCode;
         }
         catch (Exception ex)
         {
             Log.Fatal(ex, "DevHub 启动过程中发生致命错误");
+            return FatalStartupExitCode;
         }
         finally
         {
             Log.CloseAndFlush();
+            _singleInstanceMutex?.Dispose();
+            _singleInstanceMutex = null;
         }
+    }
+
+    /// <summary>
+    /// 解析 Host 的内容根目录。
+    /// </summary>
+    /// <returns>可用于加载配置文件的内容根目录。</returns>
+    internal static string ResolveContentRootPath()
+    {
+        var baseDirectory = AppContext.BaseDirectory;
+        if (string.IsNullOrWhiteSpace(baseDirectory))
+        {
+            return Directory.GetCurrentDirectory();
+        }
+
+        return Path.GetFullPath(baseDirectory);
+    }
+
+    /// <summary>
+    /// 构建启动阶段使用的配置对象。
+    /// </summary>
+    /// <param name="contentRootPath">内容根目录。</param>
+    /// <returns>可供日志初始化使用的配置。</returns>
+    internal static IConfigurationRoot BuildBootstrapConfiguration(string contentRootPath)
+    {
+        return new ConfigurationBuilder()
+            .SetBasePath(contentRootPath)
+            .AddJsonFile("appsettings.json")
+            .AddEnvironmentVariables()
+            .Build();
     }
 }

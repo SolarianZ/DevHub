@@ -4,7 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-- 暂无变更。
+- 修复 Host 从非当前工作目录启动时无法定位 `appsettings.json` 的问题。
+- 修复 Host 启动致命错误仍返回 `0` 退出码的问题。
+- 移除过期的 `src/DevHub.Host/DevHub.http` 模板文件。
 
 ## [1.0.1] - 2026-02-11
 
