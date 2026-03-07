@@ -115,13 +115,25 @@ def format_percent(numerator, denominator):
 
 
 def build_source_label(package_name, file_name):
-    normalized_file_name = (file_name or "").replace("\\", "/")
-    normalized_package_name = (package_name or "").strip()
+    normalized_file_name = (file_name or "").replace("\\", "/").strip().lstrip("./")
+    normalized_package_name = (package_name or "").replace("\\", "/").strip()
+    normalized_package_path = normalized_package_name.replace(".", "/")
 
-    if normalized_file_name and normalized_package_name:
-        return f"{normalized_package_name}/{normalized_file_name}"
     if normalized_file_name:
-        return normalized_file_name
+        if not normalized_package_name:
+            return normalized_file_name
+
+        if (
+            normalized_file_name == normalized_package_name
+            or normalized_file_name.startswith(f"{normalized_package_name}/")
+            or normalized_file_name == normalized_package_path
+            or normalized_file_name.startswith(f"{normalized_package_path}/")
+            or "/" in normalized_file_name
+        ):
+            return normalized_file_name
+
+        return f"{normalized_package_name}/{normalized_file_name}"
+
     if normalized_package_name:
         return normalized_package_name
     return "<unknown>"
