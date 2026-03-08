@@ -5,15 +5,14 @@
 > 参考文档：
 > - [Spec.md](./Spec.md)
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
-> - [DevHub_M4细化任务文档.md](./DevHub_M4细化任务文档.md)
-> - [DevHub_M4测试任务拆分文档.md](./DevHub_M4测试任务拆分文档.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-07）
+## 当前状态（截至 2026-03-08）
 
 - 当前分支：`review_before_m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
 - M5 尚未启动：仓库内尚无 SDK 代码目录、SDK 测试目录、签名向量目录与契约运行器。
+- 下文列出的 `src/DevHub.Sdk*`、`sdk/devhub-sdk-ts`、`tests/conformance` 路径均为 M5 规划中的目标落点，当前仓库尚未创建属预期状态，不应按“现存目录”理解。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中 `DEVHUB_RUNTIME_DIR` 用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。

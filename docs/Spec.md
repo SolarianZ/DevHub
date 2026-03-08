@@ -1039,7 +1039,7 @@ stateDiagram-v2
 
 ## 附录 A：完整的 JSON Schema 包
 
-[下载完整 Schema 包 (ZIP)](schemas/v1/devhub-schemas-v1.0.1.zip) 包含：
+本仓库当前未随附独立的 Schema ZIP 下载包；下列文件名为 v1.0.1 约定的 Schema 组成部分：
 - `app-definition.json`
 - `app-instance.json`
 - `invocation.json`
@@ -1053,6 +1053,8 @@ stateDiagram-v2
 ---
 
 ## 附录 B：符合性测试运行示例
+
+以下命令是“官方符合性套件”的示意调用格式，当前仓库未内置 `devhub-conformance-cli` 可执行文件；仓库内可直接执行的验证命令请参考 [`开发指南`](./开发指南.md) 与 [`tests/README.md`](../tests/README.md)。
 
 ```bash
 # 针对本地 Hub 运行官方符合性套件

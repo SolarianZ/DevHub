@@ -6,13 +6,13 @@
 > - [Spec.md](./Spec.md)
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
-> - [DevHub_M4测试任务拆分文档.md](./DevHub_M4测试任务拆分文档.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-02）
+## 当前状态（截至 2026-03-08）
 
 - M5 测试任务状态：**未启动**（当前仓库尚无 SDK 与 conformance 目录）。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
+- 下文涉及的 `src/DevHub.Sdk.Tests/`、`sdk/devhub-sdk-ts/tests/`、`tests/conformance/` 等路径均为 M5 规划中的目标测试资产，当前仓库尚未创建属预期状态。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 
 ---

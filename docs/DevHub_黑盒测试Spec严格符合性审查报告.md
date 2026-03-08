@@ -1,9 +1,11 @@
 # DevHub 黑盒测试对 Spec 严格符合性审查报告（MUST 硬门槛）
 
-> 审查日期：2026-02-08  
-> 审查分支：`m4`  
+> 审查日期：2026-02-08（历史快照）  
+> 审查分支：`m4`（历史）  
 > 审查范围：`tests/test_*.py`（含 `test_base.py`、`test_runner.py`）  
 > 规范基线：`docs/Spec.md`、`docs/DevHub协议与开发规划.md`
+
+> 说明：本文主体矩阵、统计值与文件行号保留 2026-02-08 审查时的历史上下文，用于追溯 M4 收口阶段的结论；不直接代表当前分支最新统计。2026-03-08 在当前分支 `review_before_m5` 上复跑 `python3 tests/test_runner.py --smoke --no-header` 与 `python3 tests/test_runner.py --full --no-header`，结果分别为 `14/14` 与 `142/142` 全通过。
 
 ---
 
@@ -32,11 +34,18 @@ dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release --no-launch-p
 python3 tests/test_runner.py --full --no-header
 ```
 
-### 2.2 实跑结果快照
+### 2.2 历史实跑结果快照（2026-02-08）
 
-- 报告文件：`temp/test_results.full.audit.json`、`temp/test_results.full.audit.txt`
+- 报告文件：`temp/test_results.full.audit.json`、`temp/test_results.full.audit.txt`（历史审查产物，当前仓库未保留）
 - 结果：`112 passed / 0 failed / success_rate=100%`
 - 时间窗口：`2026-02-08T23:25:40` ~ `2026-02-08T23:28:01`
+
+### 2.3 当前分支复跑结果（2026-03-08）
+
+- 复跑分支：`review_before_m5`
+- 复跑命令：先启动 `dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release --no-build`，再执行 `python3 tests/test_runner.py --smoke --no-header` 与 `python3 tests/test_runner.py --full --no-header`
+- 当前结果：`smoke = 14 passed / 0 failed`，`full = 142 passed / 0 failed`
+- 当前 runner 输出：`temp/test_results.json`、`temp/test_results.txt`
 
 ---
 
@@ -65,7 +74,7 @@ python3 tests/test_runner.py --full --no-header
 | Invalid Params | `tests/test_invalid_params.py:498` | 13 | 13 | 无 |
 | Internal Errors | `tests/test_internal_errors.py:367` | 6 | 8 | `test_server_resource_exhaustion_simulation`、`test_large_payload` |
 
-**汇总**：`default/fast=104`，`full=112`（与 `temp/test_results.full.audit.json` 一致）。
+**汇总（2026-02-08 历史快照）**：`default/fast=104`，`full=112`（与当时的 `temp/test_results.full.audit.json` 一致）。
 
 ---
 
@@ -210,6 +219,8 @@ python3 tests/test_runner.py --full --no-header
 ---
 
 ## 10. 增量更新（2026-02-12）
+
+> 以下增量更新仍属于历史审查记录；若需当前分支最新结果，以“2.3 当前分支复跑结果（2026-03-08）”为准。
 
 本次基于 `m4` 分支进行了增量收口，结论如下：
 

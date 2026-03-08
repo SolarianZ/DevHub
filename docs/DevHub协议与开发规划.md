@@ -305,7 +305,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 
 | Milestone | 目标                               | 交付物                                                                                        | 备注               |
 | --------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ------------------ |
-| M0        | 文档冻结 + Spec v0                 | DevHub.md + **Spec.md** + JSON schemas                                                        | 本文档即为 M0 产物 |
+| M0        | 文档冻结 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物 |
 | M1        | Hub（HTTP）基础能力 + Spec v1 冻结 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（协议定稿） | WS 可先不做        |
 | M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心            |
 | M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                    |
@@ -315,7 +315,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 
 ### 14.2 里程碑验收清单（最小可验收）
 **M0**
-- DevHub.md 冻结；**Spec.md** 冻结；Schema 可校验。
+- 本规划文档冻结；**Spec.md** 冻结；核心数据模型与 RPC 契约进入可评审状态。
 
 **M1**
 - 启动 Hub 生成 `runtime/hub.json` 与 `runtime/token.txt`。
@@ -417,11 +417,13 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-02-11）
+## 17. 当前里程碑状态（截至 2026-03-08）
 
+- 当前分支：`review_before_m5`。
 - M0：已完成。
 - M1：已完成。
 - M2：已完成。
 - M3：已完成。
-- M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送，白盒/黑盒回归通过）。
-- M5：未启动。
+- M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
+- M5：未启动（仓库内尚无 `src/DevHub.Sdk/`、`src/DevHub.Sdk.Tests/`、`sdk/devhub-sdk-ts/` 与 `tests/conformance/` 目录）。
+- 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。

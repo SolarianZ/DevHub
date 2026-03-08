@@ -1,6 +1,6 @@
 # DevHub 白盒测试分层与 Spec 映射矩阵
 
-更新时间：2026-03-03  
+更新时间：2026-03-08  
 适用分支：`review_before_m5`  
 规范基线：`docs/Spec.md`（v1.0.1，2026-01-31）
 
@@ -12,7 +12,7 @@
 
 ## 2. 守门机制
 
-- 规则守门测试：`src/DevHub.Tests/TestGovernanceTests.cs`
+- 规则守门测试：`src/DevHub.Tests/TestGovernanceTests.cs`、`src/DevHub.Host.Tests/TestGovernanceTests.cs`
 - 守门项：
   - 测试方法必须以 `Spec_` 或 `Impl_` 开头。
   - `Spec_*` 必须声明 `SpecRef`，且条款号与方法名一致。
@@ -22,31 +22,35 @@
 
 | Spec 条款 | 测试文件 | 用例数 |
 | --- | --- | --- |
-| 4.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 12 |
-| 4.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 12 |
-| 5.5 | `src/DevHub.Tests/ScopeRoutingSpecTests.cs` | 7 |
-| 6.1 | `src/DevHub.Tests/TransportValidationTests.cs` | 7 |
-| 6.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 2 |
+| 3.1 | `src/DevHub.Host.Tests/HttpNotificationSpecTests.cs`、`src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs` | 2 |
+| 3.3 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs` | 2 |
+| 4.2 | `src/DevHub.Tests/TransportValidationTests.cs` | 9 |
+| 4.3 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs`、`src/DevHub.Tests/TransportValidationTests.cs` | 13 |
+| 5.5 | `src/DevHub.Tests/ScopeRoutingSpecTests.cs` | 9 |
+| 6.1 | `src/DevHub.Host.Tests/HttpNotificationSpecTests.cs`、`src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs`、`src/DevHub.Tests/TransportValidationTests.cs` | 7 |
+| 6.2 | `src/DevHub.Host.Tests/HttpNotificationSpecTests.cs`、`src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs` | 3 |
+| 6.3.1 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
+| 6.3.2 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs` | 2 |
 | 6.3.3 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 1 |
 | 6.3.4 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
-| 6.3.5 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
+| 6.3.5 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 3 |
 | 6.3.6 | `src/DevHub.Tests/AppInstancesHeartbeatSpecTests.cs` | 2 |
 | 6.3.7 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 1 |
 | 6.3.8 | `src/DevHub.Tests/M1CoreRpcSpecTests.cs` | 2 |
-| 6.3.9 | `src/DevHub.Tests/M2LaunchSpecTests.cs` | 8 |
-| 6.3.10 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 5 |
-| 6.3.11 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 6 |
+| 6.3.9 | `src/DevHub.Tests/M2LaunchSpecTests.cs` | 10 |
+| 6.3.10 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 7 |
+| 6.3.11 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 9 |
 | 6.3.12 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 4 |
 | 6.3.13 | `src/DevHub.Tests/M2InvocationSpecTests.cs` | 6 |
-| 6.3.14 | `src/DevHub.Tests/TransportValidationTests.cs` | 6 |
-| 6.3.15 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
-| 6.3.16 | `src/DevHub.Tests/HubEventNotificationFactoryTests.cs` | 2 |
+| 6.3.14 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs`、`src/DevHub.Tests/TransportValidationTests.cs` | 10 |
+| 6.3.15 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs`、`src/DevHub.Tests/TransportValidationTests.cs` | 3 |
+| 6.3.16 | `src/DevHub.Host.Tests/WebSocketLifecycleSpecTests.cs` | 1 |
 | 7.1 | `src/DevHub.Tests/ScopeRoutingSpecTests.cs` | 2 |
 | 8.3 | `src/DevHub.Tests/TransportValidationTests.cs` | 1 |
 
-总计：91 个 `Spec_*` 白盒测试用例。
+总计：113 个 `Spec_*` 白盒测试用例。
 
 ## 4. 说明
 
-- 本矩阵仅覆盖“协议可观察行为层”白盒测试。
+- 本矩阵覆盖 `src/DevHub.Tests/` 与 `src/DevHub.Host.Tests/` 中“协议可观察行为层”白盒测试。
 - 组件内部行为（如计时器、缓存、内部队列、内部清理路径）归入 `Impl_*`，避免实现细节污染 Spec 符合性结论。
