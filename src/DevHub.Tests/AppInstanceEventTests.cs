@@ -1,4 +1,4 @@
-﻿namespace DevHub.Tests;
+namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;

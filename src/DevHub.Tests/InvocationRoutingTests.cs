@@ -1,4 +1,4 @@
-﻿namespace DevHub.Tests;
+namespace DevHub.Tests;
 
 using System.Diagnostics;
 using System.Text.Json;

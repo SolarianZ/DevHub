@@ -1,4 +1,4 @@
-﻿namespace DevHub.Tests;
+namespace DevHub.Tests;
 
 using System.Globalization;
 using System.Text.Json;

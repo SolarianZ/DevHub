@@ -1,4 +1,4 @@
-﻿namespace DevHub.Tests;
+namespace DevHub.Tests;
 
 using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;

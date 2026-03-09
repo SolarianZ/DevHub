@@ -1,4 +1,4 @@
-﻿namespace DevHub.Tests;
+namespace DevHub.Tests;
 
 using DevHub.Core.Extensions;
 using DevHub.Core.Services;

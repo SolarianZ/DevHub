@@ -1,4 +1,4 @@
-﻿namespace DevHub.Host.Tests.TestHelpers;
+namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
