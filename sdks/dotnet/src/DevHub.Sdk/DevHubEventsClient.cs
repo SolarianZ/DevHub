@@ -320,22 +320,20 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
                 using var document = JsonDocument.Parse(message.Text);
                 var root = document.RootElement;
+                ValidateIncomingEnvelope(root);
 
-                if (TryGetRequestId(root, out var requestId) &&
-                    (root.TryGetProperty("result", out var resultElement) || root.TryGetProperty("error", out _)))
+                if (TryHandleResponse(root, out var requestId, out var resultElement))
                 {
                     CompletePendingRequest(requestId, root, resultElement);
                     continue;
                 }
 
-                if (root.TryGetProperty("method", out var methodElement) &&
-                    methodElement.ValueKind == JsonValueKind.String &&
-                    string.Equals(methodElement.GetString(), "hub.event", StringComparison.Ordinal) &&
-                    root.TryGetProperty("params", out var paramsElement))
+                if (TryGetEventParams(root, out var paramsElement))
                 {
                     var evt = JsonSerializer.Deserialize<DevHubEvent>(paramsElement.GetRawText(), DevHubJson.SerializerOptions);
                     if (evt is not null)
                     {
+                        ValidateEvent(evt);
                         await _eventChannel.Writer.WriteAsync(evt, cancellationToken);
                     }
                 }
@@ -386,6 +384,117 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         waiter.TrySetResult(resultElement.Clone());
+    }
+
+    private static bool TryHandleResponse(JsonElement root, out string requestId, out JsonElement resultElement)
+    {
+        requestId = string.Empty;
+        resultElement = default;
+
+        if (!root.TryGetProperty("id", out _))
+        {
+            return false;
+        }
+
+        requestId = ReadResponseId(root);
+
+        var hasResult = root.TryGetProperty("result", out resultElement);
+        var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
+        if (!hasResult && !hasError)
+        {
+            return false;
+        }
+
+        if (hasResult == hasError)
+        {
+            throw new InvalidOperationException("WebSocket JSON-RPC 响应必须且只能包含 result 或 error。");
+        }
+
+        if (hasResult && resultElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("WebSocket JSON-RPC result 必须为对象。");
+        }
+
+        return true;
+    }
+
+    private static bool TryGetEventParams(JsonElement root, out JsonElement paramsElement)
+    {
+        paramsElement = default;
+        if (!root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        if (!string.Equals(methodElement.GetString(), "hub.event", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (root.TryGetProperty("id", out _))
+        {
+            throw new InvalidOperationException("hub.event 必须为通知，禁止包含 id。");
+        }
+
+        if (!root.TryGetProperty("params", out paramsElement) || paramsElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("hub.event.params 非法。");
+        }
+
+        if (root.TryGetProperty("result", out _) || root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
+        {
+            throw new InvalidOperationException("hub.event 通知禁止包含 result 或 error。");
+        }
+
+        return true;
+    }
+
+    private static void ValidateIncomingEnvelope(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("WebSocket JSON-RPC 消息根必须为对象。");
+        }
+
+        if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
+            jsonRpcElement.ValueKind != JsonValueKind.String ||
+            !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("WebSocket JSON-RPC 消息的 jsonrpc 版本非法。");
+        }
+    }
+
+    private static string ReadResponseId(JsonElement root)
+    {
+        if (!root.TryGetProperty("id", out var idElement))
+        {
+            throw new InvalidOperationException("WebSocket JSON-RPC 响应缺少 id 字段。");
+        }
+
+        return idElement.ValueKind switch
+        {
+            JsonValueKind.String => idElement.GetString() ?? string.Empty,
+            JsonValueKind.Number => idElement.GetRawText(),
+            _ => throw new InvalidOperationException("WebSocket JSON-RPC 响应的 id 类型非法。")
+        };
+    }
+
+    private static void ValidateEvent(DevHubEvent evt)
+    {
+        if (string.IsNullOrWhiteSpace(evt.SubscriptionId))
+        {
+            throw new InvalidOperationException("hub.event.params.subscriptionId 非法。");
+        }
+
+        if (string.IsNullOrWhiteSpace(evt.Type))
+        {
+            throw new InvalidOperationException("hub.event.params.type 非法。");
+        }
+
+        if (evt.TimeUtc == default)
+        {
+            throw new InvalidOperationException("hub.event.params.timeUtc 非法。");
+        }
     }
 
     private static bool TryGetRequestId(JsonElement root, out string requestId)

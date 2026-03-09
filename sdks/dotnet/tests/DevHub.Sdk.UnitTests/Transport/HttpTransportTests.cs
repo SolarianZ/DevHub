@@ -31,7 +31,7 @@ public sealed class HttpTransportTests : IDisposable
             ClientId = "client-a",
             ClientSessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-ping");
 
         _ = await client.PingAsync(cancellationToken: CancellationToken.None);
 
@@ -107,7 +107,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-ping");
 
         using var cancellationTokenSource = new CancellationTokenSource(millisecondsDelay: 50);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.PingAsync(cancellationToken: cancellationTokenSource.Token));
@@ -126,7 +126,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-ping");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
         Assert.Contains("hub.ping.result", exception.Message, StringComparison.Ordinal);
@@ -145,13 +145,73 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-launch");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.LaunchAsync(new LaunchRequest
         {
             AppId = "sample.app"
         }, CancellationToken.None));
         Assert.Contains("launchId", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"1.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler, () => "req-ping");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("jsonrpc", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenResponseIdMismatched_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-other\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                RuntimeDir = runtimeDir
+            },
+            handler,
+            () => "req-ping");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("id", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenResponseContainsResultAndError_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"},\"error\":{\"code\":-32603,\"message\":\"internal_error\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler, () => "req-ping");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("result", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,7 +230,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-get-definition");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
         Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
@@ -192,7 +252,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-register");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RegisterInstanceAsync(new AppInstanceRegistration
         {
@@ -225,7 +285,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-request");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RequestAsync(new InvokeRequest
         {
@@ -252,7 +312,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             RuntimeDir = runtimeDir
-        }, handler);
+        }, handler, () => "req-poll");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
         {

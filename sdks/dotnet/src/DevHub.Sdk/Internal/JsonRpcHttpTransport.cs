@@ -66,33 +66,7 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
         }
 
         using var document = JsonDocument.Parse(body);
-        var root = document.RootElement;
-
-        if (root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
-        {
-            var code = errorElement.TryGetProperty("code", out var codeElement) && codeElement.TryGetInt32(out var parsedCode)
-                ? parsedCode
-                : throw new InvalidOperationException("JSON-RPC error.code 非法。");
-
-            var message = errorElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
-                ? messageElement.GetString()!
-                : throw new InvalidOperationException("JSON-RPC error.message 非法。");
-
-            JsonElement? data = null;
-            if (errorElement.TryGetProperty("data", out var dataElement))
-            {
-                data = dataElement.Clone();
-            }
-
-            throw new DevHubRpcException(code, message, data, requestId);
-        }
-
-        if (!root.TryGetProperty("result", out var resultElement))
-        {
-            throw new InvalidOperationException("JSON-RPC 响应缺少 result 字段。");
-        }
-
-        return resultElement.Clone();
+        return ValidateResponseEnvelope(document.RootElement, requestId);
     }
 
     internal HttpClient HttpClient => _httpClient;
@@ -121,6 +95,85 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
     private static string CreateRequestId()
     {
         return $"req-{Guid.NewGuid():N}";
+    }
+
+    private static JsonElement ValidateResponseEnvelope(JsonElement root, string requestId)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("JSON-RPC 响应根必须为对象。");
+        }
+
+        if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
+            jsonRpcElement.ValueKind != JsonValueKind.String ||
+            !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应的 jsonrpc 版本非法。");
+        }
+
+        var responseId = ReadResponseId(root);
+        if (!string.Equals(responseId, requestId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
+        }
+
+        var hasResult = root.TryGetProperty("result", out var resultElement);
+        var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
+        if (hasResult == hasError)
+        {
+            throw new InvalidOperationException("JSON-RPC 响应必须且只能包含 result 或 error。");
+        }
+
+        if (hasError)
+        {
+            ThrowRpcException(errorElement, requestId);
+        }
+
+        if (resultElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("JSON-RPC result 必须为对象。");
+        }
+
+        return resultElement.Clone();
+    }
+
+    private static string ReadResponseId(JsonElement root)
+    {
+        if (!root.TryGetProperty("id", out var idElement))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应缺少 id 字段。");
+        }
+
+        return idElement.ValueKind switch
+        {
+            JsonValueKind.String => idElement.GetString() ?? string.Empty,
+            JsonValueKind.Number => idElement.GetRawText(),
+            _ => throw new InvalidOperationException("JSON-RPC 响应的 id 类型非法。")
+        };
+    }
+
+    private static void ThrowRpcException(JsonElement errorElement, string requestId)
+    {
+        if (errorElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("JSON-RPC error 对象非法。");
+        }
+
+        var code = errorElement.TryGetProperty("code", out var codeElement) && codeElement.TryGetInt32(out var parsedCode)
+            ? parsedCode
+            : throw new InvalidOperationException("JSON-RPC error.code 非法。");
+
+        var message = errorElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
+            ? messageElement.GetString()!
+            : throw new InvalidOperationException("JSON-RPC error.message 非法。");
+
+        JsonElement? data = null;
+        if (errorElement.TryGetProperty("data", out var dataElement))
+        {
+            data = dataElement.Clone();
+        }
+
+        throw new DevHubRpcException(code, message, data, requestId);
     }
 
     private sealed class JsonRpcRequestEnvelope

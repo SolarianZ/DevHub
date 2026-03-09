@@ -206,6 +206,82 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Contains("hub.ws.authenticate", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal)
+                ? [CreateTextMessage("""{"jsonrpc":"1.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")]
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir
+            },
+            factory,
+            () => "ws-auth-1");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthenticateAsync());
+        Assert.Contains("jsonrpc", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenEventNotificationContainsId_ShouldFaultEventStream()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"evt-1","method":"hub.event","params":{"subscriptionId":"sub-1","type":"invocation.completed","timeUtc":"2026-03-09T00:00:00Z","payload":{"invocationId":"invk-1"}}}"""),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { "invocation.completed" });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        });
+
+        Assert.Contains("hub.event", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
