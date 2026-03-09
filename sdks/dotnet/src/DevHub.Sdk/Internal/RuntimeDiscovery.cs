@@ -18,6 +18,8 @@ internal sealed class RuntimeConnectionInfo
 
 internal static class RuntimeDiscovery
 {
+    private const string RuntimeDirEnvironmentVariableName = "DEVHUB_RUNTIME_DIR";
+
     internal static async Task<RuntimeConnectionInfo> DiscoverAsync(DevHubClientOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -62,6 +64,12 @@ internal static class RuntimeDiscovery
         if (!string.IsNullOrWhiteSpace(runtimeDirectoryOverride))
         {
             return Path.GetFullPath(runtimeDirectoryOverride);
+        }
+
+        var runtimeDirectoryFromEnvironment = Environment.GetEnvironmentVariable(RuntimeDirEnvironmentVariableName);
+        if (!string.IsNullOrWhiteSpace(runtimeDirectoryFromEnvironment))
+        {
+            return Path.GetFullPath(runtimeDirectoryFromEnvironment);
         }
 
         if (OperatingSystem.IsWindows())

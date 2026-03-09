@@ -66,7 +66,10 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
         var result = await _transport.SendAsync("hub.ping", parameters, cancellationToken);
-        return DeserializeRequired<PingResult>(result, "hub.ping.result");
+        var payload = DeserializeRequired<PingResult>(result, "hub.ping.result");
+        EnsureOk(payload.Ok, "hub.ping.result");
+        EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
+        return payload;
     }
 
     /// <summary>
@@ -78,6 +81,8 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
         var payload = DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
+        EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
+        EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
         return payload.Definitions;
     }
 
@@ -91,6 +96,9 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
         var payload = DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
+        EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
+        EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
+        EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
         return payload.Definition;
     }
 
@@ -104,6 +112,9 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
         var payload = DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
+        EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
+        EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
+        EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
         return payload.Instance;
     }
 
@@ -117,6 +128,8 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.apps.heartbeat", RequestPayloadFactory.BuildHeartbeatParams(instanceId), cancellationToken);
         var payload = DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
+        EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
+        EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
         return payload.LastSeenUtc;
     }
 
@@ -128,7 +141,8 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task UnregisterInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.unregisterInstance", RequestPayloadFactory.BuildUnregisterParams(instanceId), cancellationToken);
-        _ = DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
+        var payload = DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
+        EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
     }
 
     /// <summary>
@@ -141,6 +155,8 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
         var payload = DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
+        EnsureOk(payload.Ok, "hub.apps.listInstances.result");
+        EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
         return payload.Instances;
     }
 
@@ -153,7 +169,11 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<LaunchResult> LaunchAsync(LaunchRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken);
-        return DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
+        var payload = DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
+        EnsureOk(payload.Ok, "hub.apps.launch.result");
+        EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
+        EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
+        return payload;
     }
 
     /// <summary>
@@ -165,7 +185,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<NotifyResult> NotifyAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken);
-        return DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
+        var payload = DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
+        EnsureOk(payload.Ok, "hub.invoke.notify.result");
+        EnsureNotEmpty(payload.InvocationId, "hub.invoke.notify.result", "invocationId");
+        return payload;
     }
 
     /// <summary>
@@ -177,7 +200,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
-        return DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
+        var payload = DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
+        EnsureOk(payload.Ok, "hub.invoke.request.result");
+        EnsureNotEmpty(payload.InvocationId, "hub.invoke.request.result", "invocationId");
+        return payload;
     }
 
     /// <summary>
@@ -189,7 +215,11 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
-        return DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
+        var payload = DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
+        EnsureOk(payload.Ok, "hub.invoke.poll.result");
+        EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
+        EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
+        return payload;
     }
 
     /// <summary>
@@ -200,7 +230,8 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task RespondAsync(RespondRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
-        _ = DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
+        var payload = DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
+        EnsureOk(payload.Ok, "hub.invoke.respond.result");
     }
 
     /// <inheritdoc />
@@ -213,6 +244,39 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
         return value ?? throw new InvalidOperationException($"无法解析 {location}。");
+    }
+
+    private static void EnsureOk(bool ok, string location)
+    {
+        if (!ok)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：ok 必须为 true。");
+        }
+    }
+
+    private static void EnsureTimestamp(DateTimeOffset value, string location, string propertyName)
+    {
+        if (value == default)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空默认值。");
+        }
+    }
+
+    private static void EnsureNotEmpty(string? value, string location, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void EnsureNotNull<T>(T? value, string location, string propertyName)
+        where T : class
+    {
+        if (value is null)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
     }
 
     private sealed class OkOnlyContract

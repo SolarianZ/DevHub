@@ -120,6 +120,72 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         }, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task M5_DN_UT_001_RuntimeDiscovery_WhenEnvironmentOverrideProvided_ShouldUseEnvironmentRuntimeDir()
+    {
+        var runtimeDir = CreateRuntimeDirectory();
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-env");
+        await WriteHubJsonAsync(runtimeDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.1:47231",
+            WsUrl = "ws://127.0.0.1:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        using var scope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDir);
+        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client"
+        }, CancellationToken.None);
+
+        Assert.Equal(runtimeDir, connectionInfo.RuntimeDirectory);
+        Assert.Equal("token-env", connectionInfo.Token);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_001_RuntimeDiscovery_WhenExplicitRuntimeDirProvided_ShouldOverrideEnvironmentVariable()
+    {
+        var runtimeDir = CreateRuntimeDirectory();
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-explicit");
+        await WriteHubJsonAsync(runtimeDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.1:47231",
+            WsUrl = "ws://127.0.0.1:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var envRuntimeDir = CreateRuntimeDirectory();
+        using var scope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", envRuntimeDir);
+        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            RuntimeDir = runtimeDir
+        }, CancellationToken.None);
+
+        Assert.Equal(runtimeDir, connectionInfo.RuntimeDirectory);
+        Assert.Equal("token-explicit", connectionInfo.Token);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
@@ -138,5 +204,23 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     private static Task WriteHubJsonAsync(string runtimeDir, HubRuntime runtime)
     {
         return File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), JsonSerializer.Serialize(runtime));
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _originalValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _originalValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _originalValue);
+        }
     }
 }

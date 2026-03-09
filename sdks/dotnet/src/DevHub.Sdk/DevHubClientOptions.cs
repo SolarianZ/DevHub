@@ -16,12 +16,14 @@ public sealed class DevHubClientOptions
     public Guid ClientSessionId { get; set; } = Guid.NewGuid();
 
     /// <summary>
-    /// 运行时目录覆盖。
+    /// 显式运行时目录覆盖。
+    /// 若未指定，则依次使用环境变量 <c>DEVHUB_RUNTIME_DIR</c> 与平台默认目录。
     /// </summary>
     public string? RuntimeDir { get; set; }
 
     /// <summary>
     /// 可选的客户端请求超时。
+    /// 同时应用于 HTTP 请求与 WS 请求-响应交互。
     /// </summary>
     public TimeSpan? RequestTimeout { get; set; }
 

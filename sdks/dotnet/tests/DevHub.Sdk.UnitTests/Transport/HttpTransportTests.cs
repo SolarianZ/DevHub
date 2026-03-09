@@ -81,6 +81,79 @@ public sealed class HttpTransportTests : IDisposable
         }));
     }
 
+    [Fact]
+    public async Task M5_DN_UT_003_HttpTransport_WhenRequestTimeoutExceeded_ShouldThrowOperationCanceledException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new BlockingHandler();
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir,
+            RequestTimeout = TimeSpan.FromMilliseconds(50)
+        }, handler);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_003_HttpTransport_WhenCallerCancellationRequested_ShouldThrowOperationCanceledException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new BlockingHandler();
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        using var cancellationTokenSource = new CancellationTokenSource(millisecondsDelay: 50);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.PingAsync(cancellationToken: cancellationTokenSource.Token));
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenSuccessPayloadOkFalse_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":false,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("hub.ping.result", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-launch\",\"result\":{\"ok\":true,\"status\":\"started\",\"pid\":12345}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "sample.app"
+        }, CancellationToken.None));
+        Assert.Contains("launchId", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
@@ -137,6 +210,30 @@ public sealed class HttpTransportTests : IDisposable
                 await request.Content!.ReadAsStringAsync(cancellationToken));
 
             return _responseFactory(request);
+        }
+    }
+
+    private sealed class StaticResponseHandler : HttpMessageHandler
+    {
+        private readonly HttpResponseMessage _response;
+
+        public StaticResponseHandler(HttpResponseMessage response)
+        {
+            _response = response;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_response);
+        }
+    }
+
+    private sealed class BlockingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 

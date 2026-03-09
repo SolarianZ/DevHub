@@ -116,6 +116,20 @@ public sealed class HttpFlowTests
         Assert.Equal("2", exception.Data!.Value.GetProperty("received").GetString());
     }
 
+    [Fact]
+    public async Task M5_E2E_001_RuntimeDiscovery_WhenEnvironmentOverrideSet_ShouldCreateClientWithoutExplicitRuntimeDir()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        using var scope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", host.RuntimeDirectory);
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "env-runtime-client"
+        });
+
+        var ping = await client.PingAsync();
+        Assert.True(ping.Ok);
+    }
+
     private sealed class HeaderTamperingHandler : DelegatingHandler
     {
         private readonly Action<HttpRequestMessage> _tamperAction;
@@ -130,6 +144,24 @@ public sealed class HttpFlowTests
         {
             _tamperAction(request);
             return base.SendAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _originalValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _originalValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _originalValue);
         }
     }
 }

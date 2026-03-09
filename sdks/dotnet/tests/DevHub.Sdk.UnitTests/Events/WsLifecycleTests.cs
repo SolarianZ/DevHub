@@ -162,6 +162,50 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Equal("invalid_token", exception.Data!.Value.GetProperty("reason").GetString());
     }
 
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateTimesOut_ShouldThrowOperationCanceledException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir,
+                RequestTimeout = TimeSpan.FromMilliseconds(50)
+            },
+            factory,
+            () => "ws-auth-1");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.AuthenticateAsync());
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateReturnsInvalidSuccessPayload_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal)
+                ? [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":false,"protocolVersion":1}}""")]
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir
+            },
+            factory,
+            () => "ws-auth-1");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthenticateAsync());
+        Assert.Contains("hub.ws.authenticate", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))

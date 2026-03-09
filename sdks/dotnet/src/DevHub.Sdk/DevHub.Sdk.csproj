@@ -4,7 +4,20 @@
     <RootNamespace>DevHub.Sdk</RootNamespace>
     <AssemblyName>DevHub.Sdk</AssemblyName>
     <PackageId>DevHub.Sdk</PackageId>
-    <Description>DevHub .NET SDK.</Description>
+    <Description>DevHub 协议的 .NET SDK，提供 runtime discovery、HTTP JSON-RPC 与 WebSocket events 客户端。</Description>
+    <Authors>DevHub Contributors</Authors>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/SolarianZ/DevHub</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SolarianZ/DevHub.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>DevHub;SDK;JSON-RPC;WebSocket;RPC</PackageTags>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +25,10 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
   </ItemGroup>
 
 </Project>
