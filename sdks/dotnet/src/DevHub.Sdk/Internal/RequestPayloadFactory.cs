@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.Internal;
@@ -18,10 +19,16 @@ internal static class RequestPayloadFactory
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
+        ArgumentNullException.ThrowIfNull(instance.Invoke);
 
         if (instance.Pid < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(instance.Pid), instance.Pid, "Pid 必须大于等于 1。");
+        }
+
+        if (instance.Meta is not null)
+        {
+            EnsureSerializesToObject(instance.Meta, nameof(instance), "Meta");
         }
 
         var instancePayload = new Dictionary<string, object?>
@@ -183,6 +190,11 @@ internal static class RequestPayloadFactory
             throw new ArgumentException("RespondRequest 必须且只能包含 Value 或 Error 之一。", nameof(request));
         }
 
+        if (hasError)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.Error!.Message);
+        }
+
         var payload = new Dictionary<string, object?>
         {
             ["instanceId"] = request.InstanceId,
@@ -271,5 +283,24 @@ internal static class RequestPayloadFactory
         }
 
         return payload;
+    }
+
+    private static void EnsureSerializesToObject(object value, string paramName, string propertyName)
+    {
+        JsonElement jsonValue;
+
+        try
+        {
+            jsonValue = JsonSerializer.SerializeToElement(value, DevHubJson.SerializerOptions);
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        {
+            throw new ArgumentException($"{propertyName} 必须可序列化为 JSON 对象。", paramName, exception);
+        }
+
+        if (jsonValue.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException($"{propertyName} 必须序列化为 JSON 对象。", paramName);
+        }
     }
 }

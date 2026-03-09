@@ -322,6 +322,78 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Contains("clientSessionId", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionCapabilitiesTypeInvalid_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-get-definition\"," +
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"displayName\":\"Sample App\",\"capabilities\":{\"rpc\":\"true\"}}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
+        Assert.Contains("definition.capabilities", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("rpc", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenListInstancesResultMetaTypeInvalid_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-list-instances\"," +
+                "\"result\":{\"ok\":true,\"instances\":[{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"meta\":[1]}]}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler, () => "req-list-instances");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("meta", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenPollResultOptionsTypeInvalid_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-poll\"," +
+                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":null,\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"},\"options\":{\"queueIfOffline\":\"true\"}}]}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler, () => "req-poll");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1"
+        }, CancellationToken.None));
+
+        Assert.Contains("items[0].options", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("queueIfOffline", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))

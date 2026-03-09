@@ -254,10 +254,6 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
         var itemsElement = EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
-        var payload = DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
-        EnsureOk(payload.Ok, "hub.invoke.poll.result");
-        EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
-        EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
 
         var index = 0;
         foreach (var itemElement in itemsElement.EnumerateArray())
@@ -265,6 +261,11 @@ public sealed class DevHubClient : IAsyncDisposable
             ValidateInvocationElement(itemElement, $"hub.invoke.poll.result.items[{index}]");
             index++;
         }
+
+        var payload = DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
+        EnsureOk(payload.Ok, "hub.invoke.poll.result");
+        EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
+        EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
 
         return payload;
     }
@@ -289,8 +290,15 @@ public sealed class DevHubClient : IAsyncDisposable
 
     private static T DeserializeRequired<T>(JsonElement result, string location)
     {
-        var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
-        return value ?? throw new InvalidOperationException($"无法解析 {location}。");
+        try
+        {
+            var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
+            return value ?? throw new InvalidOperationException($"无法解析 {location}。");
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        {
+            throw new InvalidOperationException($"无法解析 {location}。", exception);
+        }
     }
 
     private static void EnsureOk(bool ok, string location)
@@ -346,16 +354,28 @@ public sealed class DevHubClient : IAsyncDisposable
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "appId");
         EnsureStringProperty(element, location, "displayName");
+        EnsureOptionalStringProperty(element, location, "description");
+
+        if (element.TryGetProperty("capabilities", out var capabilitiesElement))
+        {
+            if (capabilitiesElement.ValueKind != JsonValueKind.Null)
+            {
+                EnsureElementKind(capabilitiesElement, $"{location}.capabilities", JsonValueKind.Object);
+                EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "rpc");
+                EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "events");
+            }
+        }
 
         if (element.TryGetProperty("launch", out var launchElement))
         {
-            if (launchElement.ValueKind == JsonValueKind.Null)
+            if (launchElement.ValueKind != JsonValueKind.Null)
             {
-                return;
+                EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
+                EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
+                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "argsTemplate");
+                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "workingDirectory");
+                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "dedupeKeyTemplate");
             }
-
-            EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
-            EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
         }
     }
 
@@ -364,6 +384,7 @@ public sealed class DevHubClient : IAsyncDisposable
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "instanceId");
         EnsureStringProperty(element, location, "appId");
+        EnsureOptionalStringOrNullProperty(element, location, "scope");
         EnsurePositiveIntegerProperty(element, location, "pid");
         EnsureStringProperty(element, location, "registeredAtUtc");
         EnsureStringProperty(element, location, "lastSeenUtc");
@@ -371,6 +392,14 @@ public sealed class DevHubClient : IAsyncDisposable
         var invokeElement = EnsurePropertyExists(element, location, "invoke", JsonValueKind.Object);
         EnsureBooleanProperty(invokeElement, $"{location}.invoke", "poll");
         EnsureBooleanProperty(invokeElement, $"{location}.invoke", "respond");
+
+        if (element.TryGetProperty("meta", out var metaElement))
+        {
+            if (metaElement.ValueKind != JsonValueKind.Null)
+            {
+                EnsureElementKind(metaElement, $"{location}.meta", JsonValueKind.Object);
+            }
+        }
     }
 
     private static void ValidateInvocationElement(JsonElement element, string location)
@@ -378,10 +407,24 @@ public sealed class DevHubClient : IAsyncDisposable
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "invocationId");
         EnsureStringProperty(element, location, "appId");
-        EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
+        var targetElement = EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
+        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "scope");
+        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "instanceId");
         EnsureStringProperty(element, location, "method");
         EnsureStringProperty(element, location, "kind");
         EnsureStringProperty(element, location, "createdAtUtc");
+
+        if (element.TryGetProperty("options", out var optionsElement))
+        {
+            if (optionsElement.ValueKind != JsonValueKind.Null)
+            {
+                EnsureElementKind(optionsElement, $"{location}.options", JsonValueKind.Object);
+                EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "ttlMs", 1000);
+                EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "waitTimeoutMs", 1);
+                EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "queueIfOffline");
+                EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "autoLaunch");
+            }
+        }
 
         var callerElement = EnsurePropertyExists(element, location, "caller", JsonValueKind.Object);
         EnsureStringProperty(callerElement, $"{location}.caller", "clientId");
@@ -421,12 +464,69 @@ public sealed class DevHubClient : IAsyncDisposable
         }
     }
 
+    private static void EnsureOptionalBooleanProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalStringProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalStringOrNullProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
     private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)
     {
         var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.Number);
         if (!propertyValue.TryGetInt32(out var value) || value < 1)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 1。");
+        }
+    }
+
+    private static void EnsureOptionalIntegerPropertyAtLeast(JsonElement element, string location, string propertyName, int minimumValue)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.Number || !propertyValue.TryGetInt32(out var value) || value < minimumValue)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 {minimumValue}。");
         }
     }
 

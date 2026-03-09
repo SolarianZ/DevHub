@@ -106,4 +106,36 @@ public sealed class InvocationRequestBuilderTests
         Assert.Equal(10, document.RootElement.GetProperty("maxCount").GetInt32());
         Assert.Equal(25000, document.RootElement.GetProperty("waitMs").GetInt32());
     }
+
+    [Fact]
+    public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "test.app",
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            },
+            Meta = new[] { 1, 2, 3 }
+        }));
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_RespondBuilder_WhenErrorMessageMissing_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InvocationId = "invk-1",
+            Error = new DevHubCalleeError
+            {
+                Code = 1001,
+                Message = string.Empty
+            }
+        }));
+    }
 }
