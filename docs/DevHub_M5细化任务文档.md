@@ -7,15 +7,16 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-08）
+## 当前状态（截至 2026-03-09）
 
-- 当前分支：`review_before_m5`。
+- 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
-- M5 尚未启动：仓库内尚无 SDK 代码目录、SDK 测试目录、签名向量目录与契约运行器。
-- 下文列出的 `src/DevHub.Sdk*`、`sdk/devhub-sdk-ts`、`tests/conformance` 路径均为 M5 规划中的目标落点，当前仓库尚未创建属预期状态，不应按“现存目录”理解。
+- M5 已启动：已在 `sdks/dotnet/` 初始化独立 .NET SDK 解决方案骨架（`DevHub.DotNetSdk.slnx`、`src/DevHub.Sdk/`、`tests/DevHub.Sdk.UnitTests/`、`tests/DevHub.Sdk.IntegrationTests/`），具体 SDK 功能尚未实现。
+- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdk/devhub-sdk-ts` 与 `tests/conformance` 仍为后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中 `DEVHUB_RUNTIME_DIR` 用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（当前为 0 条测试用例的脚手架状态）。
 
 ---
 
@@ -51,8 +52,9 @@
 
 ### 1.1 新增目录与职责
 
-- .NET SDK：`/Users/qiuyu/projects/DevHub/src/DevHub.Sdk/`
-- .NET SDK 测试：`/Users/qiuyu/projects/DevHub/src/DevHub.Sdk.Tests/`
+- .NET SDK：`/Users/qiuyu/projects/DevHub/sdks/dotnet/src/DevHub.Sdk/`
+- .NET SDK 单元测试：`/Users/qiuyu/projects/DevHub/sdks/dotnet/tests/DevHub.Sdk.UnitTests/`
+- .NET SDK 集成测试：`/Users/qiuyu/projects/DevHub/sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`
 - JS/TS SDK：`/Users/qiuyu/projects/DevHub/sdk/devhub-sdk-ts/`
 - JS/TS SDK 测试：`/Users/qiuyu/projects/DevHub/sdk/devhub-sdk-ts/tests/`
 - 签名向量基线：`/Users/qiuyu/projects/DevHub/tests/conformance/v1.0.1/`
@@ -60,7 +62,7 @@
 
 ### 1.2 与现有工程集成要求
 
-- .NET 侧：将 `DevHub.Sdk`、`DevHub.Sdk.Tests` 纳入 `src/DevHub.slnx`。
+- .NET 侧：独立维护 `sdks/dotnet/DevHub.DotNetSdk.slnx`，不纳入 `src/DevHub.slnx`。
 - JS/TS 侧：`sdk/devhub-sdk-ts` 独立包管理，测试命令通过 `npm test` 接入 CI。
 - 契约侧：统一由 `vector_runner.py` 驱动 .NET/TS SDK，输出统一报告格式。
 

@@ -417,13 +417,14 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-03-08）
+## 17. 当前里程碑状态（截至 2026-03-09）
 
-- 当前分支：`review_before_m5`。
+- 当前分支：`m5`。
 - M0：已完成。
 - M1：已完成。
 - M2：已完成。
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：未启动（仓库内尚无 `src/DevHub.Sdk/`、`src/DevHub.Sdk.Tests/`、`sdk/devhub-sdk-ts/` 与 `tests/conformance/` 目录）。
+- M5：已启动（已初始化 `sdks/dotnet/DevHub.DotNetSdk.slnx` 独立 .NET SDK 解决方案，以及 `sdks/dotnet/src/DevHub.Sdk/`、`sdks/dotnet/tests/DevHub.Sdk.UnitTests/`、`sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/` 项目骨架；JS/TS SDK 与 conformance 资产尚未创建）。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（当前为脚手架状态，暂无实际测试用例）。

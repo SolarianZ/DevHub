@@ -8,12 +8,13 @@
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-08）
+## 当前状态（截至 2026-03-09）
 
-- M5 测试任务状态：**未启动**（当前仓库尚无 SDK 与 conformance 目录）。
+- M5 测试任务状态：**已启动**（已创建 `sdks/dotnet/DevHub.DotNetSdk.slnx` 及 .NET SDK 单元/集成测试工程骨架，测试用例尚未实现）。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
-- 下文涉及的 `src/DevHub.Sdk.Tests/`、`sdk/devhub-sdk-ts/tests/`、`tests/conformance/` 等路径均为 M5 规划中的目标测试资产，当前仓库尚未创建属预期状态。
+- 下文涉及的 .NET SDK 单元测试路径统一调整为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，.NET SDK 集成测试路径为 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdk/devhub-sdk-ts/tests/` 与 `tests/conformance/` 仍为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过，当前尚无实际测试用例。
 
 ---
 
@@ -53,12 +54,12 @@
 
 | 用例编号 | 场景 | 类型 | 责任文件 |
 | --- | --- | --- | --- |
-| `M5-DN-UT-001` | `hub.json` 正常解析并读取 `tokenFile` | .NET 白盒 | `src/DevHub.Sdk.Tests/Discovery/RuntimeDiscoveryTests.cs` |
-| `M5-DN-UT-002` | `hub.json` 缺失字段（`httpBaseUrl/wsUrl/tokenFile`）抛出统一异常 | .NET 白盒 | `src/DevHub.Sdk.Tests/Discovery/RuntimeDiscoveryTests.cs` |
-| `M5-DN-UT-003` | HTTP 鉴权头组装与 `protocol/clientId/clientSessionId` 必填校验 | .NET 白盒 | `src/DevHub.Sdk.Tests/Transport/HttpTransportTests.cs` |
-| `M5-DN-UT-004` | RPC 错误响应映射为 `DevHubRpcException` | .NET 白盒 | `src/DevHub.Sdk.Tests/Rpc/RpcErrorMappingTests.cs` |
-| `M5-DN-UT-005` | WS 首条必须认证（未认证调用被拒绝） | .NET 白盒 | `src/DevHub.Sdk.Tests/Events/WsLifecycleTests.cs` |
-| `M5-DN-UT-006` | `target.scope` 与 `target.instanceId` 默认值构造逻辑 | .NET 白盒 | `src/DevHub.Sdk.Tests/Rpc/InvocationRequestBuilderTests.cs` |
+| `M5-DN-UT-001` | `hub.json` 正常解析并读取 `tokenFile` | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Discovery/RuntimeDiscoveryTests.cs` |
+| `M5-DN-UT-002` | `hub.json` 缺失字段（`httpBaseUrl/wsUrl/tokenFile`）抛出统一异常 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Discovery/RuntimeDiscoveryTests.cs` |
+| `M5-DN-UT-003` | HTTP 鉴权头组装与 `protocol/clientId/clientSessionId` 必填校验 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Transport/HttpTransportTests.cs` |
+| `M5-DN-UT-004` | RPC 错误响应映射为 `DevHubRpcException` | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/RpcErrorMappingTests.cs` |
+| `M5-DN-UT-005` | WS 首条必须认证（未认证调用被拒绝） | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Events/WsLifecycleTests.cs` |
+| `M5-DN-UT-006` | `target.scope` 与 `target.instanceId` 默认值构造逻辑 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/InvocationRequestBuilderTests.cs` |
 | `M5-TS-UT-001` | Node runtime discovery 成功路径 | TS 白盒 | `sdk/devhub-sdk-ts/tests/discovery.test.ts` |
 | `M5-TS-UT-002` | discovery 缺失/非法字段错误映射 | TS 白盒 | `sdk/devhub-sdk-ts/tests/discovery.test.ts` |
 | `M5-TS-UT-003` | HTTP header 与 `protocolVersion/clientId/clientSessionId` 校验 | TS 白盒 | `sdk/devhub-sdk-ts/tests/http-transport.test.ts` |
@@ -123,7 +124,7 @@
 
 ### 4.1 .NET SDK 测试任务
 
-- [ ] 创建 `DevHub.Sdk.Tests` 工程并接入 `src/DevHub.slnx`。
+- [x] 创建 `DevHub.Sdk.UnitTests` 与 `DevHub.Sdk.IntegrationTests` 工程并接入 `sdks/dotnet/DevHub.DotNetSdk.slnx`。
 - [ ] 先完成 Discovery/Auth/错误映射白盒，再补全 apps/invoke/events API 白盒。
 - [ ] 增加对 `DevHubRpcException` 字段完整性断言（`Code/Message/Data/RequestId`）。
 
