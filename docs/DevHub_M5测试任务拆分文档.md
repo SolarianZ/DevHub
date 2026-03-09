@@ -14,7 +14,7 @@
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
 - 下文涉及的 .NET SDK 单元测试路径统一为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景当前落在 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdk/devhub-sdk-ts/tests/` 与 `tests/conformance/` 仍为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
-- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 39 条单元测试 + 14 条集成测试）。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
 
 ---
 

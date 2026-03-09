@@ -42,9 +42,45 @@ public sealed class RpcErrorMappingTests : IDisposable
         Assert.Equal(-32050, exception.Code);
         Assert.Equal("invocation_failed", exception.Message);
         Assert.Equal("req-fixed", exception.RequestId);
+        Assert.Equal(DevHubRpcErrorCode.InvocationFailed, exception.KnownCode);
+        Assert.True(exception.Is(DevHubRpcErrorCode.InvocationFailed));
         Assert.True(exception.Data.HasValue);
-        Assert.Equal("invk-1", exception.Data.Value.GetProperty("invocationId").GetString());
-        Assert.Equal(1001, exception.Data.Value.GetProperty("calleeError").GetProperty("code").GetInt32());
+        var errorData = exception.Data ?? throw new InvalidOperationException("缺少 error.data。");
+        Assert.Equal(errorData.GetRawText(), exception.ErrorData?.GetRawText());
+        Assert.Equal("invk-1", errorData.GetProperty("invocationId").GetString());
+        Assert.Equal(1001, errorData.GetProperty("calleeError").GetProperty("code").GetInt32());
+        Assert.True(exception.TryGetDataProperty("calleeError", out var calleeError));
+        Assert.Equal("app_error", calleeError.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_RpcErrorResponse_ShouldExposeReasonHelper()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-fixed\",\"error\":{\"code\":-32001,\"message\":\"unauthorized\",\"data\":{\"reason\":\"invalid_token\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                RuntimeDir = runtimeDir
+            },
+            handler,
+            () => "req-fixed");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+
+        Assert.Equal(DevHubRpcErrorCode.Unauthorized, exception.KnownCode);
+        Assert.Equal("invalid_token", exception.Reason);
+        Assert.True(exception.TryGetDataString("reason", out var reason));
+        Assert.Equal("invalid_token", reason);
+        Assert.False(exception.TryGetDataProperty("missing", out _));
     }
 
     public void Dispose()

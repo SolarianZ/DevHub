@@ -240,8 +240,8 @@ try
 }
 catch (DevHubRpcException ex)
 {
-    Console.WriteLine($"code={ex.Code}, message={ex.Message}, requestId={ex.RequestId}");
-    Console.WriteLine(ex.Data?.GetRawText());
+    Console.WriteLine($"code={ex.Code}, knownCode={ex.KnownCode}, reason={ex.Reason}, requestId={ex.RequestId}");
+    Console.WriteLine(ex.ErrorData?.GetRawText());
 }
 ```
 
@@ -257,6 +257,7 @@ catch (DevHubRpcException ex)
 - `DevHubClient`
 - `DevHubEventsClient`
 - `DevHubRpcException`
+- `DevHubRpcErrorCode`
 - `DevHub.Sdk.Models.*`
 
 ## 常用命令
