@@ -11,12 +11,12 @@
 
 - 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
-- M5 已启动：已在 `sdks/dotnet/` 初始化独立 .NET SDK 解决方案骨架（`DevHub.DotNetSdk.slnx`、`src/DevHub.Sdk/`、`tests/DevHub.Sdk.UnitTests/`、`tests/DevHub.Sdk.IntegrationTests/`），具体 SDK 功能尚未实现。
+- `.NET SDK` 子范围已完成：`sdks/dotnet/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及 `.NET` 单元测试与 SDK↔Hub 黑盒集成测试；TS SDK、conformance 与跨语言 CI 仍待后续阶段完成。
 - 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdk/devhub-sdk-ts` 与 `tests/conformance` 仍为后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中 `DEVHUB_RUNTIME_DIR` 用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
-- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（当前为 0 条测试用例的脚手架状态）。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 20 条单元测试 + 13 条集成测试）。
 
 ---
 
@@ -130,12 +130,12 @@
 
 ### 3.2 `M5-DN-*`（.NET SDK 实现）
 
-- [ ] `M5-DN-001`：Runtime discovery（`hub.json/tokenFile`）读取模块。
-- [ ] `M5-DN-002`：HTTP JSON-RPC 客户端与统一请求管线。
-- [ ] `M5-DN-003`：WS 客户端鉴权与订阅管线。
-- [ ] `M5-DN-004`：`hub.apps.*` API 封装（显式包含 `launch`）。
-- [ ] `M5-DN-005`：`hub.invoke.*` API 封装（含 request/notify/poll/respond）。
-- [ ] `M5-DN-006`：统一错误模型 `DevHubRpcException` 与错误数据透传。
+- [x] `M5-DN-001`：Runtime discovery（`hub.json/tokenFile`）读取模块。
+- [x] `M5-DN-002`：HTTP JSON-RPC 客户端与统一请求管线。
+- [x] `M5-DN-003`：WS 客户端鉴权与订阅管线。
+- [x] `M5-DN-004`：`hub.apps.*` API 封装（显式包含 `launch`）。
+- [x] `M5-DN-005`：`hub.invoke.*` API 封装（含 request/notify/poll/respond）。
+- [x] `M5-DN-006`：统一错误模型 `DevHubRpcException` 与错误数据透传。
 
 ### 3.3 `M5-TS-*`（JS/TS SDK 实现）
 
@@ -169,9 +169,9 @@
 
 ### 3.7 `M5-DOC-*`（文档与状态同步）
 
-- [ ] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
+- [x] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
 - [ ] `M5-DOC-002`：补充 SDK 快速接入示例（.NET/TS）。
-- [ ] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
+- [x] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
 
 ---
 

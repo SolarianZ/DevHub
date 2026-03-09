@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+    <ProjectReference Include="..\..\..\..\src\DevHub.Host\DevHub.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
