@@ -425,6 +425,6 @@ ws.onmessage = (e) => {
 - M2：已完成。
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、打包元数据与 SDK 白盒/黑盒测试；JS/TS SDK 与 conformance 资产尚未创建）。
+- M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试；JS/TS SDK 与 conformance 资产尚未创建）。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。
-- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；`python3 tests/test_runner.py --smoke --no-header` 在隔离 `DEVHUB_RUNTIME_DIR` 环境下可通过。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在本地 Host 运行时，`python3 tests/test_runner.py --smoke --no-header` 可通过。

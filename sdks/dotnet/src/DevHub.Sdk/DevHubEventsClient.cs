@@ -45,6 +45,16 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 客户端选项。
+    /// </summary>
+    public DevHubClientOptions Options => _options;
+
+    /// <summary>
+    /// 当前连接的运行时信息。
+    /// </summary>
+    public HubRuntime Runtime => _connectionInfo.Runtime;
+
+    /// <summary>
     /// 通过运行时目录创建事件客户端。
     /// </summary>
     /// <param name="options">客户端选项。</param>

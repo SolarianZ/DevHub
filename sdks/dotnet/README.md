@@ -15,6 +15,7 @@
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
 - 统一错误模型：`DevHubRpcException`
+- 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试
 
 当前不包含：
@@ -88,6 +89,27 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 {
     ClientId = "ExampleClient"
 });
+```
+
+### 3. 使用依赖注入工厂
+
+```csharp
+using DevHub.Sdk;
+using Microsoft.Extensions.DependencyInjection;
+
+var services = new ServiceCollection();
+services.AddDevHubSdk(options =>
+{
+    options.ClientId = "ExampleClient";
+    options.RuntimeDir = runtimeDir;
+});
+
+using var serviceProvider = services.BuildServiceProvider();
+var clientFactory = serviceProvider.GetRequiredService<IDevHubClientFactory>();
+var eventsClientFactory = serviceProvider.GetRequiredService<IDevHubEventsClientFactory>();
+
+await using var client = await clientFactory.CreateAsync();
+await using var eventsClient = await eventsClientFactory.CreateAsync();
 ```
 
 ## HTTP 用法示例
