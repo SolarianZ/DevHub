@@ -118,6 +118,11 @@ internal static class RuntimeDiscovery
             throw new InvalidOperationException($"hub.json.tokenFile 非法：{hubJsonPath}");
         }
 
+        if (runtime.StartedAtUtc == default)
+        {
+            throw new InvalidOperationException($"hub.json.startedAtUtc 非法：{hubJsonPath}");
+        }
+
         if (runtime.RuntimeTuning is null ||
             runtime.RuntimeTuning.LeaseSeconds < 1 ||
             runtime.RuntimeTuning.OnlineThresholdSeconds < 1 ||

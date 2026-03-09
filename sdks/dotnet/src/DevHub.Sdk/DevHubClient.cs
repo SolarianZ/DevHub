@@ -80,9 +80,18 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
+        var definitionsElement = EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
         var payload = DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
         EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
         EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+
+        var index = 0;
+        foreach (var definitionElement in definitionsElement.EnumerateArray())
+        {
+            ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
+            index++;
+        }
+
         return payload.Definitions;
     }
 
@@ -95,10 +104,15 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
+        ValidateAppDefinitionElement(
+            EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
+            "hub.apps.getDefinition.result.definition");
+
         var payload = DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
         EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
         EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
         EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
+        EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
         return payload.Definition;
     }
 
@@ -111,10 +125,17 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppInstance> RegisterInstanceAsync(AppInstanceRegistration instance, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
+        ValidateAppInstanceElement(
+            EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
+            "hub.apps.registerInstance.result.instance");
+
         var payload = DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
         EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
         EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
         EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
+        EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
+        EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
+        EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
         return payload.Instance;
     }
 
@@ -154,9 +175,18 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
+        var instancesElement = EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
         var payload = DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
         EnsureOk(payload.Ok, "hub.apps.listInstances.result");
         EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
+
+        var index = 0;
+        foreach (var instanceElement in instancesElement.EnumerateArray())
+        {
+            ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
+            index++;
+        }
+
         return payload.Instances;
     }
 
@@ -173,6 +203,13 @@ public sealed class DevHubClient : IAsyncDisposable
         EnsureOk(payload.Ok, "hub.apps.launch.result");
         EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
         EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
+        if (!string.Equals(payload.Status, "started", StringComparison.Ordinal) &&
+            !string.Equals(payload.Status, "starting", StringComparison.Ordinal) &&
+            !string.Equals(payload.Status, "already_running", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("hub.apps.launch.result 返回结果非法：status 取值不受支持。");
+        }
+
         return payload;
     }
 
@@ -200,6 +237,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
+        EnsurePropertyExists(result, "hub.invoke.request.result", "value");
         var payload = DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
         EnsureOk(payload.Ok, "hub.invoke.request.result");
         EnsureNotEmpty(payload.InvocationId, "hub.invoke.request.result", "invocationId");
@@ -215,10 +253,19 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
+        var itemsElement = EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
         var payload = DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
         EnsureOk(payload.Ok, "hub.invoke.poll.result");
         EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
         EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
+
+        var index = 0;
+        foreach (var itemElement in itemsElement.EnumerateArray())
+        {
+            ValidateInvocationElement(itemElement, $"hub.invoke.poll.result.items[{index}]");
+            index++;
+        }
+
         return payload;
     }
 
@@ -254,9 +301,24 @@ public sealed class DevHubClient : IAsyncDisposable
         }
     }
 
-    private static void EnsureTimestamp(DateTimeOffset value, string location, string propertyName)
+    private static JsonElement EnsurePropertyExists(JsonElement payload, string location, string propertyName, JsonValueKind? expectedKind = null)
     {
-        if (value == default)
+        if (!payload.TryGetProperty(propertyName, out var propertyValue))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+
+        if (expectedKind is { } kind && propertyValue.ValueKind != kind)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+
+        return propertyValue;
+    }
+
+    private static void EnsureTimestamp(DateTimeOffset? value, string location, string propertyName)
+    {
+        if (value is null || value.Value == default)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空默认值。");
         }
@@ -276,6 +338,95 @@ public sealed class DevHubClient : IAsyncDisposable
         if (value is null)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void ValidateAppDefinitionElement(JsonElement element, string location)
+    {
+        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureStringProperty(element, location, "appId");
+        EnsureStringProperty(element, location, "displayName");
+
+        if (element.TryGetProperty("launch", out var launchElement))
+        {
+            if (launchElement.ValueKind == JsonValueKind.Null)
+            {
+                return;
+            }
+
+            EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
+            EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
+        }
+    }
+
+    private static void ValidateAppInstanceElement(JsonElement element, string location)
+    {
+        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureStringProperty(element, location, "instanceId");
+        EnsureStringProperty(element, location, "appId");
+        EnsurePositiveIntegerProperty(element, location, "pid");
+        EnsureStringProperty(element, location, "registeredAtUtc");
+        EnsureStringProperty(element, location, "lastSeenUtc");
+
+        var invokeElement = EnsurePropertyExists(element, location, "invoke", JsonValueKind.Object);
+        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "poll");
+        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "respond");
+    }
+
+    private static void ValidateInvocationElement(JsonElement element, string location)
+    {
+        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureStringProperty(element, location, "invocationId");
+        EnsureStringProperty(element, location, "appId");
+        EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
+        EnsureStringProperty(element, location, "method");
+        EnsureStringProperty(element, location, "kind");
+        EnsureStringProperty(element, location, "createdAtUtc");
+
+        var callerElement = EnsurePropertyExists(element, location, "caller", JsonValueKind.Object);
+        EnsureStringProperty(callerElement, $"{location}.caller", "clientId");
+        EnsureStringProperty(callerElement, $"{location}.caller", "clientSessionId");
+
+        if (element.TryGetProperty("delivery", out var deliveryElement) && deliveryElement.ValueKind != JsonValueKind.Null)
+        {
+            EnsureElementKind(deliveryElement, $"{location}.delivery", JsonValueKind.Object);
+            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "leaseSeconds");
+            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "attempt");
+        }
+    }
+
+    private static void EnsureElementKind(JsonElement element, string location, JsonValueKind expectedKind)
+    {
+        if (element.ValueKind != expectedKind)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：JSON 类型非法。");
+        }
+    }
+
+    private static void EnsureStringProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
+        if (string.IsNullOrWhiteSpace(propertyValue.GetString()))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void EnsureBooleanProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName);
+        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.Number);
+        if (!propertyValue.TryGetInt32(out var value) || value < 1)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 1。");
         }
     }
 

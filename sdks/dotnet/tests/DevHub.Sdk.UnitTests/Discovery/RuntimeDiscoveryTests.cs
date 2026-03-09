@@ -55,6 +55,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     [InlineData("httpBaseUrl")]
     [InlineData("wsUrl")]
     [InlineData("tokenFile")]
+    [InlineData("startedAtUtc")]
     public async Task M5_DN_UT_002_RuntimeDiscovery_WhenHubJsonMissingRequiredField_ShouldThrowInvalidOperationException(string missingProperty)
     {
         var runtimeDir = CreateRuntimeDirectory();

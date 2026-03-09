@@ -154,6 +154,114 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Contains("launchId", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-get-definition\"," +
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\"}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
+        Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-register\"," +
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "sample.app",
+            Pid = 12345,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, CancellationToken.None));
+
+        Assert.Contains("lastSeenUtc", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenRequestResultMissingValue_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-request\"," +
+                "\"result\":{\"ok\":true,\"invocationId\":\"invk-1\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RequestAsync(new InvokeRequest
+        {
+            AppId = "sample.app",
+            Method = "sample.request"
+        }, CancellationToken.None));
+
+        Assert.Contains("value", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenPollResultItemMissingCallerSessionId_ShouldThrowInvalidOperationException()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-poll\"," +
+                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\"}}]}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            RuntimeDir = runtimeDir
+        }, handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1"
+        }, CancellationToken.None));
+
+        Assert.Contains("clientSessionId", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
