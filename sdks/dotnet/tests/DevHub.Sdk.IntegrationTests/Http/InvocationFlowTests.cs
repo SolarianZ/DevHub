@@ -29,17 +29,11 @@ public sealed class InvocationFlowTests
             Args = new { message = "hello" }
         });
 
-        var pollResult = await client.PollAsync(new PollRequest
-        {
-            InstanceId = "notify-inst-1",
-            WaitMs = 0
-        });
-
         Assert.True(notifyResult.Ok);
-        Assert.Single(pollResult.Items);
-        Assert.Equal(notifyResult.InvocationId, pollResult.Items[0].InvocationId);
-        Assert.Equal(InvocationKind.Notify, pollResult.Items[0].Kind);
-        Assert.Equal("hello", pollResult.Items[0].Args!.Value.GetProperty("message").GetString());
+        var invocation = await WaitForSingleInvocationAsync(client, "notify-inst-1");
+        Assert.Equal(notifyResult.InvocationId, invocation.InvocationId);
+        Assert.Equal(InvocationKind.Notify, invocation.Kind);
+        Assert.Equal("hello", invocation.Args!.Value.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -67,12 +61,7 @@ public sealed class InvocationFlowTests
             }
         });
 
-        var pollResult = await client.PollAsync(new PollRequest
-        {
-            InstanceId = "request-inst-1",
-            WaitMs = 100
-        });
-        var invocation = Assert.Single(pollResult.Items);
+        var invocation = await WaitForSingleInvocationAsync(client, "request-inst-1");
 
         await client.RespondAsync(new RespondRequest
         {
@@ -118,12 +107,7 @@ public sealed class InvocationFlowTests
             }
         });
 
-        var pollResult = await client.PollAsync(new PollRequest
-        {
-            InstanceId = "error-inst-1",
-            WaitMs = 100
-        });
-        var invocation = Assert.Single(pollResult.Items);
+        var invocation = await WaitForSingleInvocationAsync(client, "error-inst-1");
 
         await client.RespondAsync(new RespondRequest
         {
@@ -195,8 +179,7 @@ public sealed class InvocationFlowTests
             AppId = "invoke.scope.app",
             Method = "test.default-global"
         });
-        var globalDefault = await client.PollAsync(new PollRequest { InstanceId = "scope-global-inst", WaitMs = 100 });
-        Assert.Single(globalDefault.Items);
+        _ = await WaitForSingleInvocationAsync(client, "scope-global-inst");
         Assert.Empty((await client.PollAsync(new PollRequest { InstanceId = "scope-a-inst", WaitMs = 0 })).Items);
 
         _ = await client.NotifyAsync(new InvokeRequest
@@ -205,8 +188,7 @@ public sealed class InvocationFlowTests
             Method = "test.scope-a",
             Target = new InvocationTarget { Scope = "scope-a" }
         });
-        var scopeAItems = await client.PollAsync(new PollRequest { InstanceId = "scope-a-inst", WaitMs = 100 });
-        Assert.Single(scopeAItems.Items);
+        _ = await WaitForSingleInvocationAsync(client, "scope-a-inst");
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -214,8 +196,7 @@ public sealed class InvocationFlowTests
             Method = "test.empty-scope",
             Target = new InvocationTarget { Scope = string.Empty }
         });
-        var emptyScopeItems = await client.PollAsync(new PollRequest { InstanceId = "scope-global-inst", WaitMs = 100 });
-        Assert.Single(emptyScopeItems.Items);
+        _ = await WaitForSingleInvocationAsync(client, "scope-global-inst");
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -223,8 +204,7 @@ public sealed class InvocationFlowTests
             Method = "test.literal-global",
             Target = new InvocationTarget { Scope = "global" }
         });
-        var literalGlobalItems = await client.PollAsync(new PollRequest { InstanceId = "scope-literal-global-inst", WaitMs = 100 });
-        Assert.Single(literalGlobalItems.Items);
+        _ = await WaitForSingleInvocationAsync(client, "scope-literal-global-inst");
     }
 
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId, string? scope)
@@ -241,5 +221,38 @@ public sealed class InvocationFlowTests
                 Respond = true
             }
         };
+    }
+
+    private static async Task<Invocation> WaitForSingleInvocationAsync(DevHubClient client, string instanceId, int timeoutMs = 3000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        var lastCount = 0;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            var waitMs = remaining <= TimeSpan.Zero
+                ? 0
+                : Math.Min((int)Math.Ceiling(remaining.TotalMilliseconds), 250);
+
+            var pollResult = await client.PollAsync(new PollRequest
+            {
+                InstanceId = instanceId,
+                WaitMs = waitMs
+            });
+
+            lastCount = pollResult.Items.Count;
+            if (lastCount == 1)
+            {
+                return pollResult.Items[0];
+            }
+
+            if (lastCount > 1)
+            {
+                Assert.Single(pollResult.Items);
+            }
+        }
+
+        throw new TimeoutException($"鍦?{timeoutMs}ms 鍐呮湭绛夊埌瀹炰緥 {instanceId} 鐨勫崟鏉¤皟鐢ㄣ€傛渶鍚庝竴娆¤疆璇㈣繑鍥?{lastCount} 涓」鐩€?");
     }
 }

@@ -87,6 +87,55 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenConnectionClosesAfterQueuedEvent_ShouldStillReadBufferedEvents()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage("""{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"invocation.completed","timeUtc":"2026-03-09T00:00:00Z","payload":{"invocationId":"invk-1"}}}"""),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { "invocation.completed" });
+        await connection.WaitForCloseObservedAsync();
+
+        await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal("invocation.completed", enumerator.Current.Type);
+        Assert.Equal("sub-1", enumerator.Current.SubscriptionId);
+        Assert.False(await enumerator.MoveNextAsync());
+    }
+
+    [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateFails_ShouldThrowDevHubRpcException()
     {
         var runtimeDir = await CreateRuntimeAsync();
@@ -185,6 +234,7 @@ public sealed class WsLifecycleTests : IDisposable
     {
         private readonly Queue<WebSocketReceiveMessage> _messages = new();
         private readonly SemaphoreSlim _messageSignal = new(0);
+        private readonly TaskCompletionSource<bool> _closeObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public List<string> SentTexts { get; } = [];
 
@@ -216,7 +266,18 @@ public sealed class WsLifecycleTests : IDisposable
         public async Task<WebSocketReceiveMessage> ReceiveAsync(CancellationToken cancellationToken)
         {
             await _messageSignal.WaitAsync(cancellationToken);
-            return _messages.Dequeue();
+            var message = _messages.Dequeue();
+            if (message.MessageType == WebSocketMessageType.Close)
+            {
+                _closeObserved.TrySetResult(true);
+            }
+
+            return message;
+        }
+
+        public Task WaitForCloseObservedAsync()
+        {
+            return _closeObserved.Task;
         }
 
         public Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)

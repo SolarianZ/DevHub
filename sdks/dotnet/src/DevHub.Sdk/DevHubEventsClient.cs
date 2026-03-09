@@ -25,6 +25,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     private IWebSocketConnection? _connection;
     private Task? _receiverLoopTask;
     private bool _authenticated;
+    private bool _eventStreamAvailable;
     private bool _disposed;
 
     private DevHubEventsClient(
@@ -104,6 +105,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             }
 
             _authenticated = true;
+            _eventStreamAvailable = true;
         }
         catch
         {
@@ -192,7 +194,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>事件异步序列。</returns>
     public IAsyncEnumerable<DevHubEvent> ReadEventsAsync(CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
+        EnsureEventStreamAvailable();
 
         return ReadEventsCore(cancellationToken);
     }
@@ -407,6 +409,15 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         if (!_authenticated)
         {
             throw new InvalidOperationException("当前事件客户端尚未认证。");
+        }
+    }
+
+    private void EnsureEventStreamAvailable()
+    {
+        ThrowIfDisposed();
+        if (!_eventStreamAvailable)
+        {
+            EnsureAuthenticated();
         }
     }
 
