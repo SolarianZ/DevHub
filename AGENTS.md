@@ -6,20 +6,31 @@
 
 ```text
 DevHub/
-├── docs/                          # 协议规范与设计文档
-│   ├── Spec.md                    # 权威技术规范（Single Source of Truth）
-│   └── DevHub协议与开发规划.md      # 架构演进与里程碑规划
-├── src/                           # 核心实现代码（.NET）
-│   ├── DevHub.Core/               # 核心领域模型与基础服务
-│   ├── DevHub.Host/               # 基于 ASP.NET Core 的宿主程序
-│   ├── DevHub.Tests/              # 单元测试（白盒测试）
-│   ├── DevHub.Host.Tests/         # Host 级测试
-│   └── DevHub.slnx                # 解决方案文件
-├── tests/                         # 集成测试套件（黑盒测试）
-│   ├── README.md                  # 集成测试环境配置说明
-│   └── test_runner.py             # 集成测试自动化入口脚本
-├── temp/                          # 生成的测试报告与临时产物
-└── LICENSE                        # 许可证文件
+├── docs/                                    # 协议规范与设计文档
+│   ├── Spec.md                              # 权威技术规范（Single Source of Truth）
+│   └── DevHub协议与开发规划.md               # 架构演进与里程碑规划
+├── src/                                     # 核心实现代码（.NET）
+│   ├── DevHub.Core/                         # 核心领域模型与基础服务
+│   ├── DevHub.Host/                         # 基于 ASP.NET Core 的宿主程序
+│   ├── DevHub.Tests/                        # 单元测试（白盒测试）
+│   ├── DevHub.Host.Tests/                   # Host 级测试
+│   └── DevHub.slnx                          # 解决方案文件
+├── tests/                                   # 集成测试套件（黑盒测试）
+│   ├── README.md                            # 集成测试环境配置说明
+│   └── test_runner.py                       # 集成测试自动化入口脚本
+├── sdks/                                    # 多语言 SDK、示例代码与相关开发资源
+│   └── dotnet/                              # .NET SDK 工作区
+│       ├── src/                             # .NET SDK 源码
+│       │   └── DevHub.Sdk/                  # .NET SDK 核心库
+│       ├── tests/                           # .NET SDK 测试项目
+│       │   ├── DevHub.Sdk.UnitTests/        # .NET SDK 单元测试
+│       │   └── DevHub.Sdk.IntegrationTests/ # .NET SDK 集成测试
+│       ├── DevHub.DotNetSdk.slnx            # .NET SDK 解决方案文件
+│       ├── Directory.Build.props            # .NET SDK 工作区公共构建配置
+│       ├── Directory.Packages.props         # .NET SDK 工作区统一依赖版本管理
+│       └── README.md                        # .NET SDK 使用与开发说明
+├── temp/                                    # 生成的测试报告与临时产物
+└── LICENSE                                  # 许可证文件
 ```
 
 ## 运行时数据规约
