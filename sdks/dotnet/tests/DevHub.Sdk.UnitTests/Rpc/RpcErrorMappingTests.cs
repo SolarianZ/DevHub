@@ -47,10 +47,17 @@ public sealed class RpcErrorMappingTests : IDisposable
         Assert.True(exception.Data.HasValue);
         var errorData = exception.Data ?? throw new InvalidOperationException("缺少 error.data。");
         Assert.Equal(errorData.GetRawText(), exception.ErrorData?.GetRawText());
+        Assert.Equal("invk-1", exception.InvocationId);
         Assert.Equal("invk-1", errorData.GetProperty("invocationId").GetString());
         Assert.Equal(1001, errorData.GetProperty("calleeError").GetProperty("code").GetInt32());
         Assert.True(exception.TryGetDataProperty("calleeError", out var calleeError));
         Assert.Equal("app_error", calleeError.GetProperty("message").GetString());
+        Assert.True(exception.TryGetCalleeError(out var typedCalleeError));
+        Assert.NotNull(typedCalleeError);
+        Assert.Equal(1001, typedCalleeError!.Code);
+        Assert.Equal("app_error", typedCalleeError.Message);
+        Assert.Equal("boom", typedCalleeError.Data!.Value.GetProperty("reason").GetString());
+        Assert.Equal(typedCalleeError.Code, exception.CalleeError?.Code);
     }
 
     [Fact]
@@ -78,9 +85,12 @@ public sealed class RpcErrorMappingTests : IDisposable
 
         Assert.Equal(DevHubRpcErrorCode.Unauthorized, exception.KnownCode);
         Assert.Equal("invalid_token", exception.Reason);
+        Assert.Null(exception.InvocationId);
+        Assert.Null(exception.CalleeError);
         Assert.True(exception.TryGetDataString("reason", out var reason));
         Assert.Equal("invalid_token", reason);
         Assert.False(exception.TryGetDataProperty("missing", out _));
+        Assert.False(exception.TryGetCalleeError(out _));
     }
 
     public void Dispose()

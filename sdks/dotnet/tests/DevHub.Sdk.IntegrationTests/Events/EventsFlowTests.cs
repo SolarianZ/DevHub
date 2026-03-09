@@ -20,7 +20,7 @@ public sealed class EventsFlowTests
 
         await using var eventsClient = await host.CreateEventsClientAsync("events-client");
         await eventsClient.AuthenticateAsync();
-        var subscriptionId = await eventsClient.SubscribeAsync(new[] { "app.instance.registered" });
+        var subscriptionId = await eventsClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
 
         var eventEnumerator = eventsClient.ReadEventsAsync().GetAsyncEnumerator();
 
@@ -29,7 +29,7 @@ public sealed class EventsFlowTests
 
         Assert.True(await eventEnumerator.MoveNextAsync());
         Assert.Equal(subscriptionId, eventEnumerator.Current.SubscriptionId);
-        Assert.Equal("app.instance.registered", eventEnumerator.Current.Type);
+        Assert.Equal(DevHubEventTypes.AppInstanceRegistered, eventEnumerator.Current.Type);
 
         await eventsClient.UnsubscribeAsync(subscriptionId);
         await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-2"));
@@ -63,7 +63,7 @@ public sealed class EventsFlowTests
         await using (var firstClient = await host.CreateEventsClientAsync("events-client-1"))
         {
             await firstClient.AuthenticateAsync();
-            _ = await firstClient.SubscribeAsync(new[] { "app.instance.registered" });
+            _ = await firstClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
         }
 
         await using var secondClient = await host.CreateEventsClientAsync("events-client-2");
@@ -72,7 +72,7 @@ public sealed class EventsFlowTests
         await using var httpClient = await host.CreateClientAsync("events-http-client");
         await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-1"));
 
-        _ = await secondClient.SubscribeAsync(new[] { "app.instance.registered" });
+        _ = await secondClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
         await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-2"));
 
         await using var enumerator = secondClient.ReadEventsAsync().GetAsyncEnumerator();
@@ -80,7 +80,7 @@ public sealed class EventsFlowTests
         var completedTask = await Task.WhenAny(moveNextTask, Task.Delay(TimeSpan.FromSeconds(2)));
         Assert.Same(moveNextTask, completedTask);
         Assert.True(await moveNextTask);
-        Assert.Equal("app.instance.registered", enumerator.Current.Type);
+        Assert.Equal(DevHubEventTypes.AppInstanceRegistered, enumerator.Current.Type);
         Assert.Equal("events-reconnect-inst-2", enumerator.Current.Payload!.Value.GetProperty("instanceId").GetString());
     }
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk.Models;
 
@@ -507,7 +508,7 @@ public sealed class DevHubCalleeError
         {
             Code = code,
             Message = message,
-            Data = data is null ? null : JsonSerializer.SerializeToElement(data)
+            Data = data is null ? null : JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions)
         };
     }
 }

@@ -15,6 +15,7 @@
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
 - 统一错误模型：`DevHubRpcException`
+- 协议辅助常量与结构化错误：`DevHubEventTypes`、`DevHubRpcException.CalleeError`
 - 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试
 
@@ -68,6 +69,7 @@ SDK 始终以 `hub.json` 为权威端点来源，不会硬编码端口、HTTP �
 
 ```csharp
 using DevHub.Sdk;
+using DevHub.Sdk.Models;
 
 var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
 {
@@ -239,8 +241,8 @@ await using var eventsClient = await DevHubEventsClient.FromRuntimeAsync(new Dev
 await eventsClient.AuthenticateAsync();
 var subscriptionId = await eventsClient.SubscribeAsync(new[]
 {
-    "app.instance.registered",
-    "invocation.completed"
+    DevHubEventTypes.AppInstanceRegistered,
+    DevHubEventTypes.InvocationCompleted
 });
 
 await foreach (var evt in eventsClient.ReadEventsAsync())
@@ -264,6 +266,11 @@ catch (DevHubRpcException ex)
 {
     Console.WriteLine($"code={ex.Code}, knownCode={ex.KnownCode}, reason={ex.Reason}, requestId={ex.RequestId}");
     Console.WriteLine(ex.ErrorData?.GetRawText());
+
+    if (ex.CalleeError is { } calleeError)
+    {
+        Console.WriteLine($"invocationId={ex.InvocationId}, calleeCode={calleeError.Code}, calleeMessage={calleeError.Message}");
+    }
 }
 ```
 
@@ -278,8 +285,10 @@ catch (DevHubRpcException ex)
 - `DevHubClientOptions`
 - `DevHubClient`
 - `DevHubEventsClient`
+- `IDevHubClientFactory` / `IDevHubEventsClientFactory`
 - `DevHubRpcException`
 - `DevHubRpcErrorCode`
+- `DevHubEventTypes`
 - `DevHub.Sdk.Models.*`
 
 ## 常用命令

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using DevHub.Sdk.Internal;
+using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk;
 
@@ -50,6 +52,16 @@ public sealed class DevHubRpcException : Exception
     public string? Reason => TryGetDataString("reason", out var reason) ? reason : null;
 
     /// <summary>
+    /// 当 <c>error.data.invocationId</c> 为字符串时返回该值，否则返回 <see langword="null"/>。
+    /// </summary>
+    public string? InvocationId => TryGetDataString("invocationId", out var invocationId) ? invocationId : null;
+
+    /// <summary>
+    /// 当 <c>error.data.calleeError</c> 可解析为 <see cref="DevHubCalleeError"/> 时返回该值，否则返回 <see langword="null"/>。
+    /// </summary>
+    public DevHubCalleeError? CalleeError => TryGetCalleeError(out var calleeError) ? calleeError : null;
+
+    /// <summary>
     /// 请求标识。
     /// </summary>
     public string RequestId { get; }
@@ -98,6 +110,27 @@ public sealed class DevHubRpcException : Exception
         {
             value = propertyValue.GetString();
             return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    /// <summary>
+    /// 尝试读取并解析 <c>error.data.calleeError</c>。
+    /// </summary>
+    /// <param name="value">读取到的被调用方错误对象。</param>
+    /// <returns>读取并解析成功时返回 <see langword="true"/>。</returns>
+    public bool TryGetCalleeError(out DevHubCalleeError? value)
+    {
+        if (TryGetDataProperty("calleeError", out var propertyValue) && propertyValue.ValueKind == JsonValueKind.Object)
+        {
+            var calleeError = JsonSerializer.Deserialize<DevHubCalleeError>(propertyValue.GetRawText(), DevHubJson.SerializerOptions);
+            if (calleeError is not null && !string.IsNullOrWhiteSpace(calleeError.Message))
+            {
+                value = calleeError;
+                return true;
+            }
         }
 
         value = null;

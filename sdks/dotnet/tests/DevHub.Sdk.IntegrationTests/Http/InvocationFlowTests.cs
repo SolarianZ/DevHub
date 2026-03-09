@@ -118,6 +118,10 @@ public sealed class InvocationFlowTests
 
         var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => requestTask);
         Assert.Equal(-32050, exception.Code);
+        Assert.Equal(invocation.InvocationId, exception.InvocationId);
+        Assert.NotNull(exception.CalleeError);
+        Assert.Equal(1001, exception.CalleeError!.Code);
+        Assert.Equal("app_error", exception.CalleeError.Message);
         Assert.Equal(1001, exception.Data!.Value.GetProperty("calleeError").GetProperty("code").GetInt32());
     }
 
