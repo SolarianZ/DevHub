@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Sequence
+from collections.abc import Iterable, Mapping
+from typing import Any, AsyncIterator
 from uuid import uuid4
 
 import websockets
@@ -49,6 +50,9 @@ class DevHubEventsClient:
     async def authenticate(self) -> None:
         """执行 `hub.ws.authenticate`。"""
 
+        if self._authenticated:
+            raise RuntimeError("当前事件客户端已完成认证。")
+
         result = await self._send_request(
             "hub.ws.authenticate",
             {
@@ -67,11 +71,15 @@ class DevHubEventsClient:
             raise RuntimeError("hub.ws.authenticate 返回结果非法。")
         self._authenticated = True
 
-    async def subscribe(self, types: Sequence[str] | None = None) -> str:
+    async def subscribe(self, types: Iterable[str] | None = None) -> str:
         """订阅事件。"""
 
         params: dict[str, Any] = {}
         if types is not None:
+            if isinstance(types, str | bytes | bytearray):
+                raise ValueError("types 必须为事件类型字符串序列。")
+            if isinstance(types, Mapping):
+                raise ValueError("types 必须为事件类型字符串序列。")
             types_list = list(types)
             if any(not isinstance(item, str) or not item.strip() for item in types_list):
                 raise ValueError("types 只能包含非空字符串。")

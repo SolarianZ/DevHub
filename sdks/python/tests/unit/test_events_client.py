@@ -107,6 +107,64 @@ async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exc
     assert exc_info.value.reason == "invalid_token"
 
 
+@pytest.mark.asyncio
+async def test_events_client_when_authenticate_called_twice_should_raise(tmp_path: Path) -> None:
+    async def handler(websocket) -> None:
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            )
+        )
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        runtime_dir = _write_runtime(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        try:
+            await client.authenticate()
+            with pytest.raises(RuntimeError, match="已完成认证"):
+                await client.authenticate()
+        finally:
+            await client.close()
+
+
+@pytest.mark.asyncio
+async def test_events_client_subscribe_when_types_is_single_string_should_raise(tmp_path: Path) -> None:
+    async def handler(websocket) -> None:
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            )
+        )
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        runtime_dir = _write_runtime(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        try:
+            await client.authenticate()
+            with pytest.raises(ValueError, match="事件类型字符串序列"):
+                await client.subscribe(INVOCATION_COMPLETED)
+        finally:
+            await client.close()
+
+
 def _write_runtime(tmp_path: Path, port: int) -> Path:
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir()
