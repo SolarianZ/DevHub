@@ -56,6 +56,16 @@ def test_client_options_when_client_session_id_invalid_should_raise() -> None:
         DevHubClientOptions(client_id="unit-test-client", client_session_id="not-a-uuid").validate()
 
 
+def test_client_options_when_request_timeout_is_not_number_should_raise() -> None:
+    with pytest.raises(ValueError):
+        DevHubClientOptions(client_id="unit-test-client", request_timeout="50").validate()  # type: ignore[arg-type]
+
+
+def test_client_options_when_protocol_version_is_bool_should_raise() -> None:
+    with pytest.raises(ValueError):
+        DevHubClientOptions(client_id="unit-test-client", protocol_version=True).validate()  # type: ignore[arg-type]
+
+
 def _write_hub_json(runtime_dir: Path, *, token_file: Path) -> None:
     (runtime_dir / "hub.json").write_text(json.dumps(_hub_payload(token_file)), encoding="utf-8")
 

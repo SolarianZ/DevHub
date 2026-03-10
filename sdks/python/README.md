@@ -32,3 +32,19 @@ python3 -m compileall src tests
 python3 -m pytest tests/unit
 python3 -m pytest tests/integration
 ```
+
+## 本地 Smoke 前置说明
+
+如果需要在仓库根目录执行黑盒 smoke：
+
+```bash
+python3 tests/test_runner.py --smoke --no-header
+```
+
+请先在另一个终端启动本地 Hub：
+
+```bash
+dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
+```
+
+原因：仓库级 `smoke` 默认针对“已启动的本地 Hub”执行；若本地 Hub 未启动，测试可能会读取到默认运行时目录中历史残留的 `hub.json`，从而出现 `Connection refused`。

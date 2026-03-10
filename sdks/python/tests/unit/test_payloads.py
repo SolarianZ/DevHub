@@ -86,6 +86,18 @@ def test_register_instance_builder_when_meta_is_not_object_should_raise() -> Non
         )
 
 
+def test_register_instance_builder_when_invoke_poll_is_not_bool_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll="true", respond=True),  # type: ignore[arg-type]
+            )
+        )
+
+
 def test_respond_builder_when_error_message_missing_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
@@ -93,6 +105,27 @@ def test_respond_builder_when_error_message_missing_should_raise() -> None:
                 instance_id="inst-1",
                 invocation_id="invk-1",
                 error=DevHubCalleeError(code=1001, message=""),
+            )
+        )
+
+
+def test_notify_builder_when_target_instance_id_is_not_string_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_notify_params(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.notify",
+                target=InvocationTarget(instance_id=123),  # type: ignore[arg-type]
+            )
+        )
+
+
+def test_poll_builder_when_wait_ms_is_not_integer_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_poll_params(
+            PollRequest(
+                instance_id="inst-1",
+                wait_ms=1.5,  # type: ignore[arg-type]
             )
         )
 

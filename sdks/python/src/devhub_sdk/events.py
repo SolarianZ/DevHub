@@ -10,6 +10,7 @@ import websockets
 
 from ._jsonrpc import validate_response_envelope
 from ._parsing import parse_event, require_bool, require_mapping, require_str
+from ._validation import require_non_empty_string
 from .models import DevHubClientOptions, DevHubEvent, HubRuntime
 from .runtime import discover_runtime
 
@@ -94,11 +95,10 @@ class DevHubEventsClient:
     async def unsubscribe(self, subscription_id: str) -> None:
         """取消订阅。"""
 
-        if not subscription_id or not subscription_id.strip():
-            raise ValueError("subscription_id 不能为空。")
+        normalized_subscription_id = require_non_empty_string(subscription_id, "subscription_id")
         result = await self._send_request(
             "hub.events.unsubscribe",
-            {"subscriptionId": subscription_id},
+            {"subscriptionId": normalized_subscription_id},
             require_authenticated=True,
         )
         root = require_mapping(result, "hub.events.unsubscribe.result")
