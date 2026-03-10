@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from devhub_sdk import AppInstanceRegistration, InvokeCapability, ListInstancesRequest
+from devhub_sdk.models import LaunchRequest
 
 from ._host import DevHubHostFixture
 
@@ -47,3 +51,45 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         client.unregister_instance("http-flow-inst-1")
         instances_after_unregister = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
         assert instances_after_unregister == []
+
+
+def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition(
+            {
+                "appId": "http.launch.app",
+                "displayName": "HTTP Launch App",
+                "launch": {
+                    "exePath": sys.executable,
+                    "argsTemplate": str(_launch_script_path()),
+                },
+            }
+        )
+
+        client = host.create_client("http-launch-client")
+
+        first = client.launch(
+            LaunchRequest(
+                app_id="http.launch.app",
+                dedupe_key="python-sdk-launch-dedupe",
+                wait_for_register_ms=800,
+            )
+        )
+        second = client.launch(
+            LaunchRequest(
+                app_id="http.launch.app",
+                dedupe_key="python-sdk-launch-dedupe",
+                wait_for_register_ms=0,
+            )
+        )
+
+        assert first.ok is True
+        assert first.status in {"started", "starting"}
+        assert first.launch_id
+        assert second.ok is True
+        assert second.status == "already_running"
+        assert second.launch_id == first.launch_id
+
+
+def _launch_script_path() -> Path:
+    return Path(__file__).resolve().parents[4] / "tests" / "assets" / "launch_noop.py"
