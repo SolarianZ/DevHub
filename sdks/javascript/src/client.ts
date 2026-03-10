@@ -1427,6 +1427,10 @@ function readOptionalString(payload: Record<string, unknown>, location: string, 
   }
 
   const value = payload[key];
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
   if (typeof value !== "string") {
     throw new Error(`${location} 返回结果非法：${key} 类型非法。`);
   }
@@ -1470,6 +1474,10 @@ function readOptionalBoolean(payload: Record<string, unknown>, location: string,
   }
 
   const value = payload[key];
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
   if (typeof value !== "boolean") {
     throw new Error(`${location} 返回结果非法：${key} 类型非法。`);
   }

@@ -79,9 +79,11 @@ export interface LaunchRequest {
   waitForRegisterMs?: number | null;
 }
 
+export type LaunchStatus = "started" | "starting" | "already_running";
+
 export interface LaunchResult {
   ok: true;
-  status: "started" | "starting" | "already_running" | string;
+  status: LaunchStatus;
   pid?: number | null;
   launchId: string;
 }

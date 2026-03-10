@@ -95,6 +95,54 @@ it("request 应保留显式空 scope 并应用默认选项", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.listDefinitions");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definitions: [
+        {
+          appId: "test.launch.app",
+          displayName: "Test Launch App",
+          description: null,
+          launch: {
+            exePath: process.execPath,
+            argsTemplate: null,
+            workingDirectory: null,
+            dedupeKeyTemplate: null
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-list-definitions-client",
+    runtimeDir
+  });
+
+  const definitions = await client.listDefinitions();
+
+  expect(definitions).toHaveLength(1);
+  expect(definitions[0]).toEqual({
+    appId: "test.launch.app",
+    displayName: "Test Launch App",
+    description: undefined,
+    capabilities: undefined,
+    launch: {
+      exePath: process.execPath,
+      argsTemplate: undefined,
+      workingDirectory: undefined,
+      dedupeKeyTemplate: undefined
+    }
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {

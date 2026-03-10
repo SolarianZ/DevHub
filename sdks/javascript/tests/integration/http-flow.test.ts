@@ -1,6 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubHostFixture } from "./host.js";
+
+const launchScriptPath = fileURLToPath(new URL("../assets/launch_noop.mjs", import.meta.url));
 
 let host: DevHubHostFixture;
 
@@ -11,6 +15,9 @@ beforeAll(async () => {
     displayName: "HTTP Flow App",
     description: "用于 SDK HTTP 链路测试。"
   });
+  await host.writeDefinition(createLaunchDefinition("http.launch.started.app"));
+  await host.writeDefinition(createLaunchDefinition("http.launch.starting.app"));
+  await host.writeDefinition(createLaunchDefinition("http.launch.running.app"));
 }, 60_000);
 
 afterAll(async () => {
@@ -64,3 +71,64 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   await client.dispose();
 });
+
+it("launch 应覆盖 started / starting / already_running", async () => {
+  const client = await DevHubClient.fromRuntime({
+    clientId: "http-launch-client",
+    runtimeDir: host.runtimeDirectory
+  });
+
+  const started = await client.launch({
+    appId: "http.launch.started.app",
+    waitForRegisterMs: 0
+  });
+  expect(started.ok).toBe(true);
+  expect(started.status).toBe("started");
+  expect(started.pid).toBeGreaterThan(0);
+  expect(started.launchId).toMatch(/^launch-/);
+
+  const starting = await client.launch({
+    appId: "http.launch.starting.app",
+    waitForRegisterMs: 200
+  });
+  expect(starting.ok).toBe(true);
+  expect(starting.status).toBe("starting");
+  expect(starting.pid).toBeGreaterThan(0);
+  expect(starting.launchId).toMatch(/^launch-/);
+
+  const registered = await client.registerInstance({
+    instanceId: "http-launch-running-inst-1",
+    appId: "http.launch.running.app",
+    pid: process.pid,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  });
+
+  const alreadyRunning = await client.launch({
+    appId: "http.launch.running.app"
+  });
+  expect(alreadyRunning.ok).toBe(true);
+  expect(alreadyRunning.status).toBe("already_running");
+  expect(alreadyRunning.pid).toBe(registered.pid);
+  expect(alreadyRunning.launchId).toMatch(/^launch-/);
+
+  await client.unregisterInstance("http-launch-running-inst-1");
+  await client.dispose();
+});
+
+function createLaunchDefinition(appId: string): Record<string, unknown> {
+  return {
+    appId,
+    displayName: appId,
+    launch: {
+      exePath: process.execPath,
+      argsTemplate: quoteCommandArgument(path.normalize(launchScriptPath))
+    }
+  };
+}
+
+function quoteCommandArgument(value: string): string {
+  return value.includes(" ") ? `"${value}"` : value;
+}
