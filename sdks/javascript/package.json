@@ -30,5 +30,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }

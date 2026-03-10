@@ -199,6 +199,40 @@ it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   });
 });
 
+it("请求应携带协议头与鉴权头", async () => {
+  const runtimeDir = await createRuntime();
+  const clientSessionId = "11111111-1111-4111-8111-111111111111";
+  const fetchSpy = vi.fn(async (input: unknown, init?: RequestInit) => {
+    expect(input).toBe("http://127.0.0.1:47231/rpc");
+    expect(init?.method).toBe("POST");
+    expect(init?.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer token-1",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "unit-header-client",
+      "X-DevHub-ClientSessionId": clientSessionId
+    });
+
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z"
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-header-client",
+    clientSessionId,
+    runtimeDir
+  });
+
+  const result = await client.ping();
+
+  expect(result.ok).toBe(true);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
   const runtimeDir = await createRuntime();
 
@@ -267,6 +301,34 @@ it("poll 应在本地校验 waitMs 为整数", async () => {
     instanceId: "inst-1",
     waitMs: 1.5 as unknown as number
   })).rejects.toThrow("waitMs 必须为大于等于 0 的整数。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond 应在本地校验 value 与 error 互斥", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-client",
+    runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "invk-1"
+  })).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "invk-1",
+    value: { ok: true },
+    error: {
+      code: 1001,
+      message: "app_error"
+    }
+  })).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
