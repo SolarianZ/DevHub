@@ -71,8 +71,12 @@ class DevHubEventsClient:
         """订阅事件。"""
 
         params: dict[str, Any] = {}
-        if types:
-            params["types"] = list(types)
+        if types is not None:
+            types_list = list(types)
+            if any(not isinstance(item, str) or not item.strip() for item in types_list):
+                raise ValueError("types 只能包含非空字符串。")
+            if types_list:
+                params["types"] = types_list
         result = await self._send_request("hub.events.subscribe", params, require_authenticated=True)
         root = require_mapping(result, "hub.events.subscribe.result")
         if not require_bool(root, "ok", "hub.events.subscribe.result"):
@@ -196,8 +200,10 @@ class DevHubEventsClient:
         if method is not None:
             if method != "hub.event":
                 raise RuntimeError("WebSocket 收到未知通知。")
-            if "id" in root and root.get("id") is not None:
+            if "id" in root:
                 raise RuntimeError("hub.event 通知不允许包含 id。")
+            if "result" in root or "error" in root:
+                raise RuntimeError("hub.event 通知禁止包含 result 或 error。")
             event = parse_event(root.get("params"), path="hub.event.params")
             await self._events.put(event)
             return

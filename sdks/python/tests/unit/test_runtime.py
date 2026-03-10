@@ -51,6 +51,11 @@ def test_runtime_discovery_when_environment_override_provided_should_use_environ
     assert connection_info.token == "token-env"
 
 
+def test_client_options_when_client_session_id_invalid_should_raise() -> None:
+    with pytest.raises(ValueError):
+        DevHubClientOptions(client_id="unit-test-client", client_session_id="not-a-uuid").validate()
+
+
 def _write_hub_json(runtime_dir: Path, *, token_file: Path) -> None:
     (runtime_dir / "hub.json").write_text(json.dumps(_hub_payload(token_file)), encoding="utf-8")
 

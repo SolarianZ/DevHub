@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 
 @dataclass(slots=True)
@@ -35,6 +35,10 @@ class DevHubClientOptions:
             raise ValueError("client_id 不能为空。")
         if not self.client_session_id or not self.client_session_id.strip():
             raise ValueError("client_session_id 不能为空。")
+        try:
+            UUID(self.client_session_id)
+        except ValueError as exc:
+            raise ValueError("client_session_id 必须是有效的 UUID。") from exc
         if self.protocol_version != 1:
             raise ValueError("当前仅支持协议版本 1。")
         if self.request_timeout is not None and self.request_timeout <= 0:

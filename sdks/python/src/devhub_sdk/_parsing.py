@@ -28,6 +28,8 @@ from .models import (
     RequestResult,
 )
 
+_LAUNCH_STATUS_VALUES = {"started", "starting", "already_running"}
+
 
 def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     """解析并校验 `hub.json`。"""
@@ -150,12 +152,15 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
     ok = require_bool(root, "ok", path)
     if not ok:
         raise RuntimeError(f"{path} 返回结果非法。")
+    status = require_str(root, "status", path)
+    if status not in _LAUNCH_STATUS_VALUES:
+        raise RuntimeError(f"{path}.status 取值非法。")
     pid = root.get("pid")
     if pid is not None and not isinstance(pid, int):
         raise RuntimeError(f"{path}.pid 类型非法。")
     return LaunchResult(
         ok=ok,
-        status=require_str(root, "status", path),
+        status=status,
         launch_id=require_str(root, "launchId", path),
         pid=pid,
     )
@@ -178,6 +183,8 @@ def parse_request_result(value: Any, *, path: str) -> RequestResult:
     ok = require_bool(root, "ok", path)
     if not ok:
         raise RuntimeError(f"{path} 返回结果非法。")
+    if "value" not in root:
+        raise RuntimeError(f"{path}.value 必须存在。")
     return RequestResult(ok=ok, invocation_id=require_str(root, "invocationId", path), value=root.get("value"))
 
 
@@ -199,14 +206,11 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     """解析调用对象。"""
 
     root = require_mapping(value, path)
-    target_value = root.get("target")
-    target = None
-    if target_value is not None:
-        target_root = require_mapping(target_value, f"{path}.target")
-        target = InvocationTarget(
-            scope=optional_str(target_root.get("scope"), f"{path}.target.scope"),
-            instance_id=optional_str(target_root.get("instanceId"), f"{path}.target.instanceId"),
-        )
+    target_root = require_mapping(root.get("target"), f"{path}.target")
+    target = InvocationTarget(
+        scope=optional_str(target_root.get("scope"), f"{path}.target.scope"),
+        instance_id=optional_str(target_root.get("instanceId"), f"{path}.target.instanceId"),
+    )
 
     options_value = root.get("options")
     options = None

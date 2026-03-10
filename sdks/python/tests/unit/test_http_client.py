@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import pytest
 
-from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubRpcException
+from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubRpcException, InvokeRequest, LaunchRequest
 
 
 @dataclass(slots=True)
@@ -68,6 +68,34 @@ def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None
 
         assert definitions == []
         assert "params" not in scenario.requests[0]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_request_missing_value_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        with pytest.raises(RuntimeError):
+            client.request(InvokeRequest(app_id="test.app", method="test.request"))
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_launch_invalid_status_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        with pytest.raises(RuntimeError):
+            client.launch(LaunchRequest(app_id="test.app"))
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -155,5 +183,29 @@ def _list_definitions_response(request: dict[str, Any]) -> dict[str, Any]:
         "result": {
             "ok": True,
             "definitions": [],
+        },
+    }
+
+
+def _request_missing_value_response(request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {
+            "ok": True,
+            "invocationId": "invk-1",
+        },
+    }
+
+
+def _launch_invalid_status_response(request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {
+            "ok": True,
+            "status": "invalid",
+            "launchId": "launch-1",
+            "pid": 123,
         },
     }
