@@ -116,6 +116,10 @@ secrets.json
 # Node.js
 node_modules/
 
+# Python packaging artifacts
+*.egg-info/
+.pytest_cache/
+
 # Temp files
 [Tt]emp/
 **/__pycache__/
