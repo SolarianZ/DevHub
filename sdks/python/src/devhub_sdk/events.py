@@ -176,15 +176,19 @@ class DevHubEventsClient:
         return validate_response_envelope(envelope, request_id)
 
     async def _run_receive_loop(self) -> None:
+        terminal_error: BaseException | None = None
         try:
             async for message in self._websocket:
                 await self._handle_message(message)
         except asyncio.CancelledError:
             raise
         except BaseException as exc:
+            terminal_error = exc
             self._terminal_error = exc
-            self._fail_pending(exc)
         finally:
+            if self._pending:
+                error = terminal_error or RuntimeError("WebSocket 连接已关闭。")
+                self._fail_pending(error)
             self._complete_event_stream()
 
     async def _handle_message(self, message: Any) -> None:
