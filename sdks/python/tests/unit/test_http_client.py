@@ -57,6 +57,22 @@ def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception
         thread.join(timeout=5)
 
 
+def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_list_definitions_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        definitions = client.list_definitions()
+
+        assert definitions == []
+        assert "params" not in scenario.requests[0]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 def _start_http_server(scenario: HttpScenario) -> tuple[ThreadingHTTPServer, threading.Thread]:
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
@@ -128,5 +144,16 @@ def _unauthorized_response(request: dict[str, Any]) -> dict[str, Any]:
             "code": -32001,
             "message": "unauthorized",
             "data": {"reason": "invalid_token"},
+        },
+    }
+
+
+def _list_definitions_response(request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "result": {
+            "ok": True,
+            "definitions": [],
         },
     }

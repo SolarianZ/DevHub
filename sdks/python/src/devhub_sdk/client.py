@@ -205,8 +205,9 @@ class DevHubClient:
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,
-            "params": params,
         }
+        if params is not None:
+            payload["params"] = params
         request = Request(
             self._connection_info.rpc_endpoint,
             data=json.dumps(payload).encode("utf-8"),

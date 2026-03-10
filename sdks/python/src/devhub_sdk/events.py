@@ -151,14 +151,14 @@ class DevHubEventsClient:
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
 
-        payload = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": method,
-                "params": params,
-            }
-        )
+        payload_dict = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+        }
+        if params is not None:
+            payload_dict["params"] = params
+        payload = json.dumps(payload_dict)
         async with self._send_lock:
             await self._websocket.send(payload)
 
@@ -203,6 +203,8 @@ class DevHubEventsClient:
             return
 
         request_id = root.get("id")
+        if isinstance(request_id, bool):
+            raise RuntimeError("WebSocket JSON-RPC 响应缺少有效 id。")
         if isinstance(request_id, int | float):
             request_id = str(request_id)
         if not isinstance(request_id, str):

@@ -4,8 +4,10 @@ import json
 import os
 import subprocess
 import time
+from collections import deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Thread
 from typing import Any, Mapping
 from uuid import uuid4
 
@@ -21,6 +23,10 @@ class DevHubHostFixture:
         self.runtime_directory = runtime_directory
         self.definitions_directory = definitions_directory
         self._process: subprocess.Popen[str] | None = None
+        self._stdout_buffer: deque[str] = deque(maxlen=200)
+        self._stderr_buffer: deque[str] = deque(maxlen=200)
+        self._stdout_thread: Thread | None = None
+        self._stderr_thread: Thread | None = None
 
     @classmethod
     def start(cls) -> "DevHubHostFixture":
@@ -58,6 +64,7 @@ class DevHubHostFixture:
                     self._process.wait(timeout=10)
             finally:
                 self._process = None
+        self._stop_output_drainers()
         self._temp_root.cleanup()
 
     def __enter__(self) -> "DevHubHostFixture":
@@ -79,11 +86,16 @@ class DevHubHostFixture:
         self._process = subprocess.Popen(
             ["dotnet", str(host_assembly_path)],
             cwd=self._repo_root,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             env=environment,
         )
+        # 重要：必须持续消费 stdout/stderr，避免管道被写满后阻塞 Host 线程，导致 HTTP 请求卡死。
+        self._start_output_drainers()
 
         hub_json_path = self.runtime_directory / "hub.json"
         deadline = time.time() + 30
@@ -91,12 +103,57 @@ class DevHubHostFixture:
             if hub_json_path.is_file():
                 return
             if self._process.poll() is not None:
-                stdout = self._process.stdout.read() if self._process.stdout is not None else ""
-                stderr = self._process.stderr.read() if self._process.stderr is not None else ""
+                stdout = self._collect_output(self._stdout_buffer)
+                stderr = self._collect_output(self._stderr_buffer)
                 raise RuntimeError(f"Host 进程提前退出。stdout={stdout} stderr={stderr}")
             time.sleep(0.25)
 
         raise RuntimeError("等待 hub.json 超时。")
+
+    def _start_output_drainers(self) -> None:
+        if self._process is None:
+            return
+
+        if self._process.stdout is not None:
+            # 说明：Host 默认会写 Console 日志；若不 drain，Windows 管道缓冲区写满后会阻塞。
+            self._stdout_thread = Thread(
+                target=self._drain_stream,
+                args=(self._process.stdout, self._stdout_buffer),
+                daemon=True,
+            )
+            self._stdout_thread.start()
+
+        if self._process.stderr is not None:
+            # 说明：stderr 同样需要 drain，避免日志输出造成死锁。
+            self._stderr_thread = Thread(
+                target=self._drain_stream,
+                args=(self._process.stderr, self._stderr_buffer),
+                daemon=True,
+            )
+            self._stderr_thread.start()
+
+    def _stop_output_drainers(self) -> None:
+        threads = [self._stdout_thread, self._stderr_thread]
+        for thread in threads:
+            if thread is not None:
+                thread.join(timeout=1)
+        self._stdout_thread = None
+        self._stderr_thread = None
+
+    @staticmethod
+    def _drain_stream(stream, buffer: deque[str]) -> None:
+        for line in iter(stream.readline, ""):
+            buffer.append(line)
+        try:
+            stream.close()
+        except Exception:
+            return
+
+    @staticmethod
+    def _collect_output(buffer: deque[str]) -> str:
+        if not buffer:
+            return ""
+        return "".join(buffer)
 
 
 def _resolve_repo_root() -> Path:

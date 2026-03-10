@@ -28,7 +28,7 @@ def validate_response_envelope(root: Any, request_id: str) -> dict[str, Any]:
             raise RuntimeError("JSON-RPC error 对象非法。")
         code = error.get("code")
         message = error.get("message")
-        if not isinstance(code, int):
+        if not isinstance(code, int) or isinstance(code, bool):
             raise RuntimeError("JSON-RPC error.code 非法。")
         if not isinstance(message, str) or not message:
             raise RuntimeError("JSON-RPC error.message 非法。")
@@ -49,6 +49,6 @@ def read_response_id(root: Mapping[str, Any]) -> str:
     response_id = root["id"]
     if isinstance(response_id, str):
         return response_id
-    if isinstance(response_id, int | float):
+    if isinstance(response_id, int | float) and not isinstance(response_id, bool):
         return str(response_id)
     raise RuntimeError("JSON-RPC 响应的 id 类型非法。")
