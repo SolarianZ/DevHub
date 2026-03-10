@@ -4,6 +4,25 @@ export interface DevHubCalleeError {
   data?: unknown;
 }
 
+export enum DevHubRpcErrorCode {
+  ParseError = -32700,
+  InvalidRequest = -32600,
+  MethodNotFound = -32601,
+  InvalidParams = -32602,
+  InternalError = -32603,
+  Unauthorized = -32001,
+  Forbidden = -32002,
+  InstanceNotFound = -32010,
+  InvocationExpired = -32011,
+  InvocationTimeout = -32012,
+  AppDefinitionNotFound = -32014,
+  LaunchFailed = -32020,
+  DeliveryConflict = -32030,
+  RateLimited = -32040,
+  InvocationFailed = -32050,
+  NotSupported = -32099
+}
+
 export interface DevHubRpcErrorInit {
   code: number;
   message: string;
@@ -22,6 +41,14 @@ export class DevHubRpcError extends Error {
     this.code = init.code;
     this.data = init.data;
     this.requestId = init.requestId;
+  }
+
+  get knownCode(): DevHubRpcErrorCode | null {
+    return isKnownCode(this.code) ? (this.code as DevHubRpcErrorCode) : null;
+  }
+
+  is(code: DevHubRpcErrorCode): boolean {
+    return this.code === code;
   }
 
   get reason(): string | null {
@@ -59,6 +86,46 @@ export class DevHubRpcError extends Error {
       data: callee.data
     };
   }
+
+  tryGetDataProperty(propertyName: string): unknown {
+    if (!propertyName || !propertyName.trim()) {
+      throw new Error("propertyName 不能为空。");
+    }
+
+    if (isRecord(this.data) && propertyName in this.data) {
+      return this.data[propertyName];
+    }
+
+    return undefined;
+  }
+
+  tryGetDataString(propertyName: string): string | null {
+    const value = this.tryGetDataProperty(propertyName);
+    return typeof value === "string" ? value : null;
+  }
+}
+
+const KNOWN_CODES = new Set<number>([
+  DevHubRpcErrorCode.ParseError,
+  DevHubRpcErrorCode.InvalidRequest,
+  DevHubRpcErrorCode.MethodNotFound,
+  DevHubRpcErrorCode.InvalidParams,
+  DevHubRpcErrorCode.InternalError,
+  DevHubRpcErrorCode.Unauthorized,
+  DevHubRpcErrorCode.Forbidden,
+  DevHubRpcErrorCode.InstanceNotFound,
+  DevHubRpcErrorCode.InvocationExpired,
+  DevHubRpcErrorCode.InvocationTimeout,
+  DevHubRpcErrorCode.AppDefinitionNotFound,
+  DevHubRpcErrorCode.LaunchFailed,
+  DevHubRpcErrorCode.DeliveryConflict,
+  DevHubRpcErrorCode.RateLimited,
+  DevHubRpcErrorCode.InvocationFailed,
+  DevHubRpcErrorCode.NotSupported
+]);
+
+function isKnownCode(code: number): boolean {
+  return KNOWN_CODES.has(code);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

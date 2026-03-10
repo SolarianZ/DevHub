@@ -5,8 +5,11 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 ## 当前状态
 
 - 已初始化工程骨架（M5-ARCH-002）。
-- 已提供基础模型、运行时发现与错误模型的初始实现。
-- HTTP JSON-RPC 与 WebSocket 客户端封装将在后续迭代补齐。
+- 已提供基础模型、运行时发现与统一错误模型。
+- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `invoke` 等）。
+- 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流）。
+
+> 若运行时未提供全局 `WebSocket`（例如 Node.js 18），请安装 `ws` 依赖以启用事件客户端。
 
 ## 规划能力范围
 
@@ -21,4 +24,22 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 npm install
 npm run build
 npm test
+```
+
+## 快速示例
+
+```ts
+import { DevHubClient, DevHubEventsClient } from "@devhub/sdk";
+
+const client = await DevHubClient.fromRuntime({ clientId: "demo" });
+const ping = await client.ping({ value: 1 });
+console.log(ping.serverTimeUtc, ping.echo);
+
+const eventsClient = await DevHubEventsClient.fromRuntime({ clientId: "demo-events" });
+await eventsClient.authenticate();
+const subscriptionId = await eventsClient.subscribe();
+
+for await (const evt of eventsClient.readEvents()) {
+  console.log("event", evt.type, evt.payload);
+}
 ```

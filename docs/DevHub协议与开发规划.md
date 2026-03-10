@@ -417,7 +417,7 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-03-09）
+## 17. 当前里程碑状态（截至 2026-03-10）
 
 - 当前分支：`m5`。
 - M0：已完成。
@@ -425,6 +425,6 @@ ws.onmessage = (e) => {
 - M2：已完成。
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、`invocation_failed` 结构化错误辅助、规范事件类型常量、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试，并补齐成功载荷结构校验与本地参数校验；JS/TS SDK 与 conformance 资产尚未创建）。
+- M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、`invocation_failed` 结构化错误辅助、规范事件类型常量、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试，并补齐成功载荷结构校验与本地参数校验；JS/TS SDK 已补齐 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型与基础集成测试，conformance 资产待补齐）。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 运行时（`DEVHUB_RUNTIME_DIR=temp/sdk-smoke/runtime`、`DEVHUB_APPDEFS_DIR=temp/sdk-smoke/apps/definitions`），`python3 tests/test_runner.py --smoke --no-header` 可通过。
