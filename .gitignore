@@ -113,6 +113,9 @@ secrets.json
 .env.test.local
 .env.production.local
 
+# Node.js
+node_modules/
+
 # Temp files
 [Tt]emp/
 **/__pycache__/
