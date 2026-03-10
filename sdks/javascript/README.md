@@ -6,25 +6,37 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 
 - 已初始化工程骨架（M5-ARCH-002）。
 - 已提供基础模型、运行时发现与统一错误模型。
-- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `invoke` 等）。
+- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `invoke` / `poll` / `respond` 等）。
 - 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流）。
+- 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助。
+- 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `invoke` 往返、超时/过期、scope 路由与事件重连场景。
 
 > 若运行时未提供全局 `WebSocket`（例如 Node.js 18），请安装 `ws` 依赖以启用事件客户端。
 
 ## 规划能力范围
 
 - 运行时发现：读取 `hub.json` 与 `token.txt`。
-- HTTP JSON-RPC：`ping`、`apps`、`invoke` 等。
+- HTTP JSON-RPC：`ping`、`apps`、`invoke`、`poll`、`respond` 等。
 - WebSocket 事件：鉴权、订阅、取消订阅、事件流读取。
-- 统一错误模型：`DevHubRpcError`。
+- 统一错误模型：`DevHubRpcError`、`reason` / `invocationId` / `calleeError` 辅助属性。
+- 本地参数校验：在请求发出前校验关键字段与默认值约束。
 
 ## 开发命令
 
 ```bash
 npm install
+npm run typecheck
 npm run build
 npm test
 ```
+
+## 已验证能力
+
+- Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `DEVHUB_RUNTIME_DIR` 覆盖。
+- HTTP flows：`ping`、应用定义查询、实例注册/心跳/注销、`notify`、`request`、`poll`、`respond`。
+- Invocation semantics：默认选项、`delivery_conflict`、`invocation_timeout`、`invocation_expired`、`invocation_failed`。
+- Scope routing：默认 Global、显式空字符串 scope、字面量 `global` 与命名 scope。
+- Events flows：WS 鉴权、订阅/取消订阅、未知事件类型错误、断开后重新订阅。
 
 ## 快速示例
 

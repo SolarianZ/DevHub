@@ -192,11 +192,11 @@ export function normalizeClientOptions(options: DevHubClientOptions): Normalized
 }
 
 export function validateClientOptions(options: NormalizedDevHubClientOptions): void {
-  if (!options.clientId || !options.clientId.trim()) {
+  if (typeof options.clientId !== "string" || !options.clientId.trim()) {
     throw new Error("clientId 不能为空。");
   }
 
-  if (!options.clientSessionId || !options.clientSessionId.trim()) {
+  if (typeof options.clientSessionId !== "string" || !options.clientSessionId.trim()) {
     throw new Error("clientSessionId 不能为空。");
   }
 
@@ -208,7 +208,10 @@ export function validateClientOptions(options: NormalizedDevHubClientOptions): v
     throw new Error("当前仅支持协议版本 1。");
   }
 
-  if (options.requestTimeoutMs !== undefined && options.requestTimeoutMs <= 0) {
-    throw new Error("requestTimeoutMs 必须大于 0。");
+  if (
+    options.requestTimeoutMs !== undefined
+    && (typeof options.requestTimeoutMs !== "number" || Number.isNaN(options.requestTimeoutMs) || !Number.isInteger(options.requestTimeoutMs) || options.requestTimeoutMs <= 0)
+  ) {
+    throw new Error("requestTimeoutMs 必须为大于 0 的整数。");
   }
 }

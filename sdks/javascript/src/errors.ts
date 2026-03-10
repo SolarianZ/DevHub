@@ -88,7 +88,7 @@ export class DevHubRpcError extends Error {
   }
 
   tryGetDataProperty(propertyName: string): unknown {
-    if (!propertyName || !propertyName.trim()) {
+    if (typeof propertyName !== "string" || !propertyName.trim()) {
       throw new Error("propertyName 不能为空。");
     }
 

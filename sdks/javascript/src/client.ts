@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { DevHubRpcError } from "./errors.js";
 import {
+  normalizeClientOptions,
+  validateClientOptions,
+} from "./models.js";
+import type {
   AppDefinition,
   AppInstance,
   AppInstanceRegistration,
@@ -13,18 +17,17 @@ import {
   LaunchResult,
   ListInstancesRequest,
   NormalizedDevHubClientOptions,
-  normalizeClientOptions,
   NotifyResult,
   PingResult,
   PollRequest,
   PollResult,
   RequestResult,
   RespondRequest,
-  validateClientOptions,
-  type JsonObject,
-  type JsonValue
+  JsonObject,
+  JsonValue
 } from "./models.js";
-import { discoverRuntime, RuntimeConnectionInfo } from "./runtime.js";
+import { discoverRuntime } from "./runtime.js";
+import type { RuntimeConnectionInfo } from "./runtime.js";
 
 const require = createRequire(import.meta.url);
 
@@ -254,8 +257,16 @@ export class DevHubEventsClient {
 
     let params: Record<string, unknown> | undefined;
     if (types !== undefined) {
+      if (!Array.isArray(types)) {
+        throw new Error("types 必须为字符串数组。");
+      }
+
       if (types.some((item) => item === null || item === undefined)) {
         throw new Error("types 不能包含 null。");
+      }
+
+      if (types.some((item) => typeof item !== "string")) {
+        throw new Error("types 只能包含字符串。");
       }
 
       if (types.some((item) => !item || !item.trim())) {
@@ -338,8 +349,8 @@ export class DevHubEventsClient {
   }
 
   private attachSocketHandlers(socket: WebSocketLike): void {
-    this.socketCleanup.push(addSocketListener(socket, "message", (event, isBinary) => {
-      void this.handleMessage(event, isBinary);
+    this.socketCleanup.push(addSocketListener(socket, "message", (event) => {
+      void this.handleMessage(event);
     }));
 
     this.socketCleanup.push(addSocketListener(socket, "close", () => {
@@ -352,7 +363,7 @@ export class DevHubEventsClient {
     }));
   }
 
-  private async handleMessage(event: unknown, _isBinary?: boolean): Promise<void> {
+  private async handleMessage(event: unknown): Promise<void> {
     let text: string | null = null;
     try {
       text = coerceMessageText(event);
@@ -950,12 +961,10 @@ function createPendingRequest(timeoutMs: number | undefined, onTimeout: () => vo
 }
 
 function buildGetDefinitionParams(appId: string): Record<string, unknown> {
-  if (!appId || !appId.trim()) {
-    throw new Error("appId 不能为空。");
-  }
+  const normalizedAppId = ensureRequiredInputString(appId, "appId");
 
   return {
-    appId
+    appId: normalizedAppId
   };
 }
 
@@ -964,17 +973,16 @@ function buildRegisterInstanceParams(instance: AppInstanceRegistration): Record<
     throw new Error("instance 不能为空。");
   }
 
-  if (!instance.instanceId || !instance.instanceId.trim()) {
-    throw new Error("instanceId 不能为空。");
-  }
-
-  if (!instance.appId || !instance.appId.trim()) {
-    throw new Error("appId 不能为空。");
-  }
+  const instanceId = ensureRequiredInputString(instance.instanceId, "instanceId");
+  const appId = ensureRequiredInputString(instance.appId, "appId");
+  const scope = ensureOptionalInputStringOrNull(instance.scope, "scope");
 
   if (!instance.invoke) {
     throw new Error("invoke 不能为空。");
   }
+
+  const poll = ensureInputBoolean(instance.invoke.poll, "invoke.poll");
+  const respond = ensureInputBoolean(instance.invoke.respond, "invoke.respond");
 
   if (!Number.isInteger(instance.pid) || instance.pid < 1) {
     throw new Error("pid 必须大于等于 1。");
@@ -982,18 +990,18 @@ function buildRegisterInstanceParams(instance: AppInstanceRegistration): Record<
 
   const payload: Record<string, unknown> = {
     instance: {
-      instanceId: instance.instanceId,
-      appId: instance.appId,
+      instanceId,
+      appId,
       pid: instance.pid,
       invoke: {
-        poll: instance.invoke.poll,
-        respond: instance.invoke.respond
+        poll,
+        respond
       }
     }
   };
 
-  if (instance.scope !== undefined && instance.scope !== null) {
-    (payload.instance as Record<string, unknown>).scope = instance.scope;
+  if (scope !== undefined && scope !== null) {
+    (payload.instance as Record<string, unknown>).scope = scope;
   }
 
   if (instance.meta !== undefined) {
@@ -1005,22 +1013,18 @@ function buildRegisterInstanceParams(instance: AppInstanceRegistration): Record<
 }
 
 function buildHeartbeatParams(instanceId: string): Record<string, unknown> {
-  if (!instanceId || !instanceId.trim()) {
-    throw new Error("instanceId 不能为空。");
-  }
+  const normalizedInstanceId = ensureRequiredInputString(instanceId, "instanceId");
 
   return {
-    instanceId
+    instanceId: normalizedInstanceId
   };
 }
 
 function buildUnregisterParams(instanceId: string): Record<string, unknown> {
-  if (!instanceId || !instanceId.trim()) {
-    throw new Error("instanceId 不能为空。");
-  }
+  const normalizedInstanceId = ensureRequiredInputString(instanceId, "instanceId");
 
   return {
-    instanceId
+    instanceId: normalizedInstanceId
   };
 }
 
@@ -1030,20 +1034,24 @@ function buildListInstancesParams(request?: ListInstancesRequest): Record<string
   }
 
   const payload: Record<string, unknown> = {};
-  if (request.appId !== undefined) {
-    payload.appId = request.appId;
+  const appId = ensureOptionalInputString(request.appId, "appId", false);
+  if (appId !== undefined) {
+    payload.appId = appId;
   }
 
-  if (request.scope !== undefined) {
-    payload.scope = request.scope;
+  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
+  if (scope !== undefined) {
+    payload.scope = scope;
   }
 
-  if (request.includeAllScopes) {
-    payload.includeAllScopes = true;
+  const includeAllScopes = ensureOptionalInputBoolean(request.includeAllScopes, "includeAllScopes");
+  if (includeAllScopes !== undefined) {
+    payload.includeAllScopes = includeAllScopes;
   }
 
-  if (request.includeOffline) {
-    payload.includeOffline = true;
+  const includeOffline = ensureOptionalInputBoolean(request.includeOffline, "includeOffline");
+  if (includeOffline !== undefined) {
+    payload.includeOffline = includeOffline;
   }
 
   return Object.keys(payload).length > 0 ? payload : undefined;
@@ -1054,28 +1062,30 @@ function buildLaunchParams(request: LaunchRequest): Record<string, unknown> {
     throw new Error("request 不能为空。");
   }
 
-  if (!request.appId || !request.appId.trim()) {
-    throw new Error("appId 不能为空。");
-  }
-
-  if (request.waitForRegisterMs !== undefined && request.waitForRegisterMs !== null && request.waitForRegisterMs < 0) {
-    throw new Error("waitForRegisterMs 不能小于 0。");
-  }
+  const appId = ensureRequiredInputString(request.appId, "appId");
+  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
+  const dedupeKey = ensureOptionalInputStringOrNull(request.dedupeKey, "dedupeKey");
+  const waitForRegisterMs = ensureOptionalInputIntegerAtLeast(
+    request.waitForRegisterMs,
+    "waitForRegisterMs",
+    0,
+    "waitForRegisterMs 必须为大于等于 0 的整数。"
+  );
 
   const payload: Record<string, unknown> = {
-    appId: request.appId
+    appId
   };
 
-  if (request.scope !== undefined && request.scope !== null) {
-    payload.scope = request.scope;
+  if (scope !== undefined && scope !== null) {
+    payload.scope = scope;
   }
 
-  if (request.dedupeKey !== undefined && request.dedupeKey !== null) {
-    payload.dedupeKey = request.dedupeKey;
+  if (dedupeKey !== undefined && dedupeKey !== null) {
+    payload.dedupeKey = dedupeKey;
   }
 
-  if (request.waitForRegisterMs !== undefined && request.waitForRegisterMs !== null) {
-    payload.waitForRegisterMs = request.waitForRegisterMs;
+  if (waitForRegisterMs !== undefined) {
+    payload.waitForRegisterMs = waitForRegisterMs;
   }
 
   return payload;
@@ -1086,37 +1096,27 @@ function buildInvokeParams(request: InvokeRequest, isRequest: boolean): Record<s
     throw new Error("request 不能为空。");
   }
 
-  if (!request.appId || !request.appId.trim()) {
-    throw new Error("appId 不能为空。");
-  }
+  const appId = ensureRequiredInputString(request.appId, "appId");
+  const method = ensureRequiredInputString(request.method, "method");
+  const target = request.target;
+  const targetScope = ensureOptionalInputStringOrNull(target?.scope, "target.scope");
+  const targetInstanceId = ensureOptionalInputString(target?.instanceId, "target.instanceId", false, "target.instanceId 不能为空白字符串。", true);
 
-  if (!request.method || !request.method.trim()) {
-    throw new Error("method 不能为空。");
-  }
+  const ttlMs = ensureOptionalInputIntegerAtLeast(request.options?.ttlMs, "ttlMs", 1000, "ttlMs 必须大于等于 1000。")
+    ?? (isRequest ? 300000 : 60000);
+  const waitTimeoutMs = isRequest
+    ? ensureOptionalInputIntegerAtLeast(request.options?.waitTimeoutMs, "waitTimeoutMs", 1, "waitTimeoutMs 必须大于等于 1。")
+      ?? 120000
+    : undefined;
+  const queueIfOffline = ensureOptionalInputBoolean(request.options?.queueIfOffline, "queueIfOffline") ?? true;
+  const autoLaunch = ensureOptionalInputBoolean(request.options?.autoLaunch, "autoLaunch")
+    ?? (targetInstanceId === undefined || targetInstanceId === null);
 
-  const target = request.target ?? {};
-  if (target.instanceId !== undefined && target.instanceId !== null && !target.instanceId.trim()) {
-    throw new Error("target.instanceId 不能为空白字符串。");
-  }
-
-  const ttlMs = request.options?.ttlMs ?? (isRequest ? 300000 : 60000);
-  const waitTimeoutMs = isRequest ? request.options?.waitTimeoutMs ?? 120000 : undefined;
-  const queueIfOffline = request.options?.queueIfOffline ?? true;
-  const autoLaunch = request.options?.autoLaunch ?? (target.instanceId === undefined || target.instanceId === null);
-
-  if (ttlMs === null || ttlMs < 1000) {
-    throw new Error("ttlMs 必须大于等于 1000。");
-  }
-
-  if (waitTimeoutMs !== undefined && waitTimeoutMs !== null && waitTimeoutMs < 1) {
-    throw new Error("waitTimeoutMs 必须大于等于 1。");
-  }
-
-  if (waitTimeoutMs !== undefined && waitTimeoutMs !== null && waitTimeoutMs > ttlMs) {
+  if (waitTimeoutMs !== undefined && waitTimeoutMs > ttlMs) {
     throw new Error("waitTimeoutMs 不能大于 ttlMs。");
   }
 
-  if (target.instanceId !== undefined && target.instanceId !== null && autoLaunch) {
+  if (targetInstanceId !== undefined && targetInstanceId !== null && autoLaunch) {
     throw new Error("指定 target.instanceId 时不能启用 autoLaunch。");
   }
 
@@ -1125,8 +1125,8 @@ function buildInvokeParams(request: InvokeRequest, isRequest: boolean): Record<s
   }
 
   const payload: Record<string, unknown> = {
-    appId: request.appId,
-    method: request.method,
+    appId,
+    method,
     args: request.args,
     options: {
       ttlMs,
@@ -1139,10 +1139,10 @@ function buildInvokeParams(request: InvokeRequest, isRequest: boolean): Record<s
     (payload.options as Record<string, unknown>).waitTimeoutMs = waitTimeoutMs;
   }
 
-  if (request.target !== undefined) {
+  if (target !== undefined) {
     payload.target = {
-      scope: request.target?.scope ?? null,
-      instanceId: request.target?.instanceId ?? null
+      scope: targetScope ?? null,
+      instanceId: targetInstanceId ?? null
     };
   }
 
@@ -1154,23 +1154,13 @@ function buildPollParams(request: PollRequest): Record<string, unknown> {
     throw new Error("request 不能为空。");
   }
 
-  if (!request.instanceId || !request.instanceId.trim()) {
-    throw new Error("instanceId 不能为空。");
-  }
+  const instanceId = ensureRequiredInputString(request.instanceId, "instanceId");
 
-  const maxCount = request.maxCount ?? 10;
-  const waitMs = request.waitMs ?? 25000;
-
-  if (!Number.isInteger(maxCount) || maxCount < 1 || maxCount > 100) {
-    throw new Error("maxCount 必须位于 1..100。");
-  }
-
-  if (waitMs < 0) {
-    throw new Error("waitMs 不能小于 0。");
-  }
+  const maxCount = ensureOptionalInputIntegerInRange(request.maxCount, "maxCount", 1, 100, "maxCount 必须位于 1..100。") ?? 10;
+  const waitMs = ensureOptionalInputIntegerAtLeast(request.waitMs, "waitMs", 0, "waitMs 必须为大于等于 0 的整数。") ?? 25000;
 
   return {
-    instanceId: request.instanceId,
+    instanceId,
     maxCount,
     waitMs
   };
@@ -1181,13 +1171,8 @@ function buildRespondParams(request: RespondRequest): Record<string, unknown> {
     throw new Error("request 不能为空。");
   }
 
-  if (!request.instanceId || !request.instanceId.trim()) {
-    throw new Error("instanceId 不能为空。");
-  }
-
-  if (!request.invocationId || !request.invocationId.trim()) {
-    throw new Error("invocationId 不能为空。");
-  }
+  const instanceId = ensureRequiredInputString(request.instanceId, "instanceId");
+  const invocationId = ensureRequiredInputString(request.invocationId, "invocationId");
 
   const hasValue = request.value !== undefined;
   const hasError = request.error !== undefined;
@@ -1195,19 +1180,22 @@ function buildRespondParams(request: RespondRequest): Record<string, unknown> {
     throw new Error("RespondRequest 必须且只能包含 value 或 error 之一。");
   }
 
-  if (request.error && (!request.error.message || !request.error.message.trim())) {
-    throw new Error("error.message 不能为空。");
-  }
+  const errorCode = request.error ? ensureInputNumber(request.error.code, "error.code") : undefined;
+  const errorMessage = request.error ? ensureRequiredInputString(request.error.message, "error.message") : undefined;
 
   const payload: Record<string, unknown> = {
-    instanceId: request.instanceId,
-    invocationId: request.invocationId
+    instanceId,
+    invocationId
   };
 
   if (hasValue) {
     payload.value = request.value;
   } else {
-    payload.error = request.error;
+    payload.error = {
+      code: errorCode,
+      message: errorMessage,
+      data: request.error?.data
+    };
   }
 
   return payload;
@@ -1531,6 +1519,107 @@ function readDate(payload: Record<string, unknown>, location: string, key: strin
     throw new Error(`${location} 返回结果非法：${key} 不能为空默认值。`);
   }
   return date;
+}
+
+function ensureRequiredInputString(value: unknown, propertyName: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${propertyName} 不能为空。`);
+  }
+
+  return value;
+}
+
+function ensureOptionalInputString(
+  value: unknown,
+  propertyName: string,
+  allowEmpty: boolean,
+  emptyMessage = `${propertyName} 不能为空。`,
+  allowNull = false
+): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    if (allowNull) {
+      return null;
+    }
+
+    throw new Error(`${propertyName} 类型非法。`);
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`${propertyName} 类型非法。`);
+  }
+
+  if (!allowEmpty && !value.trim()) {
+    throw new Error(emptyMessage);
+  }
+
+  return value;
+}
+
+function ensureOptionalInputStringOrNull(value: unknown, propertyName: string): string | null | undefined {
+  return ensureOptionalInputString(value, propertyName, true, `${propertyName} 不能为空。`, true);
+}
+
+function ensureInputBoolean(value: unknown, propertyName: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${propertyName} 必须为布尔值。`);
+  }
+
+  return value;
+}
+
+function ensureOptionalInputBoolean(value: unknown, propertyName: string): boolean | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return ensureInputBoolean(value, propertyName);
+}
+
+function ensureInputNumber(value: unknown, propertyName: string): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new Error(`${propertyName} 类型非法。`);
+  }
+
+  return value;
+}
+
+function ensureOptionalInputIntegerAtLeast(
+  value: unknown,
+  propertyName: string,
+  minimumValue: number,
+  errorMessage: string
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isInteger(value) || value < minimumValue) {
+    throw new Error(errorMessage);
+  }
+
+  return value;
+}
+
+function ensureOptionalInputIntegerInRange(
+  value: unknown,
+  propertyName: string,
+  minimumValue: number,
+  maximumValue: number,
+  errorMessage: string
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isInteger(value) || value < minimumValue || value > maximumValue) {
+    throw new Error(errorMessage);
+  }
+
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
