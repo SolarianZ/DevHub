@@ -40,6 +40,23 @@ def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -
         thread.join(timeout=5)
 
 
+def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_ping_success_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        ping = client.ping(None)
+
+        assert ping.ok is True
+        assert "params" in scenario.requests[0]
+        assert scenario.requests[0]["params"]["echo"] is None
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_unauthorized_response)
     server, thread = _start_http_server(scenario)

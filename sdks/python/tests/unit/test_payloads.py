@@ -95,3 +95,28 @@ def test_respond_builder_when_error_message_missing_should_raise() -> None:
                 error=DevHubCalleeError(code=1001, message=""),
             )
         )
+
+
+def test_respond_builder_should_allow_null_value() -> None:
+    payload = build_respond_params(
+        RespondRequest(
+            instance_id="inst-1",
+            invocation_id="invk-1",
+            value=None,
+        )
+    )
+
+    assert payload["value"] is None
+    assert "error" not in payload
+
+
+def test_respond_builder_when_value_and_error_present_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                invocation_id="invk-1",
+                value={"ok": True},
+                error=DevHubCalleeError(code=1001, message="app_error"),
+            )
+        )

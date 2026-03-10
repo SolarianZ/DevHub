@@ -107,7 +107,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     if launch_value is not None:
         launch_root = require_mapping(launch_value, f"{path}.launch")
         launch = LaunchConfiguration(
-            exe_path=optional_str(launch_root.get("exePath"), f"{path}.launch.exePath"),
+            exe_path=require_str(launch_root, "exePath", f"{path}.launch"),
             args_template=optional_str(launch_root.get("argsTemplate"), f"{path}.launch.argsTemplate"),
             working_directory=optional_str(launch_root.get("workingDirectory"), f"{path}.launch.workingDirectory"),
             dedupe_key_template=optional_str(launch_root.get("dedupeKeyTemplate"), f"{path}.launch.dedupeKeyTemplate"),

@@ -51,6 +51,9 @@ from .models import (
 from .runtime import discover_runtime
 
 
+_ECHO_UNSET = object()
+
+
 class DevHubClient:
     """DevHub HTTP JSON-RPC 客户端。"""
 
@@ -79,10 +82,10 @@ class DevHubClient:
 
         return self._connection_info.runtime
 
-    def ping(self, echo: Any = None) -> PingResult:
+    def ping(self, echo: Any = _ECHO_UNSET) -> PingResult:
         """调用 `hub.ping`。"""
 
-        params = None if echo is None else {"echo": echo}
+        params = None if echo is _ECHO_UNSET else {"echo": echo}
         result = self._send("hub.ping", params)
         return parse_ping_result(result, path="hub.ping.result")
 

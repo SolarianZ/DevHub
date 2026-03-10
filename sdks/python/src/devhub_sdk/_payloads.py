@@ -142,19 +142,18 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
     if not request.invocation_id or not request.invocation_id.strip():
         raise ValueError("request.invocation_id 不能为空。")
 
-    has_value = request.value is not None
     has_error = request.error is not None
-    if has_value == has_error:
+    if has_error and request.value is not None:
         raise ValueError("RespondRequest 必须且只能包含 value 或 error 之一。")
 
     payload: dict[str, Any] = {
         "instanceId": request.instance_id,
         "invocationId": request.invocation_id,
     }
-    if has_value:
-        payload["value"] = request.value
-    else:
+    if has_error:
         payload["error"] = _callee_error_to_dict(request.error)
+    else:
+        payload["value"] = request.value
     return payload
 
 
