@@ -243,6 +243,12 @@ it("fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
   })).rejects.toThrow("requestTimeoutMs 必须为大于 0 的整数。");
 });
 
+it("fromRuntime 应拒绝空 options", async () => {
+  await expect(DevHubClient.fromRuntime(undefined as unknown as Parameters<typeof DevHubClient.fromRuntime>[0]))
+    .rejects
+    .toThrow("options 不能为空。");
+});
+
 it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();

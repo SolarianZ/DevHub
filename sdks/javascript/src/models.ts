@@ -180,6 +180,10 @@ export interface DevHubEvent {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function normalizeClientOptions(options: DevHubClientOptions): NormalizedDevHubClientOptions {
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    throw new Error("options 不能为空。");
+  }
+
   const clientId = options.clientId ?? "";
   const clientSessionId = options.clientSessionId ?? randomUUID();
   const protocolVersion = options.protocolVersion ?? 1;

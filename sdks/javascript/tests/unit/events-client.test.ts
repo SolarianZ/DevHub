@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevHubEventsClient } from "../../src/events.js";
+import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
 
 const tempRoots: string[] = [];
 
@@ -76,6 +77,54 @@ it("事件通知携带 id 时应使事件流报错", async () => {
 
   const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
+});
+
+it("authenticate 应映射 DevHub RPC 错误", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createAuthenticateErrorScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-auth-error-client",
+    runtimeDir
+  });
+
+  let capturedError: unknown;
+  try {
+    await client.authenticate();
+  } catch (error) {
+    capturedError = error;
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(DevHubRpcErrorCode.Unauthorized);
+  expect(rpcError.reason).toBe("invalid_token");
+});
+
+it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createInvalidAuthenticateEnvelopeScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-auth-envelope-client",
+    runtimeDir
+  });
+
+  await expect(client.authenticate()).rejects.toThrow(/jsonrpc/i);
+});
+
+it("fromRuntime 应拒绝空 options", async () => {
+  await expect(
+    DevHubEventsClient.fromRuntime(null as unknown as Parameters<typeof DevHubEventsClient.fromRuntime>[0])
+  ).rejects.toThrow("options 不能为空。");
 });
 
 async function createRuntime(): Promise<string> {
@@ -283,4 +332,47 @@ function createMalformedEventScenario(request: Record<string, unknown>): ServerF
   }
 
   return [];
+}
+
+function createAuthenticateErrorScenario(request: Record<string, unknown>): ServerFrame[] {
+  if (String(request.method) !== "hub.ws.authenticate") {
+    return [];
+  }
+
+  return [
+    {
+      type: "message",
+      payload: JSON.stringify({
+        jsonrpc: "2.0",
+        id: String(request.id),
+        error: {
+          code: DevHubRpcErrorCode.Unauthorized,
+          message: "unauthorized",
+          data: {
+            reason: "invalid_token"
+          }
+        }
+      })
+    }
+  ];
+}
+
+function createInvalidAuthenticateEnvelopeScenario(request: Record<string, unknown>): ServerFrame[] {
+  if (String(request.method) !== "hub.ws.authenticate") {
+    return [];
+  }
+
+  return [
+    {
+      type: "message",
+      payload: JSON.stringify({
+        jsonrpc: "1.0",
+        id: String(request.id),
+        result: {
+          ok: true,
+          protocolVersion: 1
+        }
+      })
+    }
+  ];
 }
