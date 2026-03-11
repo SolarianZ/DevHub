@@ -236,13 +236,14 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
     payload: dict[str, Any] = {
         "appId": app_id,
         "method": method,
-        "args": ensure_json_value(request.args, "args"),
         "options": {
             "ttlMs": ttl_ms,
             "queueIfOffline": queue_if_offline,
             "autoLaunch": auto_launch,
         },
     }
+    if getattr(request, "_has_args", True):
+        payload["args"] = ensure_json_value(request.args, "args")
     if is_request:
         payload["options"]["waitTimeoutMs"] = wait_timeout_ms
     if request.target is not None:

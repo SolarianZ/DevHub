@@ -210,7 +210,10 @@ class InvocationOptions:
     auto_launch: bool | None = None
 
 
-@dataclass(slots=True)
+_INVOKE_ARGS_UNSET = object()
+
+
+@dataclass(slots=True, init=False)
 class InvokeRequest:
     """调用请求。"""
 
@@ -219,6 +222,22 @@ class InvokeRequest:
     target: InvocationTarget | None = None
     args: Any = None
     options: InvocationOptions | None = None
+    _has_args: bool = field(init=False, repr=False, compare=False)
+
+    def __init__(
+        self,
+        app_id: str,
+        method: str,
+        target: InvocationTarget | None = None,
+        args: Any = _INVOKE_ARGS_UNSET,
+        options: InvocationOptions | None = None,
+    ) -> None:
+        self.app_id = app_id
+        self.method = method
+        self.target = target
+        self.args = None if args is _INVOKE_ARGS_UNSET else args
+        self.options = options
+        self._has_args = args is not _INVOKE_ARGS_UNSET
 
 
 @dataclass(slots=True)

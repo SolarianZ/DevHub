@@ -19,6 +19,7 @@ def test_notify_builder_should_apply_default_options() -> None:
     assert payload["options"]["ttlMs"] == 60000
     assert payload["options"]["queueIfOffline"] is True
     assert payload["options"]["autoLaunch"] is True
+    assert "args" not in payload
     assert "target" not in payload
 
 
@@ -29,6 +30,14 @@ def test_request_builder_should_apply_default_options() -> None:
     assert payload["options"]["waitTimeoutMs"] == 120000
     assert payload["options"]["queueIfOffline"] is True
     assert payload["options"]["autoLaunch"] is True
+    assert "args" not in payload
+
+
+def test_notify_builder_should_preserve_explicit_null_args() -> None:
+    payload = build_notify_params(InvokeRequest(app_id="test.app", method="test.notify", args=None))
+
+    assert "args" in payload
+    assert payload["args"] is None
 
 
 def test_request_builder_should_preserve_explicit_empty_scope() -> None:
