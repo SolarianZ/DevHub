@@ -74,7 +74,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
 
         try:
             async with self._send_lock:
-                await self._websocket.send(json.dumps(payload_dict))
+                await self._websocket.send(json.dumps(payload_dict, allow_nan=False))
         except Exception as exc:
             self._terminal_error = self._terminal_error or exc
             self._fail_pending(exc)

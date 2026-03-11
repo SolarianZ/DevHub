@@ -86,6 +86,19 @@ def test_register_instance_builder_when_meta_is_not_object_should_raise() -> Non
         )
 
 
+def test_register_instance_builder_when_meta_contains_non_finite_number_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"meta\.value 必须为有限数字。"):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                meta={"value": float("nan")},
+            )
+        )
+
+
 def test_register_instance_builder_when_invoke_poll_is_not_bool_should_raise() -> None:
     with pytest.raises(ValueError):
         build_register_instance_params(
@@ -116,6 +129,17 @@ def test_notify_builder_when_target_instance_id_is_not_string_should_raise() -> 
                 app_id="test.app",
                 method="test.notify",
                 target=InvocationTarget(instance_id=123),  # type: ignore[arg-type]
+            )
+        )
+
+
+def test_notify_builder_when_args_contains_non_finite_number_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"args\.value 必须为有限数字。"):
+        build_notify_params(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.notify",
+                args={"value": float("nan")},
             )
         )
 
@@ -161,5 +185,31 @@ def test_respond_builder_when_value_and_error_present_should_raise() -> None:
                 invocation_id="invk-1",
                 value={"ok": True},
                 error=DevHubCalleeError(code=1001, message="app_error"),
+            )
+        )
+
+
+def test_respond_builder_when_value_contains_unsupported_json_type_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"value\.callback 包含不支持的 JSON 类型。"):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                invocation_id="invk-1",
+                value={"callback": lambda: "ignored"},
+            )
+        )
+
+
+def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"error\.data\.callback 包含不支持的 JSON 类型。"):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                invocation_id="invk-1",
+                error=DevHubCalleeError(
+                    code=1001,
+                    message="app_error",
+                    data={"callback": lambda: "ignored"},
+                ),
             )
         )

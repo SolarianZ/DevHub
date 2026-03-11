@@ -89,3 +89,68 @@ def require_protocol_version(value: Any) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value != 1:
         raise ValueError("当前仅支持协议版本 1。")
     return value
+
+
+def ensure_json_value(value: Any, property_name: str) -> Any:
+    """校验并规范化任意 JSON 值。"""
+
+    return _validate_json_value(value, property_name, set())
+
+
+def ensure_json_object(value: Any, property_name: str) -> dict[str, Any]:
+    """校验并规范化 JSON 对象。"""
+
+    parsed = ensure_json_value(value, property_name)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{property_name} 必须为 JSON 对象。")
+    return parsed
+
+
+def _validate_json_value(value: Any, path: str, ancestors: set[int]) -> Any:
+    if value is None or isinstance(value, bool | str):
+        return value
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{path} 必须为有限数字。")
+        return value
+
+    if isinstance(value, list):
+        return _validate_json_array(value, path, ancestors)
+
+    if isinstance(value, dict):
+        return _validate_json_object(value, path, ancestors)
+
+    raise ValueError(f"{path} 包含不支持的 JSON 类型。")
+
+
+def _validate_json_array(value: list[Any], path: str, ancestors: set[int]) -> list[Any]:
+    value_id = id(value)
+    if value_id in ancestors:
+        raise ValueError(f"{path} 不能包含循环引用。")
+
+    ancestors.add(value_id)
+    try:
+        return [_validate_json_value(item, f"{path}[{index}]", ancestors) for index, item in enumerate(value)]
+    finally:
+        ancestors.remove(value_id)
+
+
+def _validate_json_object(value: dict[Any, Any], path: str, ancestors: set[int]) -> dict[str, Any]:
+    value_id = id(value)
+    if value_id in ancestors:
+        raise ValueError(f"{path} 不能包含循环引用。")
+
+    ancestors.add(value_id)
+    try:
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{path} 的对象键必须为字符串。")
+            normalized[key] = _validate_json_value(item, f"{path}.{key}", ancestors)
+        return normalized
+    finally:
+        ancestors.remove(value_id)

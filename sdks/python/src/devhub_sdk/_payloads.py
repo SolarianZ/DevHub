@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from ._validation import (
+    ensure_json_object,
+    ensure_json_value,
     require_bool,
     require_non_empty_string,
     require_optional_bool,
@@ -175,7 +176,7 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
     if has_error:
         payload["error"] = _callee_error_to_dict(request.error)
     else:
-        payload["value"] = request.value
+        payload["value"] = ensure_json_value(request.value, "value")
     return payload
 
 
@@ -235,7 +236,7 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
     payload: dict[str, Any] = {
         "appId": app_id,
         "method": method,
-        "args": request.args,
+        "args": ensure_json_value(request.args, "args"),
         "options": {
             "ttlMs": ttl_ms,
             "queueIfOffline": queue_if_offline,
@@ -253,13 +254,7 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
 
 
 def _ensure_json_object(value: Any, name: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(json.dumps(value))
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} 必须可序列化为 JSON 对象。") from exc
-    if not isinstance(parsed, dict):
-        raise ValueError(f"{name} 必须序列化为 JSON 对象。")
-    return parsed
+    return ensure_json_object(value, name)
 
 
 def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:
@@ -274,5 +269,5 @@ def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:
         "message": message,
     }
     if error.data is not None:
-        payload["data"] = error.data
+        payload["data"] = ensure_json_object(error.data, "error.data")
     return payload

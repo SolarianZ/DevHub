@@ -46,7 +46,7 @@ class UrllibJsonRpcHttpTransport(JsonRpcHttpTransport):
 
         request = Request(
             connection_info.rpc_endpoint,
-            data=json.dumps(payload).encode("utf-8"),
+            data=json.dumps(payload, allow_nan=False).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {connection_info.token}",
                 "Content-Type": "application/json",

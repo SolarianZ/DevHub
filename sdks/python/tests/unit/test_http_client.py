@@ -132,6 +132,28 @@ def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> 
         thread.join(timeout=5)
 
 
+def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+        }
+    )
+
+    client = DevHubClient(
+        DevHubClientOptions(client_id="http-client"),
+        runtime_resolver=resolver,
+        transport=transport,
+    )
+
+    with pytest.raises(ValueError, match=r"echo\.callback 包含不支持的 JSON 类型。"):
+        client.ping({"callback": lambda: "ignored"})
+
+    assert transport.calls == []
+
+
 def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_unauthorized_response)
     server, thread = _start_http_server(scenario)
