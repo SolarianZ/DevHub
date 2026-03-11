@@ -457,7 +457,6 @@ export class DevHubEventsClient {
     }
 
     this.authenticated = false;
-    this.eventStreamAvailable = false;
 
     const finalError = error ?? new Error("WebSocket 连接已关闭。");
     for (const pending of this.pendingRequests.values()) {

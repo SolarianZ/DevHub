@@ -333,6 +333,95 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      status: "started",
+      pid: 12345
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-launch-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.launch({
+    appId: "test.app"
+  })).rejects.toThrow(/launchId/);
+});
+
+it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z",
+      items: [
+        {
+          invocationId: "invk-1",
+          appId: "test.app",
+          target: {
+            scope: null,
+            instanceId: null
+          },
+          method: "test.notify",
+          kind: "notify",
+          createdAtUtc: "2026-03-09T00:00:00Z",
+          caller: {
+            clientId: "caller-a"
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-poll-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.poll({
+    instanceId: "inst-1"
+  })).rejects.toThrow(/clientSessionId/);
+});
+
+it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(input).toBe("http://127.0.0.1:47231/rpc");
+
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify({
+        jsonrpc: "1.0",
+        id: body.id,
+        result: {
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z"
+        }
+      })
+    } as Response;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-jsonrpc-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
+});
+
 async function createRuntime(): Promise<string> {
   const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
   tempRoots.push(runtimeDir);
