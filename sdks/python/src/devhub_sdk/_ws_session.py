@@ -103,10 +103,13 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             await self._websocket.close()
             self._websocket = None
         if self._receiver_task is not None:
-            self._receiver_task.cancel()
+            if not self._receiver_task.done():
+                self._receiver_task.cancel()
             try:
                 await self._receiver_task
             except asyncio.CancelledError:
+                pass
+            except Exception:
                 pass
             self._receiver_task = None
         self._complete_event_stream()
@@ -169,8 +172,9 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             raise RuntimeError("WebSocket JSON-RPC 响应缺少有效 id。")
 
         future = self._pending.get(request_id)
-        if future is not None and not future.done():
-            future.set_result(root)
+        if future is None or future.done():
+            raise RuntimeError("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。")
+        future.set_result(root)
 
     def _ensure_open(self) -> None:
         if self._closed:
