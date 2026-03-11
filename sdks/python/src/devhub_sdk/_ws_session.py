@@ -56,9 +56,9 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         self._ensure_open()
+        self._ensure_stream_available()
         await self._ensure_connected()
-        if self._terminal_error is not None:
-            raise RuntimeError("事件流已终止。") from self._terminal_error
+        self._ensure_stream_available()
 
         request_id = f"ws-{uuid4().hex}"
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
@@ -72,8 +72,14 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         if params is not None:
             payload_dict["params"] = params
 
-        async with self._send_lock:
-            await self._websocket.send(json.dumps(payload_dict))
+        try:
+            async with self._send_lock:
+                await self._websocket.send(json.dumps(payload_dict))
+        except Exception as exc:
+            self._terminal_error = self._terminal_error or exc
+            self._fail_pending(exc)
+            self._complete_event_stream()
+            raise RuntimeError("事件流已终止。") from exc
 
         try:
             if self._options.request_timeout is None:
@@ -89,6 +95,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         while True:
             item = await self._events.get()
             if item is _SENTINEL:
+                self._events.put_nowait(_SENTINEL)
                 if self._terminal_error is not None:
                     raise self._terminal_error
                 return
@@ -179,6 +186,13 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("当前 WebSocket 会话已关闭。")
+
+    def _ensure_stream_available(self) -> None:
+        if not self._stream_completed:
+            return
+        if self._terminal_error is not None:
+            raise RuntimeError("事件流已终止。") from self._terminal_error
+        raise RuntimeError("事件流已终止。")
 
     def _fail_pending(self, error: BaseException) -> None:
         for future in self._pending.values():
