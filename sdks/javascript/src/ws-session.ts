@@ -1,0 +1,332 @@
+import { createRequire } from "node:module";
+import { Mutex } from "./async-utils.js";
+import {
+  buildRpcError,
+  createPendingRequest,
+  createWebSocketRequestId,
+  type PendingRequest,
+  tryGetEventParams,
+  tryGetResponse,
+  validateIncomingEnvelope
+} from "./jsonrpc.js";
+import { ensureRecord, isRecord } from "./validation.js";
+
+const require = createRequire(import.meta.url);
+
+export interface JsonRpcWsSessionOptions {
+  websocketEndpoint: string;
+  requestTimeoutMs?: number;
+  onEvent?: (params: Record<string, unknown>) => void;
+  onTerminate?: (error: Error) => void;
+}
+
+export class JsonRpcWsSession {
+  private socket: WebSocketLike | null = null;
+  private socketCleanup: Array<() => void> = [];
+  private readonly pendingRequests = new Map<string, PendingRequest>();
+  private readonly sendLock = new Mutex();
+  private disposed = false;
+
+  constructor(private readonly options: JsonRpcWsSessionOptions) {
+  }
+
+  async ensureConnected(): Promise<void> {
+    this.throwIfDisposed();
+    if (this.socket) {
+      return;
+    }
+
+    const ctor = resolveWebSocketConstructor();
+    const socket = new ctor(this.options.websocketEndpoint);
+    this.socket = socket;
+    this.attachSocketHandlers(socket);
+
+    try {
+      await waitForWebSocketOpen(socket, this.options.requestTimeoutMs);
+    } catch (error) {
+      await this.disconnect("connect_failed");
+      throw error;
+    }
+  }
+
+  async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    this.throwIfDisposed();
+    if (!method || !method.trim()) {
+      throw new Error("method cannot be empty.");
+    }
+
+    await this.ensureConnected();
+    const socket = this.socket;
+    if (!socket) {
+      throw new Error("WebSocket connection is not established.");
+    }
+
+    const requestId = createWebSocketRequestId();
+    const payload: Record<string, unknown> = {
+      jsonrpc: "2.0",
+      id: requestId,
+      method
+    };
+
+    if (params !== undefined) {
+      payload.params = params;
+    }
+
+    const waiter = createPendingRequest(this.options.requestTimeoutMs, () => {
+      this.pendingRequests.delete(requestId);
+    });
+    this.pendingRequests.set(requestId, waiter);
+
+    try {
+      await this.sendLock.run(() => {
+        socket.send(JSON.stringify(payload));
+      });
+
+      return await waiter.promise;
+    } catch (error) {
+      this.pendingRequests.delete(requestId);
+      if (waiter.timeoutId) {
+        clearTimeout(waiter.timeoutId);
+      }
+      throw error;
+    }
+  }
+
+  async disconnect(reason: string): Promise<void> {
+    this.rejectPending(new Error("WebSocket connection closed."));
+    await this.closeSocket(reason);
+  }
+
+  async dispose(reason = "client_dispose"): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    await this.disconnect(reason);
+  }
+
+  private attachSocketHandlers(socket: WebSocketLike): void {
+    this.socketCleanup.push(addSocketListener(socket, "message", (event) => {
+      void this.handleMessage(event);
+    }));
+
+    this.socketCleanup.push(addSocketListener(socket, "close", () => {
+      this.terminate(new Error("WebSocket connection closed."));
+    }));
+
+    this.socketCleanup.push(addSocketListener(socket, "error", (event) => {
+      const error = event instanceof Error ? event : new Error("WebSocket error.");
+      this.terminate(error);
+    }));
+  }
+
+  private async handleMessage(event: unknown): Promise<void> {
+    try {
+      const text = coerceMessageText(event);
+      if (!text) {
+        return;
+      }
+
+      const payload = JSON.parse(text) as unknown;
+      const root = ensureRecord(payload, "WebSocket JSON-RPC message");
+      validateIncomingEnvelope(root);
+
+      const response = tryGetResponse(root);
+      if (response) {
+        this.completePending(response.requestId, response.result, response.error);
+        return;
+      }
+
+      const params = tryGetEventParams(root);
+      if (params && this.options.onEvent) {
+        this.options.onEvent(params);
+      }
+    } catch (error) {
+      this.terminate(error instanceof Error ? error : new Error("WebSocket message handling failed."));
+    }
+  }
+
+  private completePending(
+    requestId: string,
+    result: Record<string, unknown>,
+    error?: Record<string, unknown>
+  ): void {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) {
+      return;
+    }
+
+    this.pendingRequests.delete(requestId);
+    if (pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+    }
+
+    if (error) {
+      pending.reject(buildRpcError(error, requestId));
+      return;
+    }
+
+    pending.resolve(result);
+  }
+
+  private terminate(error: Error): void {
+    const hadSocket = this.socket !== null;
+    const hadPending = this.pendingRequests.size > 0;
+
+    this.rejectPending(error);
+    void this.closeSocket("connection_closed");
+
+    if (hadSocket || hadPending) {
+      this.options.onTerminate?.(error);
+    }
+  }
+
+  private async closeSocket(reason: string): Promise<void> {
+    const socket = this.socket;
+    if (!socket) {
+      return;
+    }
+
+    this.socket = null;
+    this.cleanupSocketHandlers();
+
+    try {
+      socket.close(1000, reason);
+    } catch {
+    }
+  }
+
+  private cleanupSocketHandlers(): void {
+    for (const cleanup of this.socketCleanup) {
+      cleanup();
+    }
+    this.socketCleanup = [];
+  }
+
+  private rejectPending(error: Error): void {
+    for (const pending of this.pendingRequests.values()) {
+      if (pending.timeoutId) {
+        clearTimeout(pending.timeoutId);
+      }
+      pending.reject(error);
+    }
+
+    this.pendingRequests.clear();
+  }
+
+  private throwIfDisposed(): void {
+    if (this.disposed) {
+      throw new Error("WebSocket session has been disposed.");
+    }
+  }
+}
+
+interface WebSocketLike {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  addEventListener?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
+  removeEventListener?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
+  on?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
+  off?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
+}
+
+type WebSocketConstructor = new (url: string) => WebSocketLike;
+
+function resolveWebSocketConstructor(): WebSocketConstructor {
+  const globalCandidate = (globalThis as { WebSocket?: unknown }).WebSocket;
+  if (typeof globalCandidate === "function") {
+    return globalCandidate as WebSocketConstructor;
+  }
+
+  try {
+    const wsModule = require("ws") as Record<string, unknown>;
+    const ctor = (wsModule.WebSocket ?? wsModule.default ?? wsModule) as unknown;
+    if (typeof ctor !== "function") {
+      throw new Error("ws module did not export a WebSocket constructor.");
+    }
+
+    return ctor as WebSocketConstructor;
+  } catch (error) {
+    throw new Error("WebSocket is unavailable. Install ws or use Node.js 20+.", { cause: error });
+  }
+}
+
+function addSocketListener(
+  socket: WebSocketLike,
+  event: string,
+  handler: (event: unknown, ...args: unknown[]) => void
+): () => void {
+  if (typeof socket.addEventListener === "function" && typeof socket.removeEventListener === "function") {
+    socket.addEventListener(event, handler);
+    return () => {
+      socket.removeEventListener?.(event, handler);
+    };
+  }
+
+  if (typeof socket.on === "function" && typeof socket.off === "function") {
+    socket.on(event, handler);
+    return () => {
+      socket.off?.(event, handler);
+    };
+  }
+
+  throw new Error("The current WebSocket implementation does not support event subscriptions.");
+}
+
+function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup: Array<() => void> = [];
+
+    const finish = (error?: Error) => {
+      for (const item of cleanup) {
+        item();
+      }
+
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+
+    cleanup.push(addSocketListener(socket, "open", () => finish()));
+    cleanup.push(addSocketListener(socket, "error", (event) => {
+      finish(event instanceof Error ? event : new Error("WebSocket connection failed."));
+    }));
+    cleanup.push(addSocketListener(socket, "close", () => {
+      finish(new Error("WebSocket connection closed."));
+    }));
+
+    if (timeoutMs && timeoutMs > 0) {
+      const timeoutId = setTimeout(() => {
+        finish(new Error("WebSocket connection timed out."));
+      }, timeoutMs);
+      cleanup.push(() => clearTimeout(timeoutId));
+    }
+  });
+}
+
+function coerceMessageText(event: unknown): string | null {
+  if (typeof event === "string") {
+    return event;
+  }
+
+  if (event instanceof ArrayBuffer) {
+    return Buffer.from(event).toString("utf-8");
+  }
+
+  if (ArrayBuffer.isView(event)) {
+    return Buffer.from(event.buffer, event.byteOffset, event.byteLength).toString("utf-8");
+  }
+
+  if (Buffer.isBuffer(event)) {
+    return event.toString("utf-8");
+  }
+
+  if (isRecord(event) && "data" in event) {
+    return coerceMessageText(event.data);
+  }
+
+  return null;
+}

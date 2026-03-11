@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { DevHubClient, DevHubEventsClient } from "../../src/client.js";
+import { DevHubClient } from "../../src/client.js";
+import { DevHubEventsClient } from "../../src/events.js";
 import { DevHubRpcError } from "../../src/errors.js";
 import { APP_INSTANCE_REGISTERED } from "../../src/events.js";
 import { DevHubHostFixture } from "./host.js";

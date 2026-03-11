@@ -2,7 +2,7 @@ import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { DevHubEventsClient } from "../../src/client.js";
+import { DevHubEventsClient } from "../../src/events.js";
 
 const tempRoots: string[] = [];
 

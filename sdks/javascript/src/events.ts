@@ -13,3 +13,5 @@ export const ALL_EVENT_TYPES = new Set([
   INVOCATION_COMPLETED,
   INVOCATION_FAILED
 ]);
+
+export { DevHubEventsClient } from "./events-client.js";
