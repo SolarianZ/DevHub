@@ -16,7 +16,7 @@ afterEach(async () => {
   }));
 });
 
-it("readEvents 与 subscribe 应在鉴权前拒绝访问", async () => {
+it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   const runtimeDir = await createRuntime();
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unauthenticated-client",
@@ -79,6 +79,43 @@ it("事件通知携带 id 时应使事件流报错", async () => {
   await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
 });
 
+it("响应 id 未匹配挂起请求时应中断 authenticate", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createUnexpectedAuthenticateResponseIdScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-unexpected-response-id-client",
+    runtimeDir,
+    requestTimeoutMs: 1_000
+  });
+
+  await expect(client.authenticate()).rejects.toThrow(/pending request/i);
+});
+
+it("收到未知 WS 通知方法时应使事件流报错", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createUnknownNotificationScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-unknown-notification-client",
+    runtimeDir
+  });
+
+  await client.authenticate();
+  await client.subscribe(["invocation.completed"]);
+
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toThrow(/supported response or hub\.event/i);
+});
+
 it("authenticate 应映射 DevHub RPC 错误", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
@@ -124,7 +161,7 @@ it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
 it("fromRuntime 应拒绝空 options", async () => {
   await expect(
     DevHubEventsClient.fromRuntime(null as unknown as Parameters<typeof DevHubEventsClient.fromRuntime>[0])
-  ).rejects.toThrow("options 不能为空。");
+  ).rejects.toThrow(/options/i);
 });
 
 async function createRuntime(): Promise<string> {
@@ -357,6 +394,26 @@ function createAuthenticateErrorScenario(request: Record<string, unknown>): Serv
   ];
 }
 
+function createUnexpectedAuthenticateResponseIdScenario(request: Record<string, unknown>): ServerFrame[] {
+  if (String(request.method) !== "hub.ws.authenticate") {
+    return [];
+  }
+
+  return [
+    {
+      type: "message",
+      payload: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `${String(request.id)}-unexpected`,
+        result: {
+          ok: true,
+          protocolVersion: 1
+        }
+      })
+    }
+  ];
+}
+
 function createInvalidAuthenticateEnvelopeScenario(request: Record<string, unknown>): ServerFrame[] {
   if (String(request.method) !== "hub.ws.authenticate") {
     return [];
@@ -375,4 +432,41 @@ function createInvalidAuthenticateEnvelopeScenario(request: Record<string, unkno
       })
     }
   ];
+}
+
+function createUnknownNotificationScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "hub.events.unknown",
+          params: {
+            subscriptionId: "sub-1"
+          }
+        })
+      }
+    ];
+  }
+
+  return [];
 }

@@ -141,7 +141,10 @@ export class JsonRpcWsSession {
       const params = tryGetEventParams(root);
       if (params && this.options.onEvent) {
         this.options.onEvent(params);
+        return;
       }
+
+      throw new Error("WebSocket JSON-RPC message is not a supported response or hub.event notification.");
     } catch (error) {
       this.terminate(error instanceof Error ? error : new Error("WebSocket message handling failed."));
     }
@@ -154,6 +157,7 @@ export class JsonRpcWsSession {
   ): void {
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
+      this.terminate(new Error("WebSocket JSON-RPC response id does not match any pending request."));
       return;
     }
 
