@@ -2,6 +2,7 @@ import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { WebSocketServer } from "ws";
 import { DevHubEventsClient } from "../../src/events.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
 
@@ -158,13 +159,78 @@ it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
   await expect(client.authenticate()).rejects.toThrow(/jsonrpc/i);
 });
 
+it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+
+  const server = new WebSocketServer({
+    host: "127.0.0.1",
+    port: 0,
+    path: "/ws"
+  });
+
+  try {
+    await waitForWebSocketServer(server);
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("无法获取测试 WebSocket 端口。");
+    }
+
+    const runtimeDir = await createRuntime({
+      httpBaseUrl: `http://127.0.0.1:${address.port}`,
+      wsUrl: `ws://127.0.0.1:${address.port}/ws`
+    });
+
+    const authenticateRequestPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
+      server.once("connection", (socket) => {
+        socket.once("error", reject);
+        socket.once("message", (data) => {
+          const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
+          socket.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: String(request.id),
+            result: {
+              ok: true,
+              protocolVersion: 1
+            }
+          }));
+          resolve(request);
+        });
+      });
+    });
+
+    const client = await DevHubEventsClient.fromRuntime({
+      clientId: "unit-events-ws-fallback-client",
+      runtimeDir
+    });
+
+    try {
+      await client.authenticate();
+      const request = await authenticateRequestPromise;
+      expect(request.method).toBe("hub.ws.authenticate");
+      expect(request.params).toMatchObject({
+        token: "token-1",
+        protocolVersion: 1,
+        clientId: "unit-events-ws-fallback-client"
+      });
+    } finally {
+      await client.dispose();
+    }
+  } finally {
+    await closeWebSocketServer(server);
+  }
+});
+
 it("fromRuntime 应拒绝空 options", async () => {
   await expect(
     DevHubEventsClient.fromRuntime(null as unknown as Parameters<typeof DevHubEventsClient.fromRuntime>[0])
   ).rejects.toThrow(/options/i);
 });
 
-async function createRuntime(): Promise<string> {
+async function createRuntime(overrides?: {
+  httpBaseUrl?: string;
+  wsUrl?: string;
+}): Promise<string> {
   const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"));
   tempRoots.push(runtimeDir);
 
@@ -175,8 +241,8 @@ async function createRuntime(): Promise<string> {
     JSON.stringify({
       protocolVersion: 1,
       pid: 12345,
-      httpBaseUrl: "http://127.0.0.1:47231",
-      wsUrl: "ws://127.0.0.1:47231/ws",
+      httpBaseUrl: overrides?.httpBaseUrl ?? "http://127.0.0.1:47231",
+      wsUrl: overrides?.wsUrl ?? "ws://127.0.0.1:47231/ws",
       tokenFile,
       startedAtUtc: "2026-03-09T00:00:00Z",
       runtimeTuning: {
@@ -189,6 +255,47 @@ async function createRuntime(): Promise<string> {
   );
 
   return runtimeDir;
+}
+
+async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
+  if (server.address()) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const onListening = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      server.off("listening", onListening);
+      server.off("error", onError);
+    };
+
+    server.on("listening", onListening);
+    server.on("error", onError);
+  });
+}
+
+async function closeWebSocketServer(server: WebSocketServer): Promise<void> {
+  for (const client of server.clients) {
+    client.terminate();
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 type ServerFrame =
