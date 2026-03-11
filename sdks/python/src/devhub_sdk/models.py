@@ -310,7 +310,10 @@ class DevHubCalleeError:
         return DevHubCalleeError(code=code, message=message, data=data)
 
 
-@dataclass(slots=True)
+_RESPOND_VALUE_UNSET = object()
+
+
+@dataclass(slots=True, init=False)
 class RespondRequest:
     """响应请求。"""
 
@@ -318,6 +321,20 @@ class RespondRequest:
     invocation_id: str
     value: Any = None
     error: DevHubCalleeError | None = None
+    _has_value: bool = field(init=False, repr=False, compare=False)
+
+    def __init__(
+        self,
+        instance_id: str,
+        invocation_id: str,
+        value: Any = _RESPOND_VALUE_UNSET,
+        error: DevHubCalleeError | None = None,
+    ) -> None:
+        self.instance_id = instance_id
+        self.invocation_id = invocation_id
+        self.value = None if value is _RESPOND_VALUE_UNSET else value
+        self.error = error
+        self._has_value = value is not _RESPOND_VALUE_UNSET
 
 
 @dataclass(slots=True)

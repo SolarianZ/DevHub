@@ -163,8 +163,9 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
     instance_id = require_non_empty_string(request.instance_id, "request.instance_id")
     invocation_id = require_non_empty_string(request.invocation_id, "request.invocation_id")
 
+    has_value = getattr(request, "_has_value", True)
     has_error = request.error is not None
-    if has_error and request.value is not None:
+    if has_value == has_error:
         raise ValueError("RespondRequest 必须且只能包含 value 或 error 之一。")
 
     payload: dict[str, Any] = {

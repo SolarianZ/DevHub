@@ -12,6 +12,23 @@ from devhub_sdk import DevHubClientOptions, DevHubEventsClient, DevHubRpcExcepti
 
 
 @pytest.mark.asyncio
+async def test_events_client_before_authenticate_should_reject_read_events(tmp_path: Path) -> None:
+    async def handler(websocket) -> None:
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        runtime_dir = _write_runtime(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        try:
+            with pytest.raises(RuntimeError, match="WebSocket 尚未通过鉴权"):
+                await anext(client.read_events())
+        finally:
+            await client.close()
+
+
+@pytest.mark.asyncio
 async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Path) -> None:
     received_messages: list[dict[str, Any]] = []
 
@@ -163,6 +180,37 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
                 await client.subscribe(INVOCATION_COMPLETED)
         finally:
             await client.close()
+
+
+@pytest.mark.asyncio
+async def test_events_client_after_close_should_reject_subscribe_and_read(tmp_path: Path) -> None:
+    async def handler(websocket) -> None:
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            )
+        )
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        runtime_dir = _write_runtime(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        await client.authenticate()
+        await client.close()
+
+        with pytest.raises(RuntimeError, match="事件客户端已关闭"):
+            await client.subscribe([INVOCATION_COMPLETED])
+
+        with pytest.raises(RuntimeError, match="事件客户端已关闭"):
+            await anext(client.read_events())
 
 
 def _write_runtime(tmp_path: Path, port: int) -> Path:

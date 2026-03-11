@@ -35,6 +35,7 @@ class DevHubEventsClient:
         self._receiver_task: asyncio.Task[None] | None = None
         self._terminal_error: BaseException | None = None
         self._stream_completed = False
+        self._closed = False
 
     @classmethod
     async def from_runtime(cls, options: DevHubClientOptions) -> "DevHubEventsClient":
@@ -51,6 +52,7 @@ class DevHubEventsClient:
     async def authenticate(self) -> None:
         """执行 `hub.ws.authenticate`。"""
 
+        self._ensure_not_closed()
         if self._authenticated:
             raise RuntimeError("当前事件客户端已完成认证。")
 
@@ -75,6 +77,7 @@ class DevHubEventsClient:
     async def subscribe(self, types: Iterable[str] | None = None) -> str:
         """订阅事件。"""
 
+        self._ensure_authenticated()
         params: dict[str, Any] = {}
         if types is not None:
             if isinstance(types, str | bytes | bytearray):
@@ -95,6 +98,7 @@ class DevHubEventsClient:
     async def unsubscribe(self, subscription_id: str) -> None:
         """取消订阅。"""
 
+        self._ensure_authenticated()
         normalized_subscription_id = require_non_empty_string(subscription_id, "subscription_id")
         result = await self._send_request(
             "hub.events.unsubscribe",
@@ -108,6 +112,7 @@ class DevHubEventsClient:
     async def read_events(self) -> AsyncIterator[DevHubEvent]:
         """读取事件流。"""
 
+        self._ensure_event_stream_available()
         while True:
             item = await self._events.get()
             if item is _SENTINEL:
@@ -119,6 +124,11 @@ class DevHubEventsClient:
     async def close(self) -> None:
         """关闭事件客户端。"""
 
+        if self._closed:
+            return
+
+        self._closed = True
+        self._authenticated = False
         if self._websocket is not None:
             await self._websocket.close()
             self._websocket = None
@@ -152,8 +162,9 @@ class DevHubEventsClient:
         self._receiver_task = asyncio.create_task(self._run_receive_loop())
 
     async def _send_request(self, method: str, params: dict[str, Any] | None, *, require_authenticated: bool) -> dict[str, Any]:
-        if require_authenticated and not self._authenticated:
-            raise RuntimeError("当前 WebSocket 尚未通过鉴权。")
+        self._ensure_not_closed()
+        if require_authenticated:
+            self._ensure_authenticated()
 
         await self._ensure_connected()
         if self._terminal_error is not None:
@@ -236,6 +247,18 @@ class DevHubEventsClient:
             if not future.done():
                 future.set_exception(error)
         self._pending.clear()
+
+    def _ensure_not_closed(self) -> None:
+        if self._closed:
+            raise RuntimeError("当前事件客户端已关闭。")
+
+    def _ensure_authenticated(self) -> None:
+        self._ensure_not_closed()
+        if not self._authenticated:
+            raise RuntimeError("当前 WebSocket 尚未通过鉴权。")
+
+    def _ensure_event_stream_available(self) -> None:
+        self._ensure_authenticated()
 
     def _complete_event_stream(self) -> None:
         if not self._stream_completed:

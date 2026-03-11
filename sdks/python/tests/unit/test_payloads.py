@@ -143,6 +143,16 @@ def test_respond_builder_should_allow_null_value() -> None:
     assert "error" not in payload
 
 
+def test_respond_builder_when_value_and_error_both_missing_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                invocation_id="invk-1",
+            )
+        )
+
+
 def test_respond_builder_when_value_and_error_present_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
