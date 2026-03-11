@@ -32,8 +32,60 @@ it("其次使用环境变量", () => {
   expect(resolveRuntimeDirectory()).toBe(path.resolve(envValue));
 });
 
-it("discoverRuntime 应返回已修剪的连接信息", async () => {
-  const runtimeDir = await createRuntimeDirectory();
+it("discoverRuntime 应支持标准运行时根目录布局", async () => {
+  const { runtimeRoot, runtimeDir } = await createStandardRuntimeLayout();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-std  \r\n", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  const result = await discoverRuntime(runtimeRoot);
+
+  expect(result.runtimeDirectory).toBe(runtimeDir);
+  expect(result.token).toBe("token-std");
+  expect(result.rpcEndpoint).toBe("http://127.0.0.1:47231/rpc");
+  expect(result.websocketEndpoint).toBe("ws://127.0.0.1:47231/ws");
+  expect(result.runtime.startedAtUtc.toISOString()).toBe("2026-03-09T00:00:00.000Z");
+});
+
+it("discoverRuntime 应支持通过环境变量定位标准运行时根目录", async () => {
+  const { runtimeRoot, runtimeDir } = await createStandardRuntimeLayout();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-env", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+  process.env[ENV] = runtimeRoot;
+
+  const result = await discoverRuntime();
+
+  expect(result.runtimeDirectory).toBe(runtimeDir);
+  expect(result.token).toBe("token-env");
+});
+
+it("discoverRuntime 应兼容旧布局并返回已修剪的连接信息", async () => {
+  const runtimeDir = await createLegacyRuntimeDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1  \r\n", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -60,7 +112,7 @@ it("discoverRuntime 应返回已修剪的连接信息", async () => {
 });
 
 it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
-  const runtimeDir = await createRuntimeDirectory();
+  const runtimeDir = await createLegacyRuntimeDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -80,10 +132,18 @@ it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
   await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/runtimeTuning/);
 });
 
-async function createRuntimeDirectory(): Promise<string> {
+async function createLegacyRuntimeDirectory(): Promise<string> {
   const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-runtime-unit-"));
   tempRoots.push(runtimeDir);
   return runtimeDir;
+}
+
+async function createStandardRuntimeLayout(): Promise<{ runtimeRoot: string; runtimeDir: string }> {
+  const runtimeRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-runtime-root-unit-"));
+  const runtimeDir = path.join(runtimeRoot, "runtime");
+  await fsPromises.mkdir(runtimeDir, { recursive: true });
+  tempRoots.push(runtimeRoot);
+  return { runtimeRoot, runtimeDir };
 }
 
 async function writeHubJson(runtimeDir: string, payload: Record<string, unknown>): Promise<void> {

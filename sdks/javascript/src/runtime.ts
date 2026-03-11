@@ -44,21 +44,21 @@ export function resolveRuntimeDirectory(runtimeDirOverride?: string): string {
 
   if (platform === "win32") {
     const base = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
-    return path.resolve(base, "DevHub", "runtime");
+    return path.resolve(base, "DevHub");
   }
 
   if (platform === "darwin") {
-    return path.resolve(home, "Library", "Application Support", "DevHub", "runtime");
+    return path.resolve(home, "Library", "Application Support", "DevHub");
   }
 
   const xdgDataHome = process.env.XDG_DATA_HOME;
   const base = xdgDataHome && xdgDataHome.trim() ? xdgDataHome : path.join(home, ".local", "share");
-  return path.resolve(base, "DevHub", "runtime");
+  return path.resolve(base, "DevHub");
 }
 
 export async function discoverRuntime(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo> {
-  const runtimeDirectory = resolveRuntimeDirectory(runtimeDirOverride);
-  const hubJsonPath = path.join(runtimeDirectory, "hub.json");
+  const runtimeRootDirectory = resolveRuntimeDirectory(runtimeDirOverride);
+  const { runtimeDirectory, hubJsonPath } = await resolveHubRuntimePaths(runtimeRootDirectory);
 
   let hubJsonText: string;
   try {
@@ -98,6 +98,26 @@ export async function discoverRuntime(runtimeDirOverride?: string): Promise<Runt
     runtime,
     rpcEndpoint: `${runtime.httpBaseUrl}/rpc`,
     websocketEndpoint: runtime.wsUrl
+  };
+}
+
+async function resolveHubRuntimePaths(runtimeRootDirectory: string): Promise<{
+  runtimeDirectory: string;
+  hubJsonPath: string;
+}> {
+  const standardRuntimeDirectory = path.join(runtimeRootDirectory, "runtime");
+  const standardHubJsonPath = path.join(standardRuntimeDirectory, "hub.json");
+  if (await fileExists(standardHubJsonPath)) {
+    return {
+      runtimeDirectory: standardRuntimeDirectory,
+      hubJsonPath: standardHubJsonPath
+    };
+  }
+
+  const legacyHubJsonPath = path.join(runtimeRootDirectory, "hub.json");
+  return {
+    runtimeDirectory: runtimeRootDirectory,
+    hubJsonPath: legacyHubJsonPath
   };
 }
 
@@ -205,6 +225,15 @@ function validateWebSocketUrl(value: string, source: string): void {
 function isLoopbackHost(host: string): boolean {
   const normalized = host.toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
+async function fileExists(target: string): Promise<boolean> {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readString(payload: Record<string, unknown>, key: string, source: string): string {
