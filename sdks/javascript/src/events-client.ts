@@ -111,7 +111,7 @@ export class DevHubEventsClient {
     await this.session.dispose("client_dispose");
   }
 
-  private handleTermination(error: Error): void {
+  private handleTermination(error?: Error): void {
     if (this.disposed) {
       return;
     }

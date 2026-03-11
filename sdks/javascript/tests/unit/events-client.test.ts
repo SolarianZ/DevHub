@@ -53,6 +53,9 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
   expect(first.value.payload).toEqual({
     invocationId: "invk-1"
   });
+
+  const second = await iterator.next();
+  expect(second.done).toBe(true);
 });
 
 it("事件通知携带 id 时应使事件流报错", async () => {

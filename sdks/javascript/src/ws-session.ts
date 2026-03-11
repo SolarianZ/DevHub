@@ -17,7 +17,7 @@ export interface JsonRpcWsSessionOptions {
   websocketEndpoint: string;
   requestTimeoutMs?: number;
   onEvent?: (params: Record<string, unknown>) => void;
-  onTerminate?: (error: Error) => void;
+  onTerminate?: (error?: Error) => void;
 }
 
 export class JsonRpcWsSession {
@@ -111,8 +111,8 @@ export class JsonRpcWsSession {
       void this.handleMessage(event);
     }));
 
-    this.socketCleanup.push(addSocketListener(socket, "close", () => {
-      this.terminate(new Error("WebSocket connection closed."));
+    this.socketCleanup.push(addSocketListener(socket, "close", (event, ...args) => {
+      this.terminate(resolveCloseError(event, args));
     }));
 
     this.socketCleanup.push(addSocketListener(socket, "error", (event) => {
@@ -170,11 +170,12 @@ export class JsonRpcWsSession {
     pending.resolve(result);
   }
 
-  private terminate(error: Error): void {
+  private terminate(error?: Error): void {
     const hadSocket = this.socket !== null;
     const hadPending = this.pendingRequests.size > 0;
+    const rejectionError = error ?? new Error("WebSocket connection closed.");
 
-    this.rejectPending(error);
+    this.rejectPending(rejectionError);
     void this.closeSocket("connection_closed");
 
     if (hadSocket || hadPending) {
@@ -329,4 +330,26 @@ function coerceMessageText(event: unknown): string | null {
   }
 
   return null;
+}
+
+function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
+  if (typeof event === "number") {
+    return event === 1000 ? undefined : new Error("WebSocket connection closed.");
+  }
+
+  if (isRecord(event)) {
+    if (event.wasClean === true) {
+      return undefined;
+    }
+
+    if (typeof event.code === "number") {
+      return event.code === 1000 ? undefined : new Error("WebSocket connection closed.");
+    }
+  }
+
+  if (typeof args[0] === "number" && args[0] === 1000) {
+    return undefined;
+  }
+
+  return new Error("WebSocket connection closed.");
 }
