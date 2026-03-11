@@ -9,14 +9,15 @@
 
 ## 当前状态（截至 2026-03-09）
 
-- 当前分支：`m5`。
+- 当前分支：`m5_js`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
-- `.NET SDK` 子范围已完成：`sdks/dotnet/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及 `.NET` 单元测试与 SDK↔Hub 黑盒集成测试；TS SDK、conformance 与跨语言 CI 仍待后续阶段完成。
-- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdk/devhub-sdk-ts` 与 `tests/conformance` 仍为后续 M5 目标落点。
+- `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 仍待后续阶段完成。
+- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 已作为 JS/TS SDK 实际落点，`tests/conformance` 仍为后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中 `DEVHUB_RUNTIME_DIR` 用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 48 条单元测试 + 14 条集成测试）；已补齐 SDK 对 AppDefinition / AppInstance / Invocation 成功载荷的关键结构校验，并为注册载荷 `meta` 与 `respond.error.message` 增加本地参数校验。
+- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 tests/test_runner.py --smoke --no-header` 冒烟回归。
 
 ---
 
@@ -25,7 +26,7 @@
 ### 0.1 M5 必须实现
 
 - [ ] 交付 `.NET SDK`（Node 外调用方可通过 .NET API 调用 DevHub）。
-- [ ] 交付 `JS/TS SDK`（Node.js 环境调用 DevHub）。
+- [x] 交付 `JS/TS SDK`（Node.js 环境调用 DevHub）。
 - [ ] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
 - [ ] 建立 `Hub↔SDK 契约测试`（同向量驱动 .NET/TS 双实现并校验语义一致）。
 
@@ -55,15 +56,15 @@
 - .NET SDK：`/Users/qiuyu/projects/DevHub/sdks/dotnet/src/DevHub.Sdk/`
 - .NET SDK 单元测试：`/Users/qiuyu/projects/DevHub/sdks/dotnet/tests/DevHub.Sdk.UnitTests/`
 - .NET SDK 集成测试：`/Users/qiuyu/projects/DevHub/sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`
-- JS/TS SDK：`/Users/qiuyu/projects/DevHub/sdk/devhub-sdk-ts/`
-- JS/TS SDK 测试：`/Users/qiuyu/projects/DevHub/sdk/devhub-sdk-ts/tests/`
+- JS/TS SDK：`/Users/qiuyu/projects/DevHub/sdks/javascript/`
+- JS/TS SDK 测试：`/Users/qiuyu/projects/DevHub/sdks/javascript/tests/`
 - 签名向量基线：`/Users/qiuyu/projects/DevHub/tests/conformance/v1.0.1/`
 - 契约运行器：`/Users/qiuyu/projects/DevHub/tests/conformance/vector_runner.py`
 
 ### 1.2 与现有工程集成要求
 
 - .NET 侧：独立维护 `sdks/dotnet/DevHub.DotNetSdk.slnx`，不纳入 `src/DevHub.slnx`。
-- JS/TS 侧：`sdk/devhub-sdk-ts` 独立包管理，测试命令通过 `npm test` 接入 CI。
+- JS/TS 侧：`sdks/javascript` 独立包管理，测试命令通过 `npm test` 接入 CI。
 - 契约侧：统一由 `vector_runner.py` 驱动 .NET/TS SDK，输出统一报告格式。
 
 ---
@@ -105,11 +106,11 @@
 
 ### 2.2 JS/TS SDK（`@devhub/sdk`）
 
-- [ ] `DevHubClientOptions`
-- [ ] `DevHubClient.fromRuntime()`
-- [ ] 与 .NET 同构的方法集（Promise 版）
-- [ ] `DevHubEventsClient`（基于 `AsyncIterator` 读取事件流）
-- [ ] `DevHubRpcError`（字段语义与 .NET 对齐）
+- [x] `DevHubClientOptions`
+- [x] `DevHubClient.fromRuntime()`
+- [x] 与 .NET 同构的方法集（Promise 版）
+- [x] `DevHubEventsClient`（基于 `AsyncIterator` 读取事件流）
+- [x] `DevHubRpcError`（字段语义与 .NET 对齐）
 
 ### 2.3 跨 SDK 一致性约束
 
@@ -124,9 +125,9 @@
 ### 3.1 `M5-ARCH-*`（工程骨架与版本治理）
 
 - [ ] `M5-ARCH-001`：创建 .NET SDK 与测试工程目录结构。
-- [ ] `M5-ARCH-002`：创建 TS SDK 包结构与测试目录。
+- [x] `M5-ARCH-002`：创建 TS SDK 包结构与测试目录。
 - [ ] `M5-ARCH-003`：定义 SDK 版本策略（与 Hub v1.x 兼容口径）。
-- [ ] `M5-ARCH-004`：补充 SDK 最小可运行示例（README 片段）。
+- [x] `M5-ARCH-004`：补充 SDK 最小可运行示例（README 片段）。
 
 ### 3.2 `M5-DN-*`（.NET SDK 实现）
 
@@ -139,12 +140,12 @@
 
 ### 3.3 `M5-TS-*`（JS/TS SDK 实现）
 
-- [ ] `M5-TS-001`：Node.js runtime discovery 实现。
-- [ ] `M5-TS-002`：HTTP JSON-RPC 客户端实现与 typed response 封装。
-- [ ] `M5-TS-003`：WS 鉴权、订阅、事件流读取实现。
-- [ ] `M5-TS-004`：`hub.apps.*` API 封装（显式包含 `launch`）。
-- [ ] `M5-TS-005`：`hub.invoke.*` API 封装。
-- [ ] `M5-TS-006`：统一错误模型 `DevHubRpcError` 与错误数据透传。
+- [x] `M5-TS-001`：Node.js runtime discovery 实现。
+- [x] `M5-TS-002`：HTTP JSON-RPC 客户端实现与 typed response 封装。
+- [x] `M5-TS-003`：WS 鉴权、订阅、事件流读取实现。
+- [x] `M5-TS-004`：`hub.apps.*` API 封装（显式包含 `launch`）。
+- [x] `M5-TS-005`：`hub.invoke.*` API 封装。
+- [x] `M5-TS-006`：统一错误模型 `DevHubRpcError` 与错误数据透传。
 
 ### 3.4 `M5-CONF-*`（签名测试向量）
 

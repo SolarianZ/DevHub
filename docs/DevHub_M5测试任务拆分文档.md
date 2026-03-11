@@ -10,11 +10,12 @@
 
 ## 当前状态（截至 2026-03-09）
 
-- M5 测试任务状态：`.NET SDK` 子范围已落地，已完成 SDK 单测与 SDK↔Hub 黑盒集成测试；TS SDK、conformance 与跨语言一致性任务仍待后续阶段完成。
+- M5 测试任务状态：`.NET SDK` 与 `JS/TS SDK` 主体能力已落地，已完成 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
-- 下文涉及的 .NET SDK 单元测试路径统一为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景当前落在 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdk/devhub-sdk-ts/tests/` 与 `tests/conformance/` 仍为后续目标测试资产。
+- 下文涉及的 .NET SDK 单元测试路径统一为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景当前落在 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 已承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`tests/conformance/` 仍为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
+- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 tests/test_runner.py --smoke --no-header` 冒烟回归。
 
 ---
 
@@ -60,12 +61,12 @@
 | `M5-DN-UT-004` | RPC 错误响应映射为 `DevHubRpcException` | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/RpcErrorMappingTests.cs` |
 | `M5-DN-UT-005` | WS 首条必须认证（未认证调用被拒绝） | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Events/WsLifecycleTests.cs` |
 | `M5-DN-UT-006` | `target.scope` 与 `target.instanceId` 默认值构造逻辑 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/InvocationRequestBuilderTests.cs` |
-| `M5-TS-UT-001` | Node runtime discovery 成功路径 | TS 白盒 | `sdk/devhub-sdk-ts/tests/discovery.test.ts` |
-| `M5-TS-UT-002` | discovery 缺失/非法字段错误映射 | TS 白盒 | `sdk/devhub-sdk-ts/tests/discovery.test.ts` |
-| `M5-TS-UT-003` | HTTP header 与 `protocolVersion/clientId/clientSessionId` 校验 | TS 白盒 | `sdk/devhub-sdk-ts/tests/http-transport.test.ts` |
-| `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdk/devhub-sdk-ts/tests/rpc-error.test.ts` |
-| `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdk/devhub-sdk-ts/tests/ws-events.test.ts` |
-| `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdk/devhub-sdk-ts/tests/invocation-builder.test.ts` |
+| `M5-TS-UT-001` | Node runtime discovery 成功路径 | TS 白盒 | `sdks/javascript/tests/unit/runtime.test.ts` |
+| `M5-TS-UT-002` | discovery 缺失/非法字段错误映射 | TS 白盒 | `sdks/javascript/tests/unit/runtime.test.ts` |
+| `M5-TS-UT-003` | HTTP header 与 `protocolVersion/clientId/clientSessionId` 校验 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
+| `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
+| `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdks/javascript/tests/unit/events-client.test.ts` |
+| `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
 | `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` |
 | `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
@@ -130,9 +131,9 @@
 
 ### 4.2 TS SDK 测试任务
 
-- [ ] 在 `sdk/devhub-sdk-ts/tests/` 建立 Discovery/HTTP/WS/Invocation 测试模块。
-- [ ] 统一错误断言对象结构（`code/message/data/requestId`）。
-- [ ] 在 Node 环境下完成事件流读取（`AsyncIterator`）稳定性校验。
+- [x] 在 `sdks/javascript/tests/` 建立 Discovery/HTTP/WS/Invocation 测试模块。
+- [x] 统一错误断言对象结构（`code/message/data/requestId`）。
+- [x] 在 Node 环境下完成事件流读取（`AsyncIterator`）稳定性校验。
 
 ### 4.3 SDK↔Hub 黑盒任务
 
