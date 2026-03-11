@@ -7,10 +7,13 @@ import pytest
 from devhub_sdk import (
     AppInstanceRegistration,
     DevHubCalleeError,
+    DevHubRpcErrorCode,
     DevHubRpcException,
     InvokeCapability,
     InvokeRequest,
     InvocationKind,
+    InvocationOptions,
+    InvocationTarget,
     PollRequest,
     RespondRequest,
 )
@@ -112,6 +115,73 @@ def test_request_respond_error_should_map_invocation_failed() -> None:
         assert exception.invocation_id == invocation.invocation_id
         assert exception.callee_error is not None
         assert exception.callee_error.code == 1001
+
+
+def test_request_timeout_and_expired_should_map_expected_error_codes() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "invoke.timeout.app", "displayName": "invoke.timeout.app"})
+        client = host.create_client("invoke-timeout-client")
+        client.register_instance(_create_instance("invoke.timeout.app", "timeout-inst-1", None))
+
+        with pytest.raises(DevHubRpcException) as timeout_exc_info:
+            client.request(
+                InvokeRequest(
+                    app_id="invoke.timeout.app",
+                    method="test.timeout",
+                    options=InvocationOptions(ttl_ms=1500, wait_timeout_ms=1000),
+                )
+            )
+        assert timeout_exc_info.value.code == DevHubRpcErrorCode.INVOCATION_TIMEOUT
+
+        with pytest.raises(DevHubRpcException) as expired_exc_info:
+            client.request(
+                InvokeRequest(
+                    app_id="invoke.timeout.app",
+                    method="test.expired",
+                    options=InvocationOptions(ttl_ms=1000, wait_timeout_ms=1000),
+                )
+            )
+        assert expired_exc_info.value.code == DevHubRpcErrorCode.INVOCATION_EXPIRED
+
+
+def test_scope_routing_should_hit_expected_instance() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "invoke.scope.app", "displayName": "invoke.scope.app"})
+        client = host.create_client("invoke-scope-client")
+        client.register_instance(_create_instance("invoke.scope.app", "scope-global-inst", None))
+        client.register_instance(_create_instance("invoke.scope.app", "scope-a-inst", "scope-a"))
+        client.register_instance(_create_instance("invoke.scope.app", "scope-literal-global-inst", "global"))
+
+        client.notify(InvokeRequest(app_id="invoke.scope.app", method="test.default-global"))
+        assert _wait_for_single_invocation(client, "scope-global-inst").method == "test.default-global"
+        assert client.poll(PollRequest(instance_id="scope-a-inst", wait_ms=0)).items == []
+
+        client.notify(
+            InvokeRequest(
+                app_id="invoke.scope.app",
+                method="test.scope-a",
+                target=InvocationTarget(scope="scope-a"),
+            )
+        )
+        assert _wait_for_single_invocation(client, "scope-a-inst").method == "test.scope-a"
+
+        client.notify(
+            InvokeRequest(
+                app_id="invoke.scope.app",
+                method="test.empty-scope",
+                target=InvocationTarget(scope=""),
+            )
+        )
+        assert _wait_for_single_invocation(client, "scope-global-inst").method == "test.empty-scope"
+
+        client.notify(
+            InvokeRequest(
+                app_id="invoke.scope.app",
+                method="test.literal-global",
+                target=InvocationTarget(scope="global"),
+            )
+        )
+        assert _wait_for_single_invocation(client, "scope-literal-global-inst").method == "test.literal-global"
 
 
 def _create_instance(app_id: str, instance_id: str, scope: str | None) -> AppInstanceRegistration:
