@@ -23,6 +23,22 @@ def test_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: 
     assert connection_info.runtime.token_file == str(token_file)
 
 
+def test_runtime_discovery_should_support_standard_runtime_root_layout(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "devhub-root"
+    runtime_dir = runtime_root / "runtime"
+    runtime_dir.mkdir(parents=True)
+    token_file = runtime_dir / "token.txt"
+    token_file.write_text("token-standard  \r\n", encoding="utf-8")
+    _write_hub_json(runtime_dir, token_file=token_file)
+
+    connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_root)))
+
+    assert connection_info.runtime_directory == str(runtime_dir.resolve())
+    assert connection_info.token == "token-standard"
+    assert connection_info.rpc_endpoint == "http://127.0.0.1:47231/rpc"
+    assert connection_info.websocket_endpoint == "ws://127.0.0.1:47231/ws"
+
+
 @pytest.mark.parametrize("missing_property", ["httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"])
 def test_runtime_discovery_when_hub_json_missing_required_field_should_raise(tmp_path: Path, missing_property: str) -> None:
     runtime_dir = tmp_path / "runtime"
@@ -49,6 +65,24 @@ def test_runtime_discovery_when_environment_override_provided_should_use_environ
 
     assert connection_info.runtime_directory == str(runtime_dir.resolve())
     assert connection_info.token == "token-env"
+
+
+def test_runtime_discovery_when_environment_override_points_to_runtime_root_should_use_standard_layout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_root = tmp_path / "devhub-root"
+    runtime_dir = runtime_root / "runtime"
+    runtime_dir.mkdir(parents=True)
+    token_file = runtime_dir / "token.txt"
+    token_file.write_text("token-env-root", encoding="utf-8")
+    _write_hub_json(runtime_dir, token_file=token_file)
+    monkeypatch.setenv("DEVHUB_RUNTIME_DIR", str(runtime_root))
+
+    connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client"))
+
+    assert connection_info.runtime_directory == str(runtime_dir.resolve())
+    assert connection_info.token == "token-env-root"
 
 
 def test_client_options_when_client_session_id_invalid_should_raise() -> None:

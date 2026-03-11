@@ -28,8 +28,8 @@ class FileSystemRuntimeResolver(RuntimeResolver):
         cloned = options.clone()
         cloned.validate()
 
-        runtime_directory = resolve_runtime_directory(cloned.runtime_dir)
-        hub_json_path = runtime_directory / "hub.json"
+        runtime_root_or_directory = resolve_runtime_directory(cloned.runtime_dir)
+        runtime_directory, hub_json_path = _resolve_runtime_paths(runtime_root_or_directory)
         if not hub_json_path.is_file():
             raise RuntimeError(f"未找到 hub.json：{hub_json_path}")
 
@@ -79,3 +79,17 @@ def resolve_runtime_directory(runtime_dir_override: str | None = None) -> Path:
     xdg_data_home = os.getenv("XDG_DATA_HOME")
     base = Path(xdg_data_home).expanduser() if xdg_data_home else home / ".local" / "share"
     return (base / "DevHub" / "runtime").resolve()
+
+
+def _resolve_runtime_paths(runtime_root_or_directory: Path) -> tuple[Path, Path]:
+    direct_hub_json_path = runtime_root_or_directory / "hub.json"
+    standard_runtime_directory = runtime_root_or_directory / "runtime"
+    standard_hub_json_path = standard_runtime_directory / "hub.json"
+
+    if direct_hub_json_path.is_file():
+        return runtime_root_or_directory, direct_hub_json_path
+
+    if standard_hub_json_path.is_file() or standard_runtime_directory.is_dir():
+        return standard_runtime_directory, standard_hub_json_path
+
+    return runtime_root_or_directory, direct_hub_json_path
