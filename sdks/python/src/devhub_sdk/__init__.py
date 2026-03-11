@@ -9,7 +9,7 @@ from .constants import (
     INVOCATION_QUEUED,
 )
 from .events import DevHubEventsClient
-from .exceptions import DevHubRpcException
+from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from .models import (
     AppCapabilities,
     AppDefinition,
@@ -55,6 +55,7 @@ __all__ = [
     "DevHubClientOptions",
     "DevHubEvent",
     "DevHubEventsClient",
+    "DevHubRpcErrorCode",
     "DevHubRpcException",
     "HubRuntime",
     "HubRuntimeTuning",

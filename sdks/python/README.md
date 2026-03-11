@@ -7,7 +7,7 @@ DevHub Python SDK 基于 `docs/Spec.md` 中的 DevHub Hub v1.x 协议实现，�
 - 运行时发现：读取 `hub.json` 与 `token.txt`
 - HTTP 客户端：`ping`、应用定义、实例管理、`launch`、`notify`、`request`、`poll`、`respond`
 - WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取
-- 错误模型：统一映射为 `DevHubRpcException`
+- 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
 
 ## 安装
 
