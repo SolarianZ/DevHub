@@ -3,13 +3,23 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
 import pytest
 
-from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubRpcException, InvokeRequest, LaunchRequest
+from devhub_sdk import (
+    DevHubClient,
+    DevHubClientOptions,
+    DevHubRpcException,
+    HubRuntime,
+    HubRuntimeTuning,
+    InvokeRequest,
+    LaunchRequest,
+    RuntimeConnectionInfo,
+)
 
 
 @dataclass(slots=True)
@@ -19,6 +29,71 @@ class HttpScenario:
     responder: Callable[[dict[str, Any]], dict[str, Any]]
     requests: list[dict[str, Any]] = field(default_factory=list)
     headers: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class FakeRuntimeResolver:
+    """用于验证依赖注入的运行时解析器。"""
+
+    connection_info: RuntimeConnectionInfo
+    calls: list[DevHubClientOptions] = field(default_factory=list)
+
+    def resolve(self, options: DevHubClientOptions) -> RuntimeConnectionInfo:
+        self.calls.append(options.clone())
+        return self.connection_info
+
+
+@dataclass(slots=True)
+class FakeHttpTransport:
+    """用于验证依赖注入的 HTTP 传输。"""
+
+    response: dict[str, Any]
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def send(
+        self,
+        connection_info: RuntimeConnectionInfo,
+        options: DevHubClientOptions,
+        method: str,
+        params: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "connection_info": connection_info,
+                "options": options.clone(),
+                "method": method,
+                "params": params,
+            }
+        )
+        return self.response
+
+
+def test_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+            "echo": {"source": "fake"},
+        }
+    )
+
+    client = DevHubClient(
+        DevHubClientOptions(client_id="http-client"),
+        runtime_resolver=resolver,
+        transport=transport,
+    )
+
+    ping = client.ping({"source": "fake"})
+
+    assert ping.ok is True
+    assert ping.echo == {"source": "fake"}
+    assert client.runtime.http_base_url == "http://127.0.0.1:57231"
+    assert len(resolver.calls) == 1
+    assert transport.calls[0]["method"] == "hub.ping"
+    assert transport.calls[0]["params"] == {"echo": {"source": "fake"}}
+    assert transport.calls[0]["connection_info"].token == "token-fake"
 
 
 def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
@@ -226,3 +301,23 @@ def _launch_invalid_status_response(request: dict[str, Any]) -> dict[str, Any]:
             "pid": 123,
         },
     }
+
+
+def _create_connection_info() -> RuntimeConnectionInfo:
+    return RuntimeConnectionInfo(
+        runtime_directory="D:/runtime",
+        token="token-fake",
+        runtime=HubRuntime(
+            protocol_version=1,
+            pid=12345,
+            http_base_url="http://127.0.0.1:57231",
+            ws_url="ws://127.0.0.1:57231/ws",
+            token_file="D:/runtime/token.txt",
+            started_at_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
+            runtime_tuning=HubRuntimeTuning(
+                lease_seconds=30,
+                online_threshold_seconds=30,
+                launch_dedupe_window_seconds=30,
+            ),
+        ),
+    )

@@ -2,13 +2,98 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 import pytest
 import websockets
 
-from devhub_sdk import DevHubClientOptions, DevHubEventsClient, DevHubRpcException, INVOCATION_COMPLETED
+from devhub_sdk import (
+    DevHubClientOptions,
+    DevHubEvent,
+    DevHubEventsClient,
+    DevHubRpcException,
+    HubRuntime,
+    HubRuntimeTuning,
+    INVOCATION_COMPLETED,
+    RuntimeConnectionInfo,
+)
+
+
+@dataclass(slots=True)
+class FakeRuntimeResolver:
+    """用于验证依赖注入的运行时解析器。"""
+
+    connection_info: RuntimeConnectionInfo
+    calls: list[DevHubClientOptions] = field(default_factory=list)
+
+    def resolve(self, options: DevHubClientOptions) -> RuntimeConnectionInfo:
+        self.calls.append(options.clone())
+        return self.connection_info
+
+
+@dataclass(slots=True)
+class FakeWsSession:
+    """用于验证依赖注入的 WebSocket 会话。"""
+
+    responses: dict[str, dict[str, Any]]
+    events: list[DevHubEvent]
+    requests: list[dict[str, Any]] = field(default_factory=list)
+    closed: bool = False
+
+    async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        self.requests.append({"method": method, "params": params})
+        return self.responses[method]
+
+    async def read_events(self) -> AsyncIterator[DevHubEvent]:
+        for event in self.events:
+            yield event
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_events_client_with_injected_resolver_and_session_should_use_abstractions() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.events.subscribe": {"ok": True, "subscriptionId": "sub-fake"},
+        },
+        events=[
+            DevHubEvent(
+                subscription_id="sub-fake",
+                type=INVOCATION_COMPLETED,
+                time_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
+                payload={"invocationId": "invk-fake"},
+            )
+        ],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+    try:
+        await client.authenticate()
+        subscription_id = await client.subscribe([INVOCATION_COMPLETED])
+        event = await anext(client.read_events())
+    finally:
+        await client.close()
+
+    assert len(resolver.calls) == 1
+    assert subscription_id == "sub-fake"
+    assert event.type == INVOCATION_COMPLETED
+    assert event.payload["invocationId"] == "invk-fake"
+    assert session.requests[0]["method"] == "hub.ws.authenticate"
+    assert session.requests[0]["params"]["token"] == "token-fake"
+    assert session.requests[1]["params"] == {"types": [INVOCATION_COMPLETED]}
+    assert session.closed is True
 
 
 @pytest.mark.asyncio
@@ -237,3 +322,23 @@ def _write_runtime(tmp_path: Path, port: int) -> Path:
         encoding="utf-8",
     )
     return runtime_dir
+
+
+def _create_connection_info() -> RuntimeConnectionInfo:
+    return RuntimeConnectionInfo(
+        runtime_directory="D:/runtime",
+        token="token-fake",
+        runtime=HubRuntime(
+            protocol_version=1,
+            pid=12345,
+            http_base_url="http://127.0.0.1:57231",
+            ws_url="ws://127.0.0.1:57231/ws",
+            token_file="D:/runtime/token.txt",
+            started_at_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
+            runtime_tuning=HubRuntimeTuning(
+                lease_seconds=30,
+                online_threshold_seconds=30,
+                launch_dedupe_window_seconds=30,
+            ),
+        ),
+    )

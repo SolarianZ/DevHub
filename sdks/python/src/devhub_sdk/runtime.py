@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 from ._parsing import parse_hub_runtime
@@ -12,33 +13,48 @@ from .models import DevHubClientOptions, RuntimeConnectionInfo
 RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR"
 
 
+class RuntimeResolver(ABC):
+    """运行时发现抽象。"""
+
+    @abstractmethod
+    def resolve(self, options: DevHubClientOptions) -> RuntimeConnectionInfo:
+        """根据运行时目录解析 Hub 连接信息。"""
+
+
+class FileSystemRuntimeResolver(RuntimeResolver):
+    """默认的文件系统运行时发现实现。"""
+
+    def resolve(self, options: DevHubClientOptions) -> RuntimeConnectionInfo:
+        cloned = options.clone()
+        cloned.validate()
+
+        runtime_directory = resolve_runtime_directory(cloned.runtime_dir)
+        hub_json_path = runtime_directory / "hub.json"
+        if not hub_json_path.is_file():
+            raise RuntimeError(f"未找到 hub.json：{hub_json_path}")
+
+        runtime_payload = json.loads(hub_json_path.read_text(encoding="utf-8"))
+        runtime = parse_hub_runtime(runtime_payload, source=str(hub_json_path))
+
+        token_path = Path(runtime.token_file)
+        if not token_path.is_file():
+            raise RuntimeError(f"未找到 token 文件：{token_path}")
+
+        token = token_path.read_text(encoding="utf-8").strip()
+        if not token:
+            raise RuntimeError(f"token 文件为空：{token_path}")
+
+        return RuntimeConnectionInfo(
+            runtime_directory=str(runtime_directory),
+            token=token,
+            runtime=runtime,
+        )
+
+
 def discover_runtime(options: DevHubClientOptions) -> RuntimeConnectionInfo:
     """根据运行时目录发现 Hub 连接信息。"""
 
-    cloned = options.clone()
-    cloned.validate()
-
-    runtime_directory = resolve_runtime_directory(cloned.runtime_dir)
-    hub_json_path = runtime_directory / "hub.json"
-    if not hub_json_path.is_file():
-        raise RuntimeError(f"未找到 hub.json：{hub_json_path}")
-
-    runtime_payload = json.loads(hub_json_path.read_text(encoding="utf-8"))
-    runtime = parse_hub_runtime(runtime_payload, source=str(hub_json_path))
-
-    token_path = Path(runtime.token_file)
-    if not token_path.is_file():
-        raise RuntimeError(f"未找到 token 文件：{token_path}")
-
-    token = token_path.read_text(encoding="utf-8").strip()
-    if not token:
-        raise RuntimeError(f"token 文件为空：{token_path}")
-
-    return RuntimeConnectionInfo(
-        runtime_directory=str(runtime_directory),
-        token=token,
-        runtime=runtime,
-    )
+    return FileSystemRuntimeResolver().resolve(options)
 
 
 def resolve_runtime_directory(runtime_dir_override: str | None = None) -> Path:

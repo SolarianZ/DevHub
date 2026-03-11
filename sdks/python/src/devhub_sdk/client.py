@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import json
 from typing import Any
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
-from uuid import uuid4
 
-from ._jsonrpc import validate_response_envelope
+from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from ._parsing import (
     parse_app_definition,
     parse_app_instance,
@@ -48,21 +44,31 @@ from .models import (
     RequestResult,
     RespondRequest,
 )
-from .runtime import discover_runtime
+from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
 
 _ECHO_UNSET = object()
+_DEFAULT_RUNTIME_RESOLVER = FileSystemRuntimeResolver()
+_DEFAULT_HTTP_TRANSPORT = UrllibJsonRpcHttpTransport()
 
 
 class DevHubClient:
     """DevHub HTTP JSON-RPC 客户端。"""
 
-    def __init__(self, options: DevHubClientOptions) -> None:
+    def __init__(
+        self,
+        options: DevHubClientOptions,
+        *,
+        runtime_resolver: RuntimeResolver | None = None,
+        transport: JsonRpcHttpTransport | None = None,
+    ) -> None:
         """初始化客户端。"""
 
         self._options = options.clone()
         self._options.validate()
-        self._connection_info = discover_runtime(self._options)
+        self._runtime_resolver = runtime_resolver or _DEFAULT_RUNTIME_RESOLVER
+        self._transport = transport or _DEFAULT_HTTP_TRANSPORT
+        self._connection_info = self._runtime_resolver.resolve(self._options)
 
     @classmethod
     def from_runtime(cls, options: DevHubClientOptions) -> "DevHubClient":
@@ -203,32 +209,4 @@ class DevHubClient:
         self.close()
 
     def _send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
-        request_id = f"req-{uuid4().hex}"
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-        }
-        if params is not None:
-            payload["params"] = params
-        request = Request(
-            self._connection_info.rpc_endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._connection_info.token}",
-                "Content-Type": "application/json",
-                "X-DevHub-Protocol": str(self._options.protocol_version),
-                "X-DevHub-ClientId": self._options.client_id,
-                "X-DevHub-ClientSessionId": self._options.client_session_id,
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=self._options.request_timeout) as response:
-                body = response.read().decode("utf-8")
-        except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"HTTP 请求失败：{exc.code} {exc.reason}，响应体：{body}") from exc
-
-        root = json.loads(body)
-        return validate_response_envelope(root, request_id)
+        return self._transport.send(self._connection_info, self._options, method, params)
