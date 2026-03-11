@@ -52,22 +52,27 @@ class DevHubEventsClient:
         if self._authenticated:
             raise RuntimeError("当前事件客户端已完成认证。")
 
-        result = await self._send_request(
-            "hub.ws.authenticate",
-            {
-                "token": self._connection_info.token,
-                "protocolVersion": self._options.protocol_version,
-                "clientId": self._options.client_id,
-                "clientSessionId": self._options.client_session_id,
-            },
-            require_authenticated=False,
-        )
-        root = require_mapping(result, "hub.ws.authenticate.result")
-        if not require_bool(root, "ok", "hub.ws.authenticate.result"):
-            raise RuntimeError("hub.ws.authenticate 返回结果非法。")
-        protocol_version = root.get("protocolVersion")
-        if protocol_version != 1:
-            raise RuntimeError("hub.ws.authenticate 返回结果非法。")
+        try:
+            result = await self._send_request(
+                "hub.ws.authenticate",
+                {
+                    "token": self._connection_info.token,
+                    "protocolVersion": self._options.protocol_version,
+                    "clientId": self._options.client_id,
+                    "clientSessionId": self._options.client_session_id,
+                },
+                require_authenticated=False,
+            )
+            root = require_mapping(result, "hub.ws.authenticate.result")
+            if not require_bool(root, "ok", "hub.ws.authenticate.result"):
+                raise RuntimeError("hub.ws.authenticate 返回结果非法。")
+            protocol_version = root.get("protocolVersion")
+            if protocol_version != 1:
+                raise RuntimeError("hub.ws.authenticate 返回结果非法。")
+        except Exception:
+            await self.close()
+            raise
+
         self._authenticated = True
 
     async def subscribe(self, types: Iterable[str] | None = None) -> str:

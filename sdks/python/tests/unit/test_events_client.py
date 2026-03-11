@@ -38,14 +38,17 @@ class FakeRuntimeResolver:
 class FakeWsSession:
     """用于验证依赖注入的 WebSocket 会话。"""
 
-    responses: dict[str, dict[str, Any]]
+    responses: dict[str, dict[str, Any] | BaseException]
     events: list[DevHubEvent]
     requests: list[dict[str, Any]] = field(default_factory=list)
     closed: bool = False
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         self.requests.append({"method": method, "params": params})
-        return self.responses[method]
+        response = self.responses[method]
+        if isinstance(response, BaseException):
+            raise response
+        return response
 
     async def read_events(self) -> AsyncIterator[DevHubEvent]:
         for event in self.events:
@@ -207,6 +210,34 @@ async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exc
 
     assert exc_info.value.code == -32001
     assert exc_info.value.reason == "invalid_token"
+
+
+@pytest.mark.asyncio
+async def test_events_client_when_authenticate_fails_should_close_session() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": DevHubRpcException(
+                code=-32001,
+                message="unauthorized",
+                data={"reason": "invalid_token"},
+                request_id="ws-auth-fake",
+            )
+        },
+        events=[],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+
+    with pytest.raises(DevHubRpcException):
+        await client.authenticate()
+
+    assert session.closed is True
 
 
 @pytest.mark.asyncio
