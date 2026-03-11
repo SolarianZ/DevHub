@@ -1,4 +1,5 @@
 from .client import DevHubClient
+from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from .constants import (
     ALL_EVENT_TYPES,
     APP_INSTANCE_REGISTERED,
@@ -10,6 +11,7 @@ from .constants import (
 )
 from .events import DevHubEventsClient
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
+from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
     AppCapabilities,
     AppDefinition,
@@ -40,7 +42,12 @@ from .models import (
     RespondRequest,
     RuntimeConnectionInfo,
 )
-from .runtime import discover_runtime, resolve_runtime_directory
+from .runtime import (
+    FileSystemRuntimeResolver,
+    RuntimeResolver,
+    discover_runtime,
+    resolve_runtime_directory,
+)
 
 __all__ = [
     "ALL_EVENT_TYPES",
@@ -57,6 +64,7 @@ __all__ = [
     "DevHubEventsClient",
     "DevHubRpcErrorCode",
     "DevHubRpcException",
+    "FileSystemRuntimeResolver",
     "HubRuntime",
     "HubRuntimeTuning",
     "INVOCATION_COMPLETED",
@@ -71,6 +79,8 @@ __all__ = [
     "InvocationTarget",
     "InvokeCapability",
     "InvokeRequest",
+    "JsonRpcHttpTransport",
+    "JsonRpcWsSession",
     "LaunchConfiguration",
     "LaunchRequest",
     "LaunchResult",
@@ -81,7 +91,10 @@ __all__ = [
     "PollResult",
     "RequestResult",
     "RespondRequest",
+    "RuntimeResolver",
     "RuntimeConnectionInfo",
+    "UrllibJsonRpcHttpTransport",
+    "WebSocketJsonRpcSession",
     "discover_runtime",
     "resolve_runtime_directory",
 ]

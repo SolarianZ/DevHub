@@ -30,21 +30,25 @@ print(ping.server_time_utc, ping.echo)
 
 默认情况下，推荐继续使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
 
-如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，也可以直接构造客户端并注入内部抽象：
+如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，也可以直接构造客户端并注入顶层公开导出的扩展抽象：
 
 ```python
+from devhub_sdk import DevHubClient, DevHubClientOptions, JsonRpcHttpTransport, RuntimeResolver
+
 client = DevHubClient(
     DevHubClientOptions(client_id="example-client"),
-    runtime_resolver=my_runtime_resolver,
-    transport=my_http_transport,
+    runtime_resolver=my_runtime_resolver,  # RuntimeResolver
+    transport=my_http_transport,           # JsonRpcHttpTransport
 )
 ```
 
 ```python
+from devhub_sdk import DevHubEventsClient, DevHubClientOptions, JsonRpcWsSession, RuntimeResolver
+
 events_client = DevHubEventsClient(
     DevHubClientOptions(client_id="example-client"),
-    runtime_resolver=my_runtime_resolver,
-    session=my_ws_session,
+    runtime_resolver=my_runtime_resolver,  # RuntimeResolver
+    session=my_ws_session,                 # JsonRpcWsSession
 )
 ```
 
