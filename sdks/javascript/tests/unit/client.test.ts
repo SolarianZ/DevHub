@@ -339,6 +339,95 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("ping 应在本地拒绝会被静默丢弃的 echo 字段", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-ping-json-client",
+    runtimeDir
+  });
+
+  await expect(client.ping({
+    callback: (() => "ignored") as any
+  } as any)).rejects.toThrow("echo.callback 包含不支持的 JSON 类型。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-register-meta-client",
+    runtimeDir
+  });
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    },
+    meta: {
+      callback: (() => "ignored") as any
+    } as any
+  })).rejects.toThrow("meta.callback 包含不支持的 JSON 类型。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-notify-json-client",
+    runtimeDir
+  });
+
+  const sparseArray = new Array(1);
+
+  await expect(client.notify({
+    appId: "test.app",
+    method: "test.notify",
+    args: sparseArray as any
+  })).rejects.toThrow("args[0] 不能为数组空洞。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-json-client",
+    runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "invk-1",
+    error: {
+      code: 1001,
+      message: "app_error",
+      data: {
+        callback: (() => "ignored") as any
+      } as any
+    }
+  })).rejects.toThrow("error.data.callback 包含不支持的 JSON 类型。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {

@@ -10,6 +10,7 @@ import {
   ensureInputBoolean,
   ensureInputNumber,
   ensureJsonObject,
+  ensureJsonValue,
   ensureOptionalInputBoolean,
   ensureOptionalInputIntegerAtLeast,
   ensureOptionalInputIntegerInRange,
@@ -191,13 +192,16 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
   const payload: Record<string, unknown> = {
     appId,
     method,
-    args: request.args,
     options: {
       ttlMs,
       queueIfOffline,
       autoLaunch
     }
   };
+
+  if (request.args !== undefined) {
+    payload.args = ensureJsonValue(request.args, "args");
+  }
 
   if (isRequest) {
     (payload.options as Record<string, unknown>).waitTimeoutMs = waitTimeoutMs;
@@ -260,13 +264,18 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   };
 
   if (hasValue) {
-    payload.value = request.value;
+    payload.value = ensureJsonValue(request.value, "value");
   } else {
-    payload.error = {
+    const errorPayload: Record<string, unknown> = {
       code: ensureInputNumber(request.error?.code, "error.code"),
-      message: ensureRequiredInputString(request.error?.message, "error.message"),
-      data: request.error?.data
+      message: ensureRequiredInputString(request.error?.message, "error.message")
     };
+
+    if (request.error?.data !== undefined) {
+      errorPayload.data = ensureJsonValue(request.error.data, "error.data");
+    }
+
+    payload.error = errorPayload;
   }
 
   return payload;

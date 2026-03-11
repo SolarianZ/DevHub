@@ -46,6 +46,7 @@ import {
   buildUnregisterParams
 } from "./payloads.js";
 import { discoverRuntime } from "./runtime.js";
+import { ensureJsonValue } from "./validation.js";
 import type { RuntimeConnectionInfo } from "./runtime.js";
 
 export class DevHubClient {
@@ -72,7 +73,7 @@ export class DevHubClient {
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {
-    const params = echo === undefined ? undefined : { echo };
+    const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
     return parsePingResult(await this.transport.send("hub.ping", params));
   }
 
