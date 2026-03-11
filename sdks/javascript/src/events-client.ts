@@ -14,44 +14,72 @@ import {
   parseSubscriptionResult,
   parseUnsubscribeResult
 } from "./parsers.js";
-import { discoverRuntime } from "./runtime.js";
-import type { RuntimeConnectionInfo } from "./runtime.js";
-import { JsonRpcWsSession } from "./ws-session.js";
+import { FileSystemRuntimeResolver } from "./runtime.js";
+import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
+import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
+
+export interface JsonRpcEventSession {
+  ensureConnected(): Promise<void>;
+  sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
+  disconnect(reason: string): Promise<void>;
+  dispose(reason?: string): Promise<void>;
+}
+
+export type JsonRpcEventSessionFactory = (options: JsonRpcWsSessionOptions) => JsonRpcEventSession;
+
+export interface DevHubEventsClientDependencies {
+  runtimeResolver?: RuntimeResolver;
+  sessionFactory?: JsonRpcEventSessionFactory;
+}
+
+const DEFAULT_RUNTIME_RESOLVER = new FileSystemRuntimeResolver();
 
 export class DevHubEventsClient {
   readonly options: NormalizedDevHubClientOptions;
   readonly connection: RuntimeConnectionInfo;
 
-  private readonly eventQueue = new AsyncQueue<DevHubEvent>();
-  private readonly session: JsonRpcWsSession;
+  private eventQueue = new AsyncQueue<DevHubEvent>();
+  private readonly session: JsonRpcEventSession;
   private authenticated = false;
   private eventStreamAvailable = false;
   private disposed = false;
 
-  private constructor(options: NormalizedDevHubClientOptions, connection: RuntimeConnectionInfo) {
+  private constructor(
+    options: NormalizedDevHubClientOptions,
+    connection: RuntimeConnectionInfo,
+    session: JsonRpcEventSession
+  ) {
     this.options = options;
     this.connection = connection;
-    this.session = new JsonRpcWsSession({
-      websocketEndpoint: connection.websocketEndpoint,
-      requestTimeoutMs: options.requestTimeoutMs,
-      onEvent: (params) => {
-        this.eventQueue.push(parseEvent(params, "hub.event.params"));
-      },
-      onTerminate: (error) => {
-        this.handleTermination(error);
-      }
-    });
+    this.session = session;
   }
 
   get runtime() {
     return this.connection.runtime;
   }
 
-  static async fromRuntime(options: DevHubClientOptions): Promise<DevHubEventsClient> {
+  static async fromRuntime(
+    options: DevHubClientOptions,
+    dependencies: DevHubEventsClientDependencies = {}
+  ): Promise<DevHubEventsClient> {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
-    const connection = await discoverRuntime(normalized.runtimeDir);
-    return new DevHubEventsClient(normalized, connection);
+    const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
+    const connection = await runtimeResolver.resolve(normalized.runtimeDir);
+    let client: DevHubEventsClient | undefined;
+    const sessionOptions: JsonRpcWsSessionOptions = {
+      websocketEndpoint: connection.websocketEndpoint,
+      requestTimeoutMs: normalized.requestTimeoutMs,
+      onEvent: (params) => {
+        client?.eventQueue.push(parseEvent(params, "hub.event.params"));
+      },
+      onTerminate: (error) => {
+        client?.handleTermination(error);
+      }
+    };
+    const session = dependencies.sessionFactory?.(sessionOptions) ?? new JsonRpcWsSession(sessionOptions);
+    client = new DevHubEventsClient(normalized, connection, session);
+    return client;
   }
 
   async authenticate(): Promise<void> {
@@ -71,6 +99,7 @@ export class DevHubEventsClient {
       });
 
       parseAuthenticateResult(result);
+      this.eventQueue = new AsyncQueue<DevHubEvent>();
       this.authenticated = true;
       this.eventStreamAvailable = true;
     } catch (error) {

@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { DevHubEventsClient } from "../../src/events.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
+import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 
 const tempRoots: string[] = [];
 
@@ -15,6 +16,96 @@ afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map(async (target) => {
     await fsPromises.rm(target, { recursive: true, force: true });
   }));
+});
+
+it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () => {
+  const connection = createConnectionInfo();
+  const runtimeResolver = {
+    resolve: vi.fn(async (runtimeDirOverride?: string) => {
+      expect(runtimeDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
+      return connection;
+    })
+  };
+  let session: FakeInjectedWsSession | undefined;
+  const sessionFactory = vi.fn((options: JsonRpcWsSessionOptions) => {
+    session = new FakeInjectedWsSession(options);
+    return session;
+  });
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-injected-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver,
+      sessionFactory
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const subscriptionId = await client.subscribe(["invocation.completed"]);
+    const first = await client.readEvents()[Symbol.asyncIterator]().next();
+
+    expect(subscriptionId).toBe("sub-injected");
+    expect(first.done).toBe(false);
+    expect(first.value.type).toBe("invocation.completed");
+    expect(first.value.payload?.invocationId).toBe("invk-fake-1");
+    expect(runtimeResolver.resolve).toHaveBeenCalledTimes(1);
+    expect(sessionFactory).toHaveBeenCalledTimes(1);
+    expect(session?.requests.map((item) => item.method)).toEqual([
+      "hub.ws.authenticate",
+      "hub.events.subscribe"
+    ]);
+  } finally {
+    await client.dispose();
+  }
+
+  expect(session?.disposedReason).toBe("client_dispose");
+});
+
+it("断线后重新认证应重建事件流并要求重新订阅", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-reconnect-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+
+    const previousIterator = client.readEvents()[Symbol.asyncIterator]();
+    const buffered = await previousIterator.next();
+    expect(buffered.done).toBe(false);
+    expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
+    await expect(previousIterator.next()).rejects.toThrow(/socket_closed/i);
+
+    await client.authenticate();
+    await client.subscribe(["invocation.completed"]);
+
+    const second = await client.readEvents()[Symbol.asyncIterator]().next();
+    expect(second.done).toBe(false);
+    expect(second.value.type).toBe("invocation.completed");
+    expect(second.value.payload?.invocationId).toBe("invk-fake-2");
+  } finally {
+    await client.dispose();
+  }
 });
 
 it("应在认证前拒绝 subscribe 和 readEvents", async () => {
@@ -257,6 +348,28 @@ async function createRuntime(overrides?: {
   return runtimeDir;
 }
 
+function createConnectionInfo() {
+  return {
+    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    token: "token-fake",
+    runtime: {
+      protocolVersion: 1,
+      pid: 12345,
+      httpBaseUrl: "http://127.0.0.1:57231",
+      wsUrl: "ws://127.0.0.1:57231/ws",
+      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+      runtimeTuning: {
+        leaseSeconds: 30,
+        onlineThresholdSeconds: 30,
+        launchDedupeWindowSeconds: 30
+      }
+    },
+    rpcEndpoint: "http://127.0.0.1:57231/rpc",
+    websocketEndpoint: "ws://127.0.0.1:57231/ws"
+  };
+}
+
 async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
   if (server.address()) {
     return;
@@ -296,6 +409,64 @@ async function closeWebSocketServer(server: WebSocketServer): Promise<void> {
       resolve();
     });
   });
+}
+
+class FakeInjectedWsSession {
+  readonly requests: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  disposedReason: string | undefined;
+
+  constructor(private readonly options: JsonRpcWsSessionOptions) {
+  }
+
+  async ensureConnected(): Promise<void> {
+  }
+
+  async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    this.requests.push({ method, params });
+
+    if (method === "hub.ws.authenticate") {
+      return {
+        ok: true,
+        protocolVersion: 1
+      };
+    }
+
+    if (method === "hub.events.subscribe") {
+      const eventIndex = this.requests.filter((item) => item.method === "hub.events.subscribe").length;
+      this.options.onEvent?.({
+        subscriptionId: "sub-injected",
+        type: "invocation.completed",
+        timeUtc: "2026-03-09T00:00:00Z",
+        payload: {
+          invocationId: `invk-fake-${eventIndex}`
+        }
+      });
+
+      return {
+        ok: true,
+        subscriptionId: "sub-injected"
+      };
+    }
+
+    if (method === "hub.events.unsubscribe") {
+      return {
+        ok: true
+      };
+    }
+
+    throw new Error(`unexpected method: ${method}`);
+  }
+
+  async disconnect(): Promise<void> {
+  }
+
+  async dispose(reason = "client_dispose"): Promise<void> {
+    this.disposedReason = reason;
+  }
+
+  terminate(error?: Error): void {
+    this.options.onTerminate?.(error);
+  }
 }
 
 type ServerFrame =

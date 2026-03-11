@@ -45,31 +45,57 @@ import {
   buildRespondParams,
   buildUnregisterParams
 } from "./payloads.js";
-import { discoverRuntime } from "./runtime.js";
+import { FileSystemRuntimeResolver } from "./runtime.js";
 import { ensureJsonValue } from "./validation.js";
-import type { RuntimeConnectionInfo } from "./runtime.js";
+import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
+
+export interface JsonRpcTransport {
+  send(method: string, params?: Record<string, unknown> | null): Promise<Record<string, unknown>>;
+}
+
+export type JsonRpcTransportFactory = (
+  options: NormalizedDevHubClientOptions,
+  connection: RuntimeConnectionInfo
+) => JsonRpcTransport;
+
+export interface DevHubClientDependencies {
+  runtimeResolver?: RuntimeResolver;
+  transportFactory?: JsonRpcTransportFactory;
+}
+
+const DEFAULT_RUNTIME_RESOLVER = new FileSystemRuntimeResolver();
 
 export class DevHubClient {
   readonly options: NormalizedDevHubClientOptions;
   readonly connection: RuntimeConnectionInfo;
 
-  private readonly transport: JsonRpcHttpTransport;
+  private readonly transport: JsonRpcTransport;
 
-  private constructor(options: NormalizedDevHubClientOptions, connection: RuntimeConnectionInfo) {
+  private constructor(
+    options: NormalizedDevHubClientOptions,
+    connection: RuntimeConnectionInfo,
+    transport: JsonRpcTransport
+  ) {
     this.options = options;
     this.connection = connection;
-    this.transport = new JsonRpcHttpTransport(options, connection);
+    this.transport = transport;
   }
 
   get runtime() {
     return this.connection.runtime;
   }
 
-  static async fromRuntime(options: DevHubClientOptions): Promise<DevHubClient> {
+  static async fromRuntime(
+    options: DevHubClientOptions,
+    dependencies: DevHubClientDependencies = {}
+  ): Promise<DevHubClient> {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
-    const connection = await discoverRuntime(normalized.runtimeDir);
-    return new DevHubClient(normalized, connection);
+    const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
+    const connection = await runtimeResolver.resolve(normalized.runtimeDir);
+    const transport = dependencies.transportFactory?.(normalized, connection)
+      ?? new JsonRpcHttpTransport(normalized, connection);
+    return new DevHubClient(normalized, connection, transport);
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {

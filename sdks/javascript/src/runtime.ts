@@ -29,6 +29,16 @@ export interface RuntimeConnectionInfo {
   websocketEndpoint: string;
 }
 
+export interface RuntimeResolver {
+  resolve(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo>;
+}
+
+export class FileSystemRuntimeResolver implements RuntimeResolver {
+  async resolve(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo> {
+    return discoverRuntime(runtimeDirOverride);
+  }
+}
+
 export function resolveRuntimeDirectory(runtimeDirOverride?: string): string {
   if (runtimeDirOverride && runtimeDirOverride.trim()) {
     return path.resolve(runtimeDirOverride);

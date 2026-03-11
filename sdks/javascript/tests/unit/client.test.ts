@@ -16,6 +16,57 @@ afterEach(async () => {
   }));
 });
 
+it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
+  const connection = createConnectionInfo();
+  const runtimeResolver = {
+    resolve: vi.fn(async (runtimeDirOverride?: string) => {
+      expect(runtimeDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
+      return connection;
+    })
+  };
+  const transport = {
+    send: vi.fn(async (method: string, params?: Record<string, unknown> | null) => {
+      expect(method).toBe("hub.ping");
+      expect(params).toEqual({
+        echo: {
+          source: "fake-transport"
+        }
+      });
+
+      return {
+        ok: true,
+        serverTimeUtc: "2026-03-09T00:00:00Z",
+        echo: {
+          source: "fake-transport"
+        }
+      };
+    })
+  };
+  const transportFactory = vi.fn((_options: unknown, resolvedConnection: unknown) => {
+    expect(resolvedConnection).toBe(connection);
+    return transport;
+  });
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver,
+      transportFactory
+    }
+  );
+
+  const result = await client.ping({ source: "fake-transport" });
+
+  expect(result.echo).toEqual({ source: "fake-transport" });
+  expect(client.connection).toBe(connection);
+  expect(runtimeResolver.resolve).toHaveBeenCalledTimes(1);
+  expect(transportFactory).toHaveBeenCalledTimes(1);
+  expect(transport.send).toHaveBeenCalledTimes(1);
+});
+
 it("notify 应应用默认选项", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -516,6 +567,28 @@ it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
 
   await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
 });
+
+function createConnectionInfo() {
+  return {
+    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    token: "token-fake",
+    runtime: {
+      protocolVersion: 1,
+      pid: 12345,
+      httpBaseUrl: "http://127.0.0.1:57231",
+      wsUrl: "ws://127.0.0.1:57231/ws",
+      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+      runtimeTuning: {
+        leaseSeconds: 30,
+        onlineThresholdSeconds: 30,
+        launchDedupeWindowSeconds: 30
+      }
+    },
+    rpcEndpoint: "http://127.0.0.1:57231/rpc",
+    websocketEndpoint: "ws://127.0.0.1:57231/ws"
+  };
+}
 
 async function createRuntime(): Promise<string> {
   const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
