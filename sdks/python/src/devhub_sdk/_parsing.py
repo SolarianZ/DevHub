@@ -134,7 +134,7 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
         instance_id=require_str(root, "instanceId", path),
         app_id=require_str(root, "appId", path),
         scope=optional_str(root.get("scope"), f"{path}.scope"),
-        pid=require_int(root, "pid", path),
+        pid=require_positive_int(root, "pid", path),
         registered_at_utc=require_datetime(root, "registeredAtUtc", path),
         last_seen_utc=require_datetime(root, "lastSeenUtc", path),
         invoke=InvokeCapability(
@@ -217,8 +217,8 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     if options_value is not None:
         options_root = require_mapping(options_value, f"{path}.options")
         options = InvocationOptions(
-            ttl_ms=optional_int(options_root.get("ttlMs"), f"{path}.options.ttlMs"),
-            wait_timeout_ms=optional_int(options_root.get("waitTimeoutMs"), f"{path}.options.waitTimeoutMs"),
+            ttl_ms=optional_int_at_least(options_root.get("ttlMs"), f"{path}.options.ttlMs", 1000),
+            wait_timeout_ms=optional_int_at_least(options_root.get("waitTimeoutMs"), f"{path}.options.waitTimeoutMs", 1),
             queue_if_offline=optional_bool(options_root.get("queueIfOffline"), f"{path}.options.queueIfOffline"),
             auto_launch=optional_bool(options_root.get("autoLaunch"), f"{path}.options.autoLaunch"),
         )
@@ -228,8 +228,8 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     if delivery_value is not None:
         delivery_root = require_mapping(delivery_value, f"{path}.delivery")
         delivery = InvocationDelivery(
-            lease_seconds=require_int(delivery_root, "leaseSeconds", f"{path}.delivery"),
-            attempt=require_int(delivery_root, "attempt", f"{path}.delivery"),
+            lease_seconds=require_positive_int(delivery_root, "leaseSeconds", f"{path}.delivery"),
+            attempt=require_positive_int(delivery_root, "attempt", f"{path}.delivery"),
         )
 
     caller_root = require_mapping(root.get("caller"), f"{path}.caller")
@@ -315,6 +315,15 @@ def require_int(root: Mapping[str, Any], name: str, path: str) -> int:
     return value
 
 
+def require_positive_int(root: Mapping[str, Any], name: str, path: str) -> int:
+    """璇诲彇蹇呭～姝ｆ暣鏁板睘鎬с€?"""
+
+    value = require_int(root, name, path)
+    if value < 1:
+        raise RuntimeError(f"{path}.{name} 蹇呴』涓烘鏁般€?")
+    return value
+
+
 def optional_int(value: Any, path: str) -> int | None:
     """读取可选整数属性。"""
 
@@ -323,6 +332,15 @@ def optional_int(value: Any, path: str) -> int | None:
     if not isinstance(value, int) or isinstance(value, bool):
         raise RuntimeError(f"{path} 类型非法。")
     return value
+
+
+def optional_int_at_least(value: Any, path: str, minimum_value: int) -> int | None:
+    """璇诲彇鍙€夋暣鏁板睘鎬э紝骞惰姹傚叾涓嶅皬浜庢寚瀹氫笅闄愩€?"""
+
+    parsed = optional_int(value, path)
+    if parsed is not None and parsed < minimum_value:
+        raise RuntimeError(f"{path} 蹇呴』澶т簬绛変簬 {minimum_value}銆?")
+    return parsed
 
 
 def require_bool(root: Mapping[str, Any], name: str, path: str) -> bool:
