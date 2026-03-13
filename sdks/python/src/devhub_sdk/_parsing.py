@@ -164,7 +164,7 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
     if status not in _LAUNCH_STATUS_VALUES:
         raise RuntimeError(f"{path}.status 取值非法。")
     pid = root.get("pid")
-    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool)):
+    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid < 1):
         raise RuntimeError(f"{path}.pid 类型非法。")
     return LaunchResult(
         ok=ok,

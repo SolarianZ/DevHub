@@ -82,7 +82,10 @@ class DevHubRpcException(Exception):
         message = value.get("message")
         if not isinstance(code, int) or not isinstance(message, str) or not message:
             return None
-        return DevHubCalleeError(code=code, message=message, data=value.get("data"))
+        data = value.get("data")
+        if data is not None and not isinstance(data, dict):
+            return None
+        return DevHubCalleeError(code=code, message=message, data=data)
 
     def is_code(self, error_code: DevHubRpcErrorCode | int) -> bool:
         """判断当前错误码是否与给定值一致。"""

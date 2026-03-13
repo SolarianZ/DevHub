@@ -88,6 +88,19 @@ def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
         )
 
 
+def test_parse_launch_result_when_pid_is_not_positive_should_raise() -> None:
+    with pytest.raises(RuntimeError):
+        parse_launch_result(
+            {
+                "ok": True,
+                "status": "started",
+                "launchId": "launch-1",
+                "pid": 0,
+            },
+            path="hub.apps.launch.result",
+        )
+
+
 def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
     payload = _app_instance_payload()
     payload["pid"] = 0

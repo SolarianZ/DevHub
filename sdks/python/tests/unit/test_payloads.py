@@ -33,6 +33,17 @@ def test_request_builder_should_apply_default_options() -> None:
     assert "args" not in payload
 
 
+def test_notify_builder_when_wait_timeout_specified_should_raise() -> None:
+    with pytest.raises(ValueError, match="wait_timeout_ms"):
+        build_notify_params(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.notify",
+                options=InvocationOptions(wait_timeout_ms=1000),
+            )
+        )
+
+
 def test_notify_builder_should_preserve_explicit_null_args() -> None:
     payload = build_notify_params(InvokeRequest(app_id="test.app", method="test.notify", args=None))
 

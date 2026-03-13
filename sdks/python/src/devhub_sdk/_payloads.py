@@ -207,6 +207,9 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
         1000,
         "ttl_ms 必须大于等于 1000。",
     )
+    notify_wait_timeout_ms = getattr(options, "wait_timeout_ms", None) if options is not None else None
+    if not is_request and notify_wait_timeout_ms is not None:
+        raise ValueError("hub.invoke.notify 不支持 wait_timeout_ms。")
     wait_timeout_ms = getattr(options, "wait_timeout_ms", None) if options is not None else None
     if is_request and wait_timeout_ms is None:
         wait_timeout_ms = 120000
