@@ -230,5 +230,9 @@ function buildSubscribeParams(types?: string[]): Record<string, unknown> | undef
     throw new Error("types cannot contain blank strings.");
   }
 
-  return types.length > 0 ? { types } : undefined;
+  if (types.length === 0) {
+    return undefined;
+  }
+
+  return { types };
 }

@@ -11,6 +11,7 @@ import type {
   PollResult,
   RequestResult
 } from "./models.js";
+import { ensureSupportedEventType } from "./event-types.js";
 import {
   ensureRecord,
   readAppId,
@@ -247,12 +248,24 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   let options: Invocation["options"] | undefined;
   if ("options" in record && record.options !== null && record.options !== undefined) {
     const optionsPayload = ensureRecord(record.options, `${location}.options`);
+    const ttlMs = readOptionalIntAtLeast(optionsPayload, `${location}.options`, "ttlMs", 1000);
+    const waitTimeoutMs = readOptionalIntAtLeast(optionsPayload, `${location}.options`, "waitTimeoutMs", 1);
+    const queueIfOffline = readOptionalBoolean(optionsPayload, `${location}.options`, "queueIfOffline");
+    const autoLaunch = readOptionalBoolean(optionsPayload, `${location}.options`, "autoLaunch");
     options = {
-      ttlMs: readOptionalIntAtLeast(optionsPayload, `${location}.options`, "ttlMs", 1000),
-      waitTimeoutMs: readOptionalIntAtLeast(optionsPayload, `${location}.options`, "waitTimeoutMs", 1),
-      queueIfOffline: readOptionalBoolean(optionsPayload, `${location}.options`, "queueIfOffline"),
-      autoLaunch: readOptionalBoolean(optionsPayload, `${location}.options`, "autoLaunch")
+      ttlMs,
+      waitTimeoutMs,
+      queueIfOffline,
+      autoLaunch
     };
+
+    if (
+      waitTimeoutMs !== undefined
+      && ttlMs !== undefined
+      && waitTimeoutMs > ttlMs
+    ) {
+      throw new Error(`${location}.options.waitTimeoutMs must be less than or equal to ttlMs.`);
+    }
   }
 
   let delivery: Invocation["delivery"] | undefined;
@@ -294,7 +307,7 @@ export function parseEvent(payload: unknown, location: string): DevHubEvent {
 
   return {
     subscriptionId: readString(record, location, "subscriptionId"),
-    type: readString(record, location, "type"),
+    type: ensureSupportedEventType(readString(record, location, "type"), `${location}.type`),
     timeUtc: readDate(record, location, "timeUtc"),
     payload: parsedPayload
   };

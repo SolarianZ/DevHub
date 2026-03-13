@@ -279,6 +279,26 @@ it("收到未知 WS 通知方法时应使事件流报错", async () => {
   await expect(iterator.next()).rejects.toThrow(/supported response or hub\.event/i);
 });
 
+it("收到未知事件类型时应使事件流报错", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createUnknownEventTypeScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-unknown-type-client",
+    runtimeDir
+  });
+
+  await client.authenticate();
+  await client.subscribe(["invocation.completed"]);
+
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toThrow(/supported DevHub event type/i);
+});
+
 it("authenticate 应映射 DevHub RPC 错误", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
@@ -865,6 +885,48 @@ function createUnknownNotificationScenario(request: Record<string, unknown>): Se
           method: "hub.events.unknown",
           params: {
             subscriptionId: "sub-1"
+          }
+        })
+      }
+    ];
+  }
+
+  return [];
+}
+
+function createUnknownEventTypeScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "hub.event",
+          params: {
+            subscriptionId: "sub-1",
+            type: "unknown.type",
+            timeUtc: "2026-03-09T00:00:00Z",
+            payload: {
+              invocationId: "invk-1"
+            }
           }
         })
       }

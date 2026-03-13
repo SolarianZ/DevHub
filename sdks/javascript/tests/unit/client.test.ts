@@ -875,6 +875,48 @@ it("request should reject a non-object options payload before sending the reques
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z",
+      items: [
+        {
+          invocationId: "invk-1",
+          appId: "test.app",
+          target: {
+            scope: null,
+            instanceId: null
+          },
+          method: "test.request",
+          kind: "request",
+          createdAtUtc: "2026-03-09T00:00:00Z",
+          options: {
+            ttlMs: 1_000,
+            waitTimeoutMs: 1_001
+          },
+          caller: {
+            clientId: "caller-a",
+            clientSessionId: "11111111-1111-4111-8111-111111111111"
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-poll-options-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.poll({
+    instanceId: "inst-1"
+  })).rejects.toThrow(/waitTimeoutMs/i);
+});
+
 function createConnectionInfo() {
   return {
     runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
