@@ -183,13 +183,48 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
     appId: "test.launch.app",
     displayName: "Test Launch App",
     description: undefined,
-    capabilities: undefined,
+    capabilities: {
+      rpc: true
+    },
     launch: {
       exePath: process.execPath,
       argsTemplate: undefined,
       workingDirectory: undefined,
       dedupeKeyTemplate: undefined
     }
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.rpc-default.app",
+        displayName: "RPC Default App",
+        capabilities: {
+          events: false
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-capabilities-client",
+    runtimeDir
+  });
+
+  const definition = await client.getDefinition("test.rpc-default.app");
+
+  expect(definition.capabilities).toEqual({
+    rpc: true,
+    events: false
   });
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });

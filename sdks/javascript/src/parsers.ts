@@ -178,12 +178,16 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   const displayName = readString(record, location, "displayName");
   const description = readOptionalString(record, location, "description");
 
-  let capabilities: AppDefinition["capabilities"] | undefined;
+  let capabilities: AppDefinition["capabilities"] = {
+    rpc: true
+  };
   if ("capabilities" in record && record.capabilities !== null && record.capabilities !== undefined) {
     const capabilitiesPayload = ensureRecord(record.capabilities, `${location}.capabilities`);
+    const rpc = readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "rpc");
+    const events = readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "events");
     capabilities = {
-      rpc: readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "rpc"),
-      events: readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "events")
+      rpc: rpc ?? true,
+      ...(events !== undefined ? { events } : {})
     };
   }
 

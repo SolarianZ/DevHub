@@ -36,9 +36,15 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   const definitions = await client.listDefinitions();
   expect(definitions.some((definition) => definition.appId === "http.flow.app")).toBe(true);
+  expect(definitions.find((definition) => definition.appId === "http.flow.app")?.capabilities).toEqual({
+    rpc: true
+  });
 
   const definitionResult = await client.getDefinition("http.flow.app");
   expect(definitionResult.displayName).toBe("HTTP Flow App");
+  expect(definitionResult.capabilities).toEqual({
+    rpc: true
+  });
 
   const registered = await client.registerInstance({
     instanceId: "http-flow-inst-1",
