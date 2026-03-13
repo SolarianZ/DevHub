@@ -85,9 +85,10 @@ def test_runtime_discovery_when_environment_override_points_to_runtime_root_shou
     assert connection_info.token == "token-env-root"
 
 
-def test_client_options_when_client_session_id_invalid_should_raise() -> None:
+@pytest.mark.parametrize("client_session_id", ["not-a-uuid", "11111111111111111111111111111111"])
+def test_client_options_when_client_session_id_invalid_should_raise(client_session_id: str) -> None:
     with pytest.raises(ValueError):
-        DevHubClientOptions(client_id="unit-test-client", client_session_id="not-a-uuid").validate()
+        DevHubClientOptions(client_id="unit-test-client", client_session_id=client_session_id).validate()
 
 
 def test_client_options_when_request_timeout_is_not_number_should_raise() -> None:

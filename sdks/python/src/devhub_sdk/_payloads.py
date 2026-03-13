@@ -5,11 +5,16 @@ from typing import Any
 from ._validation import (
     ensure_json_object,
     ensure_json_value,
+    require_app_id,
     require_bool,
+    require_instance_id,
+    require_invocation_id,
     require_non_empty_string,
     require_optional_bool,
+    require_optional_app_id,
     require_optional_int_at_least,
     require_optional_int_in_range,
+    require_optional_instance_id,
     require_optional_string,
 )
 from .models import (
@@ -30,7 +35,7 @@ _MISSING = object()
 def build_get_definition_params(app_id: str) -> dict[str, Any]:
     """构造 `hub.apps.getDefinition` 参数。"""
 
-    return {"appId": require_non_empty_string(app_id, "app_id")}
+    return {"appId": require_app_id(app_id, "app_id")}
 
 
 def build_register_instance_params(instance: AppInstanceRegistration) -> dict[str, Any]:
@@ -39,8 +44,8 @@ def build_register_instance_params(instance: AppInstanceRegistration) -> dict[st
     if instance is None:
         raise ValueError("instance 不能为空。")
 
-    instance_id = require_non_empty_string(instance.instance_id, "instance.instance_id")
-    app_id = require_non_empty_string(instance.app_id, "instance.app_id")
+    instance_id = require_instance_id(instance.instance_id, "instance.instance_id")
+    app_id = require_app_id(instance.app_id, "instance.app_id")
     scope = require_optional_string(instance.scope, "instance.scope")
     if not isinstance(instance.pid, int) or isinstance(instance.pid, bool) or instance.pid < 1:
         raise ValueError("instance.pid 必须大于等于 1。")
@@ -69,13 +74,13 @@ def build_register_instance_params(instance: AppInstanceRegistration) -> dict[st
 def build_heartbeat_params(instance_id: str) -> dict[str, Any]:
     """构造 `hub.apps.heartbeat` 参数。"""
 
-    return {"instanceId": require_non_empty_string(instance_id, "instance_id")}
+    return {"instanceId": require_instance_id(instance_id, "instance_id")}
 
 
 def build_unregister_params(instance_id: str) -> dict[str, Any]:
     """构造 `hub.apps.unregisterInstance` 参数。"""
 
-    return {"instanceId": require_non_empty_string(instance_id, "instance_id")}
+    return {"instanceId": require_instance_id(instance_id, "instance_id")}
 
 
 def build_list_instances_params(request: ListInstancesRequest | None) -> dict[str, Any] | None:
@@ -85,7 +90,7 @@ def build_list_instances_params(request: ListInstancesRequest | None) -> dict[st
         return None
 
     payload: dict[str, Any] = {}
-    app_id = require_optional_string(request.app_id, "app_id", allow_empty=False)
+    app_id = require_optional_app_id(request.app_id, "app_id")
     scope = require_optional_string(request.scope, "scope")
     include_all_scopes = require_optional_bool(request.include_all_scopes, "include_all_scopes")
     include_offline = require_optional_bool(request.include_offline, "include_offline")
@@ -107,7 +112,7 @@ def build_launch_params(request: LaunchRequest) -> dict[str, Any]:
     if request is None:
         raise ValueError("request 不能为空。")
 
-    app_id = require_non_empty_string(request.app_id, "request.app_id")
+    app_id = require_app_id(request.app_id, "request.app_id")
     scope = require_optional_string(request.scope, "request.scope")
     dedupe_key = require_optional_string(request.dedupe_key, "request.dedupe_key")
     wait_for_register_ms = require_optional_int_at_least(
@@ -144,7 +149,7 @@ def build_poll_params(request: PollRequest) -> dict[str, Any]:
     if request is None:
         raise ValueError("request 不能为空。")
 
-    instance_id = require_non_empty_string(request.instance_id, "request.instance_id")
+    instance_id = require_instance_id(request.instance_id, "request.instance_id")
     max_count = require_optional_int_in_range(request.max_count, 1, 100, "max_count 必须位于 1..100。")
     wait_ms = require_optional_int_at_least(request.wait_ms, 0, "wait_ms 必须为大于等于 0 的整数。")
 
@@ -161,8 +166,8 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
     if request is None:
         raise ValueError("request 不能为空。")
 
-    instance_id = require_non_empty_string(request.instance_id, "request.instance_id")
-    invocation_id = require_non_empty_string(request.invocation_id, "request.invocation_id")
+    instance_id = require_instance_id(request.instance_id, "request.instance_id")
+    invocation_id = require_invocation_id(request.invocation_id, "request.invocation_id")
 
     has_value = getattr(request, "_has_value", True)
     has_error = request.error is not None
@@ -184,18 +189,16 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
     if request is None:
         raise ValueError("request 不能为空。")
 
-    app_id = require_non_empty_string(request.app_id, "request.app_id")
+    app_id = require_app_id(request.app_id, "request.app_id")
     method = require_non_empty_string(request.method, "request.method")
 
     target_scope = None
     target_instance_id = None
     if request.target is not None:
         target_scope = require_optional_string(getattr(request.target, "scope", _MISSING), "target.scope")
-        target_instance_id = require_optional_string(
+        target_instance_id = require_optional_instance_id(
             getattr(request.target, "instance_id", _MISSING),
             "target.instance_id",
-            allow_empty=False,
-            error_message="target.instance_id 不能为空白字符串。",
         )
 
     options = request.options

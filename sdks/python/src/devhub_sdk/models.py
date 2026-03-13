@@ -4,9 +4,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from ._validation import require_non_empty_string, require_positive_number, require_protocol_version
+from ._validation import (
+    require_non_empty_string,
+    require_positive_number,
+    require_protocol_version,
+    require_uuid_string,
+)
 
 
 @dataclass(slots=True)
@@ -34,13 +39,9 @@ class DevHubClientOptions:
         """校验选项合法性。"""
 
         require_non_empty_string(self.client_id, "client_id")
-        require_non_empty_string(self.client_session_id, "client_session_id")
+        require_uuid_string(self.client_session_id, "client_session_id")
         if self.runtime_dir is not None and not isinstance(self.runtime_dir, str):
             raise ValueError("runtime_dir 类型非法。")
-        try:
-            UUID(self.client_session_id)
-        except ValueError as exc:
-            raise ValueError("client_session_id 必须是有效的 UUID。") from exc
         require_protocol_version(self.protocol_version)
         if self.request_timeout is not None:
             require_positive_number(self.request_timeout, "request_timeout")

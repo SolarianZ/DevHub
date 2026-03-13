@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 
+from ._validation import (
+    require_app_id as validate_app_id,
+    require_instance_id as validate_instance_id,
+    require_invocation_id as validate_invocation_id,
+    require_optional_instance_id as validate_optional_instance_id,
+    require_uuid_string as validate_uuid_string,
+)
 from .models import (
     AppCapabilities,
     AppDefinition,
@@ -114,7 +121,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
         )
 
     return AppDefinition(
-        app_id=require_str(root, "appId", path),
+        app_id=require_validated_string(root, "appId", path, validate_app_id),
         display_name=require_str(root, "displayName", path),
         description=optional_str(root.get("description"), f"{path}.description"),
         capabilities=capabilities,
@@ -131,8 +138,8 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     if meta_value is not None and not isinstance(meta_value, dict):
         raise RuntimeError(f"{path}.meta 必须为对象。")
     return AppInstance(
-        instance_id=require_str(root, "instanceId", path),
-        app_id=require_str(root, "appId", path),
+        instance_id=require_validated_string(root, "instanceId", path, validate_instance_id),
+        app_id=require_validated_string(root, "appId", path, validate_app_id),
         scope=optional_str(root.get("scope"), f"{path}.scope"),
         pid=require_positive_int(root, "pid", path),
         registered_at_utc=require_datetime(root, "registeredAtUtc", path),
@@ -173,7 +180,10 @@ def parse_notify_result(value: Any, *, path: str) -> NotifyResult:
     ok = require_bool(root, "ok", path)
     if not ok:
         raise RuntimeError(f"{path} 返回结果非法。")
-    return NotifyResult(ok=ok, invocation_id=require_str(root, "invocationId", path))
+    return NotifyResult(
+        ok=ok,
+        invocation_id=require_validated_string(root, "invocationId", path, validate_invocation_id),
+    )
 
 
 def parse_request_result(value: Any, *, path: str) -> RequestResult:
@@ -185,7 +195,11 @@ def parse_request_result(value: Any, *, path: str) -> RequestResult:
         raise RuntimeError(f"{path} 返回结果非法。")
     if "value" not in root:
         raise RuntimeError(f"{path}.value 必须存在。")
-    return RequestResult(ok=ok, invocation_id=require_str(root, "invocationId", path), value=root.get("value"))
+    return RequestResult(
+        ok=ok,
+        invocation_id=require_validated_string(root, "invocationId", path, validate_invocation_id),
+        value=root.get("value"),
+    )
 
 
 def parse_poll_result(value: Any, *, path: str) -> PollResult:
@@ -209,7 +223,11 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     target_root = require_mapping(root.get("target"), f"{path}.target")
     target = InvocationTarget(
         scope=optional_str(target_root.get("scope"), f"{path}.target.scope"),
-        instance_id=optional_str(target_root.get("instanceId"), f"{path}.target.instanceId"),
+        instance_id=optional_validated_string(
+            target_root.get("instanceId"),
+            f"{path}.target.instanceId",
+            validate_optional_instance_id,
+        ),
     )
 
     options_value = root.get("options")
@@ -240,14 +258,19 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         raise RuntimeError(f"{path}.kind 非法。") from exc
 
     return Invocation(
-        invocation_id=require_str(root, "invocationId", path),
-        app_id=require_str(root, "appId", path),
+        invocation_id=require_validated_string(root, "invocationId", path, validate_invocation_id),
+        app_id=require_validated_string(root, "appId", path, validate_app_id),
         method=require_str(root, "method", path),
         kind=kind,
         created_at_utc=require_datetime(root, "createdAtUtc", path),
         caller=InvocationCaller(
             client_id=require_str(caller_root, "clientId", f"{path}.caller"),
-            client_session_id=require_str(caller_root, "clientSessionId", f"{path}.caller"),
+            client_session_id=require_validated_string(
+                caller_root,
+                "clientSessionId",
+                f"{path}.caller",
+                validate_uuid_string,
+            ),
         ),
         target=target,
         args=root.get("args"),
@@ -277,6 +300,40 @@ def parse_callee_error(value: Any, *, path: str) -> DevHubCalleeError:
         message=require_str(root, "message", path),
         data=root.get("data"),
     )
+
+
+def require_validated_string(
+    root: Mapping[str, Any],
+    name: str,
+    path: str,
+    validator: Callable[[Any, str], str],
+) -> str:
+    """读取并校验必须字段中的字符串格式。"""
+
+    return _validate_string(root.get(name), f"{path}.{name}", validator)
+
+
+def optional_validated_string(
+    value: Any,
+    path: str,
+    validator: Callable[[Any, str], str | None],
+) -> str | None:
+    """读取并校验可选字符串格式。"""
+
+    if value is None:
+        return None
+    return _validate_string(value, path, validator)
+
+
+def _validate_string(
+    value: Any,
+    path: str,
+    validator: Callable[[Any, str], str | None],
+) -> str | None:
+    try:
+        return validator(value, path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def require_mapping(value: Any, path: str) -> dict[str, Any]:

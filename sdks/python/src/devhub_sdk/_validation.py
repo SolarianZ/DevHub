@@ -1,7 +1,21 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
+from uuid import UUID
+
+
+_APP_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+_INSTANCE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9._:-]+$")
+_INVOCATION_ID_PATTERN = re.compile(r"^invk-[a-zA-Z0-9._:-]+$")
+_CANONICAL_UUID_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}$"
+)
 
 
 def require_non_empty_string(value: Any, name: str, *, error_message: str | None = None) -> str:
@@ -10,6 +24,62 @@ def require_non_empty_string(value: Any, name: str, *, error_message: str | None
     if not isinstance(value, str) or not value.strip():
         raise ValueError(error_message or f"{name} 不能为空。")
     return value
+
+
+def require_app_id(value: Any, name: str) -> str:
+    """要求值必须符合 Spec 定义的 appId 格式。"""
+
+    normalized = require_non_empty_string(value, name)
+    if _APP_ID_PATTERN.fullmatch(normalized) is None:
+        raise ValueError(f"{name} 必须符合 appId 格式要求。")
+    return normalized
+
+
+def require_optional_app_id(value: Any, name: str) -> str | None:
+    """要求值必须为可选的 appId。"""
+
+    if value is None:
+        return None
+    return require_app_id(value, name)
+
+
+def require_instance_id(value: Any, name: str) -> str:
+    """要求值必须符合 Spec 定义的 instanceId 格式。"""
+
+    normalized = require_non_empty_string(value, name)
+    if len(normalized) > 256 or _INSTANCE_ID_PATTERN.fullmatch(normalized) is None:
+        raise ValueError(f"{name} 必须符合 instanceId 格式要求。")
+    return normalized
+
+
+def require_optional_instance_id(value: Any, name: str) -> str | None:
+    """要求值必须为可选的 instanceId。"""
+
+    if value is None:
+        return None
+    return require_instance_id(value, name)
+
+
+def require_invocation_id(value: Any, name: str) -> str:
+    """要求值必须符合 Spec 定义的 invocationId 格式。"""
+
+    normalized = require_non_empty_string(value, name)
+    if len(normalized) > 256 or _INVOCATION_ID_PATTERN.fullmatch(normalized) is None:
+        raise ValueError(f"{name} 必须符合 invocationId 格式要求。")
+    return normalized
+
+
+def require_uuid_string(value: Any, name: str) -> str:
+    """要求值必须为 RFC 4122 UUID 字符串。"""
+
+    normalized = require_non_empty_string(value, name)
+    if _CANONICAL_UUID_PATTERN.fullmatch(normalized) is None:
+        raise ValueError(f"{name} 必须为 RFC 4122 UUID 字符串。")
+    try:
+        UUID(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{name} 必须为 RFC 4122 UUID 字符串。") from exc
+    return normalized
 
 
 def require_optional_string(

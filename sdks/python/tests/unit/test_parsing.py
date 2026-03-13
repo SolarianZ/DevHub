@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from devhub_sdk._parsing import parse_app_definition, parse_app_instance, parse_invocation, parse_launch_result
+from devhub_sdk._parsing import parse_app_definition, parse_app_instance, parse_invocation, parse_launch_result, parse_notify_result
 
 
 def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
@@ -12,6 +12,17 @@ def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> Non
                 "appId": "test.app",
                 "displayName": "Test App",
                 "launch": {},
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
+    with pytest.raises(RuntimeError):
+        parse_app_definition(
+            {
+                "appId": "Test.App",
+                "displayName": "Test App",
             },
             path="app.definition",
         )
@@ -63,6 +74,33 @@ def test_parse_invocation_when_option_is_out_of_range_should_raise(field_name: s
 def test_parse_invocation_when_delivery_is_not_positive_should_raise(field_name: str, value: int) -> None:
     payload = _invocation_payload()
     payload["delivery"][field_name] = value
+
+    with pytest.raises(RuntimeError):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+def test_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> None:
+    with pytest.raises(RuntimeError):
+        parse_notify_result(
+            {
+                "ok": True,
+                "invocationId": "request-1",
+            },
+            path="hub.invoke.notify.result",
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutator",),
+    [
+        (lambda payload: payload.__setitem__("invocationId", "request-1"),),
+        (lambda payload: payload["target"].__setitem__("instanceId", "inst/1"),),
+        (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
+    ],
+)
+def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) -> None:
+    payload = _invocation_payload()
+    mutator(payload)
 
     with pytest.raises(RuntimeError):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")

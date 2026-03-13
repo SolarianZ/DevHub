@@ -64,6 +64,22 @@ def test_request_builder_when_auto_launch_enabled_with_instance_id_should_raise(
         )
 
 
+def test_request_builder_when_app_id_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_request_params(InvokeRequest(app_id="Test.App", method="test.request"))
+
+
+def test_notify_builder_when_target_instance_id_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_notify_params(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.notify",
+                target=InvocationTarget(instance_id="inst/1"),
+            )
+        )
+
+
 def test_request_builder_when_auto_launch_requires_queue_if_offline_true_should_raise() -> None:
     with pytest.raises(ValueError):
         build_notify_params(
@@ -116,6 +132,18 @@ def test_register_instance_builder_when_invoke_poll_is_not_bool_should_raise() -
                 app_id="test.app",
                 pid=1234,
                 invoke=InvokeCapability(poll="true", respond=True),  # type: ignore[arg-type]
+            )
+        )
+
+
+def test_register_instance_builder_when_instance_id_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="inst/1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
             )
         )
 
@@ -182,6 +210,17 @@ def test_respond_builder_when_value_and_error_both_missing_should_raise() -> Non
             RespondRequest(
                 instance_id="inst-1",
                 invocation_id="invk-1",
+            )
+        )
+
+
+def test_respond_builder_when_invocation_id_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                invocation_id="request-1",
+                value={"ok": True},
             )
         )
 
