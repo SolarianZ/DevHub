@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 
 from .constants import ALL_EVENT_TYPES
 from ._validation import (
+    ensure_json_object,
+    ensure_json_value,
     require_app_id as validate_app_id,
     require_instance_id as validate_instance_id,
     require_invocation_id as validate_invocation_id,
@@ -44,6 +46,7 @@ _RFC3339_TIMESTAMP_PATTERN = re.compile(
     r"(?:\.\d+)?"
     r"(?:Z|[+-]\d{2}:\d{2})$"
 )
+_MISSING = object()
 
 
 def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
@@ -76,7 +79,7 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     if lease_seconds < 1 or online_threshold_seconds < 1 or launch_dedupe_window_seconds < 1:
         raise RuntimeError(f"hub.json.runtimeTuning 非法：{source}")
 
-    hub_version = optional_str(root.get("hubVersion"), f"{source}.hubVersion")
+    hub_version = optional_property_string(root, "hubVersion", source)
     return HubRuntime(
         protocol_version=protocol_version,
         pid=pid,
@@ -101,38 +104,37 @@ def parse_ping_result(value: Any, *, path: str) -> PingResult:
     if not ok:
         raise RuntimeError(f"{path} 返回结果非法。")
     server_time_utc = require_datetime(root, "serverTimeUtc", path)
-    return PingResult(ok=ok, server_time_utc=server_time_utc, echo=root.get("echo"))
+    echo = _require_json_value(root["echo"], f"{path}.echo") if "echo" in root else None
+    return PingResult(ok=ok, server_time_utc=server_time_utc, echo=echo)
 
 
 def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
     root = require_mapping(value, path)
-    capabilities_value = root.get("capabilities")
     capabilities = AppCapabilities(rpc=True)
-    if capabilities_value is not None:
-        capabilities_root = require_mapping(capabilities_value, f"{path}.capabilities")
-        rpc = optional_bool(capabilities_root.get("rpc"), f"{path}.capabilities.rpc")
+    if "capabilities" in root:
+        capabilities_root = require_mapping(root["capabilities"], f"{path}.capabilities")
+        rpc = optional_property_bool(capabilities_root, "rpc", f"{path}.capabilities")
         capabilities = AppCapabilities(
             rpc=True if rpc is None else rpc,
-            events=optional_bool(capabilities_root.get("events"), f"{path}.capabilities.events"),
+            events=optional_property_bool(capabilities_root, "events", f"{path}.capabilities"),
         )
 
-    launch_value = root.get("launch")
     launch = None
-    if launch_value is not None:
-        launch_root = require_mapping(launch_value, f"{path}.launch")
+    if "launch" in root:
+        launch_root = require_mapping(root["launch"], f"{path}.launch")
         launch = LaunchConfiguration(
             exe_path=require_string(launch_root, "exePath", f"{path}.launch"),
-            args_template=optional_str(launch_root.get("argsTemplate"), f"{path}.launch.argsTemplate"),
-            working_directory=optional_str(launch_root.get("workingDirectory"), f"{path}.launch.workingDirectory"),
-            dedupe_key_template=optional_str(launch_root.get("dedupeKeyTemplate"), f"{path}.launch.dedupeKeyTemplate"),
+            args_template=optional_property_string(launch_root, "argsTemplate", f"{path}.launch"),
+            working_directory=optional_property_string(launch_root, "workingDirectory", f"{path}.launch"),
+            dedupe_key_template=optional_property_string(launch_root, "dedupeKeyTemplate", f"{path}.launch"),
         )
 
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
         display_name=require_string(root, "displayName", path),
-        description=optional_str(root.get("description"), f"{path}.description"),
+        description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
     )
@@ -143,9 +145,9 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
 
     root = require_mapping(value, path)
     invoke_root = require_mapping(root.get("invoke"), f"{path}.invoke")
-    meta_value = root.get("meta")
-    if meta_value is not None and not isinstance(meta_value, dict):
-        raise RuntimeError(f"{path}.meta 必须为对象。")
+    meta = None
+    if "meta" in root:
+        meta = _require_json_object(root["meta"], f"{path}.meta")
     return AppInstance(
         instance_id=require_validated_string(root, "instanceId", path, validate_instance_id),
         app_id=require_validated_string(root, "appId", path, validate_app_id),
@@ -157,7 +159,7 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
             poll=require_bool(invoke_root, "poll", f"{path}.invoke"),
             respond=require_bool(invoke_root, "respond", f"{path}.invoke"),
         ),
-        meta=meta_value,
+        meta=meta,
     )
 
 
@@ -171,9 +173,11 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
     status = require_str(root, "status", path)
     if status not in _LAUNCH_STATUS_VALUES:
         raise RuntimeError(f"{path}.status 取值非法。")
-    pid = root.get("pid")
-    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid < 1):
-        raise RuntimeError(f"{path}.pid 类型非法。")
+    pid = None
+    if "pid" in root:
+        pid = root["pid"]
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1:
+            raise RuntimeError(f"{path}.pid 类型非法。")
     return LaunchResult(
         ok=ok,
         status=status,
@@ -207,7 +211,7 @@ def parse_request_result(value: Any, *, path: str) -> RequestResult:
     return RequestResult(
         ok=ok,
         invocation_id=require_validated_string(root, "invocationId", path, validate_invocation_id),
-        value=root.get("value"),
+        value=_require_json_value(root["value"], f"{path}.value"),
     )
 
 
@@ -239,21 +243,19 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         ),
     )
 
-    options_value = root.get("options")
     options = None
-    if options_value is not None:
-        options_root = require_mapping(options_value, f"{path}.options")
+    if "options" in root:
+        options_root = require_mapping(root["options"], f"{path}.options")
         options = InvocationOptions(
-            ttl_ms=optional_int_at_least(options_root.get("ttlMs"), f"{path}.options.ttlMs", 1000),
-            wait_timeout_ms=optional_int_at_least(options_root.get("waitTimeoutMs"), f"{path}.options.waitTimeoutMs", 1),
-            queue_if_offline=optional_bool(options_root.get("queueIfOffline"), f"{path}.options.queueIfOffline"),
-            auto_launch=optional_bool(options_root.get("autoLaunch"), f"{path}.options.autoLaunch"),
+            ttl_ms=optional_property_int_at_least(options_root, "ttlMs", f"{path}.options", 1000),
+            wait_timeout_ms=optional_property_int_at_least(options_root, "waitTimeoutMs", f"{path}.options", 1),
+            queue_if_offline=optional_property_bool(options_root, "queueIfOffline", f"{path}.options"),
+            auto_launch=optional_property_bool(options_root, "autoLaunch", f"{path}.options"),
         )
 
-    delivery_value = root.get("delivery")
     delivery = None
-    if delivery_value is not None:
-        delivery_root = require_mapping(delivery_value, f"{path}.delivery")
+    if "delivery" in root:
+        delivery_root = require_mapping(root["delivery"], f"{path}.delivery")
         delivery = InvocationDelivery(
             lease_seconds=require_positive_int(delivery_root, "leaseSeconds", f"{path}.delivery"),
             attempt=require_positive_int(delivery_root, "attempt", f"{path}.delivery"),
@@ -282,7 +284,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
             ),
         ),
         target=target,
-        args=root.get("args"),
+        args=_require_json_value(root["args"], f"{path}.args") if "args" in root else None,
         options=options,
         delivery=delivery,
     )
@@ -299,7 +301,7 @@ def parse_event(value: Any, *, path: str) -> DevHubEvent:
         subscription_id=require_str(root, "subscriptionId", path),
         type=event_type,
         time_utc=require_datetime(root, "timeUtc", path),
-        payload=root.get("payload"),
+        payload=_require_json_value(root["payload"], f"{path}.payload") if "payload" in root else None,
     )
 
 
@@ -307,10 +309,11 @@ def parse_callee_error(value: Any, *, path: str) -> DevHubCalleeError:
     """解析被调用方错误对象。"""
 
     root = require_mapping(value, path)
+    data = _require_json_object(root["data"], f"{path}.data") if "data" in root else None
     return DevHubCalleeError(
         code=require_int(root, "code", path),
         message=require_str(root, "message", path),
-        data=root.get("data"),
+        data=data,
     )
 
 
@@ -344,6 +347,52 @@ def _validate_string(
 ) -> str | None:
     try:
         return validator(value, path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def optional_property_string(root: Mapping[str, Any], name: str, path: str) -> str | None:
+    """读取“可省略但不可为 null”的字符串属性。"""
+
+    if name not in root:
+        return None
+    return require_string(root, name, path)
+
+
+def optional_property_bool(root: Mapping[str, Any], name: str, path: str) -> bool | None:
+    """读取“可省略但不可为 null”的布尔属性。"""
+
+    if name not in root:
+        return None
+    return require_bool(root, name, path)
+
+
+def optional_property_int_at_least(
+    root: Mapping[str, Any],
+    name: str,
+    path: str,
+    minimum_value: int,
+) -> int | None:
+    """读取“可省略但不可为 null”的整数属性，并要求其满足最小值。"""
+
+    if name not in root:
+        return None
+    parsed = require_int(root, name, path)
+    if parsed < minimum_value:
+        raise RuntimeError(f"{path}.{name} 必须大于等于 {minimum_value}。")
+    return parsed
+
+
+def _require_json_value(value: Any, path: str) -> Any:
+    try:
+        return ensure_json_value(value, path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def _require_json_object(value: Any, path: str) -> dict[str, Any]:
+    try:
+        return ensure_json_object(value, path)
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
 

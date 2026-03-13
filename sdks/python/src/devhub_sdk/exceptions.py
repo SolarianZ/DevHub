@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
+from ._validation import ensure_json_object
 from .models import DevHubCalleeError
 
 
@@ -82,9 +83,12 @@ class DevHubRpcException(Exception):
         message = value.get("message")
         if not isinstance(code, int) or isinstance(code, bool) or not isinstance(message, str) or not message:
             return None
-        data = value.get("data")
-        if data is not None and not isinstance(data, dict):
-            return None
+        data = None
+        if "data" in value:
+            try:
+                data = ensure_json_object(value["data"], "calleeError.data")
+            except ValueError:
+                return None
         return DevHubCalleeError(code=code, message=message, data=data)
 
     def is_code(self, error_code: DevHubRpcErrorCode | int) -> bool:

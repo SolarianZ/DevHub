@@ -72,6 +72,25 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore
     assert exception.callee_error is None
 
 
+@pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
+def test_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_should_ignore_helper(data) -> None:
+    exception = DevHubRpcException(
+        code=DevHubRpcErrorCode.INVOCATION_FAILED,
+        message="invocation_failed",
+        data={
+            "invocationId": "invk-1",
+            "calleeError": {
+                "code": 1001,
+                "message": "app_error",
+                "data": data,
+            },
+        },
+        request_id="req-invalid-callee-error-data",
+    )
+
+    assert exception.callee_error is None
+
+
 def test_devhub_rpc_exception_when_callee_error_code_is_bool_should_ignore_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,

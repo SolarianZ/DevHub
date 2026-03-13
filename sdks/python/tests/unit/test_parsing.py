@@ -5,11 +5,14 @@ import pytest
 from devhub_sdk._parsing import (
     parse_app_definition,
     parse_app_instance,
+    parse_callee_error,
     parse_datetime,
     parse_event,
     parse_invocation,
     parse_launch_result,
     parse_notify_result,
+    parse_ping_result,
+    parse_request_result,
 )
 
 
@@ -83,6 +86,36 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
     assert definition.launch.exe_path == ""
 
 
+@pytest.mark.parametrize(
+    ("mutator",),
+    [
+        (lambda payload: payload.__setitem__("description", None),),
+        (lambda payload: payload.__setitem__("capabilities", None),),
+        (lambda payload: payload["capabilities"].__setitem__("rpc", None),),
+        (lambda payload: payload["capabilities"].__setitem__("events", None),),
+        (lambda payload: payload.__setitem__("launch", None),),
+        (lambda payload: payload["launch"].__setitem__("argsTemplate", None),),
+    ],
+)
+def test_parse_app_definition_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
+    payload = {
+        "appId": "test.app",
+        "displayName": "Test App",
+        "capabilities": {
+            "rpc": True,
+            "events": False,
+        },
+        "launch": {
+            "exePath": "app.exe",
+            "argsTemplate": "--scope {scope}",
+        },
+    }
+    mutator(payload)
+
+    with pytest.raises(RuntimeError):
+        parse_app_definition(payload, path="app.definition")
+
+
 def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_launch_result(
@@ -114,6 +147,22 @@ def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
     payload["pid"] = 0
 
     with pytest.raises(RuntimeError):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
+def test_parse_app_instance_when_meta_is_null_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["meta"] = None
+
+    with pytest.raises(RuntimeError):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
+def test_parse_app_instance_when_meta_contains_unsupported_json_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["meta"] = {"callback": lambda: "ignored"}
+
+    with pytest.raises(RuntimeError, match=r"meta\.callback 包含不支持的 JSON 类型。"):
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
@@ -170,6 +219,30 @@ def test_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> 
         )
 
 
+def test_parse_ping_result_when_echo_contains_unsupported_json_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"echo\.callback 包含不支持的 JSON 类型。"):
+        parse_ping_result(
+            {
+                "ok": True,
+                "serverTimeUtc": "2026-03-09T00:00:00Z",
+                "echo": {"callback": lambda: "ignored"},
+            },
+            path="hub.ping.result",
+        )
+
+
+def test_parse_request_result_when_value_contains_unsupported_json_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"value\.callback 包含不支持的 JSON 类型。"):
+        parse_request_result(
+            {
+                "ok": True,
+                "invocationId": "invk-1",
+                "value": {"callback": lambda: "ignored"},
+            },
+            path="hub.invoke.request.result",
+        )
+
+
 def test_parse_event_when_type_is_not_supported_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_event(
@@ -177,6 +250,19 @@ def test_parse_event_when_type_is_not_supported_should_raise() -> None:
                 "subscriptionId": "sub-1",
                 "type": "future.event",
                 "timeUtc": "2026-03-09T00:00:00Z",
+            },
+            path="hub.event.params",
+        )
+
+
+def test_parse_event_when_payload_contains_unsupported_json_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"payload\.callback 包含不支持的 JSON 类型。"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "invocation.completed",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {"callback": lambda: "ignored"},
             },
             path="hub.event.params",
         )
@@ -196,6 +282,44 @@ def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) ->
 
     with pytest.raises(RuntimeError):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+@pytest.mark.parametrize(
+    ("mutator",),
+    [
+        (lambda payload: payload.__setitem__("options", None),),
+        (lambda payload: payload["options"].__setitem__("ttlMs", None),),
+        (lambda payload: payload["options"].__setitem__("queueIfOffline", None),),
+        (lambda payload: payload.__setitem__("delivery", None),),
+    ],
+)
+def test_parse_invocation_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
+    payload = _invocation_payload()
+    mutator(payload)
+
+    with pytest.raises(RuntimeError):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+def test_parse_invocation_when_args_contains_unsupported_json_should_raise() -> None:
+    payload = _invocation_payload()
+    payload["args"] = {"callback": lambda: "ignored"}
+
+    with pytest.raises(RuntimeError, match=r"args\.callback 包含不支持的 JSON 类型。"):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+@pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
+def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data) -> None:
+    with pytest.raises(RuntimeError):
+        parse_callee_error(
+            {
+                "code": 1001,
+                "message": "app_error",
+                "data": data,
+            },
+            path="error.data.calleeError",
+        )
 
 
 def _app_instance_payload() -> dict[str, object]:
