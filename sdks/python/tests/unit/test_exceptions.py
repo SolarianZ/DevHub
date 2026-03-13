@@ -72,6 +72,23 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore
     assert exception.callee_error is None
 
 
+def test_devhub_rpc_exception_when_callee_error_code_is_bool_should_ignore_helper() -> None:
+    exception = DevHubRpcException(
+        code=DevHubRpcErrorCode.INVOCATION_FAILED,
+        message="invocation_failed",
+        data={
+            "invocationId": "invk-1",
+            "calleeError": {
+                "code": True,
+                "message": "app_error",
+            },
+        },
+        request_id="req-invalid-callee-error-code",
+    )
+
+    assert exception.callee_error is None
+
+
 @pytest.mark.parametrize("property_name", ["", "   ", None])
 def test_devhub_rpc_exception_when_property_name_is_blank_should_raise(property_name) -> None:
     exception = DevHubRpcException(

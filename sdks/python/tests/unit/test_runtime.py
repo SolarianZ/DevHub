@@ -142,6 +142,45 @@ def test_runtime_discovery_when_started_at_utc_is_not_utc_should_raise(tmp_path:
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_dir)))
 
 
+@pytest.mark.parametrize(
+    ("property_name", "value"),
+    [
+        ("httpBaseUrl", "http://127.0.0.1:47231/"),
+        ("httpBaseUrl", "http://192.168.1.10:47231"),
+        ("wsUrl", "ws://127.0.0.1:47231/ws/"),
+        ("wsUrl", "ws://example.com:47231/ws"),
+    ],
+)
+def test_runtime_discovery_when_runtime_url_violates_spec_should_raise(
+    tmp_path: Path,
+    property_name: str,
+    value: str,
+) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    token_file = runtime_dir / "token.txt"
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    payload[property_name] = value
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError):
+        discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_dir)))
+
+
+def test_runtime_discovery_when_token_file_is_not_absolute_should_raise(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    token_file = runtime_dir / "token.txt"
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    payload["tokenFile"] = "token.txt"
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError):
+        discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_dir)))
+
+
 @pytest.mark.parametrize("client_session_id", ["not-a-uuid", "11111111111111111111111111111111"])
 def test_client_options_when_client_session_id_invalid_should_raise(client_session_id: str) -> None:
     with pytest.raises(ValueError):

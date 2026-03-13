@@ -80,7 +80,7 @@ class DevHubRpcException(Exception):
             return None
         code = value.get("code")
         message = value.get("message")
-        if not isinstance(code, int) or not isinstance(message, str) or not message:
+        if not isinstance(code, int) or isinstance(code, bool) or not isinstance(message, str) or not message:
             return None
         data = value.get("data")
         if data is not None and not isinstance(data, dict):

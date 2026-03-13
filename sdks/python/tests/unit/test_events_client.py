@@ -100,6 +100,33 @@ async def test_events_client_with_injected_resolver_and_session_should_use_abstr
 
 
 @pytest.mark.asyncio
+async def test_events_client_subscribe_without_types_should_request_all_events() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.events.subscribe": {"ok": True, "subscriptionId": "sub-all"},
+        },
+        events=[],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+    try:
+        await client.authenticate()
+        subscription_id = await client.subscribe()
+    finally:
+        await client.close()
+
+    assert subscription_id == "sub-all"
+    assert session.requests[1]["params"] == {}
+
+
+@pytest.mark.asyncio
 async def test_events_client_before_authenticate_should_reject_read_events(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         await websocket.wait_closed()
