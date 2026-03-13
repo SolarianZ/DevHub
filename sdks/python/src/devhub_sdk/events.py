@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any, AsyncIterator
 
+from .constants import ALL_EVENT_TYPES
 from ._parsing import require_bool, require_mapping, require_str
 from ._validation import require_non_empty_string
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
@@ -88,6 +89,8 @@ class DevHubEventsClient:
             types_list = list(types)
             if any(not isinstance(item, str) or not item.strip() for item in types_list):
                 raise ValueError("types 只能包含非空字符串。")
+            if any(item not in ALL_EVENT_TYPES for item in types_list):
+                raise ValueError("types 只能包含规范定义的事件类型。")
             if types_list:
                 params["types"] = types_list
         result = await self._send_request("hub.events.subscribe", params, require_authenticated=True)

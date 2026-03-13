@@ -6,6 +6,7 @@ from devhub_sdk._parsing import (
     parse_app_definition,
     parse_app_instance,
     parse_datetime,
+    parse_event,
     parse_invocation,
     parse_launch_result,
     parse_notify_result,
@@ -166,6 +167,18 @@ def test_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> 
                 "invocationId": "request-1",
             },
             path="hub.invoke.notify.result",
+        )
+
+
+def test_parse_event_when_type_is_not_supported_should_raise() -> None:
+    with pytest.raises(RuntimeError):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "future.event",
+                "timeUtc": "2026-03-09T00:00:00Z",
+            },
+            path="hub.event.params",
         )
 
 

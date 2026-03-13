@@ -537,6 +537,32 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
 
 
 @pytest.mark.asyncio
+async def test_events_client_subscribe_when_types_contains_unknown_event_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+        },
+        events=[],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(ValueError, match="types"):
+            await client.subscribe([INVOCATION_COMPLETED, "future.event"])
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
+
+
+@pytest.mark.asyncio
 async def test_events_client_after_close_should_reject_subscribe_and_read(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()

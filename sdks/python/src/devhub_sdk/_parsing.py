@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 
+from .constants import ALL_EVENT_TYPES
 from ._validation import (
     require_app_id as validate_app_id,
     require_instance_id as validate_instance_id,
@@ -291,9 +292,12 @@ def parse_event(value: Any, *, path: str) -> DevHubEvent:
     """解析事件通知。"""
 
     root = require_mapping(value, path)
+    event_type = require_str(root, "type", path)
+    if event_type not in ALL_EVENT_TYPES:
+        raise RuntimeError(f"{path}.type 取值非法。")
     return DevHubEvent(
         subscription_id=require_str(root, "subscriptionId", path),
-        type=require_str(root, "type", path),
+        type=event_type,
         time_utc=require_datetime(root, "timeUtc", path),
         payload=root.get("payload"),
     )
