@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
@@ -36,6 +37,12 @@ from .models import (
 )
 
 _LAUNCH_STATUS_VALUES = {"started", "starting", "already_running"}
+_RFC3339_TIMESTAMP_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}"
+    r"T\d{2}:\d{2}:\d{2}"
+    r"(?:\.\d+)?"
+    r"(?:Z|[+-]\d{2}:\d{2})$"
+)
 
 
 def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
@@ -439,12 +446,17 @@ def require_datetime(root: Mapping[str, Any], name: str, path: str) -> datetime:
 def parse_datetime(value: str, path: str) -> datetime:
     """解析 ISO 8601 UTC 时间。"""
 
+    if _RFC3339_TIMESTAMP_PATTERN.fullmatch(value) is None:
+        raise RuntimeError(f"{path} 类型非法。")
+
     normalized = value.replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise RuntimeError(f"{path} 类型非法。") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise RuntimeError(f"{path} 类型非法。")
+    if parsed.utcoffset() != timedelta(0):
         raise RuntimeError(f"{path} 类型非法。")
     return parsed.astimezone(timezone.utc)
 

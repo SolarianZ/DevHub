@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from devhub_sdk._parsing import parse_app_definition, parse_app_instance, parse_invocation, parse_launch_result, parse_notify_result
+from devhub_sdk._parsing import (
+    parse_app_definition,
+    parse_app_instance,
+    parse_datetime,
+    parse_invocation,
+    parse_launch_result,
+    parse_notify_result,
+)
 
 
 def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
@@ -107,6 +114,18 @@ def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
 
     with pytest.raises(RuntimeError):
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-03-09 00:00:00Z",
+        "2026-03-09T08:00:00+08:00",
+    ],
+)
+def test_parse_datetime_when_value_is_not_rfc3339_utc_should_raise(value: str) -> None:
+    with pytest.raises(RuntimeError):
+        parse_datetime(value, "timeUtc")
 
 
 @pytest.mark.parametrize(

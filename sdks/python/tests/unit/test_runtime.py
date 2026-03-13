@@ -129,6 +129,19 @@ def test_runtime_discovery_when_started_at_utc_missing_timezone_should_raise(tmp
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_dir)))
 
 
+def test_runtime_discovery_when_started_at_utc_is_not_utc_should_raise(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    token_file = runtime_dir / "token.txt"
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    payload["startedAtUtc"] = "2026-03-09T08:00:00+08:00"
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError):
+        discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_dir)))
+
+
 @pytest.mark.parametrize("client_session_id", ["not-a-uuid", "11111111111111111111111111111111"])
 def test_client_options_when_client_session_id_invalid_should_raise(client_session_id: str) -> None:
     with pytest.raises(ValueError):
