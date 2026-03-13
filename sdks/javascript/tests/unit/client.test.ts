@@ -479,6 +479,51 @@ it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("respond 应在本地拒绝非整数 error.code", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-error-code-client",
+    runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "invk-1",
+    error: {
+      code: 1001.5,
+      message: "app_error"
+    }
+  })).rejects.toThrow("error.code 必须为整数。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond 应在本地拒绝非对象 error.data", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-error-data-shape-client",
+    runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "invk-1",
+    error: {
+      code: 1001,
+      message: "app_error",
+      data: "boom" as any
+    }
+  })).rejects.toThrow("error.data 必须为 JSON 对象。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -566,6 +611,48 @@ it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
   });
 
   await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
+});
+
+it("ping 应拒绝非整数 JSON-RPC error.code", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, undefined, {
+      code: 1.5,
+      message: "invalid_request",
+      data: {
+        reason: "bad_code"
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-jsonrpc-error-code-client",
+    runtimeDir
+  });
+
+  await expect(client.ping()).rejects.toThrow(/error\.code/i);
+});
+
+it("ping 应拒绝非对象 JSON-RPC error.data", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, undefined, {
+      code: DevHubRpcErrorCode.InvalidRequest,
+      message: "invalid_request",
+      data: "bad_data"
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-jsonrpc-error-data-client",
+    runtimeDir
+  });
+
+  await expect(client.ping()).rejects.toThrow(/error\.data/i);
 });
 
 it("notify should reject a non-object target before sending the request", async () => {

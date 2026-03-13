@@ -132,8 +132,8 @@ export function buildRpcError(payload: unknown, requestId: string): DevHubRpcErr
   }
 
   const code = payload.code;
-  if (typeof code !== "number" || Number.isNaN(code)) {
-    throw new Error("JSON-RPC error.code must be a number.");
+  if (!Number.isInteger(code)) {
+    throw new Error("JSON-RPC error.code must be an integer.");
   }
 
   const message = payload.message;
@@ -141,10 +141,15 @@ export function buildRpcError(payload: unknown, requestId: string): DevHubRpcErr
     throw new Error("JSON-RPC error.message must be a non-empty string.");
   }
 
+  const data = payload.data;
+  if (data !== undefined && !isRecord(data)) {
+    throw new Error("JSON-RPC error.data must be an object when present.");
+  }
+
   return new DevHubRpcError({
-    code,
+    code: code as number,
     message,
-    data: payload.data,
+    data,
     requestId
   });
 }

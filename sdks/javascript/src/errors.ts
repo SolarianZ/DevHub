@@ -1,7 +1,7 @@
 export interface DevHubCalleeError {
   code: number;
   message: string;
-  data?: unknown;
+  data?: Record<string, unknown>;
 }
 
 export enum DevHubRpcErrorCode {
@@ -76,14 +76,18 @@ export class DevHubRpcError extends Error {
     const code = callee.code;
     const message = callee.message;
 
-    if (typeof code !== "number" || Number.isNaN(code) || typeof message !== "string" || !message) {
+    if (!Number.isInteger(code) || typeof message !== "string" || !message.trim()) {
+      return null;
+    }
+
+    if ("data" in callee && callee.data !== undefined && !isRecord(callee.data)) {
       return null;
     }
 
     return {
-      code,
+      code: code as number,
       message,
-      data: callee.data
+      data: isRecord(callee.data) ? callee.data : undefined
     };
   }
 

@@ -54,16 +54,16 @@ export function resolveRuntimeDirectory(runtimeDirOverride?: string): string {
 
   if (platform === "win32") {
     const base = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
-    return path.resolve(base, "DevHub");
+    return path.resolve(base, "DevHub", "runtime");
   }
 
   if (platform === "darwin") {
-    return path.resolve(home, "Library", "Application Support", "DevHub");
+    return path.resolve(home, "Library", "Application Support", "DevHub", "runtime");
   }
 
   const xdgDataHome = process.env.XDG_DATA_HOME;
   const base = xdgDataHome && xdgDataHome.trim() ? xdgDataHome : path.join(home, ".local", "share");
-  return path.resolve(base, "DevHub");
+  return path.resolve(base, "DevHub", "runtime");
 }
 
 export async function discoverRuntime(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo> {
@@ -233,7 +233,7 @@ function validateWebSocketUrl(value: string, source: string): void {
 }
 
 function isLoopbackHost(host: string): boolean {
-  const normalized = host.toLowerCase();
+  const normalized = host.replace(/^\[(.*)\]$/, "$1").toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 

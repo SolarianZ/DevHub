@@ -8,9 +8,9 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 - 已提供基础模型、运行时发现与统一错误模型。
 - 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等）。
 - 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流）。
-- 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值。
+- 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`respond.error` 与 JSON-RPC `error` 结构现已按 Spec 严格要求整数 `code` 与对象型 `data`。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
-- 运行时发现现已同时支持标准运行时根目录布局（`<DEVHUB_RUNTIME_DIR>/runtime/hub.json`）与既有直接运行时目录布局（`<dir>/hub.json`）。
+- 运行时发现现已同时支持标准运行时根目录布局（`<DEVHUB_RUNTIME_DIR>/runtime/hub.json`）与既有直接运行时目录布局（`<dir>/hub.json`），并支持 `127.0.0.1`、`localhost` 与 `::1` 回环端点。
 - 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点，便于 fake transport、录制回放或自定义连接策略测试。
 
 > SDK 已内置 `ws` 回退实现，因此在 Node.js 18/19 等未提供全局 `WebSocket` 的环境中也可直接使用事件客户端。

@@ -8,7 +8,6 @@ import type {
 } from "./models.js";
 import {
   ensureInputBoolean,
-  ensureInputNumber,
   ensureJsonObject,
   ensureJsonValue,
   ensureOptionalInputBoolean,
@@ -268,13 +267,18 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   if (hasValue) {
     payload.value = ensureJsonValue(request.value, "value");
   } else {
+    const errorCode = request.error?.code;
+    if (!Number.isInteger(errorCode)) {
+      throw new Error("error.code 必须为整数。");
+    }
+
     const errorPayload: Record<string, unknown> = {
-      code: ensureInputNumber(request.error?.code, "error.code"),
+      code: errorCode,
       message: ensureRequiredInputString(request.error?.message, "error.message")
     };
 
     if (request.error?.data !== undefined) {
-      errorPayload.data = ensureJsonValue(request.error.data, "error.data");
+      errorPayload.data = ensureJsonObject(request.error.data, "error.data");
     }
 
     payload.error = errorPayload;
