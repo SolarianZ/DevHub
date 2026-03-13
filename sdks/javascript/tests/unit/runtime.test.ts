@@ -183,6 +183,27 @@ it("discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
   await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/runtimeTuning/);
 });
 
+it("discoverRuntime should reject a startedAtUtc value without an explicit timezone", async () => {
+  const runtimeDir = await createLegacyRuntimeDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/startedAtUtc/);
+});
+
 it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   const runtimeDir = await createLegacyRuntimeDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");

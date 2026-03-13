@@ -3,6 +3,7 @@ import type { JsonObject, JsonValue } from "./models.js";
 const APP_ID_REGEX = /^[a-z0-9][a-z0-9.-]*$/;
 const INSTANCE_ID_REGEX = /^[a-zA-Z0-9._:-]+$/;
 const INVOCATION_ID_REGEX = /^invk-[a-zA-Z0-9._:-]+$/;
+const RFC3339_DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
 const IDENTIFIER_MAX_LENGTH = 256;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -223,9 +224,18 @@ export function readOptionalIntAtLeast(
 
 export function readDate(payload: Record<string, unknown>, location: string, key: string): Date {
   const value = readString(payload, location, key);
+  return parseDateTimeString(value, `${location}.${key}`);
+}
+
+export function parseDateTimeString(value: string, location: string): Date {
+  const match = RFC3339_DATE_TIME_REGEX.exec(value);
+  if (!match || !hasValidDateTimeComponents(match)) {
+    throw new Error(`${location} must be an ISO-8601 date-time string.`);
+  }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(`${location}.${key} must be an ISO-8601 date string.`);
+    throw new Error(`${location} must be an ISO-8601 date-time string.`);
   }
 
   return date;
@@ -465,4 +475,59 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function hasValidDateTimeComponents(match: RegExpExecArray): boolean {
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[10] === undefined ? undefined : Number(match[10]);
+  const offsetMinute = match[11] === undefined ? undefined : Number(match[11]);
+
+  if (month < 1 || month > 12) {
+    return false;
+  }
+
+  if (day < 1 || day > daysInMonth(year, month)) {
+    return false;
+  }
+
+  if (hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+
+  if (offsetHour !== undefined && (offsetHour > 23 || offsetMinute === undefined || offsetMinute > 59)) {
+    return false;
+  }
+
+  return true;
+}
+
+function daysInMonth(year: number, month: number): number {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    default:
+      return 31;
+  }
+}
+
+function isLeapYear(year: number): boolean {
+  if (year % 400 === 0) {
+    return true;
+  }
+
+  if (year % 100 === 0) {
+    return false;
+  }
+
+  return year % 4 === 0;
 }

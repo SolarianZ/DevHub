@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { parseDateTimeString } from "./validation.js";
 
 export const RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
 
@@ -155,10 +156,7 @@ function parseHubRuntime(payload: unknown, source: string): HubRuntime {
   const tokenFile = readString(payload, "tokenFile", source);
 
   const startedAtUtcRaw = readString(payload, "startedAtUtc", source);
-  const startedAtUtc = new Date(startedAtUtcRaw);
-  if (Number.isNaN(startedAtUtc.getTime())) {
-    throw new Error(`hub.json.startedAtUtc 非法：${source}`);
-  }
+  const startedAtUtc = parseDateTimeString(startedAtUtcRaw, "hub.json.startedAtUtc");
 
   const runtimeTuning = parseRuntimeTuning(payload.runtimeTuning, source);
 

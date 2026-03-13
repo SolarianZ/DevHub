@@ -778,6 +778,25 @@ it("ping 应拒绝非对象 JSON-RPC error.data", async () => {
   await expect(client.ping()).rejects.toThrow(/error\.data/i);
 });
 
+it("ping should reject a serverTimeUtc value that is not a full date-time", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09"
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-ping-date-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.ping()).rejects.toThrow(/serverTimeUtc/i);
+});
+
 it("notify should reject a non-object target before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
