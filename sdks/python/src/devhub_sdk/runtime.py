@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import platform
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from ._json import load_json_text
 from ._parsing import parse_hub_runtime
 from .models import DevHubClientOptions, RuntimeConnectionInfo
 
@@ -33,7 +33,7 @@ class FileSystemRuntimeResolver(RuntimeResolver):
         if not hub_json_path.is_file():
             raise RuntimeError(f"未找到 hub.json：{hub_json_path}")
 
-        runtime_payload = json.loads(hub_json_path.read_text(encoding="utf-8"))
+        runtime_payload = load_json_text(hub_json_path.read_text(encoding="utf-8"), source=str(hub_json_path))
         runtime = parse_hub_runtime(runtime_payload, source=str(hub_json_path))
 
         token_path = Path(runtime.token_file)

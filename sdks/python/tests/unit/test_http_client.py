@@ -26,7 +26,7 @@ from devhub_sdk import (
 class HttpScenario:
     """HTTP 场景数据。"""
 
-    responder: Callable[[dict[str, Any]], dict[str, Any]]
+    responder: Callable[[dict[str, Any]], dict[str, Any] | str]
     requests: list[dict[str, Any]] = field(default_factory=list)
     headers: list[dict[str, str]] = field(default_factory=list)
 
@@ -171,6 +171,34 @@ def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception
         thread.join(timeout=5)
 
 
+def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_invalid_error_data_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        with pytest.raises(RuntimeError, match="error.data"):
+            client.ping()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_ping_response_with_non_standard_json_constant)
+    server, thread = _start_http_server(scenario)
+    try:
+        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+
+        with pytest.raises(RuntimeError, match="不是合法 JSON"):
+            client.ping({"value": 1})
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_list_definitions_response)
     server, thread = _start_http_server(scenario)
@@ -224,7 +252,7 @@ def _start_http_server(scenario: HttpScenario) -> tuple[ThreadingHTTPServer, thr
             scenario.headers.append({name.lower(): value for name, value in self.headers.items()})
 
             response = scenario.responder(payload)
-            body = json.dumps(response).encode("utf-8")
+            body = response.encode("utf-8") if isinstance(response, str) else json.dumps(response).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -288,6 +316,32 @@ def _unauthorized_response(request: dict[str, Any]) -> dict[str, Any]:
             "data": {"reason": "invalid_token"},
         },
     }
+
+
+def _invalid_error_data_response(request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request["id"],
+        "error": {
+            "code": -32001,
+            "message": "unauthorized",
+            "data": "invalid_token",
+        },
+    }
+
+
+def _ping_response_with_non_standard_json_constant(request: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": request["id"],
+            "result": {
+                "ok": True,
+                "serverTimeUtc": "2026-03-09T00:00:00Z",
+                "echo": request["params"]["echo"],
+            },
+        }
+    ).replace('"result": {', '"result": {"extra": NaN, ', 1)
 
 
 def _list_definitions_response(request: dict[str, Any]) -> dict[str, Any]:

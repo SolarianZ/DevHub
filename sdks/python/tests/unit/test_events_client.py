@@ -389,6 +389,35 @@ async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exc
 
 
 @pytest.mark.asyncio
+async def test_events_client_when_authenticate_response_contains_non_standard_json_constant_should_raise(
+    tmp_path: Path,
+) -> None:
+    async def handler(websocket) -> None:
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            ).replace('"result": {', '"result": {"extra": NaN, ', 1)
+        )
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        runtime_dir = _write_runtime(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        try:
+            with pytest.raises(RuntimeError, match="不是合法 JSON"):
+                await client.authenticate()
+        finally:
+            await client.close()
+
+
+@pytest.mark.asyncio
 async def test_events_client_when_ws_response_id_unknown_should_raise_protocol_error(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import websockets
 
+from ._json import load_json_text
 from ._jsonrpc import validate_response_envelope
 from ._parsing import parse_event
 from .models import DevHubClientOptions, DevHubEvent, RuntimeConnectionInfo
@@ -148,7 +149,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         if not isinstance(message, str):
             raise RuntimeError("WebSocket 消息必须为文本。")
 
-        root = json.loads(message)
+        root = load_json_text(message, source="WebSocket 消息")
         if not isinstance(root, dict):
             raise RuntimeError("WebSocket JSON-RPC 消息必须为对象。")
         if root.get("jsonrpc") != "2.0":

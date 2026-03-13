@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from ._json import load_json_text
 from ._jsonrpc import validate_response_envelope
 from .models import DevHubClientOptions, RuntimeConnectionInfo
 
@@ -64,5 +65,5 @@ class UrllibJsonRpcHttpTransport(JsonRpcHttpTransport):
             body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"HTTP 请求失败：{exc.code} {exc.reason}，响应体：{body}") from exc
 
-        root = json.loads(body)
+        root = load_json_text(body, source="HTTP 响应体")
         return validate_response_envelope(root, request_id)

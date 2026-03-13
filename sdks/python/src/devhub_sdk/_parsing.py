@@ -444,8 +444,8 @@ def parse_datetime(value: str, path: str) -> datetime:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise RuntimeError(f"{path} 类型非法。") from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise RuntimeError(f"{path} 类型非法。")
     return parsed.astimezone(timezone.utc)
 
 

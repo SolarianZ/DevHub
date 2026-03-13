@@ -32,7 +32,15 @@ def validate_response_envelope(root: Any, request_id: str) -> dict[str, Any]:
             raise RuntimeError("JSON-RPC error.code 非法。")
         if not isinstance(message, str) or not message:
             raise RuntimeError("JSON-RPC error.message 非法。")
-        raise DevHubRpcException(code=code, message=message, data=error.get("data"), request_id=request_id)
+        data = error.get("data")
+        if data is not None and not isinstance(data, Mapping):
+            raise RuntimeError("JSON-RPC error.data 必须为对象。")
+        raise DevHubRpcException(
+            code=code,
+            message=message,
+            data=None if data is None else dict(data),
+            request_id=request_id,
+        )
 
     result = root.get("result")
     if not isinstance(result, dict):
