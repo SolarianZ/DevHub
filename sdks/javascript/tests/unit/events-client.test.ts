@@ -65,6 +65,73 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   expect(session?.disposedReason).toBe("client_dispose");
 });
 
+it("authenticate should support WS ping and apps queries", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-ws-rpc-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+
+    const ping = await client.ping({
+      channel: "ws"
+    });
+    const definitions = await client.listDefinitions();
+    const definition = await client.getDefinition("test.launch.app");
+    const instances = await client.listInstances({
+      appId: "test.launch.app",
+      scope: null,
+      includeOffline: false
+    });
+
+    expect(ping.echo).toEqual({
+      channel: "ws"
+    });
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0].appId).toBe("test.launch.app");
+    expect(definition.displayName).toBe("Test Launch App");
+    expect(instances).toHaveLength(1);
+    expect(instances[0].instanceId).toBe("inst-1");
+    expect(session?.requests.map((item) => item.method)).toEqual([
+      "hub.ws.authenticate",
+      "hub.ping",
+      "hub.apps.listDefinitions",
+      "hub.apps.getDefinition",
+      "hub.apps.listInstances"
+    ]);
+    expect(session?.requests[1]?.params).toEqual({
+      echo: {
+        channel: "ws"
+      }
+    });
+    expect(session?.requests[3]?.params).toEqual({
+      appId: "test.launch.app"
+    });
+    expect(session?.requests[4]?.params).toEqual({
+      appId: "test.launch.app",
+      scope: null,
+      includeOffline: false
+    });
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
@@ -116,6 +183,10 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   });
 
   await expect(client.subscribe()).rejects.toThrow();
+  await expect(client.ping()).rejects.toThrow();
+  await expect(client.listDefinitions()).rejects.toThrow();
+  await expect(client.getDefinition("test.app")).rejects.toThrow();
+  await expect(client.listInstances()).rejects.toThrow();
   expect(() => client.readEvents()).toThrow();
 });
 
@@ -273,9 +344,9 @@ it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
     });
 
     const authenticateRequestPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
-      server.once("connection", (socket) => {
+      server.once("connection", (socket: any) => {
         socket.once("error", reject);
-        socket.once("message", (data) => {
+        socket.once("message", (data: Buffer) => {
           const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
           socket.send(JSON.stringify({
             jsonrpc: "2.0",
@@ -370,7 +441,7 @@ function createConnectionInfo() {
   };
 }
 
-async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
+async function waitForWebSocketServer(server: any): Promise<void> {
   if (server.address()) {
     return;
   }
@@ -394,13 +465,13 @@ async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
   });
 }
 
-async function closeWebSocketServer(server: WebSocketServer): Promise<void> {
+async function closeWebSocketServer(server: any): Promise<void> {
   for (const client of server.clients) {
     client.terminate();
   }
 
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
+    server.close((error: Error | undefined) => {
       if (error) {
         reject(error);
         return;
@@ -445,6 +516,60 @@ class FakeInjectedWsSession {
       return {
         ok: true,
         subscriptionId: "sub-injected"
+      };
+    }
+
+    if (method === "hub.ping") {
+      return {
+        ok: true,
+        serverTimeUtc: "2026-03-09T00:00:00Z",
+        echo: params?.echo
+      };
+    }
+
+    if (method === "hub.apps.listDefinitions") {
+      return {
+        ok: true,
+        definitions: [
+          {
+            appId: "test.launch.app",
+            displayName: "Test Launch App",
+            description: null
+          }
+        ]
+      };
+    }
+
+    if (method === "hub.apps.getDefinition") {
+      return {
+        ok: true,
+        definition: {
+          appId: "test.launch.app",
+          displayName: "Test Launch App",
+          launch: {
+            exePath: process.execPath
+          }
+        }
+      };
+    }
+
+    if (method === "hub.apps.listInstances") {
+      return {
+        ok: true,
+        instances: [
+          {
+            instanceId: "inst-1",
+            appId: "test.launch.app",
+            scope: null,
+            pid: 12345,
+            registeredAtUtc: "2026-03-09T00:00:00Z",
+            lastSeenUtc: "2026-03-09T00:00:01Z",
+            invoke: {
+              poll: true,
+              respond: true
+            }
+          }
+        ]
       };
     }
 

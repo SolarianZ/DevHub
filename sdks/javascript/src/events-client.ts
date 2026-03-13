@@ -4,17 +4,31 @@ import {
   validateClientOptions
 } from "./models.js";
 import type {
+  AppDefinition,
+  AppInstance,
   DevHubClientOptions,
   DevHubEvent,
+  JsonValue,
+  ListInstancesRequest,
+  PingResult,
   NormalizedDevHubClientOptions
 } from "./models.js";
 import {
   parseAuthenticateResult,
+  parseDefinitionResult,
+  parseDefinitionsResult,
   parseEvent,
+  parseInstancesResult,
+  parsePingResult,
   parseSubscriptionResult,
   parseUnsubscribeResult
 } from "./parsers.js";
+import {
+  buildGetDefinitionParams,
+  buildListInstancesParams
+} from "./payloads.js";
 import { FileSystemRuntimeResolver } from "./runtime.js";
+import { ensureJsonValue } from "./validation.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
 
@@ -111,6 +125,31 @@ export class DevHubEventsClient {
   async subscribe(types?: string[]): Promise<string> {
     this.ensureAuthenticated();
     return parseSubscriptionResult(await this.session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
+  }
+
+  async ping(echo?: JsonValue): Promise<PingResult> {
+    this.ensureAuthenticated();
+    const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
+    return parsePingResult(await this.session.sendRequest("hub.ping", params));
+  }
+
+  async listDefinitions(): Promise<AppDefinition[]> {
+    this.ensureAuthenticated();
+    return parseDefinitionsResult(await this.session.sendRequest("hub.apps.listDefinitions"));
+  }
+
+  async getDefinition(appId: string): Promise<AppDefinition> {
+    this.ensureAuthenticated();
+    return parseDefinitionResult(
+      await this.session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(appId))
+    );
+  }
+
+  async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
+    this.ensureAuthenticated();
+    return parseInstancesResult(
+      await this.session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
+    );
   }
 
   async unsubscribe(subscriptionId: string): Promise<void> {

@@ -72,6 +72,56 @@ it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
   await eventsClient.dispose();
 });
 
+it("authenticated WS should support ping and apps queries", async () => {
+  const eventsClient = await DevHubEventsClient.fromRuntime({
+    clientId: "events-query-client",
+    runtimeDir: host.runtimeDirectory
+  });
+
+  const httpClient = await DevHubClient.fromRuntime({
+    clientId: "events-query-http-client",
+    runtimeDir: host.runtimeDirectory
+  });
+
+  try {
+    await eventsClient.authenticate();
+
+    const ping = await eventsClient.ping({
+      channel: "ws"
+    });
+    expect(ping.ok).toBe(true);
+    expect(ping.echo).toEqual({
+      channel: "ws"
+    });
+
+    const definitions = await eventsClient.listDefinitions();
+    expect(definitions.some((definition) => definition.appId === "events.flow.app")).toBe(true);
+
+    const definition = await eventsClient.getDefinition("events.flow.app");
+    expect(definition.displayName).toBe("events.flow.app");
+
+    await httpClient.registerInstance({
+      instanceId: "events-query-inst-1",
+      appId: "events.flow.app",
+      pid: process.pid,
+      invoke: {
+        poll: true,
+        respond: true
+      }
+    });
+
+    const instances = await eventsClient.listInstances({
+      appId: "events.flow.app"
+    });
+    expect(instances.some((instance) => instance.instanceId === "events-query-inst-1")).toBe(true);
+
+    await httpClient.unregisterInstance("events-query-inst-1");
+  } finally {
+    await httpClient.dispose();
+    await eventsClient.dispose();
+  }
+});
+
 it("订阅未知事件类型应返回 invalid_params", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-invalid-client",
