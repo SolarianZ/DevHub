@@ -101,11 +101,12 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
 
     root = require_mapping(value, path)
     capabilities_value = root.get("capabilities")
-    capabilities = None
+    capabilities = AppCapabilities(rpc=True)
     if capabilities_value is not None:
         capabilities_root = require_mapping(capabilities_value, f"{path}.capabilities")
+        rpc = optional_bool(capabilities_root.get("rpc"), f"{path}.capabilities.rpc")
         capabilities = AppCapabilities(
-            rpc=optional_bool(capabilities_root.get("rpc"), f"{path}.capabilities.rpc"),
+            rpc=True if rpc is None else rpc,
             events=optional_bool(capabilities_root.get("events"), f"{path}.capabilities.events"),
         )
 
@@ -114,7 +115,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     if launch_value is not None:
         launch_root = require_mapping(launch_value, f"{path}.launch")
         launch = LaunchConfiguration(
-            exe_path=require_str(launch_root, "exePath", f"{path}.launch"),
+            exe_path=require_string(launch_root, "exePath", f"{path}.launch"),
             args_template=optional_str(launch_root.get("argsTemplate"), f"{path}.launch.argsTemplate"),
             working_directory=optional_str(launch_root.get("workingDirectory"), f"{path}.launch.workingDirectory"),
             dedupe_key_template=optional_str(launch_root.get("dedupeKeyTemplate"), f"{path}.launch.dedupeKeyTemplate"),
@@ -122,7 +123,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
 
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        display_name=require_str(root, "displayName", path),
+        display_name=require_string(root, "displayName", path),
         description=optional_str(root.get("description"), f"{path}.description"),
         capabilities=capabilities,
         launch=launch,
@@ -349,6 +350,13 @@ def require_str(root: Mapping[str, Any], name: str, path: str) -> str:
 
     value = root.get(name)
     if not isinstance(value, str) or not value:
+        raise RuntimeError(f"{path}.{name} 类型非法。")
+    return value
+
+
+def require_string(root: Mapping[str, Any], name: str, path: str) -> str:
+    value = root.get(name)
+    if not isinstance(value, str):
         raise RuntimeError(f"{path}.{name} 类型非法。")
     return value
 

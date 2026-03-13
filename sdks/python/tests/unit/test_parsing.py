@@ -28,6 +28,53 @@ def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
         )
 
 
+def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "displayName": "Test App",
+        },
+        path="app.definition",
+    )
+
+    assert definition.capabilities is not None
+    assert definition.capabilities.rpc is True
+    assert definition.capabilities.events is None
+
+
+def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_default() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "displayName": "Test App",
+            "capabilities": {
+                "events": False,
+            },
+        },
+        path="app.definition",
+    )
+
+    assert definition.capabilities is not None
+    assert definition.capabilities.rpc is True
+    assert definition.capabilities.events is False
+
+
+def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "displayName": "Test App",
+            "launch": {
+                "exePath": "",
+            },
+        },
+        path="app.definition",
+    )
+
+    assert definition.launch is not None
+    assert definition.launch.exe_path == ""
+
+
 def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_launch_result(

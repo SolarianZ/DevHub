@@ -17,8 +17,6 @@ _SENTINEL = object()
 
 
 class JsonRpcWsSession(ABC):
-    """WebSocket JSON-RPC 会话抽象。"""
-
     @abstractmethod
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         """发送一条 JSON-RPC 请求并返回结果载荷。"""
@@ -33,8 +31,6 @@ class JsonRpcWsSession(ABC):
 
 
 class WebSocketJsonRpcSession(JsonRpcWsSession):
-    """基于 websockets 的默认 WebSocket JSON-RPC 会话。"""
-
     def __init__(
         self,
         connection_info: RuntimeConnectionInfo,
@@ -64,7 +60,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
 
-        payload_dict = {
+        payload_dict: dict[str, Any] = {
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,
@@ -161,7 +157,9 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         method = root.get("method")
         if method is not None:
             if method != "hub.event":
-                raise RuntimeError("WebSocket 收到未知通知。")
+                if "id" in root or "result" in root or "error" in root:
+                    raise RuntimeError("未知的 WebSocket 请求不受支持。")
+                return
             if "id" in root:
                 raise RuntimeError("hub.event 通知不允许包含 id。")
             if "result" in root or "error" in root:
