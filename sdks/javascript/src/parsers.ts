@@ -13,12 +13,16 @@ import type {
 } from "./models.js";
 import {
   ensureRecord,
+  readAppId,
   readArray,
   readBoolean,
   readDate,
+  readInstanceId,
+  readInvocationId,
   readNumber,
   readObject,
   readOptionalBoolean,
+  readOptionalInstanceIdOrNull,
   readOptionalIntAtLeast,
   readOptionalString,
   readOptionalStringOrNull,
@@ -90,7 +94,11 @@ export function parseLaunchResult(payload: unknown): LaunchResult {
   }
 
   const pidValue = record.pid;
-  if (pidValue !== undefined && pidValue !== null && (typeof pidValue !== "number" || Number.isNaN(pidValue))) {
+  if (
+    pidValue !== undefined
+    && pidValue !== null
+    && (typeof pidValue !== "number" || Number.isNaN(pidValue) || !Number.isInteger(pidValue) || pidValue < 1)
+  ) {
     throw new Error("hub.apps.launch.result.pid is invalid.");
   }
 
@@ -107,7 +115,7 @@ export function parseNotifyResult(payload: unknown): NotifyResult {
   ensureOk(record, "hub.invoke.notify.result");
   return {
     ok: true,
-    invocationId: readString(record, "hub.invoke.notify.result", "invocationId")
+    invocationId: readInvocationId(record, "hub.invoke.notify.result", "invocationId")
   };
 }
 
@@ -120,7 +128,7 @@ export function parseRequestResult(payload: unknown): RequestResult {
 
   return {
     ok: true,
-    invocationId: readString(record, "hub.invoke.request.result", "invocationId"),
+    invocationId: readInvocationId(record, "hub.invoke.request.result", "invocationId"),
     value: record.value as JsonValue
   };
 }
@@ -166,7 +174,7 @@ export function parseUnsubscribeResult(payload: unknown): void {
 
 export function parseAppDefinition(payload: unknown, location: string): AppDefinition {
   const record = ensureRecord(payload, location);
-  const appId = readString(record, location, "appId");
+  const appId = readAppId(record, location, "appId");
   const displayName = readString(record, location, "displayName");
   const description = readOptionalString(record, location, "description");
 
@@ -209,8 +217,8 @@ export function parseAppInstance(payload: unknown, location: string): AppInstanc
   }
 
   return {
-    instanceId: readString(record, location, "instanceId"),
-    appId: readString(record, location, "appId"),
+    instanceId: readInstanceId(record, location, "instanceId"),
+    appId: readAppId(record, location, "appId"),
     scope: readOptionalStringOrNull(record, location, "scope"),
     pid: readPositiveInt(record, location, "pid"),
     registeredAtUtc: readDate(record, location, "registeredAtUtc"),
@@ -253,11 +261,11 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   }
 
   return {
-    invocationId: readString(record, location, "invocationId"),
-    appId: readString(record, location, "appId"),
+    invocationId: readInvocationId(record, location, "invocationId"),
+    appId: readAppId(record, location, "appId"),
     target: {
       scope: readOptionalStringOrNull(targetPayload, `${location}.target`, "scope"),
-      instanceId: readOptionalStringOrNull(targetPayload, `${location}.target`, "instanceId")
+      instanceId: readOptionalInstanceIdOrNull(targetPayload, `${location}.target`, "instanceId")
     },
     method: readString(record, location, "method"),
     args: record.args as JsonValue | undefined,

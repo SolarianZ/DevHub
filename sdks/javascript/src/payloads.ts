@@ -7,7 +7,10 @@ import type {
   RespondRequest
 } from "./models.js";
 import {
+  ensureAppId,
   ensureInputBoolean,
+  ensureInstanceId,
+  ensureInvocationId,
   ensureJsonObject,
   ensureJsonValue,
   ensureOptionalInputBoolean,
@@ -21,7 +24,7 @@ import {
 
 export function buildGetDefinitionParams(appId: string): Record<string, unknown> {
   return {
-    appId: ensureRequiredInputString(appId, "appId")
+    appId: ensureAppId(appId, "appId")
   };
 }
 
@@ -30,8 +33,8 @@ export function buildRegisterInstanceParams(instance: AppInstanceRegistration): 
     throw new Error("instance cannot be empty.");
   }
 
-  const instanceId = ensureRequiredInputString(instance.instanceId, "instanceId");
-  const appId = ensureRequiredInputString(instance.appId, "appId");
+  const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
+  const appId = ensureAppId(instance.appId, "appId");
   const scope = ensureOptionalInputStringOrNull(instance.scope, "scope");
 
   if (!instance.invoke) {
@@ -70,13 +73,13 @@ export function buildRegisterInstanceParams(instance: AppInstanceRegistration): 
 
 export function buildHeartbeatParams(instanceId: string): Record<string, unknown> {
   return {
-    instanceId: ensureRequiredInputString(instanceId, "instanceId")
+    instanceId: ensureInstanceId(instanceId, "instanceId")
   };
 }
 
 export function buildUnregisterParams(instanceId: string): Record<string, unknown> {
   return {
-    instanceId: ensureRequiredInputString(instanceId, "instanceId")
+    instanceId: ensureInstanceId(instanceId, "instanceId")
   };
 }
 
@@ -86,7 +89,8 @@ export function buildListInstancesParams(request?: ListInstancesRequest): Record
   }
 
   const payload: Record<string, unknown> = {};
-  const appId = ensureOptionalInputString(request.appId, "appId", false);
+  const appIdRaw = ensureOptionalInputString(request.appId, "appId", false);
+  const appId = appIdRaw === undefined ? undefined : ensureAppId(appIdRaw, "appId");
   if (appId !== undefined) {
     payload.appId = appId;
   }
@@ -114,9 +118,9 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
     throw new Error("request cannot be empty.");
   }
 
-  const appId = ensureRequiredInputString(request.appId, "appId");
+  const appId = ensureAppId(request.appId, "appId");
   const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
-  const dedupeKey = ensureOptionalInputStringOrNull(request.dedupeKey, "dedupeKey");
+  const dedupeKey = ensureOptionalInputString(request.dedupeKey, "dedupeKey", false);
   const waitForRegisterMs = ensureOptionalInputIntegerAtLeast(
     request.waitForRegisterMs,
     "waitForRegisterMs",
@@ -145,18 +149,21 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
     throw new Error("request cannot be empty.");
   }
 
-  const appId = ensureRequiredInputString(request.appId, "appId");
+  const appId = ensureAppId(request.appId, "appId");
   const method = ensureRequiredInputString(request.method, "method");
   const target = ensureOptionalInputRecord(request.target, "target");
   const options = ensureOptionalInputRecord(request.options, "options");
   const targetScope = ensureOptionalInputStringOrNull(target?.scope, "target.scope");
-  const targetInstanceId = ensureOptionalInputString(
+  const targetInstanceIdRaw = ensureOptionalInputString(
     target?.instanceId,
     "target.instanceId",
     false,
     "target.instanceId cannot be blank.",
     true
   );
+  const targetInstanceId = targetInstanceIdRaw === undefined || targetInstanceIdRaw === null
+    ? targetInstanceIdRaw
+    : ensureInstanceId(targetInstanceIdRaw, "target.instanceId");
 
   const ttlMs = ensureOptionalInputIntegerAtLeast(
     options?.ttlMs,
@@ -223,7 +230,7 @@ export function buildPollParams(request: PollRequest): Record<string, unknown> {
     throw new Error("request cannot be empty.");
   }
 
-  const instanceId = ensureRequiredInputString(request.instanceId, "instanceId");
+  const instanceId = ensureInstanceId(request.instanceId, "instanceId");
   const maxCount = ensureOptionalInputIntegerInRange(
     request.maxCount,
     "maxCount",
@@ -250,8 +257,8 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
     throw new Error("request cannot be empty.");
   }
 
-  const instanceId = ensureRequiredInputString(request.instanceId, "instanceId");
-  const invocationId = ensureRequiredInputString(request.invocationId, "invocationId");
+  const instanceId = ensureInstanceId(request.instanceId, "instanceId");
+  const invocationId = ensureInvocationId(request.invocationId, "invocationId");
 
   const hasValue = request.value !== undefined;
   const hasError = request.error !== undefined;

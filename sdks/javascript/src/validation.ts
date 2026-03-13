@@ -1,5 +1,10 @@
 import type { JsonObject, JsonValue } from "./models.js";
 
+const APP_ID_REGEX = /^[a-z0-9][a-z0-9.-]*$/;
+const INSTANCE_ID_REGEX = /^[a-zA-Z0-9._:-]+$/;
+const INVOCATION_ID_REGEX = /^invk-[a-zA-Z0-9._:-]+$/;
+const IDENTIFIER_MAX_LENGTH = 256;
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -59,6 +64,50 @@ export function readString(payload: Record<string, unknown>, location: string, k
   const value = payload[key];
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${location}.${key} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+export function readAppId(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readString(payload, location, key);
+  if (!APP_ID_REGEX.test(value)) {
+    throw new Error(`${location}.${key} must match ^[a-z0-9][a-z0-9.-]*$.`);
+  }
+
+  return value;
+}
+
+export function readInstanceId(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readString(payload, location, key);
+  if (value.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(value)) {
+    throw new Error(`${location}.${key} must be a valid instance id.`);
+  }
+
+  return value;
+}
+
+export function readInvocationId(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readString(payload, location, key);
+  if (value.length > IDENTIFIER_MAX_LENGTH || !INVOCATION_ID_REGEX.test(value)) {
+    throw new Error(`${location}.${key} must be a valid invocation id.`);
+  }
+
+  return value;
+}
+
+export function readOptionalInstanceIdOrNull(
+  payload: Record<string, unknown>,
+  location: string,
+  key: string
+): string | null | undefined {
+  const value = readOptionalStringOrNull(payload, location, key);
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  if (value.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(value)) {
+    throw new Error(`${location}.${key} must be a valid instance id.`);
   }
 
   return value;
@@ -190,6 +239,33 @@ export function ensureRequiredInputString(value: unknown, propertyName: string):
   return value;
 }
 
+export function ensureAppId(value: unknown, propertyName: string): string {
+  const parsed = ensureRequiredInputString(value, propertyName);
+  if (!APP_ID_REGEX.test(parsed)) {
+    throw new Error(`${propertyName} 必须匹配 ^[a-z0-9][a-z0-9.-]*$。`);
+  }
+
+  return parsed;
+}
+
+export function ensureInstanceId(value: unknown, propertyName: string): string {
+  const parsed = ensureRequiredInputString(value, propertyName);
+  if (parsed.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(parsed)) {
+    throw new Error(`${propertyName} 必须是长度不超过 256 的有效实例 ID。`);
+  }
+
+  return parsed;
+}
+
+export function ensureInvocationId(value: unknown, propertyName: string): string {
+  const parsed = ensureRequiredInputString(value, propertyName);
+  if (parsed.length > IDENTIFIER_MAX_LENGTH || !INVOCATION_ID_REGEX.test(parsed)) {
+    throw new Error(`${propertyName} 必须是有效的 invocationId。`);
+  }
+
+  return parsed;
+}
+
 export function ensureOptionalInputString(
   value: unknown,
   propertyName: string,
@@ -248,7 +324,7 @@ export function ensureInputBoolean(value: unknown, propertyName: string): boolea
 }
 
 export function ensureOptionalInputBoolean(value: unknown, propertyName: string): boolean | undefined {
-  if (value === undefined || value === null) {
+  if (value === undefined) {
     return undefined;
   }
 
@@ -269,7 +345,7 @@ export function ensureOptionalInputIntegerAtLeast(
   minimumValue: number,
   errorMessage: string
 ): number | undefined {
-  if (value === undefined || value === null) {
+  if (value === undefined) {
     return undefined;
   }
 
@@ -287,7 +363,7 @@ export function ensureOptionalInputIntegerInRange(
   maximumValue: number,
   errorMessage: string
 ): number | undefined {
-  if (value === undefined || value === null) {
+  if (value === undefined) {
     return undefined;
   }
 

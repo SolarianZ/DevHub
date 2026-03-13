@@ -323,6 +323,44 @@ it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("getDefinition should reject an invalid appId before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-appid-client",
+    runtimeDir
+  });
+
+  await expect(client.getDefinition("Invalid.App")).rejects.toThrow(/appId/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("registerInstance should reject an invalid instanceId before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-register-instanceid-client",
+    runtimeDir
+  });
+
+  await expect(client.registerInstance({
+    instanceId: "bad id",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  })).rejects.toThrow(/instanceId/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("notify 应在本地校验 target.instanceId 类型", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
@@ -344,6 +382,24 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("launch should reject null waitForRegisterMs before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-launch-null-wait-client",
+    runtimeDir
+  });
+
+  await expect(client.launch({
+    appId: "test.app",
+    waitForRegisterMs: null as unknown as number
+  })).rejects.toThrow(/waitForRegisterMs/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("poll 应在本地校验 waitMs 为整数", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
@@ -358,6 +414,27 @@ it("poll 应在本地校验 waitMs 为整数", async () => {
     instanceId: "inst-1",
     waitMs: 1.5 as unknown as number
   })).rejects.toThrow("waitMs 必须为大于等于 0 的整数。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("request should reject null queueIfOffline before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-request-null-bool-client",
+    runtimeDir
+  });
+
+  await expect(client.request({
+    appId: "test.app",
+    method: "test.request",
+    options: {
+      queueIfOffline: null as unknown as boolean
+    }
+  })).rejects.toThrow(/queueIfOffline/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -386,6 +463,27 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
       message: "app_error"
     }
   })).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond should reject an invalid invocationId before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-invocationid-client",
+    runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    invocationId: "bad-id",
+    value: {
+      ok: true
+    }
+  })).rejects.toThrow(/invocationId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -452,6 +550,31 @@ it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
   })).rejects.toThrow("args[0] 不能为数组空洞。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("request should reject an invalid invocationId in a success payload", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      invocationId: "bad-id",
+      value: {
+        ok: true
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-request-result-validation-client",
+    runtimeDir
+  });
+
+  await expect(client.request({
+    appId: "test.app",
+    method: "test.request"
+  })).rejects.toThrow(/invocationId/);
 });
 
 it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
