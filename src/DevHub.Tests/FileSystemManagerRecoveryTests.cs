@@ -11,6 +11,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public sealed class FileSystemManagerRecoveryTests : IDisposable
 {
+    private const string DefaultHubVersion = "1.0.1-test";
     private readonly string _tempDirectory;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;
@@ -76,7 +77,11 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, _definitionsDirectory);
         using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, _logsDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve(_definitionsDirectory));
+        var manager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            RuntimePathOptions.Resolve(_definitionsDirectory),
+            RuntimeTuningOptions.Default,
+            DefaultHubVersion);
         _ = manager.GetToken();
 
         var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
@@ -89,6 +94,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
 
         Assert.True(File.Exists(hubJsonPath));
         using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        Assert.Equal(DefaultHubVersion, document.RootElement.GetProperty("hubVersion").GetString());
         Assert.Equal("http://127.0.0.1:47999", document.RootElement.GetProperty("httpBaseUrl").GetString());
         Assert.Equal("ws://127.0.0.1:47999/ws", document.RootElement.GetProperty("wsUrl").GetString());
     }

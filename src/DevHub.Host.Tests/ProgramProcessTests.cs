@@ -36,6 +36,9 @@ public sealed class ProgramProcessTests : IDisposable
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(hubJsonPath));
         Assert.Equal(
+            HostVersionProvider.ResolveHubVersion(typeof(Program).Assembly),
+            document.RootElement.GetProperty("hubVersion").GetString());
+        Assert.Equal(
             Path.Combine(context.RuntimeDirectory, "token.txt"),
             document.RootElement.GetProperty("tokenFile").GetString());
         Assert.StartsWith(

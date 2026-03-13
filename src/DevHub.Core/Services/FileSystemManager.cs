@@ -6,6 +6,8 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DevHub.Core.Services;
 
@@ -16,6 +18,11 @@ public class FileSystemManager
 {
     private const int HubJsonReplaceMaxRetryCount = 40;
     private static readonly TimeSpan HubJsonReplaceRetryDelay = TimeSpan.FromMilliseconds(50);
+    private static readonly JsonSerializerOptions HubJsonSerializerOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly ILogger<FileSystemManager> _logger;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
@@ -27,6 +34,7 @@ public class FileSystemManager
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
     private readonly DateTime _sessionStartedAtUtc;
+    private readonly string? _defaultHubVersion;
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
     private bool _sessionTokenInitialized;
@@ -38,7 +46,7 @@ public class FileSystemManager
     /// <param name="logger">日志记录器。</param>
     /// <param name="runtimePathOptions">运行时路径选项。</param>
     public FileSystemManager(ILogger<FileSystemManager> logger, RuntimePathOptions runtimePathOptions)
-        : this(logger, runtimePathOptions, RuntimeTuningOptions.Default)
+        : this(logger, runtimePathOptions, RuntimeTuningOptions.Default, defaultHubVersion: null)
     {
     }
 
@@ -51,7 +59,8 @@ public class FileSystemManager
     public FileSystemManager(
         ILogger<FileSystemManager> logger,
         RuntimePathOptions runtimePathOptions,
-        RuntimeTuningOptions runtimeTuningOptions)
+        RuntimeTuningOptions runtimeTuningOptions,
+        string? defaultHubVersion = null)
     {
         _logger = logger;
         _runtimeTuningOptions = runtimeTuningOptions;
@@ -63,6 +72,7 @@ public class FileSystemManager
         _tokenFilePath = runtimePathOptions.TokenFilePath;
         _hubJsonPath = runtimePathOptions.HubJsonPath;
         _sessionStartedAtUtc = DateTime.UtcNow;
+        _defaultHubVersion = NormalizeHubVersion(defaultHubVersion);
     }
 
     /// <summary>
@@ -232,9 +242,10 @@ public class FileSystemManager
     public void WriteHubJson(int port, string? hubVersion = null)
     {
         var tempPath = _hubJsonPath + ".tmp";
+        var effectiveHubVersion = NormalizeHubVersion(hubVersion) ?? _defaultHubVersion;
         try
         {
-            _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, hubVersion);
+            _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, effectiveHubVersion);
 
             Directory.CreateDirectory(_runtimePath);
             _ = GetToken();
@@ -242,7 +253,7 @@ public class FileSystemManager
             var hubRuntime = new HubRuntime
             {
                 ProtocolVersion = 1,
-                HubVersion = hubVersion,
+                HubVersion = effectiveHubVersion,
                 Pid = Environment.ProcessId,
                 HttpBaseUrl = $"http://127.0.0.1:{port}",
                 WsUrl = $"ws://127.0.0.1:{port}/ws",
@@ -256,10 +267,7 @@ public class FileSystemManager
                 }
             };
 
-            File.WriteAllText(tempPath, System.Text.Json.JsonSerializer.Serialize(hubRuntime, new System.Text.Json.JsonSerializerOptions
-            {
-                WriteIndented = true
-            }));
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(hubRuntime, HubJsonSerializerOptions));
 
             ReplaceHubJsonAtomically(tempPath);
             EnsureCurrentUserOnlyAccess(_hubJsonPath);
@@ -327,6 +335,13 @@ public class FileSystemManager
         {
             _logger.LogWarning(cleanupException, "删除临时 hub.json 文件失败: {Path}", tempPath);
         }
+    }
+
+    private static string? NormalizeHubVersion(string? hubVersion)
+    {
+        return string.IsNullOrWhiteSpace(hubVersion)
+            ? null
+            : hubVersion.Trim();
     }
 
     /// <summary>

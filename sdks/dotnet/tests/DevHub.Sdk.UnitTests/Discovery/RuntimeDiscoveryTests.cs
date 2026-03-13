@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
@@ -9,6 +10,11 @@ namespace DevHub.Sdk.UnitTests.Discovery;
 /// </summary>
 public sealed class RuntimeDiscoveryTests : IDisposable
 {
+    private static readonly JsonSerializerOptions HubJsonSerializerOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly string _tempRoot;
 
     public RuntimeDiscoveryTests()
@@ -26,6 +32,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         await WriteHubJsonAsync(runtimeDir, new HubRuntime
         {
             ProtocolVersion = 1,
+            HubVersion = "1.0.1",
             Pid = 12345,
             HttpBaseUrl = "http://127.0.0.1:47231",
             WsUrl = "ws://127.0.0.1:47231/ws",
@@ -46,9 +53,45 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Equal("token-1", connectionInfo.Token);
+        Assert.Equal("1.0.1", connectionInfo.Runtime.HubVersion);
         Assert.Equal("http://127.0.0.1:47231", connectionInfo.Runtime.HttpBaseUrl);
         Assert.Equal("ws://127.0.0.1:47231/ws", connectionInfo.Runtime.WsUrl);
         Assert.Equal(tokenFile, connectionInfo.Runtime.TokenFile);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("123")]
+    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenHubVersionIsNotString_ShouldThrowInvalidOperationException(string hubVersionLiteral)
+    {
+        var runtimeDir = CreateRuntimeDirectory();
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-1");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(runtimeDir, "hub.json"),
+            $$"""
+            {
+              "protocolVersion": 1,
+              "hubVersion": {{hubVersionLiteral}},
+              "pid": 12345,
+              "httpBaseUrl": "http://127.0.0.1:47231",
+              "wsUrl": "ws://127.0.0.1:47231/ws",
+              "tokenFile": "{{tokenFile.Replace("\\", "\\\\")}}",
+              "startedAtUtc": "2026-03-09T00:00:00Z",
+              "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 30,
+                "launchDedupeWindowSeconds": 30
+              }
+            }
+            """);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            RuntimeDir = runtimeDir
+        }, CancellationToken.None));
     }
 
     [Theory]
@@ -204,7 +247,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
 
     private static Task WriteHubJsonAsync(string runtimeDir, HubRuntime runtime)
     {
-        return File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), JsonSerializer.Serialize(runtime));
+        return File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), JsonSerializer.Serialize(runtime, HubJsonSerializerOptions));
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

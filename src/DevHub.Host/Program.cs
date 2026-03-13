@@ -104,6 +104,7 @@ public class Program
         try
         {
             Log.Information("DevHub 启动初始化...");
+            var hubVersion = HostVersionProvider.ResolveHubVersion();
 
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -115,6 +116,12 @@ public class Program
             builder.Services.AddAuthorization();
             builder.Services.AddOpenApi();
             builder.Services.AddDevHubCore(runtimePathOptions.DefinitionsPath);
+            builder.Services.AddSingleton<FileSystemManager>(sp =>
+                new FileSystemManager(
+                    sp.GetRequiredService<ILogger<FileSystemManager>>(),
+                    sp.GetRequiredService<RuntimePathOptions>(),
+                    sp.GetRequiredService<RuntimeTuningOptions>(),
+                    hubVersion));
             builder.Services.AddSingleton<HostBootstrapper>();
             builder.Services.AddSingleton<RpcHttpEndpointHandler>();
             builder.Services.AddSingleton<WebSocketSessionHandler>();

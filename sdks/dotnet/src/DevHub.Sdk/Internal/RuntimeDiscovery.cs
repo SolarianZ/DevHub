@@ -35,7 +35,10 @@ internal static class RuntimeDiscovery
         cancellationToken.ThrowIfCancellationRequested();
 
         await using var hubJsonStream = File.OpenRead(hubJsonPath);
-        var runtime = await JsonSerializer.DeserializeAsync<HubRuntime>(hubJsonStream, DevHubJson.SerializerOptions, cancellationToken)
+        using var hubJsonDocument = await JsonDocument.ParseAsync(hubJsonStream, cancellationToken: cancellationToken);
+        ValidateHubVersion(hubJsonDocument.RootElement, hubJsonPath);
+
+        var runtime = hubJsonDocument.RootElement.Deserialize<HubRuntime>(DevHubJson.SerializerOptions)
             ?? throw new InvalidOperationException($"hub.json 解析失败：{hubJsonPath}");
 
         ValidateRuntime(runtime, hubJsonPath);
@@ -129,6 +132,16 @@ internal static class RuntimeDiscovery
             runtime.RuntimeTuning.LaunchDedupeWindowSeconds < 1)
         {
             throw new InvalidOperationException($"hub.json.runtimeTuning 非法：{hubJsonPath}");
+        }
+    }
+
+    private static void ValidateHubVersion(JsonElement root, string hubJsonPath)
+    {
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("hubVersion", out var hubVersionProperty)
+            && hubVersionProperty.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException($"hub.json.hubVersion 非法：{hubJsonPath}");
         }
     }
 

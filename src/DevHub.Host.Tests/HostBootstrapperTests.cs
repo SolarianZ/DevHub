@@ -13,6 +13,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public sealed class HostBootstrapperTests : IDisposable
 {
+    private const string ExpectedHubVersion = "1.0.1-test";
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;
@@ -74,6 +75,7 @@ public sealed class HostBootstrapperTests : IDisposable
         Assert.True(File.Exists(hubJsonPath));
 
         using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        Assert.Equal(ExpectedHubVersion, document.RootElement.GetProperty("hubVersion").GetString());
         Assert.Equal("http://127.0.0.1:7102", document.RootElement.GetProperty("httpBaseUrl").GetString());
     }
 
@@ -116,7 +118,11 @@ public sealed class HostBootstrapperTests : IDisposable
     private BootstrapperContext CreateContext()
     {
         var runtimePathOptions = CreateRuntimePathOptions();
-        var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), runtimePathOptions);
+        var fileSystemManager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            runtimePathOptions,
+            RuntimeTuningOptions.Default,
+            ExpectedHubVersion);
 
         var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
