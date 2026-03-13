@@ -28,6 +28,7 @@ import {
   readOptionalString,
   readOptionalStringOrNull,
   readPositiveInt,
+  readStringValue,
   readString
 } from "./validation.js";
 
@@ -176,7 +177,7 @@ export function parseUnsubscribeResult(payload: unknown): void {
 export function parseAppDefinition(payload: unknown, location: string): AppDefinition {
   const record = ensureRecord(payload, location);
   const appId = readAppId(record, location, "appId");
-  const displayName = readString(record, location, "displayName");
+  const displayName = readStringValue(record, location, "displayName");
   const description = readOptionalString(record, location, "description");
 
   let capabilities: AppDefinition["capabilities"] = {
@@ -196,7 +197,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   if ("launch" in record && record.launch !== null && record.launch !== undefined) {
     const launchPayload = ensureRecord(record.launch, `${location}.launch`);
     launch = {
-      exePath: readString(launchPayload, `${location}.launch`, "exePath"),
+      exePath: readStringValue(launchPayload, `${location}.launch`, "exePath"),
       argsTemplate: readOptionalString(launchPayload, `${location}.launch`, "argsTemplate"),
       workingDirectory: readOptionalString(launchPayload, `${location}.launch`, "workingDirectory"),
       dedupeKeyTemplate: readOptionalString(launchPayload, `${location}.launch`, "dedupeKeyTemplate")

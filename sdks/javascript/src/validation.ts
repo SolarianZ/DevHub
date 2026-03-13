@@ -79,6 +79,19 @@ export function readAppId(payload: Record<string, unknown>, location: string, ke
   return value;
 }
 
+export function readStringValue(payload: Record<string, unknown>, location: string, key: string): string {
+  if (!(key in payload)) {
+    throw new Error(`${location}.${key} is required.`);
+  }
+
+  const value = payload[key];
+  if (typeof value !== "string") {
+    throw new Error(`${location}.${key} must be a string.`);
+  }
+
+  return value;
+}
+
 export function readInstanceId(payload: Record<string, unknown>, location: string, key: string): string {
   const value = readString(payload, location, key);
   if (value.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(value)) {

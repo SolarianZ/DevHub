@@ -917,6 +917,49 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
   })).rejects.toThrow(/waitTimeoutMs/i);
 });
 
+it("getDefinition should accept spec-valid empty displayName and launch.exePath", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.empty-fields.app",
+        displayName: "",
+        launch: {
+          exePath: ""
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-empty-strings-client",
+    runtimeDir
+  });
+
+  const definition = await client.getDefinition("test.empty-fields.app");
+
+  expect(definition).toEqual({
+    appId: "test.empty-fields.app",
+    displayName: "",
+    description: undefined,
+    capabilities: {
+      rpc: true
+    },
+    launch: {
+      exePath: "",
+      argsTemplate: undefined,
+      workingDirectory: undefined,
+      dedupeKeyTemplate: undefined
+    }
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 function createConnectionInfo() {
   return {
     runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
