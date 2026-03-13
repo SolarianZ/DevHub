@@ -70,6 +70,27 @@ export function readString(payload: Record<string, unknown>, location: string, k
   return value;
 }
 
+export function readOptionalObject(
+  payload: Record<string, unknown>,
+  location: string,
+  key: string
+): Record<string, unknown> | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+
+  const value = payload[key];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${location}.${key} must be an object.`);
+  }
+
+  return value;
+}
+
 export function readAppId(payload: Record<string, unknown>, location: string, key: string): string {
   const value = readString(payload, location, key);
   if (!APP_ID_REGEX.test(value)) {
@@ -133,7 +154,7 @@ export function readOptionalString(payload: Record<string, unknown>, location: s
   }
 
   const value = payload[key];
-  if (value === null || value === undefined) {
+  if (value === undefined) {
     return undefined;
   }
 
@@ -184,7 +205,7 @@ export function readOptionalBoolean(payload: Record<string, unknown>, location: 
   }
 
   const value = payload[key];
-  if (value === null || value === undefined) {
+  if (value === undefined) {
     return undefined;
   }
 

@@ -160,10 +160,7 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
           displayName: "Test Launch App",
           description: null,
           launch: {
-            exePath: process.execPath,
-            argsTemplate: null,
-            workingDirectory: null,
-            dedupeKeyTemplate: null
+            exePath: process.execPath
           }
         }
       ]
@@ -176,23 +173,7 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
     runtimeDir
   });
 
-  const definitions = await client.listDefinitions();
-
-  expect(definitions).toHaveLength(1);
-  expect(definitions[0]).toEqual({
-    appId: "test.launch.app",
-    displayName: "Test Launch App",
-    description: undefined,
-    capabilities: {
-      rpc: true
-    },
-    launch: {
-      exePath: process.execPath,
-      argsTemplate: undefined,
-      workingDirectory: undefined,
-      dedupeKeyTemplate: undefined
-    }
-  });
+  await expect(client.listDefinitions()).rejects.toThrow(/description/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -957,6 +938,113 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
       dedupeKeyTemplate: undefined
     }
   });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("getDefinition should reject null capabilities flags", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.invalid-capabilities.app",
+        displayName: "Invalid Capabilities App",
+        capabilities: {
+          rpc: null
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-invalid-capabilities-client",
+    runtimeDir
+  });
+
+  await expect(client.getDefinition("test.invalid-capabilities.app")).rejects.toThrow(/capabilities\.rpc/i);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("listInstances should reject a null meta object", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.listInstances");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      instances: [
+        {
+          instanceId: "inst-1",
+          appId: "test.app",
+          scope: null,
+          pid: 12345,
+          registeredAtUtc: "2026-03-09T00:00:00Z",
+          lastSeenUtc: "2026-03-09T00:00:01Z",
+          invoke: {
+            poll: true,
+            respond: true
+          },
+          meta: null
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-list-instances-null-meta-client",
+    runtimeDir
+  });
+
+  await expect(client.listInstances()).rejects.toThrow(/meta/i);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("poll should reject null optional invocation booleans", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z",
+      items: [
+        {
+          invocationId: "invk-1",
+          appId: "test.app",
+          target: {
+            scope: null,
+            instanceId: null
+          },
+          method: "test.request",
+          kind: "request",
+          createdAtUtc: "2026-03-09T00:00:00Z",
+          options: {
+            ttlMs: 1_000,
+            autoLaunch: null
+          },
+          caller: {
+            clientId: "caller-a",
+            clientSessionId: "11111111-1111-4111-8111-111111111111"
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-poll-null-bool-client",
+    runtimeDir
+  });
+
+  await expect(client.poll({
+    instanceId: "inst-1"
+  })).rejects.toThrow(/autoLaunch/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 

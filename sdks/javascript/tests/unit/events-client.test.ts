@@ -409,6 +409,26 @@ it("fromRuntime 应拒绝空 options", async () => {
   ).rejects.toThrow(/options/i);
 });
 
+it("event notifications should reject a null payload object", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createNullEventPayloadScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-null-payload-client",
+    runtimeDir
+  });
+
+  await client.authenticate();
+  await client.subscribe(["invocation.completed"]);
+
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toThrow(/payload/i);
+});
+
 async function createRuntime(overrides?: {
   httpBaseUrl?: string;
   wsUrl?: string;
@@ -553,8 +573,7 @@ class FakeInjectedWsSession {
         definitions: [
           {
             appId: "test.launch.app",
-            displayName: "Test Launch App",
-            description: null
+            displayName: "Test Launch App"
           }
         ]
       };
@@ -885,6 +904,46 @@ function createUnknownNotificationScenario(request: Record<string, unknown>): Se
           method: "hub.events.unknown",
           params: {
             subscriptionId: "sub-1"
+          }
+        })
+      }
+    ];
+  }
+
+  return [];
+}
+
+function createNullEventPayloadScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "hub.event",
+          params: {
+            subscriptionId: "sub-1",
+            type: "invocation.completed",
+            timeUtc: "2026-03-09T00:00:00Z",
+            payload: null
           }
         })
       }

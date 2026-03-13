@@ -25,6 +25,7 @@ import {
   readOptionalBoolean,
   readOptionalInstanceIdOrNull,
   readOptionalIntAtLeast,
+  readOptionalObject,
   readOptionalString,
   readOptionalStringOrNull,
   readPositiveInt,
@@ -183,8 +184,8 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   let capabilities: AppDefinition["capabilities"] = {
     rpc: true
   };
-  if ("capabilities" in record && record.capabilities !== null && record.capabilities !== undefined) {
-    const capabilitiesPayload = ensureRecord(record.capabilities, `${location}.capabilities`);
+  const capabilitiesPayload = readOptionalObject(record, location, "capabilities");
+  if (capabilitiesPayload) {
     const rpc = readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "rpc");
     const events = readOptionalBoolean(capabilitiesPayload, `${location}.capabilities`, "events");
     capabilities = {
@@ -194,8 +195,8 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   }
 
   let launch: AppDefinition["launch"] | undefined;
-  if ("launch" in record && record.launch !== null && record.launch !== undefined) {
-    const launchPayload = ensureRecord(record.launch, `${location}.launch`);
+  const launchPayload = readOptionalObject(record, location, "launch");
+  if (launchPayload) {
     launch = {
       exePath: readStringValue(launchPayload, `${location}.launch`, "exePath"),
       argsTemplate: readOptionalString(launchPayload, `${location}.launch`, "argsTemplate"),
@@ -217,10 +218,8 @@ export function parseAppInstance(payload: unknown, location: string): AppInstanc
   const record = ensureRecord(payload, location);
   const invokePayload = readObject(record, location, "invoke");
 
-  let meta: JsonObject | undefined;
-  if ("meta" in record && record.meta !== null && record.meta !== undefined) {
-    meta = ensureRecord(record.meta, `${location}.meta`) as JsonObject;
-  }
+  const metaPayload = readOptionalObject(record, location, "meta");
+  const meta = metaPayload as JsonObject | undefined;
 
   return {
     instanceId: readInstanceId(record, location, "instanceId"),
@@ -247,8 +246,8 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   }
 
   let options: Invocation["options"] | undefined;
-  if ("options" in record && record.options !== null && record.options !== undefined) {
-    const optionsPayload = ensureRecord(record.options, `${location}.options`);
+  const optionsPayload = readOptionalObject(record, location, "options");
+  if (optionsPayload) {
     const ttlMs = readOptionalIntAtLeast(optionsPayload, `${location}.options`, "ttlMs", 1000);
     const waitTimeoutMs = readOptionalIntAtLeast(optionsPayload, `${location}.options`, "waitTimeoutMs", 1);
     const queueIfOffline = readOptionalBoolean(optionsPayload, `${location}.options`, "queueIfOffline");
@@ -270,8 +269,8 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   }
 
   let delivery: Invocation["delivery"] | undefined;
-  if ("delivery" in record && record.delivery !== null && record.delivery !== undefined) {
-    const deliveryPayload = ensureRecord(record.delivery, `${location}.delivery`);
+  const deliveryPayload = readOptionalObject(record, location, "delivery");
+  if (deliveryPayload) {
     delivery = {
       leaseSeconds: readPositiveInt(deliveryPayload, `${location}.delivery`, "leaseSeconds"),
       attempt: readPositiveInt(deliveryPayload, `${location}.delivery`, "attempt")
@@ -301,10 +300,8 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
 export function parseEvent(payload: unknown, location: string): DevHubEvent {
   const record = ensureRecord(payload, location);
 
-  let parsedPayload: JsonObject | undefined;
-  if ("payload" in record && record.payload !== null && record.payload !== undefined) {
-    parsedPayload = ensureRecord(record.payload, `${location}.payload`) as JsonObject;
-  }
+  const payloadObject = readOptionalObject(record, location, "payload");
+  const parsedPayload = payloadObject as JsonObject | undefined;
 
   return {
     subscriptionId: readString(record, location, "subscriptionId"),

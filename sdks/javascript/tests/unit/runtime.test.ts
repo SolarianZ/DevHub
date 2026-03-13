@@ -228,6 +228,52 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
+it("discoverRuntime should reject a non-string hubVersion when present", async () => {
+  const runtimeDir = await createLegacyRuntimeDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    hubVersion: 1,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/hubVersion/);
+});
+
+it("discoverRuntime should preserve a spec-valid empty hubVersion string", async () => {
+  const runtimeDir = await createLegacyRuntimeDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    hubVersion: "",
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  const result = await discoverRuntime(runtimeDir);
+
+  expect(result.runtime.hubVersion).toBe("");
+});
+
 async function createLegacyRuntimeDirectory(): Promise<string> {
   const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-runtime-unit-"));
   tempRoots.push(runtimeDir);

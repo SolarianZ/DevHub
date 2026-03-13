@@ -160,9 +160,7 @@ function parseHubRuntime(payload: unknown, source: string): HubRuntime {
 
   const runtimeTuning = parseRuntimeTuning(payload.runtimeTuning, source);
 
-  const hubVersion = typeof payload.hubVersion === "string" && payload.hubVersion.trim()
-    ? payload.hubVersion
-    : undefined;
+  const hubVersion = readOptionalString(payload, "hubVersion", source);
 
   return {
     protocolVersion,
@@ -249,6 +247,23 @@ function readString(payload: Record<string, unknown>, key: string, source: strin
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`hub.json.${key} 非法：${source}`);
   }
+  return value;
+}
+
+function readOptionalString(payload: Record<string, unknown>, key: string, source: string): string | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+
+  const value = payload[key];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`hub.json.${key} 闈炴硶锛?{source}`);
+  }
+
   return value;
 }
 
