@@ -568,6 +568,49 @@ it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
   await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
 });
 
+it("notify should reject a non-object target before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-target-shape-client",
+    runtimeDir
+  });
+
+  await expect(client.notify({
+    appId: "test.app",
+    method: "test.notify",
+    target: "global" as unknown as { scope?: string | null; instanceId?: string | null }
+  })).rejects.toThrow("target must be an object.");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("request should reject a non-object options payload before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-options-shape-client",
+    runtimeDir
+  });
+
+  await expect(client.request({
+    appId: "test.app",
+    method: "test.request",
+    options: 1 as unknown as {
+      ttlMs?: number | null;
+      waitTimeoutMs?: number | null;
+      queueIfOffline?: boolean | null;
+      autoLaunch?: boolean | null;
+    }
+  })).rejects.toThrow("options must be an object.");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 function createConnectionInfo() {
   return {
     runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",

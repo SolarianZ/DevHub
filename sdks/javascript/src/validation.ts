@@ -224,6 +224,21 @@ export function ensureOptionalInputStringOrNull(value: unknown, propertyName: st
   return ensureOptionalInputString(value, propertyName, true, `${propertyName} 不能为空。`, true);
 }
 
+export function ensureOptionalInputRecord(
+  value: unknown,
+  propertyName: string
+): Record<string, unknown> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${propertyName} must be an object.`);
+  }
+
+  return value;
+}
+
 export function ensureInputBoolean(value: unknown, propertyName: string): boolean {
   if (typeof value !== "boolean") {
     throw new Error(`${propertyName} 必须为布尔值。`);

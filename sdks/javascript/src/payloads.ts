@@ -14,6 +14,7 @@ import {
   ensureOptionalInputBoolean,
   ensureOptionalInputIntegerAtLeast,
   ensureOptionalInputIntegerInRange,
+  ensureOptionalInputRecord,
   ensureOptionalInputString,
   ensureOptionalInputStringOrNull,
   ensureRequiredInputString
@@ -147,7 +148,8 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
 
   const appId = ensureRequiredInputString(request.appId, "appId");
   const method = ensureRequiredInputString(request.method, "method");
-  const target = request.target;
+  const target = ensureOptionalInputRecord(request.target, "target");
+  const options = ensureOptionalInputRecord(request.options, "options");
   const targetScope = ensureOptionalInputStringOrNull(target?.scope, "target.scope");
   const targetInstanceId = ensureOptionalInputString(
     target?.instanceId,
@@ -158,7 +160,7 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
   );
 
   const ttlMs = ensureOptionalInputIntegerAtLeast(
-    request.options?.ttlMs,
+    options?.ttlMs,
     "ttlMs",
     1000,
     "ttlMs 必须大于等于 1000。"
@@ -166,15 +168,15 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
 
   const waitTimeoutMs = isRequest
     ? ensureOptionalInputIntegerAtLeast(
-      request.options?.waitTimeoutMs,
+      options?.waitTimeoutMs,
       "waitTimeoutMs",
       1,
       "waitTimeoutMs 必须大于等于 1。"
     ) ?? 120000
     : undefined;
 
-  const queueIfOffline = ensureOptionalInputBoolean(request.options?.queueIfOffline, "queueIfOffline") ?? true;
-  const autoLaunch = ensureOptionalInputBoolean(request.options?.autoLaunch, "autoLaunch")
+  const queueIfOffline = ensureOptionalInputBoolean(options?.queueIfOffline, "queueIfOffline") ?? true;
+  const autoLaunch = ensureOptionalInputBoolean(options?.autoLaunch, "autoLaunch")
     ?? (targetInstanceId === undefined || targetInstanceId === null);
 
   if (waitTimeoutMs !== undefined && waitTimeoutMs > ttlMs) {
