@@ -141,7 +141,7 @@ function parseHubRuntime(payload: unknown, source: string): HubRuntime {
     throw new Error(`hub.json.protocolVersion 非法：${source}`);
   }
 
-  const pid = readNumber(payload, "pid", source);
+  const pid = readInteger(payload, "pid", source);
   if (pid < 1) {
     throw new Error(`hub.json.pid 非法：${source}`);
   }
@@ -183,9 +183,9 @@ function parseRuntimeTuning(payload: unknown, source: string): HubRuntimeTuning 
     throw new Error(`hub.json.runtimeTuning 非法：${source}`);
   }
 
-  const leaseSeconds = readNumber(payload, "leaseSeconds", source, "hub.json.runtimeTuning 非法");
-  const onlineThresholdSeconds = readNumber(payload, "onlineThresholdSeconds", source, "hub.json.runtimeTuning 非法");
-  const launchDedupeWindowSeconds = readNumber(payload, "launchDedupeWindowSeconds", source, "hub.json.runtimeTuning 非法");
+  const leaseSeconds = readInteger(payload, "leaseSeconds", source, "hub.json.runtimeTuning 非法");
+  const onlineThresholdSeconds = readInteger(payload, "onlineThresholdSeconds", source, "hub.json.runtimeTuning 非法");
+  const launchDedupeWindowSeconds = readInteger(payload, "launchDedupeWindowSeconds", source, "hub.json.runtimeTuning 非法");
 
   if (leaseSeconds < 1 || onlineThresholdSeconds < 1 || launchDedupeWindowSeconds < 1) {
     throw new Error(`hub.json.runtimeTuning 非法：${source}`);
@@ -260,6 +260,16 @@ function readNumber(payload: Record<string, unknown>, key: string, source: strin
     const message = overrideMessage ? `${overrideMessage}：${source}` : `hub.json.${key} 非法：${source}`;
     throw new Error(message);
   }
+  return value;
+}
+
+function readInteger(payload: Record<string, unknown>, key: string, source: string, overrideMessage?: string): number {
+  const value = readNumber(payload, key, source, overrideMessage);
+  if (!Number.isInteger(value)) {
+    const message = overrideMessage ? `${overrideMessage}：${source}` : `hub.json.${key} 非法：${source}`;
+    throw new Error(message);
+  }
+
   return value;
 }
 
