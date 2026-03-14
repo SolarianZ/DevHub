@@ -5,19 +5,22 @@
 > 参考文档：
 > - [Spec.md](./Spec.md)
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
+> - [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-09）
+## 当前状态（截至 2026-03-14）
 
-- 当前分支：`m5_js`。
+- 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
 - `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 仍待后续阶段完成。
+- `Python SDK` 已在 `sdks/python/` 落地：当前已提供 runtime discovery、同步 HTTP JSON-RPC、异步 WebSocket events、统一错误模型、包根扩展抽象，以及 `sdks/python/tests/` 下的单元测试与 SDK↔Hub 集成测试；共享 conformance 与统一 CI 仍待接入。
 - 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 已作为 JS/TS SDK 实际落点，`tests/conformance` 仍为后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中 `DEVHUB_RUNTIME_DIR` 用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 48 条单元测试 + 14 条集成测试）；已补齐 SDK 对 AppDefinition / AppInstance / Invocation 成功载荷的关键结构校验，并为注册载荷 `meta` 与 `respond.error.message` 增加本地参数校验。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 tests/test_runner.py --smoke --no-header` 冒烟回归。
+- 2026-03-14 已完成：补充 `docs/DevHub_Python_SDK设计规划.md`，同步 M5 文档中的 Python SDK 路径、API 基线与当前状态说明。
 
 ---
 
@@ -27,8 +30,9 @@
 
 - [ ] 交付 `.NET SDK`（Node 外调用方可通过 .NET API 调用 DevHub）。
 - [x] 交付 `JS/TS SDK`（Node.js 环境调用 DevHub）。
+- [x] 补齐 `Python SDK` 设计规划文档（基于现有 `sdks/python/` 实现与测试资产，统一 M5 文档口径）。
 - [ ] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
-- [ ] 建立 `Hub↔SDK 契约测试`（同向量驱动 .NET/TS 双实现并校验语义一致）。
+- [ ] 建立 `Hub↔SDK 契约测试`（同向量驱动 `.NET` / `TS` / `Python` 多实现并校验语义一致）。
 
 ### 0.2 M5 协议覆盖面（必须）
 
@@ -58,6 +62,8 @@
 - .NET SDK 集成测试：`/Users/qiuyu/projects/DevHub/sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`
 - JS/TS SDK：`/Users/qiuyu/projects/DevHub/sdks/javascript/`
 - JS/TS SDK 测试：`/Users/qiuyu/projects/DevHub/sdks/javascript/tests/`
+- Python SDK：`/Users/qiuyu/projects/DevHub/sdks/python/src/devhub_sdk/`
+- Python SDK 测试：`/Users/qiuyu/projects/DevHub/sdks/python/tests/`
 - 签名向量基线：`/Users/qiuyu/projects/DevHub/tests/conformance/v1.0.1/`
 - 契约运行器：`/Users/qiuyu/projects/DevHub/tests/conformance/vector_runner.py`
 
@@ -65,7 +71,8 @@
 
 - .NET 侧：独立维护 `sdks/dotnet/DevHub.DotNetSdk.slnx`，不纳入 `src/DevHub.slnx`。
 - JS/TS 侧：`sdks/javascript` 独立包管理，测试命令通过 `npm test` 接入 CI。
-- 契约侧：统一由 `vector_runner.py` 驱动 .NET/TS SDK，输出统一报告格式。
+- Python 侧：`sdks/python` 通过 `pyproject.toml` 管理，测试命令通过 `python3 -m pytest` 接入。
+- 契约侧：统一由 `vector_runner.py` 驱动 `.NET` / `TS` / `Python` SDK，输出统一报告格式。
 
 ---
 
@@ -112,9 +119,18 @@
 - [x] `DevHubEventsClient`（基于 `AsyncIterator` 读取事件流）
 - [x] `DevHubRpcError`（字段语义与 .NET 对齐）
 
-### 2.3 跨 SDK 一致性约束
+### 2.3 Python SDK（`devhub-sdk` / `devhub_sdk`）
 
-- 方法名、参数名、错误码、错误数据字段在 .NET 与 TS 侧保持语义同构。
+- [x] `DevHubClientOptions`
+- [x] `DevHubClient.from_runtime()`
+- [x] 与 `.NET` / `JS/TS` 同构的 HTTP 方法集（同步 API）
+- [x] `DevHubEventsClient.from_runtime()`、`authenticate()`、`subscribe()`、`unsubscribe()`、`read_events()`
+- [x] `DevHubRpcException` / `DevHubRpcErrorCode`
+- [x] `RuntimeResolver`、`JsonRpcHttpTransport`、`JsonRpcWsSession` 扩展抽象
+
+### 2.4 跨 SDK 一致性约束
+
+- 方法名、参数名、错误码、错误数据字段在 `.NET`、`TS` 与 `Python` 侧保持语义同构。
 - `target.scope` / `target.instanceId` 默认值与约束严格对齐 `Spec.md`。
 - 对 Spec §8 全量错误码保持一致异常映射（`-32700/-32600/-32601/-32602/-32603/-32001/-32002/-32010/-32011/-32012/-32014/-32020/-32030/-32040/-32050/-32099`）。
 
@@ -157,7 +173,7 @@
 
 ### 3.5 `M5-CT-*`（契约测试）
 
-- [ ] `M5-CT-001`：实现 `vector_runner.py`，统一调度 .NET/TS SDK 执行同一向量。
+- [ ] `M5-CT-001`：实现 `vector_runner.py`，统一调度 `.NET` / `TS` / `Python` SDK 执行同一向量。
 - [ ] `M5-CT-002`：输出统一报告（向量 ID、实际响应、期望响应、差异字段）。
 - [ ] `M5-CT-003`：建立失败快照机制，便于跨 SDK 回归定位。
 
@@ -167,11 +183,12 @@
 - [ ] `M5-CI-002`：CI 增加 TS SDK 单元测试入口（`npm test`）。
 - [ ] `M5-CI-003`：CI 增加 conformance 运行步骤（`python3 tests/conformance/vector_runner.py`）。
 - [ ] `M5-CI-004`：将 SDK 与契约测试结果纳入门禁判定。
+- [ ] `M5-CI-005`：CI 增加 Python SDK 测试入口（`python3 -m pytest sdks/python/tests`）。
 
 ### 3.7 `M5-DOC-*`（文档与状态同步）
 
 - [x] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
-- [ ] `M5-DOC-002`：补充 SDK 快速接入示例（.NET/TS）。
+- [ ] `M5-DOC-002`：补充 SDK 快速接入示例（`.NET` / `TS` / `Python`）。
 - [x] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
 
 ---
@@ -182,16 +199,17 @@
 
 - `.NET SDK` 工程与测试工程。
 - `JS/TS SDK` 工程与测试目录。
+- `Python SDK` 工程与测试目录。
 - `tests/conformance/v1.0.1/*.json` 向量文件。
 - `tests/conformance/vector_runner.py` 契约运行器。
 - CI 配置更新（SDK + conformance）。
-- README 与里程碑文档更新。
+- README、里程碑文档与 Python SDK 设计规划文档更新。
 
 ### 4.2 M5 DoD
 
-- [ ] M5 必须能力（.NET + TS + 向量 + 契约）全部落地。
+- [ ] M5 必须能力（`.NET` + `TS` + `Python` + 向量 + 契约）全部落地。
 - [ ] 向量覆盖满足 Spec §10.1 最小计数（总计 52）。
-- [ ] 双 SDK 对同一向量给出语义一致的结果。
+- [ ] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
 - [ ] CI 具备自动验证并阻断不一致变更。
 - [ ] 文档已同步、范围边界清晰、`Spec.md` 未改动。
 
@@ -207,7 +225,7 @@
 
 ## 6. 假设与默认选择
 
-- 默认同时推进 .NET 与 JS/TS，公共 API 尽量同构。
+- 默认同时推进 `.NET`、`JS/TS` 与 `Python`，公共 API 尽量同构。
 - 默认 JS/TS 目标运行时为 Node.js，不承诺浏览器侧 runtime discovery。
 - 默认协议版本固定为 `1`，不引入 v2 字段或行为。
 - 默认以签名测试向量作为跨 SDK 一致性的唯一事实来源。

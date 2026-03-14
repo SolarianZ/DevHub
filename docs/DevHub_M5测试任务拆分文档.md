@@ -6,16 +6,19 @@
 > - [Spec.md](./Spec.md)
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
+> - [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-09）
+## 当前状态（截至 2026-03-14）
 
-- M5 测试任务状态：`.NET SDK` 与 `JS/TS SDK` 主体能力已落地，已完成 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
+- M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
-- 下文涉及的 .NET SDK 单元测试路径统一为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景当前落在 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 已承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`tests/conformance/` 仍为后续目标测试资产。
+- `Python SDK` 当前已在 `sdks/python/tests/` 下落地 95 条单元测试用例与 8 条 SDK↔Hub 集成测试用例；共享 conformance runner 与跨语言一致性门禁仍待统一接入。
+- 下文涉及的 .NET SDK 单元测试路径统一为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景当前落在 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 已承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 已承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`tests/conformance/` 仍为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 tests/test_runner.py --smoke --no-header` 冒烟回归。
+- 2026-03-14 已完成：补充 `docs/DevHub_Python_SDK设计规划.md`，并在测试规划文档中同步 Python SDK 的测试资产位置与范围说明。
 
 ---
 
@@ -29,7 +32,7 @@
 - [ ] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type -> `-32602`、断线清理。
 - [ ] 覆盖 Invocation 错误路径：`invocation_timeout`、`invocation_expired`、`delivery_conflict`、`invocation_failed`。
 - [ ] 覆盖 Scope 规则：默认 global、显式 scope 不回退、`target.scope=""` 映射 global、`target.scope="global"` 作为显式字符串作用域合法。
-- [ ] 覆盖跨 SDK 一致性：同向量在 .NET 与 TS 结果语义等价。
+- [ ] 覆盖跨 SDK 一致性：同向量在 `.NET`、`TS` 与 `Python` 结果语义等价。
 
 ### 0.2 测试分层
 
@@ -46,6 +49,7 @@
 
 - `.NET 单测`：`M5-DN-UT-xxx`
 - `TS 单测`：`M5-TS-UT-xxx`
+- `Python 单测`：`M5-PY-UT-xxx`
 - `契约测试`：`M5-CONF-xxx`
 - `端到端 SDK↔Hub`：`M5-E2E-xxx`
 
@@ -67,14 +71,19 @@
 | `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdks/javascript/tests/unit/events-client.test.ts` |
 | `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
-| `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
-| `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` |
-| `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
-| `M5-E2E-004` | SDK WS 认证 + 订阅 + 取消订阅 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` |
+| `M5-PY-UT-001` | runtime discovery 成功路径、标准运行时根目录兼容与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
+| `M5-PY-UT-002` | HTTP header 组装、`protocolVersion/clientId/clientSessionId` 校验与错误映射 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` |
+| `M5-PY-UT-003` | `notify/request/poll/respond` 载荷默认值、参数互斥与 JSON 校验 | Python 白盒 | `sdks/python/tests/unit/test_payloads.py` |
+| `M5-PY-UT-004` | `DevHubRpcException` 已知错误码、辅助字段与 `calleeError` 提取 | Python 白盒 | `sdks/python/tests/unit/test_exceptions.py` |
+| `M5-PY-UT-005` | WS 鉴权生命周期、订阅行为与事件流终止语义 | Python 白盒 | `sdks/python/tests/unit/test_events_client.py` |
+| `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/python/tests/integration/test_http_flow.py` |
+| `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` / `sdks/python/tests/integration/test_http_flow.py` |
+| `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-004` | SDK WS 认证 + 订阅 + 取消订阅 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/python/tests/integration/test_events_flow.py` |
 | `M5-E2E-005` | unknown event type 订阅返回 `-32602 invalid_params` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` |
-| `M5-E2E-006` | scope 默认 global 与显式 scope 不回退验证 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
-| `M5-E2E-007` | `invocation_timeout` / `invocation_expired` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
-| `M5-E2E-008` | `delivery_conflict` / `invocation_failed` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
+| `M5-E2E-006` | scope 默认 global 与显式 scope 不回退验证 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-007` | `invocation_timeout` / `invocation_expired` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-008` | `delivery_conflict` / `invocation_failed` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
 | `M5-E2E-009` | 缺失 `X-DevHub-ClientId` 返回 `-32600 invalid_request` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
 | `M5-E2E-010` | WS 断开后订阅状态清理（重连后需重新订阅） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` |
 | `M5-E2E-011` | `target.scope=""` 路由至 global，`target.scope="global"` 仅命中字面量作用域 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
@@ -82,7 +91,7 @@
 | `M5-CONF-002` | Auth 类向量执行与断言 | 契约 | `tests/conformance/v1.0.1/auth.*.json` |
 | `M5-CONF-003` | AppDef/AppInstance 向量执行与断言 | 契约 | `tests/conformance/v1.0.1/apps.*.json` |
 | `M5-CONF-004` | Notify/Request 向量执行与断言 | 契约 | `tests/conformance/v1.0.1/invocation.*.json` |
-| `M5-CONF-005` | .NET 与 TS 对同向量结果语义比较 | 契约 | `tests/conformance/vector_runner.py` |
+| `M5-CONF-005` | `.NET`、`TS` 与 `Python` 对同向量结果语义比较 | 契约 | `tests/conformance/vector_runner.py` |
 | `M5-CONF-006` | 契约失败报告输出（向量ID/实际/期望/差异字段） | 契约 | `tests/conformance/vector_runner.py` |
 | `M5-CONF-007` | Events 断连清理向量执行与断言 | 契约 | `tests/conformance/v1.0.1/events.*.json` |
 | `M5-CONF-008` | Spec §8 全量错误码与 `error.data` 字段向量断言 | 契约 | `tests/conformance/v1.0.1/errors.*.json` |
@@ -147,7 +156,7 @@
 ### 4.4 契约测试任务
 
 - [ ] 生成 52 条最小向量，按分类落盘。
-- [ ] `vector_runner.py` 同时驱动 .NET 与 TS SDK，逐向量比对。
+- [ ] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
 - [ ] 报告中必须输出失败差异字段，支持快速定位跨实现偏差。
 - [ ] Events 类向量显式包含断开连接清理场景。
 - [ ] Error 类向量显式覆盖 Spec §8 全量错误码与 `error.data` 关键字段。
@@ -159,6 +168,7 @@
 - CI 必须同时执行：
   - `dotnet test`（含 SDK 测试）
   - `npm test`（TS SDK）
+  - `python3 -m pytest sdks/python/tests`
   - `python3 tests/conformance/vector_runner.py`
 - 失败报告必须包含：
   - 向量 ID
@@ -168,23 +178,24 @@
 - 推荐新增阶段：
   - `sdk-dotnet-tests`
   - `sdk-ts-tests`
+  - `sdk-python-tests`
   - `sdk-conformance`
 
 ---
 
 ## 6. 完成定义（DoD）
 
-- [ ] 四类编号用例（`M5-DN-UT` / `M5-TS-UT` / `M5-E2E` / `M5-CONF`）已建立并可自动执行。
+- [ ] 五类编号用例（`M5-DN-UT` / `M5-TS-UT` / `M5-PY-UT` / `M5-E2E` / `M5-CONF`）已建立并可自动执行。
 - [ ] Spec §10.1 最小 52 条向量全部落地且可回归。
-- [ ] .NET 与 TS 对同向量结果语义一致（忽略键序与空白）。
-- [ ] CI 已接入三类执行入口并作为门禁。
+- [ ] `.NET`、`TS` 与 `Python` 对同向量结果语义一致（忽略键序与空白）。
+- [ ] CI 已接入四类执行入口并作为门禁。
 - [ ] 文档与测试实现一致，且未修改 `docs/Spec.md`。
 
 ---
 
 ## 7. 假设与默认选择
 
-- 默认同时推进 .NET 与 JS/TS SDK，能力覆盖保持同构。
+- 默认同时推进 `.NET`、`JS/TS` 与 `Python` SDK，能力覆盖保持同构。
 - 默认 TS SDK 目标为 Node.js，不承诺浏览器运行时 discovery。
 - 默认协议固定为 `1`，不引入 v2 兼容分支逻辑。
 - 默认签名向量是跨 SDK 一致性的唯一事实来源。
