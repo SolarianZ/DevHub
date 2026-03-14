@@ -15,6 +15,21 @@ public static class HubEventNotificationFactory
     /// <returns>可序列化匿名对象。</returns>
     public static object Create(HubEventDelivery delivery)
     {
+        if (delivery.Payload is null)
+        {
+            return new
+            {
+                jsonrpc = "2.0",
+                method = HubRpcMethods.HubEvent,
+                @params = new
+                {
+                    subscriptionId = delivery.SubscriptionId,
+                    type = delivery.Type,
+                    timeUtc = delivery.TimeUtc.ToString("O")
+                }
+            };
+        }
+
         return new
         {
             jsonrpc = "2.0",

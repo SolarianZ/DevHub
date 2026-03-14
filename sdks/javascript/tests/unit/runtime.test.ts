@@ -231,6 +231,7 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
 it("discoverRuntime should reject a non-string hubVersion when present", async () => {
   const runtimeDir = await createLegacyRuntimeDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
+  const hubJsonPath = path.join(runtimeDir, "hub.json");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
     protocolVersion: 1,
@@ -247,7 +248,7 @@ it("discoverRuntime should reject a non-string hubVersion when present", async (
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/hubVersion/);
+  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(`hub.json.hubVersion 非法：${hubJsonPath}`);
 });
 
 it("discoverRuntime should preserve a spec-valid empty hubVersion string", async () => {

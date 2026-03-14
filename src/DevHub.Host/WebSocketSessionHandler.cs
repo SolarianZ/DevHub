@@ -6,6 +6,7 @@ using DevHub.Host.Transport;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DevHub.Host;
 
@@ -14,6 +15,11 @@ namespace DevHub.Host;
 /// </summary>
 public class WebSocketSessionHandler
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly RpcRouter _rpcRouter;
     private readonly FileSystemManager _fileSystemManager;
     private readonly HubEventBus _eventBus;
@@ -414,7 +420,7 @@ public class WebSocketSessionHandler
             return;
         }
 
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
         var bytes = Encoding.UTF8.GetBytes(json);
         await webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
     }

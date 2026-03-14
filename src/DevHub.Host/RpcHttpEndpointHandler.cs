@@ -3,6 +3,7 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
 using DevHub.Host.Transport;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DevHub.Host;
 
@@ -13,7 +14,8 @@ public class RpcHttpEndpointHandler
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     private readonly RpcRouter _rpcRouter;
@@ -71,7 +73,7 @@ public class RpcHttpEndpointHandler
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "JSON 解析失败，返回 parse_error，ClientId: {ClientId}", clientId);
-                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null));
+                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null), JsonOptions);
             }
 
             using (requestDocument)

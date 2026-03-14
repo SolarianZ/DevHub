@@ -261,7 +261,7 @@ function readOptionalString(payload: Record<string, unknown>, key: string, sourc
   }
 
   if (typeof value !== "string") {
-    throw new Error(`hub.json.${key} 闈炴硶锛?{source}`);
+    throw new Error(`hub.json.${key} 非法：${source}`);
   }
 
   return value;

@@ -288,6 +288,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(getDefinitionResult.GetProperty("ok").GetBoolean());
         var definition = getDefinitionResult.GetProperty("definition");
         Assert.Equal("ws-supported.app", definition.GetProperty("appId").GetString());
+        Assert.False(definition.TryGetProperty("description", out _));
+        Assert.False(definition.TryGetProperty("launch", out _));
 
         var listInstancesResponse = FindResponseById(responses, "ws-list-instances");
         Assert.True(listInstancesResponse.TryGetProperty("result", out var listInstancesResult));
