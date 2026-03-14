@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
-      - review_before_m5
-      - "codex/**"
+    paths:
+      - "src/**"
   pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
 
 jobs:
   build-and-test:
