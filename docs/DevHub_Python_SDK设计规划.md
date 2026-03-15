@@ -17,7 +17,7 @@
 - 当前仓库已存在 `sdks/python/` 工作区，发布包名为 `devhub-sdk`，导入名为 `devhub_sdk`。
 - 已落地同步 HTTP 客户端 `DevHubClient`、异步事件客户端 `DevHubEventsClient`、统一错误模型 `DevHubRpcException` / `DevHubRpcErrorCode`、公开模型与运行时发现抽象。
 - 已提供可注入扩展点：`RuntimeResolver`、`JsonRpcHttpTransport`、`JsonRpcWsSession`，用于 fake transport、录制回放与自定义连接策略。
-- 当前 `sdks/python/tests/` 下已包含 95 条单元测试用例与 8 条 SDK↔Hub 集成测试用例。
+- 当前 `sdks/python/tests/` 下已包含 123 条单元测试用例与 10 条 SDK↔Hub 集成测试用例。
 - 共享 conformance 向量、跨语言一致性 runner 与发布流水线尚未统一接入。
 
 ---

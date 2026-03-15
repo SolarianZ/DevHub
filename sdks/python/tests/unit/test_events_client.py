@@ -123,7 +123,34 @@ async def test_events_client_subscribe_without_types_should_request_all_events()
         await client.close()
 
     assert subscription_id == "sub-all"
-    assert session.requests[1]["params"] == {}
+    assert session.requests[1]["params"] is None
+
+
+@pytest.mark.asyncio
+async def test_events_client_subscribe_with_empty_types_should_request_all_events() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.events.subscribe": {"ok": True, "subscriptionId": "sub-empty"},
+        },
+        events=[],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+    try:
+        await client.authenticate()
+        subscription_id = await client.subscribe([])
+    finally:
+        await client.close()
+
+    assert subscription_id == "sub-empty"
+    assert session.requests[1]["params"] is None
 
 
 @pytest.mark.asyncio
@@ -564,12 +591,18 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_when_types_contains_unknown_event_should_raise() -> None:
+async def test_events_client_subscribe_when_types_contains_unknown_event_should_surface_rpc_error() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
         responses={
             "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.events.subscribe": DevHubRpcException(
+                code=-32602,
+                message="invalid_params",
+                data={"reason": "unknown_event_type"},
+                request_id="ws-subscribe-fake",
+            ),
         },
         events=[],
     )
@@ -581,12 +614,18 @@ async def test_events_client_subscribe_when_types_contains_unknown_event_should_
     )
     try:
         await client.authenticate()
-        with pytest.raises(ValueError, match="types"):
+        with pytest.raises(DevHubRpcException) as exc_info:
             await client.subscribe([INVOCATION_COMPLETED, "future.event"])
     finally:
         await client.close()
 
-    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
+    assert exc_info.value.code == -32602
+    assert exc_info.value.reason == "unknown_event_type"
+    assert [request["method"] for request in session.requests] == [
+        "hub.ws.authenticate",
+        "hub.events.subscribe",
+    ]
+    assert session.requests[1]["params"] == {"types": [INVOCATION_COMPLETED, "future.event"]}
 
 
 @pytest.mark.asyncio
