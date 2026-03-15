@@ -5,6 +5,8 @@ export {
   INVOCATION_COMPLETED,
   INVOCATION_DELIVERED,
   INVOCATION_FAILED,
-  INVOCATION_QUEUED
+  INVOCATION_QUEUED,
+  SUPPORTED_EVENT_TYPES
 } from "./event-types.js";
+export type { DevHubEventType } from "./event-types.js";
 export { DevHubEventsClient } from "./events-client.js";

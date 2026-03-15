@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DevHubCalleeError } from "./errors.js";
+import type { DevHubEventType } from "./event-types.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -172,7 +173,7 @@ export interface RespondRequest {
 
 export interface DevHubEvent {
   subscriptionId: string;
-  type: string;
+  type: DevHubEventType;
   timeUtc: Date;
   payload?: JsonObject;
 }

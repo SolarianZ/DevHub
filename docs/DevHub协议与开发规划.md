@@ -427,6 +427,7 @@ ws.onmessage = (e) => {
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
 - M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、`invocation_failed` 结构化错误辅助、规范事件类型常量、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试，并补齐成功载荷结构校验与本地参数校验；JS/TS SDK 已补齐 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型与基础集成测试；Python SDK 已在 `sdks/python/` 落地同步 HTTP 客户端、异步事件客户端、统一错误模型、公开扩展点与单元/集成测试，跨语言 conformance 资产与统一门禁待补齐）。
+- 2026-03-15 已完成：补齐 `sdks/javascript` 的规范事件类型公开模型，新增 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，并将 `DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名收束到 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
 - 2026-03-14 已完成：补充 [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)，同步总规划与 M5 文档中的 Python SDK 设计、路径与现状说明，明确 Python SDK 仍与仓库级 M5-CONF / M5-CT 任务共享同一套协议与契约基线。
 - 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。本轮仅完成静态检查与代码修复，尚未执行测试验证。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。

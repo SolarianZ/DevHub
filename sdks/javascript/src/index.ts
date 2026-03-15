@@ -8,12 +8,14 @@ export {
   INVOCATION_COMPLETED,
   INVOCATION_DELIVERED,
   INVOCATION_FAILED,
-  INVOCATION_QUEUED
+  INVOCATION_QUEUED,
+  SUPPORTED_EVENT_TYPES
 } from "./events.js";
 export { JsonRpcWsSession } from "./ws-session.js";
 export * from "./errors.js";
 export * from "./models.js";
 export * from "./runtime.js";
+export type { DevHubEventType } from "./event-types.js";
 export type { DevHubClientDependencies, JsonRpcTransport, JsonRpcTransportFactory } from "./client.js";
 export type {
   DevHubEventsClientDependencies,

@@ -1,4 +1,5 @@
 import { AsyncQueue } from "./async-utils.js";
+import type { DevHubEventType } from "./event-types.js";
 import {
   normalizeClientOptions,
   validateClientOptions
@@ -122,7 +123,7 @@ export class DevHubEventsClient {
     }
   }
 
-  async subscribe(types?: string[]): Promise<string> {
+  async subscribe(types?: readonly DevHubEventType[]): Promise<string> {
     this.ensureAuthenticated();
     return parseSubscriptionResult(await this.session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
   }
@@ -209,7 +210,7 @@ export class DevHubEventsClient {
   }
 }
 
-function buildSubscribeParams(types?: string[]): Record<string, unknown> | undefined {
+function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string, unknown> | undefined {
   if (types === undefined) {
     return undefined;
   }
@@ -234,5 +235,5 @@ function buildSubscribeParams(types?: string[]): Record<string, unknown> | undef
     return undefined;
   }
 
-  return { types };
+  return { types: [...types] };
 }

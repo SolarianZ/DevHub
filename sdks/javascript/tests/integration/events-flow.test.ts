@@ -3,6 +3,7 @@ import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
 import { DevHubRpcError } from "../../src/errors.js";
 import { APP_INSTANCE_REGISTERED } from "../../src/events.js";
+import type { DevHubEventType } from "../../src/events.js";
 import { DevHubHostFixture } from "./host.js";
 
 let host: DevHubHostFixture;
@@ -132,7 +133,7 @@ it("订阅未知事件类型应返回 invalid_params", async () => {
 
   let capturedError: unknown;
   try {
-    await eventsClient.subscribe(["unknown.type"]);
+    await eventsClient.subscribe(["unknown.type" as unknown as DevHubEventType]);
   } catch (error) {
     capturedError = error;
   }

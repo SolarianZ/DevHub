@@ -5,7 +5,7 @@ export const INVOCATION_DELIVERED = "invocation.delivered";
 export const INVOCATION_COMPLETED = "invocation.completed";
 export const INVOCATION_FAILED = "invocation.failed";
 
-const SUPPORTED_EVENT_TYPES = [
+export const SUPPORTED_EVENT_TYPES = [
   APP_INSTANCE_REGISTERED,
   APP_INSTANCE_UNREGISTERED,
   INVOCATION_QUEUED,
@@ -14,12 +14,16 @@ const SUPPORTED_EVENT_TYPES = [
   INVOCATION_FAILED
 ] as const;
 
-export const ALL_EVENT_TYPES = new Set<string>(SUPPORTED_EVENT_TYPES);
+export type DevHubEventType = typeof SUPPORTED_EVENT_TYPES[number];
 
-export function ensureSupportedEventType(value: string, propertyName: string): string {
-  if (!ALL_EVENT_TYPES.has(value)) {
+const ALL_EVENT_TYPE_SET = new Set<string>(SUPPORTED_EVENT_TYPES);
+
+export const ALL_EVENT_TYPES: ReadonlySet<DevHubEventType> = ALL_EVENT_TYPE_SET as ReadonlySet<DevHubEventType>;
+
+export function ensureSupportedEventType(value: string, propertyName: string): DevHubEventType {
+  if (!ALL_EVENT_TYPE_SET.has(value)) {
     throw new Error(`${propertyName} must be a supported DevHub event type.`);
   }
 
-  return value;
+  return value as DevHubEventType;
 }
