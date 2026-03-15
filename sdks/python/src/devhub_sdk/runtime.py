@@ -82,14 +82,11 @@ def resolve_runtime_directory(runtime_dir_override: str | None = None) -> Path:
 
 
 def _resolve_runtime_paths(runtime_root_or_directory: Path) -> tuple[Path, Path]:
-    direct_hub_json_path = runtime_root_or_directory / "hub.json"
     standard_runtime_directory = runtime_root_or_directory / "runtime"
     standard_hub_json_path = standard_runtime_directory / "hub.json"
-
-    if direct_hub_json_path.is_file():
-        return runtime_root_or_directory, direct_hub_json_path
 
     if standard_hub_json_path.is_file() or standard_runtime_directory.is_dir():
         return standard_runtime_directory, standard_hub_json_path
 
+    direct_hub_json_path = runtime_root_or_directory / "hub.json"
     return runtime_root_or_directory, direct_hub_json_path

@@ -39,6 +39,26 @@ def test_runtime_discovery_should_support_standard_runtime_root_layout(tmp_path:
     assert connection_info.websocket_endpoint == "ws://127.0.0.1:47231/ws"
 
 
+def test_runtime_discovery_when_runtime_root_contains_multiple_layouts_should_prefer_standard_layout(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "devhub-root"
+    runtime_root.mkdir()
+    legacy_token_file = runtime_root / "token.txt"
+    legacy_token_file.write_text("token-legacy", encoding="utf-8")
+    _write_hub_json(runtime_root, token_file=legacy_token_file)
+
+    runtime_dir = runtime_root / "runtime"
+    runtime_dir.mkdir()
+    standard_token_file = runtime_dir / "token.txt"
+    standard_token_file.write_text("token-standard", encoding="utf-8")
+    _write_hub_json(runtime_dir, token_file=standard_token_file)
+
+    connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client", runtime_dir=str(runtime_root)))
+
+    assert connection_info.runtime_directory == str(runtime_dir.resolve())
+    assert connection_info.token == "token-standard"
+    assert connection_info.runtime.token_file == str(standard_token_file)
+
+
 @pytest.mark.parametrize("missing_property", ["httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"])
 def test_runtime_discovery_when_hub_json_missing_required_field_should_raise(tmp_path: Path, missing_property: str) -> None:
     runtime_dir = tmp_path / "runtime"
