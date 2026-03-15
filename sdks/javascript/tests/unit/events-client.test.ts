@@ -132,6 +132,65 @@ it("authenticate should support WS ping and apps queries", async () => {
   }
 });
 
+it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-payload-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-invalid",
+              type: "invocation.completed",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                callback: (() => "ignored") as any
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-invalid"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["invocation.completed"]))
+      .rejects
+      .toThrow("hub.event.params.payload.callback 包含不支持的 JSON 类型。");
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;

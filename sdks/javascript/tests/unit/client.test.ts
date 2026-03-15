@@ -67,6 +67,63 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   expect(transport.send).toHaveBeenCalledTimes(1);
 });
 
+it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-invalid-echo-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z",
+          echo: {
+            callback: (() => "ignored") as any
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.ping()).rejects.toThrow("hub.ping.result.echo.callback 包含不支持的 JSON 类型。");
+});
+
+it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-invalid-value-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          invocationId: "invk-request-invalid-value",
+          value: {
+            callback: (() => "ignored") as any
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.request({
+    appId: "test.app",
+    method: "test.request"
+  })).rejects.toThrow("hub.invoke.request.result.value.callback 包含不支持的 JSON 类型。");
+});
+
 it("notify 应应用默认选项", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -1026,6 +1083,48 @@ it("listInstances should reject a null meta object", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-invalid-meta-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          instances: [
+            {
+              instanceId: "inst-1",
+              appId: "test.app",
+              scope: null,
+              pid: 12345,
+              registeredAtUtc: "2026-03-09T00:00:00Z",
+              lastSeenUtc: "2026-03-09T00:00:01Z",
+              invoke: {
+                poll: true,
+                respond: true
+              },
+              meta: {
+                callback: (() => "ignored") as any
+              }
+            }
+          ]
+        })
+      })
+    }
+  );
+
+  await expect(client.listInstances()).rejects.toThrow(
+    "hub.apps.listInstances.result.instances[0].meta.callback 包含不支持的 JSON 类型。"
+  );
+});
+
 it("poll should reject null optional invocation booleans", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -1067,6 +1166,52 @@ it("poll should reject null optional invocation booleans", async () => {
     instanceId: "inst-1"
   })).rejects.toThrow(/autoLaunch/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-invalid-args-client",
+      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z",
+          items: [
+            {
+              invocationId: "invk-1",
+              appId: "test.app",
+              target: {
+                scope: null,
+                instanceId: null
+              },
+              method: "test.notify",
+              args: {
+                callback: (() => "ignored") as any
+              },
+              kind: "notify",
+              createdAtUtc: "2026-03-09T00:00:00Z",
+              caller: {
+                clientId: "caller-a",
+                clientSessionId: "11111111-1111-4111-8111-111111111111"
+              }
+            }
+          ]
+        })
+      })
+    }
+  );
+
+  await expect(client.poll({
+    instanceId: "inst-1"
+  })).rejects.toThrow("hub.invoke.poll.result.items[0].args.callback 包含不支持的 JSON 类型。");
 });
 
 function createConnectionInfo() {

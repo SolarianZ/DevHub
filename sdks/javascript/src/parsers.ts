@@ -13,6 +13,8 @@ import type {
 } from "./models.js";
 import { ensureSupportedEventType } from "./event-types.js";
 import {
+  ensureJsonObject,
+  ensureJsonValue,
   ensureRecord,
   readAppId,
   readArray,
@@ -40,7 +42,7 @@ export function parsePingResult(payload: unknown): PingResult {
   return {
     ok: true,
     serverTimeUtc: readDate(record, "hub.ping.result", "serverTimeUtc"),
-    echo: record.echo as JsonValue | undefined
+    echo: readOptionalJsonValue(record, "hub.ping.result", "echo")
   };
 }
 
@@ -132,7 +134,7 @@ export function parseRequestResult(payload: unknown): RequestResult {
   return {
     ok: true,
     invocationId: readInvocationId(record, "hub.invoke.request.result", "invocationId"),
-    value: record.value as JsonValue
+    value: ensureJsonValue(record.value, "hub.invoke.request.result.value")
   };
 }
 
@@ -218,9 +220,6 @@ export function parseAppInstance(payload: unknown, location: string): AppInstanc
   const record = ensureRecord(payload, location);
   const invokePayload = readObject(record, location, "invoke");
 
-  const metaPayload = readOptionalObject(record, location, "meta");
-  const meta = metaPayload as JsonObject | undefined;
-
   return {
     instanceId: readInstanceId(record, location, "instanceId"),
     appId: readAppId(record, location, "appId"),
@@ -232,7 +231,7 @@ export function parseAppInstance(payload: unknown, location: string): AppInstanc
       poll: readBoolean(invokePayload, `${location}.invoke`, "poll"),
       respond: readBoolean(invokePayload, `${location}.invoke`, "respond")
     },
-    meta
+    meta: readOptionalJsonObject(record, location, "meta")
   };
 }
 
@@ -285,7 +284,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
       instanceId: readOptionalInstanceIdOrNull(targetPayload, `${location}.target`, "instanceId")
     },
     method: readString(record, location, "method"),
-    args: record.args as JsonValue | undefined,
+    args: readOptionalJsonValue(record, location, "args"),
     kind,
     createdAtUtc: readDate(record, location, "createdAtUtc"),
     options,
@@ -300,14 +299,11 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
 export function parseEvent(payload: unknown, location: string): DevHubEvent {
   const record = ensureRecord(payload, location);
 
-  const payloadObject = readOptionalObject(record, location, "payload");
-  const parsedPayload = payloadObject as JsonObject | undefined;
-
   return {
     subscriptionId: readString(record, location, "subscriptionId"),
     type: ensureSupportedEventType(readString(record, location, "type"), `${location}.type`),
     timeUtc: readDate(record, location, "timeUtc"),
-    payload: parsedPayload
+    payload: readOptionalJsonObject(record, location, "payload")
   };
 }
 
@@ -316,4 +312,28 @@ function ensureOk(payload: Record<string, unknown>, location: string): void {
   if (!ok) {
     throw new Error(`${location}.ok must be true.`);
   }
+}
+
+function readOptionalJsonValue(
+  payload: Record<string, unknown>,
+  location: string,
+  key: string
+): JsonValue | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+
+  return ensureJsonValue(payload[key], `${location}.${key}`);
+}
+
+function readOptionalJsonObject(
+  payload: Record<string, unknown>,
+  location: string,
+  key: string
+): JsonObject | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+
+  return ensureJsonObject(payload[key], `${location}.${key}`);
 }
