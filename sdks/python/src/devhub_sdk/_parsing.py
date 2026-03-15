@@ -441,11 +441,11 @@ def require_int(root: Mapping[str, Any], name: str, path: str) -> int:
 
 
 def require_positive_int(root: Mapping[str, Any], name: str, path: str) -> int:
-    """璇诲彇蹇呭～姝ｆ暣鏁板睘鎬с€?"""
+    """读取必填正整数属性。"""
 
     value = require_int(root, name, path)
     if value < 1:
-        raise RuntimeError(f"{path}.{name} 蹇呴』涓烘鏁般€?")
+        raise RuntimeError(f"{path}.{name} 必须为正整数。")
     return value
 
 
@@ -460,11 +460,11 @@ def optional_int(value: Any, path: str) -> int | None:
 
 
 def optional_int_at_least(value: Any, path: str, minimum_value: int) -> int | None:
-    """璇诲彇鍙€夋暣鏁板睘鎬э紝骞惰姹傚叾涓嶅皬浜庢寚瀹氫笅闄愩€?"""
+    """读取可选整数属性，并要求其不小于指定下限。"""
 
     parsed = optional_int(value, path)
     if parsed is not None and parsed < minimum_value:
-        raise RuntimeError(f"{path} 蹇呴』澶т簬绛変簬 {minimum_value}銆?")
+        raise RuntimeError(f"{path} 必须大于等于 {minimum_value}。")
     return parsed
 
 

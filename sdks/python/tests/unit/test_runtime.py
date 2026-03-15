@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from devhub_sdk import DevHubClientOptions, discover_runtime
+import devhub_sdk.runtime as runtime_module
 
 
 def test_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: Path) -> None:
@@ -103,6 +104,66 @@ def test_runtime_discovery_when_environment_override_points_to_runtime_root_shou
 
     assert connection_info.runtime_directory == str(runtime_dir.resolve())
     assert connection_info.token == "token-env-root"
+
+
+def test_resolve_runtime_directory_when_override_and_environment_both_present_should_prefer_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEVHUB_RUNTIME_DIR", "C:/runtime-from-env")
+
+    resolved = runtime_module.resolve_runtime_directory("C:/runtime-from-argument")
+
+    assert resolved == Path("C:/runtime-from-argument").resolve()
+
+
+def test_resolve_runtime_directory_on_windows_should_use_local_app_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", "C:/Users/tester/AppData/Local")
+    monkeypatch.setattr(runtime_module.platform, "system", lambda: "Windows")
+
+    resolved = runtime_module.resolve_runtime_directory()
+
+    assert resolved == Path("C:/Users/tester/AppData/Local/DevHub/runtime").resolve()
+
+
+def test_resolve_runtime_directory_on_darwin_should_use_application_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(runtime_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(runtime_module.Path, "home", classmethod(lambda cls: Path("C:/Users/tester")))
+
+    resolved = runtime_module.resolve_runtime_directory()
+
+    assert resolved == Path("C:/Users/tester/Library/Application Support/DevHub/runtime").resolve()
+
+
+def test_resolve_runtime_directory_on_linux_should_use_xdg_data_home_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
+    monkeypatch.setattr(runtime_module.platform, "system", lambda: "Linux")
+    monkeypatch.setenv("XDG_DATA_HOME", "C:/xdg-data")
+
+    resolved = runtime_module.resolve_runtime_directory()
+
+    assert resolved == Path("C:/xdg-data/DevHub/runtime").resolve()
+
+
+def test_resolve_runtime_directory_on_linux_should_fallback_to_home_local_share(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(runtime_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(runtime_module.Path, "home", classmethod(lambda cls: Path("C:/Users/tester")))
+
+    resolved = runtime_module.resolve_runtime_directory()
+
+    assert resolved == Path("C:/Users/tester/.local/share/DevHub/runtime").resolve()
 
 
 def test_runtime_discovery_when_hub_json_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:

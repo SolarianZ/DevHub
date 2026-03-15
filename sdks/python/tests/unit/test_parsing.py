@@ -146,7 +146,7 @@ def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
     payload = _app_instance_payload()
     payload["pid"] = 0
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=r"pid 必须为正整数。"):
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
@@ -204,7 +204,7 @@ def test_parse_invocation_when_delivery_is_not_positive_should_raise(field_name:
     payload = _invocation_payload()
     payload["delivery"][field_name] = value
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=r"必须为正整数。"):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
