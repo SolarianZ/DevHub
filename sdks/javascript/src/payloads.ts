@@ -172,6 +172,10 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
     "ttlMs 必须大于等于 1000。"
   ) ?? (isRequest ? 300000 : 60000);
 
+  if (!isRequest && options?.waitTimeoutMs !== undefined) {
+    throw new Error("hub.invoke.notify 不支持 waitTimeoutMs。");
+  }
+
   const waitTimeoutMs = isRequest
     ? ensureOptionalInputIntegerAtLeast(
       options?.waitTimeoutMs,

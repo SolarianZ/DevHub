@@ -455,6 +455,27 @@ it("request should reject null queueIfOffline before sending the request", async
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("notify 应在本地拒绝 waitTimeoutMs", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-notify-wait-timeout-client",
+    runtimeDir
+  });
+
+  await expect(client.notify({
+    appId: "test.app",
+    method: "test.notify",
+    options: {
+      waitTimeoutMs: 1_000
+    }
+  })).rejects.toThrow("hub.invoke.notify 不支持 waitTimeoutMs。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("respond 应在本地校验 value 与 error 互斥", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
