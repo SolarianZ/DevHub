@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const OUTPUT_LIMIT = 200;
+let sharedHostAssemblyPromise: Promise<string> | undefined;
 
 export class DevHubHostFixture {
   readonly repoRoot: string;
@@ -16,15 +17,23 @@ export class DevHubHostFixture {
   readonly definitionsDirectory: string;
 
   private readonly tempRoot: string;
+  private readonly hostAssemblyPath: string;
   private process: ReturnType<typeof spawn> | null = null;
   private readonly stdoutBuffer: string[] = [];
   private readonly stderrBuffer: string[] = [];
 
-  private constructor(repoRoot: string, tempRoot: string, runtimeDirectory: string, definitionsDirectory: string) {
+  private constructor(
+    repoRoot: string,
+    tempRoot: string,
+    runtimeDirectory: string,
+    definitionsDirectory: string,
+    hostAssemblyPath: string
+  ) {
     this.repoRoot = repoRoot;
     this.tempRoot = tempRoot;
     this.runtimeDirectory = runtimeDirectory;
     this.definitionsDirectory = definitionsDirectory;
+    this.hostAssemblyPath = hostAssemblyPath;
   }
 
   static async start(): Promise<DevHubHostFixture> {
@@ -35,8 +44,15 @@ export class DevHubHostFixture {
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
     await fsPromises.mkdir(definitionsDirectory, { recursive: true });
+    const hostAssemblyPath = await resolveHostAssemblyPath(repoRoot);
 
-    const fixture = new DevHubHostFixture(repoRoot, tempRoot, runtimeDirectory, definitionsDirectory);
+    const fixture = new DevHubHostFixture(
+      repoRoot,
+      tempRoot,
+      runtimeDirectory,
+      definitionsDirectory,
+      hostAssemblyPath
+    );
     await fixture.startProcess();
     return fixture;
   }
@@ -60,18 +76,8 @@ export class DevHubHostFixture {
   }
 
   private async startProcess(): Promise<void> {
-    const hostAssemblyPath = path.join(
-      this.repoRoot,
-      "src",
-      "DevHub.Host",
-      "bin",
-      "Release",
-      "net10.0",
-      "DevHub.Host.dll"
-    );
-
-    if (!(await fileExists(hostAssemblyPath))) {
-      throw new Error(`未找到 Host 程序：${hostAssemblyPath}`);
+    if (!(await fileExists(this.hostAssemblyPath))) {
+      throw new Error(`未找到 Host 程序：${this.hostAssemblyPath}`);
     }
 
     const env = {
@@ -81,7 +87,7 @@ export class DevHubHostFixture {
       DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS: randomUUID().replace(/-/g, "")
     };
 
-    this.process = spawn("dotnet", [hostAssemblyPath], {
+    this.process = spawn("dotnet", [this.hostAssemblyPath], {
       cwd: this.repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
       env
@@ -137,6 +143,60 @@ function resolveRepoRoot(): string {
   throw new Error("无法定位仓库根目录。");
 }
 
+function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
+  sharedHostAssemblyPromise ??= (async () => {
+    const hostBuildRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-host-build-"));
+    return await buildHostAssembly(repoRoot, hostBuildRoot);
+  })();
+
+  return sharedHostAssemblyPromise;
+}
+
+async function buildHostAssembly(repoRoot: string, buildRoot: string): Promise<string> {
+  const hostProjectPath = path.join(repoRoot, "src", "DevHub.Host", "DevHub.Host.csproj");
+  if (!(await fileExists(hostProjectPath))) {
+    throw new Error(`未找到 Host 工程：${hostProjectPath}`);
+  }
+
+  await fsPromises.mkdir(buildRoot, { recursive: true });
+
+  const stdoutBuffer: string[] = [];
+  const stderrBuffer: string[] = [];
+  const build = spawn("dotnet", [
+    "build",
+    hostProjectPath,
+    "-c",
+    "Release",
+    "--nologo",
+    `-p:BaseOutputPath=${ensureTrailingSeparator(path.join(buildRoot, "bin"))}`
+  ], {
+    cwd: repoRoot,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  build.stdout?.on("data", (chunk: Buffer) => {
+    pushOutput(stdoutBuffer, chunk.toString("utf-8"));
+  });
+
+  build.stderr?.on("data", (chunk: Buffer) => {
+    pushOutput(stderrBuffer, chunk.toString("utf-8"));
+  });
+
+  const [exitCode] = await once(build, "exit") as [number | null];
+  if (exitCode !== 0) {
+    throw new Error(
+      `构建 Host 失败。stdout=${stdoutBuffer.join("") || ""} stderr=${stderrBuffer.join("") || ""}`
+    );
+  }
+
+  const hostAssemblyPath = path.join(buildRoot, "bin", "Release", "net10.0", "DevHub.Host.dll");
+  if (!(await fileExists(hostAssemblyPath))) {
+    throw new Error(`未找到构建后的 Host 程序：${hostAssemblyPath}`);
+  }
+
+  return hostAssemblyPath;
+}
+
 async function fileExists(target: string): Promise<boolean> {
   try {
     await fsPromises.stat(target);
@@ -144,6 +204,12 @@ async function fileExists(target: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function ensureTrailingSeparator(value: string): string {
+  return value.endsWith(path.sep)
+    ? value
+    : `${value}${path.sep}`;
 }
 
 function pushOutput(buffer: string[], chunk: string): void {
