@@ -15,6 +15,8 @@ export class DevHubHostFixture {
   readonly repoRoot: string;
   readonly runtimeDirectory: string;
   readonly definitionsDirectory: string;
+  readonly instancesDirectory: string;
+  readonly logsDirectory: string;
 
   private readonly tempRoot: string;
   private readonly hostAssemblyPath: string;
@@ -27,12 +29,16 @@ export class DevHubHostFixture {
     tempRoot: string,
     runtimeDirectory: string,
     definitionsDirectory: string,
+    instancesDirectory: string,
+    logsDirectory: string,
     hostAssemblyPath: string
   ) {
     this.repoRoot = repoRoot;
     this.tempRoot = tempRoot;
     this.runtimeDirectory = runtimeDirectory;
     this.definitionsDirectory = definitionsDirectory;
+    this.instancesDirectory = instancesDirectory;
+    this.logsDirectory = logsDirectory;
     this.hostAssemblyPath = hostAssemblyPath;
   }
 
@@ -41,6 +47,8 @@ export class DevHubHostFixture {
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-"));
     const runtimeDirectory = path.join(tempRoot, "runtime");
     const definitionsDirectory = path.join(tempRoot, "definitions");
+    const instancesDirectory = path.join(tempRoot, "instances");
+    const logsDirectory = path.join(tempRoot, "logs");
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
     await fsPromises.mkdir(definitionsDirectory, { recursive: true });
@@ -51,6 +59,8 @@ export class DevHubHostFixture {
       tempRoot,
       runtimeDirectory,
       definitionsDirectory,
+      instancesDirectory,
+      logsDirectory,
       hostAssemblyPath
     );
     await fixture.startProcess();
@@ -84,6 +94,8 @@ export class DevHubHostFixture {
       ...process.env,
       DEVHUB_RUNTIME_DIR: this.runtimeDirectory,
       DEVHUB_APPDEFS_DIR: this.definitionsDirectory,
+      DEVHUB_APPINST_DIR: this.instancesDirectory,
+      DEVHUB_LOG_DIR: this.logsDirectory,
       DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS: randomUUID().replace(/-/g, "")
     };
 
