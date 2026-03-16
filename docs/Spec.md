@@ -193,7 +193,15 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
 - 每个定义**必须**是一个名为 `{appId}.json` 的 JSON 文件，且**必须**符合 `AppDefinition` 架构 (§5.1)。
 - Hub **必须**忽略不符合命名规则或未通过架构验证的文件（并**应该**记录诊断日志）。
 
-> 注意：符合性测试假设使用平台默认值，除非使用了 `DEVHUB_APPDEFS_DIR`。`DEVHUB_RUNTIME_DIR` 仅影响运行时目录。
+#### 4.1.5 AppInstance 镜像目录 (v1)
+- 默认位置：
+  - **Windows**：`%LOCALAPPDATA%/DevHub/apps/instances/`
+  - **macOS**：`~/Library/Application Support/DevHub/apps/instances/`
+  - **Linux**：`$XDG_DATA_HOME/DevHub/apps/instances/`（若 `XDG_DATA_HOME` 未设置，则使用 `~/.local/share/DevHub/apps/instances/`）
+- Hub **应该**支持通过环境变量 `DEVHUB_APPINST_DIR` 覆盖实例镜像目录（主要用于测试框架 / 便携式安装）。
+- 当前 v1 仅对目录路径本身建立约定；目录内部文件布局属于 Hub 内部实现，客户端**禁止**依赖其内部结构作为公开契约。
+
+> 注意：符合性测试假设使用平台默认值，除非使用了 `DEVHUB_APPDEFS_DIR` 或 `DEVHUB_APPINST_DIR`。`DEVHUB_RUNTIME_DIR` 仅影响运行时目录。
 
 ---
 

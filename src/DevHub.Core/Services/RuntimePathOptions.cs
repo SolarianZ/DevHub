@@ -19,6 +19,11 @@ public sealed class RuntimePathOptions
     public const string AppDefinitionsDirEnvironmentVariable = "DEVHUB_APPDEFS_DIR";
 
     /// <summary>
+    /// 实例目录环境变量名。
+    /// </summary>
+    public const string AppInstancesDirEnvironmentVariable = "DEVHUB_APPINST_DIR";
+
+    /// <summary>
     /// 日志目录环境变量名。
     /// </summary>
     public const string LogDirEnvironmentVariable = "DEVHUB_LOG_DIR";
@@ -101,6 +106,11 @@ public sealed class RuntimePathOptions
                 : definitionsOverride);
         }
 
+        var instancesOverride = Environment.GetEnvironmentVariable(AppInstancesDirEnvironmentVariable);
+        var instancesPath = NormalizePath(string.IsNullOrWhiteSpace(instancesOverride)
+            ? Path.Combine(defaultRootPath, "apps", "instances")
+            : instancesOverride);
+
         var logOverride = Environment.GetEnvironmentVariable(LogDirEnvironmentVariable);
         var logsPath = NormalizePath(string.IsNullOrWhiteSpace(logOverride)
             ? Path.Combine(defaultRootPath, "logs")
@@ -110,7 +120,7 @@ public sealed class RuntimePathOptions
             rootPath: defaultRootPath,
             runtimePath: runtimePath,
             definitionsPath: definitionsPath,
-            instancesPath: Path.Combine(defaultRootPath, "apps", "instances"),
+            instancesPath: instancesPath,
             logsPath: logsPath);
     }
 

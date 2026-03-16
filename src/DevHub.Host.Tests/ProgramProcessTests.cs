@@ -24,7 +24,7 @@ public sealed class ProgramProcessTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_HostProcess_WhenStartedFromDifferentWorkingDirectory_ShouldCreateRuntimeArtifacts()
+    public async Task Impl_HostProcess_WhenStartedFromDifferentWorkingDirectory_ShouldCreateIsolatedArtifacts()
     {
         using var context = CreateProcessContext();
         using var hostProcess = StartHostProcess(context);
@@ -33,6 +33,11 @@ public sealed class ProgramProcessTests : IDisposable
         await WaitForHubJsonAsync(hostProcess, hubJsonPath, TimeSpan.FromSeconds(30));
 
         Assert.False(hostProcess.Process.HasExited, hostProcess.GetFailureMessage("Host 在生成 hub.json 后提前退出。"));
+        Assert.True(Directory.Exists(context.RuntimeDirectory));
+        Assert.True(Directory.Exists(context.DefinitionsDirectory));
+        Assert.True(Directory.Exists(context.InstancesDirectory));
+        Assert.True(Directory.Exists(context.LogsDirectory));
+        Assert.True(File.Exists(Path.Combine(context.RuntimeDirectory, "token.txt")));
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(hubJsonPath));
         Assert.Equal(
@@ -84,19 +89,24 @@ public sealed class ProgramProcessTests : IDisposable
         var workingDirectory = Path.Combine(_tempRoot, "work", contextId);
         var runtimeDirectory = Path.Combine(_tempRoot, "runtime", contextId);
         var definitionsDirectory = Path.Combine(_tempRoot, "definitions", contextId);
+        var instancesDirectory = Path.Combine(_tempRoot, "instances", contextId);
+        var logsDirectory = Path.Combine(_tempRoot, "logs", contextId);
 
         Directory.CreateDirectory(workingDirectory);
-        Directory.CreateDirectory(runtimeDirectory);
-        Directory.CreateDirectory(definitionsDirectory);
 
         return new ProcessTestContext(
             typeof(Program).Assembly.Location,
             workingDirectory,
             runtimeDirectory,
+            definitionsDirectory,
+            instancesDirectory,
+            logsDirectory,
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [RuntimePathOptions.RuntimeDirEnvironmentVariable] = runtimeDirectory,
                 [RuntimePathOptions.AppDefinitionsDirEnvironmentVariable] = definitionsDirectory,
+                [RuntimePathOptions.AppInstancesDirEnvironmentVariable] = instancesDirectory,
+                [RuntimePathOptions.LogDirEnvironmentVariable] = logsDirectory,
                 ["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = contextId
             });
     }
@@ -186,6 +196,9 @@ public sealed class ProgramProcessTests : IDisposable
         string HostAssemblyPath,
         string WorkingDirectory,
         string RuntimeDirectory,
+        string DefinitionsDirectory,
+        string InstancesDirectory,
+        string LogsDirectory,
         IDictionary<string, string> EnvironmentVariables)
         : IDisposable
     {

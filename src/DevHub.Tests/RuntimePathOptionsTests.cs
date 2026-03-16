@@ -24,16 +24,19 @@ public class RuntimePathOptionsTests : IDisposable
     {
         var runtimeOverride = Path.Combine(_tempRoot, "runtime-env");
         var definitionsOverride = Path.Combine(_tempRoot, "definitions-env");
+        var instancesOverride = Path.Combine(_tempRoot, "instances-env");
         var logOverride = Path.Combine(_tempRoot, "logs-env");
 
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtimeOverride);
         using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitionsOverride);
+        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, instancesOverride);
         using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, logOverride);
 
         var options = RuntimePathOptions.Resolve();
 
         Assert.Equal(runtimeOverride, options.RuntimePath);
         Assert.Equal(definitionsOverride, options.DefinitionsPath);
+        Assert.Equal(instancesOverride, options.InstancesPath);
         Assert.Equal(logOverride, options.LogsPath);
         Assert.Equal(Path.Combine(runtimeOverride, "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(runtimeOverride, "hub.json"), options.HubJsonPath);
@@ -56,6 +59,7 @@ public class RuntimePathOptionsTests : IDisposable
     {
         using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, null);
         using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, null);
+        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, null);
         using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, null);
 
         var options = RuntimePathOptions.Resolve();
@@ -86,6 +90,20 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.True(Path.IsPathFullyQualified(options.HubJsonPath));
         Assert.Equal(Path.Combine(expectedRuntimePath, "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(expectedRuntimePath, "hub.json"), options.HubJsonPath);
+    }
+
+    [Fact]
+    public void Impl_Resolve_WithRelativeInstancesOverride_ShouldNormalizeToAbsolutePath()
+    {
+        var currentDirectory = Directory.GetCurrentDirectory();
+        var relativeInstancesOverride = Path.Combine(".", "temp", "instances-relative");
+
+        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, relativeInstancesOverride);
+        var options = RuntimePathOptions.Resolve();
+
+        var expectedInstancesPath = Path.GetFullPath(relativeInstancesOverride, currentDirectory);
+        Assert.Equal(expectedInstancesPath, options.InstancesPath);
+        Assert.True(Path.IsPathFullyQualified(options.InstancesPath));
     }
 
     [Fact]
