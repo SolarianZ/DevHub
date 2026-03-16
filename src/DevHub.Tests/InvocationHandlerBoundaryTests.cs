@@ -219,6 +219,45 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, CancellationToken.None);
         AssertError(bothValueAndError, -32602, "invalid_params");
+
+        var nullError = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-null-error",
+            Method = HubRpcMethods.HubInvokeRespond,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "inst-1",
+                invocationId = "invk-1",
+                error = (object?)null
+            })
+        }, CancellationToken.None);
+        AssertError(nullError, -32602, "invalid_params");
+
+        var missingErrorCode = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-missing-error-code",
+            Method = HubRpcMethods.HubInvokeRespond,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "inst-1",
+                invocationId = "invk-1",
+                error = new { message = "app_error" }
+            })
+        }, CancellationToken.None);
+        AssertError(missingErrorCode, -32602, "invalid_params");
+
+        var invalidErrorData = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-invalid-error-data",
+            Method = HubRpcMethods.HubInvokeRespond,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "inst-1",
+                invocationId = "invk-1",
+                error = new { code = 1001, message = "app_error", data = "boom" }
+            })
+        }, CancellationToken.None);
+        AssertError(invalidErrorData, -32602, "invalid_params");
     }
 
     [Fact]

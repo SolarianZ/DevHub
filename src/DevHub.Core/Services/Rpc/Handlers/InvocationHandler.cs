@@ -383,7 +383,7 @@ public class InvocationHandler : IRpcHandler
                 {
                     ok = true,
                     invocationId,
-                    value = completion.Value
+                    value = completion.Value ?? JsonSerializer.SerializeToElement((object?)null)
                 }
             },
             InvocationRequestCompletionKind.Failed => RpcErrorFactory.Create(requestId, -32050, "invocation_failed", new
@@ -496,6 +496,22 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
+        object? value;
+        object? error;
+        if (hasValue)
+        {
+            value = JsonSerializer.Deserialize<object>(valueElement.GetRawText());
+            error = null;
+        }
+        else
+        {
+            value = null;
+            if (!TryParseRespondError(errorElement, out error))
+            {
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+            }
+        }
+
         var instance = _appRegistry.GetInstance(instanceId);
         if (instance is null)
         {
@@ -508,9 +524,6 @@ public class InvocationHandler : IRpcHandler
         }
 
         _appRegistry.Heartbeat(instanceId, out _);
-
-        var value = hasValue ? JsonSerializer.Deserialize<object>(valueElement.GetRawText()) : null;
-        var error = hasError ? JsonSerializer.Deserialize<object>(errorElement.GetRawText()) : null;
 
         var status = _store.Respond(instanceId, invocationId, value, error);
 
@@ -581,6 +594,48 @@ public class InvocationHandler : IRpcHandler
         }
 
         return new { invocationId };
+    }
+
+    private static bool TryParseRespondError(JsonElement errorElement, out object? error)
+    {
+        error = null;
+
+        if (errorElement.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (!errorElement.TryGetProperty("code", out var codeElement)
+            || codeElement.ValueKind != JsonValueKind.Number
+            || !codeElement.TryGetInt32(out var code))
+        {
+            return false;
+        }
+
+        if (!errorElement.TryGetProperty("message", out var messageElement)
+            || messageElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["code"] = code,
+            ["message"] = messageElement.GetString()
+        };
+
+        if (errorElement.TryGetProperty("data", out var dataElement))
+        {
+            if (dataElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            payload["data"] = JsonSerializer.Deserialize<object>(dataElement.GetRawText());
+        }
+
+        error = payload;
+        return true;
     }
 
     private void PublishInvocationLifecycleEvent(string eventType, InvocationModel invocation, string? instanceId, object? error)

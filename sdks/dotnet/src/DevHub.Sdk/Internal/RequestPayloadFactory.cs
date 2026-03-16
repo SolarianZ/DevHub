@@ -183,16 +183,11 @@ internal static class RequestPayloadFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
 
-        var hasValue = request.Value is not null;
+        var hasValue = request.HasValue;
         var hasError = request.Error is not null;
         if (hasValue == hasError)
         {
             throw new ArgumentException("RespondRequest 必须且只能包含 Value 或 Error 之一。", nameof(request));
-        }
-
-        if (hasError)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(request.Error!.Message);
         }
 
         var payload = new Dictionary<string, object?>
@@ -207,7 +202,7 @@ internal static class RequestPayloadFactory
         }
         else
         {
-            payload["error"] = request.Error;
+            payload["error"] = BuildCalleeErrorPayload(request.Error!, nameof(request));
         }
 
         return payload;
@@ -226,6 +221,11 @@ internal static class RequestPayloadFactory
         }
 
         int? ttlMs = request.Options?.TtlMs ?? (isRequest ? 300000 : 60000);
+        if (!isRequest && request.Options?.WaitTimeoutMs is not null)
+        {
+            throw new ArgumentException("hub.invoke.notify 不支持 waitTimeoutMs。", nameof(request));
+        }
+
         int? waitTimeoutMs = isRequest ? request.Options?.WaitTimeoutMs ?? 120000 : null;
         var queueIfOffline = request.Options?.QueueIfOffline ?? true;
         var autoLaunch = request.Options?.AutoLaunch ?? target.InstanceId is null;
@@ -302,5 +302,29 @@ internal static class RequestPayloadFactory
         {
             throw new ArgumentException($"{propertyName} 必须序列化为 JSON 对象。", paramName);
         }
+    }
+
+    private static object BuildCalleeErrorPayload(DevHubCalleeError error, string paramName)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        ArgumentException.ThrowIfNullOrWhiteSpace(error.Message);
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["code"] = error.Code,
+            ["message"] = error.Message
+        };
+
+        if (error.Data is { } data)
+        {
+            if (data.ValueKind != JsonValueKind.Object)
+            {
+                throw new ArgumentException("Error.Data 必须为 JSON 对象。", paramName);
+            }
+
+            payload["data"] = JsonSerializer.Deserialize<object>(data.GetRawText(), DevHubJson.SerializerOptions);
+        }
+
+        return payload;
     }
 }

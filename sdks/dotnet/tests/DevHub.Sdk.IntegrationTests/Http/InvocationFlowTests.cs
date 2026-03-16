@@ -84,6 +84,44 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
+    public async Task M5_E2E_003_RequestRespondNullValue_ShouldReturnJsonNull()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.request.null.app",
+            DisplayName = "invoke.request.null.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-request-null-client");
+        await client.RegisterInstanceAsync(CreateInstance("invoke.request.null.app", "request-null-inst-1", scope: null));
+
+        var requestTask = client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.request.null.app",
+            Method = "test.request.null",
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        var invocation = await WaitForSingleInvocationAsync(client, "request-null-inst-1");
+
+        await client.RespondAsync(new RespondRequest
+        {
+            InstanceId = "request-null-inst-1",
+            InvocationId = invocation.InvocationId,
+            Value = null
+        });
+
+        var requestResult = await requestTask;
+        Assert.True(requestResult.Ok);
+        Assert.Null(requestResult.Value);
+    }
+
+    [Fact]
     public async Task M5_E2E_008_RequestRespondError_ShouldMapInvocationFailed()
     {
         await using var host = await DevHubHostFixture.StartAsync();

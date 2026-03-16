@@ -44,6 +44,22 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void M5_DN_UT_006_NotifyBuilder_WhenWaitTimeoutSpecified_ShouldThrowArgumentException()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
+        {
+            AppId = "test.app",
+            Method = "test.notify",
+            Options = new InvocationOptions
+            {
+                WaitTimeoutMs = 1000
+            }
+        }));
+
+        Assert.Contains("waitTimeoutMs", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void M5_DN_UT_006_RequestBuilder_ShouldPreserveExplicitEmptyScope()
     {
         var payload = RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
@@ -108,6 +124,21 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void M5_DN_UT_006_RespondBuilder_WhenValueExplicitlyNull_ShouldWriteJsonNull()
+    {
+        var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InvocationId = "invk-1",
+            Value = null
+        });
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
+        Assert.False(document.RootElement.TryGetProperty("error", out _));
+    }
+
+    [Fact]
     public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
@@ -137,5 +168,23 @@ public sealed class InvocationRequestBuilderTests
                 Message = string.Empty
             }
         }));
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_RespondBuilder_WhenErrorDataIsNotObject_ShouldThrowArgumentException()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InvocationId = "invk-1",
+            Error = new DevHubCalleeError
+            {
+                Code = 1001,
+                Message = "app_error",
+                Data = JsonSerializer.SerializeToElement("boom")
+            }
+        }));
+
+        Assert.Contains("Error.Data", exception.Message, StringComparison.Ordinal);
     }
 }

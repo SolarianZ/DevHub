@@ -888,6 +888,53 @@ public class M2InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.13")]
+    public async Task Spec_6_3_13_Respond_WhenErrorPayloadMalformed_ShouldReturnInvalidParams()
+    {
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var nonObject = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.13-error-non-object",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "any-instance",
+                invocationId = "invk-any",
+                error = "boom"
+            })
+        }, CancellationToken.None);
+        AssertError(nonObject, -32602, "invalid_params");
+
+        var missingCode = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.13-error-missing-code",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "any-instance",
+                invocationId = "invk-any",
+                error = new { message = "app_error" }
+            })
+        }, CancellationToken.None);
+        AssertError(missingCode, -32602, "invalid_params");
+
+        var invalidData = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.13-error-invalid-data",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "any-instance",
+                invocationId = "invk-any",
+                error = new { code = 1001, message = "app_error", data = 42 }
+            })
+        }, CancellationToken.None);
+        AssertError(invalidData, -32602, "invalid_params");
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.13")]
     public async Task Spec_6_3_13_Respond_WhenNonLeaseHolderOrDuplicate_ShouldReturnDeliveryConflict()
     {
         const string appId = "spec-6.3.13-delivery-conflict";

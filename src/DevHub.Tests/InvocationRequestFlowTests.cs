@@ -116,6 +116,81 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Request_Poll_RespondNullValue_ShouldReturnSuccessWithNullValue()
+    {
+        const string appId = "request-null-success.app";
+        const string instanceId = "request-null-success-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = instanceId,
+            AppId = appId,
+            Scope = null,
+            Pid = 6109,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateHandler(appRegistry);
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-null-success",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.null-result",
+                options = new
+                {
+                    ttlMs = 10000,
+                    waitTimeoutMs = 3000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-null-success",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                maxCount = 1,
+                waitMs = 1000
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+
+        var respondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-null-success",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                invocationId,
+                value = (object?)null
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(respondResponse.Error);
+
+        var requestResponse = await requestTask;
+        Assert.Null(requestResponse.Error);
+        var requestResult = JsonSerializer.SerializeToElement(requestResponse.Result);
+        Assert.True(requestResult.TryGetProperty("value", out var value));
+        Assert.Equal(JsonValueKind.Null, value.ValueKind);
+    }
+
+    [Fact]
     public async Task Impl_Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
     {
         const string appId = "request-failed.app";

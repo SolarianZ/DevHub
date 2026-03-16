@@ -233,6 +233,7 @@ public sealed class PollResult
 /// </summary>
 public sealed class RespondRequest
 {
+    private object? _value;
     /// <summary>
     /// 实例标识。
     /// </summary>
@@ -246,12 +247,22 @@ public sealed class RespondRequest
     /// <summary>
     /// 成功返回值。
     /// </summary>
-    public object? Value { get; set; }
+    public object? Value
+    {
+        get => _value;
+        set
+        {
+            _value = value;
+            HasValue = true;
+        }
+    }
 
     /// <summary>
     /// 失败错误对象。
     /// </summary>
     public DevHubCalleeError? Error { get; set; }
+
+    internal bool HasValue { get; private set; }
 }
 
 /// <summary>
@@ -504,11 +515,23 @@ public sealed class DevHubCalleeError
     /// <returns>错误对象。</returns>
     public static DevHubCalleeError Create(int code, string message, object? data = null)
     {
+        JsonElement? serializedData = null;
+        if (data is not null)
+        {
+            var jsonData = JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions);
+            if (jsonData.ValueKind != JsonValueKind.Object)
+            {
+                throw new ArgumentException("data 必须序列化为 JSON 对象。", nameof(data));
+            }
+
+            serializedData = jsonData;
+        }
+
         return new DevHubCalleeError
         {
             Code = code,
             Message = message,
-            Data = data is null ? null : JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions)
+            Data = serializedData
         };
     }
 }

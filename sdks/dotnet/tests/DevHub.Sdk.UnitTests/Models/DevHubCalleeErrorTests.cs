@@ -25,6 +25,12 @@ public sealed class DevHubCalleeErrorTests
         Assert.False(error.Data!.Value.TryGetProperty("RetryCount", out _));
     }
 
+    [Fact]
+    public void M5_DN_UT_008_CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
+    }
+
     private sealed class SampleErrorData
     {
         public string ErrorCode { get; init; } = string.Empty;
