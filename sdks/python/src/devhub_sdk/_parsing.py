@@ -246,9 +246,13 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     options = None
     if "options" in root:
         options_root = require_mapping(root["options"], f"{path}.options")
+        ttl_ms = optional_property_int_at_least(options_root, "ttlMs", f"{path}.options", 1000)
+        wait_timeout_ms = optional_property_int_at_least(options_root, "waitTimeoutMs", f"{path}.options", 1)
+        if wait_timeout_ms is not None and ttl_ms is not None and wait_timeout_ms > ttl_ms:
+            raise RuntimeError(f"{path}.options.waitTimeoutMs 蹇呴』灏忎簬绛変簬 ttlMs銆?")
         options = InvocationOptions(
-            ttl_ms=optional_property_int_at_least(options_root, "ttlMs", f"{path}.options", 1000),
-            wait_timeout_ms=optional_property_int_at_least(options_root, "waitTimeoutMs", f"{path}.options", 1),
+            ttl_ms=ttl_ms,
+            wait_timeout_ms=wait_timeout_ms,
             queue_if_offline=optional_property_bool(options_root, "queueIfOffline", f"{path}.options"),
             auto_launch=optional_property_bool(options_root, "autoLaunch", f"{path}.options"),
         )

@@ -193,6 +193,15 @@ def test_parse_invocation_when_option_is_out_of_range_should_raise(field_name: s
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
+def test_parse_invocation_when_wait_timeout_exceeds_ttl_should_raise() -> None:
+    payload = _invocation_payload()
+    payload["options"]["ttlMs"] = 1000
+    payload["options"]["waitTimeoutMs"] = 1001
+
+    with pytest.raises(RuntimeError, match=r"waitTimeoutMs"):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [
