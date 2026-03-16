@@ -17,11 +17,21 @@ from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubEventsClient
 class DevHubHostFixture:
     """DevHub Host 进程测试夹具。"""
 
-    def __init__(self, repo_root: Path, temp_root: TemporaryDirectory[str], runtime_directory: Path, definitions_directory: Path) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        temp_root: TemporaryDirectory[str],
+        runtime_directory: Path,
+        definitions_directory: Path,
+        instances_directory: Path,
+        logs_directory: Path,
+    ) -> None:
         self._repo_root = repo_root
         self._temp_root = temp_root
         self.runtime_directory = runtime_directory
         self.definitions_directory = definitions_directory
+        self.instances_directory = instances_directory
+        self.logs_directory = logs_directory
         self._process: subprocess.Popen[str] | None = None
         self._stdout_buffer: deque[str] = deque(maxlen=200)
         self._stderr_buffer: deque[str] = deque(maxlen=200)
@@ -35,10 +45,21 @@ class DevHubHostFixture:
         temp_path = Path(temp_root.name)
         runtime_directory = temp_path / "runtime"
         definitions_directory = temp_path / "definitions"
+        instances_directory = temp_path / "instances"
+        logs_directory = temp_path / "logs"
         runtime_directory.mkdir(parents=True, exist_ok=True)
         definitions_directory.mkdir(parents=True, exist_ok=True)
+        instances_directory.mkdir(parents=True, exist_ok=True)
+        logs_directory.mkdir(parents=True, exist_ok=True)
 
-        fixture = cls(repo_root, temp_root, runtime_directory, definitions_directory)
+        fixture = cls(
+            repo_root,
+            temp_root,
+            runtime_directory,
+            definitions_directory,
+            instances_directory,
+            logs_directory,
+        )
         fixture._start_process()
         return fixture
 
@@ -81,6 +102,8 @@ class DevHubHostFixture:
         environment = os.environ.copy()
         environment["DEVHUB_RUNTIME_DIR"] = str(self.runtime_directory)
         environment["DEVHUB_APPDEFS_DIR"] = str(self.definitions_directory)
+        environment["DEVHUB_APPINST_DIR"] = str(self.instances_directory)
+        environment["DEVHUB_LOG_DIR"] = str(self.logs_directory)
         environment["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = uuid4().hex
 
         self._process = subprocess.Popen(
