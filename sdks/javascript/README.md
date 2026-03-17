@@ -11,6 +11,7 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 - 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 现会按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构现已按 Spec 严格要求整数 `code` 与对象型 `data`。
 - 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
+- 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
 - 运行时发现现已同时支持标准运行时根目录布局（`<DEVHUB_RUNTIME_DIR>/runtime/hub.json`）与既有直接运行时目录布局（`<dir>/hub.json`），并支持 `127.0.0.1`、`localhost` 与 `::1` 回环端点。
 - 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点，便于 fake transport、录制回放或自定义连接策略测试。
 
@@ -39,6 +40,7 @@ npm test
 - HTTP flows：`ping`、应用定义查询、实例注册/心跳/注销、`launch`、`notify`、`request`、`poll`、`respond`。
 - Launch semantics：`started`、`starting`、`already_running` 状态与去重/在线实例分支。
 - Invocation semantics：默认选项、`delivery_conflict`、`invocation_timeout`、`invocation_expired`、`invocation_failed`。
+- Capability gates：`rpc_disabled`、`poll_not_enabled`、`respond_not_enabled` 错误映射。
 - Scope routing：默认 Global、显式空字符串 scope、字面量 `global` 与命名 scope。
 - Events flows：WS 鉴权、订阅/取消订阅、未知事件类型错误、断开后重新订阅。
 

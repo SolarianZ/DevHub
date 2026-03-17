@@ -27,6 +27,21 @@ beforeAll(async () => {
     appId: "invoke.scope.app",
     displayName: "invoke.scope.app"
   });
+  await host.writeDefinition({
+    appId: "invoke.rpc-disabled.app",
+    displayName: "invoke.rpc-disabled.app",
+    capabilities: {
+      rpc: false
+    }
+  });
+  await host.writeDefinition({
+    appId: "invoke.poll-disabled.app",
+    displayName: "invoke.poll-disabled.app"
+  });
+  await host.writeDefinition({
+    appId: "invoke.respond-disabled.app",
+    displayName: "invoke.respond-disabled.app"
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -180,6 +195,83 @@ it("request 超时与过期应映射为预期错误", async () => {
   await client.dispose();
 });
 
+it("notify/request 在 rpc_disabled 时应映射 forbidden", async () => {
+  const client = await createClient("invoke-rpc-disabled-client");
+
+  await expectRpcError(
+    client.notify({
+      appId: "invoke.rpc-disabled.app",
+      method: "test.notify"
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "rpc_disabled"
+  );
+
+  await expectRpcError(
+    client.request({
+      appId: "invoke.rpc-disabled.app",
+      method: "test.request"
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "rpc_disabled"
+  );
+
+  await client.dispose();
+});
+
+it("poll 在 poll_not_enabled 时应映射 forbidden", async () => {
+  const client = await createClient("invoke-poll-disabled-client");
+  await registerInstance(
+    client,
+    "invoke.poll-disabled.app",
+    "poll-disabled-inst-1",
+    null,
+    {
+      poll: false,
+      respond: true
+    }
+  );
+
+  await expectRpcError(
+    client.poll({
+      instanceId: "poll-disabled-inst-1",
+      waitMs: 0
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "poll_not_enabled"
+  );
+
+  await client.dispose();
+});
+
+it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
+  const client = await createClient("invoke-respond-disabled-client");
+  await registerInstance(
+    client,
+    "invoke.respond-disabled.app",
+    "respond-disabled-inst-1",
+    null,
+    {
+      poll: true,
+      respond: false
+    }
+  );
+
+  await expectRpcError(
+    client.respond({
+      instanceId: "respond-disabled-inst-1",
+      invocationId: "invk-missing",
+      value: {
+        ok: true
+      }
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "respond_not_enabled"
+  );
+
+  await client.dispose();
+});
+
 it("scope 路由规则应命中正确实例", async () => {
   const client = await createClient("invoke-scope-client");
   await registerInstance(client, "invoke.scope.app", "scope-global-inst", null);
@@ -230,16 +322,22 @@ async function createClient(clientId: string): Promise<DevHubClient> {
   });
 }
 
-async function registerInstance(client: DevHubClient, appId: string, instanceId: string, scope?: string | null): Promise<void> {
+async function registerInstance(
+  client: DevHubClient,
+  appId: string,
+  instanceId: string,
+  scope?: string | null,
+  invoke = {
+    poll: true,
+    respond: true
+  }
+): Promise<void> {
   await client.registerInstance({
     instanceId,
     appId,
     scope,
     pid: process.pid,
-    invoke: {
-      poll: true,
-      respond: true
-    }
+    invoke
   });
 }
 
@@ -252,4 +350,24 @@ async function waitForSingleInvocation(client: DevHubClient, instanceId: string)
 
   expect(result.items).toHaveLength(1);
   return result.items[0];
+}
+
+async function expectRpcError<T>(
+  promise: Promise<T>,
+  code: DevHubRpcErrorCode,
+  reason: string
+): Promise<DevHubRpcError> {
+  let capturedError: unknown;
+
+  try {
+    await promise;
+  } catch (error) {
+    capturedError = error;
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(code);
+  expect(rpcError.reason).toBe(reason);
+  return rpcError;
 }
