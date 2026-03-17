@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
@@ -129,7 +130,7 @@ class DevHubClient:
             raise RuntimeError("hub.apps.registerInstance.result 返回结果非法。")
         return parse_app_instance(root.get("instance"), path="hub.apps.registerInstance.result.instance")
 
-    def heartbeat(self, instance_id: str):
+    def heartbeat(self, instance_id: str) -> datetime:
         """调用 `hub.apps.heartbeat`。"""
 
         result = self._send("hub.apps.heartbeat", build_heartbeat_params(instance_id))
