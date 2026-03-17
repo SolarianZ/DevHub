@@ -346,7 +346,11 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                         ValidateEvent(evt);
                         await _eventChannel.Writer.WriteAsync(evt, cancellationToken);
                     }
+
+                    continue;
                 }
+
+                ThrowUnexpectedIncomingMessage(root);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -457,6 +461,22 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         return true;
+    }
+
+    private static void ThrowUnexpectedIncomingMessage(JsonElement root)
+    {
+        if (root.TryGetProperty("id", out _))
+        {
+            throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 响应。");
+        }
+
+        if (root.TryGetProperty("method", out var methodElement) && methodElement.ValueKind == JsonValueKind.String)
+        {
+            var method = methodElement.GetString() ?? string.Empty;
+            throw new InvalidOperationException($"收到不受支持的 WebSocket 通知：{method}");
+        }
+
+        throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 消息。");
     }
 
     private static void ValidateIncomingEnvelope(JsonElement root)
