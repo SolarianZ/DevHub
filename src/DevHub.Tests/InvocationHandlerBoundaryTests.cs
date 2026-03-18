@@ -15,15 +15,17 @@ using Moq;
 [Trait("Category", "Impl")]
 public sealed class InvocationHandlerBoundaryTests : IDisposable
 {
-    private readonly string _tempDirectory;
+    private readonly string _dataDirectory;
+    private readonly string _definitionsDirectory;
 
     /// <summary>
     /// 初始化测试上下文。
     /// </summary>
     public InvocationHandlerBoundaryTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubInvocationHandlerBoundaryTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_tempDirectory);
+        _dataDirectory = Path.Combine(Path.GetTempPath(), "DevHubInvocationHandlerBoundaryTests", Guid.NewGuid().ToString("N"));
+        _definitionsDirectory = Path.Combine(_dataDirectory, "apps", "definitions");
+        Directory.CreateDirectory(_definitionsDirectory);
     }
 
     [Fact]
@@ -505,9 +507,9 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     {
         try
         {
-            if (Directory.Exists(_tempDirectory))
+            if (Directory.Exists(_dataDirectory))
             {
-                Directory.Delete(_tempDirectory, recursive: true);
+                Directory.Delete(_dataDirectory, recursive: true);
             }
         }
         catch
@@ -519,14 +521,14 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     {
         var effectiveClock = clock ?? new SystemClock();
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
         var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
         var store = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, effectiveClock);
         var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Create(_tempDirectory));
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Create(_dataDirectory));
         var launchCoordinator = new LaunchCoordinator(
             definitionProvider,
             appRegistry,
@@ -548,7 +550,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_definitionsDirectory, $"{appId}.json");
         var payload = new
         {
             appId,

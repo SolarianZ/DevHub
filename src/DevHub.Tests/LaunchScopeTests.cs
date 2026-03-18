@@ -17,7 +17,8 @@ using Moq;
 [Trait("Category", "Impl")]
 public class LaunchScopeTests : IDisposable
 {
-    private readonly string _tempDirectory;
+    private readonly string _dataDirectory;
+    private readonly string _definitionsDirectory;
     private readonly string _runtimeDirectory;
     private readonly EnvironmentVariableScope _dataScope;
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
@@ -33,17 +34,19 @@ public class LaunchScopeTests : IDisposable
     /// </summary>
     public LaunchScopeTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchScopeTests", Guid.NewGuid().ToString("N"));
-        _runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
-        Directory.CreateDirectory(_tempDirectory);
+        _dataDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchScopeTests", Guid.NewGuid().ToString("N"));
+        _definitionsDirectory = Path.Combine(_dataDirectory, "apps", "definitions");
+        _runtimeDirectory = Path.Combine(_dataDirectory, "runtime");
+        Directory.CreateDirectory(_dataDirectory);
+        Directory.CreateDirectory(_definitionsDirectory);
         Directory.CreateDirectory(_runtimeDirectory);
-        _dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
+        _dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _dataDirectory);
     }
 
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -72,7 +75,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -118,7 +121,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -163,7 +166,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -196,7 +199,7 @@ public class LaunchScopeTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -272,7 +275,7 @@ public class LaunchScopeTests : IDisposable
             argsTemplate: "--scope {scopeOrGlobal}");
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -338,15 +341,15 @@ public class LaunchScopeTests : IDisposable
     {
         _dataScope.Dispose();
 
-        if (Directory.Exists(_tempDirectory))
+        if (Directory.Exists(_dataDirectory))
         {
-            Directory.Delete(_tempDirectory, recursive: true);
+            Directory.Delete(_dataDirectory, recursive: true);
         }
     }
 
     private LaunchCoordinator CreateCoordinator(IProcessLauncher? processLauncher = null)
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -394,7 +397,7 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
