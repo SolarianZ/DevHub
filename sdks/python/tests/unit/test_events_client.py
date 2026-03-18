@@ -100,6 +100,61 @@ async def test_events_client_with_injected_resolver_and_session_should_use_abstr
 
 
 @pytest.mark.asyncio
+async def test_events_client_with_injected_session_should_support_ws_readable_methods() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.ping": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z", "echo": {"value": 1}},
+            "hub.apps.listDefinitions": {"ok": True, "definitions": [{"appId": "ws.app", "displayName": "WS App"}]},
+            "hub.apps.getDefinition": {"ok": True, "definition": {"appId": "ws.app", "displayName": "WS App"}},
+            "hub.apps.listInstances": {
+                "ok": True,
+                "instances": [
+                    {
+                        "instanceId": "inst-1",
+                        "appId": "ws.app",
+                        "scope": None,
+                        "pid": 12345,
+                        "registeredAtUtc": "2026-03-09T00:00:00Z",
+                        "lastSeenUtc": "2026-03-09T00:00:01Z",
+                        "invoke": {"poll": True, "respond": True},
+                    }
+                ],
+            },
+        },
+        events=[],
+    )
+
+    client = DevHubEventsClient(
+        DevHubClientOptions(client_id="ws-client"),
+        runtime_resolver=resolver,
+        session=session,
+    )
+    try:
+        await client.authenticate()
+        ping = await client.ping({"value": 1})
+        definitions = await client.list_definitions()
+        definition = await client.get_definition("ws.app")
+        instances = await client.list_instances()
+    finally:
+        await client.close()
+
+    assert ping.ok is True
+    assert definitions[0].app_id == "ws.app"
+    assert definition.app_id == "ws.app"
+    assert instances[0].instance_id == "inst-1"
+    assert [request["method"] for request in session.requests] == [
+        "hub.ws.authenticate",
+        "hub.ping",
+        "hub.apps.listDefinitions",
+        "hub.apps.getDefinition",
+        "hub.apps.listInstances",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_events_client_subscribe_without_types_should_request_all_events() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)

@@ -1,15 +1,16 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
-using System.Runtime.CompilerServices;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk;
 
 /// <summary>
-/// DevHub WebSocket 事件客户端。
+/// DevHub WebSocket 客户端。
+/// 支持事件订阅以及协议允许的 WS 只读方法。
 /// </summary>
 public sealed class DevHubEventsClient : IAsyncDisposable
 {
@@ -55,11 +56,11 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public HubRuntime Runtime => _connectionInfo.Runtime;
 
     /// <summary>
-    /// 通过运行时目录创建事件客户端。
+    /// 通过运行时目录创建客户端。
     /// </summary>
     /// <param name="options">客户端选项。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>事件客户端实例。</returns>
+    /// <returns>客户端实例。</returns>
     public static async Task<DevHubEventsClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
         var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
@@ -87,7 +88,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         ThrowIfDisposed();
         if (_authenticated)
         {
-            throw new InvalidOperationException("当前事件客户端已完成认证。");
+            throw new InvalidOperationException("当前 WebSocket 客户端已完成认证。");
         }
 
         await EnsureConnectedAsync(cancellationToken);
@@ -125,9 +126,105 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.ping</c>。
+    /// </summary>
+    /// <param name="echo">可选回显参数。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>Ping 结果。</returns>
+    public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
+    {
+        object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
+        var result = await SendRequestAsync("hub.ping", parameters, requireAuthenticated: true, cancellationToken);
+        var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.ping.result");
+        ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
+        return payload;
+    }
+
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.listDefinitions</c>。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义列表。</returns>
+    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await SendRequestAsync("hub.apps.listDefinitions", null, requireAuthenticated: true, cancellationToken);
+        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
+        var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+
+        var index = 0;
+        foreach (var definitionElement in definitionsElement.EnumerateArray())
+        {
+            ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
+            index++;
+        }
+
+        return payload.Definitions;
+    }
+
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.getDefinition</c>。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义。</returns>
+    public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
+    {
+        var result = await SendRequestAsync(
+            "hub.apps.getDefinition",
+            RequestPayloadFactory.BuildGetDefinitionParams(appId),
+            requireAuthenticated: true,
+            cancellationToken);
+
+        ResponsePayloadReader.ValidateAppDefinitionElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
+            "hub.apps.getDefinition.result.definition");
+
+        var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
+        return payload.Definition;
+    }
+
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.listInstances</c>。
+    /// </summary>
+    /// <param name="request">过滤参数。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>实例列表。</returns>
+    public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(
+        ListInstancesRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await SendRequestAsync(
+            "hub.apps.listInstances",
+            RequestPayloadFactory.BuildListInstancesParams(request),
+            requireAuthenticated: true,
+            cancellationToken);
+
+        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
+        var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
+
+        var index = 0;
+        foreach (var instanceElement in instancesElement.EnumerateArray())
+        {
+            ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
+            index++;
+        }
+
+        return payload.Instances;
+    }
+
+    /// <summary>
     /// 订阅事件。
     /// </summary>
-    /// <param name="types">事件类型列表；空或 <see langword="null"/> 表示订阅全部。</param>
+    /// <param name="types">事件类型列表；为空或 <see langword="null"/> 表示订阅全部。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>订阅标识。</returns>
     public async Task<string> SubscribeAsync(IEnumerable<string>? types = null, CancellationToken cancellationToken = default)
@@ -205,7 +302,6 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public IAsyncEnumerable<DevHubEvent> ReadEventsAsync(CancellationToken cancellationToken = default)
     {
         EnsureEventStreamAvailable();
-
         return ReadEventsCore(cancellationToken);
     }
 
@@ -455,7 +551,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             throw new InvalidOperationException("hub.event.params 非法。");
         }
 
-        if (root.TryGetProperty("result", out _) || root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
+        if (root.TryGetProperty("result", out _) ||
+            root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
         {
             throw new InvalidOperationException("hub.event 通知禁止包含 result 或 error。");
         }
@@ -527,27 +624,12 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
     }
 
-    private static bool TryGetRequestId(JsonElement root, out string requestId)
-    {
-        requestId = string.Empty;
-        if (!root.TryGetProperty("id", out var idElement))
-        {
-            return false;
-        }
-
-        requestId = idElement.ValueKind == JsonValueKind.String
-            ? idElement.GetString() ?? string.Empty
-            : idElement.GetRawText();
-
-        return !string.IsNullOrWhiteSpace(requestId);
-    }
-
     private void EnsureAuthenticated()
     {
         ThrowIfDisposed();
         if (!_authenticated)
         {
-            throw new InvalidOperationException("当前事件客户端尚未认证。");
+            throw new InvalidOperationException("当前 WebSocket 客户端尚未认证。");
         }
     }
 
@@ -615,10 +697,5 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         public bool Ok { get; set; }
 
         public string SubscriptionId { get; set; } = string.Empty;
-    }
-
-    private sealed class OkOnlyContract
-    {
-        public bool Ok { get; set; }
     }
 }

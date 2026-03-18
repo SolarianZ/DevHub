@@ -5,9 +5,11 @@ from typing import Any
 
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from ._parsing import (
-    parse_app_definition,
     parse_app_instance,
     parse_datetime,
+    parse_definition_result,
+    parse_definitions_result,
+    parse_instances_result,
     parse_launch_result,
     parse_notify_result,
     parse_ping_result,
@@ -101,25 +103,13 @@ class DevHubClient:
         """调用 `hub.apps.listDefinitions`。"""
 
         result = self._send("hub.apps.listDefinitions", None)
-        root = require_mapping(result, "hub.apps.listDefinitions.result")
-        if not require_bool(root, "ok", "hub.apps.listDefinitions.result"):
-            raise RuntimeError("hub.apps.listDefinitions.result 返回结果非法。")
-        definitions = root.get("definitions")
-        if not isinstance(definitions, list):
-            raise RuntimeError("hub.apps.listDefinitions.result.definitions 必须为数组。")
-        return [
-            parse_app_definition(item, path=f"hub.apps.listDefinitions.result.definitions[{index}]")
-            for index, item in enumerate(definitions)
-        ]
+        return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
     def get_definition(self, app_id: str) -> AppDefinition:
         """调用 `hub.apps.getDefinition`。"""
 
         result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id))
-        root = require_mapping(result, "hub.apps.getDefinition.result")
-        if not require_bool(root, "ok", "hub.apps.getDefinition.result"):
-            raise RuntimeError("hub.apps.getDefinition.result 返回结果非法。")
-        return parse_app_definition(root.get("definition"), path="hub.apps.getDefinition.result.definition")
+        return parse_definition_result(result, path="hub.apps.getDefinition.result")
 
     def register_instance(self, instance: AppInstanceRegistration) -> AppInstance:
         """调用 `hub.apps.registerInstance`。"""
@@ -154,16 +144,7 @@ class DevHubClient:
         """调用 `hub.apps.listInstances`。"""
 
         result = self._send("hub.apps.listInstances", build_list_instances_params(request))
-        root = require_mapping(result, "hub.apps.listInstances.result")
-        if not require_bool(root, "ok", "hub.apps.listInstances.result"):
-            raise RuntimeError("hub.apps.listInstances.result 返回结果非法。")
-        instances = root.get("instances")
-        if not isinstance(instances, list):
-            raise RuntimeError("hub.apps.listInstances.result.instances 必须为数组。")
-        return [
-            parse_app_instance(item, path=f"hub.apps.listInstances.result.instances[{index}]")
-            for index, item in enumerate(instances)
-        ]
+        return parse_instances_result(result, path="hub.apps.listInstances.result")
 
     def launch(self, request: LaunchRequest) -> LaunchResult:
         """调用 `hub.apps.launch`。"""

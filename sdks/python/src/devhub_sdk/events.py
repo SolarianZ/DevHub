@@ -3,18 +3,35 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any, AsyncIterator
 
-from ._parsing import require_bool, require_mapping, require_str
-from ._validation import require_non_empty_string
+from ._parsing import (
+    parse_definition_result,
+    parse_definitions_result,
+    parse_instances_result,
+    parse_ping_result,
+    require_bool,
+    require_mapping,
+    require_str,
+)
+from ._validation import ensure_json_value, require_non_empty_string
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
-from .models import DevHubClientOptions, DevHubEvent, HubRuntime
+from .models import (
+    AppDefinition,
+    AppInstance,
+    DevHubClientOptions,
+    DevHubEvent,
+    HubRuntime,
+    ListInstancesRequest,
+    PingResult,
+)
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
 
 _DEFAULT_RUNTIME_RESOLVER = FileSystemRuntimeResolver()
+_ECHO_UNSET = object()
 
 
 class DevHubEventsClient:
-    """DevHub WebSocket 事件客户端。"""
+    """DevHub WebSocket 客户端。"""
 
     def __init__(
         self,
@@ -23,7 +40,7 @@ class DevHubEventsClient:
         runtime_resolver: RuntimeResolver | None = None,
         session: JsonRpcWsSession | None = None,
     ) -> None:
-        """初始化事件客户端。"""
+        """初始化 WebSocket 客户端。"""
 
         self._options = options.clone()
         self._options.validate()
@@ -35,7 +52,7 @@ class DevHubEventsClient:
 
     @classmethod
     async def from_runtime(cls, options: DevHubClientOptions) -> "DevHubEventsClient":
-        """根据运行时目录创建事件客户端。"""
+        """根据运行时目录创建 WebSocket 客户端。"""
 
         return cls(options)
 
@@ -50,7 +67,7 @@ class DevHubEventsClient:
 
         self._ensure_not_closed()
         if self._authenticated:
-            raise RuntimeError("当前事件客户端已完成认证。")
+            raise RuntimeError("当前 WebSocket 客户端已完成认证。")
 
         try:
             result = await self._send_request(
@@ -74,6 +91,56 @@ class DevHubEventsClient:
             raise
 
         self._authenticated = True
+
+    async def ping(self, echo: Any = _ECHO_UNSET) -> PingResult:
+        """通过 WebSocket 调用 `hub.ping`。"""
+
+        self._ensure_authenticated()
+        params = None if echo is _ECHO_UNSET else {"echo": ensure_json_value(echo, "echo")}
+        result = await self._send_request("hub.ping", params, require_authenticated=True)
+        return parse_ping_result(result, path="hub.ping.result")
+
+    async def list_definitions(self) -> list[AppDefinition]:
+        """通过 WebSocket 调用 `hub.apps.listDefinitions`。"""
+
+        self._ensure_authenticated()
+        result = await self._send_request("hub.apps.listDefinitions", None, require_authenticated=True)
+        return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
+
+    async def get_definition(self, app_id: str) -> AppDefinition:
+        """通过 WebSocket 调用 `hub.apps.getDefinition`。"""
+
+        self._ensure_authenticated()
+        normalized_app_id = require_non_empty_string(app_id, "app_id")
+        result = await self._send_request(
+            "hub.apps.getDefinition",
+            {"appId": normalized_app_id},
+            require_authenticated=True,
+        )
+        return parse_definition_result(result, path="hub.apps.getDefinition.result")
+
+    async def list_instances(self, request: ListInstancesRequest | None = None) -> list[AppInstance]:
+        """通过 WebSocket 调用 `hub.apps.listInstances`。"""
+
+        self._ensure_authenticated()
+        params: dict[str, Any] | None = None
+        if request is not None:
+            params = {}
+            if request.app_id is not None:
+                params["appId"] = require_non_empty_string(request.app_id, "request.app_id")
+            if request.scope is not None:
+                if not isinstance(request.scope, str):
+                    raise ValueError("request.scope 类型非法。")
+                params["scope"] = request.scope
+            if request.include_all_scopes:
+                params["includeAllScopes"] = True
+            if request.include_offline:
+                params["includeOffline"] = True
+            if not params:
+                params = None
+
+        result = await self._send_request("hub.apps.listInstances", params, require_authenticated=True)
+        return parse_instances_result(result, path="hub.apps.listInstances.result")
 
     async def subscribe(self, types: Iterable[str] | None = None) -> str:
         """订阅事件。"""
@@ -124,7 +191,7 @@ class DevHubEventsClient:
                 await aclose()
 
     async def close(self) -> None:
-        """关闭事件客户端。"""
+        """关闭 WebSocket 客户端。"""
 
         if self._closed:
             return

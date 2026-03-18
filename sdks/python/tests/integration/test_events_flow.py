@@ -114,3 +114,34 @@ async def test_ws_disconnect_cleanup_should_require_resubscribe_after_reconnect(
 
     assert event.type == APP_INSTANCE_REGISTERED
     assert event.payload["instanceId"] == "events-reconnect-inst-2"
+
+
+@pytest.mark.asyncio
+async def test_ws_readable_methods_should_match_published_surface() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "events.ws.read.app", "displayName": "events.ws.read.app"})
+
+        client = host.create_client("events-http-client")
+        client.register_instance(
+            AppInstanceRegistration(
+                instance_id="events-ws-read-inst-1",
+                app_id="events.ws.read.app",
+                pid=99995,
+                invoke=InvokeCapability(poll=True, respond=True),
+            )
+        )
+
+        events_client = await host.create_events_client("events-client")
+        try:
+            await events_client.authenticate()
+            ping = await events_client.ping({"source": "ws"})
+            definitions = await events_client.list_definitions()
+            definition = await events_client.get_definition("events.ws.read.app")
+            instances = await events_client.list_instances()
+        finally:
+            await events_client.close()
+
+    assert ping.ok is True
+    assert any(item.app_id == "events.ws.read.app" for item in definitions)
+    assert definition.app_id == "events.ws.read.app"
+    assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)

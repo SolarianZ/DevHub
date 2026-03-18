@@ -108,6 +108,32 @@ def parse_ping_result(value: Any, *, path: str) -> PingResult:
     return PingResult(ok=ok, server_time_utc=server_time_utc, echo=echo)
 
 
+def parse_definitions_result(value: Any, *, path: str) -> list[AppDefinition]:
+    """解析应用定义列表结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    definitions = root.get("definitions")
+    if not isinstance(definitions, list):
+        raise RuntimeError(f"{path}.definitions 必须为数组。")
+    return [
+        parse_app_definition(item, path=f"{path}.definitions[{index}]")
+        for index, item in enumerate(definitions)
+    ]
+
+
+def parse_definition_result(value: Any, *, path: str) -> AppDefinition:
+    """解析单个应用定义结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    return parse_app_definition(root.get("definition"), path=f"{path}.definition")
+
+
 def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
@@ -161,6 +187,22 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
         ),
         meta=meta,
     )
+
+
+def parse_instances_result(value: Any, *, path: str) -> list[AppInstance]:
+    """解析实例列表结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    instances = root.get("instances")
+    if not isinstance(instances, list):
+        raise RuntimeError(f"{path}.instances 必须为数组。")
+    return [
+        parse_app_instance(item, path=f"{path}.instances[{index}]")
+        for index, item in enumerate(instances)
+    ]
 
 
 def parse_launch_result(value: Any, *, path: str) -> LaunchResult:

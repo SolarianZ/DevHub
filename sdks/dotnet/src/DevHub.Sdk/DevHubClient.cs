@@ -66,9 +66,9 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
         var result = await _transport.SendAsync("hub.ping", parameters, cancellationToken);
-        var payload = DeserializeRequired<PingResult>(result, "hub.ping.result");
-        EnsureOk(payload.Ok, "hub.ping.result");
-        EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
+        var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.ping.result");
+        ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
         return payload;
     }
 
@@ -80,15 +80,15 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
-        var definitionsElement = EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
-        var payload = DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
-        EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
-        EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
+        var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
 
         var index = 0;
         foreach (var definitionElement in definitionsElement.EnumerateArray())
         {
-            ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
+            ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
             index++;
         }
 
@@ -104,15 +104,15 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
-        ValidateAppDefinitionElement(
-            EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
+        ResponsePayloadReader.ValidateAppDefinitionElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
             "hub.apps.getDefinition.result.definition");
 
-        var payload = DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
-        EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
-        EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
-        EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
-        EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
+        var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
         return payload.Definition;
     }
 
@@ -125,17 +125,17 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppInstance> RegisterInstanceAsync(AppInstanceRegistration instance, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
-        ValidateAppInstanceElement(
-            EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
+        ResponsePayloadReader.ValidateAppInstanceElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
             "hub.apps.registerInstance.result.instance");
 
-        var payload = DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
-        EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
-        EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
-        EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
-        EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
-        EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
-        EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
+        var payload = ResponsePayloadReader.DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
+        ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
+        ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
         return payload.Instance;
     }
 
@@ -148,9 +148,9 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<DateTimeOffset> HeartbeatAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.heartbeat", RequestPayloadFactory.BuildHeartbeatParams(instanceId), cancellationToken);
-        var payload = DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
-        EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
-        EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
+        var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
+        ResponsePayloadReader.EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
         return payload.LastSeenUtc;
     }
 
@@ -162,8 +162,8 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task UnregisterInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.unregisterInstance", RequestPayloadFactory.BuildUnregisterParams(instanceId), cancellationToken);
-        var payload = DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
-        EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
+        var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
     }
 
     /// <summary>
@@ -175,15 +175,15 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
-        var instancesElement = EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
-        var payload = DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
-        EnsureOk(payload.Ok, "hub.apps.listInstances.result");
-        EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
+        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
+        var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
 
         var index = 0;
         foreach (var instanceElement in instancesElement.EnumerateArray())
         {
-            ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
+            ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
             index++;
         }
 
@@ -199,10 +199,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<LaunchResult> LaunchAsync(LaunchRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken);
-        var payload = DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
-        EnsureOk(payload.Ok, "hub.apps.launch.result");
-        EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
-        EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
+        var payload = ResponsePayloadReader.DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.launch.result");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
+        ResponsePayloadReader.EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
         if (!string.Equals(payload.Status, "started", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "starting", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "already_running", StringComparison.Ordinal))
@@ -222,9 +222,9 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<NotifyResult> NotifyAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken);
-        var payload = DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
-        EnsureOk(payload.Ok, "hub.invoke.notify.result");
-        EnsureNotEmpty(payload.InvocationId, "hub.invoke.notify.result", "invocationId");
+        var payload = ResponsePayloadReader.DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.notify.result");
+        ResponsePayloadReader.EnsureNotEmpty(payload.InvocationId, "hub.invoke.notify.result", "invocationId");
         return payload;
     }
 
@@ -237,10 +237,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
-        EnsurePropertyExists(result, "hub.invoke.request.result", "value");
-        var payload = DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
-        EnsureOk(payload.Ok, "hub.invoke.request.result");
-        EnsureNotEmpty(payload.InvocationId, "hub.invoke.request.result", "invocationId");
+        ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.request.result", "value");
+        var payload = ResponsePayloadReader.DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.request.result");
+        ResponsePayloadReader.EnsureNotEmpty(payload.InvocationId, "hub.invoke.request.result", "invocationId");
         return payload;
     }
 
@@ -253,20 +253,19 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
-        var itemsElement = EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
+        var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
 
         var index = 0;
         foreach (var itemElement in itemsElement.EnumerateArray())
         {
-            ValidateInvocationElement(itemElement, $"hub.invoke.poll.result.items[{index}]");
+            ResponsePayloadReader.ValidateInvocationElement(itemElement, $"hub.invoke.poll.result.items[{index}]");
             index++;
         }
 
-        var payload = DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
-        EnsureOk(payload.Ok, "hub.invoke.poll.result");
-        EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
-        EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
-
+        var payload = ResponsePayloadReader.DeserializeRequired<PollResult>(result, "hub.invoke.poll.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.poll.result");
+        ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
+        ResponsePayloadReader.EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
         return payload;
     }
 
@@ -278,295 +277,13 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task RespondAsync(RespondRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
-        var payload = DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
-        EnsureOk(payload.Ok, "hub.invoke.respond.result");
+        var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");
     }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
         return _transport.DisposeAsync();
-    }
-
-    private static T DeserializeRequired<T>(JsonElement result, string location)
-    {
-        try
-        {
-            var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
-            return value ?? throw new InvalidOperationException($"无法解析 {location}。");
-        }
-        catch (Exception exception) when (exception is JsonException or NotSupportedException)
-        {
-            throw new InvalidOperationException($"无法解析 {location}。", exception);
-        }
-    }
-
-    private static void EnsureOk(bool ok, string location)
-    {
-        if (!ok)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：ok 必须为 true。");
-        }
-    }
-
-    private static JsonElement EnsurePropertyExists(JsonElement payload, string location, string propertyName, JsonValueKind? expectedKind = null)
-    {
-        if (!payload.TryGetProperty(propertyName, out var propertyValue))
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
-        }
-
-        if (expectedKind is { } kind && propertyValue.ValueKind != kind)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
-        }
-
-        return propertyValue;
-    }
-
-    private static void EnsureTimestamp(DateTimeOffset? value, string location, string propertyName)
-    {
-        if (value is null || value.Value == default)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空默认值。");
-        }
-    }
-
-    private static void EnsureNotEmpty(string? value, string location, string propertyName)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
-        }
-    }
-
-    private static void EnsureNotNull<T>(T? value, string location, string propertyName)
-        where T : class
-    {
-        if (value is null)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
-        }
-    }
-
-    private static void ValidateAppDefinitionElement(JsonElement element, string location)
-    {
-        EnsureElementKind(element, location, JsonValueKind.Object);
-        EnsureStringProperty(element, location, "appId");
-        EnsureStringProperty(element, location, "displayName");
-        EnsureOptionalStringProperty(element, location, "description");
-
-        if (element.TryGetProperty("capabilities", out var capabilitiesElement))
-        {
-            if (capabilitiesElement.ValueKind != JsonValueKind.Null)
-            {
-                EnsureElementKind(capabilitiesElement, $"{location}.capabilities", JsonValueKind.Object);
-                EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "rpc");
-                EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "events");
-            }
-        }
-
-        if (element.TryGetProperty("launch", out var launchElement))
-        {
-            if (launchElement.ValueKind != JsonValueKind.Null)
-            {
-                EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
-                EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
-                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "argsTemplate");
-                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "workingDirectory");
-                EnsureOptionalStringProperty(launchElement, $"{location}.launch", "dedupeKeyTemplate");
-            }
-        }
-    }
-
-    private static void ValidateAppInstanceElement(JsonElement element, string location)
-    {
-        EnsureElementKind(element, location, JsonValueKind.Object);
-        EnsureStringProperty(element, location, "instanceId");
-        EnsureStringProperty(element, location, "appId");
-        EnsureOptionalStringOrNullProperty(element, location, "scope");
-        EnsurePositiveIntegerProperty(element, location, "pid");
-        EnsureStringProperty(element, location, "registeredAtUtc");
-        EnsureStringProperty(element, location, "lastSeenUtc");
-
-        var invokeElement = EnsurePropertyExists(element, location, "invoke", JsonValueKind.Object);
-        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "poll");
-        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "respond");
-
-        if (element.TryGetProperty("meta", out var metaElement))
-        {
-            if (metaElement.ValueKind != JsonValueKind.Null)
-            {
-                EnsureElementKind(metaElement, $"{location}.meta", JsonValueKind.Object);
-            }
-        }
-    }
-
-    private static void ValidateInvocationElement(JsonElement element, string location)
-    {
-        EnsureElementKind(element, location, JsonValueKind.Object);
-        EnsureStringProperty(element, location, "invocationId");
-        EnsureStringProperty(element, location, "appId");
-        var targetElement = EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "scope");
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "instanceId");
-        EnsureStringProperty(element, location, "method");
-        EnsureStringProperty(element, location, "kind");
-        EnsureStringProperty(element, location, "createdAtUtc");
-
-        if (element.TryGetProperty("options", out var optionsElement))
-        {
-            if (optionsElement.ValueKind != JsonValueKind.Null)
-            {
-                EnsureElementKind(optionsElement, $"{location}.options", JsonValueKind.Object);
-                EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "ttlMs", 1000);
-                EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "waitTimeoutMs", 1);
-                EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "queueIfOffline");
-                EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "autoLaunch");
-            }
-        }
-
-        var callerElement = EnsurePropertyExists(element, location, "caller", JsonValueKind.Object);
-        EnsureStringProperty(callerElement, $"{location}.caller", "clientId");
-        EnsureStringProperty(callerElement, $"{location}.caller", "clientSessionId");
-
-        if (element.TryGetProperty("delivery", out var deliveryElement) && deliveryElement.ValueKind != JsonValueKind.Null)
-        {
-            EnsureElementKind(deliveryElement, $"{location}.delivery", JsonValueKind.Object);
-            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "leaseSeconds");
-            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "attempt");
-        }
-    }
-
-    private static void EnsureElementKind(JsonElement element, string location, JsonValueKind expectedKind)
-    {
-        if (element.ValueKind != expectedKind)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：JSON 类型非法。");
-        }
-    }
-
-    private static void EnsureStringProperty(JsonElement element, string location, string propertyName)
-    {
-        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
-        if (string.IsNullOrWhiteSpace(propertyValue.GetString()))
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
-        }
-    }
-
-    private static void EnsureBooleanProperty(JsonElement element, string location, string propertyName)
-    {
-        var propertyValue = EnsurePropertyExists(element, location, propertyName);
-        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
-        }
-    }
-
-    private static void EnsureOptionalBooleanProperty(JsonElement element, string location, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
-        {
-            return;
-        }
-
-        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
-        }
-    }
-
-    private static void EnsureOptionalStringProperty(JsonElement element, string location, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
-        {
-            return;
-        }
-
-        if (propertyValue.ValueKind != JsonValueKind.String)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
-        }
-    }
-
-    private static void EnsureOptionalStringOrNullProperty(JsonElement element, string location, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
-        {
-            return;
-        }
-
-        if (propertyValue.ValueKind == JsonValueKind.Null)
-        {
-            return;
-        }
-
-        if (propertyValue.ValueKind != JsonValueKind.String)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
-        }
-    }
-
-    private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)
-    {
-        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.Number);
-        if (!propertyValue.TryGetInt32(out var value) || value < 1)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 1。");
-        }
-    }
-
-    private static void EnsureOptionalIntegerPropertyAtLeast(JsonElement element, string location, string propertyName, int minimumValue)
-    {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
-        {
-            return;
-        }
-
-        if (propertyValue.ValueKind != JsonValueKind.Number || !propertyValue.TryGetInt32(out var value) || value < minimumValue)
-        {
-            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 {minimumValue}。");
-        }
-    }
-
-    private sealed class OkOnlyContract
-    {
-        public bool Ok { get; set; }
-    }
-
-    private sealed class ListDefinitionsContract
-    {
-        public bool Ok { get; set; }
-
-        public List<AppDefinition> Definitions { get; set; } = [];
-    }
-
-    private sealed class GetDefinitionContract
-    {
-        public bool Ok { get; set; }
-
-        public AppDefinition Definition { get; set; } = new();
-    }
-
-    private sealed class RegisterInstanceContract
-    {
-        public bool Ok { get; set; }
-
-        public AppInstance Instance { get; set; } = new();
-    }
-
-    private sealed class HeartbeatContract
-    {
-        public bool Ok { get; set; }
-
-        public DateTimeOffset LastSeenUtc { get; set; }
-    }
-
-    private sealed class ListInstancesContract
-    {
-        public bool Ok { get; set; }
-
-        public List<AppInstance> Instances { get; set; } = [];
     }
 }

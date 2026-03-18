@@ -87,6 +87,86 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldSupportWsReadableMethods()
+    {
+        var runtimeDir = await CreateRuntimeAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-ping-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-ping-1","result":{"ok":true,"serverTimeUtc":"2026-03-09T00:00:00Z","echo":{"value":1}}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-listdefs-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","displayName":"WS App"}]}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-getdef-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getdef-1","result":{"ok":true,"definition":{"appId":"ws.app","displayName":"WS App"}}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-listinst-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listinst-1","result":{"ok":true,"instances":[{"instanceId":"inst-1","appId":"ws.app","scope":null,"pid":12345,"registeredAtUtc":"2026-03-09T00:00:00Z","lastSeenUtc":"2026-03-09T00:00:01Z","invoke":{"poll":true,"respond":true}}]}}""")
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                RuntimeDir = runtimeDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
+
+        await client.AuthenticateAsync();
+
+        var ping = await client.PingAsync(new { value = 1 });
+        var definitions = await client.ListDefinitionsAsync();
+        var definition = await client.GetDefinitionAsync("ws.app");
+        var instances = await client.ListInstancesAsync();
+
+        Assert.True(ping.Ok);
+        Assert.Equal("ws.app", definitions.Single().AppId);
+        Assert.Equal("ws.app", definition.AppId);
+        Assert.Equal("inst-1", instances.Single().InstanceId);
+
+        Assert.Collection(connection.SentTexts,
+            sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.ping", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.apps.listDefinitions", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.apps.getDefinition", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.apps.listInstances", sent, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenConnectionClosesAfterQueuedEvent_ShouldStillReadBufferedEvents()
     {
         var runtimeDir = await CreateRuntimeAsync();

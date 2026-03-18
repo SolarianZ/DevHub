@@ -84,6 +84,36 @@ public sealed class EventsFlowTests
         Assert.Equal("events-reconnect-inst-2", enumerator.Current.Payload!.Value.GetProperty("instanceId").GetString());
     }
 
+    [Fact]
+    public async Task M5_E2E_011_WsReadableMethods_ShouldMatchPublishedSurface()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "events.ws.read.app",
+            DisplayName = "events.ws.read.app"
+        });
+
+        await using var httpClient = await host.CreateClientAsync("events-http-client");
+        await httpClient.RegisterInstanceAsync(CreateInstance("events.ws.read.app", "events-ws-read-inst-1"));
+
+        await using var eventsClient = await host.CreateEventsClientAsync("events-client");
+        await eventsClient.AuthenticateAsync();
+
+        var ping = await eventsClient.PingAsync(new { source = "ws" });
+        var definitions = await eventsClient.ListDefinitionsAsync();
+        var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app");
+        var instances = await eventsClient.ListInstancesAsync(new ListInstancesRequest
+        {
+            AppId = "events.ws.read.app"
+        });
+
+        Assert.True(ping.Ok);
+        Assert.Equal("events.ws.read.app", definition.AppId);
+        Assert.Contains(definitions, item => item.AppId == "events.ws.read.app");
+        Assert.Contains(instances, item => item.InstanceId == "events-ws-read-inst-1");
+    }
+
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId)
     {
         return new AppInstanceRegistration
