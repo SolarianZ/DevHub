@@ -27,8 +27,8 @@ public sealed class HostBootstrapperTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostBootstrapperTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "definitions");
-        _instancesDirectory = Path.Combine(_tempRoot, "instances");
+        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
+        _instancesDirectory = Path.Combine(_tempRoot, "apps", "instances");
         _logsDirectory = Path.Combine(_tempRoot, "logs");
 
         Directory.CreateDirectory(_tempRoot);
@@ -144,12 +144,7 @@ public sealed class HostBootstrapperTests : IDisposable
 
     private RuntimePathOptions CreateRuntimePathOptions()
     {
-        return RuntimePathOptions.Create(
-            rootPath: _tempRoot,
-            runtimePath: _runtimeDirectory,
-            definitionsPath: _definitionsDirectory,
-            instancesPath: _instancesDirectory,
-            logsPath: _logsDirectory);
+        return RuntimePathOptions.Create(_tempRoot);
     }
 
     private void WriteDefinition(string appId)

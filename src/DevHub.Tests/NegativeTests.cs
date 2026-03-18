@@ -86,8 +86,8 @@ public class NegativeTests : IDisposable
         // Arrange
         var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
 
-        using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
-        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(_testDirectory));
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _testDirectory);
+        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
 
         // Act
         fileSystemManager.InitializeDirectories();

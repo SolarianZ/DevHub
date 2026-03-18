@@ -1,6 +1,7 @@
 using DevHub.Core.Extensions;
 using DevHub.Core.Services;
 using Serilog;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 
@@ -15,22 +16,16 @@ public class Program
     private const int SuccessExitCode = 0;
     private const int FatalStartupExitCode = 1;
     private static Mutex? _singleInstanceMutex;
-    private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
+    private const string SerilogFileSinkPathKey = "Serilog:WriteTo:1:Args:path";
 
     /// <summary>
-    /// 构建当前用户维度的单实例互斥量名称。
+    /// 构建当前用户 + 数据根目录维度的单实例互斥量名称。
     /// </summary>
-    private static string BuildSingleInstanceMutexName()
+    private static string BuildSingleInstanceMutexName(RuntimePathOptions runtimePathOptions)
     {
         var userKey = ResolveCurrentUserKey();
-        var slot = Environment.GetEnvironmentVariable(SingleInstanceSlotEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(slot))
-        {
-            return $"Local\\DevHub_{userKey}";
-        }
-
-        var slotKey = NormalizeMutexUserKey(slot);
-        return $"Local\\DevHub_{userKey}_{slotKey}";
+        var dataDirectoryKey = BuildDataDirectoryKey(runtimePathOptions.RootPath);
+        return $"Local\\DevHub_{userKey}_{dataDirectoryKey}";
     }
 
     /// <summary>
@@ -78,13 +73,29 @@ public class Program
     }
 
     /// <summary>
+    /// 基于规范化数据根目录构建稳定的锁键。
+    /// </summary>
+    /// <param name="rootPath">规范化后的数据根目录。</param>
+    /// <returns>可用于命名系统互斥量的稳定键。</returns>
+    private static string BuildDataDirectoryKey(string rootPath)
+    {
+        var normalizedRootPath = OperatingSystem.IsWindows()
+            ? rootPath.ToUpperInvariant()
+            : rootPath;
+
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedRootPath));
+        return Convert.ToHexString(hashBytes);
+    }
+
+    /// <summary>
     /// 应用程序主入口。
     /// </summary>
     /// <param name="args">命令行参数。</param>
     /// <returns>进程退出码。</returns>
     public static int Main(string[] args)
     {
-        var mutexName = BuildSingleInstanceMutexName();
+        var runtimePathOptions = RuntimePathOptions.Resolve();
+        var mutexName = BuildSingleInstanceMutexName(runtimePathOptions);
         _singleInstanceMutex = new Mutex(true, mutexName, out var createdNew);
 
         if (!createdNew)
@@ -94,11 +105,9 @@ public class Program
         }
 
         var contentRootPath = ResolveContentRootPath();
-        var runtimePathOptions = RuntimePathOptions.Resolve();
-        Environment.SetEnvironmentVariable(RuntimePathOptions.LogDirEnvironmentVariable, runtimePathOptions.LogsPath);
 
         Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(BuildBootstrapConfiguration(contentRootPath))
+            .ReadFrom.Configuration(BuildBootstrapConfiguration(contentRootPath, runtimePathOptions.LogsPath))
             .CreateLogger();
 
         try
@@ -115,7 +124,7 @@ public class Program
             builder.Host.UseSerilog();
             builder.Services.AddAuthorization();
             builder.Services.AddOpenApi();
-            builder.Services.AddDevHubCore(runtimePathOptions.DefinitionsPath);
+            builder.Services.AddDevHubCore();
             builder.Services.AddSingleton<FileSystemManager>(sp =>
                 new FileSystemManager(
                     sp.GetRequiredService<ILogger<FileSystemManager>>(),
@@ -199,13 +208,18 @@ public class Program
     /// 构建启动阶段使用的配置对象。
     /// </summary>
     /// <param name="contentRootPath">内容根目录。</param>
+    /// <param name="logsPath">运行时日志目录。</param>
     /// <returns>可供日志初始化使用的配置。</returns>
-    internal static IConfigurationRoot BuildBootstrapConfiguration(string contentRootPath)
+    internal static IConfigurationRoot BuildBootstrapConfiguration(string contentRootPath, string logsPath)
     {
         return new ConfigurationBuilder()
             .SetBasePath(contentRootPath)
             .AddJsonFile("appsettings.json")
             .AddEnvironmentVariables()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [SerilogFileSinkPathKey] = Path.Combine(logsPath, "devhub-.log")
+            })
             .Build();
     }
 }

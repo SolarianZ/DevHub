@@ -29,8 +29,7 @@ public sealed class ProgramProcessTests : IDisposable
         using var context = CreateProcessContext();
         using var hostProcess = StartHostProcess(context);
 
-        var hubJsonPath = Path.Combine(context.RuntimeDirectory, "hub.json");
-        await WaitForHubJsonAsync(hostProcess, hubJsonPath, TimeSpan.FromSeconds(30));
+        await WaitForHubJsonAsync(hostProcess, context.HubJsonPath, TimeSpan.FromSeconds(30));
 
         Assert.False(hostProcess.Process.HasExited, hostProcess.GetFailureMessage("Host 在生成 hub.json 后提前退出。"));
         Assert.True(Directory.Exists(context.RuntimeDirectory));
@@ -39,7 +38,7 @@ public sealed class ProgramProcessTests : IDisposable
         Assert.True(Directory.Exists(context.LogsDirectory));
         Assert.True(File.Exists(Path.Combine(context.RuntimeDirectory, "token.txt")));
 
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(hubJsonPath));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(context.HubJsonPath));
         Assert.Equal(
             HostVersionProvider.ResolveHubVersion(typeof(Program).Assembly),
             document.RootElement.GetProperty("hubVersion").GetString());
@@ -53,13 +52,58 @@ public sealed class ProgramProcessTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_HostProcess_WhenSameDataDirectoryStartedTwice_ShouldBlockSecondProcess()
+    {
+        using var firstContext = CreateProcessContext();
+        using var secondContext = CreateProcessContext(dataDirectory: firstContext.DataDirectory);
+        using var firstHostProcess = StartHostProcess(firstContext);
+
+        await WaitForHubJsonAsync(firstHostProcess, firstContext.HubJsonPath, TimeSpan.FromSeconds(30));
+
+        using var secondHostProcess = StartHostProcess(secondContext);
+        await secondHostProcess.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.False(firstHostProcess.Process.HasExited, firstHostProcess.GetFailureMessage("首个 Host 在校验单实例时意外退出。"));
+        Assert.Equal(0, secondHostProcess.Process.ExitCode);
+        Assert.Contains("DevHub 已在运行中", secondHostProcess.GetCombinedOutput(), StringComparison.Ordinal);
+        Assert.True(File.Exists(firstContext.HubJsonPath));
+        Assert.False(File.Exists(secondContext.HubJsonPath) && !PathsReferToSameLocation(secondContext.HubJsonPath, firstContext.HubJsonPath));
+    }
+
+    [Fact]
+    public async Task Impl_HostProcess_WhenDifferentDataDirectoriesStartedConcurrently_ShouldAllowParallelExecution()
+    {
+        using var firstContext = CreateProcessContext();
+        using var secondContext = CreateProcessContext();
+        using var firstHostProcess = StartHostProcess(firstContext);
+        using var secondHostProcess = StartHostProcess(secondContext);
+
+        await WaitForHubJsonAsync(firstHostProcess, firstContext.HubJsonPath, TimeSpan.FromSeconds(30));
+        await WaitForHubJsonAsync(secondHostProcess, secondContext.HubJsonPath, TimeSpan.FromSeconds(30));
+
+        Assert.False(firstHostProcess.Process.HasExited, firstHostProcess.GetFailureMessage("首个 Host 在异数据根并行启动时意外退出。"));
+        Assert.False(secondHostProcess.Process.HasExited, secondHostProcess.GetFailureMessage("第二个 Host 在异数据根并行启动时意外退出。"));
+
+        using var firstDocument = JsonDocument.Parse(await File.ReadAllTextAsync(firstContext.HubJsonPath));
+        using var secondDocument = JsonDocument.Parse(await File.ReadAllTextAsync(secondContext.HubJsonPath));
+
+        var firstRoot = firstDocument.RootElement;
+        var secondRoot = secondDocument.RootElement;
+
+        Assert.Equal(Path.Combine(firstContext.RuntimeDirectory, "token.txt"), firstRoot.GetProperty("tokenFile").GetString());
+        Assert.Equal(Path.Combine(secondContext.RuntimeDirectory, "token.txt"), secondRoot.GetProperty("tokenFile").GetString());
+        Assert.NotEqual(firstRoot.GetProperty("pid").GetInt32(), secondRoot.GetProperty("pid").GetInt32());
+        Assert.NotEqual(firstRoot.GetProperty("httpBaseUrl").GetString(), secondRoot.GetProperty("httpBaseUrl").GetString());
+    }
+
+    [Fact]
     public async Task Impl_HostProcess_WhenStartupFails_ShouldReturnNonZeroExitCode()
     {
         using var context = CreateProcessContext();
-        var invalidRuntimePath = Path.Combine(_tempRoot, $"runtime-blocker-{Guid.NewGuid():N}.txt");
-        await File.WriteAllTextAsync(invalidRuntimePath, "blocked");
+        var invalidDataDirectory = Path.Combine(_tempRoot, $"data-blocker-{Guid.NewGuid():N}.txt");
+        await File.WriteAllTextAsync(invalidDataDirectory, "blocked");
 
-        context.EnvironmentVariables[RuntimePathOptions.RuntimeDirEnvironmentVariable] = invalidRuntimePath;
+        context.EnvironmentVariables[RuntimePathOptions.DataDirEnvironmentVariable] = invalidDataDirectory;
 
         using var hostProcess = StartHostProcess(context);
         await hostProcess.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
@@ -83,31 +127,30 @@ public sealed class ProgramProcessTests : IDisposable
         }
     }
 
-    private ProcessTestContext CreateProcessContext()
+    private ProcessTestContext CreateProcessContext(string? dataDirectory = null)
     {
         var contextId = Guid.NewGuid().ToString("N");
         var workingDirectory = Path.Combine(_tempRoot, "work", contextId);
-        var runtimeDirectory = Path.Combine(_tempRoot, "runtime", contextId);
-        var definitionsDirectory = Path.Combine(_tempRoot, "definitions", contextId);
-        var instancesDirectory = Path.Combine(_tempRoot, "instances", contextId);
-        var logsDirectory = Path.Combine(_tempRoot, "logs", contextId);
+        var effectiveDataDirectory = dataDirectory ?? Path.Combine(_tempRoot, "data", contextId);
+        var runtimeDirectory = Path.Combine(effectiveDataDirectory, "runtime");
+        var definitionsDirectory = Path.Combine(effectiveDataDirectory, "apps", "definitions");
+        var instancesDirectory = Path.Combine(effectiveDataDirectory, "apps", "instances");
+        var logsDirectory = Path.Combine(effectiveDataDirectory, "logs");
 
         Directory.CreateDirectory(workingDirectory);
 
         return new ProcessTestContext(
             typeof(Program).Assembly.Location,
             workingDirectory,
+            effectiveDataDirectory,
             runtimeDirectory,
             definitionsDirectory,
             instancesDirectory,
             logsDirectory,
+            Path.Combine(runtimeDirectory, "hub.json"),
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                [RuntimePathOptions.RuntimeDirEnvironmentVariable] = runtimeDirectory,
-                [RuntimePathOptions.AppDefinitionsDirEnvironmentVariable] = definitionsDirectory,
-                [RuntimePathOptions.AppInstancesDirEnvironmentVariable] = instancesDirectory,
-                [RuntimePathOptions.LogDirEnvironmentVariable] = logsDirectory,
-                ["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = contextId
+                [RuntimePathOptions.DataDirEnvironmentVariable] = effectiveDataDirectory
             });
     }
 
@@ -192,13 +235,27 @@ public sealed class ProgramProcessTests : IDisposable
         throw new XunitException(hostProcess.GetFailureMessage($"等待 hub.json 超时: {hubJsonPath}"));
     }
 
+    private static bool PathsReferToSameLocation(string left, string right)
+    {
+        try
+        {
+            return File.Exists(left) && File.Exists(right) && string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private sealed record ProcessTestContext(
         string HostAssemblyPath,
         string WorkingDirectory,
+        string DataDirectory,
         string RuntimeDirectory,
         string DefinitionsDirectory,
         string InstancesDirectory,
         string LogsDirectory,
+        string HubJsonPath,
         IDictionary<string, string> EnvironmentVariables)
         : IDisposable
     {

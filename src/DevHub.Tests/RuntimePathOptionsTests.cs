@@ -20,47 +20,27 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Resolve_WithOverrides_ShouldUseEnvironmentOverrides()
+    public void Impl_Resolve_WithDataDirOverride_ShouldUseDerivedStandardLayout()
     {
-        var runtimeOverride = Path.Combine(_tempRoot, "runtime-env");
-        var definitionsOverride = Path.Combine(_tempRoot, "definitions-env");
-        var instancesOverride = Path.Combine(_tempRoot, "instances-env");
-        var logOverride = Path.Combine(_tempRoot, "logs-env");
+        var dataDirectory = Path.Combine(_tempRoot, "data-env");
 
-        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtimeOverride);
-        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitionsOverride);
-        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, instancesOverride);
-        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, logOverride);
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, dataDirectory);
 
         var options = RuntimePathOptions.Resolve();
 
-        Assert.Equal(runtimeOverride, options.RuntimePath);
-        Assert.Equal(definitionsOverride, options.DefinitionsPath);
-        Assert.Equal(instancesOverride, options.InstancesPath);
-        Assert.Equal(logOverride, options.LogsPath);
-        Assert.Equal(Path.Combine(runtimeOverride, "token.txt"), options.TokenFilePath);
-        Assert.Equal(Path.Combine(runtimeOverride, "hub.json"), options.HubJsonPath);
-    }
-
-    [Fact]
-    public void Impl_Resolve_WithDefinitionsOverride_ShouldPreferArgument()
-    {
-        var definitionsFromEnv = Path.Combine(_tempRoot, "definitions-env");
-        var definitionsFromArg = Path.Combine(_tempRoot, "definitions-arg");
-
-        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitionsFromEnv);
-        var options = RuntimePathOptions.Resolve(definitionsFromArg);
-
-        Assert.Equal(definitionsFromArg, options.DefinitionsPath);
+        Assert.Equal(dataDirectory, options.RootPath);
+        Assert.Equal(Path.Combine(dataDirectory, "runtime"), options.RuntimePath);
+        Assert.Equal(Path.Combine(dataDirectory, "apps", "definitions"), options.DefinitionsPath);
+        Assert.Equal(Path.Combine(dataDirectory, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(dataDirectory, "logs"), options.LogsPath);
+        Assert.Equal(Path.Combine(dataDirectory, "runtime", "token.txt"), options.TokenFilePath);
+        Assert.Equal(Path.Combine(dataDirectory, "runtime", "hub.json"), options.HubJsonPath);
     }
 
     [Fact]
     public void Impl_Resolve_WithoutOverrides_ShouldUsePlatformConventionalRoot()
     {
-        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, null);
-        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, null);
-        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, null);
-        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, null);
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, null);
 
         var options = RuntimePathOptions.Resolve();
         var expectedRoot = GetExpectedDefaultRootPath();
@@ -75,68 +55,47 @@ public class RuntimePathOptionsTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Resolve_WithRelativeRuntimeOverride_ShouldNormalizeToAbsolutePath()
+    public void Impl_Resolve_WithRelativeDataDirOverride_ShouldNormalizeToAbsolutePath()
     {
         var currentDirectory = Directory.GetCurrentDirectory();
-        var relativeRuntimeOverride = Path.Combine(".", "temp", "runtime-relative");
+        var relativeDataDirectory = Path.Combine(".", "temp", "data-relative");
 
-        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, relativeRuntimeOverride);
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, relativeDataDirectory);
         var options = RuntimePathOptions.Resolve();
 
-        var expectedRuntimePath = Path.GetFullPath(relativeRuntimeOverride, currentDirectory);
-        Assert.Equal(expectedRuntimePath, options.RuntimePath);
+        var expectedRootPath = Path.GetFullPath(relativeDataDirectory, currentDirectory);
+        Assert.Equal(expectedRootPath, options.RootPath);
         Assert.True(Path.IsPathFullyQualified(options.RuntimePath));
+        Assert.True(Path.IsPathFullyQualified(options.DefinitionsPath));
+        Assert.True(Path.IsPathFullyQualified(options.InstancesPath));
+        Assert.True(Path.IsPathFullyQualified(options.LogsPath));
         Assert.True(Path.IsPathFullyQualified(options.TokenFilePath));
         Assert.True(Path.IsPathFullyQualified(options.HubJsonPath));
-        Assert.Equal(Path.Combine(expectedRuntimePath, "token.txt"), options.TokenFilePath);
-        Assert.Equal(Path.Combine(expectedRuntimePath, "hub.json"), options.HubJsonPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "runtime"), options.RuntimePath);
+        Assert.Equal(Path.Combine(expectedRootPath, "apps", "definitions"), options.DefinitionsPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "logs"), options.LogsPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "runtime", "token.txt"), options.TokenFilePath);
+        Assert.Equal(Path.Combine(expectedRootPath, "runtime", "hub.json"), options.HubJsonPath);
     }
 
     [Fact]
-    public void Impl_Resolve_WithRelativeInstancesOverride_ShouldNormalizeToAbsolutePath()
-    {
-        var currentDirectory = Directory.GetCurrentDirectory();
-        var relativeInstancesOverride = Path.Combine(".", "temp", "instances-relative");
-
-        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, relativeInstancesOverride);
-        var options = RuntimePathOptions.Resolve();
-
-        var expectedInstancesPath = Path.GetFullPath(relativeInstancesOverride, currentDirectory);
-        Assert.Equal(expectedInstancesPath, options.InstancesPath);
-        Assert.True(Path.IsPathFullyQualified(options.InstancesPath));
-    }
-
-    [Fact]
-    public void Impl_Create_WithEquivalentInputs_ShouldMatchResolveOverlappingFields_AndKeepIsolatedLayout()
+    public void Impl_Create_WithEquivalentRoot_ShouldMatchResolveAndKeepStandardLayout()
     {
         var root = Path.Combine(_tempRoot, "root");
-        var runtime = Path.Combine(root, "runtime-custom");
-        var definitions = Path.Combine(root, "definitions-custom");
-        var logs = Path.Combine(root, "logs-custom");
-        var defaultRoot = GetExpectedDefaultRootPath();
 
-        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtime);
-        using var definitionsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitions);
-        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, logs);
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, root);
 
         var resolved = RuntimePathOptions.Resolve();
-        var created = RuntimePathOptions.Create(
-            rootPath: root,
-            runtimePath: runtime,
-            definitionsPath: definitions,
-            logsPath: logs);
+        var created = RuntimePathOptions.Create(root);
 
+        Assert.Equal(created.RootPath, resolved.RootPath);
         Assert.Equal(created.RuntimePath, resolved.RuntimePath);
         Assert.Equal(created.DefinitionsPath, resolved.DefinitionsPath);
+        Assert.Equal(created.InstancesPath, resolved.InstancesPath);
         Assert.Equal(created.LogsPath, resolved.LogsPath);
         Assert.Equal(created.TokenFilePath, resolved.TokenFilePath);
         Assert.Equal(created.HubJsonPath, resolved.HubJsonPath);
-
-        Assert.Equal(Path.Combine(root, "apps", "instances"), created.InstancesPath);
-        Assert.Equal(Path.Combine(defaultRoot, "apps", "instances"), resolved.InstancesPath);
-
-        Assert.Equal(Path.Combine(created.RuntimePath, "token.txt"), created.TokenFilePath);
-        Assert.Equal(Path.Combine(created.RuntimePath, "hub.json"), created.HubJsonPath);
     }
 
     /// <inheritdoc />

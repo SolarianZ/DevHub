@@ -18,14 +18,13 @@ public static class ServiceCollectionExtensions
     /// 注册 DevHub M1/M2 阶段核心服务。
     /// </summary>
     /// <param name="services">依赖注入服务集合。</param>
-    /// <param name="definitionsPath">AppDefinition 目录路径覆盖（可选）。</param>
     /// <returns>原服务集合，便于链式调用。</returns>
     /// <remarks>
     /// 本方法仅负责服务装配，不承担启动流程控制或运行时状态初始化。
     /// </remarks>
-    public static IServiceCollection AddDevHubCore(this IServiceCollection services, string? definitionsPath = null)
+    public static IServiceCollection AddDevHubCore(this IServiceCollection services)
     {
-        var runtimePathOptions = RuntimePathOptions.Resolve(definitionsPath);
+        var runtimePathOptions = RuntimePathOptions.Resolve();
 
         services.AddSingleton(runtimePathOptions);
         services.AddSingleton<RuntimeTuningOptions>(sp =>

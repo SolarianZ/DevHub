@@ -274,11 +274,11 @@ class TestLaunchDiscovery(unittest.TestCase):
             stop_event = threading.Event()
             result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
 
-            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-atomic-") as temp_root:
-                runtime_dir = os.path.join(temp_root, "runtime")
-                definitions_dir = os.path.join(temp_root, "apps", "definitions")
+            with tempfile.TemporaryDirectory(prefix="devhub-test-data-atomic-") as data_dir:
+                runtime_dir = os.path.join(data_dir, "runtime")
+                definitions_dir = os.path.join(data_dir, "apps", "definitions")
                 hub_json_path = os.path.join(runtime_dir, "hub.json")
-                host_log_path = os.path.join(temp_root, "host-atomic.log")
+                host_log_path = os.path.join(data_dir, "host-atomic.log")
                 os.makedirs(definitions_dir, exist_ok=True)
 
                 def validate_hub_runtime_snapshot(hub_info):
@@ -334,7 +334,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                         process = None
                         try:
                             with open(host_log_path, "a+", encoding="utf-8", errors="backslashreplace") as log_file:
-                                process = start_isolated_hub_process(runtime_dir, definitions_dir, log_file)
+                                process = start_isolated_hub_process(data_dir, log_file)
 
                                 if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
                                     process_output = self._read_open_log_tail(log_file)
@@ -461,60 +461,59 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         return result
 
-    def test_custom_runtime_dir_real_hub_files(self):
-        """测试 DEVHUB_RUNTIME_DIR 下 Hub 实际生成发现文件并可访问"""
-        result = TestResult("测试 DEVHUB_RUNTIME_DIR Hub 实际行为")
+    def test_custom_data_dir_real_hub_files(self):
+        """测试 DEVHUB_DATA_DIR 下 Hub 实际生成发现文件并可访问"""
+        result = TestResult("测试 DEVHUB_DATA_DIR Hub 实际行为")
         process = None
 
         try:
-            with tempfile.TemporaryDirectory(prefix="devhub-test-runtime-real-") as temp_root:
-                runtime_dir = os.path.join(temp_root, "runtime")
-                definitions_dir = os.path.join(temp_root, "apps", "definitions")
+            with tempfile.TemporaryDirectory(prefix="devhub-test-data-real-") as data_dir:
+                runtime_dir = os.path.join(data_dir, "runtime")
+                definitions_dir = os.path.join(data_dir, "apps", "definitions")
                 os.makedirs(definitions_dir, exist_ok=True)
                 result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
 
                 try:
-                    with temporary_env_var("DEVHUB_RUNTIME_DIR", runtime_dir):
-                        with temporary_env_var("DEVHUB_APPDEFS_DIR", definitions_dir):
-                            host_log_path = os.path.join(temp_root, "host-runtime-dir.log")
-                            with open(host_log_path, "w+", encoding="utf-8", errors="backslashreplace") as log_file:
-                                process = start_isolated_hub_process(runtime_dir, definitions_dir, log_file)
+                    with temporary_env_var("DEVHUB_DATA_DIR", data_dir):
+                        host_log_path = os.path.join(data_dir, "host-data-dir.log")
+                        with open(host_log_path, "w+", encoding="utf-8", errors="backslashreplace") as log_file:
+                            process = start_isolated_hub_process(data_dir, log_file)
 
-                                if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
-                                    process_output = self._read_open_log_tail(log_file)
-                                    if process.poll() is None:
-                                        result.mark_failure(
-                                            f"❌ 等待超时：Hub 未在自定义运行时目录生成 hub.json。日志片段: {process_output}")
-                                    else:
-                                        result.mark_failure(
-                                            f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
-                                    return result
-
-                                hub_json_path = os.path.join(runtime_dir, "hub.json")
-                                with open(hub_json_path, "r", encoding="utf-8") as f:
-                                    hub_info = json.load(f)
-
-                                token_file = hub_info.get("tokenFile")
-                                if not token_file or not os.path.exists(token_file):
-                                    result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
-                                    return result
-                                result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
-
-                                runtime_token = os.path.join(runtime_dir, "token.txt")
-                                if not paths_refer_to_same_location(token_file, runtime_token):
-                                    result.mark_failure(f"❌ tokenFile 路径不在自定义运行时目录: {token_file}")
-                                    return result
-
-                                base_url, token = DiscoveryService.get_hub_info()
-                                ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
-                                if not ok:
-                                    process_output = self._read_open_log_tail(log_file)
+                            if not self._wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds=45):
+                                process_output = self._read_open_log_tail(log_file)
+                                if process.poll() is None:
                                     result.mark_failure(
-                                        f"❌ Hub 在自定义运行时目录下不可访问: {error}; output={process_output}")
-                                    return result
+                                        f"❌ 等待超时：Hub 未在自定义数据根目录生成 hub.json。日志片段: {process_output}")
+                                else:
+                                    result.mark_failure(
+                                        f"❌ Hub 提前退出，未生成 hub.json。exit={process.returncode}, output={process_output}")
+                                return result
 
-                                result.add_detail(f"✅ 通过自定义运行时目录发现并访问 Hub 成功: {base_url}")
-                                result.mark_success()
+                            hub_json_path = os.path.join(runtime_dir, "hub.json")
+                            with open(hub_json_path, "r", encoding="utf-8") as f:
+                                hub_info = json.load(f)
+
+                            token_file = hub_info.get("tokenFile")
+                            if not token_file or not os.path.exists(token_file):
+                                result.mark_failure(f"❌ tokenFile 未正确生成: {token_file}")
+                                return result
+                            result.add_detail(f"✅ Hub 真实生成 hub.json 与 tokenFile: {hub_json_path}, {token_file}")
+
+                            runtime_token = os.path.join(runtime_dir, "token.txt")
+                            if not paths_refer_to_same_location(token_file, runtime_token):
+                                result.mark_failure(f"❌ tokenFile 路径不在自定义数据根目录: {token_file}")
+                                return result
+
+                            base_url, token = DiscoveryService.get_hub_info()
+                            ok, error = self._wait_for_hub_ping(process, base_url, token, timeout_seconds=20)
+                            if not ok:
+                                process_output = self._read_open_log_tail(log_file)
+                                result.mark_failure(
+                                    f"❌ Hub 在自定义数据根目录下不可访问: {error}; output={process_output}")
+                                return result
+
+                            result.add_detail(f"✅ 通过自定义数据根目录发现并访问 Hub 成功: {base_url}")
+                            result.mark_success()
                 finally:
                     # 在临时目录回收前停止子进程，避免 Windows 文件句柄占用导致删除失败。
                     self._stop_process(process)
@@ -556,8 +555,8 @@ class TestLaunchDiscovery(unittest.TestCase):
             result.mark_failure("❌ 跳过，因为发现文件不存在")
             results.append(result)
 
-        # 测试 DEVHUB_RUNTIME_DIR 环境变量支持（真实 Hub 进程路径）
-        results.append(self.test_custom_runtime_dir_real_hub_files())
+        # 测试 DEVHUB_DATA_DIR 环境变量支持（真实 Hub 进程路径）
+        results.append(self.test_custom_data_dir_real_hub_files())
 
         return results
 

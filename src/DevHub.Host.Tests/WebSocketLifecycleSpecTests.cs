@@ -27,7 +27,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostWsSpecTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "definitions");
+        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
 
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
@@ -930,7 +930,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
     }
 
-    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_tempRoot);
 
     private void WriteDefinition(string appId)
     {

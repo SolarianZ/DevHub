@@ -32,16 +32,16 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void Impl_FileSystemManager_GetToken_ShouldWriteTokenToRuntimeOverrideDirectory()
+    public void Impl_FileSystemManager_GetToken_ShouldWriteTokenToConfiguredDataDirectory()
     {
         var testRoot = TestHelpers.GetTestDirectory();
         var runtimeDirectory = Path.Combine(testRoot, "runtime");
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
             var token = fileSystemManager.GetToken();
             var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
 
@@ -66,9 +66,9 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
             var token1 = fileSystemManager.GetToken();
             var token2 = fileSystemManager.GetToken();
 
@@ -98,7 +98,7 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
             Directory.CreateDirectory(runtimeDirectory);
             var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
@@ -115,7 +115,7 @@ public class CoreServiceTests
             security.AddAccessRule(new FileSystemAccessRule(administratorsSid, FileSystemRights.Read, AccessControlType.Allow));
             tokenFile.SetAccessControl(security);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
             var token = fileSystemManager.GetToken();
 
             Assert.False(string.IsNullOrWhiteSpace(token));
@@ -138,10 +138,10 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
-            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
-            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
+            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
 
             var token1 = fileSystemManager1.GetToken();
             var token2 = fileSystemManager2.GetToken();
@@ -167,9 +167,9 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
             _ = fileSystemManager.GetToken();
             fileSystemManager.WriteHubJson(47231, "test-hub");
 
@@ -212,9 +212,9 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot));
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
             _ = fileSystemManager.GetToken();
 
             fileSystemManager.WriteHubJson(48001, "v1");
@@ -245,7 +245,7 @@ public class CoreServiceTests
 
         try
         {
-            using var runtimeScope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", runtimeDirectory);
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
             using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
             using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
             using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
@@ -255,7 +255,7 @@ public class CoreServiceTests
             Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
             Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
 
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(testRoot), tuningOptions);
+            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(), tuningOptions);
             _ = fileSystemManager.GetToken();
             fileSystemManager.WriteHubJson(49001, "runtime-override");
 

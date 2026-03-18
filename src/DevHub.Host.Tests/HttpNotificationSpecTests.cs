@@ -27,7 +27,7 @@ public class HttpNotificationSpecTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostHttpNotificationTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "definitions");
+        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
 
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
@@ -38,7 +38,7 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "3.1")]
     public async Task Spec_3_1_HttpNotification_ShouldReturn200WithEmptyBody()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,
@@ -72,7 +72,7 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,
@@ -116,7 +116,7 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "6.1")]
     public async Task Spec_6_1_HttpHubMethod_WhenParamsIsArray_ShouldReturnInvalidParams()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,
@@ -159,7 +159,7 @@ public class HttpNotificationSpecTests : IDisposable
     [InlineData("1.5", 1.5d)]
     public async Task Spec_6_1_HttpRequest_WhenIdIsNumber_ShouldKeepIdCorrelation(string requestIdLiteral, double expectedId)
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,
@@ -208,7 +208,7 @@ public class HttpNotificationSpecTests : IDisposable
             }
             """);
 
-        var hostContext = HostTestContextFactory.Create(_tempRoot, _runtimeDirectory, _definitionsDirectory);
+        var hostContext = HostTestContextFactory.Create(_tempRoot);
         var handler = new RpcHttpEndpointHandler(
             hostContext.Router,
             hostContext.FileSystemManager,

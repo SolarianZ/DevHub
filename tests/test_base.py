@@ -19,7 +19,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 TEST_HUB_COMMAND_ENV_VAR = "DEVHUB_TEST_HUB_COMMAND"
 TEST_HUB_CWD_ENV_VAR = "DEVHUB_TEST_HUB_CWD"
 TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
-_INTERNAL_SINGLE_INSTANCE_SLOT_ENV_VAR = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"
 
 
 @contextmanager
@@ -28,7 +27,7 @@ def temporary_env_var(name: str, value: Optional[str]):
     临时设置环境变量并在退出时恢复原值。
 
     该 helper 用于解决集成测试中的环境污染问题：
-    某些用例（例如 DEVHUB_RUNTIME_DIR 相关测试）若直接覆盖并清空环境变量，
+    某些用例（例如 DEVHUB_DATA_DIR 相关测试）若直接覆盖并清空环境变量，
     会导致后续用例读取到错误的 hub.json 路径，从而出现 Connection refused。
     """
     original_value = os.environ.get(name)
@@ -51,23 +50,29 @@ class DiscoveryService:
     """
 
     @staticmethod
-    def get_runtime_directory():
-        """获取运行时目录"""
-        if "DEVHUB_RUNTIME_DIR" in os.environ:
-            return os.environ["DEVHUB_RUNTIME_DIR"]
+    def get_data_directory():
+        """获取数据根目录"""
+        configured = os.environ.get("DEVHUB_DATA_DIR", "").strip()
+        if configured:
+            return os.path.abspath(configured)
 
         system = platform.system()
         if system == "Windows":
-            return os.path.join(os.environ["LOCALAPPDATA"], "DevHub", "runtime")
+            return os.path.join(os.environ["LOCALAPPDATA"], "DevHub")
         elif system == "Darwin":
-            return os.path.join(os.environ["HOME"], "Library", "Application Support", "DevHub", "runtime")
+            return os.path.join(os.environ["HOME"], "Library", "Application Support", "DevHub")
         elif system == "Linux":
             xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
             if xdg_data_home:
-                return os.path.join(xdg_data_home, "DevHub", "runtime")
-            return os.path.join(os.environ["HOME"], ".local", "share", "DevHub", "runtime")
+                return os.path.join(xdg_data_home, "DevHub")
+            return os.path.join(os.environ["HOME"], ".local", "share", "DevHub")
         else:
             raise Exception(f"Unsupported OS: {system}")
+
+    @staticmethod
+    def get_runtime_directory():
+        """获取运行时目录"""
+        return os.path.join(DiscoveryService.get_data_directory(), "runtime")
 
     @staticmethod
     def get_hub_info():
@@ -96,14 +101,14 @@ class DiscoveryService:
 
 def get_definitions_dir() -> str:
     """获取应用定义目录（按 Spec 与环境变量约定）。"""
-    if "DEVHUB_APPDEFS_DIR" in os.environ:
-        definitions_dir = os.environ["DEVHUB_APPDEFS_DIR"]
-    else:
-        runtime_dir = DiscoveryService.get_runtime_directory()
-        definitions_dir = os.path.abspath(os.path.join(runtime_dir, "..", "apps", "definitions"))
-
+    definitions_dir = os.path.join(DiscoveryService.get_data_directory(), "apps", "definitions")
     os.makedirs(definitions_dir, exist_ok=True)
     return definitions_dir
+
+
+def get_data_directory() -> str:
+    """获取数据根目录（按 Spec 与环境变量约定）。"""
+    return DiscoveryService.get_data_directory()
 
 
 def get_test_python_executable() -> str:
@@ -231,17 +236,15 @@ def resolve_test_hub_env_overrides() -> Dict[str, str]:
     return result
 
 
-def build_isolated_hub_environment(runtime_dir: str, definitions_dir: str) -> Dict[str, str]:
+def build_isolated_hub_environment(data_dir: str) -> Dict[str, str]:
     """构造隔离 Hub 进程环境变量。"""
     env = os.environ.copy()
-    env["DEVHUB_RUNTIME_DIR"] = runtime_dir
-    env["DEVHUB_APPDEFS_DIR"] = definitions_dir
+    env["DEVHUB_DATA_DIR"] = os.path.abspath(data_dir)
     env.update(resolve_test_hub_env_overrides())
-    env.setdefault(_INTERNAL_SINGLE_INSTANCE_SLOT_ENV_VAR, f"test-harness-{uuid.uuid4().hex[:12]}")
     return env
 
 
-def start_isolated_hub_process(runtime_dir: str, definitions_dir: str, log_file):
+def start_isolated_hub_process(data_dir: str, log_file):
     """启动用于黑盒测试的隔离 Hub 进程。"""
     return subprocess.Popen(
         resolve_test_hub_command(),
@@ -249,7 +252,7 @@ def start_isolated_hub_process(runtime_dir: str, definitions_dir: str, log_file)
         stdout=log_file,
         stderr=subprocess.STDOUT,
         text=True,
-        env=build_isolated_hub_environment(runtime_dir, definitions_dir),
+        env=build_isolated_hub_environment(data_dir),
     )
 
 

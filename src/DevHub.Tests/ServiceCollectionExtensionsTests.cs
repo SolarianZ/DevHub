@@ -29,23 +29,22 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     [Fact]
     public void Impl_AddDevHubCore_ShouldRegisterAndResolveCoreServices()
     {
-        var runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
-        var definitionsDirectory = Path.Combine(_tempDirectory, "definitions");
-        var instancesDirectory = Path.Combine(_tempDirectory, "instances");
-        var logsDirectory = Path.Combine(_tempDirectory, "logs");
+        var dataDirectory = Path.Combine(_tempDirectory, "data");
+        var runtimeDirectory = Path.Combine(dataDirectory, "runtime");
+        var definitionsDirectory = Path.Combine(dataDirectory, "apps", "definitions");
+        var instancesDirectory = Path.Combine(dataDirectory, "apps", "instances");
+        var logsDirectory = Path.Combine(dataDirectory, "logs");
 
-        using var runtimeScope = new EnvironmentVariableScope(RuntimePathOptions.RuntimeDirEnvironmentVariable, runtimeDirectory);
-        using var appDefsScope = new EnvironmentVariableScope(RuntimePathOptions.AppDefinitionsDirEnvironmentVariable, definitionsDirectory);
-        using var instancesScope = new EnvironmentVariableScope(RuntimePathOptions.AppInstancesDirEnvironmentVariable, instancesDirectory);
-        using var logScope = new EnvironmentVariableScope(RuntimePathOptions.LogDirEnvironmentVariable, logsDirectory);
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, dataDirectory);
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddDevHubCore(definitionsDirectory);
+        services.AddDevHubCore();
 
         using var provider = services.BuildServiceProvider();
 
         var runtimePathOptions = provider.GetRequiredService<RuntimePathOptions>();
+        Assert.Equal(dataDirectory, runtimePathOptions.RootPath);
         Assert.Equal(runtimeDirectory, runtimePathOptions.RuntimePath);
         Assert.Equal(definitionsDirectory, runtimePathOptions.DefinitionsPath);
         Assert.Equal(instancesDirectory, runtimePathOptions.InstancesPath);
@@ -91,6 +90,3 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         }
     }
 }
-
-
-
