@@ -71,7 +71,7 @@
 | `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdks/javascript/tests/unit/events-client.test.ts` |
 | `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
-| `M5-PY-UT-001` | runtime discovery 成功路径、标准运行时根目录兼容与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
+| `M5-PY-UT-001` | runtime discovery 成功路径、数据根目录派生与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
 | `M5-PY-UT-002` | HTTP header 组装、`protocolVersion/clientId/clientSessionId` 校验与错误映射 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` |
 | `M5-PY-UT-003` | `notify/request/poll/respond` 载荷默认值、参数互斥与 JSON 校验 | Python 白盒 | `sdks/python/tests/unit/test_payloads.py` |
 | `M5-PY-UT-004` | `DevHubRpcException` 已知错误码、辅助字段与 `calleeError` 提取 | Python 白盒 | `sdks/python/tests/unit/test_exceptions.py` |
@@ -146,7 +146,7 @@
 
 ### 4.3 SDK↔Hub 黑盒任务
 
-- [x] 以隔离 runtime/appdefs 目录启动 Host，执行 SDK 调用闭环。
+- [x] 以隔离数据根目录启动 Host，执行 SDK 调用闭环。
 - [x] 覆盖 `hub.apps.launch` 主链路（含 `already_running/starting/started` 状态）。
 - [x] 覆盖必测错误路径：`invocation_timeout/invocation_expired/delivery_conflict/invocation_failed`。
 - [x] 覆盖 scope MUST 规则与 WS unknown type 错误映射。

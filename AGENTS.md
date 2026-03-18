@@ -35,16 +35,16 @@ DevHub/
 
 ## 运行时数据规约
 
-运行时根目录默认遵循系统约定，可通过环境变量 `DEVHUB_RUNTIME_DIR` 显式覆盖：
+运行时数据根目录默认遵循系统约定，可通过环境变量 `DEVHUB_DATA_DIR` 显式覆盖：
 
 - Windows： `%LOCALAPPDATA%\DevHub\`。
 - macOS： `~/Library/Application Support/DevHub/`。
 - Linux： `~/.local/share/DevHub/`，遵循 XDG_DATA_HOME 规范。
 
-标准运行时目录结构如下：
+标准数据根目录结构如下：
 
 ```text
-<DEVHUB_RUNTIME_DIR>/
+<DEVHUB_DATA_DIR>/
 ├── runtime/
 │   ├── hub.json          # 发现文件（存储 httpBaseUrl, wsUrl, tokenFile 等）
 │   └── token.txt         # 访问令牌（权限限定为仅当前用户可读）
@@ -55,8 +55,8 @@ DevHub/
     └── *.log             # 系统运行日志
 ```
 
-- 客户端必须通过读取 `hub.json` 获取动态端口与服务地址，严禁硬编码端口、HTTP 地址或 WebSocket URL。
-- `DEVHUB_RUNTIME_DIR` 仅用于显式覆盖默认运行时目录，不应用作规避标准运行时布局的手段。
+- 客户端必须通过读取 `<dataDir>/runtime/hub.json` 获取动态端口与服务地址，严禁硬编码端口、HTTP 地址或 WebSocket URL。
+- 单实例粒度为“同一 OS 用户 + 同一数据根目录”；不同 `DEVHUB_DATA_DIR` 可并行启动，且并行测试必须为每个 Host 分配独立数据根目录。
 
 ## 构建、运行与测试命令
 
@@ -107,7 +107,7 @@ DevHub/
 - 集成测试必须覆盖所有公开接口与对外协议入口，确保客户端可从黑盒视角验证每项公开能力是否符合规范。
 - 禁止读取或依赖内部实现细节、私有状态、内部调用顺序或临时调试行为。
 - 除 Happy Path 外，还应覆盖参数校验、鉴权约束、错误响应、状态切换、兼容性要求、幂等性和关键异常链路。
-- 尽量采用真实进程、运行时目录、发现文件、鉴权材料和协议交互验证系统闭环，而不是以白盒注入替代真实行为。
+- 尽量采用真实进程、数据根目录、发现文件、鉴权材料和协议交互验证系统闭环，而不是以白盒注入替代真实行为。
 - 新增公开接口、扩展公开字段、调整错误语义或修改协议行为时，必须同步补齐或更新对应集成测试。
 - 测试结束后必须保证环境可重复执行、状态可清理、结果可复现。
 - Python 集成测试文件统一使用 `test_*.py` 命名。

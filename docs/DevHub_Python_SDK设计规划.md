@@ -33,7 +33,7 @@
 
 ### 0.2 M5 范围
 
-- 运行时发现：读取 `hub.json` / `token.txt`，支持 `DEVHUB_RUNTIME_DIR` 覆盖。
+- 运行时发现：固定读取 `<data_dir>/runtime` 下的 `hub.json` / `token.txt`，支持 `DEVHUB_DATA_DIR` 覆盖。
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`。
 - WebSocket events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`。
 - 统一错误模型与结构化辅助字段。
@@ -79,7 +79,7 @@
 - `DevHubClientOptions`
   - `client_id`
   - `client_session_id`
-  - `runtime_dir`
+  - `data_dir`
   - `request_timeout`
   - `protocol_version`
 
@@ -140,12 +140,12 @@
 
 - `RuntimeResolver`：运行时发现抽象。
 - `FileSystemRuntimeResolver`：默认文件系统实现。
-- `discover_runtime()` / `resolve_runtime_directory()`：便于脚本和测试直接调用的辅助入口。
+- `discover_runtime()` / `resolve_data_directory()`：便于脚本和测试直接调用的辅助入口。
 
 设计要求：
 
-- 文档与示例默认遵循标准运行时根目录布局：`<DEVHUB_RUNTIME_DIR>/runtime/hub.json`。
-- 为兼容既有测试夹具与历史输入，SDK 可接受“直接传入 runtime 目录”的输入形式，但这只是兼容策略，不改变规范推荐布局。
+- 文档与示例默认遵循数据根目录布局：`<DEVHUB_DATA_DIR>/runtime/hub.json`。
+- SDK 只接受数据根目录输入；误传 `runtime/` 子目录或旧版直接 runtime 目录输入时，应给出明确迁移错误。
 - SDK 必须始终以 `hub.json` 为真实端点来源，禁止硬编码端口、HTTP 地址或 WS 地址。
 
 ### 3.2 负载构造与解析层
@@ -190,7 +190,7 @@
 
 ### 4.3 兼容策略
 
-- 当前实现允许同时解析标准运行时根目录与直接 runtime 目录输入，但所有文档示例默认使用标准布局。
+- 目标行为仅接受数据根目录输入，并统一从 `<data_dir>/runtime/hub.json` 发现 Hub；检测到旧环境变量或旧布局时应直接报迁移错误。
 - 当前实现优先保证严格解析公开响应；一旦 Host 返回不符合 Spec 的结构，SDK 应尽早失败并给出清晰异常，而不是静默兼容。
 - 后续若需要对接共享 conformance 资产，Python 侧必须使用与 `.NET`、`JS/TS` 一致的向量与比较规则。
 
@@ -202,7 +202,7 @@
 
 当前单元测试重点覆盖：
 
-- runtime discovery 成功/失败路径、环境变量覆盖与路径兼容。
+- runtime discovery 成功/失败路径、`DEVHUB_DATA_DIR` 环境变量覆盖、误传 `runtime/` 子目录错误与旧环境变量迁移错误。
 - payload 构造默认值、边界值、非法参数与 JSON 校验。
 - HTTP 客户端 header 组装、错误映射与响应结构校验。
 - WS 事件客户端鉴权、订阅、事件流生命周期与连接终止语义。
@@ -276,5 +276,5 @@
 
 - 默认目标解释器为 CPython 3.11+。
 - 默认 HTTP 客户端为同步模型，默认 WS 事件客户端为异步模型。
-- 默认文档示例使用标准运行时根目录布局，而不是旧式直接 runtime 目录输入。
+- 默认文档示例使用数据根目录布局，而不是旧式直接 runtime 目录输入。
 - 默认与其他 SDK 共享同一套协议事实来源、错误码定义与后续 conformance 基线。

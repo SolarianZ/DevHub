@@ -135,20 +135,39 @@
 
 ### 4.1 运行时文件与发现（规范性）
 
-#### 4.1.1 运行时目录
+#### 4.1.1 运行时数据根目录
 
 **路径分隔符约定**：本文档中的路径示例统一使用 `/` 作为分隔符。Windows 平台实现时应将 `/` 替换为 `\`（例如 `C:/Users/me/...` → `C:\Users\me\...`）。
 
-SDK **应该**支持通过环境变量 `DEVHUB_RUNTIME_DIR` 覆盖运行时目录（主要用于测试框架 / 便携式安装）。
+Host 与 SDK **必须**按以下优先级解析数据根目录：
+1. 显式配置的数据根目录参数（若该实现提供此能力）。
+2. 环境变量 `DEVHUB_DATA_DIR`。
+3. 平台默认数据根目录。
 
-| 平台        | 建议路径                                        | 完整路径（供参考）                     |
+标准目录布局固定如下：
+
+```text
+${dataDir}/
+├── runtime/
+│   ├── hub.json
+│   └── token.txt
+├── apps/
+│   ├── definitions/
+│   └── instances/
+└── logs/
+```
+
+| 平台        | 建议运行时数据根目录                              | 完整路径（供参考）                     |
 | :---------- | :---------------------------------------------- | :------------------------------------- |
-| **Windows** | `%LOCALAPPDATA%/DevHub/runtime/`                | `<User>/AppData/Local/DevHub/runtime/` |
-| **macOS**   | `~/Library/Application Support/DevHub/runtime/` | 与标准路径相同                         |
-| **Linux**   | `$XDG_DATA_HOME/DevHub/runtime/`                | `~/.local/share/DevHub/runtime/`       |
+| **Windows** | `%LOCALAPPDATA%/DevHub/`                        | `<User>/AppData/Local/DevHub/`         |
+| **macOS**   | `~/Library/Application Support/DevHub/`         | 与标准路径相同                         |
+| **Linux**   | `$XDG_DATA_HOME/DevHub/`                        | `~/.local/share/DevHub/`               |
+
+规范性要求：
+- 单实例粒度**必须**为“当前 OS 用户 + 规范化后的 `${dataDir}`”；同一用户在同一 `${dataDir}` 下只允许一个 Host，不同 `${dataDir}` 可并行运行。
 
 #### 4.1.2 `hub.json`（发现文件）
-Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必须**符合 §5.4 定义的 `HubRuntime` 架构。
+Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**必须**符合 §5.4 定义的 `HubRuntime` 架构。
 
 示例：
 ```json
@@ -170,6 +189,7 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
 
 规范性要求：
 - 本规范的 `protocolVersion` **必须**为 `1`。
+- 本次目录约定调整**不得**修改 `hub.json` 字段集合；Host 与客户端 **必须**继续使用 §5.4 定义的既有架构，**不得**引入新的发现字段。
 - `httpBaseUrl` **禁止**包含末尾斜杠。
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
@@ -180,28 +200,22 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
 - 客户端**必须**将 `hub.json` 作为权威端点来源，**禁止**假设固定的端口或固定的 WS 路径。
 
 #### 4.1.3 `token.txt`
-- 默认位置：`${runtimeDir}/token.txt`（也可通过 `hub.json.tokenFile` 发现）
+- 默认位置：`${dataDir}/runtime/token.txt`（也可通过 `hub.json.tokenFile` 发现）
 - 文件内容：单个持有者令牌 (bearer token) 字符串（UTF-8 文本）。客户端读取时**应该**修剪末尾的 `\r\n` 和空白字符。
 - 令牌有效期：令牌**应该**在 Hub 启动时重新生成（“每个 Hub 会话一次”）。旧令牌**必须**被拒绝。
 
 #### 4.1.4 AppDefinition 存储 (v1)
-- 默认位置：
-  - **Windows**：`%LOCALAPPDATA%/DevHub/apps/definitions/`
-  - **macOS**：`~/Library/Application Support/DevHub/apps/definitions/`
-  - **Linux**：`$XDG_DATA_HOME/DevHub/apps/definitions/`（若 `XDG_DATA_HOME` 未设置，则使用 `~/.local/share/DevHub/apps/definitions/`）
-- Hub **应该**支持通过环境变量 `DEVHUB_APPDEFS_DIR` 覆盖定义目录（主要用于测试框架 / 便携式安装）。
+- 默认位置：`${dataDir}/apps/definitions/`
+- 定义目录**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
 - 每个定义**必须**是一个名为 `{appId}.json` 的 JSON 文件，且**必须**符合 `AppDefinition` 架构 (§5.1)。
 - Hub **必须**忽略不符合命名规则或未通过架构验证的文件（并**应该**记录诊断日志）。
 
 #### 4.1.5 AppInstance 镜像目录 (v1)
-- 默认位置：
-  - **Windows**：`%LOCALAPPDATA%/DevHub/apps/instances/`
-  - **macOS**：`~/Library/Application Support/DevHub/apps/instances/`
-  - **Linux**：`$XDG_DATA_HOME/DevHub/apps/instances/`（若 `XDG_DATA_HOME` 未设置，则使用 `~/.local/share/DevHub/apps/instances/`）
-- Hub **应该**支持通过环境变量 `DEVHUB_APPINST_DIR` 覆盖实例镜像目录（主要用于测试框架 / 便携式安装）。
+- 默认位置：`${dataDir}/apps/instances/`
+- 实例镜像目录**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
 - 当前 v1 仅对目录路径本身建立约定；目录内部文件布局属于 Hub 内部实现，客户端**禁止**依赖其内部结构作为公开契约。
 
-> 注意：符合性测试假设使用平台默认值，除非使用了 `DEVHUB_APPDEFS_DIR` 或 `DEVHUB_APPINST_DIR`。`DEVHUB_RUNTIME_DIR` 仅影响运行时目录。
+> 注意：符合性测试假设使用平台默认值，除非显式配置了 `DEVHUB_DATA_DIR` 或等价的数据根目录参数。
 
 ---
 
@@ -209,7 +223,7 @@ Hub **必须**在 `${runtimeDir}/hub.json` 写入发现文件。该文件**必�
 
 | 请求头                     | 格式             | 描述                                                                    |
 | -------------------------- | ---------------- | ----------------------------------------------------------------------- |
-| `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${runtimeDir}/token.txt`）读取的令牌 |
+| `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${dataDir}/runtime/token.txt`）读取的令牌 |
 | `X-DevHub-Protocol`        | `"1"`            | 协议版本；HTTP 请求头值为字符串；**必须**精确为 `"1"`                   |
 | `X-DevHub-ClientId`        | string           | 逻辑客户端身份（如 `DevHubUI`, `VSPlugin` 等）                          |
 | `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID；**必须**在客户端重启时更改                               |

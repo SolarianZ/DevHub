@@ -123,12 +123,13 @@ flowchart LR
 ## 4. 本机部署与发现
 
 ### 4.1 per-user 安装与运行原则
-- Hub **每个 OS 用户 1 个**（single instance）。
+- Hub **同一 OS 用户 + 同一数据根目录 1 个**（single instance）。
 - 仅监听 `127.0.0.1` / `localhost`。
 - 不支持跨用户访问（默认以文件 ACL + token 保证）。
+- 不同数据根目录可并行运行多个 Host，前提是彼此完全隔离。
 
 ### 4.2 数据目录（Windows 参考）
-> 规范定义见 **[Spec.md §4.1.1](./Spec.md#411-runtime-directory)**。
+> 规范定义见 **[Spec.md §4.1.1](./Spec.md)**。
 
 - Root：`%LOCALAPPDATA%\DevHub\`
   - `runtime\hub.json`：Hub 运行信息
@@ -138,9 +139,9 @@ flowchart LR
   - `logs\*.log`
 
 ### 4.3 Hub 发现（Discovery）
-> 规范定义见 **[Spec.md §4.1.2 (hub.json)](./Spec.md#412-hubjson-discovery-file)**。
+> 规范定义见 **[Spec.md §4.1.2 (hub.json)](./Spec.md)**。
 
-Client 必须通过读取 `runtime\hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 `protocolVersion`。
+Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 `protocolVersion`。
 
 ---
 
@@ -272,14 +273,15 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 - `invoke.respond`
 
 ### 13.4 文件写入原子性
-- `runtime\hub.json`、`instances\*.json` 等建议使用：
+- `runtime\hub.json`、`apps\instances\*.json` 等建议使用：
   - 写临时文件 + 原子 rename/replace。
 - 避免半写入导致 discovery/诊断读取失败。
 
 ### 13.5 单实例（single instance）
-- Windows 建议使用 Mutex：`Global\DevHub_{UserSid}` 或 `Local\DevHub_{UserSid}`。
+- Windows 建议使用 Mutex：`Global\DevHub_{UserSid}_{DataDirHash}` 或 `Local\DevHub_{UserSid}_{DataDirHash}`。
 - 若已有实例运行：
-  - 新进程退出或转为“客户端模式”提示如何连接（可选）。
+  - 同一数据根目录下的新进程退出或转为“客户端模式”提示如何连接（可选）。
+- 不同 `dataDir` 的 Host 应允许并行运行，且不得共享 discovery、实例镜像或日志目录。
 
 ### 13.6 Invocation Lease 与重投递
 > Lease 时长遵循 **Spec.md §7.3**（30s）。
@@ -318,7 +320,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 - 本规划文档冻结；**Spec.md** 冻结；核心数据模型与 RPC 契约进入可评审状态。
 
 **M1**
-- 启动 Hub 生成 `runtime/hub.json` 与 `runtime/token.txt`。
+- 启动 Hub 生成 `<dataDir>/runtime/hub.json` 与 `<dataDir>/runtime/token.txt`。
 - `hub.ping` 返回 ok；缺 token 返回 `unauthorized`。
 - `hub.apps.listDefinitions` 能读取 `apps/definitions/*.json`。
 - `hub.apps.registerInstance` 后可 `listInstances` 看到；`lastSeen` 更新。
@@ -427,9 +429,10 @@ ws.onmessage = (e) => {
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
 - M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、`invocation_failed` 结构化错误辅助、规范事件类型常量、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试，并补齐成功载荷结构校验与本地参数校验；JS/TS SDK 已补齐 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型与基础集成测试；Python SDK 已在 `sdks/python/` 落地同步 HTTP 客户端、异步事件客户端、统一错误模型、公开扩展点与单元/集成测试，跨语言 conformance 资产与统一门禁待补齐）。
+- 2026-03-18 已完成：仓库级运行时路径文档口径统一收敛到 `DEVHUB_DATA_DIR`，明确 `<dataDir>/runtime/hub.json` 固定发现规则、旧环境变量废弃语义，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
 - 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
 - 2026-03-15 已完成：补齐 `sdks/javascript` 的规范事件类型公开模型，新增 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，并将 `DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名收束到 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
 - 2026-03-14 已完成：补充 [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)，同步总规划与 M5 文档中的 Python SDK 设计、路径与现状说明，明确 Python SDK 仍与仓库级 M5-CONF / M5-CT 任务共享同一套协议与契约基线。
 - 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。本轮仅完成静态检查与代码修复，尚未执行测试验证。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 tests/test_runner.py --smoke --no-header`、`python3 tests/test_runner.py --full --no-header` 均可通过。
-- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 运行时（`DEVHUB_RUNTIME_DIR=temp/sdk-smoke/runtime`、`DEVHUB_APPDEFS_DIR=temp/sdk-smoke/apps/definitions`），`python3 tests/test_runner.py --smoke --no-header` 可通过。
+- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 数据根目录（`DEVHUB_DATA_DIR=temp/sdk-smoke`）下，`python3 tests/test_runner.py --smoke --no-header` 可通过。
