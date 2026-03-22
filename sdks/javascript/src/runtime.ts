@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { parseDateTimeString } from "./validation.js";
 
-export const RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
+export const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
+const LEGACY_RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
 
 export interface HubRuntimeTuning {
   leaseSeconds: number;
@@ -31,23 +32,25 @@ export interface RuntimeConnectionInfo {
 }
 
 export interface RuntimeResolver {
-  resolve(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo>;
+  resolve(dataDirOverride?: string): Promise<RuntimeConnectionInfo>;
 }
 
 export class FileSystemRuntimeResolver implements RuntimeResolver {
-  async resolve(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo> {
-    return discoverRuntime(runtimeDirOverride);
+  async resolve(dataDirOverride?: string): Promise<RuntimeConnectionInfo> {
+    return discoverRuntime(dataDirOverride);
   }
 }
 
-export function resolveRuntimeDirectory(runtimeDirOverride?: string): string {
-  if (runtimeDirOverride && runtimeDirOverride.trim()) {
-    return path.resolve(runtimeDirOverride);
+export function resolveDataDirectory(dataDirOverride?: string): string {
+  assertLegacyRuntimeDirEnvUnset();
+
+  if (dataDirOverride && dataDirOverride.trim()) {
+    return path.resolve(dataDirOverride);
   }
 
-  const envRuntimeDir = process.env[RUNTIME_DIR_ENV];
-  if (envRuntimeDir && envRuntimeDir.trim()) {
-    return path.resolve(envRuntimeDir);
+  const envDataDir = process.env[DATA_DIR_ENV];
+  if (envDataDir && envDataDir.trim()) {
+    return path.resolve(envDataDir);
   }
 
   const platform = process.platform;
@@ -55,21 +58,21 @@ export function resolveRuntimeDirectory(runtimeDirOverride?: string): string {
 
   if (platform === "win32") {
     const base = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
-    return path.resolve(base, "DevHub", "runtime");
+    return path.resolve(base, "DevHub");
   }
 
   if (platform === "darwin") {
-    return path.resolve(home, "Library", "Application Support", "DevHub", "runtime");
+    return path.resolve(home, "Library", "Application Support", "DevHub");
   }
 
   const xdgDataHome = process.env.XDG_DATA_HOME;
   const base = xdgDataHome && xdgDataHome.trim() ? xdgDataHome : path.join(home, ".local", "share");
-  return path.resolve(base, "DevHub", "runtime");
+  return path.resolve(base, "DevHub");
 }
 
-export async function discoverRuntime(runtimeDirOverride?: string): Promise<RuntimeConnectionInfo> {
-  const runtimeRootDirectory = resolveRuntimeDirectory(runtimeDirOverride);
-  const { runtimeDirectory, hubJsonPath } = await resolveHubRuntimePaths(runtimeRootDirectory);
+export async function discoverRuntime(dataDirOverride?: string): Promise<RuntimeConnectionInfo> {
+  const dataDirectory = resolveDataDirectory(dataDirOverride);
+  const { runtimeDirectory, hubJsonPath } = await resolveHubRuntimePaths(dataDirectory);
 
   let hubJsonText: string;
   try {
@@ -112,24 +115,29 @@ export async function discoverRuntime(runtimeDirOverride?: string): Promise<Runt
   };
 }
 
-async function resolveHubRuntimePaths(runtimeRootDirectory: string): Promise<{
+async function resolveHubRuntimePaths(dataDirectory: string): Promise<{
   runtimeDirectory: string;
   hubJsonPath: string;
 }> {
-  const standardRuntimeDirectory = path.join(runtimeRootDirectory, "runtime");
-  const standardHubJsonPath = path.join(standardRuntimeDirectory, "hub.json");
-  if (await fileExists(standardHubJsonPath)) {
-    return {
-      runtimeDirectory: standardRuntimeDirectory,
-      hubJsonPath: standardHubJsonPath
-    };
+  const legacyHubJsonPath = path.join(dataDirectory, "hub.json");
+  if (
+    path.basename(dataDirectory).toLowerCase() === "runtime"
+    && await fileExists(legacyHubJsonPath)
+  ) {
+    throw new Error(`discoverRuntime 只接受 dataDir，不能直接传入 runtime 目录：${dataDirectory}`);
   }
 
-  const legacyHubJsonPath = path.join(runtimeRootDirectory, "hub.json");
   return {
-    runtimeDirectory: runtimeRootDirectory,
-    hubJsonPath: legacyHubJsonPath
+    runtimeDirectory: path.join(dataDirectory, "runtime"),
+    hubJsonPath: path.join(dataDirectory, "runtime", "hub.json")
   };
+}
+
+function assertLegacyRuntimeDirEnvUnset(): void {
+  const legacyRuntimeDir = process.env[LEGACY_RUNTIME_DIR_ENV];
+  if (legacyRuntimeDir && legacyRuntimeDir.trim()) {
+    throw new Error(`已移除环境变量 ${LEGACY_RUNTIME_DIR_ENV}，请改用 ${DATA_DIR_ENV} 或 dataDir 选项。`);
+  }
 }
 
 function parseHubRuntime(payload: unknown, source: string): HubRuntime {

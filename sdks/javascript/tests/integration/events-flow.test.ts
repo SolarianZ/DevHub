@@ -27,7 +27,7 @@ afterAll(async () => {
 it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await eventsClient.authenticate();
@@ -37,7 +37,7 @@ it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
 
   const httpClient = await DevHubClient.fromRuntime({
     clientId: "events-http-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await httpClient.registerInstance({
@@ -76,12 +76,12 @@ it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
 it("authenticated WS should support ping and apps queries", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-query-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   const httpClient = await DevHubClient.fromRuntime({
     clientId: "events-query-http-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   try {
@@ -126,7 +126,7 @@ it("authenticated WS should support ping and apps queries", async () => {
 it("订阅未知事件类型应返回 invalid_params", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-invalid-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await eventsClient.authenticate();
@@ -149,7 +149,7 @@ it("订阅未知事件类型应返回 invalid_params", async () => {
 it("断开后重连应需要重新订阅", async () => {
   const firstClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client-1",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await firstClient.authenticate();
@@ -158,14 +158,14 @@ it("断开后重连应需要重新订阅", async () => {
 
   const secondClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client-2",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await secondClient.authenticate();
 
   const httpClient = await DevHubClient.fromRuntime({
     clientId: "events-reconnect-http-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   await httpClient.registerInstance({

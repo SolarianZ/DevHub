@@ -19,8 +19,8 @@ afterEach(async () => {
 it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {
-    resolve: vi.fn(async (runtimeDirOverride?: string) => {
-      expect(runtimeDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
+    resolve: vi.fn(async (dataDirOverride?: string) => {
+      expect(dataDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
       return connection;
     })
   };
@@ -50,7 +50,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver,
@@ -73,7 +73,7 @@ it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-echo-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -100,7 +100,7 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-value-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -145,7 +145,7 @@ it("notify 应应用默认选项", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-notify-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const result = await client.notify({
@@ -186,7 +186,7 @@ it("request 应保留显式空 scope 并应用默认选项", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-request-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const result = await client.request({
@@ -227,7 +227,7 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-list-definitions-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.listDefinitions()).rejects.toThrow(/description/i);
@@ -255,7 +255,7 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-get-definition-capabilities-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const definition = await client.getDefinition("test.rpc-default.app");
@@ -290,7 +290,7 @@ it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-error-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   let capturedError: unknown;
@@ -348,7 +348,7 @@ it("请求应携带协议头与鉴权头", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-header-client",
     clientSessionId,
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const result = await client.ping();
@@ -362,7 +362,7 @@ it("fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
 
   await expect(DevHubClient.fromRuntime({
     clientId: "unit-timeout-client",
-    runtimeDir,
+    dataDir: runtimeDir,
     requestTimeoutMs: "50" as unknown as number
   })).rejects.toThrow("requestTimeoutMs 必须为大于 0 的整数。");
 });
@@ -380,7 +380,7 @@ it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-register-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.registerInstance({
@@ -403,7 +403,7 @@ it("getDefinition should reject an invalid appId before sending the request", as
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-get-definition-appid-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.getDefinition("Invalid.App")).rejects.toThrow(/appId/);
@@ -418,7 +418,7 @@ it("registerInstance should reject an invalid instanceId before sending the requ
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-register-instanceid-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.registerInstance({
@@ -441,7 +441,7 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-target-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.notify({
@@ -462,7 +462,7 @@ it("launch should reject null waitForRegisterMs before sending the request", asy
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-launch-null-wait-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.launch({
@@ -480,7 +480,7 @@ it("poll 应在本地校验 waitMs 为整数", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-poll-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.poll({
@@ -498,7 +498,7 @@ it("request should reject null queueIfOffline before sending the request", async
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-request-null-bool-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.request({
@@ -519,7 +519,7 @@ it("notify 应在本地拒绝 waitTimeoutMs", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-notify-wait-timeout-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.notify({
@@ -540,7 +540,7 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-respond-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.respond({
@@ -568,7 +568,7 @@ it("respond should reject an invalid invocationId before sending the request", a
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-respond-invocationid-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.respond({
@@ -589,7 +589,7 @@ it("ping 应在本地拒绝会被静默丢弃的 echo 字段", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-ping-json-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.ping({
@@ -606,7 +606,7 @@ it("registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-register-meta-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.registerInstance({
@@ -632,7 +632,7 @@ it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-notify-json-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const sparseArray = new Array(1);
@@ -662,7 +662,7 @@ it("request should reject an invalid invocationId in a success payload", async (
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-request-result-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.request({
@@ -678,7 +678,7 @@ it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-respond-json-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.respond({
@@ -703,7 +703,7 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-respond-error-code-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.respond({
@@ -725,7 +725,7 @@ it("respond 应在本地拒绝非对象 error.data", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-respond-error-data-shape-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.respond({
@@ -755,7 +755,7 @@ it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-launch-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.launch({
@@ -792,7 +792,7 @@ it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-poll-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.poll({
@@ -824,7 +824,7 @@ it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-jsonrpc-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
@@ -846,7 +846,7 @@ it("ping 应拒绝非整数 JSON-RPC error.code", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-jsonrpc-error-code-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.ping()).rejects.toThrow(/error\.code/i);
@@ -866,7 +866,7 @@ it("ping 应拒绝非对象 JSON-RPC error.data", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-jsonrpc-error-data-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.ping()).rejects.toThrow(/error\.data/i);
@@ -885,7 +885,7 @@ it("ping should reject a serverTimeUtc value that is not a full date-time", asyn
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-ping-date-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.ping()).rejects.toThrow(/serverTimeUtc/i);
@@ -898,7 +898,7 @@ it("notify should reject a non-object target before sending the request", async 
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-target-shape-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.notify({
@@ -917,7 +917,7 @@ it("request should reject a non-object options payload before sending the reques
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-options-shape-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.request({
@@ -968,7 +968,7 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-poll-options-validation-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.poll({
@@ -997,7 +997,7 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-get-definition-empty-strings-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   const definition = await client.getDefinition("test.empty-fields.app");
@@ -1040,7 +1040,7 @@ it("getDefinition should reject null capabilities flags", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-get-definition-invalid-capabilities-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.getDefinition("test.invalid-capabilities.app")).rejects.toThrow(/capabilities\.rpc/i);
@@ -1076,7 +1076,7 @@ it("listInstances should reject a null meta object", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-list-instances-null-meta-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.listInstances()).rejects.toThrow(/meta/i);
@@ -1089,7 +1089,7 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-meta-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -1159,7 +1159,7 @@ it("poll should reject null optional invocation booleans", async () => {
 
   const client = await DevHubClient.fromRuntime({
     clientId: "unit-poll-null-bool-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.poll({
@@ -1174,7 +1174,7 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-args-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -1237,8 +1237,11 @@ function createConnectionInfo() {
 }
 
 async function createRuntime(): Promise<string> {
-  const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
-  tempRoots.push(runtimeDir);
+  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
+  const runtimeDir = path.join(dataDir, "runtime");
+  tempRoots.push(dataDir);
+
+  await fsPromises.mkdir(runtimeDir, { recursive: true });
 
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -1260,7 +1263,7 @@ async function createRuntime(): Promise<string> {
     "utf-8"
   );
 
-  return runtimeDir;
+  return dataDir;
 }
 
 function parseRequestBody(init?: RequestInit): Record<string, any> {

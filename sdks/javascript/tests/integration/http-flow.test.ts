@@ -27,7 +27,7 @@ afterAll(async () => {
 it("HTTP 链路应可完成基础流程", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-flow-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   const ping = await client.ping({ value: 1 });
@@ -81,7 +81,7 @@ it("HTTP 链路应可完成基础流程", async () => {
 it("launch 应覆盖 started / starting / already_running", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-launch-client",
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 
   const started = await client.launch({

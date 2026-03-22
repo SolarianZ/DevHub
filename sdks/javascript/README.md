@@ -12,7 +12,7 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 - 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
 - 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
-- 运行时发现现已同时支持标准运行时根目录布局（`<DEVHUB_RUNTIME_DIR>/runtime/hub.json`）与既有直接运行时目录布局（`<dir>/hub.json`），并支持 `127.0.0.1`、`localhost` 与 `::1` 回环端点。
+- 运行时发现现已统一为 data dir 语义：按 `options.dataDir`、`DEVHUB_DATA_DIR`、平台默认数据目录的顺序解析数据根，并固定读取 `<dataDir>/runtime/hub.json`；检测到旧环境变量 `DEVHUB_RUNTIME_DIR` 会直接抛出迁移错误。
 - 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点，便于 fake transport、录制回放或自定义连接策略测试。
 
 > SDK 已内置 `ws` 回退实现，因此在 Node.js 18/19 等未提供全局 `WebSocket` 的环境中也可直接使用事件客户端。
@@ -36,7 +36,7 @@ npm test
 
 ## 已验证能力
 
-- Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `DEVHUB_RUNTIME_DIR` 覆盖，并兼容标准运行时根目录与旧版直接运行时目录两种布局。
+- Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `dataDir` / `DEVHUB_DATA_DIR` 覆盖，并固定使用 `<dataDir>/runtime/hub.json`。
 - HTTP flows：`ping`、应用定义查询、实例注册/心跳/注销、`launch`、`notify`、`request`、`poll`、`respond`。
 - Launch semantics：`started`、`starting`、`already_running` 状态与去重/在线实例分支。
 - Invocation semantics：默认选项、`delivery_conflict`、`invocation_timeout`、`invocation_expired`、`invocation_failed`。
@@ -60,6 +60,15 @@ const subscriptionId = await eventsClient.subscribe();
 for await (const evt of eventsClient.readEvents()) {
   console.log("event", evt.type, evt.payload);
 }
+```
+
+如需显式指定数据根目录，可传入 `dataDir`：
+
+```ts
+const client = await DevHubClient.fromRuntime({
+  clientId: "demo",
+  dataDir: "/path/to/DevHub"
+});
 ```
 
 ## 高级扩展

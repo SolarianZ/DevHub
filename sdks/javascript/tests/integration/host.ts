@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { promises as fsPromises } from "node:fs";
@@ -13,6 +12,7 @@ let sharedHostAssemblyPromise: Promise<string> | undefined;
 
 export class DevHubHostFixture {
   readonly repoRoot: string;
+  readonly dataDirectory: string;
   readonly runtimeDirectory: string;
   readonly definitionsDirectory: string;
   readonly instancesDirectory: string;
@@ -27,6 +27,7 @@ export class DevHubHostFixture {
   private constructor(
     repoRoot: string,
     tempRoot: string,
+    dataDirectory: string,
     runtimeDirectory: string,
     definitionsDirectory: string,
     instancesDirectory: string,
@@ -35,6 +36,7 @@ export class DevHubHostFixture {
   ) {
     this.repoRoot = repoRoot;
     this.tempRoot = tempRoot;
+    this.dataDirectory = dataDirectory;
     this.runtimeDirectory = runtimeDirectory;
     this.definitionsDirectory = definitionsDirectory;
     this.instancesDirectory = instancesDirectory;
@@ -45,10 +47,11 @@ export class DevHubHostFixture {
   static async start(): Promise<DevHubHostFixture> {
     const repoRoot = resolveRepoRoot();
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-"));
-    const runtimeDirectory = path.join(tempRoot, "runtime");
-    const definitionsDirectory = path.join(tempRoot, "definitions");
-    const instancesDirectory = path.join(tempRoot, "instances");
-    const logsDirectory = path.join(tempRoot, "logs");
+    const dataDirectory = tempRoot;
+    const runtimeDirectory = path.join(dataDirectory, "runtime");
+    const definitionsDirectory = path.join(dataDirectory, "apps", "definitions");
+    const instancesDirectory = path.join(dataDirectory, "apps", "instances");
+    const logsDirectory = path.join(dataDirectory, "logs");
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
     await fsPromises.mkdir(definitionsDirectory, { recursive: true });
@@ -57,6 +60,7 @@ export class DevHubHostFixture {
     const fixture = new DevHubHostFixture(
       repoRoot,
       tempRoot,
+      dataDirectory,
       runtimeDirectory,
       definitionsDirectory,
       instancesDirectory,
@@ -92,11 +96,7 @@ export class DevHubHostFixture {
 
     const env = {
       ...process.env,
-      DEVHUB_RUNTIME_DIR: this.runtimeDirectory,
-      DEVHUB_APPDEFS_DIR: this.definitionsDirectory,
-      DEVHUB_APPINST_DIR: this.instancesDirectory,
-      DEVHUB_LOG_DIR: this.logsDirectory,
-      DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS: randomUUID().replace(/-/g, "")
+      DEVHUB_DATA_DIR: this.dataDirectory
     };
 
     this.process = spawn("dotnet", [this.hostAssemblyPath], {

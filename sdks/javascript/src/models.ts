@@ -9,7 +9,7 @@ export type JsonObject = { [key: string]: JsonValue };
 export interface DevHubClientOptions {
   clientId: string;
   clientSessionId?: string;
-  runtimeDir?: string;
+  dataDir?: string;
   requestTimeoutMs?: number;
   protocolVersion?: number;
 }
@@ -17,7 +17,7 @@ export interface DevHubClientOptions {
 export interface NormalizedDevHubClientOptions {
   clientId: string;
   clientSessionId: string;
-  runtimeDir?: string;
+  dataDir?: string;
   requestTimeoutMs?: number;
   protocolVersion: number;
 }
@@ -192,7 +192,7 @@ export function normalizeClientOptions(options: DevHubClientOptions): Normalized
   return {
     clientId,
     clientSessionId,
-    runtimeDir: options.runtimeDir,
+    dataDir: options.dataDir,
     requestTimeoutMs: options.requestTimeoutMs,
     protocolVersion
   };

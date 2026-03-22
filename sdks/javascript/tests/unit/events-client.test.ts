@@ -21,8 +21,8 @@ afterEach(async () => {
 it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {
-    resolve: vi.fn(async (runtimeDirOverride?: string) => {
-      expect(runtimeDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
+    resolve: vi.fn(async (dataDirOverride?: string) => {
+      expect(dataDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
       return connection;
     })
   };
@@ -35,7 +35,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-injected-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver,
@@ -72,7 +72,7 @@ it("authenticate should support WS ping and apps queries", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-ws-rpc-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -138,7 +138,7 @@ it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-payload-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -198,7 +198,7 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-reconnect-client",
-      runtimeDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: "/tmp/devhub-js-sdk-runtime"
     },
     {
       runtimeResolver: {
@@ -238,7 +238,7 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   const runtimeDir = await createRuntime();
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unauthenticated-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.subscribe()).rejects.toThrow();
@@ -260,7 +260,7 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-buffered-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await client.authenticate();
@@ -291,7 +291,7 @@ it("事件通知携带 id 时应使事件流报错", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-invalid-notification-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await client.authenticate();
@@ -311,7 +311,7 @@ it("响应 id 未匹配挂起请求时应中断 authenticate", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unexpected-response-id-client",
-    runtimeDir,
+    dataDir: runtimeDir,
     requestTimeoutMs: 1_000
   });
 
@@ -328,7 +328,7 @@ it("收到未知 WS 通知方法时应使事件流报错", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unknown-notification-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await client.authenticate();
@@ -348,7 +348,7 @@ it("收到未知事件类型时应使事件流报错", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unknown-type-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await client.authenticate();
@@ -368,7 +368,7 @@ it("authenticate 应映射 DevHub RPC 错误", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-auth-error-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   let capturedError: unknown;
@@ -394,7 +394,7 @@ it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-auth-envelope-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await expect(client.authenticate()).rejects.toThrow(/jsonrpc/i);
@@ -442,7 +442,7 @@ it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
 
     const client = await DevHubEventsClient.fromRuntime({
       clientId: "unit-events-ws-fallback-client",
-      runtimeDir
+      dataDir: runtimeDir
     });
 
     try {
@@ -478,7 +478,7 @@ it("event notifications should reject a null payload object", async () => {
 
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-null-payload-client",
-    runtimeDir
+    dataDir: runtimeDir
   });
 
   await client.authenticate();
@@ -492,8 +492,11 @@ async function createRuntime(overrides?: {
   httpBaseUrl?: string;
   wsUrl?: string;
 }): Promise<string> {
-  const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"));
-  tempRoots.push(runtimeDir);
+  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"));
+  const runtimeDir = path.join(dataDir, "runtime");
+  tempRoots.push(dataDir);
+
+  await fsPromises.mkdir(runtimeDir, { recursive: true });
 
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -515,7 +518,7 @@ async function createRuntime(overrides?: {
     "utf-8"
   );
 
-  return runtimeDir;
+  return dataDir;
 }
 
 function createConnectionInfo() {

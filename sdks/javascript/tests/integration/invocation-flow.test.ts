@@ -318,7 +318,7 @@ it("scope 路由规则应命中正确实例", async () => {
 async function createClient(clientId: string): Promise<DevHubClient> {
   return await DevHubClient.fromRuntime({
     clientId,
-    runtimeDir: host.runtimeDirectory
+    dataDir: host.dataDirectory
   });
 }
 

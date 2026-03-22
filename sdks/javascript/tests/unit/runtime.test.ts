@@ -2,17 +2,25 @@ import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { discoverRuntime, resolveRuntimeDirectory } from "../../src/runtime.js";
+import { discoverRuntime, resolveDataDirectory } from "../../src/runtime.js";
 
-const ENV = "DEVHUB_RUNTIME_DIR";
-const originalEnvValue = process.env[ENV];
+const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
+const LEGACY_RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
+const originalDataDirEnvValue = process.env[DATA_DIR_ENV];
+const originalLegacyRuntimeDirEnvValue = process.env[LEGACY_RUNTIME_DIR_ENV];
 const tempRoots: string[] = [];
 
 afterEach(() => {
-  if (originalEnvValue === undefined) {
-    delete process.env[ENV];
+  if (originalDataDirEnvValue === undefined) {
+    delete process.env[DATA_DIR_ENV];
   } else {
-    process.env[ENV] = originalEnvValue;
+    process.env[DATA_DIR_ENV] = originalDataDirEnvValue;
+  }
+
+  if (originalLegacyRuntimeDirEnvValue === undefined) {
+    delete process.env[LEGACY_RUNTIME_DIR_ENV];
+  } else {
+    process.env[LEGACY_RUNTIME_DIR_ENV] = originalLegacyRuntimeDirEnvValue;
   }
 
   return Promise.all(tempRoots.splice(0).map(async (target) => {
@@ -20,29 +28,35 @@ afterEach(() => {
   }));
 });
 
-it("优先使用显式 override", () => {
-  process.env[ENV] = path.join("temp", "runtime-env");
-  const override = path.join("temp", "runtime-override");
-  expect(resolveRuntimeDirectory(override)).toBe(path.resolve(override));
+it("优先使用显式 dataDir override", () => {
+  process.env[DATA_DIR_ENV] = path.join("temp", "data-env");
+  const override = path.join("temp", "data-override");
+  expect(resolveDataDirectory(override)).toBe(path.resolve(override));
 });
 
-it("其次使用环境变量", () => {
-  const envValue = path.join("temp", "runtime-env");
-  process.env[ENV] = envValue;
-  expect(resolveRuntimeDirectory()).toBe(path.resolve(envValue));
+it("其次使用 DEVHUB_DATA_DIR", () => {
+  const envValue = path.join("temp", "data-env");
+  process.env[DATA_DIR_ENV] = envValue;
+  expect(resolveDataDirectory()).toBe(path.resolve(envValue));
 });
 
-it("默认运行时目录应指向规范 runtime 目录", () => {
-  delete process.env[ENV];
-
-  const runtimeDir = resolveRuntimeDirectory();
-
-  expect(path.basename(runtimeDir).toLowerCase()).toBe("runtime");
-  expect(path.basename(path.dirname(runtimeDir))).toBe("DevHub");
+it("检测到旧环境变量时应抛出迁移错误", () => {
+  process.env[LEGACY_RUNTIME_DIR_ENV] = path.join("temp", "legacy-runtime");
+  expect(() => resolveDataDirectory()).toThrow(/DEVHUB_RUNTIME_DIR/);
 });
 
-it("discoverRuntime 应支持标准运行时根目录布局", async () => {
-  const { runtimeRoot, runtimeDir } = await createStandardRuntimeLayout();
+it("默认数据目录应指向规范 data dir", () => {
+  delete process.env[DATA_DIR_ENV];
+  delete process.env[LEGACY_RUNTIME_DIR_ENV];
+
+  const dataDir = resolveDataDirectory();
+
+  expect(path.basename(dataDir)).toBe("DevHub");
+  expect(path.basename(dataDir).toLowerCase()).not.toBe("runtime");
+});
+
+it("discoverRuntime 应支持标准 dataDir 布局", async () => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-std  \r\n", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -59,7 +73,7 @@ it("discoverRuntime 应支持标准运行时根目录布局", async () => {
     }
   });
 
-  const result = await discoverRuntime(runtimeRoot);
+  const result = await discoverRuntime(dataDir);
 
   expect(result.runtimeDirectory).toBe(runtimeDir);
   expect(result.token).toBe("token-std");
@@ -68,8 +82,8 @@ it("discoverRuntime 应支持标准运行时根目录布局", async () => {
   expect(result.runtime.startedAtUtc.toISOString()).toBe("2026-03-09T00:00:00.000Z");
 });
 
-it("discoverRuntime 应支持通过环境变量定位标准运行时根目录", async () => {
-  const { runtimeRoot, runtimeDir } = await createStandardRuntimeLayout();
+it("discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir", async () => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-env", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -85,7 +99,7 @@ it("discoverRuntime 应支持通过环境变量定位标准运行时根目录", 
       launchDedupeWindowSeconds: 30
     }
   });
-  process.env[ENV] = runtimeRoot;
+  process.env[DATA_DIR_ENV] = dataDir;
 
   const result = await discoverRuntime();
 
@@ -93,11 +107,11 @@ it("discoverRuntime 应支持通过环境变量定位标准运行时根目录", 
   expect(result.token).toBe("token-env");
 });
 
-it("discoverRuntime 应兼容旧布局并返回已修剪的连接信息", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
-  const tokenFile = path.join(runtimeDir, "token.txt");
-  await fsPromises.writeFile(tokenFile, "token-1  \r\n", "utf-8");
-  await writeHubJson(runtimeDir, {
+it("discoverRuntime 只应读取 <dataDir>/runtime/hub.json", async () => {
+  const dataDir = await createTempRoot("devhub-js-sdk-runtime-legacy-root-unit-");
+  const tokenFile = path.join(dataDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-legacy", "utf-8");
+  await writeHubJson(dataDir, {
     protocolVersion: 1,
     pid: 12345,
     httpBaseUrl: "http://127.0.0.1:47231",
@@ -111,17 +125,21 @@ it("discoverRuntime 应兼容旧布局并返回已修剪的连接信息", async 
     }
   });
 
-  const result = await discoverRuntime(runtimeDir);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(`未找到 hub.json：${path.join(dataDir, "runtime", "hub.json")}`);
+});
 
-  expect(result.runtimeDirectory).toBe(runtimeDir);
-  expect(result.token).toBe("token-1");
-  expect(result.rpcEndpoint).toBe("http://127.0.0.1:47231/rpc");
-  expect(result.websocketEndpoint).toBe("ws://127.0.0.1:47231/ws");
-  expect(result.runtime.startedAtUtc.toISOString()).toBe("2026-03-09T00:00:00.000Z");
+it("discoverRuntime 应拒绝直接传入 runtime 子目录", async () => {
+  const { runtimeDir } = await createPopulatedDataDirectory();
+  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/不能直接传入 runtime 目录/);
+});
+
+it("discoverRuntime 检测到旧环境变量时应抛出迁移错误", async () => {
+  process.env[LEGACY_RUNTIME_DIR_ENV] = path.join("temp", "legacy-runtime");
+  await expect(discoverRuntime()).rejects.toThrow(/DEVHUB_RUNTIME_DIR/);
 });
 
 it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -138,11 +156,11 @@ it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/runtimeTuning/);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/runtimeTuning/);
 });
 
 it("discoverRuntime 应拒绝非整数 pid", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -159,11 +177,11 @@ it("discoverRuntime 应拒绝非整数 pid", async () => {
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/pid/);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/pid/);
 });
 
 it("discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -180,11 +198,11 @@ it("discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/runtimeTuning/);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/runtimeTuning/);
 });
 
 it("discoverRuntime should reject a startedAtUtc value without an explicit timezone", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -201,11 +219,11 @@ it("discoverRuntime should reject a startedAtUtc value without an explicit timez
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/startedAtUtc/);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/startedAtUtc/);
 });
 
 it("discoverRuntime 应接受 IPv6 回环端点", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-ipv6", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -222,14 +240,14 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
     }
   });
 
-  const result = await discoverRuntime(runtimeDir);
+  const result = await discoverRuntime(dataDir);
 
   expect(result.rpcEndpoint).toBe("http://[::1]:47231/rpc");
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
 it("discoverRuntime should reject a non-string hubVersion when present", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   const hubJsonPath = path.join(runtimeDir, "hub.json");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -248,11 +266,11 @@ it("discoverRuntime should reject a non-string hubVersion when present", async (
     }
   });
 
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(`hub.json.hubVersion 非法：${hubJsonPath}`);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(`hub.json.hubVersion 非法：${hubJsonPath}`);
 });
 
 it("discoverRuntime should preserve a spec-valid empty hubVersion string", async () => {
-  const runtimeDir = await createLegacyRuntimeDirectory();
+  const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
   await writeHubJson(runtimeDir, {
@@ -270,23 +288,43 @@ it("discoverRuntime should preserve a spec-valid empty hubVersion string", async
     }
   });
 
-  const result = await discoverRuntime(runtimeDir);
+  const result = await discoverRuntime(dataDir);
 
   expect(result.runtime.hubVersion).toBe("");
 });
 
-async function createLegacyRuntimeDirectory(): Promise<string> {
-  const runtimeDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-runtime-unit-"));
-  tempRoots.push(runtimeDir);
-  return runtimeDir;
+async function createPopulatedDataDirectory(): Promise<{ dataDir: string; runtimeDir: string }> {
+  const { dataDir, runtimeDir } = await createDataDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  return { dataDir, runtimeDir };
 }
 
-async function createStandardRuntimeLayout(): Promise<{ runtimeRoot: string; runtimeDir: string }> {
-  const runtimeRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-runtime-root-unit-"));
-  const runtimeDir = path.join(runtimeRoot, "runtime");
+async function createDataDirectory(): Promise<{ dataDir: string; runtimeDir: string }> {
+  const dataDir = await createTempRoot("devhub-js-sdk-data-root-unit-");
+  const runtimeDir = path.join(dataDir, "runtime");
   await fsPromises.mkdir(runtimeDir, { recursive: true });
-  tempRoots.push(runtimeRoot);
-  return { runtimeRoot, runtimeDir };
+  return { dataDir, runtimeDir };
+}
+
+async function createTempRoot(prefix: string): Promise<string> {
+  const target = await fsPromises.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempRoots.push(target);
+  return target;
 }
 
 async function writeHubJson(runtimeDir: string, payload: Record<string, unknown>): Promise<void> {
