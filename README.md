@@ -11,4 +11,4 @@ DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon）�
 - [运维排障手册](docs/运维排障手册.md)：日志定位、常见故障与恢复步骤。
 - [协议规范](docs/Spec.md)：公开协议与对外契约。
 - [架构与开发规划](docs/DevHub协议与开发规划.md)：架构背景、里程碑与当前状态。
-- [集成测试说明](tests/README.md)：Python 黑盒测试夹具与执行方式。
+- [集成测试说明](src/tests/README.md)：Python 黑盒测试夹具与执行方式。

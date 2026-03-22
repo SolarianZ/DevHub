@@ -7,7 +7,7 @@
 set -e  # 遇到错误时立即停止
 
 # 项目根目录
-PROJECT_ROOT="$(cd "$(dirname "$(dirname "$0")")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$0")")")" && pwd)"
 SRC_DIR="$PROJECT_ROOT/src"
 HOST_PROJECT="$SRC_DIR/DevHub.Host/DevHub.Host.csproj"
 

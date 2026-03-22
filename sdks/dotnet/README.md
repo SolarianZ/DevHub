@@ -22,7 +22,7 @@
 当前不包含：
 
 - TS SDK
-- `tests/conformance`
+- `src/tests/conformance`
 - 跨语言 CI 门禁
 
 ## 安装方式

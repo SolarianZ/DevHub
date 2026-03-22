@@ -221,7 +221,7 @@
 - `python3 -m compileall sdks/python/src sdks/python/tests`
 - `python3 -m pytest sdks/python/tests/unit`
 - `python3 -m pytest sdks/python/tests/integration`
-- `python3 tests/test_runner.py --smoke --no-header`
+- `python3 src/tests/test_runner.py --smoke --no-header`
 
 说明：
 
@@ -230,7 +230,7 @@
 
 ### 5.4 后续补齐项
 
-- 将 Python SDK 接入 `tests/conformance/vector_runner.py` 或同类共享运行器。
+- 将 Python SDK 接入 `src/tests/conformance/vector_runner.py` 或同类共享运行器。
 - 在跨语言一致性门禁中纳入 Python 与 `.NET` / `JS/TS` 的同向量语义比较。
 
 ---

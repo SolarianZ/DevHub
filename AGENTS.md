@@ -14,10 +14,10 @@ DevHub/
 │   ├── DevHub.Host/                         # 基于 ASP.NET Core 的宿主程序
 │   ├── DevHub.Tests/                        # 单元测试（白盒测试）
 │   ├── DevHub.Host.Tests/                   # Host 级测试
+│   ├── tests/                               # 集成测试套件（黑盒测试）
+│   │   ├── README.md                        # 集成测试环境配置说明
+│   │   └── test_runner.py                   # 集成测试自动化入口脚本
 │   └── DevHub.slnx                          # 解决方案文件
-├── tests/                                   # 集成测试套件（黑盒测试）
-│   ├── README.md                            # 集成测试环境配置说明
-│   └── test_runner.py                       # 集成测试自动化入口脚本
 ├── sdks/                                    # 多语言 SDK、示例代码与相关开发资源
 │   └── dotnet/                              # .NET SDK 工作区
 │       ├── src/                             # .NET SDK 源码
@@ -63,8 +63,8 @@ DevHub/
 - `dotnet build src/DevHub.slnx -c Release`：构建全部 .NET 项目。
 - `dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release`：启动本地 DevHub 守护进程。
 - `dotnet test src/DevHub.slnx -c Release`：运行全部单元测试。
-- `python3 tests/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
-- `python3 tests/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
+- `python3 src/tests/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
+- `python3 src/tests/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
 
 ## 技术栈与工程约束
 
@@ -122,7 +122,7 @@ DevHub/
 
 ### 最小验证要求
 
-- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 tests/test_runner.py --smoke --no-header` 冒烟验证。
+- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟验证。
 
 ## 提交与协作要求
 

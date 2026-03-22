@@ -14,13 +14,13 @@
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
 - `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 仍待后续阶段完成。
 - `Python SDK` 已在 `sdks/python/` 落地：当前已提供 runtime discovery、同步 HTTP JSON-RPC、异步 WebSocket events、统一错误模型、包根扩展抽象，以及 `sdks/python/tests/` 下的单元测试与 SDK↔Hub 集成测试；共享 conformance 与统一 CI 仍待接入。
-- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 已作为 JS/TS SDK 实际落点，`tests/conformance` 仍为后续 M5 目标落点。
+- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 已作为 JS/TS SDK 实际落点，`src/tests/conformance` 仍为后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
 - 2026-03-18 已完成：仓库级文档已统一收敛到 `DEVHUB_DATA_DIR` 数据根目录语义，并补充了多 Host 并行运行的文档约束。
 - 2026-03-07 已修复 Windows `cross-platform-smoke` 中旧版自定义发现路径用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 48 条单元测试 + 14 条集成测试）；已补齐 SDK 对 AppDefinition / AppInstance / Invocation 成功载荷的关键结构校验，并为注册载荷 `meta` 与 `respond.error.message` 增加本地参数校验。
-- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 tests/test_runner.py --smoke --no-header` 冒烟回归。
+- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-14 已完成：补充 `docs/DevHub_Python_SDK设计规划.md`，同步 M5 文档中的 Python SDK 路径、API 基线与当前状态说明。
 
 ---
@@ -65,8 +65,8 @@
 - JS/TS SDK 测试：`/Users/qiuyu/projects/DevHub/sdks/javascript/tests/`
 - Python SDK：`/Users/qiuyu/projects/DevHub/sdks/python/src/devhub_sdk/`
 - Python SDK 测试：`/Users/qiuyu/projects/DevHub/sdks/python/tests/`
-- 签名向量基线：`/Users/qiuyu/projects/DevHub/tests/conformance/v1.0.1/`
-- 契约运行器：`/Users/qiuyu/projects/DevHub/tests/conformance/vector_runner.py`
+- 签名向量基线：`/Users/qiuyu/projects/DevHub/src/tests/conformance/v1.0.1/`
+- 契约运行器：`/Users/qiuyu/projects/DevHub/src/tests/conformance/vector_runner.py`
 
 ### 1.2 与现有工程集成要求
 
@@ -166,7 +166,7 @@
 
 ### 3.4 `M5-CONF-*`（签名测试向量）
 
-- [ ] `M5-CONF-001`：建立 `tests/conformance/v1.0.1/` 目录与向量元数据规范。
+- [ ] `M5-CONF-001`：建立 `src/tests/conformance/v1.0.1/` 目录与向量元数据规范。
 - [ ] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整）。
 - [ ] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
 - [ ] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
@@ -182,7 +182,7 @@
 
 - [ ] `M5-CI-001`：CI 增加 .NET SDK 单元测试入口。
 - [ ] `M5-CI-002`：CI 增加 TS SDK 单元测试入口（`npm test`）。
-- [ ] `M5-CI-003`：CI 增加 conformance 运行步骤（`python3 tests/conformance/vector_runner.py`）。
+- [ ] `M5-CI-003`：CI 增加 conformance 运行步骤（`python3 src/tests/conformance/vector_runner.py`）。
 - [ ] `M5-CI-004`：将 SDK 与契约测试结果纳入门禁判定。
 - [ ] `M5-CI-005`：CI 增加 Python SDK 测试入口（`python3 -m pytest sdks/python/tests`）。
 
@@ -201,8 +201,8 @@
 - `.NET SDK` 工程与测试工程。
 - `JS/TS SDK` 工程与测试目录。
 - `Python SDK` 工程与测试目录。
-- `tests/conformance/v1.0.1/*.json` 向量文件。
-- `tests/conformance/vector_runner.py` 契约运行器。
+- `src/tests/conformance/v1.0.1/*.json` 向量文件。
+- `src/tests/conformance/vector_runner.py` 契约运行器。
 - CI 配置更新（SDK + conformance）。
 - README、里程碑文档与 Python SDK 设计规划文档更新。
 

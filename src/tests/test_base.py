@@ -125,7 +125,7 @@ def get_test_python_executable() -> str:
 
 def get_test_project_root() -> str:
     """获取测试仓库根目录。"""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def normalize_path_for_comparison(path: str) -> str:
@@ -949,6 +949,6 @@ class TestReport:
 
 def create_temp_directory():
     """创建 temp 目录"""
-    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "temp")
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp")
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir
