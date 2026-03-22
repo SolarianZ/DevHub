@@ -9,7 +9,7 @@
 
 ## 当前能力范围
 
-当前 `.NET SDK` 已覆盖 `docs/Spec.md` 中属于 M5 `.NET SDK` 子范围的公开协议能力：
+当前 `.NET SDK` 已覆盖 `docs/Spec.md` 中当前已实现的公开协议能力：
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
@@ -19,11 +19,11 @@
 - 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试
 
-当前不包含：
+## 文档边界
 
-- TS SDK
-- `src/tests/conformance`
-- 跨语言 CI 门禁
+本文档只覆盖 `.NET SDK` 本身的公开能力、用法与验证命令。
+
+仓库级 `src/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
 
 ## 安装方式
 
