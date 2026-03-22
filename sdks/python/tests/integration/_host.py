@@ -21,6 +21,7 @@ class DevHubHostFixture:
         self,
         repo_root: Path,
         temp_root: TemporaryDirectory[str],
+        data_directory: Path,
         runtime_directory: Path,
         definitions_directory: Path,
         instances_directory: Path,
@@ -28,6 +29,7 @@ class DevHubHostFixture:
     ) -> None:
         self._repo_root = repo_root
         self._temp_root = temp_root
+        self.data_directory = data_directory
         self.runtime_directory = runtime_directory
         self.definitions_directory = definitions_directory
         self.instances_directory = instances_directory
@@ -42,11 +44,11 @@ class DevHubHostFixture:
     def start(cls) -> "DevHubHostFixture":
         repo_root = _resolve_repo_root()
         temp_root = TemporaryDirectory(prefix="devhub-python-sdk-")
-        temp_path = Path(temp_root.name)
-        runtime_directory = temp_path / "runtime"
-        definitions_directory = temp_path / "definitions"
-        instances_directory = temp_path / "instances"
-        logs_directory = temp_path / "logs"
+        data_directory = Path(temp_root.name)
+        runtime_directory = data_directory / "runtime"
+        definitions_directory = data_directory / "apps" / "definitions"
+        instances_directory = data_directory / "apps" / "instances"
+        logs_directory = data_directory / "logs"
         runtime_directory.mkdir(parents=True, exist_ok=True)
         definitions_directory.mkdir(parents=True, exist_ok=True)
         instances_directory.mkdir(parents=True, exist_ok=True)
@@ -55,6 +57,7 @@ class DevHubHostFixture:
         fixture = cls(
             repo_root,
             temp_root,
+            data_directory,
             runtime_directory,
             definitions_directory,
             instances_directory,
@@ -69,12 +72,12 @@ class DevHubHostFixture:
 
     def create_client(self, client_id: str) -> DevHubClient:
         return DevHubClient.from_runtime(
-            DevHubClientOptions(client_id=client_id, runtime_dir=str(self.runtime_directory))
+            DevHubClientOptions(client_id=client_id, data_dir=str(self.data_directory))
         )
 
     async def create_events_client(self, client_id: str) -> DevHubEventsClient:
         return await DevHubEventsClient.from_runtime(
-            DevHubClientOptions(client_id=client_id, runtime_dir=str(self.runtime_directory))
+            DevHubClientOptions(client_id=client_id, data_dir=str(self.data_directory))
         )
 
     def close(self) -> None:
@@ -100,10 +103,7 @@ class DevHubHostFixture:
             raise RuntimeError(f"未找到 Host 程序：{host_assembly_path}")
 
         environment = os.environ.copy()
-        environment["DEVHUB_RUNTIME_DIR"] = str(self.runtime_directory)
-        environment["DEVHUB_APPDEFS_DIR"] = str(self.definitions_directory)
-        environment["DEVHUB_APPINST_DIR"] = str(self.instances_directory)
-        environment["DEVHUB_LOG_DIR"] = str(self.logs_directory)
+        environment["DEVHUB_DATA_DIR"] = str(self.data_directory)
         environment["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = uuid4().hex
 
         self._process = subprocess.Popen(

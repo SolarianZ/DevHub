@@ -145,3 +145,55 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
     assert any(item.app_id == "events.ws.read.app" for item in definitions)
     assert definition.app_id == "events.ws.read.app"
     assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)
+
+
+@pytest.mark.asyncio
+async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams() -> None:
+    with DevHubHostFixture.start() as host_a, DevHubHostFixture.start() as host_b:
+        host_a.write_definition({"appId": "parallel.events.app", "displayName": "parallel.events.app.a"})
+        host_b.write_definition({"appId": "parallel.events.app", "displayName": "parallel.events.app.b"})
+
+        events_client_a = await host_a.create_events_client("parallel-events-client-a")
+        events_client_b = await host_b.create_events_client("parallel-events-client-b")
+        try:
+            await events_client_a.authenticate()
+            subscription_id_a = await events_client_a.subscribe([APP_INSTANCE_REGISTERED])
+
+            await events_client_b.authenticate()
+            subscription_id_b = await events_client_b.subscribe([APP_INSTANCE_REGISTERED])
+
+            http_client_a = host_a.create_client("parallel-events-http-a")
+            http_client_b = host_b.create_client("parallel-events-http-b")
+
+            http_client_a.register_instance(
+                AppInstanceRegistration(
+                    instance_id="parallel-events-inst-a",
+                    app_id="parallel.events.app",
+                    pid=99994,
+                    invoke=InvokeCapability(poll=True, respond=True),
+                )
+            )
+
+            event_a = await asyncio.wait_for(anext(events_client_a.read_events()), timeout=3)
+
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(anext(events_client_b.read_events()), timeout=0.6)
+
+            http_client_b.register_instance(
+                AppInstanceRegistration(
+                    instance_id="parallel-events-inst-b",
+                    app_id="parallel.events.app",
+                    pid=99993,
+                    invoke=InvokeCapability(poll=True, respond=True),
+                )
+            )
+
+            event_b = await asyncio.wait_for(anext(events_client_b.read_events()), timeout=3)
+        finally:
+            await events_client_a.close()
+            await events_client_b.close()
+
+    assert event_a.subscription_id == subscription_id_a
+    assert event_a.payload["instanceId"] == "parallel-events-inst-a"
+    assert event_b.subscription_id == subscription_id_b
+    assert event_b.payload["instanceId"] == "parallel-events-inst-b"

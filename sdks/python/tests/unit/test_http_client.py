@@ -100,8 +100,8 @@ def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         ping = client.ping({"value": 1})
 
@@ -119,8 +119,8 @@ def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> 
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         ping = client.ping(None)
 
@@ -158,8 +158,8 @@ def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception
     scenario = HttpScenario(responder=_unauthorized_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(DevHubRpcException) as exc_info:
             client.ping()
@@ -175,8 +175,8 @@ def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tm
     scenario = HttpScenario(responder=_invalid_error_data_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError, match="error.data"):
             client.ping()
@@ -189,8 +189,8 @@ def test_http_client_when_response_contains_non_standard_json_constant_should_ra
     scenario = HttpScenario(responder=_ping_response_with_non_standard_json_constant)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError, match="不是合法 JSON"):
             client.ping({"value": 1})
@@ -203,8 +203,8 @@ def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None
     scenario = HttpScenario(responder=_list_definitions_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         definitions = client.list_definitions()
 
@@ -219,8 +219,8 @@ def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Pa
     scenario = HttpScenario(responder=_request_missing_value_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError):
             client.request(InvokeRequest(app_id="test.app", method="test.request"))
@@ -233,8 +233,8 @@ def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> 
     scenario = HttpScenario(responder=_launch_invalid_status_response)
     server, thread = _start_http_server(scenario)
     try:
-        runtime_dir = _write_runtime(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", runtime_dir=str(runtime_dir)))
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError):
             client.launch(LaunchRequest(app_id="test.app"))
@@ -268,9 +268,10 @@ def _start_http_server(scenario: HttpScenario) -> tuple[ThreadingHTTPServer, thr
     return server, thread
 
 
-def _write_runtime(tmp_path: Path, port: int) -> Path:
-    runtime_dir = tmp_path / "runtime"
-    runtime_dir.mkdir()
+def _write_data_directory(tmp_path: Path, port: int) -> Path:
+    data_dir = tmp_path / "devhub-data"
+    runtime_dir = data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
     token_file = runtime_dir / "token.txt"
     token_file.write_text("token-1", encoding="utf-8")
     (runtime_dir / "hub.json").write_text(
@@ -291,7 +292,7 @@ def _write_runtime(tmp_path: Path, port: int) -> Path:
         ),
         encoding="utf-8",
     )
-    return runtime_dir
+    return data_dir
 
 
 def _ping_success_response(request: dict[str, Any]) -> dict[str, Any]:

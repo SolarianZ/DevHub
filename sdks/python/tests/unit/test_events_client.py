@@ -215,9 +215,9 @@ async def test_events_client_before_authenticate_should_reject_read_events(tmp_p
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             with pytest.raises(RuntimeError, match="WebSocket 尚未通过鉴权"):
                 await anext(client.read_events())
@@ -271,9 +271,9 @@ async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Pat
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             subscription_id = await client.subscribe([INVOCATION_COMPLETED])
@@ -339,9 +339,9 @@ async def test_events_client_when_unknown_notification_received_should_ignore_an
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
@@ -397,9 +397,9 @@ async def test_events_client_when_connection_closes_after_queued_event_should_en
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
@@ -447,9 +447,9 @@ async def test_events_client_when_connection_terminated_should_raise_runtime_err
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
@@ -484,9 +484,9 @@ async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exc
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             with pytest.raises(DevHubRpcException) as exc_info:
                 await client.authenticate()
@@ -516,9 +516,9 @@ async def test_events_client_when_authenticate_response_contains_non_standard_js
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             with pytest.raises(RuntimeError, match="不是合法 JSON"):
                 await client.authenticate()
@@ -543,12 +543,12 @@ async def test_events_client_when_ws_response_id_unknown_should_raise_protocol_e
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
         client = await DevHubEventsClient.from_runtime(
             DevHubClientOptions(
                 client_id="ws-client",
-                runtime_dir=str(runtime_dir),
+                data_dir=str(data_dir),
                 request_timeout=2,
             )
         )
@@ -605,9 +605,9 @@ async def test_events_client_when_authenticate_called_twice_should_raise(tmp_pat
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             with pytest.raises(RuntimeError, match="已完成认证"):
@@ -634,9 +634,9 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
             with pytest.raises(ValueError, match="事件类型字符串序列"):
@@ -701,9 +701,9 @@ async def test_events_client_after_close_should_reject_subscribe_and_read(tmp_pa
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        runtime_dir = _write_runtime(tmp_path, port)
+        data_dir = _write_data_directory(tmp_path, port)
 
-        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", runtime_dir=str(runtime_dir)))
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         await client.authenticate()
         await client.close()
 
@@ -714,9 +714,10 @@ async def test_events_client_after_close_should_reject_subscribe_and_read(tmp_pa
             await anext(client.read_events())
 
 
-def _write_runtime(tmp_path: Path, port: int) -> Path:
-    runtime_dir = tmp_path / "runtime"
-    runtime_dir.mkdir()
+def _write_data_directory(tmp_path: Path, port: int) -> Path:
+    data_dir = tmp_path / "devhub-data"
+    runtime_dir = data_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
     token_file = runtime_dir / "token.txt"
     token_file.write_text("token-1", encoding="utf-8")
     (runtime_dir / "hub.json").write_text(
@@ -737,7 +738,7 @@ def _write_runtime(tmp_path: Path, port: int) -> Path:
         ),
         encoding="utf-8",
     )
-    return runtime_dir
+    return data_dir
 
 
 def _create_connection_info() -> RuntimeConnectionInfo:

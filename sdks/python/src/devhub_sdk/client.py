@@ -76,7 +76,7 @@ class DevHubClient:
 
     @classmethod
     def from_runtime(cls, options: DevHubClientOptions) -> "DevHubClient":
-        """根据运行时目录创建客户端。"""
+        """根据数据根目录创建客户端。"""
 
         return cls(options)
 

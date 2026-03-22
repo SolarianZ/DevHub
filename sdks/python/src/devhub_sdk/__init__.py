@@ -46,7 +46,7 @@ from .runtime import (
     FileSystemRuntimeResolver,
     RuntimeResolver,
     discover_runtime,
-    resolve_runtime_directory,
+    resolve_data_directory,
 )
 
 __all__ = [
@@ -96,5 +96,5 @@ __all__ = [
     "UrllibJsonRpcHttpTransport",
     "WebSocketJsonRpcSession",
     "discover_runtime",
-    "resolve_runtime_directory",
+    "resolve_data_directory",
 ]

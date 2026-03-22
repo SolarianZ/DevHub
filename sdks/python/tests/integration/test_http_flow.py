@@ -91,5 +91,44 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         assert second.launch_id == first.launch_id
 
 
+def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
+    with DevHubHostFixture.start() as host_a, DevHubHostFixture.start() as host_b:
+        host_a.write_definition(
+            {
+                "appId": "parallel.http.app",
+                "displayName": "Parallel HTTP App A",
+            }
+        )
+        host_b.write_definition(
+            {
+                "appId": "parallel.http.app",
+                "displayName": "Parallel HTTP App B",
+            }
+        )
+
+        client_a = host_a.create_client("parallel-http-client-a")
+        client_b = host_b.create_client("parallel-http-client-b")
+
+        assert client_a.ping().ok is True
+        assert client_b.ping().ok is True
+        assert client_a.get_definition("parallel.http.app").display_name == "Parallel HTTP App A"
+        assert client_b.get_definition("parallel.http.app").display_name == "Parallel HTTP App B"
+
+        client_a.register_instance(
+            AppInstanceRegistration(
+                instance_id="parallel-http-inst-a",
+                app_id="parallel.http.app",
+                pid=99994,
+                invoke=InvokeCapability(poll=True, respond=True),
+            )
+        )
+
+        instances_a = client_a.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
+        instances_b = client_b.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
+
+        assert [instance.instance_id for instance in instances_a] == ["parallel-http-inst-a"]
+        assert instances_b == []
+
+
 def _launch_script_path() -> Path:
     return Path(__file__).resolve().parents[4] / "tests" / "assets" / "launch_noop.py"

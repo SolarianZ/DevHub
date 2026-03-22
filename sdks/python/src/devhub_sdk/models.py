@@ -20,7 +20,7 @@ class DevHubClientOptions:
 
     client_id: str
     client_session_id: str = field(default_factory=lambda: str(uuid4()))
-    runtime_dir: str | None = None
+    data_dir: str | None = None
     request_timeout: float | None = None
     protocol_version: int = 1
 
@@ -30,7 +30,7 @@ class DevHubClientOptions:
         return DevHubClientOptions(
             client_id=self.client_id,
             client_session_id=self.client_session_id,
-            runtime_dir=self.runtime_dir,
+            data_dir=self.data_dir,
             request_timeout=self.request_timeout,
             protocol_version=self.protocol_version,
         )
@@ -40,8 +40,8 @@ class DevHubClientOptions:
 
         require_non_empty_string(self.client_id, "client_id")
         require_uuid_string(self.client_session_id, "client_session_id")
-        if self.runtime_dir is not None and not isinstance(self.runtime_dir, str):
-            raise ValueError("runtime_dir 类型非法。")
+        if self.data_dir is not None and not isinstance(self.data_dir, str):
+            raise ValueError("data_dir 类型非法。")
         require_protocol_version(self.protocol_version)
         if self.request_timeout is not None:
             require_positive_number(self.request_timeout, "request_timeout")

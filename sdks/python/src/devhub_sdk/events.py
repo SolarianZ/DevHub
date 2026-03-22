@@ -52,7 +52,7 @@ class DevHubEventsClient:
 
     @classmethod
     async def from_runtime(cls, options: DevHubClientOptions) -> "DevHubEventsClient":
-        """根据运行时目录创建 WebSocket 客户端。"""
+        """根据数据根目录创建 WebSocket 客户端。"""
 
         return cls(options)
 
