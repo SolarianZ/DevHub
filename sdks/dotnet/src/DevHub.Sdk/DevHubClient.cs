@@ -31,7 +31,7 @@ public sealed class DevHubClient : IAsyncDisposable
     internal RuntimeConnectionInfo ConnectionInfo { get; }
 
     /// <summary>
-    /// 通过运行时目录创建客户端。
+    /// 通过运行时发现信息创建客户端。
     /// </summary>
     /// <param name="options">客户端选项。</param>
     /// <param name="cancellationToken">取消令牌。</param>

@@ -11,10 +11,7 @@ namespace DevHub.Sdk.IntegrationTests.TestHost;
 /// </summary>
 internal sealed class DevHubHostFixture : IAsyncDisposable
 {
-    private const string RuntimeDirEnvironmentVariable = "DEVHUB_RUNTIME_DIR";
-    private const string AppDefinitionsDirEnvironmentVariable = "DEVHUB_APPDEFS_DIR";
-    private const string AppInstancesDirEnvironmentVariable = "DEVHUB_APPINST_DIR";
-    private const string LogDirEnvironmentVariable = "DEVHUB_LOG_DIR";
+    private const string DataDirEnvironmentVariable = "DEVHUB_DATA_DIR";
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 
     private readonly string _tempRoot;
@@ -26,50 +23,41 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private DevHubHostFixture(
         string tempRoot,
         string repoRoot,
-        string runtimeDirectory,
-        string definitionsDirectory,
-        string instancesDirectory,
-        string logsDirectory)
+        string dataDirectory)
     {
         _tempRoot = tempRoot;
         _repoRoot = repoRoot;
-        RuntimeDirectory = runtimeDirectory;
-        DefinitionsDirectory = definitionsDirectory;
-        InstancesDirectory = instancesDirectory;
-        LogsDirectory = logsDirectory;
+        DataDirectory = dataDirectory;
     }
 
-    public string RuntimeDirectory { get; }
+    public string DataDirectory { get; }
 
-    public string DefinitionsDirectory { get; }
+    public string RuntimeDirectory => Path.Combine(DataDirectory, "runtime");
 
-    public string InstancesDirectory { get; }
+    public string DefinitionsDirectory => Path.Combine(DataDirectory, "apps", "definitions");
 
-    public string LogsDirectory { get; }
+    public string InstancesDirectory => Path.Combine(DataDirectory, "apps", "instances");
+
+    public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
     public static async Task<DevHubHostFixture> StartAsync()
     {
         var repoRoot = ResolveRepositoryRoot();
         var tempRoot = Path.Combine(Path.GetTempPath(), "DevHubSdkIntegrationTests", Guid.NewGuid().ToString("N"));
-        var runtimeDirectory = Path.Combine(tempRoot, "runtime");
-        var definitionsDirectory = Path.Combine(tempRoot, "definitions");
-        var instancesDirectory = Path.Combine(tempRoot, "instances");
-        var logsDirectory = Path.Combine(tempRoot, "logs");
+        var dataDirectory = Path.Combine(tempRoot, "data");
         Directory.CreateDirectory(tempRoot);
 
         var fixture = new DevHubHostFixture(
             tempRoot,
             repoRoot,
-            runtimeDirectory,
-            definitionsDirectory,
-            instancesDirectory,
-            logsDirectory);
+            dataDirectory);
         await fixture.StartProcessAsync();
         return fixture;
     }
 
     public async Task WriteDefinitionAsync(AppDefinition definition)
     {
+        Directory.CreateDirectory(DefinitionsDirectory);
         var path = Path.Combine(DefinitionsDirectory, $"{definition.AppId}.json");
         var content = JsonSerializer.Serialize(
             definition,
@@ -85,7 +73,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         return DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = clientId,
-            RuntimeDir = RuntimeDirectory
+            DataDir = DataDirectory
         });
     }
 
@@ -94,7 +82,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         return DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = clientId,
-            RuntimeDir = RuntimeDirectory
+            DataDir = DataDirectory
         }, handler);
     }
 
@@ -103,7 +91,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         return DevHubEventsClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = clientId,
-            RuntimeDir = RuntimeDirectory
+            DataDir = DataDirectory
         });
     }
 
@@ -157,10 +145,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         };
 
         startInfo.ArgumentList.Add(hostAssemblyPath);
-        startInfo.Environment[RuntimeDirEnvironmentVariable] = RuntimeDirectory;
-        startInfo.Environment[AppDefinitionsDirEnvironmentVariable] = DefinitionsDirectory;
-        startInfo.Environment[AppInstancesDirEnvironmentVariable] = InstancesDirectory;
-        startInfo.Environment[LogDirEnvironmentVariable] = LogsDirectory;
+        startInfo.Environment[DataDirEnvironmentVariable] = DataDirectory;
         startInfo.Environment[SingleInstanceSlotEnvironmentVariable] = slot;
 
         _hostProcess = new Process

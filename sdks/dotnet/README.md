@@ -49,18 +49,33 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 
 ## Runtime Discovery
 
-SDK 会按以下优先级解析运行时目录：
+SDK 会按以下优先级解析数据根目录：
 
-1. `DevHubClientOptions.RuntimeDir`
-2. 环境变量 `DEVHUB_RUNTIME_DIR`
-3. 平台默认目录
+1. `DevHubClientOptions.DataDir`
+2. 环境变量 `DEVHUB_DATA_DIR`
+3. 平台默认数据根目录
 
-平台默认目录：
+标准目录布局固定如下：
 
-- Windows：`%LOCALAPPDATA%/DevHub/runtime/`
-- macOS：`~/Library/Application Support/DevHub/runtime/`
-- Linux：`$XDG_DATA_HOME/DevHub/runtime/`，若未设置则回退到 `~/.local/share/DevHub/runtime/`
+```text
+<dataDir>/
+├── runtime/
+│   ├── hub.json
+│   └── token.txt
+├── apps/
+│   ├── definitions/
+│   └── instances/
+└── logs/
+```
 
+平台默认数据根目录：
+
+- Windows：`%LOCALAPPDATA%/DevHub/`
+- macOS：`~/Library/Application Support/DevHub/`
+- Linux：`$XDG_DATA_HOME/DevHub/`，若未设置则回退到 `~/.local/share/DevHub/`
+
+SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，并继续通过 `hub.json.tokenFile` 读取令牌。
+若误传 `runtime` 子目录，或仍设置 `DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`、`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR` 等旧环境变量，SDK 会直接抛出迁移错误。
 SDK 始终以 `hub.json` 为权威端点来源，不会硬编码端口、HTTP 地址或 WebSocket URL。
 
 ## 快速开始
@@ -82,10 +97,10 @@ Console.WriteLine($"Ping ok={ping.Ok}, serverTimeUtc={ping.ServerTimeUtc:O}");
 await client.DisposeAsync();
 ```
 
-### 2. 使用环境变量覆盖运行时目录
+### 2. 使用环境变量覆盖数据根目录
 
 ```csharp
-Environment.SetEnvironmentVariable("DEVHUB_RUNTIME_DIR", runtimeDir);
+Environment.SetEnvironmentVariable("DEVHUB_DATA_DIR", dataDir);
 
 await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
 {
@@ -103,7 +118,7 @@ var services = new ServiceCollection();
 services.AddDevHubSdk(options =>
 {
     options.ClientId = "ExampleClient";
-    options.RuntimeDir = runtimeDir;
+    options.DataDir = dataDir;
 });
 
 using var serviceProvider = services.BuildServiceProvider();

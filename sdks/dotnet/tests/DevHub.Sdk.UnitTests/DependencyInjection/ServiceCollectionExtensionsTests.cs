@@ -12,14 +12,14 @@ public sealed class ServiceCollectionExtensionsTests
     [Fact]
     public async Task M5_DN_UT_007_AddDevHubSdk_WithConfigureDelegate_ShouldCreateHttpAndEventsClients()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         try
         {
             var services = new ServiceCollection();
             services.AddDevHubSdk(options =>
             {
                 options.ClientId = "di-client";
-                options.RuntimeDir = runtimeDir;
+                options.DataDir = dataDir;
                 options.RequestTimeout = TimeSpan.FromSeconds(5);
             });
 
@@ -31,22 +31,22 @@ public sealed class ServiceCollectionExtensionsTests
             await using var eventsClient = await eventsClientFactory.CreateAsync();
 
             Assert.Equal("di-client", client.Options.ClientId);
-            Assert.Equal(runtimeDir, client.Options.RuntimeDir);
+            Assert.Equal(dataDir, client.Options.DataDir);
             Assert.Equal("http://127.0.0.1:47231", client.Runtime.HttpBaseUrl);
             Assert.Equal("di-client", eventsClient.Options.ClientId);
-            Assert.Equal(runtimeDir, eventsClient.Options.RuntimeDir);
+            Assert.Equal(dataDir, eventsClient.Options.DataDir);
             Assert.Equal("ws://127.0.0.1:47231/ws", eventsClient.Runtime.WsUrl);
         }
         finally
         {
-            DeleteRuntime(runtimeDir);
+            DeleteDataDirectory(dataDir);
         }
     }
 
     [Fact]
     public async Task M5_DN_UT_007_AddDevHubSdk_WithoutDelegate_ShouldHonorExternalOptionsConfiguration()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         try
         {
             var services = new ServiceCollection();
@@ -54,7 +54,7 @@ public sealed class ServiceCollectionExtensionsTests
             services.Configure<DevHubClientOptions>(options =>
             {
                 options.ClientId = "configured-client";
-                options.RuntimeDir = runtimeDir;
+                options.DataDir = dataDir;
             });
 
             using var provider = services.BuildServiceProvider();
@@ -64,18 +64,19 @@ public sealed class ServiceCollectionExtensionsTests
             await using var client = await clientFactory.CreateAsync();
 
             Assert.Equal("configured-client", configuredOptions.ClientId);
-            Assert.Equal(runtimeDir, client.Options.RuntimeDir);
+            Assert.Equal(dataDir, client.Options.DataDir);
             Assert.Equal("configured-client", client.Options.ClientId);
         }
         finally
         {
-            DeleteRuntime(runtimeDir);
+            DeleteDataDirectory(dataDir);
         }
     }
 
-    private static async Task<string> CreateRuntimeAsync()
+    private static async Task<string> CreateDataDirectoryAsync()
     {
-        var runtimeDir = Path.Combine(Path.GetTempPath(), "DevHub.Sdk.UnitTests", Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Combine(Path.GetTempPath(), "DevHub.Sdk.UnitTests", Guid.NewGuid().ToString("N"));
+        var runtimeDir = Path.Combine(dataDir, "runtime");
         Directory.CreateDirectory(runtimeDir);
 
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
@@ -99,14 +100,14 @@ public sealed class ServiceCollectionExtensionsTests
         });
 
         await File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), hubJson);
-        return runtimeDir;
+        return dataDir;
     }
 
-    private static void DeleteRuntime(string runtimeDir)
+    private static void DeleteDataDirectory(string dataDir)
     {
-        if (Directory.Exists(runtimeDir))
+        if (Directory.Exists(dataDir))
         {
-            Directory.Delete(runtimeDir, recursive: true);
+            Directory.Delete(dataDir, recursive: true);
         }
     }
 }

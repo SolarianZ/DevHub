@@ -18,14 +18,22 @@ internal sealed class RuntimeConnectionInfo
 
 internal static class RuntimeDiscovery
 {
-    private const string RuntimeDirEnvironmentVariableName = "DEVHUB_RUNTIME_DIR";
+    private const string DataDirEnvironmentVariableName = "DEVHUB_DATA_DIR";
+    private static readonly string[] LegacyEnvironmentVariableNames =
+    [
+        "DEVHUB_RUNTIME_DIR",
+        "DEVHUB_APPDEFS_DIR",
+        "DEVHUB_APPINST_DIR",
+        "DEVHUB_LOG_DIR"
+    ];
 
     internal static async Task<RuntimeConnectionInfo> DiscoverAsync(DevHubClientOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
-        var runtimeDirectory = ResolveRuntimeDirectory(options.RuntimeDir);
+        var dataDirectory = ResolveDataDirectory(options.DataDir);
+        var runtimeDirectory = GetRuntimeDirectory(dataDirectory);
         var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
         if (!File.Exists(hubJsonPath))
         {
@@ -62,25 +70,66 @@ internal static class RuntimeDiscovery
         };
     }
 
-    internal static string ResolveRuntimeDirectory(string? runtimeDirectoryOverride)
+    internal static string ResolveDataDirectory(string? dataDirectoryOverride)
     {
-        if (!string.IsNullOrWhiteSpace(runtimeDirectoryOverride))
+        if (!string.IsNullOrWhiteSpace(dataDirectoryOverride))
         {
-            return Path.GetFullPath(runtimeDirectoryOverride);
+            var explicitDataDirectory = Path.GetFullPath(dataDirectoryOverride);
+            EnsureDataDirectoryIsNotRuntimeDirectory(explicitDataDirectory);
+            return explicitDataDirectory;
         }
 
-        var runtimeDirectoryFromEnvironment = Environment.GetEnvironmentVariable(RuntimeDirEnvironmentVariableName);
-        if (!string.IsNullOrWhiteSpace(runtimeDirectoryFromEnvironment))
+        ThrowIfLegacyEnvironmentVariablesPresent();
+
+        var dataDirectoryFromEnvironment = Environment.GetEnvironmentVariable(DataDirEnvironmentVariableName);
+        var resolvedDataDirectory = !string.IsNullOrWhiteSpace(dataDirectoryFromEnvironment)
+            ? Path.GetFullPath(dataDirectoryFromEnvironment)
+            : GetDefaultDataDirectory();
+
+        EnsureDataDirectoryIsNotRuntimeDirectory(resolvedDataDirectory);
+        return resolvedDataDirectory;
+    }
+
+    internal static string GetRuntimeDirectory(string dataDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        return Path.Combine(dataDirectory, "runtime");
+    }
+
+    private static void ThrowIfLegacyEnvironmentVariablesPresent()
+    {
+        var legacyEnvironmentVariables = LegacyEnvironmentVariableNames
+            .Where(static name => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)))
+            .ToArray();
+        if (legacyEnvironmentVariables.Length == 0)
         {
-            return Path.GetFullPath(runtimeDirectoryFromEnvironment);
+            return;
         }
 
+        throw new InvalidOperationException(
+            $"检测到已废弃的环境变量：{string.Join(", ", legacyEnvironmentVariables)}。请改用 DEVHUB_DATA_DIR 或 DevHubClientOptions.DataDir，并将 hub.json 放在 <dataDir>/runtime/hub.json。");
+    }
+
+    private static void EnsureDataDirectoryIsNotRuntimeDirectory(string dataDirectory)
+    {
+        var legacyHubJsonPath = Path.Combine(dataDirectory, "hub.json");
+        var legacyTokenFilePath = Path.Combine(dataDirectory, "token.txt");
+        if (!File.Exists(legacyHubJsonPath) && !File.Exists(legacyTokenFilePath))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"DataDir 必须指向数据根目录，不能直接指向 runtime 子目录：{dataDirectory}。请改用其上级目录，并使用 <dataDir>/runtime/hub.json 布局。");
+    }
+
+    private static string GetDefaultDataDirectory()
+    {
         if (OperatingSystem.IsWindows())
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "DevHub",
-                "runtime");
+                "DevHub");
         }
 
         if (OperatingSystem.IsMacOS())
@@ -89,8 +138,7 @@ internal static class RuntimeDiscovery
                 GetUserHomePath(),
                 "Library",
                 "Application Support",
-                "DevHub",
-                "runtime");
+                "DevHub");
         }
 
         var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
@@ -98,7 +146,7 @@ internal static class RuntimeDiscovery
             ? Path.Combine(GetUserHomePath(), ".local", "share")
             : xdgDataHome;
 
-        return Path.Combine(dataHome, "DevHub", "runtime");
+        return Path.Combine(Path.GetFullPath(dataHome), "DevHub");
     }
 
     private static void ValidateRuntime(HubRuntime runtime, string hubJsonPath)

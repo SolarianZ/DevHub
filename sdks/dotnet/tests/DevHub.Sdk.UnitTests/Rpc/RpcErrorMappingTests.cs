@@ -19,7 +19,7 @@ public sealed class RpcErrorMappingTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_RpcErrorResponse_ShouldMapToDevHubRpcException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(
@@ -32,7 +32,7 @@ public sealed class RpcErrorMappingTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "client-a",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             handler,
             () => "req-fixed");
@@ -63,7 +63,7 @@ public sealed class RpcErrorMappingTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_RpcErrorResponse_ShouldExposeReasonHelper()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(
@@ -76,7 +76,7 @@ public sealed class RpcErrorMappingTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "client-a",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             handler,
             () => "req-fixed");
@@ -101,9 +101,10 @@ public sealed class RpcErrorMappingTests : IDisposable
         }
     }
 
-    private async Task<string> CreateRuntimeAsync()
+    private async Task<string> CreateDataDirectoryAsync()
     {
-        var runtimeDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var runtimeDir = Path.Combine(dataDir, "runtime");
         Directory.CreateDirectory(runtimeDir);
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
         await File.WriteAllTextAsync(tokenFile, "token-1");
@@ -124,7 +125,7 @@ public sealed class RpcErrorMappingTests : IDisposable
               }
             }
             """);
-        return runtimeDir;
+        return dataDir;
     }
 
     private sealed class StubHandler : HttpMessageHandler

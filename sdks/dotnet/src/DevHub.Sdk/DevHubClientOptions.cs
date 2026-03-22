@@ -16,10 +16,10 @@ public sealed class DevHubClientOptions
     public Guid ClientSessionId { get; set; } = Guid.NewGuid();
 
     /// <summary>
-    /// 显式运行时目录覆盖。
-    /// 若未指定，则依次使用环境变量 <c>DEVHUB_RUNTIME_DIR</c> 与平台默认目录。
+    /// 显式数据根目录覆盖。
+    /// 若未指定，则依次使用环境变量 <c>DEVHUB_DATA_DIR</c> 与平台默认数据根目录。
     /// </summary>
-    public string? RuntimeDir { get; set; }
+    public string? DataDir { get; set; }
 
     /// <summary>
     /// 可选的客户端请求超时。
@@ -38,7 +38,7 @@ public sealed class DevHubClientOptions
         {
             ClientId = ClientId,
             ClientSessionId = ClientSessionId,
-            RuntimeDir = RuntimeDir,
+            DataDir = DataDir,
             RequestTimeout = RequestTimeout,
             ProtocolVersion = ProtocolVersion
         };

@@ -20,13 +20,13 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_BeforeAuthenticate_ShouldRejectSubscribeAndRead()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
         await using var client = await DevHubEventsClient.FromRuntimeAsync(
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             () => "ws-auth-1");
@@ -38,7 +38,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldSubscribeAndReadEvents()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -67,7 +67,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
@@ -89,7 +89,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldSupportWsReadableMethods()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -141,7 +141,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             new SequenceRequestIdFactory("ws-auth-1", "ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
@@ -169,7 +169,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenConnectionClosesAfterQueuedEvent_ShouldStillReadBufferedEvents()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -199,7 +199,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
@@ -218,7 +218,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateFails_ShouldThrowDevHubRpcException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -231,7 +231,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             () => "ws-auth-1");
@@ -245,13 +245,13 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateTimesOut_ShouldThrowOperationCanceledException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
         await using var client = await DevHubEventsClient.FromRuntimeAsync(
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir,
+                DataDir = dataDir,
                 RequestTimeout = TimeSpan.FromMilliseconds(50)
             },
             factory,
@@ -263,7 +263,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateReturnsInvalidSuccessPayload_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -277,7 +277,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             () => "ws-auth-1");
@@ -289,7 +289,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -303,7 +303,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             () => "ws-auth-1");
@@ -315,7 +315,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateResponseMissingResultAndError_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -329,7 +329,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             () => "ws-auth-1");
@@ -341,7 +341,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenEventNotificationContainsId_ShouldFaultEventStream()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -371,7 +371,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
@@ -391,7 +391,7 @@ public sealed class WsLifecycleTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenServerSendsUnsupportedNotification_ShouldFaultEventStream()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -421,7 +421,7 @@ public sealed class WsLifecycleTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "ws-client",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             factory,
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
@@ -446,9 +446,10 @@ public sealed class WsLifecycleTests : IDisposable
         }
     }
 
-    private async Task<string> CreateRuntimeAsync()
+    private async Task<string> CreateDataDirectoryAsync()
     {
-        var runtimeDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var runtimeDir = Path.Combine(dataDir, "runtime");
         Directory.CreateDirectory(runtimeDir);
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
         await File.WriteAllTextAsync(tokenFile, "token-1");
@@ -469,7 +470,7 @@ public sealed class WsLifecycleTests : IDisposable
               }
             }
             """);
-        return runtimeDir;
+        return dataDir;
     }
 
     private static WebSocketReceiveMessage CreateTextMessage(string text)
@@ -584,3 +585,4 @@ public sealed class WsLifecycleTests : IDisposable
         }
     }
 }
+

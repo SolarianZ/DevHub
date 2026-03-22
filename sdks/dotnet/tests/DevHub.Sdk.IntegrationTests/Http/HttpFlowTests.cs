@@ -117,17 +117,47 @@ public sealed class HttpFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_001_RuntimeDiscovery_WhenEnvironmentOverrideSet_ShouldCreateClientWithoutExplicitRuntimeDir()
+    public async Task M5_E2E_001_RuntimeDiscovery_WhenEnvironmentOverrideSet_ShouldCreateClientWithoutExplicitDataDir()
     {
         await using var host = await DevHubHostFixture.StartAsync();
-        using var scope = new EnvironmentVariableScope("DEVHUB_RUNTIME_DIR", host.RuntimeDirectory);
+        using var scope = new EnvironmentVariableScope("DEVHUB_DATA_DIR", host.DataDirectory);
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
-            ClientId = "env-runtime-client"
+            ClientId = "env-data-client"
         });
 
         var ping = await client.PingAsync();
         Assert.True(ping.Ok);
+    }
+
+    [Fact]
+    public async Task Impl_RuntimeDiscovery_WhenUsingDifferentDataDirectories_ShouldKeepParallelHostsIsolated()
+    {
+        await using var firstHost = await DevHubHostFixture.StartAsync();
+        await using var secondHost = await DevHubHostFixture.StartAsync();
+
+        await firstHost.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "parallel.first.app",
+            DisplayName = "Parallel First App"
+        });
+
+        await secondHost.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "parallel.second.app",
+            DisplayName = "Parallel Second App"
+        });
+
+        await using var firstClient = await firstHost.CreateClientAsync("parallel-client-1");
+        await using var secondClient = await secondHost.CreateClientAsync("parallel-client-2");
+
+        var firstDefinitions = await firstClient.ListDefinitionsAsync();
+        var secondDefinitions = await secondClient.ListDefinitionsAsync();
+
+        Assert.Contains(firstDefinitions, definition => definition.AppId == "parallel.first.app");
+        Assert.DoesNotContain(firstDefinitions, definition => definition.AppId == "parallel.second.app");
+        Assert.Contains(secondDefinitions, definition => definition.AppId == "parallel.second.app");
+        Assert.DoesNotContain(secondDefinitions, definition => definition.AppId == "parallel.first.app");
     }
 
     private sealed class HeaderTamperingHandler : DelegatingHandler

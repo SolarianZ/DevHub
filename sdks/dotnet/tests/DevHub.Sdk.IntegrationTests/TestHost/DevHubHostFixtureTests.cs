@@ -12,6 +12,7 @@ public sealed class DevHubHostFixtureTests
     {
         await using var host = await DevHubHostFixture.StartAsync();
 
+        Assert.True(Directory.Exists(host.DataDirectory));
         Assert.True(Directory.Exists(host.RuntimeDirectory));
         Assert.True(Directory.Exists(host.DefinitionsDirectory));
         Assert.True(Directory.Exists(host.InstancesDirectory));

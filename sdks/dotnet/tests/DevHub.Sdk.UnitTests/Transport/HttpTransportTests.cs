@@ -20,7 +20,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_ShouldAssembleRequiredHeaders()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
@@ -30,7 +30,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             ClientId = "client-a",
             ClientSessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-ping");
 
         _ = await client.PingAsync(cancellationToken: CancellationToken.None);
@@ -46,51 +46,51 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_WhenClientIdMissing_ShouldThrowArgumentException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }));
     }
 
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_WhenProtocolVersionMismatch_ShouldThrowArgumentOutOfRangeException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
             ProtocolVersion = 2,
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }));
     }
 
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_WhenClientSessionIdEmpty_ShouldThrowArgumentException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
             ClientSessionId = Guid.Empty,
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }));
     }
 
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_WhenRequestTimeoutExceeded_ShouldThrowOperationCanceledException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new BlockingHandler();
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir,
+            DataDir = dataDir,
             RequestTimeout = TimeSpan.FromMilliseconds(50)
         }, handler);
 
@@ -100,13 +100,13 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_003_HttpTransport_WhenCallerCancellationRequested_ShouldThrowOperationCanceledException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new BlockingHandler();
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-ping");
 
         using var cancellationTokenSource = new CancellationTokenSource(millisecondsDelay: 50);
@@ -116,7 +116,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenSuccessPayloadOkFalse_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":false,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
@@ -125,7 +125,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-ping");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
@@ -135,7 +135,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-launch\",\"result\":{\"ok\":true,\"status\":\"started\",\"pid\":12345}}", Encoding.UTF8, "application/json")
@@ -144,7 +144,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-launch");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.LaunchAsync(new LaunchRequest
@@ -157,7 +157,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"1.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
@@ -166,7 +166,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-ping");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
@@ -176,7 +176,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenResponseIdMismatched_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-other\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
@@ -186,7 +186,7 @@ public sealed class HttpTransportTests : IDisposable
             new DevHubClientOptions
             {
                 ClientId = "client-a",
-                RuntimeDir = runtimeDir
+                DataDir = dataDir
             },
             handler,
             () => "req-ping");
@@ -198,7 +198,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenResponseContainsResultAndError_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"},\"error\":{\"code\":-32603,\"message\":\"internal_error\"}}", Encoding.UTF8, "application/json")
@@ -207,7 +207,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-ping");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
@@ -217,7 +217,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -229,7 +229,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-get-definition");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
@@ -239,7 +239,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -251,7 +251,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-register");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RegisterInstanceAsync(new AppInstanceRegistration
@@ -272,7 +272,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenRequestResultMissingValue_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -284,7 +284,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-request");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RequestAsync(new InvokeRequest
@@ -299,7 +299,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenPollResultItemMissingCallerSessionId_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -311,7 +311,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-poll");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
@@ -325,7 +325,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionCapabilitiesTypeInvalid_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -337,7 +337,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-get-definition");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
@@ -348,7 +348,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenListInstancesResultMetaTypeInvalid_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -360,7 +360,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-list-instances");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(cancellationToken: CancellationToken.None));
@@ -370,7 +370,7 @@ public sealed class HttpTransportTests : IDisposable
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenPollResultOptionsTypeInvalid_ShouldThrowInvalidOperationException()
     {
-        var runtimeDir = await CreateRuntimeAsync();
+        var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{" +
@@ -382,7 +382,7 @@ public sealed class HttpTransportTests : IDisposable
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
         {
             ClientId = "client-a",
-            RuntimeDir = runtimeDir
+            DataDir = dataDir
         }, handler, () => "req-poll");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
@@ -402,9 +402,10 @@ public sealed class HttpTransportTests : IDisposable
         }
     }
 
-    private async Task<string> CreateRuntimeAsync()
+    private async Task<string> CreateDataDirectoryAsync()
     {
-        var runtimeDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
+        var runtimeDir = Path.Combine(dataDir, "runtime");
         Directory.CreateDirectory(runtimeDir);
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
         await File.WriteAllTextAsync(tokenFile, "token-1");
@@ -425,7 +426,7 @@ public sealed class HttpTransportTests : IDisposable
               }
             }
             """);
-        return runtimeDir;
+        return dataDir;
     }
 
     private sealed class CaptureHandler : HttpMessageHandler
@@ -479,3 +480,4 @@ public sealed class HttpTransportTests : IDisposable
 
     private sealed record CapturedRequest(string RequestUri, string Authorization, string Protocol, string ClientId, string ClientSessionId, string Body);
 }
+
