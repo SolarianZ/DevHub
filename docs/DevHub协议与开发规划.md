@@ -344,7 +344,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 **M5**
 - 基于 **Spec.md** 完成 .NET SDK、JS/TS SDK 与 Python SDK。
 - 通过 Hub↔SDK 契约测试（正向/异常/兼容性场景）。
-- Python SDK 的工程与文档化设计基线见 [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)。
+- Python SDK 的工程与设计基线并入 [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md) 与 [DevHub_M5测试任务拆分文档.md](./DevHub_M5测试任务拆分文档.md) 统一维护。
 
 ---
 
@@ -420,7 +420,7 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-03-14）
+## 17. 当前里程碑状态（截至 2026-03-24）
 
 - 当前分支：`m5`。
 - M0：已完成。
@@ -432,7 +432,7 @@ ws.onmessage = (e) => {
 - 2026-03-18 已完成：仓库级运行时路径文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，明确 `<dataDir>/runtime/hub.json` 固定发现规则、仅识别规范定义的环境变量，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
 - 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
 - 2026-03-15 已完成：`sdks/javascript` 的规范事件类型公开模型包含 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，`DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名对应 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
-- 2026-03-14 已完成：补充 [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)，同步总规划与 M5 文档中的 Python SDK 设计、路径与现状说明，明确 Python SDK 仍与仓库级 M5-CONF / M5-CT 任务共享同一套协议与契约基线。
+- 2026-03-24 已完成：将原独立的 Python SDK 设计规划并入 `DevHub_M5细化任务文档.md` 与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计、任务与测试维护口径，并移除独立子文档。
 - 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。本轮仅完成静态检查与代码修复，尚未执行测试验证。
 - 2026-03-08 已验证：`dotnet build src/DevHub.slnx -c Release`、`dotnet test src/DevHub.slnx -c Release --no-build`、`python3 src/tests/test_runner.py --smoke --no-header`、`python3 src/tests/test_runner.py --full --no-header` 均可通过。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 数据根目录（`DEVHUB_DATA_DIR=temp/sdk-smoke`）下，`python3 src/tests/test_runner.py --smoke --no-header` 可通过。

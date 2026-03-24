@@ -6,19 +6,18 @@
 > - [Spec.md](./Spec.md)
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
-> - [DevHub_Python_SDK设计规划.md](./DevHub_Python_SDK设计规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-14）
+## 当前状态（截至 2026-03-24）
 
 - M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
-- `Python SDK` 当前已在 `sdks/python/tests/` 下落地 123 条单元测试用例与 10 条 SDK↔Hub 集成测试用例；共享 conformance runner 与跨语言一致性门禁仍待统一接入。
+- `Python SDK` 当前已在 `sdks/python/tests/` 下落地 runtime、payloads、parsing、HTTP、events、package exports 等单元测试模块，以及 HTTP / Invocation / Events SDK↔Hub 集成测试；共享 conformance runner 与跨语言一致性门禁仍待统一接入。
 - 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`src/tests/conformance/` 为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟回归。
-- 2026-03-14 已完成：补充 `docs/DevHub_Python_SDK设计规划.md`，并在测试规划文档中同步 Python SDK 的测试资产位置与范围说明。
+- 2026-03-24 已完成：将原 `Python SDK` 独立设计规划中的测试基线并入本 M5 测试文档，与 `.NET` / `JS/TS` / `Python` SDK 采用统一粒度维护。
 
 ---
 
@@ -29,7 +28,7 @@
 - [ ] 覆盖 Discovery：`hub.json` 解析成功、缺失、字段非法。
 - [ ] 覆盖 Auth：missing/invalid token、missing/mismatch protocol、missing `clientId/clientSessionId`、`clientSessionId` 格式非法。
 - [ ] 覆盖 RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*` 全方法成功与关键错误码。
-- [ ] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type -> `-32602`、断线清理。
+- [ ] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type 规范拒绝路径、断线清理。
 - [ ] 覆盖 Invocation 错误路径：`invocation_timeout`、`invocation_expired`、`delivery_conflict`、`invocation_failed`。
 - [ ] 覆盖 Scope 规则：默认 global、显式 scope 不回退、`target.scope=""` 映射 global、`target.scope="global"` 作为显式字符串作用域合法。
 - [ ] 覆盖跨 SDK 一致性：同向量在 `.NET`、`TS` 与 `Python` 结果语义等价。
@@ -41,7 +40,7 @@
 - 黑盒（SDK↔Hub E2E）：
   - 真实启动 Hub，验证 HTTP/WS 全链路行为。
 - 契约（Conformance Vectors）：
-  - 同一向量同时跑 .NET SDK 与 TS SDK，比对语义一致性（忽略 JSON 键序与空白）。
+  - 同一向量同时跑 `.NET SDK`、`TS SDK` 与 `Python SDK`，比对语义一致性（忽略 JSON 键序与空白）。
 
 ---
 
@@ -71,21 +70,22 @@
 | `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdks/javascript/tests/unit/events-client.test.ts` |
 | `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
-| `M5-PY-UT-001` | runtime discovery 成功路径、数据根目录派生与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
-| `M5-PY-UT-002` | HTTP header 组装、`protocolVersion/clientId/clientSessionId` 校验与错误映射 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` |
-| `M5-PY-UT-003` | `notify/request/poll/respond` 载荷默认值、参数互斥与 JSON 校验 | Python 白盒 | `sdks/python/tests/unit/test_payloads.py` |
-| `M5-PY-UT-004` | `DevHubRpcException` 已知错误码、辅助字段与 `calleeError` 提取 | Python 白盒 | `sdks/python/tests/unit/test_exceptions.py` |
-| `M5-PY-UT-005` | WS 鉴权生命周期、订阅行为与事件流终止语义 | Python 白盒 | `sdks/python/tests/unit/test_events_client.py` |
-| `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/python/tests/integration/test_http_flow.py` |
-| `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` / `sdks/python/tests/integration/test_http_flow.py` |
-| `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
-| `M5-E2E-004` | SDK WS 认证 + 订阅 + 取消订阅 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/python/tests/integration/test_events_flow.py` |
-| `M5-E2E-005` | unknown event type 订阅返回 `-32602 invalid_params` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/python/tests/integration/test_events_flow.py` |
-| `M5-E2E-006` | scope 默认 global 与显式 scope 不回退验证 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
-| `M5-E2E-007` | `invocation_timeout` / `invocation_expired` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
-| `M5-E2E-008` | `delivery_conflict` / `invocation_failed` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-PY-UT-001` | runtime discovery 成功路径、默认数据根目录派生、`DEVHUB_DATA_DIR` 覆盖与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
+| `M5-PY-UT-002` | dataDir 输入约束、`runtime/` 子目录误传、直放 `hub.json` 布局与 `ClientOptions` 非法值校验 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
+| `M5-PY-UT-003` | HTTP header 组装、本地参数校验、错误映射与响应结构严格解析 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` |
+| `M5-PY-UT-004` | `notify/request/poll/respond` 载荷默认值、`args` 省略/null 语义、互斥约束与 JSON 校验 | Python 白盒 | `sdks/python/tests/unit/test_payloads.py` |
+| `M5-PY-UT-005` | 模型解析、已知错误码辅助字段、`calleeError` 提取与 JSON-RPC envelope 校验 | Python 白盒 | `sdks/python/tests/unit/test_parsing.py` / `sdks/python/tests/unit/test_exceptions.py` / `sdks/python/tests/unit/test_jsonrpc.py` |
+| `M5-PY-UT-006` | WS 鉴权生命周期、未知事件类型拒绝、连接终止语义与包根扩展点导出 | Python 白盒 | `sdks/python/tests/unit/test_events_client.py` / `sdks/python/tests/unit/test_package_exports.py` |
+| `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/javascript/tests/integration/http-flow.test.ts` / `sdks/python/tests/integration/test_http_flow.py` |
+| `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` / `sdks/javascript/tests/integration/http-flow.test.ts` / `sdks/python/tests/integration/test_http_flow.py` |
+| `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-004` | SDK WS 认证 + 订阅 + 取消订阅 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/javascript/tests/integration/events-flow.test.ts` / `sdks/python/tests/integration/test_events_flow.py` |
+| `M5-E2E-005` | unknown event type 订阅返回 `-32602 invalid_params` 或由客户端按规范本地拒绝 | SDK 黑盒 | `sdks/javascript/tests/integration/events-flow.test.ts` / `sdks/python/tests/integration/test_events_flow.py` |
+| `M5-E2E-006` | scope 默认 global 与显式 scope 不回退验证 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-007` | `invocation_timeout` / `invocation_expired` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
+| `M5-E2E-008` | `delivery_conflict` / `invocation_failed` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
 | `M5-E2E-009` | 缺失 `X-DevHub-ClientId` 返回 `-32600 invalid_request` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
-| `M5-E2E-010` | WS 断开后订阅状态清理（重连后需重新订阅） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/python/tests/integration/test_events_flow.py` |
+| `M5-E2E-010` | WS 断开后订阅状态清理（重连后需重新订阅） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/javascript/tests/integration/events-flow.test.ts` / `sdks/python/tests/integration/test_events_flow.py` |
 | `M5-E2E-011` | `target.scope=""` 路由至 global，`target.scope="global"` 仅命中字面量作用域 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
 | `M5-CONF-001` | Discovery 类向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/discovery.*.json` |
 | `M5-CONF-002` | Auth 类向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/auth.*.json` |
@@ -144,16 +144,22 @@
 - [x] 统一错误断言对象结构（`code/message/data/requestId`）。
 - [x] 在 Node 环境下完成事件流读取（`AsyncIterator`）稳定性校验。
 
-### 4.3 SDK↔Hub 黑盒任务
+### 4.3 Python SDK 测试任务
 
-- [x] 以隔离数据根目录启动 Host，执行 SDK 调用闭环。
+- [x] 在 `sdks/python/tests/unit/` 建立 runtime、payloads、parsing、HTTP、events 与 package exports 测试模块。
+- [x] 统一验证本地 JSON 校验、严格响应解析，以及 `DevHubRpcException` 的辅助字段读取语义。
+- [x] 在异步事件客户端中覆盖认证前约束、未知事件类型拒绝、连接终止后重认证与重订阅要求。
+
+### 4.4 SDK↔Hub 黑盒任务
+
+- [x] 以隔离数据根目录启动 Host，执行 SDK 调用闭环，避免依赖默认常驻 Hub。
 - [x] 覆盖 `hub.apps.launch` 主链路（含 `already_running/starting/started` 状态）。
 - [x] 覆盖必测错误路径：`invocation_timeout/invocation_expired/delivery_conflict/invocation_failed`。
-- [x] 覆盖 scope MUST 规则与 WS unknown type 错误映射。
+- [x] 覆盖 scope MUST 规则与 WS unknown type 规范拒绝路径。
 - [x] 覆盖 `X-DevHub-ClientId` 缺失返回 `-32600 invalid_request`。
 - [x] 覆盖 WS 断线清理后重连行为（需重新订阅才可收事件）。
 
-### 4.4 契约测试任务
+### 4.5 契约测试任务
 
 - [ ] 生成 52 条最小向量，按分类落盘。
 - [ ] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
