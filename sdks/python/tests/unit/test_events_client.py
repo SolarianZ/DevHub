@@ -579,7 +579,7 @@ async def test_events_client_when_ws_response_id_unknown_should_raise_protocol_e
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_authenticate_fails_should_close_session() -> None:
+async def test_events_client_when_authenticate_fails_should_allow_retry_on_same_client() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -600,10 +600,21 @@ async def test_events_client_when_authenticate_fails_should_close_session() -> N
         session=session,
     )
 
-    with pytest.raises(DevHubRpcException):
-        await client.authenticate()
+    try:
+        with pytest.raises(DevHubRpcException):
+            await client.authenticate()
 
-    assert session.closed is True
+        assert session.closed is False
+
+        session.responses["hub.ws.authenticate"] = {"ok": True, "protocolVersion": 1}
+        await client.authenticate()
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == [
+        "hub.ws.authenticate",
+        "hub.ws.authenticate",
+    ]
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
 
@@ -45,6 +46,41 @@ public sealed class DevHubHostFixtureTests
         Assert.False(IsProcessRunning(hostProcessId));
     }
 
+    [Fact]
+    public async Task Impl_HostFixture_WhenDisposedAfterLaunch_ShouldCleanupProcessTreeAndTempRoot()
+    {
+        var host = await DevHubHostFixture.StartAsync();
+        var tempRoot = host.TempRoot;
+        var hostProcessId = host.HostProcessId;
+        int? launchedProcessId = null;
+
+        try
+        {
+            await host.WriteDefinitionAsync(CreateLongRunningLaunchDefinition("host.cleanup.app"));
+
+            await using var client = await host.CreateClientAsync("host-cleanup-client");
+            var launchResult = await client.LaunchAsync(new LaunchRequest
+            {
+                AppId = "host.cleanup.app",
+                WaitForRegisterMs = 0
+            });
+
+            Assert.Contains(launchResult.Status, new[] { "started", "starting" });
+            Assert.NotNull(launchResult.Pid);
+            launchedProcessId = launchResult.Pid!.Value;
+            Assert.True(await WaitForProcessStateAsync(launchedProcessId.Value, expectedRunning: true, TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            await host.DisposeAsync();
+        }
+
+        Assert.False(Directory.Exists(tempRoot));
+        Assert.False(IsProcessRunning(hostProcessId));
+        Assert.NotNull(launchedProcessId);
+        Assert.True(await WaitForProcessStateAsync(launchedProcessId.Value, expectedRunning: false, TimeSpan.FromSeconds(10)));
+    }
+
     private static async Task<IReadOnlyList<string>> WaitForFilesAsync(string directory, string searchPattern, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow.Add(timeout);
@@ -64,6 +100,50 @@ public sealed class DevHubHostFixtureTests
         }
 
         return Array.Empty<string>();
+    }
+
+    private static async Task<bool> WaitForProcessStateAsync(int processId, bool expectedRunning, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (IsProcessRunning(processId) == expectedRunning)
+            {
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(250));
+        }
+
+        return IsProcessRunning(processId) == expectedRunning;
+    }
+
+    private static AppDefinition CreateLongRunningLaunchDefinition(string appId)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new AppDefinition
+            {
+                AppId = appId,
+                DisplayName = appId,
+                Launch = new LaunchConfiguration
+                {
+                    ExePath = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+                    ArgsTemplate = "-NoProfile -Command Start-Sleep -Seconds 30"
+                }
+            };
+        }
+
+        return new AppDefinition
+        {
+            AppId = appId,
+            DisplayName = appId,
+            Launch = new LaunchConfiguration
+            {
+                ExePath = "/bin/sh",
+                ArgsTemplate = "-c \"sleep 30\""
+            }
+        };
     }
 
     private static bool IsProcessRunning(int processId)

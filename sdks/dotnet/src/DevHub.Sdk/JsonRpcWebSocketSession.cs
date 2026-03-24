@@ -297,9 +297,14 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
                     break;
                 }
 
-                if (message.MessageType != WebSocketMessageType.Text || string.IsNullOrWhiteSpace(message.Text))
+                if (message.MessageType != WebSocketMessageType.Text)
                 {
-                    continue;
+                    throw new InvalidOperationException("WebSocket JSON-RPC 消息必须为文本。");
+                }
+
+                if (string.IsNullOrWhiteSpace(message.Text))
+                {
+                    throw new InvalidOperationException("WebSocket JSON-RPC 消息不能为空。");
                 }
 
                 using var document = JsonDocument.Parse(message.Text);

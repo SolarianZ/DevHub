@@ -91,7 +91,8 @@ class DevHubEventsClient:
             if protocol_version != 1:
                 raise RuntimeError("hub.ws.authenticate 返回结果非法。")
         except Exception:
-            await self.close()
+            self._authenticated = False
+            self._event_stream_available = False
             raise
 
         self._authenticated = True

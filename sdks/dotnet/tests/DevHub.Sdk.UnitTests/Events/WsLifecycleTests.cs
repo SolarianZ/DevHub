@@ -483,6 +483,106 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenServerSendsBinaryFrame_ShouldFaultEventStream()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateBinaryMessage(),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        });
+
+        Assert.Contains("文本", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenServerSendsBlankTextFrame_ShouldFaultEventStream()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage("   "),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        });
+
+        Assert.Contains("不能为空", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task M5_DN_UT_005_EventsClient_WhenServerSendsUnsupportedNotification_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -573,6 +673,14 @@ public sealed class WsLifecycleTests : IDisposable
         {
             MessageType = WebSocketMessageType.Text,
             Text = text
+        };
+    }
+
+    private static WebSocketReceiveMessage CreateBinaryMessage()
+    {
+        return new WebSocketReceiveMessage
+        {
+            MessageType = WebSocketMessageType.Binary
         };
     }
 
