@@ -255,6 +255,36 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   expect(() => client.readEvents()).toThrow();
 });
 
+it("subscribe 应在发送请求前拒绝未知事件类型", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-subscribe-type-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["future.event" as any])).rejects.toThrow(/supported DevHub event type/i);
+  } finally {
+    await client.dispose();
+  }
+
+  expect(session?.requests.map((item) => item.method)).toEqual(["hub.ws.authenticate"]);
+});
+
 it("连接关闭后仍应允许读取已缓冲事件", async () => {
   const runtimeDir = await createRuntime();
   const sockets: FakeWebSocket[] = [];
@@ -305,6 +335,26 @@ it("事件通知携带 id 时应使事件流报错", async () => {
 
   const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
+});
+
+it("收到空白文本消息时应使事件流报错", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("WebSocket", class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url, [], createBlankTextScenario);
+    }
+  });
+
+  const client = await DevHubEventsClient.fromRuntime({
+    clientId: "unit-events-blank-message-client",
+    dataDir: runtimeDir
+  });
+
+  await client.authenticate();
+  await client.subscribe(["invocation.completed"]);
+
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toThrow(/blank/i);
 });
 
 it("响应 id 未匹配挂起请求时应中断 authenticate", async () => {
@@ -362,6 +412,77 @@ it("收到未知事件类型时应使事件流报错", async () => {
 
   const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/supported DevHub event type/i);
+});
+
+it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async () => {
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+
+  const server = new WebSocketServer({
+    host: "127.0.0.1",
+    port: 0,
+    path: "/ws"
+  });
+
+  try {
+    await waitForWebSocketServer(server);
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("无法获取测试 WebSocket 端口。");
+    }
+
+    const runtimeDir = await createRuntime({
+      httpBaseUrl: `http://127.0.0.1:${address.port}`,
+      wsUrl: `ws://127.0.0.1:${address.port}/ws`
+    });
+
+    server.once("connection", (socket: any) => {
+      socket.on("message", (data: Buffer) => {
+        const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
+        const method = String(request.method);
+
+        if (method === "hub.ws.authenticate") {
+          socket.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: String(request.id),
+            result: {
+              ok: true,
+              protocolVersion: 1
+            }
+          }));
+          return;
+        }
+
+        if (method === "hub.events.subscribe") {
+          socket.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: String(request.id),
+            result: {
+              ok: true,
+              subscriptionId: "sub-1"
+            }
+          }));
+          socket.send(Buffer.from([0x01, 0x02, 0x03]), { binary: true });
+        }
+      });
+    });
+
+    const client = await DevHubEventsClient.fromRuntime({
+      clientId: "unit-events-fallback-binary-client",
+      dataDir: runtimeDir
+    });
+
+    try {
+      await client.authenticate();
+      await client.subscribe(["invocation.completed"]);
+      const iterator = client.readEvents()[Symbol.asyncIterator]();
+      await expect(iterator.next()).rejects.toThrow(/text frame/i);
+    } finally {
+      await client.dispose();
+    }
+  } finally {
+    await closeWebSocketServer(server);
+  }
 });
 
 it("authenticate 应映射 DevHub RPC 错误", async () => {
@@ -702,13 +823,13 @@ class FakeInjectedWsSession {
 }
 
 type ServerFrame =
-  | { type: "message"; payload: string }
+  | { type: "message"; payload: string | Uint8Array; isBinary?: boolean }
   | { type: "close"; code?: number; reason?: string };
 
 type ScenarioFactory = (request: Record<string, unknown>) => ServerFrame[];
 
 class FakeWebSocket {
-  private readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+  private readonly listeners = new Map<string, Set<(event: unknown, ...args: unknown[]) => void>>();
   private readonly closePromise: Promise<void>;
   private closeResolver: (() => void) | undefined;
   private closed = false;
@@ -728,7 +849,7 @@ class FakeWebSocket {
     });
   }
 
-  addEventListener(type: string, listener: (event: unknown) => void): void {
+  addEventListener(type: string, listener: (event: unknown, ...args: unknown[]) => void): void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
@@ -736,7 +857,7 @@ class FakeWebSocket {
     this.listeners.get(type)!.add(listener);
   }
 
-  removeEventListener(type: string, listener: (event: unknown) => void): void {
+  removeEventListener(type: string, listener: (event: unknown, ...args: unknown[]) => void): void {
     this.listeners.get(type)?.delete(listener);
   }
 
@@ -745,7 +866,7 @@ class FakeWebSocket {
     for (const frame of this.scenarioFactory(request)) {
       queueMicrotask(() => {
         if (frame.type === "message") {
-          this.emit("message", { data: frame.payload });
+          this.emit("message", { data: frame.payload }, frame.isBinary ?? false);
           return;
         }
 
@@ -768,14 +889,14 @@ class FakeWebSocket {
     await this.closePromise;
   }
 
-  private emit(type: string, event: unknown): void {
+  private emit(type: string, event: unknown, ...args: unknown[]): void {
     const listeners = this.listeners.get(type);
     if (!listeners) {
       return;
     }
 
     for (const listener of listeners) {
-      listener(event);
+      listener(event, ...args);
     }
   }
 }
@@ -874,6 +995,37 @@ function createMalformedEventScenario(request: Record<string, unknown>): ServerF
             }
           }
         })
+      }
+    ];
+  }
+
+  return [];
+}
+
+function createBlankTextScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: "   "
       }
     ];
   }

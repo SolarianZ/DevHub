@@ -107,8 +107,8 @@ export class JsonRpcWsSession {
   }
 
   private attachSocketHandlers(socket: WebSocketLike): void {
-    this.socketCleanup.push(addSocketListener(socket, "message", (event) => {
-      void this.handleMessage(event);
+    this.socketCleanup.push(addSocketListener(socket, "message", (event, ...args) => {
+      void this.handleMessage(event, args);
     }));
 
     this.socketCleanup.push(addSocketListener(socket, "close", (event, ...args) => {
@@ -121,11 +121,11 @@ export class JsonRpcWsSession {
     }));
   }
 
-  private async handleMessage(event: unknown): Promise<void> {
+  private async handleMessage(event: unknown, args: readonly unknown[] = []): Promise<void> {
     try {
-      const text = coerceMessageText(event);
-      if (!text) {
-        return;
+      const text = readMessageText(event, args);
+      if (!text.trim()) {
+        throw new Error("WebSocket JSON-RPC message cannot be blank.");
       }
 
       const payload = JSON.parse(text) as unknown;
@@ -312,28 +312,45 @@ function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promis
   });
 }
 
-function coerceMessageText(event: unknown): string | null {
+function readMessageText(event: unknown, args: readonly unknown[] = []): string {
+  const binaryHint = args[0];
+  if (binaryHint === true) {
+    throw new Error("WebSocket JSON-RPC message must be a text frame.");
+  }
+
   if (typeof event === "string") {
     return event;
   }
 
+  if (Buffer.isBuffer(event)) {
+    if (binaryHint !== false) {
+      throw new Error("WebSocket JSON-RPC message must be a text frame.");
+    }
+
+    return event.toString("utf-8");
+  }
+
   if (event instanceof ArrayBuffer) {
+    if (binaryHint !== false) {
+      throw new Error("WebSocket JSON-RPC message must be a text frame.");
+    }
+
     return Buffer.from(event).toString("utf-8");
   }
 
   if (ArrayBuffer.isView(event)) {
+    if (binaryHint !== false) {
+      throw new Error("WebSocket JSON-RPC message must be a text frame.");
+    }
+
     return Buffer.from(event.buffer, event.byteOffset, event.byteLength).toString("utf-8");
   }
 
-  if (Buffer.isBuffer(event)) {
-    return event.toString("utf-8");
-  }
-
   if (isRecord(event) && "data" in event) {
-    return coerceMessageText(event.data);
+    return readMessageText(event.data, args);
   }
 
-  return null;
+  throw new Error("WebSocket JSON-RPC message must be a text frame.");
 }
 
 function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {

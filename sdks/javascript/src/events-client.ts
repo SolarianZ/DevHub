@@ -1,5 +1,8 @@
 import { AsyncQueue } from "./async-utils.js";
-import type { DevHubEventType } from "./event-types.js";
+import {
+  ensureSupportedEventType,
+  type DevHubEventType
+} from "./event-types.js";
 import {
   normalizeClientOptions,
   validateClientOptions
@@ -231,9 +234,11 @@ function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string
     throw new Error("types cannot contain blank strings.");
   }
 
+  const normalizedTypes = types.map((item, index) => ensureSupportedEventType(item, `types[${index}]`));
+
   if (types.length === 0) {
     return undefined;
   }
 
-  return { types: [...types] };
+  return { types: normalizedTypes };
 }

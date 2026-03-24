@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
-import { DevHubRpcError } from "../../src/errors.js";
 import { APP_INSTANCE_REGISTERED } from "../../src/events.js";
 import type { DevHubEventType } from "../../src/events.js";
 import { DevHubHostFixture } from "./host.js";
@@ -123,7 +122,7 @@ it("authenticated WS should support ping and apps queries", async () => {
   }
 });
 
-it("订阅未知事件类型应返回 invalid_params", async () => {
+it("订阅未知事件类型应在客户端本地被拒绝", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-invalid-client",
     dataDir: host.dataDirectory
@@ -138,10 +137,8 @@ it("订阅未知事件类型应返回 invalid_params", async () => {
     capturedError = error;
   }
 
-  expect(capturedError).toBeInstanceOf(DevHubRpcError);
-  const rpcError = capturedError as DevHubRpcError;
-  expect(rpcError.code).toBe(-32602);
-  expect(rpcError.message).toBe("invalid_params");
+  expect(capturedError).toBeInstanceOf(Error);
+  expect((capturedError as Error).message).toMatch(/supported DevHub event type/i);
 
   await eventsClient.dispose();
 });
