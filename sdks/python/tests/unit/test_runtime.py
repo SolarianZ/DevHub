@@ -31,7 +31,6 @@ def test_runtime_discovery_when_environment_override_provided_should_use_environ
     token_file.write_text("token-env", encoding="utf-8")
     _write_hub_json(runtime_dir, token_file=token_file)
     monkeypatch.setenv("DEVHUB_DATA_DIR", str(data_dir))
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
 
     connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client"))
 
@@ -43,27 +42,15 @@ def test_resolve_data_directory_when_override_and_environment_both_present_shoul
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DEVHUB_DATA_DIR", "C:/data-from-env")
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
 
     resolved = runtime_module.resolve_data_directory("C:/data-from-argument")
 
     assert resolved == Path("C:/data-from-argument").resolve()
 
 
-def test_resolve_data_directory_when_legacy_runtime_env_present_should_raise(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("DEVHUB_RUNTIME_DIR", "C:/legacy-runtime")
-    monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
-
-    with pytest.raises(RuntimeError, match="DEVHUB_RUNTIME_DIR"):
-        runtime_module.resolve_data_directory()
-
-
 def test_resolve_data_directory_on_windows_should_use_local_app_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", "C:/Users/tester/AppData/Local")
     monkeypatch.setattr(runtime_module.platform, "system", lambda: "Windows")
@@ -76,7 +63,6 @@ def test_resolve_data_directory_on_windows_should_use_local_app_data(
 def test_resolve_data_directory_on_darwin_should_use_application_support(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     monkeypatch.setattr(runtime_module.platform, "system", lambda: "Darwin")
@@ -90,7 +76,6 @@ def test_resolve_data_directory_on_darwin_should_use_application_support(
 def test_resolve_data_directory_on_linux_should_use_xdg_data_home_when_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
     monkeypatch.setattr(runtime_module.platform, "system", lambda: "Linux")
     monkeypatch.setenv("XDG_DATA_HOME", "C:/xdg-data")
@@ -103,7 +88,6 @@ def test_resolve_data_directory_on_linux_should_use_xdg_data_home_when_present(
 def test_resolve_data_directory_on_linux_should_fallback_to_home_local_share(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("DEVHUB_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     monkeypatch.setattr(runtime_module.platform, "system", lambda: "Linux")

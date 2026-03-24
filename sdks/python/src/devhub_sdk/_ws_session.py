@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
@@ -30,6 +31,21 @@ class JsonRpcWsSession(ABC):
     async def close(self) -> None:
         """关闭会话。"""
 
+    def reopen(self) -> None:
+        """为重新认证准备新的连接代次。"""
+
+    def is_terminated(self) -> bool:
+        """返回当前连接是否已经终止。"""
+
+        return False
+
+
+@dataclass(slots=True)
+class _EventStreamState:
+    queue: asyncio.Queue[DevHubEvent | object] = field(default_factory=asyncio.Queue)
+    terminal_error: BaseException | None = None
+    completed: bool = False
+
 
 class WebSocketJsonRpcSession(JsonRpcWsSession):
     def __init__(
@@ -45,10 +61,9 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._websocket = None
         self._send_lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
-        self._events: asyncio.Queue[DevHubEvent | object] = asyncio.Queue()
+        self._stream = _EventStreamState()
         self._receiver_task: asyncio.Task[None] | None = None
-        self._terminal_error: BaseException | None = None
-        self._stream_completed = False
+        self._terminated = False
         self._closed = False
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
@@ -73,9 +88,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             async with self._send_lock:
                 await self._websocket.send(json.dumps(payload_dict, allow_nan=False))
         except Exception as exc:
-            self._terminal_error = self._terminal_error or exc
-            self._fail_pending(exc)
-            self._complete_event_stream()
+            await self._abort_connection(exc)
             raise RuntimeError("事件流已终止。") from exc
 
         try:
@@ -89,12 +102,13 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         return validate_response_envelope(envelope, request_id)
 
     async def read_events(self) -> AsyncIterator[DevHubEvent]:
+        stream = self._stream
         while True:
-            item = await self._events.get()
+            item = await stream.queue.get()
             if item is _SENTINEL:
-                self._events.put_nowait(_SENTINEL)
-                if self._terminal_error is not None:
-                    raise self._terminal_error
+                stream.queue.put_nowait(_SENTINEL)
+                if stream.terminal_error is not None:
+                    raise stream.terminal_error
                 return
             yield item
 
@@ -103,20 +117,8 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             return
 
         self._closed = True
-        if self._websocket is not None:
-            await self._websocket.close()
-            self._websocket = None
-        if self._receiver_task is not None:
-            if not self._receiver_task.done():
-                self._receiver_task.cancel()
-            try:
-                await self._receiver_task
-            except asyncio.CancelledError:
-                pass
-            except Exception:
-                pass
-            self._receiver_task = None
-        self._complete_event_stream()
+        await self._shutdown_connection()
+        self._complete_event_stream(self._stream)
 
     async def _ensure_connected(self) -> None:
         if self._websocket is not None:
@@ -131,6 +133,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
 
     async def _run_receive_loop(self) -> None:
         terminal_error: BaseException | None = None
+        current_task = asyncio.current_task()
         try:
             async for message in self._websocket:
                 await self._handle_message(message)
@@ -138,12 +141,15 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             raise
         except BaseException as exc:
             terminal_error = exc
-            self._terminal_error = exc
         finally:
             if self._pending:
                 error = terminal_error or RuntimeError("WebSocket 连接已关闭。")
                 self._fail_pending(error)
-            self._complete_event_stream()
+            self._websocket = None
+            if self._receiver_task is current_task:
+                self._receiver_task = None
+            self._terminated = True
+            self._complete_event_stream(self._stream, terminal_error)
 
     async def _handle_message(self, message: Any) -> None:
         if not isinstance(message, str):
@@ -158,15 +164,13 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         method = root.get("method")
         if method is not None:
             if method != "hub.event":
-                if "id" in root or "result" in root or "error" in root:
-                    raise RuntimeError("未知的 WebSocket 请求不受支持。")
-                return
+                raise RuntimeError("WebSocket JSON-RPC 消息只允许挂起请求响应或 hub.event 通知。")
             if "id" in root:
                 raise RuntimeError("hub.event 通知不允许包含 id。")
             if "result" in root or "error" in root:
                 raise RuntimeError("hub.event 通知禁止包含 result 或 error。")
             event = parse_event(root.get("params"), path="hub.event.params")
-            await self._events.put(event)
+            await self._stream.queue.put(event)
             return
 
         request_id = root.get("id")
@@ -187,10 +191,10 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             raise RuntimeError("当前 WebSocket 会话已关闭。")
 
     def _ensure_stream_available(self) -> None:
-        if not self._stream_completed:
+        if not self._terminated:
             return
-        if self._terminal_error is not None:
-            raise RuntimeError("事件流已终止。") from self._terminal_error
+        if self._stream.terminal_error is not None:
+            raise RuntimeError("事件流已终止。") from self._stream.terminal_error
         raise RuntimeError("事件流已终止。")
 
     def _fail_pending(self, error: BaseException) -> None:
@@ -199,7 +203,49 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
                 future.set_exception(error)
         self._pending.clear()
 
-    def _complete_event_stream(self) -> None:
-        if not self._stream_completed:
-            self._stream_completed = True
-            self._events.put_nowait(_SENTINEL)
+    def reopen(self) -> None:
+        self._ensure_open()
+        if self._receiver_task is not None and not self._receiver_task.done():
+            raise RuntimeError("当前 WebSocket 连接仍处于活动状态。")
+        if not self._terminated:
+            return
+        self._stream = _EventStreamState()
+        self._terminated = False
+
+    def is_terminated(self) -> bool:
+        return self._terminated
+
+    async def _abort_connection(self, error: BaseException) -> None:
+        self._terminated = True
+        self._fail_pending(error)
+        await self._shutdown_connection()
+        self._complete_event_stream(self._stream, error)
+
+    async def _shutdown_connection(self) -> None:
+        websocket = self._websocket
+        self._websocket = None
+        if websocket is not None:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        receiver_task = self._receiver_task
+        if receiver_task is not None:
+            if not receiver_task.done():
+                receiver_task.cancel()
+            try:
+                await receiver_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+            self._receiver_task = None
+
+    @staticmethod
+    def _complete_event_stream(stream: _EventStreamState, error: BaseException | None = None) -> None:
+        if stream.completed:
+            return
+        if error is not None and stream.terminal_error is None:
+            stream.terminal_error = error
+        stream.completed = True
+        stream.queue.put_nowait(_SENTINEL)

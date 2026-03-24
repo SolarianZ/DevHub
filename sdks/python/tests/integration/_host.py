@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import time
 from collections import deque
@@ -84,8 +85,12 @@ class DevHubHostFixture:
         if self._process is not None:
             try:
                 if self._process.poll() is None:
-                    self._process.kill()
-                    self._process.wait(timeout=10)
+                    _terminate_process_tree(self._process)
+                    try:
+                        self._process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        self._process.kill()
+                        self._process.wait(timeout=5)
             finally:
                 self._process = None
         self._stop_output_drainers()
@@ -116,6 +121,7 @@ class DevHubHostFixture:
             encoding="utf-8",
             errors="replace",
             env=environment,
+            **_create_isolated_process_kwargs(),
         )
         # 重要：必须持续消费 stdout/stderr，避免管道被写满后阻塞 Host 线程，导致 HTTP 请求卡死。
         self._start_output_drainers()
@@ -185,3 +191,32 @@ def _resolve_repo_root() -> Path:
         if (directory / "AGENTS.md").is_file() and (directory / "src" / "DevHub.Host" / "DevHub.Host.csproj").is_file():
             return directory
     raise RuntimeError("无法定位仓库根目录。")
+
+
+def _create_isolated_process_kwargs() -> dict[str, Any]:
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+        except Exception:
+            process.kill()
+        return
+
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        return

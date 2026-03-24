@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from devhub_sdk import DevHubEventType
 from devhub_sdk._parsing import (
     parse_app_definition,
     parse_app_instance,
@@ -275,6 +276,20 @@ def test_parse_event_when_payload_contains_unsupported_json_should_raise() -> No
             },
             path="hub.event.params",
         )
+
+
+def test_parse_event_should_return_supported_event_type() -> None:
+    event = parse_event(
+        {
+            "subscriptionId": "sub-1",
+            "type": "invocation.completed",
+            "timeUtc": "2026-03-09T00:00:00Z",
+            "payload": {"invocationId": "invk-1"},
+        },
+        path="hub.event.params",
+    )
+
+    assert event.type is DevHubEventType.INVOCATION_COMPLETED
 
 
 @pytest.mark.parametrize(

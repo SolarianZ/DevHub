@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 
-from .constants import ALL_EVENT_TYPES
+from .constants import ensure_supported_event_type
 from ._validation import (
     ensure_json_object,
     ensure_json_value,
@@ -340,9 +340,10 @@ def parse_event(value: Any, *, path: str) -> DevHubEvent:
     """解析事件通知。"""
 
     root = require_mapping(value, path)
-    event_type = require_str(root, "type", path)
-    if event_type not in ALL_EVENT_TYPES:
-        raise RuntimeError(f"{path}.type 取值非法。")
+    try:
+        event_type = ensure_supported_event_type(require_str(root, "type", path), f"{path}.type")
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     return DevHubEvent(
         subscription_id=require_str(root, "subscriptionId", path),
         type=event_type,

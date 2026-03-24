@@ -12,6 +12,7 @@ from ._parsing import (
     require_mapping,
     require_str,
 )
+from .constants import DevHubEventType, ensure_supported_event_type
 from ._validation import ensure_json_value, require_non_empty_string
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
@@ -48,6 +49,7 @@ class DevHubEventsClient:
         self._connection_info = self._runtime_resolver.resolve(self._options)
         self._session = session or WebSocketJsonRpcSession(self._connection_info, self._options)
         self._authenticated = False
+        self._event_stream_available = False
         self._closed = False
 
     @classmethod
@@ -66,9 +68,11 @@ class DevHubEventsClient:
         """执行 `hub.ws.authenticate`。"""
 
         self._ensure_not_closed()
+        self._refresh_session_state()
         if self._authenticated:
             raise RuntimeError("当前 WebSocket 客户端已完成认证。")
 
+        self._reopen_session()
         try:
             result = await self._send_request(
                 "hub.ws.authenticate",
@@ -91,6 +95,7 @@ class DevHubEventsClient:
             raise
 
         self._authenticated = True
+        self._event_stream_available = True
 
     async def ping(self, echo: Any = _ECHO_UNSET) -> PingResult:
         """通过 WebSocket 调用 `hub.ping`。"""
@@ -142,21 +147,23 @@ class DevHubEventsClient:
         result = await self._send_request("hub.apps.listInstances", params, require_authenticated=True)
         return parse_instances_result(result, path="hub.apps.listInstances.result")
 
-    async def subscribe(self, types: Iterable[str] | None = None) -> str:
+    async def subscribe(self, types: Iterable[DevHubEventType] | None = None) -> str:
         """订阅事件。"""
 
         self._ensure_authenticated()
         params: dict[str, Any] | None = None
         if types is not None:
             if isinstance(types, str | bytes | bytearray):
-                raise ValueError("types 必须为事件类型字符串序列。")
+                raise ValueError("types 必须为事件类型序列。")
             if isinstance(types, Mapping):
-                raise ValueError("types 必须为事件类型字符串序列。")
+                raise ValueError("types 必须为事件类型序列。")
             types_list = list(types)
-            if any(not isinstance(item, str) or not item.strip() for item in types_list):
-                raise ValueError("types 只能包含非空字符串。")
+            normalized_types = [
+                ensure_supported_event_type(item, f"types[{index}]")
+                for index, item in enumerate(types_list)
+            ]
             if types_list:
-                params = {"types": types_list}
+                params = {"types": normalized_types}
         result = await self._send_request("hub.events.subscribe", params, require_authenticated=True)
         root = require_mapping(result, "hub.events.subscribe.result")
         if not require_bool(root, "ok", "hub.events.subscribe.result"):
@@ -198,6 +205,7 @@ class DevHubEventsClient:
 
         self._closed = True
         self._authenticated = False
+        self._event_stream_available = False
         await self._session.close()
 
     async def __aenter__(self) -> "DevHubEventsClient":
@@ -218,6 +226,7 @@ class DevHubEventsClient:
         require_authenticated: bool,
     ) -> dict[str, Any]:
         self._ensure_not_closed()
+        self._refresh_session_state()
         if require_authenticated:
             self._ensure_authenticated()
         return await self._session.send_request(method, params)
@@ -227,9 +236,24 @@ class DevHubEventsClient:
             raise RuntimeError("当前事件客户端已关闭。")
 
     def _ensure_authenticated(self) -> None:
+        self._refresh_session_state()
         self._ensure_not_closed()
         if not self._authenticated:
             raise RuntimeError("当前 WebSocket 尚未通过鉴权。")
 
     def _ensure_event_stream_available(self) -> None:
+        self._refresh_session_state()
+        self._ensure_not_closed()
+        if self._event_stream_available:
+            return
         self._ensure_authenticated()
+
+    def _refresh_session_state(self) -> None:
+        is_terminated = getattr(self._session, "is_terminated", None)
+        if callable(is_terminated) and is_terminated():
+            self._authenticated = False
+
+    def _reopen_session(self) -> None:
+        reopen = getattr(self._session, "reopen", None)
+        if callable(reopen):
+            reopen()

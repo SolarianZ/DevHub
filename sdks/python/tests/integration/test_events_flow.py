@@ -7,7 +7,6 @@ import pytest
 from devhub_sdk import (
     APP_INSTANCE_REGISTERED,
     AppInstanceRegistration,
-    DevHubRpcException,
     InvokeCapability,
 )
 
@@ -56,19 +55,16 @@ async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -
 
 
 @pytest.mark.asyncio
-async def test_ws_subscribe_unknown_type_should_return_invalid_params() -> None:
+async def test_ws_subscribe_unknown_type_should_raise_value_error_before_request() -> None:
     with DevHubHostFixture.start() as host:
         events_client = await host.create_events_client("events-invalid-client")
         try:
             await events_client.authenticate()
 
-            with pytest.raises(DevHubRpcException) as exc_info:
+            with pytest.raises(ValueError, match="受支持的 DevHub 事件类型"):
                 await events_client.subscribe(["unknown.type"])
         finally:
             await events_client.close()
-
-    assert exc_info.value.code == -32602
-    assert exc_info.value.message == "invalid_params"
 
 
 @pytest.mark.asyncio

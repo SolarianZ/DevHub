@@ -288,7 +288,7 @@ async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_unknown_notification_received_should_ignore_and_continue(tmp_path: Path) -> None:
+async def test_events_client_when_unknown_notification_received_should_fail_stream(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -321,20 +321,6 @@ async def test_events_client_when_unknown_notification_received_should_ignore_an
                         }
                     )
                 )
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "method": "hub.event",
-                            "params": {
-                                "subscriptionId": "sub-1",
-                                "type": INVOCATION_COMPLETED,
-                                "timeUtc": "2026-03-09T00:00:00Z",
-                                "payload": {"invocationId": "invk-1"},
-                            },
-                        }
-                    )
-                )
                 break
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
@@ -345,12 +331,13 @@ async def test_events_client_when_unknown_notification_received_should_ignore_an
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
-            event = await asyncio.wait_for(anext(client.read_events()), timeout=2)
+            with pytest.raises(RuntimeError, match="hub.event|响应"):
+                await asyncio.wait_for(anext(client.read_events()), timeout=2)
+
+            with pytest.raises(RuntimeError, match="尚未通过鉴权"):
+                await client.subscribe([INVOCATION_COMPLETED])
         finally:
             await client.close()
-
-    assert event.type == INVOCATION_COMPLETED
-    assert event.payload["invocationId"] == "invk-1"
 
 
 @pytest.mark.asyncio
@@ -418,8 +405,16 @@ async def test_events_client_when_connection_closes_after_queued_event_should_en
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_connection_terminated_should_raise_runtime_error_on_followup_request(tmp_path: Path) -> None:
+async def test_events_client_when_connection_terminated_should_allow_reauthenticate_and_require_resubscribe(
+    tmp_path: Path,
+) -> None:
+    connection_count = 0
+
     async def handler(websocket) -> None:
+        nonlocal connection_count
+        connection_count += 1
+        current_connection = connection_count
+
         async for raw in websocket:
             message = json.loads(raw)
             if message["method"] == "hub.ws.authenticate":
@@ -438,11 +433,27 @@ async def test_events_client_when_connection_terminated_should_raise_runtime_err
                         {
                             "jsonrpc": "2.0",
                             "id": message["id"],
-                            "result": {"ok": True, "subscriptionId": "sub-1"},
+                            "result": {"ok": True, "subscriptionId": f"sub-{current_connection}"},
                         }
                     )
                 )
-                await websocket.close()
+                if current_connection == 1:
+                    await websocket.close()
+                    break
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "hub.event",
+                            "params": {
+                                "subscriptionId": f"sub-{current_connection}",
+                                "type": INVOCATION_COMPLETED,
+                                "timeUtc": "2026-03-09T00:00:00Z",
+                                "payload": {"invocationId": f"invk-{current_connection}"},
+                            },
+                        }
+                    )
+                )
                 break
 
     async with websockets.serve(handler, "127.0.0.1", 0) as server:
@@ -457,10 +468,18 @@ async def test_events_client_when_connection_terminated_should_raise_runtime_err
             with pytest.raises(StopAsyncIteration):
                 await asyncio.wait_for(anext(client.read_events()), timeout=2)
 
-            with pytest.raises(RuntimeError, match="事件流已终止|Event stream terminated"):
+            with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await client.subscribe([INVOCATION_COMPLETED])
+
+            await client.authenticate()
+            subscription_id = await client.subscribe([INVOCATION_COMPLETED])
+            event = await asyncio.wait_for(anext(client.read_events()), timeout=2)
         finally:
             await client.close()
+
+    assert subscription_id == "sub-2"
+    assert event.type == INVOCATION_COMPLETED
+    assert event.payload["invocationId"] == "invk-2"
 
 
 @pytest.mark.asyncio
@@ -639,25 +658,19 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
         client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
-            with pytest.raises(ValueError, match="事件类型字符串序列"):
+            with pytest.raises(ValueError, match="事件类型序列"):
                 await client.subscribe(INVOCATION_COMPLETED)
         finally:
             await client.close()
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_when_types_contains_unknown_event_should_surface_rpc_error() -> None:
+async def test_events_client_subscribe_when_types_contains_unknown_event_should_raise_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
         responses={
             "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
-            "hub.events.subscribe": DevHubRpcException(
-                code=-32602,
-                message="invalid_params",
-                data={"reason": "unknown_event_type"},
-                request_id="ws-subscribe-fake",
-            ),
         },
         events=[],
     )
@@ -669,18 +682,12 @@ async def test_events_client_subscribe_when_types_contains_unknown_event_should_
     )
     try:
         await client.authenticate()
-        with pytest.raises(DevHubRpcException) as exc_info:
+        with pytest.raises(ValueError, match="受支持的 DevHub 事件类型"):
             await client.subscribe([INVOCATION_COMPLETED, "future.event"])
     finally:
         await client.close()
 
-    assert exc_info.value.code == -32602
-    assert exc_info.value.reason == "unknown_event_type"
-    assert [request["method"] for request in session.requests] == [
-        "hub.ws.authenticate",
-        "hub.events.subscribe",
-    ]
-    assert session.requests[1]["params"] == {"types": [INVOCATION_COMPLETED, "future.event"]}
+    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
 
 
 @pytest.mark.asyncio

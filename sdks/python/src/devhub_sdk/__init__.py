@@ -4,10 +4,13 @@ from .constants import (
     ALL_EVENT_TYPES,
     APP_INSTANCE_REGISTERED,
     APP_INSTANCE_UNREGISTERED,
+    DevHubEventType,
     INVOCATION_COMPLETED,
     INVOCATION_DELIVERED,
     INVOCATION_FAILED,
     INVOCATION_QUEUED,
+    SUPPORTED_EVENT_TYPES,
+    ensure_supported_event_type,
 )
 from .events import DevHubEventsClient
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
@@ -61,6 +64,7 @@ __all__ = [
     "DevHubClient",
     "DevHubClientOptions",
     "DevHubEvent",
+    "DevHubEventType",
     "DevHubEventsClient",
     "DevHubRpcErrorCode",
     "DevHubRpcException",
@@ -93,8 +97,10 @@ __all__ = [
     "RespondRequest",
     "RuntimeResolver",
     "RuntimeConnectionInfo",
+    "SUPPORTED_EVENT_TYPES",
     "UrllibJsonRpcHttpTransport",
     "WebSocketJsonRpcSession",
     "discover_runtime",
+    "ensure_supported_event_type",
     "resolve_data_directory",
 ]

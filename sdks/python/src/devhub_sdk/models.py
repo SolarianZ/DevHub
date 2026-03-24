@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
+from .constants import DevHubEventType
 from ._validation import (
     require_non_empty_string,
     require_positive_number,
@@ -362,6 +363,6 @@ class DevHubEvent:
     """DevHub 事件对象。"""
 
     subscription_id: str
-    type: str
+    type: DevHubEventType
     time_utc: datetime
     payload: Any = None

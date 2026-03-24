@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 from devhub_sdk import AppInstanceRegistration, InvokeCapability, ListInstancesRequest
@@ -91,6 +94,48 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         assert second.launch_id == first.launch_id
 
 
+def test_host_fixture_close_should_cleanup_launch_process_tree_and_temp_dir() -> None:
+    host = DevHubHostFixture.start()
+    data_directory = host.data_directory
+    child_pid: int | None = None
+
+    try:
+        ready_file = host.data_directory / "launch-probe" / "pid.txt"
+        host.write_definition(
+            {
+                "appId": "http.launch.cleanup.app",
+                "displayName": "HTTP Launch Cleanup App",
+                "launch": {
+                    "exePath": sys.executable,
+                    "argsTemplate": f'"{_launch_probe_script_path()}" "{ready_file}"',
+                },
+            }
+        )
+
+        client = host.create_client("http-launch-cleanup-client")
+        result = client.launch(
+            LaunchRequest(
+                app_id="http.launch.cleanup.app",
+                dedupe_key="python-sdk-launch-cleanup",
+                wait_for_register_ms=0,
+            )
+        )
+
+        assert result.ok is True
+        child_pid = _wait_for_child_pid(ready_file)
+        assert _process_exists(child_pid) is True
+    finally:
+        host.close()
+
+    child_terminated = child_pid is not None and _wait_until(lambda: not _process_exists(child_pid), timeout_seconds=5)
+    if child_pid is not None and not child_terminated:
+        _kill_process(child_pid)
+
+    assert child_pid is not None
+    assert child_terminated is True
+    assert data_directory.exists() is False
+
+
 def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
     with DevHubHostFixture.start() as host_a, DevHubHostFixture.start() as host_b:
         host_a.write_definition(
@@ -132,3 +177,60 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
 def _launch_script_path() -> Path:
     return Path(__file__).resolve().parents[4] / "tests" / "assets" / "launch_noop.py"
+
+
+def _launch_probe_script_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "assets" / "launch_probe.py"
+
+
+def _wait_for_child_pid(ready_file: Path, timeout_seconds: float = 10) -> int:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if ready_file.is_file():
+            return int(ready_file.read_text(encoding="utf-8").strip())
+        time.sleep(0.1)
+    raise TimeoutError(f"等待子进程 ready 文件超时：{ready_file}")
+
+
+def _wait_until(condition, timeout_seconds: float) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if condition():
+            return True
+        time.sleep(0.1)
+    return condition()
+
+
+def _process_exists(pid: int) -> bool:
+    if pid < 1:
+        return False
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return f'"{pid}"' in completed.stdout
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _kill_process(pid: int) -> None:
+    if pid < 1:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    try:
+        os.kill(pid, 9)
+    except OSError:
+        return

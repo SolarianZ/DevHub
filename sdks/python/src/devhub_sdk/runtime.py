@@ -11,7 +11,6 @@ from .models import DevHubClientOptions, RuntimeConnectionInfo
 
 
 DATA_DIR_ENV = "DEVHUB_DATA_DIR"
-_LEGACY_RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR"
 
 
 class RuntimeResolver(ABC):
@@ -63,8 +62,6 @@ def discover_runtime(options: DevHubClientOptions) -> RuntimeConnectionInfo:
 def resolve_data_directory(data_dir_override: str | None = None) -> Path:
     """解析运行时数据根目录。"""
 
-    _ensure_legacy_runtime_dir_env_unused()
-
     if data_dir_override and data_dir_override.strip():
         return Path(data_dir_override).expanduser().resolve()
 
@@ -84,14 +81,6 @@ def resolve_data_directory(data_dir_override: str | None = None) -> Path:
     xdg_data_home = os.getenv("XDG_DATA_HOME")
     base = Path(xdg_data_home).expanduser() if xdg_data_home else home / ".local" / "share"
     return (base / "DevHub").resolve()
-
-
-def _ensure_legacy_runtime_dir_env_unused() -> None:
-    legacy_runtime_dir = os.getenv(_LEGACY_RUNTIME_DIR_ENV)
-    if legacy_runtime_dir and legacy_runtime_dir.strip():
-        raise RuntimeError(
-            f"检测到已废弃环境变量 {_LEGACY_RUNTIME_DIR_ENV}。请改用 {DATA_DIR_ENV}，并传入数据根目录而不是 runtime 子目录。"
-        )
 
 
 def _raise_invalid_data_directory_error_if_needed(data_directory: Path) -> None:
