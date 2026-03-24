@@ -36,10 +36,10 @@ print(ping.server_time_utc, ping.echo)
 - `<dataDir>/runtime/hub.json`
 - `<dataDir>/runtime/token.txt`
 
-不再支持：
+不支持以下输入：
 
 - 直接传入 `runtime` 子目录
-- `hub.json` / `token.txt` 直放在根目录的 legacy 布局
+- `hub.json` / `token.txt` 直放在数据根目录的布局
 
 如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，也可以直接构造客户端并注入顶层公开导出的扩展抽象：
 
@@ -63,7 +63,7 @@ events_client = DevHubEventsClient(
 )
 ```
 
-公开事件类型模型收敛为 `DevHubEventType` 闭集，并同步导出 `SUPPORTED_EVENT_TYPES`、`ALL_EVENT_TYPES` 与 `ensure_supported_event_type(...)`，便于在调用侧提前完成订阅入参校验。
+公开事件类型模型使用 `DevHubEventType` 闭集，并同步导出 `SUPPORTED_EVENT_TYPES`、`ALL_EVENT_TYPES` 与 `ensure_supported_event_type(...)`，便于在调用侧提前完成订阅入参校验。
 
 ## 集成测试隔离模式
 

@@ -5,7 +5,7 @@
 本方案只以 `docs/Spec.md` 为准，不通过修改 Spec 迁就现状实现。
 
 - 数据根目录解析统一遵循 `Spec.md §4.1.1`：显式 `dataDir` 参数 > `DEVHUB_DATA_DIR` > 平台默认数据根目录。
-- 三套 SDK 都应完全移除 `DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`、`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR` 的处理逻辑；不保留兼容分支、迁移提示、注释、README 说明和对应测试。
+- 三套 SDK 的运行时发现只识别 Spec 定义的输入：不处理 `DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`、`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR`，代码、注释、README 与测试也不将其作为公开契约。
 - 运行时发现统一遵循 `Spec.md §4.1.1`、`§4.1.2`：固定读取 `<dataDir>/runtime/hub.json`，并继续通过 `hub.json.tokenFile` 读取令牌。
 - 三套 SDK 的集成测试统一遵循 `Spec.md §4.1.1` 的单实例粒度约束：每套 SDK 在运行集成测试时都必须自行启动绑定独立临时 `dataDir` 的临时 Host，禁止复用开发机默认数据根目录下的常驻 Host，也禁止不同 SDK 共享同一个测试 Host。
 - 三套 SDK 的集成测试在完成后都必须关闭自己启动的临时 Host，并清理对应临时目录；若测试覆盖 `launch` 场景，还必须确保 Host 派生出的子进程一并回收，避免并行测试互相干扰。
@@ -13,7 +13,7 @@
 - WebSocket 统一遵循 `Spec.md §3.3`、`§4.3`、`§6.3.16`：鉴权后，客户端只接受两类入站消息。
   - 与挂起请求匹配的 JSON-RPC 响应。
   - `hub.event` 通知。
-- 事件类型统一收敛到当前 Spec 对外公开的 6 个事件值；公开类型、订阅入参、运行时解析校验保持一致。
+- 事件类型以当前 Spec 对外公开的 6 个事件值为准；公开类型、订阅入参、运行时解析校验保持一致。
 - 订阅生命周期统一遵循 `Spec.md §6.3.14` 到 `§6.3.16`：订阅绑定到连接，断线后订阅自动失效；若复用同一客户端对象，则必须重新认证并重新订阅。
 - 三套 SDK 都应提供同构的高级扩展点：`runtime resolver`、`HTTP transport`、`WS session`。语言生态附加能力可以保留，但不能替代这三类扩展点。
 
@@ -36,18 +36,18 @@
 - Spec 对齐说明：
   - 该调整只改变 SDK 构造与扩展方式，不改变协议消息、字段、错误语义与运行时发现规则，符合 Spec。
 
-### 2. 完全移除旧环境变量处理逻辑
+### 2. 运行时发现只识别标准数据根目录配置
 
 - 当前不一致：
   - `.NET SDK` 仍显式扫描并拒绝 `DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`、`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR`。
-  - 这属于超出 Spec 的旧版迁移逻辑，不应继续保留。
+  - 这类处理超出 Spec 定义的发现语义，不属于 SDK 对外约束的一部分。
 - 位置：
   - `sdks/dotnet/src/DevHub.Sdk/Internal/RuntimeDiscovery.cs`，`ResolveDataDirectory()` / `ThrowIfLegacyEnvironmentVariablesPresent()`，关键词：`DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`
   - `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Discovery/RuntimeDiscoveryTests.cs`，`RuntimeDiscovery_WhenLegacyEnvironmentVariableProvided_ShouldThrowMigrationException`，关键词：`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR`
   - `sdks/dotnet/README.md`，`Runtime Discovery`，关键词：`DEVHUB_RUNTIME_DIR`
 - 处理方案：
-  - 删除旧环境变量列表、扫描逻辑、迁移异常文本。
-  - 删除与旧环境变量相关的单元测试与 README 说明。
+  - 代码与文档中只保留 Spec 定义的解析顺序与错误语义。
+  - 与非规范环境变量相关的单元测试和 README 说明移除，避免把这类输入写成公开契约。
   - 保留且只保留 Spec 要求的三段解析顺序：显式 `DataDir`、`DEVHUB_DATA_DIR`、平台默认目录。
 - Spec 对齐说明：
   - `Spec.md §4.1.1` 只定义了显式参数、`DEVHUB_DATA_DIR` 与平台默认目录；移除旧变量处理后反而更严格对齐 Spec。
@@ -56,7 +56,7 @@
 
 - 当前不一致：
   - `.NET SDK` 目前只有 `DevHubEventTypes` 字符串常量；`SubscribeAsync()` 仍接收 `IEnumerable<string>`，`DevHubEvent.Type` 仍是 `string`，运行时只检查非空字符串。
-  - JS 已收敛到闭集事件类型模型；Python 也至少在解析层按闭集校验。
+  - JS 已采用闭集事件类型模型；Python 也至少在解析层按闭集校验。
 - 位置：
   - `sdks/dotnet/src/DevHub.Sdk/Models/DevHubEventTypes.cs`，关键词：`InvocationFailed`
   - `sdks/dotnet/src/DevHub.Sdk/DevHubEventsClient.cs`，`SubscribeAsync()`，关键词：`IEnumerable<string>? types`
@@ -64,7 +64,7 @@
   - `sdks/dotnet/src/DevHub.Sdk/DevHubEventsClient.cs`，`ValidateEvent()`，关键词：`string.IsNullOrWhiteSpace(evt.Type)`
 - 处理方案：
   - 新增公开的闭集事件类型模型，例如 string-backed `DevHubEventType`。
-  - 将 `DevHubEvent.Type` 与 `SubscribeAsync(types)` 的公开签名都收敛到该模型。
+  - 让 `DevHubEvent.Type` 与 `SubscribeAsync(types)` 的公开签名都使用该模型。
   - 运行时解析阶段继续按 Spec 字符串值进行校验，遇到非 6 个已知值立即失败。
 - Spec 对齐说明：
   - 事件在协议层仍按 Spec 的字符串值序列化，不改变 WS 契约；只是把 SDK 公开模型从“裸字符串”收紧为“受限字符串集合”。
@@ -86,7 +86,7 @@
 - Spec 对齐说明：
   - 订阅绑定连接、断线自动清理属于 Spec 明确要求；重新认证后重新订阅完全符合 Spec。
 
-### 5. 将当前集成测试隔离模式显式固化到 README 与回归测试
+### 5. 集成测试隔离模式在 README 与回归测试中显式体现
 
 - 当前不一致：
   - `.NET SDK` 的集成测试代码已经通过 `DevHubHostFixture` 为每个测试用例启动独立临时 Host，并在释放时关闭 Host、删除临时目录。
@@ -103,7 +103,7 @@
 
 ## Python SDK 处理方案
 
-### 1. 完全移除旧环境变量处理逻辑
+### 1. 运行时发现只识别标准数据根目录配置
 
 - 当前不一致：
   - `Python SDK` 仍显式检测并拒绝 `DEVHUB_RUNTIME_DIR`。
@@ -113,13 +113,13 @@
   - `sdks/python/tests/unit/test_runtime.py`，`test_resolve_data_directory_when_legacy_runtime_env_present_should_raise`，关键词：`DEVHUB_RUNTIME_DIR`
   - `sdks/python/README.md`，`高级扩展`，关键词：`DEVHUB_RUNTIME_DIR`
 - 处理方案：
-  - 删除旧环境变量常量、检测逻辑、异常文本。
+  - 代码与异常文本只保留 Spec 定义的发现输入与错误语义。
   - 删除对应测试与 README 表述。
   - `resolve_data_directory()` 只保留 Spec 规定的三段解析顺序。
 - Spec 对齐说明：
   - 删除旧变量逻辑后，运行时发现路径规则与 `Spec.md §4.1.1`、`§4.1.2` 完全一致。
 
-### 2. 将未知服务端通知从“忽略”改为“协议错误并终止事件流”
+### 2. 未知服务端通知按“协议错误并终止事件流”处理
 
 - 当前不一致：
   - `Python SDK` 遇到 `method != "hub.event"` 且不带 `id/result/error` 的服务端通知时直接忽略并继续读流。
@@ -130,11 +130,11 @@
 - 处理方案：
   - 调整 `_handle_message()`：鉴权后仅允许“挂起请求响应”与 `hub.event` 两类入站消息。
   - 任何其他服务端通知都抛出协议错误，并终止当前事件流。
-  - 删除“忽略未知通知并继续”这类测试，改为验证事件流失败。
+  - 相关测试验证事件流失败，而不是继续读流。
 - Spec 对齐说明：
   - `Spec.md §6.3.16` 只定义了 `hub.event` 作为服务端事件交付方式；SDK 严格限制入站通知类型更符合当前公开契约。
 
-### 3. 将事件类型从裸字符串收敛为闭集公开模型
+### 3. 事件类型使用闭集公开模型
 
 - 当前不一致：
   - `Python SDK` 虽然在解析层按 `ALL_EVENT_TYPES` 校验，但公开类型仍是 `Iterable[str]` 与 `str`。
@@ -168,7 +168,7 @@
 - Spec 对齐说明：
   - 该语义直接遵循 Spec 中“订阅绑定连接、断线自动清理”的要求。
 
-### 5. 将集成测试 Host 清理从“关闭主进程”提升为“回收整个进程树”，并补齐 README 说明
+### 5. 集成测试 Host 采用进程树级清理，并补齐 README 说明
 
 - 当前不一致：
   - `Python SDK` 的集成测试已通过 `DevHubHostFixture.start()` 为每个测试用例创建独立临时 Host 和独立 `dataDir`，这点方向正确。
@@ -188,17 +188,17 @@
 
 ## JavaScript SDK 处理方案
 
-### 1. 完全移除旧环境变量处理逻辑
+### 1. 运行时发现只识别标准数据根目录配置
 
 - 当前不一致：
   - `JS SDK` 仍显式检测并拒绝 `DEVHUB_RUNTIME_DIR`。
-  - 根据统一基线，这类逻辑应被彻底删除，不再保留任何迁移兼容痕迹。
+  - 根据统一基线，代码与文档中不保留这类兼容分支或对应测试。
 - 位置：
   - `sdks/javascript/src/runtime.ts`，`resolveDataDirectory()` / `assertLegacyRuntimeDirEnvUnset()`，关键词：`DEVHUB_RUNTIME_DIR`
-  - `sdks/javascript/tests/unit/runtime.test.ts`，关键词：`检测到旧环境变量时应抛出迁移错误`
+  - `sdks/javascript/tests/unit/runtime.test.ts`，关键词：`DEVHUB_RUNTIME_DIR`
   - `sdks/javascript/README.md`，`当前状态`，关键词：`DEVHUB_RUNTIME_DIR`
 - 处理方案：
-  - 删除旧环境变量常量、检测逻辑、测试和 README 说明。
+  - 代码、测试和 README 中只保留规范定义的发现配置。
   - `resolveDataDirectory()` 仅保留 Spec 规定的解析顺序与 `<dataDir>/runtime/hub.json` 布局。
 - Spec 对齐说明：
   - 该调整直接向 `Spec.md §4.1.1`、`§4.1.2` 收敛。
@@ -213,13 +213,13 @@
   - `sdks/javascript/src/client.ts`，`fromRuntime()`，关键词：`resolve(normalized.dataDir)`
   - `sdks/javascript/src/events-client.ts`，`fromRuntime()`，关键词：`resolve(normalized.dataDir)`
 - 处理方案：
-  - 将 `RuntimeResolver.resolve()` 统一为接收完整的归一化客户端选项，而不是只接收字符串路径。
+  - `RuntimeResolver.resolve()` 接收完整的归一化客户端选项，而不是只接收字符串路径。
   - `DevHubClient.fromRuntime()` 与 `DevHubEventsClient.fromRuntime()` 都把完整选项传给 resolver。
   - 这样三套 SDK 的 runtime seam 都能承载未来的发现策略扩展，而不是把 resolver 限制成“单纯路径映射器”。
 - Spec 对齐说明：
   - 该调整只影响 SDK 内部架构与扩展接口，不改变 Spec 规定的数据根目录优先级和发现文件布局。
 
-### 3. 将当前 WS 严格校验与重连语义固化为跨语言基线
+### 3. WS 严格校验与重连语义作为跨语言基线
 
 - 当前不一致：
   - `JS SDK` 在这两点上已经比另两套 SDK 更接近目标状态。
@@ -231,7 +231,7 @@
 - 处理方案：
   - 保持当前“仅接受响应或 `hub.event`”的严格校验，不做协议放宽。
   - 保持当前“断线后可重新认证，但必须重新订阅”的对象复用语义。
-  - 补充共享架构说明与跨语言一致性测试，把该行为从“JS 当前实现”升级为“统一 SDK 约束”。
+  - 补充共享架构说明与跨语言一致性测试，明确该行为属于统一 SDK 约束。
 - Spec 对齐说明：
   - 严格校验与重新认证后重新订阅都符合 `Spec.md §3.3`、`§4.3`、`§6.3.14` 到 `§6.3.16`。
 
@@ -239,19 +239,19 @@
 
 - 当前不一致：
   - `JS SDK` 已经提供了 `DevHubEventType`、`SUPPORTED_EVENT_TYPES`、`ensureSupportedEventType()`，这比 `.NET` 与 Python 更完整。
-  - 当前需要的是将这一做法提升为跨语言统一模型，而不是让 JS 回退到裸字符串。
+  - 三套 SDK 的公开模型都应使用同层次的事件类型约束，而不是以裸字符串作为主模型。
 - 位置：
   - `sdks/javascript/src/event-types.ts`，关键词：`SUPPORTED_EVENT_TYPES`、`ensureSupportedEventType`
   - `sdks/javascript/src/events-client.ts`，`subscribe()`，关键词：`readonly DevHubEventType[]`
   - `sdks/javascript/src/models.ts`，`DevHubEvent`，关键词：`type: DevHubEventType`
 - 处理方案：
   - 保持当前闭集事件类型模型不变。
-  - 以 JS 的事件类型设计为参考，推动 `.NET` 与 Python 收敛到同一层次的公开约束。
+  - 以 JS 的事件类型设计为参考，使 `.NET` 与 Python 使用同一层次的公开约束。
   - 在后续统一文档中明确：事件类型不应再以裸字符串作为公开主模型。
 - Spec 对齐说明：
   - JS 当前模型仍按 Spec 字符串值进行序列化与解析，不改变协议，仅提升 SDK API 的约束强度。
 
-### 5. 将当前集成测试隔离模式补齐为“文档显式约束 + 进程树级清理”
+### 5. 集成测试隔离模式包含“文档显式约束 + 进程树级清理”
 
 - 当前不一致：
   - `JS SDK` 的集成测试已经通过 `DevHubHostFixture.start()` 自行启动临时 Host，并通过独立临时目录隔离运行时数据；测试文件级 `beforeAll/afterAll` 也已经避免了对外部常驻 Host 的依赖。
@@ -263,7 +263,7 @@
   - `sdks/javascript/README.md`，关键词：`开发命令`、`npm test`
 - 处理方案：
   - 调整 `JS` 集成测试夹具的进程管理策略：启动时创建可被整组终止的进程组，关闭时做跨平台整棵进程树回收，而不是只杀主进程。
-  - 保留当前“每个测试文件一个临时 Host”的粒度，不强行改成“每个 test 一个 Host”；统一要求的关键是“每套 SDK 自管独立 Host 与 dataDir”，不是三套语言必须使用相同测试粒度。
+  - 测试粒度可采用“每个测试文件一个临时 Host”；关键要求是“每套 SDK 自管独立 Host 与 dataDir”，而不是三套语言使用完全相同的测试粒度。
   - 在 `JS SDK README` 中新增“集成测试隔离模式”章节，明确 `npm test` 中的集成测试会自建 / 自启临时 Host，不连接开发机默认数据目录下的常驻 Hub。
   - 在 README 中补充并行开发说明，明确该模式就是为了支持同机同时运行多套 SDK 集成测试而互不干扰。
 - Spec 对齐说明：

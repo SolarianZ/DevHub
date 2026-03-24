@@ -14,11 +14,11 @@
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
 - `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 仍待后续阶段完成。
 - `Python SDK` 已在 `sdks/python/` 落地：当前已提供 runtime discovery、同步 HTTP JSON-RPC、异步 WebSocket events、统一错误模型、包根扩展抽象，以及 `sdks/python/tests/` 下的单元测试与 SDK↔Hub 集成测试；共享 conformance 与统一 CI 仍待接入。
-- 下文列出的 .NET SDK 路径已调整为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 已作为 JS/TS SDK 实际落点，`src/tests/conformance` 仍为后续 M5 目标落点。
+- 下文列出的 .NET SDK 路径为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 是 JS/TS SDK 落点，`src/tests/conformance` 是后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
-- 2026-03-18 已完成：仓库级文档已统一收敛到 `DEVHUB_DATA_DIR` 数据根目录语义，并补充了多 Host 并行运行的文档约束。
-- 2026-03-07 已修复 Windows `cross-platform-smoke` 中旧版自定义发现路径用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
+- 2026-03-18 已完成：仓库级文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，并补充了多 Host 并行运行的文档约束。
+- 2026-03-07 已修复 Windows `cross-platform-smoke` 中自定义发现路径用例的误报：问题来自测试夹具对 8.3 短路径与长路径的字面值比较，Hub 实际行为仍符合 `Spec`。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 48 条单元测试 + 14 条集成测试）；已补齐 SDK 对 AppDefinition / AppInstance / Invocation 成功载荷的关键结构校验，并为注册载荷 `meta` 与 `respond.error.message` 增加本地参数校验。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-14 已完成：补充 `docs/DevHub_Python_SDK设计规划.md`，同步 M5 文档中的 Python SDK 路径、API 基线与当前状态说明。
