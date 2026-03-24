@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { promises as fsPromises } from "node:fs";
@@ -44,6 +44,10 @@ export class DevHubHostFixture {
     this.hostAssemblyPath = hostAssemblyPath;
   }
 
+  get processId(): number | null {
+    return this.process?.pid ?? null;
+  }
+
   static async start(): Promise<DevHubHostFixture> {
     const repoRoot = resolveRepoRoot();
     const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-"));
@@ -81,11 +85,13 @@ export class DevHubHostFixture {
   }
 
   async close(): Promise<void> {
-    if (this.process && this.process.exitCode === null) {
-      this.process.kill("SIGKILL");
-      await Promise.race([once(this.process, "exit"), delay(10_000)]);
-    }
+    const hostProcess = this.process;
     this.process = null;
+
+    if (hostProcess?.pid) {
+      await terminateProcessTree(hostProcess);
+    }
+
     await fsPromises.rm(this.tempRoot, { recursive: true, force: true });
   }
 
@@ -102,7 +108,9 @@ export class DevHubHostFixture {
     this.process = spawn("dotnet", [this.hostAssemblyPath], {
       cwd: this.repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
-      env
+      env,
+      detached: process.platform !== "win32",
+      windowsHide: true
     });
 
     if (this.process.stdout) {
@@ -183,7 +191,8 @@ async function buildHostAssembly(repoRoot: string, buildRoot: string): Promise<s
     `-p:BaseOutputPath=${ensureTrailingSeparator(path.join(buildRoot, "bin"))}`
   ], {
     cwd: repoRoot,
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true
   });
 
   build.stdout?.on("data", (chunk: Buffer) => {
@@ -229,4 +238,51 @@ function pushOutput(buffer: string[], chunk: string): void {
   if (buffer.length > OUTPUT_LIMIT) {
     buffer.splice(0, buffer.length - OUTPUT_LIMIT);
   }
+}
+
+async function terminateProcessTree(child: ReturnType<typeof spawn>): Promise<void> {
+  const pid = child.pid;
+  if (!pid) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const killResult = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true
+    });
+    if (killResult.error) {
+      throw killResult.error;
+    }
+
+    if (killResult.status !== 0 && child.exitCode === null) {
+      throw new Error(`终止 Host 进程树失败，PID=${pid}。`);
+    }
+  } else {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch (error) {
+      if (!isMissingProcessError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (child.exitCode !== null) {
+    return;
+  }
+
+  await Promise.race([
+    once(child, "exit"),
+    delay(10_000).then(() => {
+      throw new Error(`等待 Host 进程退出超时，PID=${pid}。`);
+    })
+  ]);
+}
+
+function isMissingProcessError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as NodeJS.ErrnoException).code === "ESRCH";
 }

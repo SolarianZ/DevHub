@@ -1,10 +1,10 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { NormalizedDevHubClientOptions } from "./models.js";
 import { parseDateTimeString } from "./validation.js";
 
 export const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
-const LEGACY_RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
 
 export interface HubRuntimeTuning {
   leaseSeconds: number;
@@ -32,18 +32,16 @@ export interface RuntimeConnectionInfo {
 }
 
 export interface RuntimeResolver {
-  resolve(dataDirOverride?: string): Promise<RuntimeConnectionInfo>;
+  resolve(options: Readonly<NormalizedDevHubClientOptions>): Promise<RuntimeConnectionInfo>;
 }
 
 export class FileSystemRuntimeResolver implements RuntimeResolver {
-  async resolve(dataDirOverride?: string): Promise<RuntimeConnectionInfo> {
-    return discoverRuntime(dataDirOverride);
+  async resolve(options: Readonly<NormalizedDevHubClientOptions>): Promise<RuntimeConnectionInfo> {
+    return discoverRuntime(options.dataDir);
   }
 }
 
 export function resolveDataDirectory(dataDirOverride?: string): string {
-  assertLegacyRuntimeDirEnvUnset();
-
   if (dataDirOverride && dataDirOverride.trim()) {
     return path.resolve(dataDirOverride);
   }
@@ -131,13 +129,6 @@ async function resolveHubRuntimePaths(dataDirectory: string): Promise<{
     runtimeDirectory: path.join(dataDirectory, "runtime"),
     hubJsonPath: path.join(dataDirectory, "runtime", "hub.json")
   };
-}
-
-function assertLegacyRuntimeDirEnvUnset(): void {
-  const legacyRuntimeDir = process.env[LEGACY_RUNTIME_DIR_ENV];
-  if (legacyRuntimeDir && legacyRuntimeDir.trim()) {
-    throw new Error(`已移除环境变量 ${LEGACY_RUNTIME_DIR_ENV}，请改用 ${DATA_DIR_ENV} 或 dataDir 选项。`);
-  }
 }
 
 function parseHubRuntime(payload: unknown, source: string): HubRuntime {

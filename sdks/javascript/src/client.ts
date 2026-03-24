@@ -92,7 +92,7 @@ export class DevHubClient {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
     const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
-    const connection = await runtimeResolver.resolve(normalized.dataDir);
+    const connection = await runtimeResolver.resolve(normalized);
     const transport = dependencies.transportFactory?.(normalized, connection)
       ?? new JsonRpcHttpTransport(normalized, connection);
     return new DevHubClient(normalized, connection, transport);

@@ -5,9 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import { discoverRuntime, resolveDataDirectory } from "../../src/runtime.js";
 
 const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
-const LEGACY_RUNTIME_DIR_ENV = "DEVHUB_RUNTIME_DIR";
 const originalDataDirEnvValue = process.env[DATA_DIR_ENV];
-const originalLegacyRuntimeDirEnvValue = process.env[LEGACY_RUNTIME_DIR_ENV];
 const tempRoots: string[] = [];
 
 afterEach(() => {
@@ -15,12 +13,6 @@ afterEach(() => {
     delete process.env[DATA_DIR_ENV];
   } else {
     process.env[DATA_DIR_ENV] = originalDataDirEnvValue;
-  }
-
-  if (originalLegacyRuntimeDirEnvValue === undefined) {
-    delete process.env[LEGACY_RUNTIME_DIR_ENV];
-  } else {
-    process.env[LEGACY_RUNTIME_DIR_ENV] = originalLegacyRuntimeDirEnvValue;
   }
 
   return Promise.all(tempRoots.splice(0).map(async (target) => {
@@ -40,14 +32,8 @@ it("其次使用 DEVHUB_DATA_DIR", () => {
   expect(resolveDataDirectory()).toBe(path.resolve(envValue));
 });
 
-it("检测到旧环境变量时应抛出迁移错误", () => {
-  process.env[LEGACY_RUNTIME_DIR_ENV] = path.join("temp", "legacy-runtime");
-  expect(() => resolveDataDirectory()).toThrow(/DEVHUB_RUNTIME_DIR/);
-});
-
 it("默认数据目录应指向规范 data dir", () => {
   delete process.env[DATA_DIR_ENV];
-  delete process.env[LEGACY_RUNTIME_DIR_ENV];
 
   const dataDir = resolveDataDirectory();
 
@@ -131,11 +117,6 @@ it("discoverRuntime 只应读取 <dataDir>/runtime/hub.json", async () => {
 it("discoverRuntime 应拒绝直接传入 runtime 子目录", async () => {
   const { runtimeDir } = await createPopulatedDataDirectory();
   await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/不能直接传入 runtime 目录/);
-});
-
-it("discoverRuntime 检测到旧环境变量时应抛出迁移错误", async () => {
-  process.env[LEGACY_RUNTIME_DIR_ENV] = path.join("temp", "legacy-runtime");
-  await expect(discoverRuntime()).rejects.toThrow(/DEVHUB_RUNTIME_DIR/);
 });
 
 it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {

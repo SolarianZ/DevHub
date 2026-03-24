@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
+import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 
 const tempRoots: string[] = [];
 
@@ -19,8 +20,13 @@ afterEach(async () => {
 it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {
-    resolve: vi.fn(async (dataDirOverride?: string) => {
-      expect(dataDirOverride).toBe("/tmp/devhub-js-sdk-runtime");
+    resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
+      expect(options).toMatchObject({
+        clientId: "unit-injected-client",
+        dataDir: "/tmp/devhub-js-sdk-runtime",
+        protocolVersion: 1
+      });
+      expect(options.clientSessionId).toEqual(expect.any(String));
       return connection;
     })
   };

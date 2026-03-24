@@ -1,0 +1,116 @@
+import { spawnSync } from "node:child_process";
+import { promises as fsPromises } from "node:fs";
+import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "vitest";
+import { DevHubClient } from "../../src/client.js";
+import { DevHubHostFixture } from "./host.js";
+
+const longRunningLaunchScriptPath = fileURLToPath(new URL("../assets/launch_wait_forever.mjs", import.meta.url));
+
+it("close 应回收 Host 进程树并清理临时目录", async () => {
+  const host = await DevHubHostFixture.start();
+  const dataDirectory = host.dataDirectory;
+  const hostProcessId = host.processId;
+  let launchedProcessId: number | undefined;
+
+  try {
+    await host.writeDefinition({
+      appId: "host.cleanup.app",
+      displayName: "host.cleanup.app",
+      launch: {
+        exePath: process.execPath,
+        argsTemplate: quoteCommandArgument(path.normalize(longRunningLaunchScriptPath))
+      }
+    });
+
+    const client = await DevHubClient.fromRuntime({
+      clientId: "host-cleanup-client",
+      dataDir: host.dataDirectory
+    });
+
+    try {
+      const launchResult = await client.launch({
+        appId: "host.cleanup.app",
+        waitForRegisterMs: 0
+      });
+
+      expect(launchResult.status).toBe("started");
+      expect(launchResult.pid).toBeGreaterThan(0);
+
+      if (launchResult.pid === null || launchResult.pid === undefined) {
+        throw new Error("launch 应返回子进程 PID。");
+      }
+
+      launchedProcessId = launchResult.pid;
+      await waitForProcessState(launchedProcessId, true);
+    } finally {
+      await client.dispose();
+    }
+  } finally {
+    await host.close();
+  }
+
+  expect(hostProcessId).toBeGreaterThan(0);
+  expect(await pathExists(dataDirectory)).toBe(false);
+
+  if (hostProcessId !== null) {
+    await waitForProcessState(hostProcessId, false);
+  }
+
+  if (launchedProcessId !== undefined) {
+    await waitForProcessState(launchedProcessId, false);
+  }
+}, 120_000);
+
+async function waitForProcessState(pid: number, expectedRunning: boolean): Promise<void> {
+  const deadline = Date.now() + 15_000;
+
+  while (Date.now() < deadline) {
+    if (isProcessRunning(pid) === expectedRunning) {
+      return;
+    }
+
+    await delay(250);
+  }
+
+  expect(isProcessRunning(pid)).toBe(expectedRunning);
+}
+
+function isProcessRunning(pid: number): boolean {
+  if (process.platform === "win32") {
+    const query = spawnSync("tasklist", ["/FI", `PID eq ${pid}`], {
+      encoding: "utf-8",
+      windowsHide: true
+    });
+
+    if (query.error) {
+      throw query.error;
+    }
+
+    return query.stdout.split(/\r?\n/).some((line) => line.includes(` ${pid} `));
+  }
+
+  const query = spawnSync("ps", ["-p", String(pid), "-o", "pid="], {
+    encoding: "utf-8"
+  });
+  if (query.error) {
+    throw query.error;
+  }
+
+  return query.stdout.trim() === String(pid);
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fsPromises.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function quoteCommandArgument(value: string): string {
+  return value.includes(" ") ? `"${value}"` : value;
+}

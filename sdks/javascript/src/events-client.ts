@@ -80,7 +80,7 @@ export class DevHubEventsClient {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
     const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
-    const connection = await runtimeResolver.resolve(normalized.dataDir);
+    const connection = await runtimeResolver.resolve(normalized);
     let client: DevHubEventsClient | undefined;
     const sessionOptions: JsonRpcWsSessionOptions = {
       websocketEndpoint: connection.websocketEndpoint,

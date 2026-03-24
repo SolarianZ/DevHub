@@ -12,8 +12,8 @@ DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 
 - 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
 - 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
-- 运行时发现现已统一为 data dir 语义：按 `options.dataDir`、`DEVHUB_DATA_DIR`、平台默认数据目录的顺序解析数据根，并固定读取 `<dataDir>/runtime/hub.json`；检测到旧环境变量 `DEVHUB_RUNTIME_DIR` 会直接抛出迁移错误。
-- 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点，便于 fake transport、录制回放或自定义连接策略测试。
+- 运行时发现现已统一为 data dir 语义：按 `options.dataDir`、`DEVHUB_DATA_DIR`、平台默认数据目录的顺序解析数据根，并固定读取 `<dataDir>/runtime/hub.json`。
+- 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
 
 > SDK 已内置 `ws` 回退实现，因此在 Node.js 18/19 等未提供全局 `WebSocket` 的环境中也可直接使用事件客户端。
 
@@ -34,6 +34,13 @@ npm run build
 npm test
 ```
 
+## 集成测试隔离模式
+
+- `npm test` 中的集成测试会自行构建并启动临时 DevHub Host，为当前测试文件分配独立临时 `dataDir`，固定通过 `<dataDir>/runtime/hub.json` 发现连接信息。
+- 集成测试不会连接开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的临时 Host，回收 Host 进程树，并删除对应临时目录。
+- 这一模式是为了支持同机并行运行 `.NET / Python / JS` 三套 SDK 的集成测试；每套测试都必须只使用自己管理的 Host 和数据根目录。
+- 仓库级 smoke 验证或手工联调仍可连接本机 Hub，此时请显式传入 `dataDir` 或设置 `DEVHUB_DATA_DIR`，不要把这种运行方式与 SDK 集成测试混用。
+
 ## 已验证能力
 
 - Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `dataDir` / `DEVHUB_DATA_DIR` 覆盖，并固定使用 `<dataDir>/runtime/hub.json`。
@@ -42,7 +49,7 @@ npm test
 - Invocation semantics：默认选项、`delivery_conflict`、`invocation_timeout`、`invocation_expired`、`invocation_failed`。
 - Capability gates：`rpc_disabled`、`poll_not_enabled`、`respond_not_enabled` 错误映射。
 - Scope routing：默认 Global、显式空字符串 scope、字面量 `global` 与命名 scope。
-- Events flows：WS 鉴权、订阅/取消订阅、未知事件类型错误、断开后重新订阅。
+- Events flows：WS 鉴权、订阅/取消订阅、仅接受响应或 `hub.event` 入站消息、断线后重新认证并重新订阅。
 
 ## 快速示例
 
@@ -108,3 +115,5 @@ const eventsClient = await DevHubEventsClient.fromRuntime(
   }
 );
 ```
+
+如需自定义运行时发现策略，可自行实现 `RuntimeResolver`；`resolve(options)` 会收到归一化后的客户端选项，默认实现仍只按 Spec 使用 `options.dataDir`、`DEVHUB_DATA_DIR` 和平台默认数据目录。
