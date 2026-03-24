@@ -39,18 +39,6 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_005_SubscribeUnknownType_ShouldReturnInvalidParams()
-    {
-        await using var host = await DevHubHostFixture.StartAsync();
-        await using var eventsClient = await host.CreateEventsClientAsync("events-client");
-        await eventsClient.AuthenticateAsync();
-
-        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => eventsClient.SubscribeAsync(new[] { "unknown.type" }));
-        Assert.Equal(-32602, exception.Code);
-        Assert.Equal("invalid_params", exception.Message);
-    }
-
-    [Fact]
     public async Task M5_E2E_010_DisconnectCleanup_ShouldRequireResubscribeAfterReconnect()
     {
         await using var host = await DevHubHostFixture.StartAsync();

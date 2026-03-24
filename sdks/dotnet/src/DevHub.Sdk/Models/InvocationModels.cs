@@ -467,7 +467,7 @@ public sealed class DevHubEvent
     /// 事件类型。
     /// </summary>
     [JsonPropertyName("type")]
-    public string Type { get; set; } = string.Empty;
+    public DevHubEventType Type { get; set; }
 
     /// <summary>
     /// 事件发生时间。

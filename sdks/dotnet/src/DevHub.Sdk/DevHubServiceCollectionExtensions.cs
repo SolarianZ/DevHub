@@ -36,7 +36,7 @@ public interface IDevHubEventsClientFactory
 public static class DevHubServiceCollectionExtensions
 {
     /// <summary>
-    /// 注册 DevHub SDK 所需的选项与工厂服务。
+    /// 注册 DevHub SDK 所需的选项、公开 seam 与工厂服务。
     /// </summary>
     /// <param name="services">服务集合。</param>
     /// <returns>原始服务集合。</returns>
@@ -45,6 +45,9 @@ public static class DevHubServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions<DevHubClientOptions>();
+        services.TryAddSingleton<IDevHubRuntimeResolver, FileSystemDevHubRuntimeResolver>();
+        services.TryAddSingleton<IDevHubHttpTransportFactory, JsonRpcHttpTransportFactory>();
+        services.TryAddSingleton<IDevHubWebSocketSessionFactory, JsonRpcWebSocketSessionFactory>();
         services.TryAddSingleton<IDevHubClientFactory, DefaultDevHubClientFactory>();
         services.TryAddSingleton<IDevHubEventsClientFactory, DefaultDevHubEventsClientFactory>();
         return services;
@@ -65,23 +68,47 @@ public static class DevHubServiceCollectionExtensions
         return services;
     }
 
-    private sealed class DefaultDevHubClientFactory(IOptionsMonitor<DevHubClientOptions> optionsMonitor) : IDevHubClientFactory
+    private sealed class DefaultDevHubClientFactory(
+        IOptionsMonitor<DevHubClientOptions> optionsMonitor,
+        IDevHubRuntimeResolver runtimeResolver,
+        IDevHubHttpTransportFactory transportFactory) : IDevHubClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
+        private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
+        private readonly IDevHubHttpTransportFactory _transportFactory = transportFactory;
 
         public Task<DevHubClient> CreateAsync(CancellationToken cancellationToken = default)
         {
-            return DevHubClient.FromRuntimeAsync(_optionsMonitor.CurrentValue, cancellationToken);
+            return DevHubClient.FromRuntimeAsync(
+                _optionsMonitor.CurrentValue,
+                new DevHubClientDependencies
+                {
+                    RuntimeResolver = _runtimeResolver,
+                    TransportFactory = _transportFactory
+                },
+                cancellationToken);
         }
     }
 
-    private sealed class DefaultDevHubEventsClientFactory(IOptionsMonitor<DevHubClientOptions> optionsMonitor) : IDevHubEventsClientFactory
+    private sealed class DefaultDevHubEventsClientFactory(
+        IOptionsMonitor<DevHubClientOptions> optionsMonitor,
+        IDevHubRuntimeResolver runtimeResolver,
+        IDevHubWebSocketSessionFactory sessionFactory) : IDevHubEventsClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
+        private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
+        private readonly IDevHubWebSocketSessionFactory _sessionFactory = sessionFactory;
 
         public Task<DevHubEventsClient> CreateAsync(CancellationToken cancellationToken = default)
         {
-            return DevHubEventsClient.FromRuntimeAsync(_optionsMonitor.CurrentValue, cancellationToken);
+            return DevHubEventsClient.FromRuntimeAsync(
+                _optionsMonitor.CurrentValue,
+                new DevHubEventsClientDependencies
+                {
+                    RuntimeResolver = _runtimeResolver,
+                    SessionFactory = _sessionFactory
+                },
+                cancellationToken);
         }
     }
 }

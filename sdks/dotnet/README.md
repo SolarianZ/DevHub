@@ -14,8 +14,10 @@
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
+- 公开扩展点：`runtime resolver`、`HTTP transport`、`WS session`
+- 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
 - 统一错误模型：`DevHubRpcException`
-- 协议辅助常量与结构化错误：`DevHubEventTypes`、`DevHubRpcException.CalleeError`
+- 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
 - 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试
 
@@ -75,7 +77,7 @@ SDK 会按以下优先级解析数据根目录：
 - Linux：`$XDG_DATA_HOME/DevHub/`，若未设置则回退到 `~/.local/share/DevHub/`
 
 SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，并继续通过 `hub.json.tokenFile` 读取令牌。
-若误传 `runtime` 子目录，或仍设置 `DEVHUB_RUNTIME_DIR`、`DEVHUB_APPDEFS_DIR`、`DEVHUB_APPINST_DIR`、`DEVHUB_LOG_DIR` 等旧环境变量，SDK 会直接抛出迁移错误。
+若误传 `runtime` 子目录，SDK 会直接拒绝该路径并要求传入数据根目录。
 SDK 始终以 `hub.json` 为权威端点来源，不会硬编码端口、HTTP 地址或 WebSocket URL。
 
 ## 快速开始
@@ -127,6 +129,36 @@ var eventsClientFactory = serviceProvider.GetRequiredService<IDevHubEventsClient
 
 await using var client = await clientFactory.CreateAsync();
 await using var eventsClient = await eventsClientFactory.CreateAsync();
+```
+
+### 4. 使用公开扩展点
+
+```csharp
+using DevHub.Sdk;
+
+var client = await DevHubClient.FromRuntimeAsync(
+    new DevHubClientOptions
+    {
+        ClientId = "ExampleClient",
+        DataDir = dataDir
+    },
+    new DevHubClientDependencies
+    {
+        RuntimeResolver = runtimeResolver,
+        TransportFactory = transportFactory
+    });
+
+var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
+    new DevHubClientOptions
+    {
+        ClientId = "EventsClient",
+        DataDir = dataDir
+    },
+    new DevHubEventsClientDependencies
+    {
+        RuntimeResolver = runtimeResolver,
+        SessionFactory = sessionFactory
+    });
 ```
 
 ## HTTP 用法示例
@@ -247,6 +279,7 @@ foreach (var item in poll.Items)
 
 ```csharp
 using DevHub.Sdk;
+using DevHub.Sdk.Models;
 
 await using var eventsClient = await DevHubEventsClient.FromRuntimeAsync(new DevHubClientOptions
 {
@@ -300,11 +333,25 @@ catch (DevHubRpcException ex)
 - `DevHubClientOptions`
 - `DevHubClient`
 - `DevHubEventsClient`
+- `DevHubClientDependencies` / `DevHubEventsClientDependencies`
+- `IDevHubRuntimeResolver`
+- `IDevHubHttpTransport` / `IDevHubHttpTransportFactory`
+- `IDevHubWebSocketSession` / `IDevHubWebSocketSessionFactory`
 - `IDevHubClientFactory` / `IDevHubEventsClientFactory`
 - `DevHubRpcException`
 - `DevHubRpcErrorCode`
-- `DevHubEventTypes`
+- `DevHubEventType` / `DevHubEventTypes`
 - `DevHub.Sdk.Models.*`
+
+## 集成测试隔离模式
+
+`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 运行的 `.NET SDK` 集成测试会自行启动独立临时 Host，并为每个测试用例分配独立临时 `DEVHUB_DATA_DIR`。
+
+这些测试不会复用开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
+
+因此，同一台机器可以并行运行 `.NET / Python / JS` SDK 集成测试，因为每套测试都必须拥有自己的临时 Host 与独立数据根目录。
+
+仓库级 smoke、手工联调或示例运行可以连接本机已启动的 Hub，但那属于另一种运行方式，不等同于 SDK 集成测试模式。
 
 ## 常用命令
 

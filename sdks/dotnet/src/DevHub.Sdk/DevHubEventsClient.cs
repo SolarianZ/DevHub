@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -15,34 +13,22 @@ namespace DevHub.Sdk;
 public sealed class DevHubEventsClient : IAsyncDisposable
 {
     private readonly DevHubClientOptions _options;
-    private readonly RuntimeConnectionInfo _connectionInfo;
-    private readonly IWebSocketConnectionFactory _connectionFactory;
-    private readonly Func<string> _requestIdFactory;
-    private readonly Channel<DevHubEvent> _eventChannel;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingRequests;
-    private readonly SemaphoreSlim _sendLock;
-    private readonly CancellationTokenSource _disposeCts;
-
-    private IWebSocketConnection? _connection;
-    private Task? _receiverLoopTask;
+    private readonly DevHubRuntimeConnectionInfo _connectionInfo;
+    private readonly IDevHubWebSocketSession _session;
+    private Channel<DevHubEvent> _eventChannel;
     private bool _authenticated;
     private bool _eventStreamAvailable;
     private bool _disposed;
 
     private DevHubEventsClient(
         DevHubClientOptions options,
-        RuntimeConnectionInfo connectionInfo,
-        IWebSocketConnectionFactory connectionFactory,
-        Func<string>? requestIdFactory = null)
+        DevHubRuntimeConnectionInfo connectionInfo,
+        IDevHubWebSocketSession session)
     {
         _options = options;
         _connectionInfo = connectionInfo;
-        _connectionFactory = connectionFactory;
-        _requestIdFactory = requestIdFactory ?? CreateRequestId;
-        _eventChannel = Channel.CreateUnbounded<DevHubEvent>();
-        _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JsonElement>>(StringComparer.Ordinal);
-        _sendLock = new SemaphoreSlim(1, 1);
-        _disposeCts = new CancellationTokenSource();
+        _session = session;
+        _eventChannel = CreateEventChannel();
     }
 
     /// <summary>
@@ -63,9 +49,38 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubEventsClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 通过运行时发现信息创建客户端，并允许注入公开扩展点。
+    /// </summary>
+    /// <param name="options">客户端选项。</param>
+    /// <param name="dependencies">公开扩展点依赖项。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>客户端实例。</returns>
+    public static async Task<DevHubEventsClient> FromRuntimeAsync(
+        DevHubClientOptions options,
+        DevHubEventsClientDependencies? dependencies,
+        CancellationToken cancellationToken = default)
+    {
         var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
-        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(clonedOptions, cancellationToken);
-        return new DevHubEventsClient(clonedOptions, connectionInfo, new ClientWebSocketConnectionFactory());
+        clonedOptions.Validate();
+
+        dependencies ??= new DevHubEventsClientDependencies();
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+
+        DevHubEventsClient? client = null;
+        var session = dependencies.SessionFactory.Create(new DevHubWebSocketSessionOptions
+        {
+            WebSocketEndpoint = connectionInfo.WebSocketEndpoint,
+            RequestTimeout = clonedOptions.RequestTimeout,
+            OnEvent = paramsElement => client!.HandleEvent(paramsElement),
+            OnTerminated = error => client?.HandleTermination(error)
+        });
+
+        client = new DevHubEventsClient(clonedOptions, connectionInfo, session);
+        return client;
     }
 
     internal static async Task<DevHubEventsClient> FromRuntimeAsync(
@@ -74,9 +89,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         Func<string>? requestIdFactory = null,
         CancellationToken cancellationToken = default)
     {
-        var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
-        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(clonedOptions, cancellationToken);
-        return new DevHubEventsClient(clonedOptions, connectionInfo, connectionFactory, requestIdFactory);
+        return await FromRuntimeAsync(
+            options,
+            new DevHubEventsClientDependencies
+            {
+                SessionFactory = new TestWebSocketSessionFactory(connectionFactory, requestIdFactory)
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -91,11 +110,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             throw new InvalidOperationException("当前 WebSocket 客户端已完成认证。");
         }
 
-        await EnsureConnectedAsync(cancellationToken);
-
         try
         {
-            var result = await SendRequestAsync(
+            var result = await _session.SendRequestAsync(
                 "hub.ws.authenticate",
                 new Dictionary<string, object?>
                 {
@@ -104,7 +121,6 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                     ["clientId"] = _options.ClientId,
                     ["clientSessionId"] = _options.ClientSessionId.ToString("D")
                 },
-                requireAuthenticated: false,
                 cancellationToken);
 
             var payload = JsonSerializer.Deserialize<AuthenticateResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
@@ -115,12 +131,20 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                 throw new InvalidOperationException("hub.ws.authenticate 返回结果非法。");
             }
 
+            _eventChannel = CreateEventChannel();
             _authenticated = true;
             _eventStreamAvailable = true;
         }
         catch
         {
-            await DisposeConnectionAsync();
+            try
+            {
+                await _session.DisconnectAsync("authenticate_failed", CancellationToken.None);
+            }
+            catch
+            {
+            }
+
             throw;
         }
     }
@@ -133,8 +157,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>Ping 结果。</returns>
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
+        EnsureAuthenticated();
         object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
-        var result = await SendRequestAsync("hub.ping", parameters, requireAuthenticated: true, cancellationToken);
+        var result = await _session.SendRequestAsync("hub.ping", parameters, cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.ping.result");
         ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
@@ -148,7 +173,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>应用定义列表。</returns>
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
-        var result = await SendRequestAsync("hub.apps.listDefinitions", null, requireAuthenticated: true, cancellationToken);
+        EnsureAuthenticated();
+        var result = await _session.SendRequestAsync("hub.apps.listDefinitions", null, cancellationToken);
         var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
@@ -172,10 +198,10 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
-        var result = await SendRequestAsync(
+        EnsureAuthenticated();
+        var result = await _session.SendRequestAsync(
             "hub.apps.getDefinition",
             RequestPayloadFactory.BuildGetDefinitionParams(appId),
-            requireAuthenticated: true,
             cancellationToken);
 
         ResponsePayloadReader.ValidateAppDefinitionElement(
@@ -200,10 +226,10 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         ListInstancesRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await SendRequestAsync(
+        EnsureAuthenticated();
+        var result = await _session.SendRequestAsync(
             "hub.apps.listInstances",
             RequestPayloadFactory.BuildListInstancesParams(request),
-            requireAuthenticated: true,
             cancellationToken);
 
         var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
@@ -227,7 +253,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <param name="types">事件类型列表；为空或 <see langword="null"/> 表示订阅全部。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>订阅标识。</returns>
-    public async Task<string> SubscribeAsync(IEnumerable<string>? types = null, CancellationToken cancellationToken = default)
+    public async Task<string> SubscribeAsync(IEnumerable<DevHubEventType>? types = null, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
 
@@ -235,26 +261,21 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         if (types is not null)
         {
             var typeArray = types.ToArray();
-            if (typeArray.Any(static item => item is null))
+            if (typeArray.Any(static item => !item.IsSupported))
             {
-                throw new ArgumentException("types 不能包含 null。", nameof(types));
-            }
-
-            if (typeArray.Any(static item => string.IsNullOrWhiteSpace(item)))
-            {
-                throw new ArgumentException("types 不能包含空白字符串。", nameof(types));
+                throw new ArgumentException("types 只能包含受支持的 DevHub 事件类型。", nameof(types));
             }
 
             if (typeArray.Length > 0)
             {
                 parameters = new Dictionary<string, object?>
                 {
-                    ["types"] = typeArray
+                    ["types"] = typeArray.Select(static item => item.Value).ToArray()
                 };
             }
         }
 
-        var result = await SendRequestAsync("hub.events.subscribe", parameters, requireAuthenticated: true, cancellationToken);
+        var result = await _session.SendRequestAsync("hub.events.subscribe", parameters, cancellationToken);
         var payload = JsonSerializer.Deserialize<SubscribeResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
             ?? throw new InvalidOperationException("无法解析 hub.events.subscribe 结果。");
 
@@ -276,13 +297,12 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         EnsureAuthenticated();
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
 
-        var result = await SendRequestAsync(
+        var result = await _session.SendRequestAsync(
             "hub.events.unsubscribe",
             new Dictionary<string, object?>
             {
                 ["subscriptionId"] = subscriptionId
             },
-            requireAuthenticated: true,
             cancellationToken);
 
         var payload = JsonSerializer.Deserialize<OkOnlyContract>(result.GetRawText(), DevHubJson.SerializerOptions)
@@ -302,18 +322,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public IAsyncEnumerable<DevHubEvent> ReadEventsAsync(CancellationToken cancellationToken = default)
     {
         EnsureEventStreamAvailable();
-        return ReadEventsCore(cancellationToken);
-    }
-
-    private async IAsyncEnumerable<DevHubEvent> ReadEventsCore([EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        while (await _eventChannel.Reader.WaitToReadAsync(cancellationToken))
-        {
-            while (_eventChannel.Reader.TryRead(out var evt))
-            {
-                yield return evt;
-            }
-        }
+        return ReadEventsCore(_eventChannel, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -325,285 +334,46 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         _disposed = true;
-        _disposeCts.Cancel();
-
-        await DisposeConnectionAsync();
-
-        if (_receiverLoopTask is not null)
-        {
-            try
-            {
-                await _receiverLoopTask;
-            }
-            catch
-            {
-            }
-        }
-
+        _authenticated = false;
+        _eventStreamAvailable = false;
         _eventChannel.Writer.TryComplete();
-        _sendLock.Dispose();
-        _disposeCts.Dispose();
+        await _session.DisposeAsync();
     }
 
-    private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
+    private void HandleEvent(JsonElement paramsElement)
     {
-        if (_connection is not null)
+        var evt = JsonSerializer.Deserialize<DevHubEvent>(paramsElement.GetRawText(), DevHubJson.SerializerOptions)
+            ?? throw new InvalidOperationException("无法解析 hub.event.params。");
+        ValidateEvent(evt);
+
+        if (!_eventChannel.Writer.TryWrite(evt))
+        {
+            throw new InvalidOperationException("当前事件流不可用。");
+        }
+    }
+
+    private void HandleTermination(Exception? terminalException)
+    {
+        if (_disposed)
         {
             return;
         }
 
-        using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-        _connection = await _connectionFactory.ConnectAsync(_connectionInfo.WebSocketEndpoint, linkedCts.Token);
-        _receiverLoopTask = Task.Run(() => RunReceiveLoopAsync(_connection, _disposeCts.Token), CancellationToken.None);
+        _authenticated = false;
+        _eventChannel.Writer.TryComplete(terminalException);
     }
 
-    private async Task<JsonElement> SendRequestAsync(string method, object? parameters, bool requireAuthenticated, CancellationToken cancellationToken)
+    private static async IAsyncEnumerable<DevHubEvent> ReadEventsCore(
+        Channel<DevHubEvent> eventChannel,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        ThrowIfDisposed();
-        if (requireAuthenticated)
+        while (await eventChannel.Reader.WaitToReadAsync(cancellationToken))
         {
-            EnsureAuthenticated();
-        }
-
-        var connection = _connection ?? throw new InvalidOperationException("当前 WebSocket 尚未建立连接。");
-        var requestId = _requestIdFactory();
-        var waiter = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_pendingRequests.TryAdd(requestId, waiter))
-        {
-            throw new InvalidOperationException($"重复的请求标识：{requestId}");
-        }
-
-        try
-        {
-            var payload = JsonSerializer.Serialize(
-                new
-                {
-                    jsonrpc = "2.0",
-                    id = requestId,
-                    method,
-                    @params = parameters
-                },
-                DevHubJson.SerializerOptions);
-
-            await _sendLock.WaitAsync(cancellationToken);
-            try
+            while (eventChannel.Reader.TryRead(out var evt))
             {
-                await connection.SendTextAsync(payload, cancellationToken);
-            }
-            finally
-            {
-                _sendLock.Release();
-            }
-
-            using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-            return await waiter.Task.WaitAsync(linkedCts.Token);
-        }
-        catch
-        {
-            _pendingRequests.TryRemove(requestId, out _);
-            throw;
-        }
-    }
-
-    private async Task RunReceiveLoopAsync(IWebSocketConnection connection, CancellationToken cancellationToken)
-    {
-        Exception? terminalException = null;
-
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var message = await connection.ReceiveAsync(cancellationToken);
-                if (message.MessageType == WebSocketMessageType.Close)
-                {
-                    break;
-                }
-
-                if (message.MessageType != WebSocketMessageType.Text || string.IsNullOrWhiteSpace(message.Text))
-                {
-                    continue;
-                }
-
-                using var document = JsonDocument.Parse(message.Text);
-                var root = document.RootElement;
-                ValidateIncomingEnvelope(root);
-
-                if (TryHandleResponse(root, out var requestId, out var resultElement))
-                {
-                    CompletePendingRequest(requestId, root, resultElement);
-                    continue;
-                }
-
-                if (TryGetEventParams(root, out var paramsElement))
-                {
-                    var evt = JsonSerializer.Deserialize<DevHubEvent>(paramsElement.GetRawText(), DevHubJson.SerializerOptions);
-                    if (evt is not null)
-                    {
-                        ValidateEvent(evt);
-                        await _eventChannel.Writer.WriteAsync(evt, cancellationToken);
-                    }
-
-                    continue;
-                }
-
-                ThrowUnexpectedIncomingMessage(root);
+                yield return evt;
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            terminalException = ex;
-        }
-        finally
-        {
-            _authenticated = false;
-            foreach (var pendingRequest in _pendingRequests.ToArray())
-            {
-                if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
-                {
-                    pending.TrySetException(terminalException ?? new InvalidOperationException("WebSocket 连接已关闭。"));
-                }
-            }
-
-            _eventChannel.Writer.TryComplete(terminalException);
-            await DisposeConnectionAsync();
-        }
-    }
-
-    private void CompletePendingRequest(string requestId, JsonElement root, JsonElement resultElement)
-    {
-        if (!_pendingRequests.TryRemove(requestId, out var waiter))
-        {
-            return;
-        }
-
-        if (root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
-        {
-            var code = errorElement.GetProperty("code").GetInt32();
-            var message = errorElement.GetProperty("message").GetString() ?? "internal_error";
-            JsonElement? data = null;
-            if (errorElement.TryGetProperty("data", out var dataElement))
-            {
-                data = dataElement.Clone();
-            }
-
-            waiter.TrySetException(new DevHubRpcException(code, message, data, requestId));
-            return;
-        }
-
-        waiter.TrySetResult(resultElement.Clone());
-    }
-
-    private static bool TryHandleResponse(JsonElement root, out string requestId, out JsonElement resultElement)
-    {
-        requestId = string.Empty;
-        resultElement = default;
-
-        if (!root.TryGetProperty("id", out _))
-        {
-            return false;
-        }
-
-        requestId = ReadResponseId(root);
-
-        var hasResult = root.TryGetProperty("result", out resultElement);
-        var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
-        if (!hasResult && !hasError)
-        {
-            return false;
-        }
-
-        if (hasResult == hasError)
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 响应必须且只能包含 result 或 error。");
-        }
-
-        if (hasResult && resultElement.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC result 必须为对象。");
-        }
-
-        return true;
-    }
-
-    private static bool TryGetEventParams(JsonElement root, out JsonElement paramsElement)
-    {
-        paramsElement = default;
-        if (!root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        if (!string.Equals(methodElement.GetString(), "hub.event", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (root.TryGetProperty("id", out _))
-        {
-            throw new InvalidOperationException("hub.event 必须为通知，禁止包含 id。");
-        }
-
-        if (!root.TryGetProperty("params", out paramsElement) || paramsElement.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("hub.event.params 非法。");
-        }
-
-        if (root.TryGetProperty("result", out _) ||
-            root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
-        {
-            throw new InvalidOperationException("hub.event 通知禁止包含 result 或 error。");
-        }
-
-        return true;
-    }
-
-    private static void ThrowUnexpectedIncomingMessage(JsonElement root)
-    {
-        if (root.TryGetProperty("id", out _))
-        {
-            throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 响应。");
-        }
-
-        if (root.TryGetProperty("method", out var methodElement) && methodElement.ValueKind == JsonValueKind.String)
-        {
-            var method = methodElement.GetString() ?? string.Empty;
-            throw new InvalidOperationException($"收到不受支持的 WebSocket 通知：{method}");
-        }
-
-        throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 消息。");
-    }
-
-    private static void ValidateIncomingEnvelope(JsonElement root)
-    {
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 消息根必须为对象。");
-        }
-
-        if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
-            jsonRpcElement.ValueKind != JsonValueKind.String ||
-            !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 消息的 jsonrpc 版本非法。");
-        }
-    }
-
-    private static string ReadResponseId(JsonElement root)
-    {
-        if (!root.TryGetProperty("id", out var idElement))
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 响应缺少 id 字段。");
-        }
-
-        return idElement.ValueKind switch
-        {
-            JsonValueKind.String => idElement.GetString() ?? string.Empty,
-            JsonValueKind.Number => idElement.GetRawText(),
-            _ => throw new InvalidOperationException("WebSocket JSON-RPC 响应的 id 类型非法。")
-        };
     }
 
     private static void ValidateEvent(DevHubEvent evt)
@@ -613,7 +383,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             throw new InvalidOperationException("hub.event.params.subscriptionId 非法。");
         }
 
-        if (string.IsNullOrWhiteSpace(evt.Type))
+        if (!evt.Type.IsSupported)
         {
             throw new InvalidOperationException("hub.event.params.type 非法。");
         }
@@ -647,42 +417,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
-    private async Task DisposeConnectionAsync()
+    private static Channel<DevHubEvent> CreateEventChannel()
     {
-        if (_connection is null)
-        {
-            return;
-        }
-
-        var connection = _connection;
-        _connection = null;
-
-        try
-        {
-            using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            await connection.CloseAsync(WebSocketCloseStatus.NormalClosure, "client_dispose", cancellationTokenSource.Token);
-        }
-        catch
-        {
-        }
-
-        await connection.DisposeAsync();
-    }
-
-    private CancellationTokenSource CreateLinkedTokenSource(CancellationToken cancellationToken)
-    {
-        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-        if (_options.RequestTimeout is { } requestTimeout)
-        {
-            linkedCts.CancelAfter(requestTimeout);
-        }
-
-        return linkedCts;
-    }
-
-    private static string CreateRequestId()
-    {
-        return $"ws-{Guid.NewGuid():N}";
+        return Channel.CreateUnbounded<DevHubEvent>();
     }
 
     private sealed class AuthenticateResultContract
@@ -697,5 +434,22 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         public bool Ok { get; set; }
 
         public string SubscriptionId { get; set; } = string.Empty;
+    }
+
+    private sealed class TestWebSocketSessionFactory : IDevHubWebSocketSessionFactory
+    {
+        private readonly IWebSocketConnectionFactory _connectionFactory;
+        private readonly Func<string>? _requestIdFactory;
+
+        public TestWebSocketSessionFactory(IWebSocketConnectionFactory connectionFactory, Func<string>? requestIdFactory)
+        {
+            _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+            _requestIdFactory = requestIdFactory;
+        }
+
+        public IDevHubWebSocketSession Create(DevHubWebSocketSessionOptions options)
+        {
+            return new JsonRpcWebSocketSession(options, _connectionFactory, _requestIdFactory);
+        }
     }
 }

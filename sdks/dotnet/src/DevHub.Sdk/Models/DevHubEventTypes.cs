@@ -1,37 +1,42 @@
 namespace DevHub.Sdk.Models;
 
 /// <summary>
-/// DevHub 协议定义的事件类型常量。
+/// DevHub 协议定义的事件类型便捷访问器。
 /// </summary>
 public static class DevHubEventTypes
 {
     /// <summary>
     /// 应用实例已注册。
     /// </summary>
-    public const string AppInstanceRegistered = "app.instance.registered";
+    public static DevHubEventType AppInstanceRegistered => DevHubEventType.AppInstanceRegistered;
 
     /// <summary>
     /// 应用实例已注销。
     /// </summary>
-    public const string AppInstanceUnregistered = "app.instance.unregistered";
+    public static DevHubEventType AppInstanceUnregistered => DevHubEventType.AppInstanceUnregistered;
 
     /// <summary>
     /// 调用已入队。
     /// </summary>
-    public const string InvocationQueued = "invocation.queued";
+    public static DevHubEventType InvocationQueued => DevHubEventType.InvocationQueued;
 
     /// <summary>
     /// 调用已投递。
     /// </summary>
-    public const string InvocationDelivered = "invocation.delivered";
+    public static DevHubEventType InvocationDelivered => DevHubEventType.InvocationDelivered;
 
     /// <summary>
     /// 调用已完成。
     /// </summary>
-    public const string InvocationCompleted = "invocation.completed";
+    public static DevHubEventType InvocationCompleted => DevHubEventType.InvocationCompleted;
 
     /// <summary>
     /// 调用已失败。
     /// </summary>
-    public const string InvocationFailed = "invocation.failed";
+    public static DevHubEventType InvocationFailed => DevHubEventType.InvocationFailed;
+
+    /// <summary>
+    /// 所有受支持事件类型。
+    /// </summary>
+    public static IReadOnlyList<DevHubEventType> All => DevHubEventType.All;
 }

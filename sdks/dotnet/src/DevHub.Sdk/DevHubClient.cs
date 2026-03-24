@@ -9,9 +9,9 @@ namespace DevHub.Sdk;
 /// </summary>
 public sealed class DevHubClient : IAsyncDisposable
 {
-    private readonly JsonRpcHttpTransport _transport;
+    private readonly IDevHubHttpTransport _transport;
 
-    private DevHubClient(DevHubClientOptions options, RuntimeConnectionInfo connectionInfo, JsonRpcHttpTransport transport)
+    private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, IDevHubHttpTransport transport)
     {
         Options = options;
         ConnectionInfo = connectionInfo;
@@ -28,7 +28,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// </summary>
     public HubRuntime Runtime => ConnectionInfo.Runtime;
 
-    internal RuntimeConnectionInfo ConnectionInfo { get; }
+    internal DevHubRuntimeConnectionInfo ConnectionInfo { get; }
 
     /// <summary>
     /// 通过运行时发现信息创建客户端。
@@ -38,9 +38,27 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 通过运行时发现信息创建客户端，并允许注入公开扩展点。
+    /// </summary>
+    /// <param name="options">客户端选项。</param>
+    /// <param name="dependencies">公开扩展点依赖项。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>客户端实例。</returns>
+    public static async Task<DevHubClient> FromRuntimeAsync(
+        DevHubClientOptions options,
+        DevHubClientDependencies? dependencies,
+        CancellationToken cancellationToken = default)
+    {
         var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
-        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(clonedOptions, cancellationToken);
-        var transport = JsonRpcHttpTransport.Create(clonedOptions, connectionInfo);
+        clonedOptions.Validate();
+
+        dependencies ??= new DevHubClientDependencies();
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var transport = dependencies.TransportFactory.Create(clonedOptions, connectionInfo);
         return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
 
@@ -50,10 +68,13 @@ public sealed class DevHubClient : IAsyncDisposable
         Func<string>? requestIdFactory = null,
         CancellationToken cancellationToken = default)
     {
-        var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
-        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(clonedOptions, cancellationToken);
-        var transport = JsonRpcHttpTransport.Create(clonedOptions, connectionInfo, handler, requestIdFactory);
-        return new DevHubClient(clonedOptions, connectionInfo, transport);
+        return await FromRuntimeAsync(
+            options,
+            new DevHubClientDependencies
+            {
+                TransportFactory = new TestHttpTransportFactory(handler, requestIdFactory)
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -285,5 +306,22 @@ public sealed class DevHubClient : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         return _transport.DisposeAsync();
+    }
+
+    private sealed class TestHttpTransportFactory : IDevHubHttpTransportFactory
+    {
+        private readonly HttpMessageHandler _handler;
+        private readonly Func<string>? _requestIdFactory;
+
+        public TestHttpTransportFactory(HttpMessageHandler handler, Func<string>? requestIdFactory)
+        {
+            _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+            _requestIdFactory = requestIdFactory;
+        }
+
+        public IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
+        {
+            return JsonRpcHttpTransport.Create(options, connectionInfo, _handler, _requestIdFactory);
+        }
     }
 }

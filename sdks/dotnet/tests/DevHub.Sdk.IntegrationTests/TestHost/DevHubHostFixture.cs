@@ -40,6 +40,10 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
+    internal string TempRoot => _tempRoot;
+
+    internal int HostProcessId => _hostProcess?.Id ?? 0;
+
     public static async Task<DevHubHostFixture> StartAsync()
     {
         var repoRoot = ResolveRepositoryRoot();

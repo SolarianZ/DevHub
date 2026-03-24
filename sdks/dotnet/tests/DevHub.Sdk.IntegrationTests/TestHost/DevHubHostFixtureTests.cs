@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
 
@@ -31,6 +32,19 @@ public sealed class DevHubHostFixtureTests
         Assert.NotEmpty(logFiles);
     }
 
+    [Fact]
+    public async Task Impl_HostFixture_WhenDisposed_ShouldCleanupTempRootAndExitHostProcess()
+    {
+        var host = await DevHubHostFixture.StartAsync();
+        var tempRoot = host.TempRoot;
+        var hostProcessId = host.HostProcessId;
+
+        await host.DisposeAsync();
+
+        Assert.False(Directory.Exists(tempRoot));
+        Assert.False(IsProcessRunning(hostProcessId));
+    }
+
     private static async Task<IReadOnlyList<string>> WaitForFilesAsync(string directory, string searchPattern, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow.Add(timeout);
@@ -50,5 +64,18 @@ public sealed class DevHubHostFixtureTests
         }
 
         return Array.Empty<string>();
+    }
+
+    private static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

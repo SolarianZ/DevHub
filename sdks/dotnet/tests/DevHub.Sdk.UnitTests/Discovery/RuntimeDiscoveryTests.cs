@@ -15,14 +15,6 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private static readonly string[] LegacyEnvironmentVariableNames =
-    [
-        "DEVHUB_RUNTIME_DIR",
-        "DEVHUB_APPDEFS_DIR",
-        "DEVHUB_APPINST_DIR",
-        "DEVHUB_LOG_DIR"
-    ];
-
     private readonly string _tempRoot;
 
     public RuntimeDiscoveryTests()
@@ -245,24 +237,6 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         Assert.Equal("token-explicit", connectionInfo.Token);
     }
 
-    [Theory]
-    [InlineData("DEVHUB_RUNTIME_DIR")]
-    [InlineData("DEVHUB_APPDEFS_DIR")]
-    [InlineData("DEVHUB_APPINST_DIR")]
-    [InlineData("DEVHUB_LOG_DIR")]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenLegacyEnvironmentVariableProvided_ShouldThrowMigrationException(string legacyEnvironmentVariableName)
-    {
-        using var scope = CreateEnvironmentScope(null, (legacyEnvironmentVariableName, Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"))));
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
-        {
-            ClientId = "unit-test-client"
-        }, CancellationToken.None));
-
-        Assert.Contains(legacyEnvironmentVariableName, exception.Message, StringComparison.Ordinal);
-        Assert.Contains("DEVHUB_DATA_DIR", exception.Message, StringComparison.Ordinal);
-    }
-
     [Fact]
     public async Task M5_DN_UT_002_RuntimeDiscovery_WhenRuntimeDirectoryPassedAsDataDir_ShouldThrowMigrationException()
     {
@@ -381,9 +355,10 @@ public sealed class RuntimeDiscoveryTests : IDisposable
 
     private static EnvironmentVariableCollectionScope CreateEnvironmentScope(string? dataDir = null, params (string Name, string? Value)[] overrides)
     {
-        var values = LegacyEnvironmentVariableNames.ToDictionary(name => name, static _ => (string?)null, StringComparer.Ordinal)
-            .Append(new KeyValuePair<string, string?>("DEVHUB_DATA_DIR", dataDir))
-            .ToDictionary(static item => item.Key, static item => item.Value, StringComparer.Ordinal);
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["DEVHUB_DATA_DIR"] = dataDir
+        };
 
         foreach (var (name, value) in overrides)
         {

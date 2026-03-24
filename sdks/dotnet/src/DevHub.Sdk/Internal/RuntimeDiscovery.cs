@@ -3,31 +3,11 @@ using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.Internal;
 
-internal sealed class RuntimeConnectionInfo
-{
-    public required string RuntimeDirectory { get; init; }
-
-    public required string Token { get; init; }
-
-    public required HubRuntime Runtime { get; init; }
-
-    public Uri RpcEndpoint => new($"{Runtime.HttpBaseUrl}/rpc", UriKind.Absolute);
-
-    public Uri WebSocketEndpoint => new(Runtime.WsUrl, UriKind.Absolute);
-}
-
 internal static class RuntimeDiscovery
 {
     private const string DataDirEnvironmentVariableName = "DEVHUB_DATA_DIR";
-    private static readonly string[] LegacyEnvironmentVariableNames =
-    [
-        "DEVHUB_RUNTIME_DIR",
-        "DEVHUB_APPDEFS_DIR",
-        "DEVHUB_APPINST_DIR",
-        "DEVHUB_LOG_DIR"
-    ];
 
-    internal static async Task<RuntimeConnectionInfo> DiscoverAsync(DevHubClientOptions options, CancellationToken cancellationToken)
+    internal static async Task<DevHubRuntimeConnectionInfo> DiscoverAsync(DevHubClientOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -62,12 +42,7 @@ internal static class RuntimeDiscovery
             throw new InvalidOperationException($"token 文件为空：{runtime.TokenFile}");
         }
 
-        return new RuntimeConnectionInfo
-        {
-            RuntimeDirectory = runtimeDirectory,
-            Token = token,
-            Runtime = runtime
-        };
+        return new DevHubRuntimeConnectionInfo(runtimeDirectory, token, runtime);
     }
 
     internal static string ResolveDataDirectory(string? dataDirectoryOverride)
@@ -78,8 +53,6 @@ internal static class RuntimeDiscovery
             EnsureDataDirectoryIsNotRuntimeDirectory(explicitDataDirectory);
             return explicitDataDirectory;
         }
-
-        ThrowIfLegacyEnvironmentVariablesPresent();
 
         var dataDirectoryFromEnvironment = Environment.GetEnvironmentVariable(DataDirEnvironmentVariableName);
         var resolvedDataDirectory = !string.IsNullOrWhiteSpace(dataDirectoryFromEnvironment)
@@ -94,20 +67,6 @@ internal static class RuntimeDiscovery
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         return Path.Combine(dataDirectory, "runtime");
-    }
-
-    private static void ThrowIfLegacyEnvironmentVariablesPresent()
-    {
-        var legacyEnvironmentVariables = LegacyEnvironmentVariableNames
-            .Where(static name => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)))
-            .ToArray();
-        if (legacyEnvironmentVariables.Length == 0)
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"检测到已废弃的环境变量：{string.Join(", ", legacyEnvironmentVariables)}。请改用 DEVHUB_DATA_DIR 或 DevHubClientOptions.DataDir，并将 hub.json 放在 <dataDir>/runtime/hub.json。");
     }
 
     private static void EnsureDataDirectoryIsNotRuntimeDirectory(string dataDirectory)

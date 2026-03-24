@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using DevHub.Sdk.Internal;
+using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.UnitTests.Events;
 
@@ -31,7 +32,7 @@ public sealed class WsLifecycleTests : IDisposable
             factory,
             () => "ws-auth-1");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SubscribeAsync(new[] { "invocation.completed" }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted }));
         Assert.Throws<InvalidOperationException>(() => client.ReadEventsAsync());
     }
 
@@ -73,12 +74,12 @@ public sealed class WsLifecycleTests : IDisposable
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
 
         await client.AuthenticateAsync();
-        var subscriptionId = await client.SubscribeAsync(new[] { "invocation.completed" });
+        var subscriptionId = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
         Assert.Equal("sub-1", subscriptionId);
 
         var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
-        Assert.Equal("invocation.completed", enumerator.Current.Type);
+        Assert.Equal(DevHubEventTypes.InvocationCompleted, enumerator.Current.Type);
         Assert.Equal("sub-1", enumerator.Current.SubscriptionId);
 
         Assert.Collection(connection.SentTexts,
@@ -205,14 +206,107 @@ public sealed class WsLifecycleTests : IDisposable
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
 
         await client.AuthenticateAsync();
-        _ = await client.SubscribeAsync(new[] { "invocation.completed" });
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
         await connection.WaitForCloseObservedAsync();
 
         await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
-        Assert.Equal("invocation.completed", enumerator.Current.Type);
+        Assert.Equal(DevHubEventTypes.InvocationCompleted, enumerator.Current.Type);
         Assert.Equal("sub-1", enumerator.Current.SubscriptionId);
         Assert.False(await enumerator.MoveNextAsync());
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_WhenConnectionTerminates_ShouldAllowAuthenticateAgainAndRequireResubscribe()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+
+        var firstConnection = new FakeWebSocketConnection();
+        firstConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage("""{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"invocation.completed","timeUtc":"2026-03-09T00:00:00Z","payload":{"invocationId":"invk-1"}}}"""),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var secondConnection = new FakeWebSocketConnection();
+        secondConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-2\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-2","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-2\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-2","result":{"ok":true,"subscriptionId":"sub-2"}}"""),
+                    CreateTextMessage("""{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-2","type":"invocation.completed","timeUtc":"2026-03-09T00:00:01Z","payload":{"invocationId":"invk-2"}}}"""),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new SequenceWebSocketConnectionFactory(firstConnection, secondConnection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1", "ws-auth-2", "ws-sub-2").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+        await firstConnection.WaitForCloseObservedAsync();
+
+        await using (var firstEnumerator = client.ReadEventsAsync().GetAsyncEnumerator())
+        {
+            Assert.True(await firstEnumerator.MoveNextAsync());
+            Assert.Equal("invk-1", firstEnumerator.Current.Payload!.Value.GetProperty("invocationId").GetString());
+            Assert.False(await firstEnumerator.MoveNextAsync());
+        }
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        await using (var secondEnumerator = client.ReadEventsAsync().GetAsyncEnumerator())
+        {
+            Assert.True(await secondEnumerator.MoveNextAsync());
+            Assert.Equal("invk-2", secondEnumerator.Current.Payload!.Value.GetProperty("invocationId").GetString());
+            Assert.Equal(DevHubEventTypes.InvocationCompleted, secondEnumerator.Current.Type);
+        }
+
+        Assert.Collection(firstConnection.SentTexts,
+            sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.events.subscribe", sent, StringComparison.Ordinal));
+
+        Assert.Collection(secondConnection.SentTexts,
+            sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.events.subscribe", sent, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -377,7 +471,7 @@ public sealed class WsLifecycleTests : IDisposable
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
 
         await client.AuthenticateAsync();
-        _ = await client.SubscribeAsync(new[] { "invocation.completed" });
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
@@ -427,7 +521,7 @@ public sealed class WsLifecycleTests : IDisposable
             new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
 
         await client.AuthenticateAsync();
-        _ = await client.SubscribeAsync(new[] { "invocation.completed" });
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
@@ -504,6 +598,26 @@ public sealed class WsLifecycleTests : IDisposable
         public Task<IWebSocketConnection> ConnectAsync(Uri uri, CancellationToken cancellationToken)
         {
             return Task.FromResult(_connection);
+        }
+    }
+
+    private sealed class SequenceWebSocketConnectionFactory : IWebSocketConnectionFactory
+    {
+        private readonly Queue<IWebSocketConnection> _connections;
+
+        public SequenceWebSocketConnectionFactory(params IWebSocketConnection[] connections)
+        {
+            _connections = new Queue<IWebSocketConnection>(connections);
+        }
+
+        public Task<IWebSocketConnection> ConnectAsync(Uri uri, CancellationToken cancellationToken)
+        {
+            if (_connections.Count == 0)
+            {
+                throw new InvalidOperationException("没有可用的测试连接。");
+            }
+
+            return Task.FromResult(_connections.Dequeue());
         }
     }
 
