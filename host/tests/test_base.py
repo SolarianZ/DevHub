@@ -171,15 +171,33 @@ def _parse_command_string(raw_command: str) -> List[str]:
 
 def get_default_test_hub_command() -> List[str]:
     """获取隔离 Hub 测试使用的默认启动命令。"""
-    host_executable = os.path.join(get_test_project_root(), "src", "DevHub.Host", "bin", "Release", "net10.0", "DevHub.Host.exe")
+    host_executable = os.path.join(
+        get_test_project_root(),
+        "host",
+        "src",
+        "DevHub.Host",
+        "bin",
+        "Release",
+        "net10.0",
+        "DevHub.Host.exe",
+    )
     if os.name == "nt" and os.path.exists(host_executable):
         return [host_executable]
 
-    host_dll = os.path.join(get_test_project_root(), "src", "DevHub.Host", "bin", "Release", "net10.0", "DevHub.Host.dll")
+    host_dll = os.path.join(
+        get_test_project_root(),
+        "host",
+        "src",
+        "DevHub.Host",
+        "bin",
+        "Release",
+        "net10.0",
+        "DevHub.Host.dll",
+    )
     if os.path.exists(host_dll):
         return ["dotnet", host_dll]
 
-    host_project = os.path.join(get_test_project_root(), "src", "DevHub.Host", "DevHub.Host.csproj")
+    host_project = os.path.join(get_test_project_root(), "host", "src", "DevHub.Host", "DevHub.Host.csproj")
     if not os.path.exists(host_project):
         raise FileNotFoundError(f"未找到 DevHub.Host.csproj: {host_project}")
 

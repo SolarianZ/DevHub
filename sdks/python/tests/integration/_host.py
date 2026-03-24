@@ -103,7 +103,9 @@ class DevHubHostFixture:
         self.close()
 
     def _start_process(self) -> None:
-        host_assembly_path = self._repo_root / "src" / "DevHub.Host" / "bin" / "Release" / "net10.0" / "DevHub.Host.dll"
+        host_assembly_path = (
+            self._repo_root / "host" / "src" / "DevHub.Host" / "bin" / "Release" / "net10.0" / "DevHub.Host.dll"
+        )
         if not host_assembly_path.is_file():
             raise RuntimeError(f"未找到 Host 程序：{host_assembly_path}")
 
@@ -188,7 +190,7 @@ class DevHubHostFixture:
 def _resolve_repo_root() -> Path:
     current = Path(__file__).resolve()
     for directory in [current, *current.parents]:
-        if (directory / "AGENTS.md").is_file() and (directory / "src" / "DevHub.Host" / "DevHub.Host.csproj").is_file():
+        if (directory / "AGENTS.md").is_file() and (directory / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj").is_file():
             return directory
     raise RuntimeError("无法定位仓库根目录。")
 

@@ -132,7 +132,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     private async Task StartProcessAsync()
     {
-        var hostAssemblyPath = Path.Combine(_repoRoot, "src", "DevHub.Host", "bin", "Release", "net10.0", "DevHub.Host.dll");
+        var hostAssemblyPath = Path.Combine(_repoRoot, "host", "src", "DevHub.Host", "bin", "Release", "net10.0", "DevHub.Host.dll");
         if (!File.Exists(hostAssemblyPath))
         {
             throw new InvalidOperationException($"未找到 Host 程序：{hostAssemblyPath}");
@@ -207,7 +207,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         while (current is not null)
         {
             if (File.Exists(Path.Combine(current.FullName, "AGENTS.md")) &&
-                File.Exists(Path.Combine(current.FullName, "src", "DevHub.Host", "DevHub.Host.csproj")))
+                File.Exists(Path.Combine(current.FullName, "host", "src", "DevHub.Host", "DevHub.Host.csproj")))
             {
                 return current.FullName;
             }

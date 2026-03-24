@@ -15,7 +15,7 @@
 ### 1) 启动 DevHub Host
 
 ```bash
-dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
+dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
 ### 2) 运行 Python 集成测试
@@ -35,13 +35,13 @@ dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
 #### Default 模式
 
 ```bash
-python3 src/tests/test_runner.py
+python3 host/tests/test_runner.py
 ```
 
 示例：
 
 ```bash
-python3 src/tests/test_runner.py --isolated-hub-command "dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
+python3 host/tests/test_runner.py --isolated-hub-command "dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
 ```
 
 #### Fast 模式
@@ -49,7 +49,7 @@ python3 src/tests/test_runner.py --isolated-hub-command "dotnet run --project sr
 在默认模式基础上，跳过超时测试，更快反馈。
 
 ```bash
-python3 src/tests/test_runner.py --fast
+python3 host/tests/test_runner.py --fast
 ```
 
 #### Full 模式
@@ -57,7 +57,7 @@ python3 src/tests/test_runner.py --fast
 严格覆盖功能，在默认模式基础上，增加压力测试等，含耗时场景。
 
 ```bash
-python3 src/tests/test_runner.py --full
+python3 host/tests/test_runner.py --full
 ```
 
 #### Smoke 模式
@@ -65,7 +65,7 @@ python3 src/tests/test_runner.py --full
 跨平台最小冒烟回归，覆盖发现/鉴权/WS/Request 主链路，推荐用于 CI 三平台快速门禁。
 
 ```bash
-python3 src/tests/test_runner.py --smoke
+python3 host/tests/test_runner.py --smoke
 ```
 
 ## 报告输出

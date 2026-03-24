@@ -13,10 +13,10 @@
 - M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
 - `Python SDK` 当前已在 `sdks/python/tests/` 下落地 runtime、payloads、parsing、HTTP、events、package exports 等单元测试模块，以及 HTTP / Invocation / Events SDK↔Hub 集成测试；共享 conformance runner 与跨语言一致性门禁仍待统一接入。
-- 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`src/tests/conformance/` 为后续目标测试资产。
+- 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`host/tests/conformance/` 为后续目标测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
-- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟回归。
+- 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划中的测试基线并入本 M5 测试文档，与 `.NET` / `JS/TS` / `Python` SDK 采用统一粒度维护。
 
 ---
@@ -87,14 +87,14 @@
 | `M5-E2E-009` | 缺失 `X-DevHub-ClientId` 返回 `-32600 invalid_request` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
 | `M5-E2E-010` | WS 断开后订阅状态清理（重连后需重新订阅） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/javascript/tests/integration/events-flow.test.ts` / `sdks/python/tests/integration/test_events_flow.py` |
 | `M5-E2E-011` | `target.scope=""` 路由至 global，`target.scope="global"` 仅命中字面量作用域 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
-| `M5-CONF-001` | Discovery 类向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/discovery.*.json` |
-| `M5-CONF-002` | Auth 类向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/auth.*.json` |
-| `M5-CONF-003` | AppDef/AppInstance 向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/apps.*.json` |
-| `M5-CONF-004` | Notify/Request 向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/invocation.*.json` |
-| `M5-CONF-005` | `.NET`、`TS` 与 `Python` 对同向量结果语义比较 | 契约 | `src/tests/conformance/vector_runner.py` |
-| `M5-CONF-006` | 契约失败报告输出（向量ID/实际/期望/差异字段） | 契约 | `src/tests/conformance/vector_runner.py` |
-| `M5-CONF-007` | Events 断连清理向量执行与断言 | 契约 | `src/tests/conformance/v1.0.1/events.*.json` |
-| `M5-CONF-008` | Spec §8 全量错误码与 `error.data` 字段向量断言 | 契约 | `src/tests/conformance/v1.0.1/errors.*.json` |
+| `M5-CONF-001` | Discovery 类向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/discovery.*.json` |
+| `M5-CONF-002` | Auth 类向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/auth.*.json` |
+| `M5-CONF-003` | AppDef/AppInstance 向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/apps.*.json` |
+| `M5-CONF-004` | Notify/Request 向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/invocation.*.json` |
+| `M5-CONF-005` | `.NET`、`TS` 与 `Python` 对同向量结果语义比较 | 契约 | `host/tests/conformance/vector_runner.py` |
+| `M5-CONF-006` | 契约失败报告输出（向量ID/实际/期望/差异字段） | 契约 | `host/tests/conformance/vector_runner.py` |
+| `M5-CONF-007` | Events 断连清理向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/events.*.json` |
+| `M5-CONF-008` | Spec §8 全量错误码与 `error.data` 字段向量断言 | 契约 | `host/tests/conformance/v1.0.1/errors.*.json` |
 
 ---
 
@@ -175,7 +175,7 @@
   - `dotnet test`（含 SDK 测试）
   - `npm test`（TS SDK）
   - `python3 -m pytest sdks/python/tests`
-  - `python3 src/tests/conformance/vector_runner.py`
+  - `python3 host/tests/conformance/vector_runner.py`
 - 失败报告必须包含：
   - 向量 ID
   - 实际响应

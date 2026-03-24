@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet publish src/DevHub.Host/DevHub.Host.csproj \
+          dotnet publish host/src/DevHub.Host/DevHub.Host.csproj \
             -c Release \
             -r "${{ matrix.rid }}" \
             --self-contained false \

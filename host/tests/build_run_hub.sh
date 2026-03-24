@@ -8,8 +8,10 @@ set -e  # 遇到错误时立即停止
 
 # 项目根目录
 PROJECT_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$0")")")" && pwd)"
-SRC_DIR="$PROJECT_ROOT/src"
-HOST_PROJECT="$SRC_DIR/DevHub.Host/DevHub.Host.csproj"
+HOST_DIR="$PROJECT_ROOT/host"
+HOST_SRC_DIR="$HOST_DIR/src"
+HOST_PROJECT="$HOST_SRC_DIR/DevHub.Host/DevHub.Host.csproj"
+HOST_SOLUTION="$HOST_DIR/DevHub.slnx"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -37,11 +39,11 @@ fi
 
 # 恢复 NuGet 包
 echo -e "${YELLOW}正在恢复 NuGet 包...${NC}"
-dotnet restore "$SRC_DIR/DevHub.slnx"
+dotnet restore "$HOST_SOLUTION"
 
 # 构建项目
 echo -e "${YELLOW}正在构建项目...${NC}"
-dotnet build "$SRC_DIR/DevHub.slnx" -c Release
+dotnet build "$HOST_SOLUTION" -c Release
 
 # 检查构建是否成功
 if [ $? -ne 0 ]; then

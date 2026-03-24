@@ -28,20 +28,20 @@ DevHub 和 MCP 的**表层相似性**确实存在：两者都以 JSON-RPC 2.0 �
 - 权威规范：[Spec.md](./Spec.md)
 - 架构规划：[DevHub协议与开发规划.md](./DevHub%E5%8D%8F%E8%AE%AE%E4%B8%8E%E5%BC%80%E5%8F%91%E8%A7%84%E5%88%92.md)
 - Host 入口与传输层：
-  - [Program.cs](../src/DevHub.Host/Program.cs)
-  - [RpcHttpEndpointHandler.cs](../src/DevHub.Host/RpcHttpEndpointHandler.cs)
-  - [WebSocketSessionHandler.cs](../src/DevHub.Host/WebSocketSessionHandler.cs)
-  - [DevHubTransportValidator.cs](../src/DevHub.Host/Transport/DevHubTransportValidator.cs)
+  - [Program.cs](../host/src/DevHub.Host/Program.cs)
+  - [RpcHttpEndpointHandler.cs](../host/src/DevHub.Host/RpcHttpEndpointHandler.cs)
+  - [WebSocketSessionHandler.cs](../host/src/DevHub.Host/WebSocketSessionHandler.cs)
+  - [DevHubTransportValidator.cs](../host/src/DevHub.Host/Transport/DevHubTransportValidator.cs)
 - Core 调用编排：
-  - [InvocationHandler.cs](../src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs)
-  - [LaunchCoordinator.cs](../src/DevHub.Core/Services/Invocation/LaunchCoordinator.cs)
-  - [AppRegistry.cs](../src/DevHub.Core/Services/AppRegistry.cs)
+  - [InvocationHandler.cs](../host/src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs)
+  - [LaunchCoordinator.cs](../host/src/DevHub.Core/Services/Invocation/LaunchCoordinator.cs)
+  - [AppRegistry.cs](../host/src/DevHub.Core/Services/AppRegistry.cs)
 - SDK/测试耦合点：
   - [.NET RuntimeDiscovery](../sdks/dotnet/src/DevHub.Sdk/Internal/RuntimeDiscovery.cs)
   - [.NET JsonRpcHttpTransport](../sdks/dotnet/src/DevHub.Sdk/Internal/JsonRpcHttpTransport.cs)
   - [Python HTTP transport](../sdks/python/src/devhub_sdk/_http_transport.py)
   - [JavaScript HTTP transport](../sdks/javascript/src/http-transport.ts)
-  - `src/tests/` 下的鉴权、发现、调用与 WS 相关集成测试
+  - `host/tests/` 下的鉴权、发现、调用与 WS 相关集成测试
 
 ### 2.2 MCP 侧依据
 
@@ -159,7 +159,7 @@ DevHub 和 MCP 的**表层相似性**确实存在：两者都以 JSON-RPC 2.0 �
 
 - `Program.cs` 中当前的端点布局只暴露 `/rpc` 和 `/ws`。
 - `RpcHttpEndpointHandler`、`WebSocketSessionHandler`、`DevHubTransportValidator` 都是**强 DevHub 协议耦合**。
-- 三套 SDK 和大量 `src/tests/` 已把 `hub.json`、`/rpc`、`/ws`、`X-DevHub-*`、`hub.ws.authenticate` 固化为公开契约。
+- 三套 SDK 和大量 `host/tests/` 已把 `hub.json`、`/rpc`、`/ws`、`X-DevHub-*`、`hub.ws.authenticate` 固化为公开契约。
 
 换句话说，**可以复用 DevHub 的“内核服务”，但不能把现有传输层稍改一下就叫 MCP**。
 
@@ -265,7 +265,7 @@ MCP 规范支持 `stdio`，它对做“被 Host 拉起的工具服务器”很�
    如果目标是标准的受保护 HTTP MCP 服务，就不能继续把 `token.txt` + 自定义请求头当成通用互操作方案，而应转向 MCP 文档定义的 OAuth 2.1 / Protected Resource Metadata 模型。
 
 8. **测试与 SDK 资产大面积重写**  
-   不只是 Host 代码要改，`.NET / Python / JavaScript` SDK 以及 `src/tests/` 的黑盒验证都要同步重做。
+   不只是 Host 代码要改，`.NET / Python / JavaScript` SDK 以及 `host/tests/` 的黑盒验证都要同步重做。
 
 ## 7. 推荐方案
 

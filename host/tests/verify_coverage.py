@@ -20,7 +20,7 @@ CONDITION_COVERAGE_PATTERN = re.compile(r".*\((\d+)/(\d+)\)")
 
 
 def discover_coverage_files(root_dir):
-    pattern = os.path.join(root_dir, "src", "**", "TestResults", "**", "coverage.cobertura.xml")
+    pattern = os.path.join(root_dir, "host", "src", "**", "TestResults", "**", "coverage.cobertura.xml")
     return sorted(set(glob.glob(pattern, recursive=True)))
 
 

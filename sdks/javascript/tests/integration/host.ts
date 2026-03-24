@@ -151,7 +151,10 @@ export class DevHubHostFixture {
 function resolveRepoRoot(): string {
   let current = path.dirname(fileURLToPath(import.meta.url));
   for (;;) {
-    if (existsSync(path.join(current, "AGENTS.md")) && existsSync(path.join(current, "src", "DevHub.Host", "DevHub.Host.csproj"))) {
+    if (
+      existsSync(path.join(current, "AGENTS.md"))
+      && existsSync(path.join(current, "host", "src", "DevHub.Host", "DevHub.Host.csproj"))
+    ) {
       return current;
     }
     const parent = path.dirname(current);
@@ -173,7 +176,7 @@ function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
 }
 
 async function buildHostAssembly(repoRoot: string, buildRoot: string): Promise<string> {
-  const hostProjectPath = path.join(repoRoot, "src", "DevHub.Host", "DevHub.Host.csproj");
+  const hostProjectPath = path.join(repoRoot, "host", "src", "DevHub.Host", "DevHub.Host.csproj");
   if (!(await fileExists(hostProjectPath))) {
     throw new Error(`未找到 Host 工程：${hostProjectPath}`);
   }

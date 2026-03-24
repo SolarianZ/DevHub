@@ -13,5 +13,5 @@
         "**/.idea": true,
         "**/__pycache__": true
     },
-    "dotnet.defaultSolution": "src/DevHub.slnx"
+    "dotnet.defaultSolution": "host/DevHub.slnx"
 }

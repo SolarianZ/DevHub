@@ -1076,7 +1076,7 @@ stateDiagram-v2
 
 ## 附录 B：符合性测试运行示例
 
-以下命令是“官方符合性套件”的示意调用格式，当前仓库未内置 `devhub-conformance-cli` 可执行文件；仓库内可直接执行的验证命令请参考 [`开发指南`](./开发指南.md) 与 [`src/tests/README.md`](../src/tests/README.md)。
+以下命令是“官方符合性套件”的示意调用格式，当前仓库未内置 `devhub-conformance-cli` 可执行文件；仓库内可直接执行的验证命令请参考 [`开发指南`](./开发指南.md) 与 [`host/tests/README.md`](../host/tests/README.md)。
 
 ```bash
 # 针对本地 Hub 运行官方符合性套件

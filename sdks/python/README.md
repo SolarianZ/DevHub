@@ -88,13 +88,13 @@ python3 -m pytest tests/integration
 如果需要在仓库根目录执行针对 DevHub Host 的仓库级黑盒 smoke：
 
 ```bash
-python3 src/tests/test_runner.py --smoke --no-header
+python3 host/tests/test_runner.py --smoke --no-header
 ```
 
 请先在另一个终端启动本地 Hub：
 
 ```bash
-dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release
+dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
 原因：仓库级 `smoke` 默认针对“已启动的本地 Hub”执行；这和上面的 SDK 集成测试模式不同。若本地 Hub 未启动，测试可能会读取到默认数据根目录中的历史残留 `hub.json`，从而出现 `Connection refused`。

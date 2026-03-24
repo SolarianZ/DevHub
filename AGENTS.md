@@ -6,31 +6,43 @@
 
 ```text
 DevHub/
-├── docs/                                    # 协议规范与设计文档
-│   ├── Spec.md                              # 权威技术规范（Single Source of Truth）
-│   └── DevHub协议与开发规划.md               # 架构演进与里程碑规划
-├── src/                                     # 核心实现代码（.NET）
-│   ├── DevHub.Core/                         # 核心领域模型与基础服务
-│   ├── DevHub.Host/                         # 基于 ASP.NET Core 的宿主程序
-│   ├── DevHub.Tests/                        # 单元测试（白盒测试）
-│   ├── DevHub.Host.Tests/                   # Host 级测试
-│   ├── tests/                               # 集成测试套件（黑盒测试）
-│   │   ├── README.md                        # 集成测试环境配置说明
-│   │   └── test_runner.py                   # 集成测试自动化入口脚本
-│   └── DevHub.slnx                          # 解决方案文件
-├── sdks/                                    # 多语言 SDK、示例代码与相关开发资源
-│   └── dotnet/                              # .NET SDK 工作区
-│       ├── src/                             # .NET SDK 源码
-│       │   └── DevHub.Sdk/                  # .NET SDK 核心库
-│       ├── tests/                           # .NET SDK 测试项目
-│       │   ├── DevHub.Sdk.UnitTests/        # .NET SDK 单元测试
-│       │   └── DevHub.Sdk.IntegrationTests/ # .NET SDK 集成测试
-│       ├── DevHub.DotNetSdk.slnx            # .NET SDK 解决方案文件
-│       ├── Directory.Build.props            # .NET SDK 工作区公共构建配置
-│       ├── Directory.Packages.props         # .NET SDK 工作区统一依赖版本管理
-│       └── README.md                        # .NET SDK 使用与开发说明
-├── temp/                                    # 生成的测试报告与临时产物
-└── LICENSE                                  # 许可证文件
+├── docs/                                     # 协议规范与设计文档
+│   ├── Spec.md                               # 权威技术规范（Single Source of Truth）
+│   └── DevHub协议与开发规划.md                # 架构演进与里程碑规划
+├── host/                                     # Host相关代码
+│   ├── src/                                  # Host源代码（.NET）
+│   │   ├── DevHub.Core/                      # 核心领域模型与基础服务
+│   │   ├── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
+│   │   ├── DevHub.Tests/                     # 单元测试（白盒测试）
+│   │   └── DevHub.Host.Tests/                # Host 级测试
+│   ├── tests/                                # Host集成测试套件（黑盒测试）
+│   │   ├── README.md                         # 集成测试环境配置说明
+│   │   └── test_runner.py                    # 集成测试自动化入口脚本
+│   └── DevHub.slnx                           # 解决方案文件
+├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
+│   ├── dotnet/                               # .NET SDK 工作区
+│   │   ├── src/                              # .NET SDK 源码
+│   │   │   └── DevHub.Sdk/                   # .NET SDK 核心库
+│   │   ├── tests/                            # .NET SDK 测试项目
+│   │   │   ├── DevHub.Sdk.UnitTests/         # .NET SDK 单元测试
+│   │   │   └── DevHub.Sdk.IntegrationTests/  # .NET SDK 集成测试
+│   │   ├── DevHub.DotNetSdk.slnx             # .NET SDK 解决方案文件
+│   │   ├── Directory.Build.props             # .NET SDK 工作区公共构建配置
+│   │   ├── Directory.Packages.props          # .NET SDK 工作区统一依赖版本管理
+│   │   └── README.md                         # .NET SDK 使用与开发说明
+│   ├── javascript/                           # JavaScript / TypeScript SDK 工作区
+│   │   ├── src/                              # JS/TS SDK 源码
+│   │   ├── tests/                            # JS/TS SDK 单元测试与集成测试
+│   │   ├── package.json                      # JS/TS SDK 包定义
+│   │   └── README.md                         # JS/TS SDK 使用与开发说明
+│   └── python/                               # Python SDK 工作区
+│       ├── src/                              # Python SDK 源码
+│       │   └── devhub_sdk/                   # Python SDK 核心包
+│       ├── tests/                            # Python SDK 单元测试与集成测试
+│       ├── pyproject.toml                    # Python SDK 构建配置
+│       └── README.md                         # Python SDK 使用与开发说明
+├── temp/                                     # 生成的测试报告与临时产物
+└── LICENSE                                   # 许可证文件
 ```
 
 ## 运行时数据规约
@@ -60,11 +72,11 @@ DevHub/
 
 ## 构建、运行与测试命令
 
-- `dotnet build src/DevHub.slnx -c Release`：构建全部 .NET 项目。
-- `dotnet run --project src/DevHub.Host/DevHub.Host.csproj -c Release`：启动本地 DevHub 守护进程。
-- `dotnet test src/DevHub.slnx -c Release`：运行全部单元测试。
-- `python3 src/tests/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
-- `python3 src/tests/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
+- `dotnet build host/DevHub.slnx -c Release`：构建全部 .NET 项目。
+- `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release`：启动本地 DevHub 守护进程。
+- `dotnet test host/DevHub.slnx -c Release`：运行全部单元测试。
+- `python3 host/tests/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
+- `python3 host/tests/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
 
 ## 技术栈与工程约束
 
@@ -122,7 +134,7 @@ DevHub/
 
 ### 最小验证要求
 
-- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 src/tests/test_runner.py --smoke --no-header` 冒烟验证。
+- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟验证。
 
 ## 提交与协作要求
 

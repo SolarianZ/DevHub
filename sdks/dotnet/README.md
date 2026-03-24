@@ -25,7 +25,7 @@
 
 本文档只覆盖 `.NET SDK` 本身的公开能力、用法与验证命令。
 
-仓库级 `src/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
+仓库级 `host/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
 
 ## 安装方式
 
