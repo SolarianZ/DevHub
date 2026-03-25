@@ -1,0 +1,44 @@
+{
+  "id": "invocation.notify.offline_no_queue_returns_instance_not_found",
+  "description": "SDK notify 在无在线 helper 且 queueIfOffline=false 时，必须返回 instance_not_found/offline_no_queue。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.no-queue.json",
+        "definition": {
+          "appId": "invoke.notify.no-queue",
+          "displayName": "invoke.notify.no-queue"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyNoQueue",
+    "invokeRequest": {
+      "appId": "invoke.notify.no-queue",
+      "method": "demo.notify.no-queue",
+      "options": {
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "error",
+    "actual": {
+      "code": -32010,
+      "message": "instance_not_found",
+      "reason": "offline_no_queue"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "error",
+    "sdk"
+  ]
+}

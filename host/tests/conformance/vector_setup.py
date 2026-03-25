@@ -208,13 +208,15 @@ def materialize_vector(
     vector: dict[str, Any],
     host_context: HostRuntimeContext,
     temp_root: Path,
+    execution_name: str | None = None,
 ) -> VectorExecutionContext:
     """物化单条向量的 setup、上下文文件与 cleanup ledger。"""
 
     setup = require_optional_mapping(vector.get("setup"), "setup")
     validate_setup_shape(setup)
 
-    vector_temp_dir = temp_root / sanitize_file_name(str(vector["id"]))
+    vector_dir = temp_root / sanitize_file_name(str(vector["id"]))
+    vector_temp_dir = vector_dir / sanitize_file_name(execution_name) if execution_name else vector_dir
     ledger = CleanupLedger(vector_temp_dir=vector_temp_dir)
     vector_temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -383,35 +385,48 @@ def apply_instances_setup(
 ) -> None:
     """按顺序执行 setup.instances。"""
 
-    client = host_context.create_rpc_client()
     for index, item in enumerate(instances):
         instance_setup = require_mapping(item, f"setup.instances[{index}]")
         state = require_string(instance_setup.get("state"), f"setup.instances[{index}].state")
         instance = require_mapping(instance_setup.get("instance"), f"setup.instances[{index}].instance")
-        instance_id = require_string(instance.get("instanceId"), f"setup.instances[{index}].instance.instanceId")
 
         if state not in {"registered", "offline"}:
             raise ValueError(f"setup.instances[{index}].state 不支持：{state}")
 
-        response = client.call(
-            "hub.apps.registerInstance",
-            {"instance": instance},
-            request_id=f"setup-instance-{index}",
-        )
-        error = response.get("error")
-        if isinstance(error, dict):
-            raise RuntimeError(
-                f"setup.instances[{index}] 预置失败：{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
-            )
-
-        result = response.get("result")
-        if not isinstance(result, dict) or result.get("ok") is not True:
-            raise RuntimeError(f"setup.instances[{index}] 预置失败：响应缺少 result.ok=true。")
-
-        ledger.registered_instance_ids.append(instance_id)
+        register_instance(host_context, ledger, instance, request_id=f"setup-instance-{index}", error_path=f"setup.instances[{index}]")
         if state == "offline":
             wait_seconds = require_positive_number(instance_setup.get("waitSeconds"), f"setup.instances[{index}].waitSeconds")
             time.sleep(wait_seconds)
+
+
+def register_instance(
+    host_context: HostRuntimeContext,
+    ledger: CleanupLedger,
+    instance: dict[str, Any],
+    *,
+    request_id: str,
+    error_path: str,
+) -> None:
+    """注册实例并记录到清理账本。"""
+
+    instance_id = require_string(instance.get("instanceId"), f"{error_path}.instance.instanceId")
+    client = host_context.create_rpc_client()
+    response = client.call(
+        "hub.apps.registerInstance",
+        {"instance": instance},
+        request_id=request_id,
+    )
+    error = response.get("error")
+    if isinstance(error, dict):
+        raise RuntimeError(
+            f"{error_path} 预置失败：{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
+        )
+
+    result = response.get("result")
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError(f"{error_path} 预置失败：响应缺少 result.ok=true。")
+
+    ledger.registered_instance_ids.append(instance_id)
 
 
 def build_file_content(

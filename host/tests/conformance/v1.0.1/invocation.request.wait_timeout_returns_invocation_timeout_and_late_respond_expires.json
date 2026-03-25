@@ -1,0 +1,93 @@
+{
+  "id": "invocation.request.wait_timeout_returns_invocation_timeout_and_late_respond_expires",
+  "description": "SDK request 在 helper 超过 waitTimeoutMs 后才 respond 时，必须返回 invocation_timeout，且迟到 respond 被拒绝为 invocation_expired。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.timeout.json",
+        "definition": {
+          "appId": "invoke.request.timeout",
+          "displayName": "invoke.request.timeout"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-timeout-inst",
+          "appId": "invoke.request.timeout",
+          "scope": null,
+          "pid": 32008,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-timeout-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.timeout",
+          "method": "demo.request.timeout",
+          "kind": "request",
+          "options": {
+            "ttlMs": 1500
+          }
+        }
+      },
+      {
+        "action": "sleep",
+        "waitMs": 1200
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-timeout-inst",
+        "value": {
+          "handledBy": "too-late"
+        },
+        "expectedError": {
+          "code": -32011,
+          "message": "invocation_expired"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestTimeout",
+    "invokeRequest": {
+      "appId": "invoke.request.timeout",
+      "method": "demo.request.timeout",
+      "options": {
+        "ttlMs": 1500,
+        "waitTimeoutMs": 1000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32012,
+      "message": "invocation_timeout",
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "timeout",
+    "sdk"
+  ]
+}

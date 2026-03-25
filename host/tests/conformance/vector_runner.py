@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M5 最小 conformance runner。
+DevHub M5 conformance runner。
 """
 
 from __future__ import annotations
@@ -21,7 +21,13 @@ if str(HOST_ROOT) not in sys.path:
     sys.path.insert(0, str(HOST_ROOT))
 
 from tests.test_base import get_test_project_root  # type: ignore  # noqa: E402
+from tests.conformance.raw_protocol_helper import (  # type: ignore  # noqa: E402
+    OrchestrationFailure,
+    RawProtocolHelper,
+    load_orchestration_phase,
+)
 from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
+    HostRuntimeContext,
     VectorExecutionContext,
     materialize_vector,
     start_suite_host,
@@ -30,6 +36,7 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+SUPPORTED_SDKS = ("dotnet", "typescript", "python")
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
 
@@ -50,10 +57,8 @@ def main() -> int:
         host_context, process, log_file = start_suite_host(temp_root)
         try:
             for vector_path, vector in vectors:
-                execution: VectorExecutionContext | None = None
                 try:
-                    execution = materialize_vector(vector_path, vector, host_context, temp_root)
-                    result = run_vector(execution)
+                    result = run_vector(vector_path, vector, host_context, temp_root)
                 except Exception as exc:  # noqa: BLE001
                     failure_count += 1
                     emit_failures(
@@ -69,16 +74,13 @@ def main() -> int:
                         ]
                     )
                     continue
-                finally:
-                    if execution is not None:
-                        execution.cleanup(host_context)
 
                 if not result["passed"]:
                     failure_count += 1
                     emit_failures(result["failures"])
                     continue
 
-                print(f"PASS  {execution.resolved_vector['id']}")
+                print(f"PASS  {vector['id']}")
         finally:
             stop_process(process)
             log_file.close()
@@ -88,7 +90,7 @@ def main() -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="运行 DevHub 最小 conformance 向量。")
+    parser = argparse.ArgumentParser(description="运行 DevHub conformance 向量。")
     parser.add_argument("--suite", default="v1.0.1", help="默认扫描的 suite 目录名。")
     parser.add_argument("--directory", help="显式指定向量目录。")
     parser.add_argument("--vector-id", help="只执行指定向量 ID。")
@@ -138,48 +140,99 @@ def validate_vector_shape(path: Path, payload: dict[str, Any]) -> None:
         raise ValueError(f"向量缺少必需字段：{path} -> {missing}")
 
 
-def run_vector(execution: VectorExecutionContext) -> dict[str, Any]:
-    sdk_results = [
-        run_adapter("dotnet", get_dotnet_adapter_command(execution.context_path)),
-        run_adapter("typescript", get_typescript_adapter_command(execution.context_path)),
-        run_adapter("python", get_python_adapter_command(execution.context_path)),
-    ]
-
-    vector = execution.resolved_vector
+def run_vector(
+    vector_path: Path,
+    vector: dict[str, Any],
+    host_context: HostRuntimeContext,
+    temp_root: Path,
+) -> dict[str, Any]:
     is_discovery = "expectedDiscovery" in vector
-    expected = vector["expectedDiscovery"] if is_discovery else vector["expectedResponse"]
-
     failures: list[dict[str, Any]] = []
     normalized_results: dict[str, Any] = {}
-    for sdk_result in sdk_results:
-        if sdk_result.get("error") is not None:
+
+    for sdk_name in SUPPORTED_SDKS:
+        execution: VectorExecutionContext | None = None
+        try:
+            execution = materialize_vector(
+                vector_path,
+                vector,
+                host_context,
+                temp_root,
+                execution_name=sdk_name,
+            )
+            sdk_result = execute_sdk_vector(sdk_name, execution, host_context)
+            expected = execution.resolved_vector["expectedDiscovery"] if is_discovery else execution.resolved_vector["expectedResponse"]
+
+            helper_invocation_id = sdk_result.pop("_helperInvocationId", None)
+            if helper_invocation_id is not None:
+                caller_invocation_id = extract_caller_invocation_id(sdk_result)
+                if caller_invocation_id and caller_invocation_id != helper_invocation_id:
+                    failures.append(
+                        {
+                            "vectorId": execution.resolved_vector["id"],
+                            "sdk": sdk_name,
+                            "expected": {"invocationId": helper_invocation_id},
+                            "actual": sdk_result.get("actual"),
+                            "diffFields": ["$.actual.invocationId"],
+                            "message": "caller 与 helper 观察到的 invocationId 不一致。",
+                        }
+                    )
+                    continue
+
+            if sdk_result.get("error") is not None:
+                failures.append(
+                    {
+                        "vectorId": execution.resolved_vector["id"],
+                        "sdk": sdk_name,
+                        "expected": expected,
+                        "actual": sdk_result.get("actual"),
+                        "diffFields": ["$process"],
+                        "message": sdk_result["error"],
+                    }
+                )
+                continue
+
+            comparable = build_comparable_payload(sdk_result, is_discovery)
+            diffs = collect_differences(expected if is_discovery else execution.resolved_vector["expectedResponse"], comparable)
+            if diffs:
+                failures.append(
+                    {
+                        "vectorId": execution.resolved_vector["id"],
+                        "sdk": sdk_name,
+                        "expected": expected,
+                        "actual": comparable,
+                        "diffFields": diffs,
+                    }
+                )
+                continue
+
+            if not is_discovery:
+                normalized_results[sdk_name] = canonicalize_with_expected(comparable, expected)
+        except OrchestrationFailure as exc:
             failures.append(
                 {
                     "vectorId": vector["id"],
-                    "sdk": sdk_result["sdk"],
-                    "expected": expected,
-                    "actual": sdk_result.get("actual"),
-                    "diffFields": ["$process"],
-                    "message": sdk_result["error"],
+                    "sdk": sdk_name,
+                    "expected": exc.expected,
+                    "actual": exc.actual,
+                    "diffFields": exc.diff_fields or ["$helper"],
+                    "message": f"helper 编排失败: phase={exc.phase}, step={exc.step_index}, action={exc.action}, detail={exc.message}",
                 }
             )
-            continue
-
-        comparable = build_comparable_payload(sdk_result, is_discovery)
-        diffs = collect_differences(expected, comparable)
-        if diffs:
+        except Exception as exc:  # noqa: BLE001
             failures.append(
                 {
                     "vectorId": vector["id"],
-                    "sdk": sdk_result["sdk"],
-                    "expected": expected,
-                    "actual": comparable,
-                    "diffFields": diffs,
+                    "sdk": sdk_name,
+                    "expected": vector.get("expectedDiscovery") or vector.get("expectedResponse"),
+                    "actual": None,
+                    "diffFields": ["$runner"],
+                    "message": str(exc),
                 }
             )
-            continue
-
-        normalized_results[sdk_result["sdk"]] = canonicalize_with_expected(comparable, expected)
+        finally:
+            if execution is not None:
+                execution.cleanup(host_context)
 
     if not failures and normalized_results:
         baseline_sdk, baseline_payload = next(iter(normalized_results.items()))
@@ -205,6 +258,65 @@ def run_vector(execution: VectorExecutionContext) -> dict[str, Any]:
     }
 
 
+def execute_sdk_vector(
+    sdk_name: str,
+    execution: VectorExecutionContext,
+    host_context: HostRuntimeContext,
+) -> dict[str, Any]:
+    command = get_adapter_command(sdk_name, execution.context_path)
+    if should_use_orchestration(execution.resolved_vector):
+        return run_adapter_with_orchestration(sdk_name, command, execution, host_context)
+    return run_adapter(sdk_name, command)
+
+
+def should_use_orchestration(vector: dict[str, Any]) -> bool:
+    request = vector.get("request")
+    if isinstance(request, dict):
+        kind = request.get("kind")
+        if isinstance(kind, str) and kind.startswith("sdk."):
+            return True
+    return isinstance(vector.get("orchestration"), dict)
+
+
+def run_adapter_with_orchestration(
+    sdk_name: str,
+    command: list[str],
+    execution: VectorExecutionContext,
+    host_context: HostRuntimeContext,
+) -> dict[str, Any]:
+    helper = RawProtocolHelper(
+        vector_id=execution.resolved_vector["id"],
+        host_context=host_context,
+        cleanup_ledger=execution.cleanup_ledger,
+    )
+    helper.run_phase("beforeCaller", load_orchestration_phase(execution.resolved_vector, "beforeCaller"))
+
+    process = subprocess.Popen(
+        command,
+        cwd=get_test_project_root(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    try:
+        helper.run_phase("duringCaller", load_orchestration_phase(execution.resolved_vector, "duringCaller"))
+        result = wait_adapter_process(sdk_name, process)
+        helper.run_phase("afterCaller", load_orchestration_phase(execution.resolved_vector, "afterCaller"))
+    except Exception:
+        terminate_adapter_process(process)
+        raise
+    finally:
+        if process.poll() is None:
+            terminate_adapter_process(process)
+
+    if helper.state.last_invocation_id is not None:
+        result["_helperInvocationId"] = helper.state.last_invocation_id
+    return result
+
+
 def run_adapter(sdk_name: str, command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(
         command,
@@ -214,16 +326,39 @@ def run_adapter(sdk_name: str, command: list[str]) -> dict[str, Any]:
         encoding="utf-8",
         errors="replace",
     )
+    return parse_adapter_output(sdk_name, completed.stdout, completed.stderr, completed.returncode)
 
-    stdout = completed.stdout.strip()
-    stderr = completed.stderr.strip()
+
+def wait_adapter_process(sdk_name: str, process: subprocess.Popen[str], timeout_seconds: int = 60) -> dict[str, Any]:
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
+        return {
+            "sdk": sdk_name,
+            "error": {
+                "message": "适配器进程执行超时。",
+                "exitCode": process.returncode,
+                "stdout": stdout.strip(),
+                "stderr": stderr.strip(),
+            },
+            "actual": None,
+        }
+
+    return parse_adapter_output(sdk_name, stdout, stderr, process.returncode or 0)
+
+
+def parse_adapter_output(sdk_name: str, stdout: str, stderr: str, exit_code: int) -> dict[str, Any]:
+    stdout = stdout.strip()
+    stderr = stderr.strip()
     parsed = try_parse_json_line(stdout)
     if parsed is None:
         return {
             "sdk": sdk_name,
             "error": {
                 "message": "适配器未输出可解析 JSON。",
-                "exitCode": completed.returncode,
+                "exitCode": exit_code,
                 "stdout": stdout,
                 "stderr": stderr,
             },
@@ -231,13 +366,24 @@ def run_adapter(sdk_name: str, command: list[str]) -> dict[str, Any]:
         }
 
     parsed.setdefault("sdk", sdk_name)
-    if completed.returncode != 0 and parsed.get("error") is None:
+    if exit_code != 0 and parsed.get("error") is None:
         parsed["error"] = {
             "message": "适配器进程返回非零退出码。",
-            "exitCode": completed.returncode,
+            "exitCode": exit_code,
             "stderr": stderr,
         }
     return parsed
+
+
+def terminate_adapter_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+
+    process.kill()
+    try:
+        process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def try_parse_json_line(stdout: str) -> dict[str, Any] | None:
@@ -261,7 +407,25 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
             "outcome": result.get("outcome"),
             "actual": result.get("actual"),
         }
+
+    if result.get("phase") == "sdk-invocation":
+        return {
+            "phase": result.get("phase"),
+            "operation": result.get("operation"),
+            "outcome": result.get("outcome"),
+            "actual": result.get("actual"),
+        }
+
     return result.get("actual")
+
+
+def extract_caller_invocation_id(result: dict[str, Any]) -> str | None:
+    actual = result.get("actual")
+    if not isinstance(actual, dict):
+        return None
+
+    candidate = actual.get("invocationId")
+    return candidate if isinstance(candidate, str) and candidate else None
 
 
 def canonicalize_with_expected(actual: Any, expected: Any) -> Any:
@@ -345,16 +509,14 @@ def emit_failures(failures: Iterable[dict[str, Any]]) -> None:
         print(f"      Diff: {', '.join(failure['diffFields'])}")
 
 
-def get_python_adapter_command(context_path: Path) -> list[str]:
-    return [sys.executable, str(SCRIPT_DIR / "adapters" / "devhub_conformance_py.py"), str(context_path)]
-
-
-def get_typescript_adapter_command(context_path: Path) -> list[str]:
-    return ["node", str(SCRIPT_DIR / "adapters" / "devhub_conformance_js.mjs"), str(context_path)]
-
-
-def get_dotnet_adapter_command(context_path: Path) -> list[str]:
-    return ["dotnet", str(get_dotnet_adapter_dll_path()), str(context_path)]
+def get_adapter_command(sdk_name: str, context_path: Path) -> list[str]:
+    if sdk_name == "python":
+        return [sys.executable, str(SCRIPT_DIR / "adapters" / "devhub_conformance_py.py"), str(context_path)]
+    if sdk_name == "typescript":
+        return ["node", str(SCRIPT_DIR / "adapters" / "devhub_conformance_js.mjs"), str(context_path)]
+    if sdk_name == "dotnet":
+        return ["dotnet", str(get_dotnet_adapter_dll_path()), str(context_path)]
+    raise ValueError(f"不支持的 SDK: {sdk_name}")
 
 
 def get_dotnet_adapter_dll_path() -> Path:

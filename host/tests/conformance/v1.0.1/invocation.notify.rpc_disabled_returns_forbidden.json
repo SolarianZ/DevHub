@@ -1,0 +1,43 @@
+{
+  "id": "invocation.notify.rpc_disabled_returns_forbidden",
+  "description": "SDK notify 在 AppDefinition.capabilities.rpc=false 时，必须返回 forbidden/rpc_disabled。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.rpc-disabled.json",
+        "definition": {
+          "appId": "invoke.notify.rpc-disabled",
+          "displayName": "invoke.notify.rpc-disabled",
+          "capabilities": {
+            "rpc": false
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyRpcDisabled",
+    "invokeRequest": {
+      "appId": "invoke.notify.rpc-disabled",
+      "method": "demo.notify.rpc-disabled"
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "error",
+    "actual": {
+      "code": -32002,
+      "message": "forbidden",
+      "reason": "rpc_disabled"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "forbidden",
+    "sdk"
+  ]
+}

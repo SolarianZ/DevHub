@@ -2,12 +2,13 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using DevHub.Sdk;
+using DevHub.Sdk.Models;
 
 var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
 if (args.Length != 1)
 {
-    WritePayload(new AdapterResult("dotnet", null, null, "error", null, new { message = "用法错误：需要 execution-context.json 路径。" }));
+    WritePayload(new AdapterResult("dotnet", null, null, null, "error", null, new { message = "用法错误：需要 execution-context.json 路径。" }));
     return 0;
 }
 
@@ -16,14 +17,20 @@ try
     using var contextDocument = JsonDocument.Parse(await File.ReadAllTextAsync(args[0], Encoding.UTF8));
     var root = contextDocument.RootElement;
     var vector = root.GetProperty("vector");
+    var request = vector.GetProperty("request");
     var result = vector.TryGetProperty("expectedDiscovery", out _)
         ? await RunDiscoveryAsync(root, vector)
-        : await RunRpcAsync(root, vector);
+        : request.TryGetProperty("kind", out var kindElement) &&
+          kindElement.ValueKind == JsonValueKind.String &&
+          (string.Equals(kindElement.GetString(), "sdk.notify", StringComparison.Ordinal) ||
+           string.Equals(kindElement.GetString(), "sdk.request", StringComparison.Ordinal))
+            ? await RunInvocationAsync(root, vector, request)
+            : await RunRpcAsync(root, vector);
     WritePayload(result);
 }
 catch (Exception exception)
 {
-    WritePayload(new AdapterResult("dotnet", null, null, "error", null, new { message = exception.Message }));
+    WritePayload(new AdapterResult("dotnet", null, null, null, "error", null, new { message = exception.Message }));
 }
 
 return 0;
@@ -62,7 +69,7 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
             }
         };
 
-        return new AdapterResult("dotnet", ReadString(vector, "id"), "discovery", "success", actual, null);
+        return new AdapterResult("dotnet", ReadString(vector, "id"), "discovery", null, "success", actual, null);
     }
     catch (Exception exception)
     {
@@ -74,6 +81,7 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
             "dotnet",
             ReadString(vector, "id"),
             "discovery",
+            null,
             "error",
             new
             {
@@ -85,6 +93,65 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
     finally
     {
         Environment.SetEnvironmentVariable("DEVHUB_DATA_DIR", originalDataDirEnv);
+    }
+}
+
+async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement vector, JsonElement request)
+{
+    var operation = string.Equals(ReadString(request, "kind"), "sdk.notify", StringComparison.Ordinal)
+        ? "notify"
+        : "request";
+    await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+    {
+        ClientId = ReadOptionalString(request, "clientId") ?? "ConformanceInvocation",
+        DataDir = ReadString(context, "dataDir")
+    });
+
+    var invokeRequest = BuildInvokeRequest(request.GetProperty("invokeRequest"));
+    try
+    {
+        if (string.Equals(operation, "notify", StringComparison.Ordinal))
+        {
+            var result = await client.NotifyAsync(invokeRequest);
+            return new AdapterResult(
+                "dotnet",
+                ReadString(vector, "id"),
+                "sdk-invocation",
+                operation,
+                "success",
+                new
+                {
+                    ok = result.Ok,
+                    invocationId = result.InvocationId
+                },
+                null);
+        }
+
+        var requestResult = await client.RequestAsync(invokeRequest);
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "sdk-invocation",
+            operation,
+            "success",
+            new
+            {
+                ok = requestResult.Ok,
+                invocationId = requestResult.InvocationId,
+                value = ConvertJsonElement(requestResult.Value)
+            },
+            null);
+    }
+    catch (DevHubRpcException exception)
+    {
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "sdk-invocation",
+            operation,
+            "error",
+            NormalizeInvocationError(exception),
+            null);
     }
 }
 
@@ -133,9 +200,121 @@ async Task<AdapterResult> RunRpcAsync(JsonElement context, JsonElement vector)
         "dotnet",
         ReadString(vector, "id"),
         "rpc",
+        null,
         "success",
         responseDocument.RootElement.Clone(),
         null);
+}
+
+InvokeRequest BuildInvokeRequest(JsonElement payload)
+{
+    if (payload.ValueKind != JsonValueKind.Object)
+    {
+        throw new InvalidOperationException("request.invokeRequest 必须为对象。");
+    }
+
+    var request = new InvokeRequest
+    {
+        AppId = ReadString(payload, "appId"),
+        Method = ReadString(payload, "method")
+    };
+
+    if (payload.TryGetProperty("target", out var targetElement))
+    {
+        if (targetElement.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null))
+        {
+            throw new InvalidOperationException("request.invokeRequest.target 必须为对象或 null。");
+        }
+
+        if (targetElement.ValueKind == JsonValueKind.Null)
+        {
+            request.Target = null;
+        }
+        else
+        {
+            request.Target = new InvocationTarget
+            {
+                Scope = ReadOptionalString(targetElement, "scope"),
+                InstanceId = ReadOptionalString(targetElement, "instanceId")
+            };
+        }
+    }
+
+    if (payload.TryGetProperty("args", out var argsElement))
+    {
+        request.Args = JsonSerializer.Deserialize<object>(argsElement.GetRawText(), jsonOptions);
+    }
+
+    if (payload.TryGetProperty("options", out var optionsElement))
+    {
+        if (optionsElement.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null))
+        {
+            throw new InvalidOperationException("request.invokeRequest.options 必须为对象或 null。");
+        }
+
+        if (optionsElement.ValueKind == JsonValueKind.Null)
+        {
+            request.Options = null;
+        }
+        else
+        {
+            request.Options = new InvocationOptions
+            {
+                TtlMs = ReadOptionalInt32(optionsElement, "ttlMs"),
+                WaitTimeoutMs = ReadOptionalInt32(optionsElement, "waitTimeoutMs"),
+                QueueIfOffline = ReadOptionalBoolean(optionsElement, "queueIfOffline"),
+                AutoLaunch = ReadOptionalBoolean(optionsElement, "autoLaunch")
+            };
+        }
+    }
+
+    return request;
+}
+
+object NormalizeInvocationError(DevHubRpcException exception)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["code"] = exception.Code,
+        ["message"] = exception.Message
+    };
+
+    if (!string.IsNullOrWhiteSpace(exception.Reason))
+    {
+        payload["reason"] = exception.Reason;
+    }
+
+    if (!string.IsNullOrWhiteSpace(exception.InvocationId))
+    {
+        payload["invocationId"] = exception.InvocationId;
+    }
+
+    if (exception.CalleeError is { } calleeError)
+    {
+        var calleePayload = new Dictionary<string, object?>
+        {
+            ["code"] = calleeError.Code,
+            ["message"] = calleeError.Message
+        };
+        if (calleeError.Data is { } data)
+        {
+            calleePayload["data"] = ConvertJsonElement(data);
+        }
+
+        payload["calleeError"] = calleePayload;
+    }
+
+    return payload;
+}
+
+object? ConvertJsonElement(JsonElement? element)
+{
+    if (element is null)
+    {
+        return null;
+    }
+
+    return JsonSerializer.Deserialize<object>(element.Value.GetRawText(), jsonOptions);
 }
 
 string ReadString(JsonElement element, string propertyName)
@@ -159,6 +338,37 @@ string? ReadOptionalString(JsonElement element, string propertyName)
     };
 }
 
+int? ReadOptionalInt32(JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var property))
+    {
+        return null;
+    }
+
+    return property.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.Number when property.TryGetInt32(out var value) => value,
+        _ => throw new InvalidOperationException($"{propertyName} 类型非法。")
+    };
+}
+
+bool? ReadOptionalBoolean(JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var property))
+    {
+        return null;
+    }
+
+    return property.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => throw new InvalidOperationException($"{propertyName} 类型非法。")
+    };
+}
+
 void WritePayload(AdapterResult payload)
 {
     Console.Out.WriteLine(JsonSerializer.Serialize(payload, jsonOptions));
@@ -168,6 +378,7 @@ internal sealed record AdapterResult(
     string Sdk,
     string? VectorId,
     string? Phase,
+    string? Operation,
     string Outcome,
     object? Actual,
     object? Error);

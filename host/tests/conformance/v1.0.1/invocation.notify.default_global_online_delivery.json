@@ -1,0 +1,95 @@
+{
+  "id": "invocation.notify.default_global_online_delivery",
+  "description": "SDK notify 省略 options 时，必须按默认 global 路由投递到在线 helper，并体现默认 ttlMs=60000。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.default-global.json",
+        "definition": {
+          "appId": "invoke.notify.default-global",
+          "displayName": "invoke.notify.default-global"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "notify-default-global-inst",
+          "appId": "invoke.notify.default-global",
+          "scope": null,
+          "pid": 31001,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "notify-default-scope-a-inst",
+          "appId": "invoke.notify.default-global",
+          "scope": "scope-a",
+          "pid": 31002,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-default-global-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.default-global",
+          "method": "demo.notify.default-global",
+          "kind": "notify",
+          "args": {
+            "message": "hello-default-global"
+          },
+          "options": {
+            "ttlMs": 60000
+          }
+        }
+      },
+      {
+        "action": "poll_expect_empty",
+        "instanceId": "notify-default-scope-a-inst",
+        "waitMs": 0
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyDefaultGlobal",
+    "invokeRequest": {
+      "appId": "invoke.notify.default-global",
+      "method": "demo.notify.default-global",
+      "args": {
+        "message": "hello-default-global"
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "sdk",
+    "success"
+  ]
+}

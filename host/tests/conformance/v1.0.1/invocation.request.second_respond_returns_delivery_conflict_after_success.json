@@ -1,0 +1,95 @@
+{
+  "id": "invocation.request.second_respond_returns_delivery_conflict_after_success",
+  "description": "SDK request 在 helper 首次 respond 成功后，第二次 respond 必须返回 delivery_conflict，caller 仍收到成功结果。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.delivery-conflict.json",
+        "definition": {
+          "appId": "invoke.request.delivery-conflict",
+          "displayName": "invoke.request.delivery-conflict"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-delivery-conflict-inst",
+          "appId": "invoke.request.delivery-conflict",
+          "scope": null,
+          "pid": 32009,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-delivery-conflict-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.delivery-conflict",
+          "method": "demo.request.delivery-conflict",
+          "kind": "request"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-delivery-conflict-inst",
+        "value": {
+          "handledBy": "first-response"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-delivery-conflict-inst",
+        "value": {
+          "handledBy": "second-response"
+        },
+        "expectedError": {
+          "code": -32030,
+          "message": "delivery_conflict"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestDeliveryConflict",
+    "invokeRequest": {
+      "appId": "invoke.request.delivery-conflict",
+      "method": "demo.request.delivery-conflict",
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handledBy": "first-response"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "delivery-conflict",
+    "sdk"
+  ]
+}

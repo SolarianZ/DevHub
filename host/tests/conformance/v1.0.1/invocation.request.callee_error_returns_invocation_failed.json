@@ -1,0 +1,93 @@
+{
+  "id": "invocation.request.callee_error_returns_invocation_failed",
+  "description": "SDK request 在 helper 回传应用错误时，必须归一化为 invocation_failed，并暴露 calleeError。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.callee-error.json",
+        "definition": {
+          "appId": "invoke.request.callee-error",
+          "displayName": "invoke.request.callee-error"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-callee-error-inst",
+          "appId": "invoke.request.callee-error",
+          "scope": null,
+          "pid": 32007,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-callee-error-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.callee-error",
+          "method": "demo.request.callee-error",
+          "kind": "request"
+        }
+      },
+      {
+        "action": "respond_error",
+        "instanceId": "request-callee-error-inst",
+        "error": {
+          "code": 1001,
+          "message": "app_error",
+          "data": {
+            "reason": "boom"
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestCalleeError",
+    "invokeRequest": {
+      "appId": "invoke.request.callee-error",
+      "method": "demo.request.callee-error",
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32050,
+      "message": "invocation_failed",
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "calleeError": {
+        "code": 1001,
+        "message": "app_error",
+        "data": {
+          "reason": "boom"
+        }
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "error",
+    "sdk"
+  ]
+}

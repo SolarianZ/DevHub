@@ -1,0 +1,43 @@
+{
+  "id": "invocation.request.rpc_disabled_returns_forbidden",
+  "description": "SDK request 在 AppDefinition.capabilities.rpc=false 时，必须返回 forbidden/rpc_disabled。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.rpc-disabled.json",
+        "definition": {
+          "appId": "invoke.request.rpc-disabled",
+          "displayName": "invoke.request.rpc-disabled",
+          "capabilities": {
+            "rpc": false
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestRpcDisabled",
+    "invokeRequest": {
+      "appId": "invoke.request.rpc-disabled",
+      "method": "demo.request.rpc-disabled"
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32002,
+      "message": "forbidden",
+      "reason": "rpc_disabled"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "forbidden",
+    "sdk"
+  ]
+}

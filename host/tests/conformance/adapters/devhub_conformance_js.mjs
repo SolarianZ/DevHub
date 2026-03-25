@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { discoverRuntime } from "../../../../sdks/javascript/dist/index.js";
+import { DevHubClient, DevHubRpcError, discoverRuntime } from "../../../../sdks/javascript/dist/index.js";
 
 function emit(payload) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -72,6 +72,68 @@ async function runDiscovery(context) {
   }
 }
 
+async function runInvocation(context) {
+  const vector = context.vector;
+  const request = vector.request ?? {};
+  const operation = request.kind === "sdk.notify" ? "notify" : "request";
+  const client = await DevHubClient.fromRuntime({
+    clientId: typeof request.clientId === "string" && request.clientId.trim()
+      ? request.clientId
+      : "ConformanceInvocation",
+    dataDir: context.dataDir
+  });
+
+  try {
+    const invokeRequest = buildInvokeRequest(request.invokeRequest);
+    if (operation === "notify") {
+      const result = await client.notify(invokeRequest);
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "sdk-invocation",
+        operation,
+        outcome: "success",
+        actual: {
+          ok: result.ok,
+          invocationId: result.invocationId
+        },
+        error: null
+      };
+    }
+
+    const result = await client.request(invokeRequest);
+    return {
+      sdk: "typescript",
+      vectorId: vector.id,
+      phase: "sdk-invocation",
+      operation,
+      outcome: "success",
+      actual: {
+        ok: result.ok,
+        invocationId: result.invocationId,
+        value: result.value
+      },
+      error: null
+    };
+  } catch (error) {
+    if (error instanceof DevHubRpcError) {
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "sdk-invocation",
+        operation,
+        outcome: "error",
+        actual: normalizeInvocationError(error),
+        error: null
+      };
+    }
+
+    throw error;
+  } finally {
+    await client.dispose();
+  }
+}
+
 async function runRpc(context) {
   const vector = context.vector;
   const connection = await discoverRuntime(context.dataDir);
@@ -91,6 +153,58 @@ async function runRpc(context) {
   };
 }
 
+function buildInvokeRequest(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("request.invokeRequest 必须为对象。");
+  }
+
+  const request = {
+    appId: payload.appId,
+    method: payload.method
+  };
+
+  if ("target" in payload && payload.target !== null) {
+    request.target = payload.target;
+  }
+
+  if ("args" in payload) {
+    request.args = payload.args;
+  }
+
+  if ("options" in payload && payload.options !== null) {
+    request.options = payload.options;
+  }
+
+  return request;
+}
+
+function normalizeInvocationError(error) {
+  const actual = {
+    code: error.code,
+    message: error.message
+  };
+
+  if (error.reason !== null) {
+    actual.reason = error.reason;
+  }
+
+  if (error.invocationId !== null) {
+    actual.invocationId = error.invocationId;
+  }
+
+  if (error.calleeError !== null) {
+    actual.calleeError = {
+      code: error.calleeError.code,
+      message: error.calleeError.message
+    };
+    if (error.calleeError.data !== undefined) {
+      actual.calleeError.data = error.calleeError.data;
+    }
+  }
+
+  return actual;
+}
+
 async function main() {
   if (process.argv.length !== 3) {
     emit({
@@ -106,9 +220,12 @@ async function main() {
 
   try {
     const context = JSON.parse(await readFile(process.argv[2], "utf-8"));
+    const kind = context.vector?.request?.kind;
     const result = context.vector?.expectedDiscovery
       ? await runDiscovery(context)
-      : await runRpc(context);
+      : kind === "sdk.notify" || kind === "sdk.request"
+        ? await runInvocation(context)
+        : await runRpc(context);
     emit(result);
   } catch (error) {
     emit({

@@ -1,0 +1,117 @@
+{
+  "id": "invocation.request.explicit_scope_routes_only_to_scoped_instance",
+  "description": "SDK request 显式 target.scope 时，必须只命中对应 scoped helper 并成功完成往返。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.scope.json",
+        "definition": {
+          "appId": "invoke.request.scope",
+          "displayName": "invoke.request.scope"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-scope-global-inst",
+          "appId": "invoke.request.scope",
+          "scope": null,
+          "pid": 32003,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-scope-a-inst",
+          "appId": "invoke.request.scope",
+          "scope": "scope-a",
+          "pid": 32004,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-scope-a-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.scope",
+          "method": "demo.request.scope-a",
+          "kind": "request",
+          "target": {
+            "scope": "scope-a"
+          },
+          "args": {
+            "message": "scope-a-request"
+          },
+          "options": {
+            "ttlMs": 5000
+          }
+        }
+      },
+      {
+        "action": "poll_expect_empty",
+        "instanceId": "request-scope-global-inst",
+        "waitMs": 0
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-scope-a-inst",
+        "value": {
+          "handledBy": "scope-a"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestScope",
+    "invokeRequest": {
+      "appId": "invoke.request.scope",
+      "method": "demo.request.scope-a",
+      "target": {
+        "scope": "scope-a"
+      },
+      "args": {
+        "message": "scope-a-request"
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handledBy": "scope-a"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "scope",
+    "sdk"
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "id": "invocation.notify.explicit_scope_routes_only_to_scoped_instance",
+  "description": "SDK notify 显式 target.scope 时，必须只命中对应 scoped helper，不回退到 global helper。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.scope.json",
+        "definition": {
+          "appId": "invoke.notify.scope",
+          "displayName": "invoke.notify.scope"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "notify-scope-global-inst",
+          "appId": "invoke.notify.scope",
+          "scope": null,
+          "pid": 31003,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "notify-scope-a-inst",
+          "appId": "invoke.notify.scope",
+          "scope": "scope-a",
+          "pid": 31004,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-scope-a-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.scope",
+          "method": "demo.notify.scope-a",
+          "kind": "notify",
+          "target": {
+            "scope": "scope-a"
+          },
+          "args": {
+            "message": "hello-scope-a"
+          },
+          "options": {
+            "ttlMs": 5000
+          }
+        }
+      },
+      {
+        "action": "poll_expect_empty",
+        "instanceId": "notify-scope-global-inst",
+        "waitMs": 0
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyScope",
+    "invokeRequest": {
+      "appId": "invoke.notify.scope",
+      "method": "demo.notify.scope-a",
+      "target": {
+        "scope": "scope-a"
+      },
+      "args": {
+        "message": "hello-scope-a"
+      },
+      "options": {
+        "ttlMs": 5000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "scope",
+    "sdk"
+  ]
+}

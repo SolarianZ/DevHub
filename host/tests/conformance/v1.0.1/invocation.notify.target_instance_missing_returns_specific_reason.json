@@ -1,0 +1,46 @@
+{
+  "id": "invocation.notify.target_instance_missing_returns_specific_reason",
+  "description": "SDK notify 指定不存在的 target.instanceId 时，必须返回 instance_not_found/target_instance_missing。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.target-missing.json",
+        "definition": {
+          "appId": "invoke.notify.target-missing",
+          "displayName": "invoke.notify.target-missing"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyTargetMissing",
+    "invokeRequest": {
+      "appId": "invoke.notify.target-missing",
+      "method": "demo.notify.target-missing",
+      "target": {
+        "instanceId": "notify-target-missing-inst"
+      },
+      "options": {
+        "queueIfOffline": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "error",
+    "actual": {
+      "code": -32010,
+      "message": "instance_not_found",
+      "reason": "target_instance_missing"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "error",
+    "sdk"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "id": "invocation.request.target_instance_missing_returns_specific_reason",
+  "description": "SDK request 指定不存在的 target.instanceId 时，必须返回 instance_not_found/target_instance_missing。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.target-missing.json",
+        "definition": {
+          "appId": "invoke.request.target-missing",
+          "displayName": "invoke.request.target-missing"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestTargetMissing",
+    "invokeRequest": {
+      "appId": "invoke.request.target-missing",
+      "method": "demo.request.target-missing",
+      "target": {
+        "instanceId": "request-target-missing-inst"
+      },
+      "options": {
+        "queueIfOffline": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32010,
+      "message": "instance_not_found",
+      "reason": "target_instance_missing"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "error",
+    "sdk"
+  ]
+}

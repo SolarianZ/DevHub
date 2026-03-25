@@ -1,0 +1,105 @@
+{
+  "id": "invocation.request.default_global_roundtrip_uses_spec_defaults",
+  "description": "SDK request 省略 options 时，必须按默认 global 路由完成往返，并体现默认 ttlMs=300000、waitTimeoutMs=120000。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.default-global.json",
+        "definition": {
+          "appId": "invoke.request.default-global",
+          "displayName": "invoke.request.default-global"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-default-global-inst",
+          "appId": "invoke.request.default-global",
+          "scope": null,
+          "pid": 32001,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-default-scope-a-inst",
+          "appId": "invoke.request.default-global",
+          "scope": "scope-a",
+          "pid": 32002,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-default-global-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.default-global",
+          "method": "demo.request.default-global",
+          "kind": "request",
+          "args": {
+            "message": "default-request"
+          },
+          "options": {
+            "ttlMs": 300000
+          }
+        }
+      },
+      {
+        "action": "poll_expect_empty",
+        "instanceId": "request-default-scope-a-inst",
+        "waitMs": 0
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-default-global-inst",
+        "value": {
+          "handledBy": "default-global"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestDefaultGlobal",
+    "invokeRequest": {
+      "appId": "invoke.request.default-global",
+      "method": "demo.request.default-global",
+      "args": {
+        "message": "default-request"
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handledBy": "default-global"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "defaults",
+    "sdk"
+  ]
+}

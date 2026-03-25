@@ -19,6 +19,7 @@
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划中的测试基线并入本 M5 测试文档，与 `.NET` / `JS/TS` / `Python` SDK 采用统一粒度维护。
 - 2026-03-25 已完成：Discovery/Auth/AppDef/AppInstance 共 20 条向量已可直接由 `vector_runner.py` 跑通；runner v1 已支持向量级 `setup` 与自动 teardown。
+- 2026-03-25 已完成：Invocation Notify 6 + Request 10 共 16 条向量已落地并跑通，累计 36/52；runner v2 已支持 Invocation 向量的 per-SDK 独立沙箱、`orchestration` 三阶段编排，以及中立 raw-protocol helper 模拟被调用方。
 
 ---
 
@@ -107,8 +108,8 @@
 | Auth | 5 | [x] |
 | AppDef | 4 | [x] |
 | AppInstance | 8 | [x] |
-| Notify | 6 | [ ] |
-| Request | 10 | [ ] |
+| Notify | 6 | [x] |
+| Request | 10 | [x] |
 | Events | 4 | [ ] |
 | Error | 12 | [ ] |
 | **总计** | **52** | [ ] |
@@ -126,11 +127,14 @@
 
 说明：若为 HTTP 场景，可额外包含 `http.headers`；若为 WS 场景，可增加 `ws` 配置字段，但不得删除上述核心字段。
 
-- runner v1 允许仓库内扩展字段 `setup`：
+- runner v2 允许仓库内扩展字段 `setup`：
   - `setup.definitions`：支持 `{ fileName, definition }` / `{ fileName, rawText }`，写入 suite Host 的 `apps/definitions`。
   - `setup.instances`：支持 `{ state, instance, waitSeconds? }`，通过 HTTP 预注册实例并可等待到离线状态。
   - `setup.dataDir.files`：支持 `{ path, text }` / `{ path, json }`，写入向量私有数据根目录。
 - runner 自动 teardown，不单独引入向量级 `teardown` 字段：会删除预置 definition、注销预置 instance，并清理向量临时数据根目录。
+- Invocation 类向量允许扩展字段 `orchestration`，固定使用 `beforeCaller` / `duringCaller` / `afterCaller` 三阶段编排。
+- `orchestration` 中的协作步骤统一由 runner 内部 raw-protocol helper 执行，当前支持 `register_instance`、`sleep`、`poll_expect_invocation`、`poll_expect_empty`、`respond_value`、`respond_error`。
+- Invocation 主链路向量要求 `request.kind` 使用 `sdk.notify` / `sdk.request`，由三语言适配器真正调用 SDK 公共 API；helper 只承担被调用方模拟，不再复用 SDK 当被调用方。
 - Events 类向量必须包含“断开连接后订阅清理”场景。
 - Error 类向量必须覆盖 Spec §8.1 + §8.2 全量错误码与关键 `error.data` 字段。
 
@@ -167,7 +171,7 @@
 
 ### 4.5 契约测试任务
 
-- [ ] 生成 52 条最小向量，按分类落盘。
+- [ ] 生成 52 条最小向量，按分类落盘（当前 36/52；Notify 6 + Request 10 已完成）。
 - [x] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
 - [x] 报告中必须输出失败差异字段，支持快速定位跨实现偏差。
 - [ ] Events 类向量显式包含断开连接清理场景。

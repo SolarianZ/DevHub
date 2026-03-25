@@ -1,0 +1,114 @@
+{
+  "id": "invocation.request.empty_scope_routes_only_to_global_instance",
+  "description": "SDK request 使用 target.scope=\"\" 时，必须映射到 global，只命中 global helper。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.empty-scope.json",
+        "definition": {
+          "appId": "invoke.request.empty-scope",
+          "displayName": "invoke.request.empty-scope"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-empty-global-inst",
+          "appId": "invoke.request.empty-scope",
+          "scope": null,
+          "pid": 32005,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "request-empty-scope-a-inst",
+          "appId": "invoke.request.empty-scope",
+          "scope": "scope-a",
+          "pid": 32006,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-empty-global-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.empty-scope",
+          "method": "demo.request.empty-scope",
+          "kind": "request",
+          "args": {
+            "message": "empty-scope-request"
+          },
+          "options": {
+            "ttlMs": 5000
+          }
+        }
+      },
+      {
+        "action": "poll_expect_empty",
+        "instanceId": "request-empty-scope-a-inst",
+        "waitMs": 0
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-empty-global-inst",
+        "value": {
+          "handledBy": "empty-scope-global"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestEmptyScope",
+    "invokeRequest": {
+      "appId": "invoke.request.empty-scope",
+      "method": "demo.request.empty-scope",
+      "target": {
+        "scope": ""
+      },
+      "args": {
+        "message": "empty-scope-request"
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handledBy": "empty-scope-global"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "scope",
+    "sdk"
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "id": "invocation.notify.offline_pending_delivers_after_helper_registers",
+  "description": "SDK notify 在 helper 离线且 queueIfOffline=true、autoLaunch=false 时，必须先成功入队，helper 后注册后可被拉取。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.notify.pending.json",
+        "definition": {
+          "appId": "invoke.notify.pending",
+          "displayName": "invoke.notify.pending"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "duringCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "notify-pending-inst",
+          "appId": "invoke.notify.pending",
+          "scope": null,
+          "pid": 31005,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-pending-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.pending",
+          "method": "demo.notify.pending",
+          "kind": "notify",
+          "args": {
+            "message": "pending-notify"
+          },
+          "options": {
+            "ttlMs": 5000
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyPending",
+    "invokeRequest": {
+      "appId": "invoke.notify.pending",
+      "method": "demo.notify.pending",
+      "args": {
+        "message": "pending-notify"
+      },
+      "options": {
+        "ttlMs": 5000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "pending",
+    "sdk"
+  ]
+}

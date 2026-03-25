@@ -22,6 +22,7 @@
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划并入本 M5 文档与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计与任务维护口径。
 - 2026-03-25 已完成：补齐 Discovery + Auth + AppDef + AppInstance 共 20 条 conformance 向量；`vector_runner.py` 升级到 runner v1，支持向量级 `setup` 与自动 teardown，并保持 HTTP-first 的三语言一致性执行模型。
+- 2026-03-25 已完成：补齐 Invocation Notify 6 + Request 10 共 16 条 conformance 向量，累计达到 36/52；`vector_runner.py` 升级到 runner v2，Invocation 向量改为真正走三语言 SDK `notify/request`，并由中立 raw-protocol helper 完成被调用方协作编排；已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与隔离 Hub 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 
 ---
 
@@ -204,18 +205,22 @@
 ### 3.5 `M5-CONF-*`（签名测试向量）
 
 - [x] `M5-CONF-001`：建立 `host/tests/conformance/v1.0.1/` 目录与向量元数据规范。
-- [ ] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整）。
+- [ ] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整；当前已完成 36/52：Discovery/Auth/AppDef/AppInstance/Notify/Request）。
 - [x] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
 - [x] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
 - [ ] `M5-CONF-005`：显式覆盖 Events 断连清理与 Error 全量错误码/`error.data` 字段断言。
 
-补充约定（runner v1）：
+补充约定（runner v2）：
 
 - 在不变更 `docs/Spec.md` 的前提下，仓库内 conformance runner 允许可选扩展字段 `setup`。
 - `setup.definitions`：按顺序写入 suite Host 的 `apps/definitions`，支持 `{ fileName, definition }` 与 `{ fileName, rawText }`。
 - `setup.instances`：按顺序通过 HTTP 预注册实例，支持 `state="registered"` 与 `state="offline"`；离线状态由 runner 等待 `waitSeconds` 触发。
 - `setup.dataDir.files`：写入向量私有数据根目录，支持 `{ path, text }` 与 `{ path, json }`。
 - runner 自动负责 teardown：删除向量创建的 definition 文件、注销预置实例并清理向量临时数据根目录。
+- Invocation 类向量允许使用扩展字段 `orchestration`，固定阶段为 `beforeCaller` / `duringCaller` / `afterCaller`。
+- `orchestration` 中的协作步骤由 runner 内部 raw-protocol helper 执行，当前支持 `register_instance`、`sleep`、`poll_expect_invocation`、`poll_expect_empty`、`respond_value`、`respond_error`。
+- Invocation 类向量的 `request.kind` 允许使用 `sdk.notify` / `sdk.request`，要求三语言适配器真正走 SDK 公共 API；helper 只负责被调用方模拟，不再让 runner 同时把 SDK 作为“调用方”和“被调用方”。
+- runner 对同一条 Invocation 向量按 SDK 维度使用独立执行沙箱，避免跨 SDK 共享临时 runtime / helper 状态造成串扰。
 
 ### 3.6 `M5-CT-*`（契约测试）
 

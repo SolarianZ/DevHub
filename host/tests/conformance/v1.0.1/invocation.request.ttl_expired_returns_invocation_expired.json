@@ -1,0 +1,46 @@
+{
+  "id": "invocation.request.ttl_expired_returns_invocation_expired",
+  "description": "SDK request 在无 helper 在线、ttlMs==waitTimeoutMs==1000 且允许排队时，必须返回 invocation_expired。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "invoke.request.expired.json",
+        "definition": {
+          "appId": "invoke.request.expired",
+          "displayName": "invoke.request.expired"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestExpired",
+    "invokeRequest": {
+      "appId": "invoke.request.expired",
+      "method": "demo.request.expired",
+      "options": {
+        "ttlMs": 1000,
+        "waitTimeoutMs": 1000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32011,
+      "message": "invocation_expired",
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "expired",
+    "sdk"
+  ]
+}
