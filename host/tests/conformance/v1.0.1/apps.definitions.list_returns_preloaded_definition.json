@@ -1,0 +1,60 @@
+{
+  "id": "apps.definitions.list_returns_preloaded_definition",
+  "description": "预置合法 AppDefinition 时，hub.apps.listDefinitions 必须返回该定义。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.list.preloaded.app.json",
+        "definition": {
+          "appId": "apps.list.preloaded.app",
+          "displayName": "Apps List Preloaded",
+          "description": "用于 conformance AppDefinition 列表向量。",
+          "capabilities": {
+            "rpc": true,
+            "events": false
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000021"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list",
+    "method": "hub.apps.listDefinitions",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list",
+    "result": {
+      "ok": true,
+      "definitions": [
+        {
+          "appId": "apps.list.preloaded.app",
+          "displayName": "Apps List Preloaded",
+          "description": "用于 conformance AppDefinition 列表向量。",
+          "capabilities": {
+            "rpc": true,
+            "events": false
+          }
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

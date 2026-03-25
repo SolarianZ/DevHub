@@ -1,0 +1,68 @@
+{
+  "id": "apps.instances.list_include_all_scopes_ignores_scope_filter",
+  "description": "includeAllScopes=true 时，hub.apps.listInstances 必须忽略 scope 参数并返回所有作用域。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "instance": {
+          "instanceId": "apps-instance-all-scopes",
+          "appId": "apps.instance.list.all-scopes.app",
+          "scope": "workspace-a",
+          "pid": 32007,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000031"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-all-scopes",
+    "method": "hub.apps.listInstances",
+    "params": {
+      "appId": "apps.instance.list.all-scopes.app",
+      "scope": "workspace-b",
+      "includeAllScopes": true
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-all-scopes",
+    "result": {
+      "ok": true,
+      "instances": [
+        {
+          "instanceId": "apps-instance-all-scopes",
+          "appId": "apps.instance.list.all-scopes.app",
+          "scope": "workspace-a",
+          "pid": 32007,
+          "registeredAtUtc": "${ANY_ISO_UTC}",
+          "lastSeenUtc": "${ANY_ISO_UTC}",
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "scope"
+  ]
+}

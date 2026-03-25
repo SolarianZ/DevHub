@@ -1,0 +1,53 @@
+{
+  "id": "apps.instances.heartbeat_returns_last_seen_for_registered_instance",
+  "description": "实例已注册时，hub.apps.heartbeat 必须返回最新 lastSeenUtc。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "instance": {
+          "instanceId": "apps-instance-heartbeat-1",
+          "appId": "apps.instance.heartbeat.app",
+          "scope": null,
+          "pid": 32003,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000027"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-heartbeat",
+    "method": "hub.apps.heartbeat",
+    "params": {
+      "instanceId": "apps-instance-heartbeat-1"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-heartbeat",
+    "result": {
+      "ok": true,
+      "lastSeenUtc": "${ANY_ISO_UTC}"
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "success"
+  ]
+}

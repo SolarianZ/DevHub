@@ -1,0 +1,92 @@
+{
+  "id": "apps.instances.list_default_global_filters_scoped_and_offline",
+  "description": "默认 listInstances 必须仅返回 global 在线实例，过滤 scoped 与 offline。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "offline",
+        "waitSeconds": 3,
+        "instance": {
+          "instanceId": "apps-instance-default-offline",
+          "appId": "apps.instance.list.default.app",
+          "scope": null,
+          "pid": 32004,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "state": "registered",
+        "instance": {
+          "instanceId": "apps-instance-default-online",
+          "appId": "apps.instance.list.default.app",
+          "scope": null,
+          "pid": 32005,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "state": "registered",
+        "instance": {
+          "instanceId": "apps-instance-default-scoped",
+          "appId": "apps.instance.list.default.app",
+          "scope": "workspace-a",
+          "pid": 32006,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000030"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-default",
+    "method": "hub.apps.listInstances",
+    "params": {
+      "appId": "apps.instance.list.default.app"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-default",
+    "result": {
+      "ok": true,
+      "instances": [
+        {
+          "instanceId": "apps-instance-default-online",
+          "appId": "apps.instance.list.default.app",
+          "pid": 32005,
+          "registeredAtUtc": "${ANY_ISO_UTC}",
+          "lastSeenUtc": "${ANY_ISO_UTC}",
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "scope"
+  ]
+}

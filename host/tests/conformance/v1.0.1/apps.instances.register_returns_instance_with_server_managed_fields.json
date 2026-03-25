@@ -1,0 +1,55 @@
+{
+  "id": "apps.instances.register_returns_instance_with_server_managed_fields",
+  "description": "注册实例成功时，hub.apps.registerInstance 必须返回带服务端时间戳的 AppInstance。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000025"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "instance": {
+        "instanceId": "apps-instance-register-1",
+        "appId": "apps.instance.registered.app",
+        "scope": null,
+        "pid": 32001,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register",
+    "result": {
+      "ok": true,
+      "instance": {
+        "instanceId": "apps-instance-register-1",
+        "appId": "apps.instance.registered.app",
+        "pid": 32001,
+        "registeredAtUtc": "${ANY_ISO_UTC}",
+        "lastSeenUtc": "${ANY_ISO_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "success"
+  ]
+}

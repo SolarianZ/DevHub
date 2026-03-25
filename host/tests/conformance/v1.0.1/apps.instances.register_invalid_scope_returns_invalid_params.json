@@ -1,0 +1,48 @@
+{
+  "id": "apps.instances.register_invalid_scope_returns_invalid_params",
+  "description": "注册实例时 scope 类型非法时，hub.apps.registerInstance 必须返回 invalid_params/invalid_scope。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000026"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-invalid-scope",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "instance": {
+        "instanceId": "apps-instance-register-invalid-scope",
+        "appId": "apps.instance.invalid-scope.app",
+        "scope": 1,
+        "pid": 32002,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-invalid-scope",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params",
+      "data": {
+        "reason": "invalid_scope"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "error"
+  ]
+}

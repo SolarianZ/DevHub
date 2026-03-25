@@ -1,0 +1,67 @@
+{
+  "id": "apps.instances.list_include_offline_returns_offline_instance",
+  "description": "includeOffline=true 时，hub.apps.listInstances 必须返回离线实例。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "offline",
+        "waitSeconds": 3,
+        "instance": {
+          "instanceId": "apps-instance-offline-only",
+          "appId": "apps.instance.list.offline.app",
+          "scope": null,
+          "pid": 32008,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000032"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-offline",
+    "method": "hub.apps.listInstances",
+    "params": {
+      "appId": "apps.instance.list.offline.app",
+      "includeOffline": true
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-offline",
+    "result": {
+      "ok": true,
+      "instances": [
+        {
+          "instanceId": "apps-instance-offline-only",
+          "appId": "apps.instance.list.offline.app",
+          "pid": 32008,
+          "registeredAtUtc": "${ANY_ISO_UTC}",
+          "lastSeenUtc": "${ANY_ISO_UTC}",
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "offline"
+  ]
+}

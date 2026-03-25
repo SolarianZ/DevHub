@@ -6,15 +6,10 @@ DevHub M5 最小 conformance runner。
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import os
-import re
 import subprocess
 import sys
 import tempfile
-import time
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -25,44 +20,18 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(HOST_ROOT) not in sys.path:
     sys.path.insert(0, str(HOST_ROOT))
 
-from tests.test_base import (  # type: ignore  # noqa: E402
-    RpcClient,
-    get_test_project_root,
-    start_isolated_hub_process,
+from tests.test_base import get_test_project_root  # type: ignore  # noqa: E402
+from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
+    VectorExecutionContext,
+    materialize_vector,
+    start_suite_host,
+    stop_process,
 )
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-VECTOR_TOKEN_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
-
-
-@dataclass
-class HostRuntimeContext:
-    data_dir: Path
-    runtime_dir: Path
-    hub_json_path: Path
-    token_file: Path
-    token: str
-    hub_info: dict[str, Any]
-
-    @property
-    def http_base_url(self) -> str:
-        return str(self.hub_info["httpBaseUrl"])
-
-    @property
-    def ws_url(self) -> str:
-        return str(self.hub_info["wsUrl"])
-
-
-@dataclass
-class VectorExecutionContext:
-    source_path: Path
-    resolved_vector: dict[str, Any]
-    data_dir: Path
-    environment_data_dir: Path | None
-    context_path: Path
 
 
 def main() -> int:
@@ -78,16 +47,38 @@ def main() -> int:
     failure_count = 0
     with tempfile.TemporaryDirectory(prefix="devhub-conformance-") as temp_root_str:
         temp_root = Path(temp_root_str)
-        host_context, process, log_file = start_isolated_hub(temp_root)
+        host_context, process, log_file = start_suite_host(temp_root)
         try:
             for vector_path, vector in vectors:
-                execution = materialize_vector(vector_path, vector, host_context, temp_root)
-                result = run_vector(execution)
+                execution: VectorExecutionContext | None = None
+                try:
+                    execution = materialize_vector(vector_path, vector, host_context, temp_root)
+                    result = run_vector(execution)
+                except Exception as exc:  # noqa: BLE001
+                    failure_count += 1
+                    emit_failures(
+                        [
+                            {
+                                "vectorId": vector.get("id", str(vector_path)),
+                                "sdk": "runner",
+                                "expected": vector.get("expectedDiscovery") or vector.get("expectedResponse"),
+                                "actual": None,
+                                "diffFields": ["$runner"],
+                                "message": str(exc),
+                            }
+                        ]
+                    )
+                    continue
+                finally:
+                    if execution is not None:
+                        execution.cleanup(host_context)
+
                 if not result["passed"]:
                     failure_count += 1
                     emit_failures(result["failures"])
-                else:
-                    print(f"PASS  {execution.resolved_vector['id']}")
+                    continue
+
+                print(f"PASS  {execution.resolved_vector['id']}")
         finally:
             stop_process(process)
             log_file.close()
@@ -145,178 +136,6 @@ def validate_vector_shape(path: Path, payload: dict[str, Any]) -> None:
     missing = [field for field in required_fields if field not in payload]
     if missing:
         raise ValueError(f"向量缺少必需字段：{path} -> {missing}")
-
-
-def start_isolated_hub(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
-    host_data_dir = temp_root / "isolated-hub-data"
-    host_data_dir.mkdir(parents=True, exist_ok=True)
-    log_path = temp_root / "isolated-hub.log"
-    log_file = open(log_path, "w+", encoding="utf-8")
-    process = start_isolated_hub_process(str(host_data_dir), log_file)
-
-    try:
-        host_context = wait_for_host_runtime(host_data_dir, process, log_file)
-        return host_context, process, log_file
-    except Exception:
-        stop_process(process)
-        log_file.close()
-        raise
-
-
-def wait_for_host_runtime(
-    host_data_dir: Path,
-    process: subprocess.Popen[str],
-    log_file,
-) -> HostRuntimeContext:
-    runtime_dir = host_data_dir / "runtime"
-    hub_json_path = runtime_dir / "hub.json"
-    deadline = time.time() + 45
-    while time.time() < deadline:
-        if process.poll() is not None:
-            raise RuntimeError(f"隔离 Hub 提前退出，日志片段：{read_log_tail(log_file)}")
-        if hub_json_path.is_file():
-            break
-        time.sleep(0.2)
-    else:
-        raise RuntimeError(f"等待隔离 Hub 生成 hub.json 超时，日志片段：{read_log_tail(log_file)}")
-
-    hub_info = json.loads(hub_json_path.read_text(encoding="utf-8"))
-    token_file = Path(hub_info["tokenFile"])
-    if not token_file.is_file():
-        raise FileNotFoundError(f"隔离 Hub 的 tokenFile 不存在：{token_file}")
-
-    token = token_file.read_text(encoding="utf-8").strip()
-    client = RpcClient(str(hub_info["httpBaseUrl"]), token)
-    ping_deadline = time.time() + 20
-    last_error = "unknown"
-    while time.time() < ping_deadline:
-        if process.poll() is not None:
-            raise RuntimeError(f"隔离 Hub 在 ping 前退出，日志片段：{read_log_tail(log_file)}")
-        try:
-            response = client.call("hub.ping")
-            if response.get("result", {}).get("ok") is True:
-                return HostRuntimeContext(
-                    data_dir=host_data_dir,
-                    runtime_dir=runtime_dir,
-                    hub_json_path=hub_json_path,
-                    token_file=token_file,
-                    token=token,
-                    hub_info=hub_info,
-                )
-            last_error = json.dumps(response, ensure_ascii=False)
-        except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-        time.sleep(0.3)
-
-    raise RuntimeError(f"隔离 Hub 在超时时间内不可达：{last_error}；日志片段：{read_log_tail(log_file)}")
-
-
-def read_log_tail(log_file, max_chars: int = 4000) -> str:
-    try:
-        log_file.flush()
-        log_file.seek(0)
-        content = log_file.read()
-    except Exception:  # noqa: BLE001
-        return ""
-
-    content = content.strip()
-    if len(content) > max_chars:
-        return content[-max_chars:]
-    return content
-
-
-def stop_process(process: subprocess.Popen[str] | None) -> None:
-    if process is None or process.poll() is not None:
-        return
-
-    process.terminate()
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
-
-
-def materialize_vector(
-    vector_path: Path,
-    vector: dict[str, Any],
-    host_context: HostRuntimeContext,
-    temp_root: Path,
-) -> VectorExecutionContext:
-    vector_temp_dir = temp_root / sanitize_file_name(str(vector["id"]))
-    vector_temp_dir.mkdir(parents=True, exist_ok=True)
-
-    data_dir = host_context.data_dir
-    environment_data_dir: Path | None = None
-    placeholders = build_host_placeholders(host_context)
-
-    if "expectedDiscovery" in vector:
-        runtime_setup = vector.get("setup", {}).get("runtime", {})
-        if runtime_setup.get("mode") != "copy_host_runtime":
-            raise ValueError(f"暂不支持的 Discovery setup：{vector_path}")
-
-        data_dir = vector_temp_dir / "data"
-        runtime_dir = data_dir / "runtime"
-        runtime_dir.mkdir(parents=True, exist_ok=True)
-        token_file = runtime_dir / "token.txt"
-        token_file.write_text(host_context.token, encoding="utf-8")
-
-        hub_info = copy.deepcopy(host_context.hub_info)
-        hub_info["tokenFile"] = str(token_file)
-        (runtime_dir / "hub.json").write_text(
-            json.dumps(hub_info, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        placeholders.update(
-            {
-                "VECTOR_DATA_DIR": str(data_dir),
-                "VECTOR_RUNTIME_DIR": str(runtime_dir),
-                "VECTOR_TOKEN_FILE": str(token_file),
-            }
-        )
-        if vector["request"].get("useEnvironmentDataDir") is True:
-            environment_data_dir = data_dir
-
-    resolved_vector = substitute_placeholders(copy.deepcopy(vector), placeholders)
-    context_payload = {
-        "vector": resolved_vector,
-        "dataDir": str(data_dir),
-        "environmentDataDir": str(environment_data_dir) if environment_data_dir else None,
-    }
-
-    context_path = vector_temp_dir / "execution-context.json"
-    context_path.write_text(json.dumps(context_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    return VectorExecutionContext(
-        source_path=vector_path,
-        resolved_vector=resolved_vector,
-        data_dir=data_dir,
-        environment_data_dir=environment_data_dir,
-        context_path=context_path,
-    )
-
-
-def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
-    return {
-        "HOST_DATA_DIR": str(host_context.data_dir),
-        "HOST_RUNTIME_DIR": str(host_context.runtime_dir),
-        "HOST_HUB_JSON": str(host_context.hub_json_path),
-        "HOST_TOKEN_FILE": str(host_context.token_file),
-        "HOST_TOKEN": host_context.token,
-        "HOST_HTTP_BASE_URL": host_context.http_base_url,
-        "HOST_WS_URL": host_context.ws_url,
-    }
-
-
-def substitute_placeholders(value: Any, placeholders: dict[str, str]) -> Any:
-    if isinstance(value, str):
-        return VECTOR_TOKEN_PATTERN.sub(lambda match: placeholders.get(match.group(1), match.group(0)), value)
-    if isinstance(value, list):
-        return [substitute_placeholders(item, placeholders) for item in value]
-    if isinstance(value, dict):
-        return {key: substitute_placeholders(item, placeholders) for key, item in value.items()}
-    return value
 
 
 def run_vector(execution: VectorExecutionContext) -> dict[str, Any]:
@@ -550,10 +369,6 @@ def get_dotnet_adapter_dll_path() -> Path:
         / "net10.0"
         / "DevHub.Sdk.ConformanceAdapter.dll"
     )
-
-
-def sanitize_file_name(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", value)
 
 
 if __name__ == "__main__":

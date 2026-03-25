@@ -7,7 +7,7 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-24）
+## 当前状态（截至 2026-03-25）
 
 - 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
@@ -21,6 +21,7 @@
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 48 条单元测试 + 14 条集成测试）；已补齐 SDK 对 AppDefinition / AppInstance / Invocation 成功载荷的关键结构校验，并为注册载荷 `meta` 与 `respond.error.message` 增加本地参数校验。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划并入本 M5 文档与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计与任务维护口径。
+- 2026-03-25 已完成：补齐 Discovery + Auth + AppDef + AppInstance 共 20 条 conformance 向量；`vector_runner.py` 升级到 runner v1，支持向量级 `setup` 与自动 teardown，并保持 HTTP-first 的三语言一致性执行模型。
 
 ---
 
@@ -207,6 +208,14 @@
 - [x] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
 - [x] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
 - [ ] `M5-CONF-005`：显式覆盖 Events 断连清理与 Error 全量错误码/`error.data` 字段断言。
+
+补充约定（runner v1）：
+
+- 在不变更 `docs/Spec.md` 的前提下，仓库内 conformance runner 允许可选扩展字段 `setup`。
+- `setup.definitions`：按顺序写入 suite Host 的 `apps/definitions`，支持 `{ fileName, definition }` 与 `{ fileName, rawText }`。
+- `setup.instances`：按顺序通过 HTTP 预注册实例，支持 `state="registered"` 与 `state="offline"`；离线状态由 runner 等待 `waitSeconds` 触发。
+- `setup.dataDir.files`：写入向量私有数据根目录，支持 `{ path, text }` 与 `{ path, json }`。
+- runner 自动负责 teardown：删除向量创建的 definition 文件、注销预置实例并清理向量临时数据根目录。
 
 ### 3.6 `M5-CT-*`（契约测试）
 

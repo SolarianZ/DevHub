@@ -1,0 +1,35 @@
+{
+  "id": "apps.instances.unregister_is_idempotent",
+  "description": "实例不存在时，hub.apps.unregisterInstance 仍必须返回 ok=true。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000029"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-unregister-missing",
+    "method": "hub.apps.unregisterInstance",
+    "params": {
+      "instanceId": "apps-instance-unregister-missing"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-unregister-missing",
+    "result": {
+      "ok": true
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "success"
+  ]
+}

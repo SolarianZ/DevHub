@@ -1,0 +1,40 @@
+{
+  "id": "apps.instances.heartbeat_unknown_instance_returns_instance_not_found",
+  "description": "实例不存在时，hub.apps.heartbeat 必须返回 instance_not_found/unknown_instance。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000028"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-heartbeat-missing",
+    "method": "hub.apps.heartbeat",
+    "params": {
+      "instanceId": "apps-instance-heartbeat-missing"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-heartbeat-missing",
+    "error": {
+      "code": -32010,
+      "message": "instance_not_found",
+      "data": {
+        "reason": "unknown_instance",
+        "instanceId": "apps-instance-heartbeat-missing"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "error"
+  ]
+}

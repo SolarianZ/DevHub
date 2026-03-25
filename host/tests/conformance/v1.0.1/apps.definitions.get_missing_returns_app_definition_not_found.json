@@ -1,0 +1,39 @@
+{
+  "id": "apps.definitions.get_missing_returns_app_definition_not_found",
+  "description": "获取不存在的 AppDefinition 时，hub.apps.getDefinition 必须返回 app_definition_not_found。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000024"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-missing",
+    "method": "hub.apps.getDefinition",
+    "params": {
+      "appId": "apps.missing.app"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-missing",
+    "error": {
+      "code": -32014,
+      "message": "app_definition_not_found",
+      "data": {
+        "appId": "apps.missing.app"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "error"
+  ]
+}
