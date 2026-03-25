@@ -25,12 +25,12 @@
 
 ### 0.1 覆盖目标（M5 必测）
 
-- [ ] 覆盖 Discovery：`hub.json` 解析成功、缺失、字段非法。
-- [ ] 覆盖 Auth：missing/invalid token、missing/mismatch protocol、missing `clientId/clientSessionId`、`clientSessionId` 格式非法。
-- [ ] 覆盖 RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*` 全方法成功与关键错误码。
-- [ ] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type 规范拒绝路径、断线清理。
-- [ ] 覆盖 Invocation 错误路径：`invocation_timeout`、`invocation_expired`、`delivery_conflict`、`invocation_failed`。
-- [ ] 覆盖 Scope 规则：默认 global、显式 scope 不回退、`target.scope=""` 映射 global、`target.scope="global"` 作为显式字符串作用域合法。
+- [x] 覆盖 Discovery：`hub.json` 解析成功、缺失、字段非法。
+- [x] 覆盖 Auth：missing/invalid token、missing/mismatch protocol、missing `clientId/clientSessionId`、`clientSessionId` 格式非法。
+- [x] 覆盖 RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*` 全方法成功与关键错误码。
+- [x] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type 规范拒绝路径、断线清理。
+- [x] 覆盖 Invocation 错误路径：`invocation_timeout`、`invocation_expired`、`delivery_conflict`、`invocation_failed`。
+- [x] 覆盖 Scope 规则：默认 global、显式 scope 不回退、`target.scope=""` 映射 global、`target.scope="global"` 作为显式字符串作用域合法。
 - [ ] 覆盖跨 SDK 一致性：同向量在 `.NET`、`TS` 与 `Python` 结果语义等价。
 
 ### 0.2 测试分层

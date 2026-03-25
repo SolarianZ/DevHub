@@ -28,7 +28,7 @@
 
 ### 0.1 M5 必须实现
 
-- [ ] 交付 `.NET SDK`（Node 外调用方可通过 .NET API 调用 DevHub）。
+- [x] 交付 `.NET SDK`（Node 外调用方可通过 .NET API 调用 DevHub）。
 - [x] 交付 `JS/TS SDK`（Node.js 环境调用 DevHub）。
 - [x] 补齐 `Python SDK` 设计/工程基线，并并入 M5 文档统一维护。
 - [ ] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
@@ -36,12 +36,12 @@
 
 ### 0.2 M5 协议覆盖面（必须）
 
-- [ ] Discovery：`hub.json/tokenFile` 读取与校验。
-- [ ] HTTP 鉴权：Header、token、protocolVersion 校验链路。
-- [ ] WS 鉴权：`hub.ws.authenticate` 首条请求约束与错误映射。
-- [ ] RPC 全方法面：`hub.ping`、`hub.apps.*`、`hub.invoke.*`。
-- [ ] 事件能力：`hub.events.subscribe/unsubscribe` + `hub.event` 通知读取 + 断连清理语义。
-- [ ] 错误模型：JSON-RPC 标准错误 + DevHub 自定义错误完整映射。
+- [x] Discovery：`hub.json/tokenFile` 读取与校验。
+- [x] HTTP 鉴权：Header、token、protocolVersion 校验链路。
+- [x] WS 鉴权：`hub.ws.authenticate` 首条请求约束与错误映射。
+- [x] RPC 全方法面：`hub.ping`、`hub.apps.*`、`hub.invoke.*`。
+- [x] 事件能力：`hub.events.subscribe/unsubscribe` + `hub.event` 通知读取 + 断连清理语义。
+- [x] 错误模型：JSON-RPC 标准错误 + DevHub 自定义错误完整映射。
 
 ### 0.3 非 M5 范围
 
@@ -82,13 +82,13 @@
 
 ### 2.1 .NET SDK（`DevHub.Sdk`）
 
-- [ ] `DevHubClientOptions`
+- [x] `DevHubClientOptions`
   - `ClientId`
   - `ClientSessionId`
-  - `RuntimeDir`
+  - `DataDir`
   - `RequestTimeout`
   - `ProtocolVersion`
-- [ ] `DevHubClient`
+- [x] `DevHubClient`
   - `FromRuntimeAsync`
   - `PingAsync`
   - `ListDefinitionsAsync`
@@ -102,12 +102,12 @@
   - `RequestAsync`
   - `PollAsync`
   - `RespondAsync`
-- [ ] `DevHubEventsClient`
+- [x] `DevHubEventsClient`
   - `AuthenticateAsync`
   - `SubscribeAsync`
   - `UnsubscribeAsync`
   - `ReadEventsAsync`
-- [ ] `DevHubRpcException`
+- [x] `DevHubRpcException`
   - `Code`
   - `Message`
   - `Data`
@@ -167,7 +167,7 @@
 
 ### 3.1 `M5-ARCH-*`（工程骨架与版本治理）
 
-- [ ] `M5-ARCH-001`：创建 .NET SDK 与测试工程目录结构。
+- [x] `M5-ARCH-001`：创建 .NET SDK 与测试工程目录结构。
 - [x] `M5-ARCH-002`：创建 TS SDK 包结构与测试目录。
 - [ ] `M5-ARCH-003`：定义 SDK 版本策略（与 Hub v1.x 兼容口径）。
 - [x] `M5-ARCH-004`：补充 SDK 最小可运行示例（README 片段）。
@@ -224,7 +224,7 @@
 ### 3.8 `M5-DOC-*`（文档与状态同步）
 
 - [x] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
-- [ ] `M5-DOC-002`：补充 SDK 快速接入示例（`.NET` / `TS` / `Python`）。
+- [x] `M5-DOC-002`：补充 SDK 快速接入示例（`.NET` / `TS` / `Python`）。
 - [x] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
 
 ---
