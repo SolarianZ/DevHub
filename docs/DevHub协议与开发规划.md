@@ -434,5 +434,5 @@ ws.onmessage = (e) => {
 - 2026-03-15 已完成：`sdks/javascript` 的规范事件类型公开模型包含 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，`DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名对应 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
 - 2026-03-24 已完成：将原独立的 Python SDK 设计规划并入 `DevHub_M5细化任务文档.md` 与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计、任务与测试维护口径，并移除独立子文档。
 - 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。本轮仅完成静态检查与代码修复，尚未执行测试验证。
-- 2026-03-08 已验证：`dotnet build host/DevHub.slnx -c Release`、`dotnet test host/DevHub.slnx -c Release --no-build`、`python3 host/tests/test_runner.py --smoke --no-header`、`python3 host/tests/test_runner.py --full --no-header` 均可通过。
+- 2026-03-08 已验证：`dotnet build host/src/DevHub.slnx -c Release`、`dotnet test host/src/DevHub.slnx -c Release --no-build`、`python3 host/tests/test_runner.py --smoke --no-header`、`python3 host/tests/test_runner.py --full --no-header` 均可通过。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 数据根目录（`DEVHUB_DATA_DIR=temp/sdk-smoke`）下，`python3 host/tests/test_runner.py --smoke --no-header` 可通过。

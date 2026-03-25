@@ -71,7 +71,7 @@
 
 ### 1.2 与现有工程集成要求
 
-- .NET 侧：独立维护 `sdks/dotnet/DevHub.DotNetSdk.slnx`，不纳入 `host/DevHub.slnx`。
+- .NET 侧：独立维护 `sdks/dotnet/DevHub.DotNetSdk.slnx`，不纳入 `host/src/DevHub.slnx`。
 - JS/TS 侧：`sdks/javascript` 独立包管理，测试命令通过 `npm test` 接入 CI。
 - Python 侧：`sdks/python` 通过 `pyproject.toml` + `setuptools` 管理，发布包名固定为 `devhub-sdk`、导入命名空间固定为 `devhub_sdk`，测试命令通过 `python3 -m pytest` 接入 CI。
 - 契约侧：统一由 `vector_runner.py` 驱动 `.NET` / `TS` / `Python` SDK，输出统一报告格式。
