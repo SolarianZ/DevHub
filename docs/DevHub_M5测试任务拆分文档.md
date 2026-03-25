@@ -102,8 +102,8 @@
 
 | 分类 | 最小计数 | 任务状态 |
 | --- | ---: | --- |
-| Discovery | 3 | [ ] |
-| Auth | 5 | [ ] |
+| Discovery | 3 | [x] |
+| Auth | 5 | [x] |
 | AppDef | 4 | [ ] |
 | AppInstance | 8 | [ ] |
 | Notify | 6 | [ ] |
@@ -162,8 +162,8 @@
 ### 4.5 契约测试任务
 
 - [ ] 生成 52 条最小向量，按分类落盘。
-- [ ] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
-- [ ] 报告中必须输出失败差异字段，支持快速定位跨实现偏差。
+- [x] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
+- [x] 报告中必须输出失败差异字段，支持快速定位跨实现偏差。
 - [ ] Events 类向量显式包含断开连接清理场景。
 - [ ] Error 类向量显式覆盖 Spec §8 全量错误码与 `error.data` 关键字段。
 

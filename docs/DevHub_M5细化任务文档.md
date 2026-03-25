@@ -33,6 +33,7 @@
 - [x] 补齐 `Python SDK` 设计/工程基线，并并入 M5 文档统一维护。
 - [ ] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
 - [ ] 建立 `Hub↔SDK 契约测试`（同向量驱动 `.NET` / `TS` / `Python` 多实现并校验语义一致）。
+- [ ] 补齐面向第三方开发者的“无 SDK 接入资料”发布基线（`Spec`、版本化 `Schema` 包、原始协议示例、conformance 使用说明）。
 
 ### 0.2 M5 协议覆盖面（必须）
 
@@ -201,16 +202,16 @@
 
 ### 3.5 `M5-CONF-*`（签名测试向量）
 
-- [ ] `M5-CONF-001`：建立 `host/tests/conformance/v1.0.1/` 目录与向量元数据规范。
+- [x] `M5-CONF-001`：建立 `host/tests/conformance/v1.0.1/` 目录与向量元数据规范。
 - [ ] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整）。
-- [ ] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
-- [ ] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
+- [x] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
+- [x] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
 - [ ] `M5-CONF-005`：显式覆盖 Events 断连清理与 Error 全量错误码/`error.data` 字段断言。
 
 ### 3.6 `M5-CT-*`（契约测试）
 
-- [ ] `M5-CT-001`：实现 `vector_runner.py`，统一调度 `.NET` / `TS` / `Python` SDK 执行同一向量。
-- [ ] `M5-CT-002`：输出统一报告（向量 ID、实际响应、期望响应、差异字段）。
+- [x] `M5-CT-001`：实现 `vector_runner.py`，统一调度 `.NET` / `TS` / `Python` SDK 执行同一向量。
+- [x] `M5-CT-002`：输出统一报告（向量 ID、实际响应、期望响应、差异字段）。
 - [ ] `M5-CT-003`：建立失败快照机制，便于跨 SDK 回归定位。
 
 ### 3.7 `M5-CI-*`（CI 接入）
@@ -226,6 +227,9 @@
 - [x] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
 - [x] `M5-DOC-002`：补充 SDK 快速接入示例（`.NET` / `TS` / `Python`）。
 - [x] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
+- [ ] `M5-DOC-004`：补充“无 SDK 接入指南”，面向第三方开发者说明 Discovery、HTTP/WS 鉴权、方法调用、错误语义与自测入口。
+- [ ] `M5-DOC-005`：发布版本化 `Schema` 包（至少包含 `hub-runtime`、`app-definition`、`app-instance`、`invocation`、`rpc-request`、`rpc-response`、`error-response`）。
+- [ ] `M5-DOC-006`：补充原始 HTTP / WebSocket 协议示例与 conformance 使用说明，确保第三方可不依赖 SDK 完成接入与自测。
 
 ---
 
@@ -240,6 +244,9 @@
 - `host/tests/conformance/vector_runner.py` 契约运行器。
 - CI 配置更新（SDK + conformance）。
 - README 与里程碑文档更新（含 Python SDK 设计/测试基线并入 M5 文档）。
+- 面向第三方开发者的无 SDK 接入指南（含 Discovery、HTTP/WS、错误码、最小自测路径）。
+- 版本化 `Schema` 包与对应发布说明。
+- 原始协议示例与 conformance 使用说明。
 
 ### 4.2 M5 DoD
 
@@ -248,6 +255,7 @@
 - [ ] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
 - [ ] CI 具备自动验证并阻断不一致变更。
 - [ ] 文档已同步、范围边界清晰、`Spec.md` 未改动。
+- [ ] 第三方开发者可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入，无需依赖 SDK 源码。
 
 ---
 
