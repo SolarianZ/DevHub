@@ -1,0 +1,36 @@
+{
+  "id": "auth.missing_protocol_returns_not_supported",
+  "description": "缺失 X-DevHub-Protocol 时，Hub 必须返回 not_supported/missing。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-ClientId": "Conformance",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000004"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "auth-missing-protocol",
+    "method": "hub.ping",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "auth-missing-protocol",
+    "error": {
+      "code": -32099,
+      "message": "not_supported",
+      "data": {
+        "expected": 1,
+        "reason": "missing"
+      }
+    }
+  },
+  "tags": [
+    "auth",
+    "http",
+    "negative"
+  ]
+}

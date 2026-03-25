@@ -1,0 +1,30 @@
+{
+  "id": "discovery.runtime_dir_as_data_dir_rejected",
+  "description": "当直接把 runtime 子目录当作 dataDir 传入时，SDK 必须拒绝该旧布局。",
+  "transport": "http",
+  "setup": {
+    "runtime": {
+      "mode": "copy_host_runtime"
+    }
+  },
+  "request": {
+    "kind": "discovery",
+    "clientId": "ConformanceDiscovery",
+    "dataDir": "${VECTOR_RUNTIME_DIR}",
+    "useEnvironmentDataDir": false
+  },
+  "expectedResponse": null,
+  "expectedDiscovery": {
+    "phase": "discovery",
+    "outcome": "error",
+    "actual": {
+      "reason": "runtime_subdirectory_rejected",
+      "message": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "discovery",
+    "validation",
+    "migration"
+  ]
+}

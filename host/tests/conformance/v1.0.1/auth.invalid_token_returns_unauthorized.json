@@ -1,0 +1,36 @@
+{
+  "id": "auth.invalid_token_returns_unauthorized",
+  "description": "当 Bearer token 非法时，Hub 必须返回 unauthorized/invalid_token。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer invalid-token",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "Conformance",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000003"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "auth-invalid-token",
+    "method": "hub.ping",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "auth-invalid-token",
+    "error": {
+      "code": -32001,
+      "message": "unauthorized",
+      "data": {
+        "reason": "invalid_token"
+      }
+    }
+  },
+  "tags": [
+    "auth",
+    "http",
+    "negative"
+  ]
+}

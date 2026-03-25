@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DevHub.Sdk.ConformanceAdapter</RootNamespace>
+    <AssemblyName>DevHub.Sdk.ConformanceAdapter</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+{
+  "id": "discovery.valid_runtime_layout_reads_token",
+  "description": "SDK 必须从 <dataDir>/runtime/hub.json 读取端点，并继续通过 tokenFile 读取令牌。",
+  "transport": "http",
+  "setup": {
+    "runtime": {
+      "mode": "copy_host_runtime"
+    }
+  },
+  "request": {
+    "kind": "discovery",
+    "clientId": "ConformanceDiscovery",
+    "dataDir": "${VECTOR_DATA_DIR}",
+    "useEnvironmentDataDir": false
+  },
+  "expectedResponse": null,
+  "expectedDiscovery": {
+    "phase": "discovery",
+    "outcome": "success",
+    "actual": {
+      "runtimeDirectory": "${VECTOR_RUNTIME_DIR}",
+      "token": "${HOST_TOKEN}",
+      "runtime": {
+        "protocolVersion": 1,
+        "httpBaseUrl": "${HOST_HTTP_BASE_URL}",
+        "wsUrl": "${HOST_WS_URL}",
+        "tokenFile": "${VECTOR_TOKEN_FILE}"
+      }
+    }
+  },
+  "tags": [
+    "discovery",
+    "runtime",
+    "token"
+  ]
+}

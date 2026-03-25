@@ -1,0 +1,38 @@
+{
+  "id": "auth.protocol_mismatch_returns_not_supported",
+  "description": "当 X-DevHub-Protocol 不等于 1 时，Hub 必须返回 not_supported/mismatch。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "2",
+      "X-DevHub-ClientId": "Conformance",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000005"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "auth-protocol-mismatch",
+    "method": "hub.ping",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "auth-protocol-mismatch",
+    "error": {
+      "code": -32099,
+      "message": "not_supported",
+      "data": {
+        "expected": 1,
+        "received": "2",
+        "reason": "mismatch"
+      }
+    }
+  },
+  "tags": [
+    "auth",
+    "http",
+    "negative"
+  ]
+}
