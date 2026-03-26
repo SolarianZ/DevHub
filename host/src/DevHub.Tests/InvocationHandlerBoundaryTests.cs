@@ -364,6 +364,60 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Notify_WhenPendingInvocationLimitReached_ShouldReturnRateLimited()
+    {
+        const string appId = "invocation-rate-limited";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
+        var handler = CreateHandler(appRegistry, runtimeTuningOptions: runtimeTuningOptions);
+
+        var firstResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-first",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.queue.first",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(firstResponse.Error);
+
+        var secondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-second",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.queue.second",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(secondResponse, -32040, "rate_limited");
+        var errorData = JsonSerializer.SerializeToElement(secondResponse.Error!.Data);
+        Assert.Equal("pending_invocations_limit_exceeded", errorData.GetProperty("reason").GetString());
+        Assert.Equal(1, errorData.GetProperty("limit").GetInt32());
+        Assert.Equal(1, errorData.GetProperty("active").GetInt32());
+    }
+
+    [Fact]
     public async Task Impl_HandleAsync_WhenMethodUnknown_ShouldReturnMethodNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -517,9 +571,13 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
     }
 
-    private InvocationHandler CreateHandler(AppRegistry appRegistry, IClock? clock = null)
+    private InvocationHandler CreateHandler(
+        AppRegistry appRegistry,
+        IClock? clock = null,
+        RuntimeTuningOptions? runtimeTuningOptions = null)
     {
         var effectiveClock = clock ?? new SystemClock();
+        var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
 
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -535,6 +593,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             runtimeHttpBaseUrlProvider,
             new ProcessLauncher(),
             effectiveClock,
+            effectiveRuntimeTuningOptions,
             Mock.Of<ILogger<LaunchCoordinator>>());
 
         return new InvocationHandler(
@@ -545,7 +604,8 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             waiter,
             launchCoordinator,
             effectiveClock,
-            Mock.Of<ILogger<InvocationHandler>>());
+            Mock.Of<ILogger<InvocationHandler>>(),
+            effectiveRuntimeTuningOptions);
     }
 
     private void WriteDefinition(string appId, bool rpcEnabled)

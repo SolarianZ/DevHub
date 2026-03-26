@@ -12,15 +12,17 @@ public class RpcRouter
 {
     private readonly ConcurrentDictionary<string, List<IRpcHandler>> _handlers = new();
     private readonly ILogger<RpcRouter> _logger;
+    private readonly RpcTestFaultInjectionPolicy? _faultInjectionPolicy;
 
     /// <summary>
     /// 初始化 RPC 路由器并注册所有处理器。
     /// </summary>
     /// <param name="handlers">可用的 RPC 处理器集合。</param>
     /// <param name="logger">日志记录器。</param>
-    public RpcRouter(IEnumerable<IRpcHandler> handlers, ILogger<RpcRouter> logger)
+    public RpcRouter(IEnumerable<IRpcHandler> handlers, ILogger<RpcRouter> logger, RpcTestFaultInjectionPolicy? faultInjectionPolicy = null)
     {
         _logger = logger;
+        _faultInjectionPolicy = faultInjectionPolicy;
         _logger.LogDebug("开始注册RPC处理器，处理器数量: {Count}", handlers.Count());
 
         foreach (var handler in handlers)
@@ -47,6 +49,12 @@ public class RpcRouter
     {
         _logger.LogDebug("尝试路由RPC请求: {Method}, RequestId: {RequestId}, 参数: {Params}",
             request.Method, request.Id, JsonSerializer.Serialize(request.Params));
+
+        if (_faultInjectionPolicy?.ShouldForceInternalError(request.Method) == true)
+        {
+            _logger.LogWarning("测试故障注入已命中，强制返回 internal_error。Method: {Method}, RequestId: {RequestId}", request.Method, request.Id);
+            return RpcErrorFactory.InternalError(request.Id);
+        }
 
         // 首先尝试精确匹配
         if (_handlers.TryGetValue(request.Method, out var exactHandlers))

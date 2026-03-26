@@ -1,0 +1,86 @@
+{
+  "id": "events.unsubscribe_existing_subscription_stops_delivery",
+  "description": "对真实 subscriptionId 执行 unsubscribe 后，不应再收到后续 hub.event。", 
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "events.unsubscribe.existing.json",
+        "definition": {
+          "appId": "events.unsubscribe.existing",
+          "displayName": "events.unsubscribe.existing"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsUnsubscribeExisting",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "unsubscribe",
+        "client": "events",
+        "subscriptionIdRef": "subscriptionId",
+        "captureAs": "unsubscribeResult"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "register_instance",
+        "client": "http",
+        "instance": {
+          "instanceId": "events-unsubscribe-existing-inst-1",
+          "appId": "events.unsubscribe.existing",
+          "scope": null,
+          "pid": 33002,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "expect_no_event",
+        "client": "events",
+        "captureAs": "afterUnsubscribe",
+        "timeoutMs": 1200
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "unsubscribeResult": {
+        "ok": true
+      },
+      "afterUnsubscribe": {
+        "status": "timeout"
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk"
+  ]
+}

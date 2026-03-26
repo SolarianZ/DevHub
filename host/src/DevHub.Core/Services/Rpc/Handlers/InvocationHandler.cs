@@ -286,6 +286,26 @@ public class InvocationHandler : IRpcHandler
                 RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" }));
         }
 
+        if (_runtimeTuningOptions.PendingInvocationsLimit > 0)
+        {
+            var activeInvocationCount = _store.GetActiveInvocationCount();
+            if (activeInvocationCount >= _runtimeTuningOptions.PendingInvocationsLimit)
+            {
+                return new InvocationBuildResult(
+                    null,
+                    RpcErrorFactory.Create(
+                        request.Id,
+                        -32040,
+                        "rate_limited",
+                        new
+                        {
+                            reason = "pending_invocations_limit_exceeded",
+                            limit = _runtimeTuningOptions.PendingInvocationsLimit,
+                            active = activeInvocationCount
+                        }));
+            }
+        }
+
         var candidates = _routingService.GetOnlineCandidates(appId, target);
         LogRouteDecision(request.Method, appId, target, candidates.Count);
         if (candidates.Count == 0)

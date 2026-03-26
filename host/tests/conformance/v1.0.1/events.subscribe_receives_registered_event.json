@@ -1,0 +1,81 @@
+{
+  "id": "events.subscribe_receives_registered_event",
+  "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。", 
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "events.subscribe.registered.json",
+        "definition": {
+          "appId": "events.subscribe.registered",
+          "displayName": "events.subscribe.registered"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsSubscribe",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "register_instance",
+        "client": "http",
+        "instance": {
+          "instanceId": "events-register-inst-1",
+          "appId": "events.subscribe.registered",
+          "scope": null,
+          "pid": 33001,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "event"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "event": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.instance.registered",
+        "payload": {
+          "appId": "events.subscribe.registered",
+          "instanceId": "events-register-inst-1"
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk"
+  ]
+}

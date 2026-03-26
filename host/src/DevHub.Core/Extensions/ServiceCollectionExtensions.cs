@@ -29,6 +29,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(runtimePathOptions);
         services.AddSingleton<RuntimeTuningOptions>(sp =>
             RuntimeTuningOptions.Resolve(sp.GetRequiredService<ILogger<RuntimeTuningOptions>>()));
+        services.AddSingleton<RpcTestFaultInjectionPolicy>(sp =>
+            RpcTestFaultInjectionPolicy.Resolve(sp.GetRequiredService<ILogger<RpcTestFaultInjectionPolicy>>()));
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IProcessLauncher, ProcessLauncher>();
 

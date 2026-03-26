@@ -8,18 +8,19 @@
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-25）
+## 当前状态（截至 2026-03-26）
 
-- M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测与 SDK↔Hub 黑盒集成测试；conformance 与跨语言一致性任务仍待后续阶段完成。
+- M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测、SDK↔Hub 黑盒集成测试与 conformance 契约回归；跨语言一致性已在 52 条向量上完成验证，CI 门禁接入仍待后续阶段推进。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
-- `Python SDK` 当前已在 `sdks/python/tests/` 下落地 runtime、payloads、parsing、HTTP、events、package exports 等单元测试模块，以及 HTTP / Invocation / Events SDK↔Hub 集成测试；共享 conformance runner 与跨语言一致性门禁仍待统一接入。
-- 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`host/tests/conformance/` 为后续目标测试资产。
+- `Python SDK` 当前已在 `sdks/python/tests/` 下落地 runtime、payloads、parsing、HTTP、events、package exports 等单元测试模块，以及 HTTP / Invocation / Events SDK↔Hub 集成测试，并已接入共享 conformance runner 与跨语言一致性验证链路。
+- 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`host/tests/conformance/` 承载当前版本的跨语言契约测试资产。
 - M5 测试目标：建立“SDK 单测 + SDK↔Hub 黑盒 + 向量契约一致性”三层闭环。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 可通过（`.NET SDK` 40 条单元测试 + 14 条集成测试）。
 - 2026-03-11 已验证：`sdks/javascript` 在 Node 24 下执行 `npm run build && npm test` 可通过（7 个测试文件 / 45 条测试），并通过 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟回归。
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划中的测试基线并入本 M5 测试文档，与 `.NET` / `JS/TS` / `Python` SDK 采用统一粒度维护。
 - 2026-03-25 已完成：Discovery/Auth/AppDef/AppInstance 共 20 条向量已可直接由 `vector_runner.py` 跑通；runner v1 已支持向量级 `setup` 与自动 teardown。
 - 2026-03-25 已完成：Invocation Notify 6 + Request 10 共 16 条向量已落地并跑通，累计 36/52；runner v2 已支持 Invocation 向量的 per-SDK 独立沙箱、`orchestration` 三阶段编排，以及中立 raw-protocol helper 模拟被调用方。
+- 2026-03-26 已完成：WS Events 4 + Error 12 共 16 条向量已落地并跑通，累计达到 52/52；runner v3 已支持 raw HTTP 字符串/数组请求、`raw.ws`、`sdk.events`、失败快照输出与 suite host 日志回溯。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 
 ---
 
@@ -33,7 +34,7 @@
 - [x] 覆盖 WS：首条 `hub.ws.authenticate`、`subscribe/unsubscribe`、unknown type 规范拒绝路径、断线清理。
 - [x] 覆盖 Invocation 错误路径：`invocation_timeout`、`invocation_expired`、`delivery_conflict`、`invocation_failed`。
 - [x] 覆盖 Scope 规则：默认 global、显式 scope 不回退、`target.scope=""` 映射 global、`target.scope="global"` 作为显式字符串作用域合法。
-- [ ] 覆盖跨 SDK 一致性：同向量在 `.NET`、`TS` 与 `Python` 结果语义等价。
+- [x] 覆盖跨 SDK 一致性：同向量在 `.NET`、`TS` 与 `Python` 结果语义等价。
 
 ### 0.2 测试分层
 
@@ -110,9 +111,9 @@
 | AppInstance | 8 | [x] |
 | Notify | 6 | [x] |
 | Request | 10 | [x] |
-| Events | 4 | [ ] |
-| Error | 12 | [ ] |
-| **总计** | **52** | [ ] |
+| Events | 4 | [x] |
+| Error | 12 | [x] |
+| **总计** | **52** | [x] |
 
 ### 3.1 向量格式约束（Spec §10.2）
 
@@ -135,6 +136,8 @@
 - Invocation 类向量允许扩展字段 `orchestration`，固定使用 `beforeCaller` / `duringCaller` / `afterCaller` 三阶段编排。
 - `orchestration` 中的协作步骤统一由 runner 内部 raw-protocol helper 执行，当前支持 `register_instance`、`sleep`、`poll_expect_invocation`、`poll_expect_empty`、`respond_value`、`respond_error`。
 - Invocation 主链路向量要求 `request.kind` 使用 `sdk.notify` / `sdk.request`，由三语言适配器真正调用 SDK 公共 API；helper 只承担被调用方模拟，不再复用 SDK 当被调用方。
+- runner v3 允许 `request` 使用字符串、对象或数组，并对 `transport="http"` / `transport="ws"` 分别走原始 HTTP 与原始 WS 序列化发送，以覆盖 `parse_error`、非法信封、batch root array 与 WS 首包非法文本等场景。
+- Events 类向量允许 `request.kind = "sdk.events"`，由三语言适配器统一负责 EventsClient 的认证、订阅、取消订阅、断线重连与事件读取。
 - Events 类向量必须包含“断开连接后订阅清理”场景。
 - Error 类向量必须覆盖 Spec §8.1 + §8.2 全量错误码与关键 `error.data` 字段。
 
@@ -171,11 +174,12 @@
 
 ### 4.5 契约测试任务
 
-- [ ] 生成 52 条最小向量，按分类落盘（当前 36/52；Notify 6 + Request 10 已完成）。
+- [x] 生成 52 条最小向量，按分类落盘（已完成 52/52：Discovery 3 + Auth 5 + AppDef 4 + AppInstance 8 + Notify 6 + Request 10 + Events 4 + Error 12）。
 - [x] `vector_runner.py` 同时驱动 `.NET`、`TS` 与 `Python` SDK，逐向量比对。
-- [x] 报告中必须输出失败差异字段，支持快速定位跨实现偏差。
-- [ ] Events 类向量显式包含断开连接清理场景。
-- [ ] Error 类向量显式覆盖 Spec §8 全量错误码与 `error.data` 关键字段。
+- [x] 报告中必须输出失败差异字段，支持快速定位跨实现偏差，并在失败时输出快照目录。
+- [x] Events 类向量显式包含断开连接清理场景。
+- [x] Error 类向量显式覆盖 Spec §8 全量错误码与 `error.data` 关键字段。
+- [x] 为 runner 增加失败快照机制，保存失败向量、实际结果与比较产物。
 
 ---
 
@@ -201,11 +205,11 @@
 
 ## 6. 完成定义（DoD）
 
-- [ ] 五类编号用例（`M5-DN-UT` / `M5-TS-UT` / `M5-PY-UT` / `M5-E2E` / `M5-CONF`）已建立并可自动执行。
-- [ ] Spec §10.1 最小 52 条向量全部落地且可回归。
-- [ ] `.NET`、`TS` 与 `Python` 对同向量结果语义一致（忽略键序与空白）。
+- [x] 五类编号用例（`M5-DN-UT` / `M5-TS-UT` / `M5-PY-UT` / `M5-E2E` / `M5-CONF`）已建立并可自动执行。
+- [x] Spec §10.1 最小 52 条向量全部落地且可回归。
+- [x] `.NET`、`TS` 与 `Python` 对同向量结果语义一致（忽略键序与空白）。
 - [ ] CI 已接入四类执行入口并作为门禁。
-- [ ] 文档与测试实现一致，且未修改 `docs/Spec.md`。
+- [x] 文档与测试实现一致，且未修改 `docs/Spec.md`。
 
 ---
 

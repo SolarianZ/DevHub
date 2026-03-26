@@ -1,0 +1,98 @@
+{
+  "id": "errors.invocation_timeout_includes_elapsed_ms",
+  "description": "原始 HTTP request 在 waitTimeoutMs 到期时，必须返回 invocation_timeout，并包含 invocationId 与 elapsedMs。", 
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "errors.invocation.timeout.json",
+        "definition": {
+          "appId": "errors.invocation.timeout",
+          "displayName": "errors.invocation.timeout"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "errors-request-timeout-inst",
+          "appId": "errors.invocation.timeout",
+          "scope": null,
+          "pid": 33005,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-request-timeout-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "errors.invocation.timeout",
+          "method": "demo.request.timeout",
+          "kind": "request",
+          "options": {
+            "ttlMs": 1500
+          }
+        }
+      },
+      {
+        "action": "sleep",
+        "waitMs": 1200
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceErrorTimeout",
+      "X-DevHub-ClientSessionId": "30000000-0000-0000-0000-000000000002"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-invocation-timeout",
+    "method": "hub.invoke.request",
+    "params": {
+      "appId": "errors.invocation.timeout",
+      "target": {
+        "scope": null,
+        "instanceId": null
+      },
+      "method": "demo.request.timeout",
+      "options": {
+        "ttlMs": 1500,
+        "waitTimeoutMs": 1000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-invocation-timeout",
+    "error": {
+      "code": -32012,
+      "message": "invocation_timeout",
+      "data": {
+        "invocationId": "${ANY_NON_EMPTY_STRING}",
+        "elapsedMs": "${ANY_NON_NEGATIVE_INT}"
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invocation",
+    "timeout"
+  ]
+}

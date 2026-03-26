@@ -1,0 +1,76 @@
+{
+  "id": "errors.ws.subscribe_unknown_event_type_returns_invalid_params",
+  "description": "WS 鉴权后订阅未知事件类型时，必须返回 invalid_params 并带 reason/type。", 
+  "transport": "ws",
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-auth-valid",
+          "method": "hub.ws.authenticate",
+          "params": {
+            "token": "${HOST_TOKEN}",
+            "protocolVersion": 1,
+            "clientId": "ConformanceWsUnknownEvent",
+            "clientSessionId": "20000000-0000-0000-0000-000000000002"
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "auth"
+      },
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-subscribe-unsupported-event",
+          "method": "hub.events.subscribe",
+          "params": {
+            "types": [
+              "unknown.type"
+            ]
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "response"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "auth": {
+        "jsonrpc": "2.0",
+        "id": "ws-auth-valid",
+        "result": {
+          "ok": true,
+          "protocolVersion": 1
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "ws-subscribe-unsupported-event",
+        "error": {
+          "code": -32602,
+          "message": "invalid_params",
+          "data": {
+            "reason": "unsupported_event_type",
+            "type": "unknown.type"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "ws",
+    "events"
+  ]
+}

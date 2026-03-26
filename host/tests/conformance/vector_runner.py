@@ -30,6 +30,8 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
     HostRuntimeContext,
     VectorExecutionContext,
     materialize_vector,
+    read_log_tail,
+    sanitize_file_name,
     start_suite_host,
     stop_process,
 )
@@ -39,6 +41,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SUPPORTED_SDKS = ("dotnet", "typescript", "python")
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
+WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
+SNAPSHOT_DIR_NAME = "conformance_snapshots"
 
 
 def main() -> int:
@@ -52,6 +56,7 @@ def main() -> int:
         return 1
 
     failure_count = 0
+    snapshot_run_root = build_snapshot_run_root()
     with tempfile.TemporaryDirectory(prefix="devhub-conformance-") as temp_root_str:
         temp_root = Path(temp_root_str)
         host_context, process, log_file = start_suite_host(temp_root)
@@ -61,7 +66,7 @@ def main() -> int:
                     result = run_vector(vector_path, vector, host_context, temp_root)
                 except Exception as exc:  # noqa: BLE001
                     failure_count += 1
-                    emit_failures(
+                    failures = attach_failure_snapshots(
                         [
                             {
                                 "vectorId": vector.get("id", str(vector_path)),
@@ -70,14 +75,24 @@ def main() -> int:
                                 "actual": None,
                                 "diffFields": ["$runner"],
                                 "message": str(exc),
+                                "vectorPath": str(vector_path),
+                                "resolvedVector": vector,
                             }
-                        ]
+                        ],
+                        log_file=log_file,
+                        snapshot_run_root=snapshot_run_root,
                     )
+                    emit_failures(failures)
                     continue
 
                 if not result["passed"]:
                     failure_count += 1
-                    emit_failures(result["failures"])
+                    failures = attach_failure_snapshots(
+                        result["failures"],
+                        log_file=log_file,
+                        snapshot_run_root=snapshot_run_root,
+                    )
+                    emit_failures(failures)
                     continue
 
                 print(f"PASS  {vector['id']}")
@@ -140,6 +155,66 @@ def validate_vector_shape(path: Path, payload: dict[str, Any]) -> None:
         raise ValueError(f"向量缺少必需字段：{path} -> {missing}")
 
 
+def build_snapshot_run_root() -> Path:
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return REPO_ROOT / "temp" / SNAPSHOT_DIR_NAME / timestamp
+
+
+def attach_failure_snapshots(
+    failures: list[dict[str, Any]],
+    *,
+    log_file,
+    snapshot_run_root: Path,
+) -> list[dict[str, Any]]:
+    if not failures:
+        return failures
+
+    host_log_tail = read_log_tail(log_file)
+    for failure in failures:
+        failure["snapshotPath"] = str(write_failure_snapshot(failure, snapshot_run_root, host_log_tail))
+    return failures
+
+
+def write_failure_snapshot(failure: dict[str, Any], snapshot_run_root: Path, host_log_tail: str) -> Path:
+    vector_id = sanitize_file_name(str(failure.get("vectorId", "unknown-vector")))
+    sdk_name = sanitize_file_name(str(failure.get("sdk", "unknown-sdk")))
+    snapshot_dir = snapshot_run_root / vector_id / sdk_name
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "vectorId": failure.get("vectorId"),
+        "sdk": failure.get("sdk"),
+        "message": failure.get("message"),
+        "diffFields": failure.get("diffFields"),
+        "expected": failure.get("expected"),
+        "actual": failure.get("actual"),
+        "vectorPath": failure.get("vectorPath"),
+        "adapterMeta": failure.get("adapterMeta"),
+    }
+    (snapshot_dir / "failure.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    resolved_vector = failure.get("resolvedVector")
+    if resolved_vector is not None:
+        (snapshot_dir / "resolved-vector.json").write_text(
+            json.dumps(resolved_vector, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    if host_log_tail:
+        (snapshot_dir / "suite-host.log").write_text(host_log_tail, encoding="utf-8")
+
+    adapter_meta = failure.get("adapterMeta")
+    if isinstance(adapter_meta, dict):
+        stdout = adapter_meta.get("stdout")
+        stderr = adapter_meta.get("stderr")
+        if isinstance(stdout, str):
+            (snapshot_dir / "adapter.stdout.txt").write_text(stdout, encoding="utf-8")
+        if isinstance(stderr, str):
+            (snapshot_dir / "adapter.stderr.txt").write_text(stderr, encoding="utf-8")
+
+    return snapshot_dir
+
+
 def run_vector(
     vector_path: Path,
     vector: dict[str, Any],
@@ -164,6 +239,7 @@ def run_vector(
             expected = execution.resolved_vector["expectedDiscovery"] if is_discovery else execution.resolved_vector["expectedResponse"]
 
             helper_invocation_id = sdk_result.pop("_helperInvocationId", None)
+            adapter_meta = sdk_result.pop("_adapterMeta", None)
             if helper_invocation_id is not None:
                 caller_invocation_id = extract_caller_invocation_id(sdk_result)
                 if caller_invocation_id and caller_invocation_id != helper_invocation_id:
@@ -175,6 +251,9 @@ def run_vector(
                             "actual": sdk_result.get("actual"),
                             "diffFields": ["$.actual.invocationId"],
                             "message": "caller 与 helper 观察到的 invocationId 不一致。",
+                            "vectorPath": str(vector_path),
+                            "resolvedVector": execution.resolved_vector,
+                            "adapterMeta": adapter_meta,
                         }
                     )
                     continue
@@ -188,6 +267,9 @@ def run_vector(
                         "actual": sdk_result.get("actual"),
                         "diffFields": ["$process"],
                         "message": sdk_result["error"],
+                        "vectorPath": str(vector_path),
+                        "resolvedVector": execution.resolved_vector,
+                        "adapterMeta": adapter_meta,
                     }
                 )
                 continue
@@ -202,6 +284,9 @@ def run_vector(
                         "expected": expected,
                         "actual": comparable,
                         "diffFields": diffs,
+                        "vectorPath": str(vector_path),
+                        "resolvedVector": execution.resolved_vector,
+                        "adapterMeta": adapter_meta,
                     }
                 )
                 continue
@@ -210,14 +295,16 @@ def run_vector(
                 normalized_results[sdk_name] = canonicalize_with_expected(comparable, expected)
         except OrchestrationFailure as exc:
             failures.append(
-                {
-                    "vectorId": vector["id"],
-                    "sdk": sdk_name,
-                    "expected": exc.expected,
-                    "actual": exc.actual,
-                    "diffFields": exc.diff_fields or ["$helper"],
-                    "message": f"helper 编排失败: phase={exc.phase}, step={exc.step_index}, action={exc.action}, detail={exc.message}",
-                }
+                    {
+                        "vectorId": vector["id"],
+                        "sdk": sdk_name,
+                        "expected": exc.expected,
+                        "actual": exc.actual,
+                        "diffFields": exc.diff_fields or ["$helper"],
+                        "message": f"helper 编排失败: phase={exc.phase}, step={exc.step_index}, action={exc.action}, detail={exc.message}",
+                        "vectorPath": str(vector_path),
+                        "resolvedVector": execution.resolved_vector if execution is not None else vector,
+                    }
             )
         except Exception as exc:  # noqa: BLE001
             failures.append(
@@ -228,6 +315,8 @@ def run_vector(
                     "actual": None,
                     "diffFields": ["$runner"],
                     "message": str(exc),
+                    "vectorPath": str(vector_path),
+                    "resolvedVector": execution.resolved_vector if execution is not None else vector,
                 }
             )
         finally:
@@ -249,6 +338,8 @@ def run_vector(
                         "actual": comparable,
                         "diffFields": diffs,
                         "message": f"与 {baseline_sdk} 的语义结果不一致。",
+                        "vectorPath": str(vector_path),
+                        "resolvedVector": vector,
                     }
                 )
 
@@ -344,6 +435,11 @@ def wait_adapter_process(sdk_name: str, process: subprocess.Popen[str], timeout_
                 "stderr": stderr.strip(),
             },
             "actual": None,
+            "_adapterMeta": {
+                "exitCode": process.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+            },
         }
 
     return parse_adapter_output(sdk_name, stdout, stderr, process.returncode or 0)
@@ -363,6 +459,11 @@ def parse_adapter_output(sdk_name: str, stdout: str, stderr: str, exit_code: int
                 "stderr": stderr,
             },
             "actual": None,
+            "_adapterMeta": {
+                "exitCode": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+            },
         }
 
     parsed.setdefault("sdk", sdk_name)
@@ -372,6 +473,11 @@ def parse_adapter_output(sdk_name: str, stdout: str, stderr: str, exit_code: int
             "exitCode": exit_code,
             "stderr": stderr,
         }
+    parsed["_adapterMeta"] = {
+        "exitCode": exit_code,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
     return parsed
 
 
@@ -408,13 +514,16 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
             "actual": result.get("actual"),
         }
 
-    if result.get("phase") == "sdk-invocation":
-        return {
-            "phase": result.get("phase"),
-            "operation": result.get("operation"),
+    phase = result.get("phase")
+    if phase in {"sdk-invocation", "sdk-events", "ws"}:
+        comparable = {
+            "phase": phase,
             "outcome": result.get("outcome"),
             "actual": result.get("actual"),
         }
+        if "operation" in result:
+            comparable["operation"] = result.get("operation")
+        return comparable
 
     return result.get("actual")
 
@@ -496,6 +605,9 @@ def is_wildcard(expected: Any, actual: Any) -> bool:
     if expected == WILDCARD_ANY_NON_EMPTY_STRING:
         return isinstance(actual, str) and actual.strip() != ""
 
+    if expected == WILDCARD_ANY_NON_NEGATIVE_INT:
+        return isinstance(actual, int) and actual >= 0
+
     return False
 
 
@@ -507,6 +619,8 @@ def emit_failures(failures: Iterable[dict[str, Any]]) -> None:
         print(f"      Expected: {json.dumps(failure['expected'], ensure_ascii=False, sort_keys=True)}")
         print(f"      Actual: {json.dumps(failure['actual'], ensure_ascii=False, sort_keys=True)}")
         print(f"      Diff: {', '.join(failure['diffFields'])}")
+        if failure.get("snapshotPath"):
+            print(f"      Snapshot: {failure['snapshotPath']}")
 
 
 def get_adapter_command(sdk_name: str, context_path: Path) -> list[str]:

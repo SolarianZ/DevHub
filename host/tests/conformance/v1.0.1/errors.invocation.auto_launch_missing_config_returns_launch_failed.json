@@ -1,0 +1,61 @@
+{
+  "id": "errors.invocation.auto_launch_missing_config_returns_launch_failed",
+  "description": "当 invocation 请求自动启动目标应用但缺失 launch 配置时，必须返回 launch_failed/launch_config_missing。", 
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "errors.invocation.launch-missing.json",
+        "definition": {
+          "appId": "errors.invocation.launch-missing",
+          "displayName": "errors.invocation.launch-missing"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceLaunchMissingConfig",
+      "X-DevHub-ClientSessionId": "30000000-0000-0000-0000-000000000001"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-launch-config-missing",
+    "method": "hub.invoke.request",
+    "params": {
+      "appId": "errors.invocation.launch-missing",
+      "target": {
+        "scope": null,
+        "instanceId": null
+      },
+      "method": "demo.request.launch-missing",
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 5000,
+        "queueIfOffline": true,
+        "autoLaunch": true
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-launch-config-missing",
+    "error": {
+      "code": -32020,
+      "message": "launch_failed",
+      "data": {
+        "reason": "launch_config_missing"
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "launch",
+    "invocation"
+  ]
+}

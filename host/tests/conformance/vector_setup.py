@@ -30,6 +30,8 @@ from tests.test_base import (  # type: ignore  # noqa: E402
 
 SUITE_HOST_ENV_OVERRIDES = {
     "DEVHUB_ONLINE_THRESHOLD_SECONDS": "2",
+    "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16",
+    "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_METHODS": "hub.test.internalError",
 }
 
 
@@ -249,8 +251,9 @@ def materialize_vector(
             ledger,
         )
 
-        request = require_mapping(resolved_vector.get("request"), "request")
-        environment_data_dir = data_dir if request.get("useEnvironmentDataDir") is True else None
+        request = resolved_vector.get("request")
+        request_mapping = require_mapping(request, "request") if isinstance(request, dict) else {}
+        environment_data_dir = data_dir if request_mapping.get("useEnvironmentDataDir") is True else None
         context_payload = {
             "vector": resolved_vector,
             "dataDir": str(data_dir),

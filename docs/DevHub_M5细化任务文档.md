@@ -7,7 +7,7 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-25）
+## 当前状态（截至 2026-03-26）
 
 - 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
@@ -23,6 +23,7 @@
 - 2026-03-24 已完成：将原 `Python SDK` 独立设计规划并入本 M5 文档与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计与任务维护口径。
 - 2026-03-25 已完成：补齐 Discovery + Auth + AppDef + AppInstance 共 20 条 conformance 向量；`vector_runner.py` 升级到 runner v1，支持向量级 `setup` 与自动 teardown，并保持 HTTP-first 的三语言一致性执行模型。
 - 2026-03-25 已完成：补齐 Invocation Notify 6 + Request 10 共 16 条 conformance 向量，累计达到 36/52；`vector_runner.py` 升级到 runner v2，Invocation 向量改为真正走三语言 SDK `notify/request`，并由中立 raw-protocol helper 完成被调用方协作编排；已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与隔离 Hub 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
+- 2026-03-26 已完成：补齐 WS Events 4 条 + Error 12 条 conformance 向量，累计达到 52/52；`vector_runner.py` 已支持 raw HTTP 字符串/数组请求、`raw.ws`、`sdk.events`、失败快照输出与稳定快照目录回溯；Host 已补齐 `rate_limited` 最小触发路径与仅测试环境启用的 `internal_error` 故障注入缝。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py`、隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过，并完成受控失败快照验收。
 
 ---
 
@@ -33,8 +34,8 @@
 - [x] 交付 `.NET SDK`（Node 外调用方可通过 .NET API 调用 DevHub）。
 - [x] 交付 `JS/TS SDK`（Node.js 环境调用 DevHub）。
 - [x] 补齐 `Python SDK` 设计/工程基线，并并入 M5 文档统一维护。
-- [ ] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
-- [ ] 建立 `Hub↔SDK 契约测试`（同向量驱动 `.NET` / `TS` / `Python` 多实现并校验语义一致）。
+- [x] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
+- [x] 建立 `Hub↔SDK 契约测试`（同向量驱动 `.NET` / `TS` / `Python` 多实现并校验语义一致）。
 - [ ] 补齐面向第三方开发者的“无 SDK 接入资料”发布基线（`Spec`、版本化 `Schema` 包、原始协议示例、conformance 使用说明）。
 
 ### 0.2 M5 协议覆盖面（必须）
@@ -205,10 +206,10 @@
 ### 3.5 `M5-CONF-*`（签名测试向量）
 
 - [x] `M5-CONF-001`：建立 `host/tests/conformance/v1.0.1/` 目录与向量元数据规范。
-- [ ] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整；当前已完成 36/52：Discovery/Auth/AppDef/AppInstance/Notify/Request）。
+- [x] `M5-CONF-002`：按 Spec §10.1 生成最小 52 条向量（分类完整；当前已完成 52/52：Discovery/Auth/AppDef/AppInstance/Notify/Request/Events/Error）。
 - [x] `M5-CONF-003`：每条向量固定字段：`id/description/transport/request/expectedResponse/tags`。
 - [x] `M5-CONF-004`：建立语义比较规则（忽略 JSON 键序与空白）。
-- [ ] `M5-CONF-005`：显式覆盖 Events 断连清理与 Error 全量错误码/`error.data` 字段断言。
+- [x] `M5-CONF-005`：显式覆盖 Events 断连清理与 Error 全量错误码/`error.data` 字段断言。
 
 补充约定（runner v2）：
 
@@ -226,7 +227,7 @@
 
 - [x] `M5-CT-001`：实现 `vector_runner.py`，统一调度 `.NET` / `TS` / `Python` SDK 执行同一向量。
 - [x] `M5-CT-002`：输出统一报告（向量 ID、实际响应、期望响应、差异字段）。
-- [ ] `M5-CT-003`：建立失败快照机制，便于跨 SDK 回归定位。
+- [x] `M5-CT-003`：建立失败快照机制，便于跨 SDK 回归定位。
 
 ### 3.7 `M5-CI-*`（CI 接入）
 
@@ -264,11 +265,11 @@
 
 ### 4.2 M5 DoD
 
-- [ ] M5 必须能力（`.NET` + `TS` + `Python` + 向量 + 契约）全部落地。
-- [ ] 向量覆盖满足 Spec §10.1 最小计数（总计 52）。
-- [ ] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
+- [x] M5 必须能力（`.NET` + `TS` + `Python` + 向量 + 契约）全部落地。
+- [x] 向量覆盖满足 Spec §10.1 最小计数（总计 52）。
+- [x] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
 - [ ] CI 具备自动验证并阻断不一致变更。
-- [ ] 文档已同步、范围边界清晰、`Spec.md` 未改动。
+- [x] 文档已同步、范围边界清晰、`Spec.md` 未改动。
 - [ ] 第三方开发者可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入，无需依赖 SDK 源码。
 
 ---

@@ -23,6 +23,7 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
 
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
+WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
 
 
 class OrchestrationFailure(RuntimeError):
@@ -56,6 +57,7 @@ class RawProtocolState:
     last_invocation_id: str | None = None
     last_invocation: dict[str, Any] | None = None
     observations: list[dict[str, Any]] = field(default_factory=list)
+    named_values: dict[str, Any] = field(default_factory=dict)
 
 
 class RawProtocolHelper:
@@ -116,6 +118,10 @@ class RawProtocolHelper:
             time.sleep(read_non_negative_int(step, "waitMs", f"orchestration.{phase}[{index}]") / 1000)
             return
 
+        if action == "call_rpc":
+            self._call_rpc(phase, index, step)
+            return
+
         if action == "poll_expect_invocation":
             self._poll_expect_invocation(phase, index, step)
             return
@@ -133,6 +139,70 @@ class RawProtocolHelper:
             return
 
         raise ValueError(f"orchestration.{phase}[{index}].action 不支持：{action}")
+
+    def _call_rpc(self, phase: str, index: int, step: dict[str, Any]) -> None:
+        method = require_string(step.get("method"), f"orchestration.{phase}[{index}].method")
+        params = step.get("params")
+        request_id = step.get("requestId")
+        if request_id is None:
+            request_id = f"{self._vector_id}-{phase}-{index}"
+        elif not isinstance(request_id, str) or not request_id.strip():
+            raise ValueError(f"orchestration.{phase}[{index}].requestId 必须为非空字符串。")
+
+        response = self._client.call(method, params, request_id=request_id)
+
+        expected_error = step.get("expectedError")
+        if expected_error is not None:
+            if not isinstance(expected_error, dict):
+                raise ValueError(f"orchestration.{phase}[{index}].expectedError 必须为对象。")
+            ensure_error_response(
+                response,
+                expected_error,
+                invocation_id=None,
+                phase=phase,
+                step_index=index,
+                action="call_rpc",
+            )
+        else:
+            ensure_success_response(
+                response,
+                phase=phase,
+                step_index=index,
+                action="call_rpc",
+            )
+            expected_result = step.get("expectedResult")
+            if expected_result is not None:
+                if not isinstance(expected_result, dict):
+                    raise ValueError(f"orchestration.{phase}[{index}].expectedResult 必须为对象。")
+                result = response.get("result")
+                diffs = collect_subset_differences(expected_result, result)
+                if diffs:
+                    raise OrchestrationFailure(
+                        phase=phase,
+                        step_index=index,
+                        action="call_rpc",
+                        message="helper 调用 RPC 成功，但 result 与预期不一致。",
+                        expected=expected_result,
+                        actual=result,
+                        diff_fields=diffs,
+                    )
+
+        capture_as = step.get("captureAs")
+        if capture_as is not None:
+            capture_key = require_string(capture_as, f"orchestration.{phase}[{index}].captureAs")
+            if "error" in response and isinstance(response["error"], dict):
+                self._state.named_values[capture_key] = response["error"]
+            else:
+                self._state.named_values[capture_key] = response.get("result")
+
+        self._state.observations.append(
+            {
+                "phase": phase,
+                "action": "call_rpc",
+                "method": method,
+                "requestId": request_id,
+            }
+        )
 
     def _poll_expect_invocation(self, phase: str, index: int, step: dict[str, Any]) -> None:
         instance_id = require_string(step.get("instanceId"), f"orchestration.{phase}[{index}].instanceId")
@@ -447,6 +517,9 @@ def is_wildcard(expected: Any, actual: Any) -> bool:
 
     if expected == WILDCARD_ANY_NON_EMPTY_STRING:
         return isinstance(actual, str) and actual.strip() != ""
+
+    if expected == WILDCARD_ANY_NON_NEGATIVE_INT:
+        return isinstance(actual, int) and actual >= 0
 
     if expected == WILDCARD_ANY_ISO_UTC:
         if not isinstance(actual, str):

@@ -1,0 +1,36 @@
+{
+  "id": "errors.http.invalid_request_batch_root_array_returns_null_id",
+  "description": "HTTP 根数组 batch 必须返回单一 invalid_request，且 id=null。", 
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceHttpBatchRoot",
+      "X-DevHub-ClientSessionId": "10000000-0000-0000-0000-000000000003"
+    }
+  },
+  "request": [
+    {
+      "jsonrpc": "2.0",
+      "id": "batch-root-array",
+      "method": "hub.ping",
+      "params": {}
+    }
+  ],
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32600,
+      "message": "invalid_request"
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invalid-request",
+    "batch"
+  ]
+}

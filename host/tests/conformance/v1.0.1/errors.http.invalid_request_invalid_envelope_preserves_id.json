@@ -1,0 +1,32 @@
+{
+  "id": "errors.http.invalid_request_invalid_envelope_preserves_id",
+  "description": "HTTP 非法 JSON-RPC 信封必须返回 invalid_request，并保留可用 request id。", 
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceHttpInvalidEnvelope",
+      "X-DevHub-ClientSessionId": "10000000-0000-0000-0000-000000000002"
+    }
+  },
+  "request": {
+    "id": "http-invalid-envelope",
+    "method": "hub.ping",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-invalid-envelope",
+    "error": {
+      "code": -32600,
+      "message": "invalid_request"
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invalid-request"
+  ]
+}

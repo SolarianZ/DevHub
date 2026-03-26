@@ -1,0 +1,756 @@
+{
+  "id": "errors.rate_limited_pending_invocations_limit_returns_reason",
+  "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。", 
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "errors.rate-limited.pending.json",
+        "definition": {
+          "appId": "errors.rate-limited.pending",
+          "displayName": "errors.rate-limited.pending"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 1
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 2
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 3
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 4
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 5
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 6
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 7
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 8
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 9
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 10
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 11
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 12
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 13
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 14
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 15
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "errors.rate-limited.pending",
+          "target": {
+            "scope": null,
+            "instanceId": null
+          },
+          "method": "demo.notify.pending-limit",
+          "args": {
+            "seed": 16
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        },
+        "expectedResult": {
+          "ok": true,
+          "invocationId": "${ANY_NON_EMPTY_STRING}"
+        }
+      }
+    ],
+    "afterCaller": [
+      {
+        "action": "register_instance",
+        "instance": {
+          "instanceId": "errors-rate-limit-drain-inst",
+          "appId": "errors.rate-limited.pending",
+          "scope": null,
+          "pid": 33006,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "maxCount": 1,
+        "waitMs": 1000,
+        "expected": {
+          "appId": "errors.rate-limited.pending",
+          "method": "demo.notify.pending-limit",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "errors-rate-limit-drain-inst",
+        "value": {
+          "drained": true
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRateLimited",
+      "X-DevHub-ClientSessionId": "30000000-0000-0000-0000-000000000004"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-rate-limited",
+    "method": "hub.invoke.notify",
+    "params": {
+      "appId": "errors.rate-limited.pending",
+      "target": {
+        "scope": null,
+        "instanceId": null
+      },
+      "method": "demo.notify.pending-limit",
+      "args": {
+        "seed": 99
+      },
+      "options": {
+        "ttlMs": 60000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-rate-limited",
+    "error": {
+      "code": -32040,
+      "message": "rate_limited",
+      "data": {
+        "reason": "pending_invocations_limit_exceeded",
+        "limit": 16,
+        "active": 16
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invocation",
+    "rate-limit"
+  ]
+}

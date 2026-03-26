@@ -1,0 +1,117 @@
+{
+  "id": "events.disconnect_cleanup_requires_resubscribe",
+  "description": "首个连接断开后订阅状态必须被清理，第二个连接只有重新订阅后才会收到新事件。", 
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "events.disconnect.cleanup.json",
+        "definition": {
+          "appId": "events.disconnect.cleanup",
+          "displayName": "events.disconnect.cleanup"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsReconnect",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "first"
+      },
+      {
+        "action": "authenticate",
+        "client": "first"
+      },
+      {
+        "action": "subscribe",
+        "client": "first",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "firstSubscriptionId"
+      },
+      {
+        "action": "close_events_client",
+        "client": "first"
+      },
+      {
+        "action": "create_events_client",
+        "client": "second"
+      },
+      {
+        "action": "authenticate",
+        "client": "second"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "register_instance",
+        "client": "http",
+        "instance": {
+          "instanceId": "events-disconnect-window-inst-1",
+          "appId": "events.disconnect.cleanup",
+          "scope": null,
+          "pid": 33003,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "subscribe",
+        "client": "second",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "secondSubscriptionId"
+      },
+      {
+        "action": "register_instance",
+        "client": "http",
+        "instance": {
+          "instanceId": "events-disconnect-window-inst-2",
+          "appId": "events.disconnect.cleanup",
+          "scope": null,
+          "pid": 33004,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "read_event",
+        "client": "second",
+        "captureAs": "eventAfterResubscribe"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "firstSubscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "secondSubscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "eventAfterResubscribe": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.instance.registered",
+        "payload": {
+          "appId": "events.disconnect.cleanup",
+          "instanceId": "events-disconnect-window-inst-2"
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk",
+    "reconnect"
+  ]
+}

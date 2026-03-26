@@ -58,6 +58,17 @@ public class InvocationStore
     }
 
     /// <summary>
+    /// 获取当前仍处于活动中的 invocation 数量。
+    /// </summary>
+    public int GetActiveInvocationCount()
+    {
+        lock (_syncRoot)
+        {
+            return _all.Values.Count(static invocation => invocation.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered);
+        }
+    }
+
+    /// <summary>
     /// 由实例执行 poll。
     /// </summary>
     public async Task<IReadOnlyList<InvocationModel>> PollAsync(AppInstance instance, int maxCount, int waitMs, CancellationToken cancellationToken)

@@ -1,0 +1,37 @@
+{
+  "id": "errors.http.invalid_request_missing_client_id_header",
+  "description": "HTTP 缺失 X-DevHub-ClientId 头时，必须返回 invalid_request 并带 reason/header。", 
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientSessionId": "10000000-0000-0000-0000-000000000004"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-missing-client-id",
+    "method": "hub.ping",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-missing-client-id",
+    "error": {
+      "code": -32600,
+      "message": "invalid_request",
+      "data": {
+        "reason": "missing_header",
+        "header": "X-DevHub-ClientId"
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "headers",
+    "invalid-request"
+  ]
+}

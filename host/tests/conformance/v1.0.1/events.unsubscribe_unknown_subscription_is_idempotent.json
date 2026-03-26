@@ -1,0 +1,39 @@
+{
+  "id": "events.unsubscribe_unknown_subscription_is_idempotent",
+  "description": "对未知 subscriptionId 执行 unsubscribe 仍应成功，满足幂等语义。", 
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsUnsubscribeUnknown",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "unsubscribe",
+        "client": "events",
+        "subscriptionId": "sub-unknown-idempotent-001",
+        "captureAs": "unsubscribeResult"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "unsubscribeResult": {
+        "ok": true
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk"
+  ]
+}

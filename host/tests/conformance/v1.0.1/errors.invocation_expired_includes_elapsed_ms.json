@@ -1,0 +1,62 @@
+{
+  "id": "errors.invocation_expired_includes_elapsed_ms",
+  "description": "原始 HTTP request 在 ttlMs 到期时，必须返回 invocation_expired，并包含 invocationId 与 elapsedMs。", 
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "errors.invocation.expired.json",
+        "definition": {
+          "appId": "errors.invocation.expired",
+          "displayName": "errors.invocation.expired"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceErrorExpired",
+      "X-DevHub-ClientSessionId": "30000000-0000-0000-0000-000000000003"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-invocation-expired",
+    "method": "hub.invoke.request",
+    "params": {
+      "appId": "errors.invocation.expired",
+      "target": {
+        "scope": null,
+        "instanceId": null
+      },
+      "method": "demo.request.expired",
+      "options": {
+        "ttlMs": 1000,
+        "waitTimeoutMs": 1000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-invocation-expired",
+    "error": {
+      "code": -32011,
+      "message": "invocation_expired",
+      "data": {
+        "invocationId": "${ANY_NON_EMPTY_STRING}",
+        "elapsedMs": "${ANY_NON_NEGATIVE_INT}"
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invocation",
+    "expired"
+  ]
+}

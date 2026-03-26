@@ -1,0 +1,33 @@
+{
+  "id": "errors.http.method_not_found_returns_method_not_found",
+  "description": "HTTP 未知方法必须返回 method_not_found。", 
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceHttpMethodNotFound",
+      "X-DevHub-ClientSessionId": "10000000-0000-0000-0000-000000000005"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-method-not-found",
+    "method": "hub.unknown.method",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-method-not-found",
+    "error": {
+      "code": -32601,
+      "message": "method_not_found"
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "method-not-found"
+  ]
+}

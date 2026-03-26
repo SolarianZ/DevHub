@@ -1,0 +1,28 @@
+{
+  "id": "errors.http.parse_error_invalid_json_returns_null_id",
+  "description": "HTTP 原始非法 JSON 必须返回 parse_error，且 id=null。", 
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceHttpParseError",
+      "X-DevHub-ClientSessionId": "10000000-0000-0000-0000-000000000001"
+    }
+  },
+  "request": "{\"jsonrpc\":\"2.0\",\"id\":\"bad-json-id\",\"method\":\"hub.ping\",\"params\":",
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32700,
+      "message": "parse_error"
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "parse"
+  ]
+}
