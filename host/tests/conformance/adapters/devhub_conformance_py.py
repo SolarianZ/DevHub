@@ -586,8 +586,15 @@ def require_non_negative_int(value: Any, path: str) -> int:
 
 
 def emit(payload: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-    sys.stdout.write("\n")
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    stdout_buffer = getattr(sys.stdout, "buffer", None)
+    if stdout_buffer is not None:
+        stdout_buffer.write(encoded)
+        stdout_buffer.write(b"\n")
+    else:
+        sys.stdout.write(encoded.decode("utf-8"))
+        sys.stdout.write("\n")
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":

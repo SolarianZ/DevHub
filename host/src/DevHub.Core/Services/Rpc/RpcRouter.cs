@@ -50,7 +50,7 @@ public class RpcRouter
         _logger.LogDebug("尝试路由RPC请求: {Method}, RequestId: {RequestId}, 参数: {Params}",
             request.Method, request.Id, JsonSerializer.Serialize(request.Params));
 
-        if (_faultInjectionPolicy?.ShouldForceInternalError(request.Method) == true)
+        if (_faultInjectionPolicy?.ShouldForceInternalError(request.Id) == true)
         {
             _logger.LogWarning("测试故障注入已命中，强制返回 internal_error。Method: {Method}, RequestId: {RequestId}", request.Method, request.Id);
             return RpcErrorFactory.InternalError(request.Id);

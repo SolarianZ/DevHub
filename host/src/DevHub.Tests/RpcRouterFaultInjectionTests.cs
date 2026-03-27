@@ -14,14 +14,14 @@ public sealed class RpcRouterFaultInjectionTests
     [Fact]
     public async Task Impl_RouteAsync_WhenFaultInjectionDisabled_ShouldKeepOriginalRouting()
     {
-        using var scope = new EnvironmentVariableScope(RpcTestFaultInjectionPolicy.ForceInternalErrorMethodsEnvironmentVariable, null);
+        using var scope = new EnvironmentVariableScope(RpcTestFaultInjectionPolicy.ForceInternalErrorRequestIdsEnvironmentVariable, null);
         var policy = RpcTestFaultInjectionPolicy.Resolve(Mock.Of<ILogger<RpcTestFaultInjectionPolicy>>());
         var router = new RpcRouter([], Mock.Of<ILogger<RpcRouter>>(), policy);
 
         var response = await router.RouteAsync(new JsonRpcRequest
         {
             Id = "fault-disabled",
-            Method = "hub.test.internalError",
+            Method = "hub.ping",
             Params = null
         }, CancellationToken.None);
 
@@ -31,18 +31,18 @@ public sealed class RpcRouterFaultInjectionTests
     }
 
     [Fact]
-    public async Task Impl_RouteAsync_WhenFaultInjectionEnabledForMethod_ShouldReturnInternalError()
+    public async Task Impl_RouteAsync_WhenFaultInjectionEnabledForRequestId_ShouldReturnInternalError()
     {
         using var scope = new EnvironmentVariableScope(
-            RpcTestFaultInjectionPolicy.ForceInternalErrorMethodsEnvironmentVariable,
-            "hub.test.internalError");
+            RpcTestFaultInjectionPolicy.ForceInternalErrorRequestIdsEnvironmentVariable,
+            "fault-enabled");
         var policy = RpcTestFaultInjectionPolicy.Resolve(Mock.Of<ILogger<RpcTestFaultInjectionPolicy>>());
         var router = new RpcRouter([], Mock.Of<ILogger<RpcRouter>>(), policy);
 
         var response = await router.RouteAsync(new JsonRpcRequest
         {
             Id = "fault-enabled",
-            Method = "hub.test.internalError",
+            Method = "hub.ping",
             Params = null
         }, CancellationToken.None);
 
@@ -53,14 +53,26 @@ public sealed class RpcRouterFaultInjectionTests
     }
 
     [Fact]
-    public void Impl_ParseConfiguredMethods_WhenConfigured_ShouldNormalizeAndDeduplicate()
+    public void Impl_ParseConfiguredRequestIds_WhenConfigured_ShouldNormalizeAndDeduplicate()
     {
-        var methods = RpcTestFaultInjectionPolicy.ParseConfiguredMethods(
-            " hub.test.internalError ; hub.ping,\r\nhub.test.internalError ");
+        var requestIds = RpcTestFaultInjectionPolicy.ParseConfiguredRequestIds(
+            " fault-enabled ; 42,\r\nfault-enabled ");
 
         Assert.Equal(
-            ["hub.ping", "hub.test.internalError"],
-            methods.OrderBy(static method => method, StringComparer.Ordinal).ToArray());
+            ["42", "fault-enabled"],
+            requestIds.OrderBy(static requestId => requestId, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void Impl_ShouldForceInternalError_WhenRequestIdIsNumeric_ShouldMatchConfiguredText()
+    {
+        using var scope = new EnvironmentVariableScope(
+            RpcTestFaultInjectionPolicy.ForceInternalErrorRequestIdsEnvironmentVariable,
+            "42");
+        var policy = RpcTestFaultInjectionPolicy.Resolve();
+
+        Assert.True(policy.ShouldForceInternalError(42L));
+        Assert.False(policy.ShouldForceInternalError(43L));
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

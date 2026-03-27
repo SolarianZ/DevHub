@@ -10,7 +10,7 @@ import json
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -156,7 +156,7 @@ def validate_vector_shape(path: Path, payload: dict[str, Any]) -> None:
 
 
 def build_snapshot_run_root() -> Path:
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return REPO_ROOT / "temp" / SNAPSHOT_DIR_NAME / timestamp
 
 
@@ -615,9 +615,9 @@ def emit_failures(failures: Iterable[dict[str, Any]]) -> None:
     for failure in failures:
         print(f"FAIL  {failure['vectorId']}  [{failure['sdk']}]")
         if failure.get("message"):
-            print(f"      Message: {json.dumps(failure['message'], ensure_ascii=False)}")
-        print(f"      Expected: {json.dumps(failure['expected'], ensure_ascii=False, sort_keys=True)}")
-        print(f"      Actual: {json.dumps(failure['actual'], ensure_ascii=False, sort_keys=True)}")
+            print(f"      Message: {json.dumps(failure['message'], ensure_ascii=True)}")
+        print(f"      Expected: {json.dumps(failure['expected'], ensure_ascii=True, sort_keys=True)}")
+        print(f"      Actual: {json.dumps(failure['actual'], ensure_ascii=True, sort_keys=True)}")
         print(f"      Diff: {', '.join(failure['diffFields'])}")
         if failure.get("snapshotPath"):
             print(f"      Snapshot: {failure['snapshotPath']}")

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services.Rpc;
@@ -8,24 +9,24 @@ namespace DevHub.Core.Services.Rpc;
 public sealed class RpcTestFaultInjectionPolicy
 {
     /// <summary>
-    /// 通过方法名强制返回 <c>internal_error</c> 的环境变量。
+    /// 通过请求 ID 强制返回 <c>internal_error</c> 的环境变量。
     /// </summary>
-    public const string ForceInternalErrorMethodsEnvironmentVariable = "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_METHODS";
+    public const string ForceInternalErrorRequestIdsEnvironmentVariable = "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_REQUEST_IDS";
 
-    private readonly HashSet<string> _forceInternalErrorMethods;
+    private readonly HashSet<string> _forceInternalErrorRequestIds;
 
-    internal RpcTestFaultInjectionPolicy(IEnumerable<string> forceInternalErrorMethods, ILogger<RpcTestFaultInjectionPolicy>? logger = null)
+    internal RpcTestFaultInjectionPolicy(IEnumerable<string> forceInternalErrorRequestIds, ILogger<RpcTestFaultInjectionPolicy>? logger = null)
     {
-        _forceInternalErrorMethods = forceInternalErrorMethods
-            .Where(method => !string.IsNullOrWhiteSpace(method))
-            .Select(method => method.Trim())
+        _forceInternalErrorRequestIds = forceInternalErrorRequestIds
+            .Where(requestId => !string.IsNullOrWhiteSpace(requestId))
+            .Select(requestId => requestId.Trim())
             .ToHashSet(StringComparer.Ordinal);
 
-        if (_forceInternalErrorMethods.Count > 0)
+        if (_forceInternalErrorRequestIds.Count > 0)
         {
             logger?.LogWarning(
-                "已启用测试故障注入，将对以下 RPC 方法强制返回 internal_error：{Methods}",
-                string.Join(", ", _forceInternalErrorMethods.OrderBy(static method => method, StringComparer.Ordinal)));
+                "已启用测试故障注入，将对以下 RequestId 强制返回 internal_error：{RequestIds}",
+                string.Join(", ", _forceInternalErrorRequestIds.OrderBy(static requestId => requestId, StringComparer.Ordinal)));
         }
     }
 
@@ -35,19 +36,20 @@ public sealed class RpcTestFaultInjectionPolicy
     public static RpcTestFaultInjectionPolicy Resolve(ILogger<RpcTestFaultInjectionPolicy>? logger = null)
     {
         return new RpcTestFaultInjectionPolicy(
-            ParseConfiguredMethods(Environment.GetEnvironmentVariable(ForceInternalErrorMethodsEnvironmentVariable)),
+            ParseConfiguredRequestIds(Environment.GetEnvironmentVariable(ForceInternalErrorRequestIdsEnvironmentVariable)),
             logger);
     }
 
     /// <summary>
-    /// 判断指定方法是否需要强制返回 <c>internal_error</c>。
+    /// 判断指定请求 ID 是否需要强制返回 <c>internal_error</c>。
     /// </summary>
-    public bool ShouldForceInternalError(string? method)
+    public bool ShouldForceInternalError(object? requestId)
     {
-        return !string.IsNullOrWhiteSpace(method) && _forceInternalErrorMethods.Contains(method);
+        return TryNormalizeRequestId(requestId, out var normalizedRequestId)
+            && _forceInternalErrorRequestIds.Contains(normalizedRequestId);
     }
 
-    internal static IReadOnlyList<string> ParseConfiguredMethods(string? raw)
+    internal static IReadOnlyList<string> ParseConfiguredRequestIds(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -59,5 +61,31 @@ public sealed class RpcTestFaultInjectionPolicy
             .Where(method => !string.IsNullOrWhiteSpace(method))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+    }
+
+    internal static bool TryNormalizeRequestId(object? requestId, out string normalizedRequestId)
+    {
+        switch (requestId)
+        {
+            case null:
+                normalizedRequestId = string.Empty;
+                return false;
+            case string text:
+                normalizedRequestId = text.Trim();
+                return normalizedRequestId.Length > 0;
+            case bool:
+                normalizedRequestId = string.Empty;
+                return false;
+            default:
+                var converted = Convert.ToString(requestId, CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(converted))
+                {
+                    normalizedRequestId = string.Empty;
+                    return false;
+                }
+
+                normalizedRequestId = converted.Trim();
+                return true;
+        }
     }
 }

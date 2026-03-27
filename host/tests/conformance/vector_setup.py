@@ -31,7 +31,7 @@ from tests.test_base import (  # type: ignore  # noqa: E402
 SUITE_HOST_ENV_OVERRIDES = {
     "DEVHUB_ONLINE_THRESHOLD_SECONDS": "2",
     "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16",
-    "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_METHODS": "hub.test.internalError",
+    "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_REQUEST_IDS": "http-internal-error",
 }
 
 
