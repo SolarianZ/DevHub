@@ -8,9 +8,9 @@
 > - [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-26）
+## 当前状态（截至 2026-03-27）
 
-- M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测、SDK↔Hub 黑盒集成测试与 conformance 契约回归；跨语言一致性已在 52 条向量上完成验证，CI 门禁接入仍待后续阶段推进。
+- M5 测试任务状态：`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 主体能力已落地，已完成各自的 SDK 单测、SDK↔Hub 黑盒集成测试与 conformance 契约回归；跨语言一致性已在 52 条向量上完成验证，CI 门禁已接入仓库工作流。
 - M1~M4 的 Hub 白盒/黑盒体系已稳定，可作为 M5 SDK 验证基线。
 - `Python SDK` 当前已在 `sdks/python/tests/` 下落地 runtime、payloads、parsing、HTTP、events、package exports 等单元测试模块，以及 HTTP / Invocation / Events SDK↔Hub 集成测试，并已接入共享 conformance runner 与跨语言一致性验证链路。
 - 下文涉及的 .NET SDK 单元测试路径为 `sdks/dotnet/tests/DevHub.Sdk.UnitTests/`，SDK↔Hub 黑盒场景位于 `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/`；`sdks/javascript/tests/` 承载 TS SDK 单测与 SDK↔Hub 黑盒场景，`sdks/python/tests/` 承载 Python SDK 单测与 SDK↔Hub 黑盒场景，`host/tests/conformance/` 承载当前版本的跨语言契约测试资产。
@@ -21,6 +21,7 @@
 - 2026-03-25 已完成：Discovery/Auth/AppDef/AppInstance 共 20 条向量已可直接由 `vector_runner.py` 跑通；runner v1 已支持向量级 `setup` 与自动 teardown。
 - 2026-03-25 已完成：Invocation Notify 6 + Request 10 共 16 条向量已落地并跑通，累计 36/52；runner v2 已支持 Invocation 向量的 per-SDK 独立沙箱、`orchestration` 三阶段编排，以及中立 raw-protocol helper 模拟被调用方。
 - 2026-03-26 已完成：WS Events 4 + Error 12 共 16 条向量已落地并跑通，累计达到 52/52；runner v3 已支持 raw HTTP 字符串/数组请求、`raw.ws`、`sdk.events`、失败快照输出与 suite host 日志回溯。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
+- 2026-03-27 已完成：GitHub Actions 已新增 `sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance` 四个阻断 job，并将触发范围扩展到 `host/**`、`sdks/**`、`.github/workflows/**` 与 `docs/Spec.md`；conformance 失败时会上传运行日志与 `temp/conformance_snapshots/**`。已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript ci`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pip install -e './sdks/python[test]' requests`、`dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release`、`python -m pytest sdks/python/tests`、`dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`python host/tests/conformance/vector_runner.py` 与 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 
 ---
 
@@ -208,7 +209,7 @@
 - [x] 五类编号用例（`M5-DN-UT` / `M5-TS-UT` / `M5-PY-UT` / `M5-E2E` / `M5-CONF`）已建立并可自动执行。
 - [x] Spec §10.1 最小 52 条向量全部落地且可回归。
 - [x] `.NET`、`TS` 与 `Python` 对同向量结果语义一致（忽略键序与空白）。
-- [ ] CI 已接入四类执行入口并作为门禁。
+- [x] CI 已接入四类执行入口并作为门禁。
 - [x] 文档与测试实现一致，且未修改 `docs/Spec.md`。
 
 ---

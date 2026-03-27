@@ -7,12 +7,12 @@
 > - [DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 > - [DevHub_黑盒测试Spec严格符合性审查报告.md](./DevHub_黑盒测试Spec严格符合性审查报告.md)
 
-## 当前状态（截至 2026-03-26）
+## 当前状态（截至 2026-03-27）
 
 - 当前分支：`m5`。
 - M1~M4 已完成并形成 v1.0.1 Hub 能力闭环（HTTP + WS + Invocation + Events）。
-- `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 仍待后续阶段完成。
-- `Python SDK` 已在 `sdks/python/` 落地：当前已提供 runtime discovery、同步 HTTP JSON-RPC、异步 WebSocket events、统一错误模型、包根扩展抽象，以及 `sdks/python/tests/unit` / `sdks/python/tests/integration` 下的单元测试与 SDK↔Hub 集成测试；共享 conformance 与统一 CI 仍待接入。
+- `.NET SDK` 与 `JS/TS SDK` 主体能力已完成：`sdks/dotnet/` 与 `sdks/javascript/` 已实现 runtime discovery、HTTP/WS 客户端、统一错误模型，以及各自的 SDK 单元测试与 SDK↔Hub 黑盒集成测试；conformance 与跨语言 CI 门禁已接入仓库工作流。
+- `Python SDK` 已在 `sdks/python/` 落地：当前已提供 runtime discovery、同步 HTTP JSON-RPC、异步 WebSocket events、统一错误模型、包根扩展抽象，以及 `sdks/python/tests/unit` / `sdks/python/tests/integration` 下的单元测试与 SDK↔Hub 集成测试；共享 conformance 与统一 CI 门禁已接入。
 - 下文列出的 .NET SDK 路径为 `sdks/dotnet` 独立解决方案；`sdks/javascript` 是 JS/TS SDK 落点，`host/tests/conformance` 是后续 M5 目标落点。
 - M5 实施基线：严格对齐 `docs/Spec.md`（v1.0.1），不修改 Spec 协议定义。
 - 当前 Hub CI 已补充失败诊断日志、测试文本报告输出与诊断工件上传，便于后续 M5-CI 接入时快速定位门禁失败原因。
@@ -25,6 +25,7 @@
 - 2026-03-25 已完成：补齐 Invocation Notify 6 + Request 10 共 16 条 conformance 向量，累计达到 36/52；`vector_runner.py` 升级到 runner v2，Invocation 向量改为真正走三语言 SDK `notify/request`，并由中立 raw-protocol helper 完成被调用方协作编排；已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与隔离 Hub 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 - 2026-03-26 已完成：补齐 WS Events 4 条 + Error 12 条 conformance 向量，累计达到 52/52；`vector_runner.py` 已支持 raw HTTP 字符串/数组请求、`raw.ws`、`sdk.events`、失败快照输出与稳定快照目录回溯；Host 已补齐 `rate_limited` 最小触发路径与仅测试环境启用的 `internal_error` 故障注入缝。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py`、隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过，并完成受控失败快照验收。
 - 2026-03-27 已完成：将 `internal_error` conformance 故障注入改为按请求 ID 命中，避免引入非规范 RPC 方法；修复 Python conformance 适配器固定输出 UTF-8，并修复 `vector_runner.py` 在 Windows 默认控制台下打印失败报告时的编码稳定性。已验证 `dotnet test host/src/DevHub.Tests/DevHub.Tests.csproj -c Release --filter "FullyQualifiedName~RpcRouterFaultInjectionTests|FullyQualifiedName~InvocationHandlerBoundaryTests"`、`python host/tests/conformance/vector_runner.py` 与隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 可通过。
+- 2026-03-27 已完成：在 `.github/workflows/ci.yml` 中新增 `sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance` 四个阻断 job，并将触发范围扩展到 `host/**`、`sdks/**`、`.github/workflows/**` 与 `docs/Spec.md`；其中 conformance job 会上传失败日志与 `temp/conformance_snapshots/**` 工件。已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript ci`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pip install -e './sdks/python[test]' requests`、`dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release`、`python -m pytest sdks/python/tests`、`dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`python host/tests/conformance/vector_runner.py` 与 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 
 ---
 
@@ -232,11 +233,11 @@
 
 ### 3.7 `M5-CI-*`（CI 接入）
 
-- [ ] `M5-CI-001`：CI 增加 .NET SDK 单元测试入口。
-- [ ] `M5-CI-002`：CI 增加 TS SDK 单元测试入口（`npm test`）。
-- [ ] `M5-CI-003`：CI 增加 conformance 运行步骤（`python3 host/tests/conformance/vector_runner.py`）。
-- [ ] `M5-CI-004`：将 SDK 与契约测试结果纳入门禁判定。
-- [ ] `M5-CI-005`：CI 增加 Python SDK 测试入口（`python3 -m pytest sdks/python/tests`）。
+- [x] `M5-CI-001`：CI 增加 .NET SDK 单元测试入口。
+- [x] `M5-CI-002`：CI 增加 TS SDK 单元测试入口（`npm test`）。
+- [x] `M5-CI-003`：CI 增加 conformance 运行步骤（`python3 host/tests/conformance/vector_runner.py`）。
+- [x] `M5-CI-004`：将 SDK 与契约测试结果纳入门禁判定。
+- [x] `M5-CI-005`：CI 增加 Python SDK 测试入口（`python3 -m pytest sdks/python/tests`）。
 
 ### 3.8 `M5-DOC-*`（文档与状态同步）
 
@@ -269,7 +270,7 @@
 - [x] M5 必须能力（`.NET` + `TS` + `Python` + 向量 + 契约）全部落地。
 - [x] 向量覆盖满足 Spec §10.1 最小计数（总计 52）。
 - [x] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
-- [ ] CI 具备自动验证并阻断不一致变更。
+- [x] CI 具备自动验证并阻断不一致变更。
 - [x] 文档已同步、范围边界清晰、`Spec.md` 未改动。
 - [ ] 第三方开发者可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入，无需依赖 SDK 源码。
 

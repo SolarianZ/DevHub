@@ -4,9 +4,15 @@ on:
   push:
     paths:
       - "host/**"
+      - "sdks/**"
+      - ".github/workflows/**"
+      - "docs/Spec.md"
   pull_request:
     paths:
       - "host/**"
+      - "sdks/**"
+      - ".github/workflows/**"
+      - "docs/Spec.md"
 
 jobs:
   build-and-test:
@@ -157,6 +163,134 @@ jobs:
             temp/test_results.json
             temp/test_log.txt
             host/src/**/TestResults/**
+          if-no-files-found: warn
+
+  sdk-dotnet-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run .NET SDK tests
+        run: dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+
+  sdk-ts-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Install JavaScript SDK dependencies
+        run: npm --prefix sdks/javascript ci
+
+      - name: Build JavaScript SDK
+        run: npm --prefix sdks/javascript run build
+
+      - name: Run JavaScript SDK tests
+        run: npm --prefix sdks/javascript test
+
+  sdk-python-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python SDK test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e './sdks/python[test]' requests
+
+      - name: Build Host for Python SDK integration tests
+        run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+
+      - name: Run Python SDK tests
+        run: python -m pytest sdks/python/tests
+
+  sdk-conformance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python SDK test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e './sdks/python[test]' requests
+
+      - name: Install JavaScript SDK dependencies
+        run: npm --prefix sdks/javascript ci
+
+      - name: Build JavaScript SDK
+        run: npm --prefix sdks/javascript run build
+
+      - name: Build Host for conformance
+        run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+
+      - name: Build .NET SDK and conformance adapter
+        run: dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+
+      - name: Run conformance vectors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host/tests/conformance/vector_runner.py 2>&1 | tee "$RUNNER_TEMP/devhub-ci-conformance.log"
+
+      - name: Upload conformance diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-conformance-diagnostics
+          path: |
+            ${{ runner.temp }}/devhub-ci-conformance.log
+            temp/conformance_snapshots/**
           if-no-files-found: warn
 
   integration-full-gate:

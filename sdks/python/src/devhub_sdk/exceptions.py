@@ -42,7 +42,9 @@ class DevHubRpcException(Exception):
     request_id: str
 
     def __post_init__(self) -> None:
-        super().__init__(self.message)
+        # 说明：`@dataclass(slots=True)` 继承 `Exception` 时，Python 3.11 下的零参 super()
+        # 会在构造阶段触发 `super(type, obj)` TypeError，这里显式初始化基类以保持兼容。
+        Exception.__init__(self, self.message)
 
     @property
     def known_code(self) -> DevHubRpcErrorCode | None:

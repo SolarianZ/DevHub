@@ -210,6 +210,7 @@ def _process_exists(pid: int) -> bool:
             check=False,
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
         )
         return f'"{pid}"' in completed.stdout
     try:
@@ -226,6 +227,7 @@ def _kill_process(pid: int) -> None:
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/T", "/F"],
             check=False,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
