@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ws-auth-1",
+  "result": {
+    "ok": true,
+    "protocolVersion": 1
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ws-auth-1",
+  "method": "hub.ws.authenticate",
+  "params": {
+    "token": "${HOST_TOKEN}",
+    "protocolVersion": 1,
+    "clientId": "RawWsClient",
+    "clientSessionId": "00000000-0000-0000-0000-000000000002"
+  }
+}

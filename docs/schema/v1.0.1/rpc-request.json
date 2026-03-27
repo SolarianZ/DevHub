@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/rpc-request.json",
+  "type": "object",
+  "required": [
+    "jsonrpc",
+    "id",
+    "method"
+  ],
+  "properties": {
+    "jsonrpc": {
+      "type": "string",
+      "enum": [
+        "2.0"
+      ]
+    },
+    "id": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
+    "method": {
+      "type": "string"
+    },
+    "params": {
+      "oneOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        }
+      ]
+    }
+  }
+}

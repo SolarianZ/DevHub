@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/app-definition.json",
+  "type": "object",
+  "required": [
+    "appId",
+    "displayName"
+  ],
+  "properties": {
+    "appId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "rpc": {
+          "type": "boolean"
+        },
+        "events": {
+          "type": "boolean"
+        }
+      }
+    },
+    "launch": {
+      "type": "object",
+      "required": [
+        "exePath"
+      ],
+      "properties": {
+        "exePath": {
+          "type": "string"
+        },
+        "argsTemplate": {
+          "type": "string"
+        },
+        "workingDirectory": {
+          "type": "string"
+        },
+        "dedupeKeyTemplate": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

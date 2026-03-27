@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "error": {
+    "code": -32050,
+    "message": "invocation_failed",
+    "data": {
+      "invocationId": "${INVOCATION_ID}",
+      "calleeError": {
+        "code": 1001,
+        "message": "app_error",
+        "data": {
+          "reason": "boom"
+        }
+      }
+    }
+  }
+}

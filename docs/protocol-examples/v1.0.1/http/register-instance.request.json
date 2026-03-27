@@ -1,0 +1,17 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-register",
+  "method": "hub.apps.registerInstance",
+  "params": {
+    "instance": {
+      "instanceId": "sample-instance-1",
+      "appId": "sample.app",
+      "scope": null,
+      "pid": 32001,
+      "invoke": {
+        "poll": true,
+        "respond": true
+      }
+    }
+  }
+}

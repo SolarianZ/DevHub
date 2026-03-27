@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "method": "hub.event",
+  "params": {
+    "subscriptionId": "${SUBSCRIPTION_ID}",
+    "type": "app.instance.registered",
+    "timeUtc": "${EVENT_TIME_UTC}",
+    "payload": {
+      "appId": "sample.app",
+      "instanceId": "sample-instance-1"
+    }
+  }
+}

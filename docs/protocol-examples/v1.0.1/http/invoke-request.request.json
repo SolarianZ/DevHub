@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "method": "hub.invoke.request",
+  "params": {
+    "appId": "sample.app",
+    "target": {
+      "scope": null
+    },
+    "method": "sample.request",
+    "args": {
+      "message": "hello-from-raw-client"
+    },
+    "options": {
+      "ttlMs": 300000,
+      "waitTimeoutMs": 120000,
+      "queueIfOffline": true,
+      "autoLaunch": true
+    }
+  }
+}

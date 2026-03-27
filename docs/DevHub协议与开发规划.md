@@ -420,7 +420,7 @@ ws.onmessage = (e) => {
 
 ---
 
-## 17. 当前里程碑状态（截至 2026-03-24）
+## 17. 当前里程碑状态（截至 2026-03-27）
 
 - 当前分支：`m5`。
 - M0：已完成。
@@ -428,7 +428,8 @@ ws.onmessage = (e) => {
 - M2：已完成。
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：进行中（`.NET SDK` 子范围已完成 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、`invocation_failed` 结构化错误辅助、规范事件类型常量、依赖注入工厂接入、打包元数据与 SDK 白盒/黑盒测试，并补齐成功载荷结构校验与本地参数校验；JS/TS SDK 已补齐 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型与基础集成测试；Python SDK 已在 `sdks/python/` 落地同步 HTTP 客户端、异步事件客户端、统一错误模型、公开扩展点与单元/集成测试，跨语言 conformance 资产与统一门禁待补齐）。
+- M5：已完成（`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 的 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、黑盒/白盒测试、跨语言 conformance 与 CI 门禁已落地，并已补齐面向第三方开发者的无 SDK 接入指南、版本化 Schema 包、原始协议示例、conformance 使用说明与 Hub v1.x 兼容口径）。
+- 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增无 SDK 指南、版本化 Schema 包、原始协议示例与 conformance 使用说明，并明确 Hub v1.x 兼容口径，第三方无需依赖 SDK 源码即可完成接入与自测。
 - 2026-03-18 已完成：仓库级运行时路径文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，明确 `<dataDir>/runtime/hub.json` 固定发现规则、仅识别规范定义的环境变量，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
 - 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
 - 2026-03-15 已完成：`sdks/javascript` 的规范事件类型公开模型包含 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，`DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名对应 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。

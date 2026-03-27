@@ -26,6 +26,7 @@
 - 2026-03-26 已完成：补齐 WS Events 4 条 + Error 12 条 conformance 向量，累计达到 52/52；`vector_runner.py` 已支持 raw HTTP 字符串/数组请求、`raw.ws`、`sdk.events`、失败快照输出与稳定快照目录回溯；Host 已补齐 `rate_limited` 最小触发路径与仅测试环境启用的 `internal_error` 故障注入缝。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py`、隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 全部通过，并完成受控失败快照验收。
 - 2026-03-27 已完成：将 `internal_error` conformance 故障注入改为按请求 ID 命中，避免引入非规范 RPC 方法；修复 Python conformance 适配器固定输出 UTF-8，并修复 `vector_runner.py` 在 Windows 默认控制台下打印失败报告时的编码稳定性。已验证 `dotnet test host/src/DevHub.Tests/DevHub.Tests.csproj -c Release --filter "FullyQualifiedName~RpcRouterFaultInjectionTests|FullyQualifiedName~InvocationHandlerBoundaryTests"`、`python host/tests/conformance/vector_runner.py` 与隔离 Host 下的 `python host/tests/test_runner.py --smoke --no-header` 可通过。
 - 2026-03-27 已完成：在 `.github/workflows/ci.yml` 中新增 `sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance` 四个阻断 job，并将触发范围扩展到 `host/**`、`sdks/**`、`.github/workflows/**` 与 `docs/Spec.md`；其中 conformance job 会上传失败日志与 `temp/conformance_snapshots/**` 工件。已验证 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript ci`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pip install -e './sdks/python[test]' requests`、`dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release`、`python -m pytest sdks/python/tests`、`dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`python host/tests/conformance/vector_runner.py` 与 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
+- 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增 `docs/无SDK接入指南.md`、`docs/schema/v1.0.1/`、`docs/protocol-examples/v1.0.1/` 与 `host/tests/conformance/README.md`，并补充 Hub v1.x 兼容口径说明，使第三方可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入。已验证 `dotnet test host/src/DevHub.slnx -c Release`、`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`npm --prefix sdks/javascript ci`、`npm --prefix sdks/javascript run build`、`npm --prefix sdks/javascript test`、`python -m pip install -e "./sdks/python[test]" requests`、`python -m pytest sdks/python/tests`、`python host/tests/conformance/vector_runner.py` 与 `python host/tests/test_runner.py --smoke --no-header` 全部通过。
 
 ---
 
@@ -38,7 +39,7 @@
 - [x] 补齐 `Python SDK` 设计/工程基线，并并入 M5 文档统一维护。
 - [x] 建立 `签名测试向量` 基线（对齐 Spec §10.1/§10.2）。
 - [x] 建立 `Hub↔SDK 契约测试`（同向量驱动 `.NET` / `TS` / `Python` 多实现并校验语义一致）。
-- [ ] 补齐面向第三方开发者的“无 SDK 接入资料”发布基线（`Spec`、版本化 `Schema` 包、原始协议示例、conformance 使用说明）。
+- [x] 补齐面向第三方开发者的“无 SDK 接入资料”发布基线（`Spec`、版本化 `Schema` 包、原始协议示例、conformance 使用说明）。
 
 ### 0.2 M5 协议覆盖面（必须）
 
@@ -175,7 +176,7 @@
 
 - [x] `M5-ARCH-001`：创建 .NET SDK 与测试工程目录结构。
 - [x] `M5-ARCH-002`：创建 TS SDK 包结构与测试目录。
-- [ ] `M5-ARCH-003`：定义 SDK 版本策略（与 Hub v1.x 兼容口径）。
+- [x] `M5-ARCH-003`：定义 SDK 版本策略（与 Hub v1.x 兼容口径）。
 - [x] `M5-ARCH-004`：补充 SDK 最小可运行示例（README 片段）。
 
 ### 3.2 `M5-DN-*`（.NET SDK 实现）
@@ -244,9 +245,9 @@
 - [x] `M5-DOC-001`：更新 `README.md` 的“当前范围”与 SDK 使用说明。
 - [x] `M5-DOC-002`：补充 SDK 快速接入示例（`.NET` / `TS` / `Python`）。
 - [x] `M5-DOC-003`：同步里程碑状态文档；明确 `Spec.md` 不做修改。
-- [ ] `M5-DOC-004`：补充“无 SDK 接入指南”，面向第三方开发者说明 Discovery、HTTP/WS 鉴权、方法调用、错误语义与自测入口。
-- [ ] `M5-DOC-005`：发布版本化 `Schema` 包（至少包含 `hub-runtime`、`app-definition`、`app-instance`、`invocation`、`rpc-request`、`rpc-response`、`error-response`）。
-- [ ] `M5-DOC-006`：补充原始 HTTP / WebSocket 协议示例与 conformance 使用说明，确保第三方可不依赖 SDK 完成接入与自测。
+- [x] `M5-DOC-004`：补充“无 SDK 接入指南”，面向第三方开发者说明 Discovery、HTTP/WS 鉴权、方法调用、错误语义与自测入口。
+- [x] `M5-DOC-005`：发布版本化 `Schema` 包（至少包含 `hub-runtime`、`app-definition`、`app-instance`、`invocation`、`rpc-request`、`rpc-response`、`error-response`）。
+- [x] `M5-DOC-006`：补充原始 HTTP / WebSocket 协议示例与 conformance 使用说明，确保第三方可不依赖 SDK 完成接入与自测。
 
 ---
 
@@ -272,7 +273,7 @@
 - [x] `.NET`、`TS` 与 `Python` 对同一向量给出语义一致的结果。
 - [x] CI 具备自动验证并阻断不一致变更。
 - [x] 文档已同步、范围边界清晰、`Spec.md` 未改动。
-- [ ] 第三方开发者可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入，无需依赖 SDK 源码。
+- [x] 第三方开发者可仅基于 `Spec`、版本化 `Schema`、原始协议示例与 conformance 说明完成自研接入，无需依赖 SDK 源码。
 
 ---
 

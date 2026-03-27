@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ws-unsubscribe-1",
+  "method": "hub.events.unsubscribe",
+  "params": {
+    "subscriptionId": "${SUBSCRIPTION_ID}"
+  }
+}

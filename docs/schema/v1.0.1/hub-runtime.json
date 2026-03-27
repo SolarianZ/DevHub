@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/hub-runtime.json",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "pid",
+    "httpBaseUrl",
+    "wsUrl",
+    "tokenFile",
+    "startedAtUtc",
+    "runtimeTuning"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "hubVersion": {
+      "type": "string"
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "httpBaseUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "wsUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "tokenFile": {
+      "type": "string"
+    },
+    "startedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runtimeTuning": {
+      "type": "object",
+      "required": [
+        "leaseSeconds",
+        "onlineThresholdSeconds",
+        "launchDedupeWindowSeconds"
+      ],
+      "properties": {
+        "leaseSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "onlineThresholdSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "launchDedupeWindowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

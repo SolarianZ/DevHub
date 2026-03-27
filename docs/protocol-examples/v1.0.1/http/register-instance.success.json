@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-register",
+  "result": {
+    "ok": true,
+    "instance": {
+      "instanceId": "sample-instance-1",
+      "appId": "sample.app",
+      "scope": null,
+      "pid": 32001,
+      "registeredAtUtc": "${INSTANCE_REGISTERED_AT_UTC}",
+      "lastSeenUtc": "${INSTANCE_LAST_SEEN_UTC}",
+      "invoke": {
+        "poll": true,
+        "respond": true
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ping-1",
+  "result": {
+    "ok": true,
+    "serverTimeUtc": "${SERVER_TIME_UTC}",
+    "echo": "hello-devhub"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ws-subscribe-1",
+  "method": "hub.events.subscribe",
+  "params": {
+    "types": [
+      "app.instance.registered",
+      "invocation.completed"
+    ]
+  }
+}

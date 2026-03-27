@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "result": {
+    "ok": true,
+    "invocationId": "${INVOCATION_ID}",
+    "value": {
+      "handledBy": "sample-instance-1"
+    }
+  }
+}
