@@ -5,7 +5,7 @@ import { APP_INSTANCE_REGISTERED } from "../../src/events.js";
 import type { DevHubEventType } from "../../src/events.js";
 import { DevHubHostFixture } from "./host.js";
 
-let host: DevHubHostFixture;
+let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
   host = await DevHubHostFixture.start();
@@ -17,10 +17,10 @@ beforeAll(async () => {
     appId: "events.reconnect.app",
     displayName: "events.reconnect.app"
   });
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
-  await host.close();
+  await host?.close();
 });
 
 it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {

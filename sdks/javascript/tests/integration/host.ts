@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const OUTPUT_LIMIT = 200;
+const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
 let sharedHostAssemblyPromise: Promise<string> | undefined;
 
 export class DevHubHostFixture {
@@ -167,12 +168,31 @@ function resolveRepoRoot(): string {
 }
 
 function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
+  const configuredHostAssemblyPath = process.env[PrebuiltHostAssemblyEnvironmentVariable]?.trim();
+  if (configuredHostAssemblyPath) {
+    return resolveConfiguredHostAssemblyPath(repoRoot, configuredHostAssemblyPath);
+  }
+
   sharedHostAssemblyPromise ??= (async () => {
     const hostBuildRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-host-build-"));
     return await buildHostAssembly(repoRoot, hostBuildRoot);
   })();
 
   return sharedHostAssemblyPromise;
+}
+
+async function resolveConfiguredHostAssemblyPath(repoRoot: string, configuredPath: string): Promise<string> {
+  const resolvedPath = path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(repoRoot, configuredPath);
+
+  if (!(await fileExists(resolvedPath))) {
+    throw new Error(
+      `环境变量 ${PrebuiltHostAssemblyEnvironmentVariable} 指定的 Host 程序不存在：${resolvedPath}`
+    );
+  }
+
+  return resolvedPath;
 }
 
 async function buildHostAssembly(repoRoot: string, buildRoot: string): Promise<string> {

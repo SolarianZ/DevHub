@@ -7,14 +7,14 @@ import { APP_INSTANCE_REGISTERED, DevHubEventsClient } from "../../src/events.js
 import { discoverRuntime } from "../../src/runtime.js";
 import { DevHubHostFixture } from "./host.js";
 
-let host: DevHubHostFixture;
+let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
   host = await DevHubHostFixture.start();
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
-  await host.close();
+  await host?.close();
 });
 
 it("运行时发现应返回有效连接信息", async () => {

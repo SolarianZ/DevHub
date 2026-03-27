@@ -3,7 +3,7 @@ import { DevHubClient } from "../../src/client.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
 import { DevHubHostFixture } from "./host.js";
 
-let host: DevHubHostFixture;
+let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
   host = await DevHubHostFixture.start();
@@ -42,10 +42,10 @@ beforeAll(async () => {
     appId: "invoke.respond-disabled.app",
     displayName: "invoke.respond-disabled.app"
   });
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
-  await host.close();
+  await host?.close();
 });
 
 it("notify + poll 应完成调用往返", async () => {

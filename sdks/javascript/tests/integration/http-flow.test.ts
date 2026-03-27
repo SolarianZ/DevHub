@@ -6,7 +6,7 @@ import { DevHubHostFixture } from "./host.js";
 
 const launchScriptPath = fileURLToPath(new URL("../assets/launch_noop.mjs", import.meta.url));
 
-let host: DevHubHostFixture;
+let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
   host = await DevHubHostFixture.start();
@@ -18,10 +18,10 @@ beforeAll(async () => {
   await host.writeDefinition(createLaunchDefinition("http.launch.started.app"));
   await host.writeDefinition(createLaunchDefinition("http.launch.starting.app"));
   await host.writeDefinition(createLaunchDefinition("http.launch.running.app"));
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
-  await host.close();
+  await host?.close();
 });
 
 it("HTTP 链路应可完成基础流程", async () => {
