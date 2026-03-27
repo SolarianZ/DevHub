@@ -294,6 +294,9 @@ jobs:
       - name: Build Host for conformance
         run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
+      - name: Run conformance runner self-tests
+        run: python -m unittest discover -s host/tests -p "test_conformance_runner.py"
+
       - name: Build .NET SDK and conformance adapter
         run: dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 
