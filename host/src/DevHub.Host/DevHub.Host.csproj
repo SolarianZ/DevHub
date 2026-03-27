@@ -21,4 +21,19 @@
     <ProjectReference Include="..\DevHub.Core\DevHub.Core.csproj" />
   </ItemGroup>
 
+  <Target Name="NormalizeCoreProjectReferenceConfiguration" AfterTargets="AssignProjectConfiguration">
+    <ItemGroup>
+      <ProjectReferenceWithConfiguration Update="..\DevHub.Core\DevHub.Core.csproj">
+        <GlobalPropertiesToRemove></GlobalPropertiesToRemove>
+        <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+        <SetPlatform>Platform=$(Platform)</SetPlatform>
+      </ProjectReferenceWithConfiguration>
+      <_ProjectReferenceWithConfiguration Update="..\DevHub.Core\DevHub.Core.csproj">
+        <GlobalPropertiesToRemove></GlobalPropertiesToRemove>
+        <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+        <SetPlatform>Platform=$(Platform)</SetPlatform>
+      </_ProjectReferenceWithConfiguration>
+    </ItemGroup>
+  </Target>
+
 </Project>

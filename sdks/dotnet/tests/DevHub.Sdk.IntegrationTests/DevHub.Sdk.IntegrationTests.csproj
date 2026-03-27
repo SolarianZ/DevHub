@@ -16,8 +16,26 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
-    <ProjectReference Include="..\..\..\..\host\src\DevHub.Host\DevHub.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\host\src\DevHub.Host\DevHub.Host.csproj"
+                      ReferenceOutputAssembly="false"
+                      SetConfiguration="Configuration=$(Configuration)"
+                      SetPlatform="Platform=$(Platform)" />
   </ItemGroup>
+
+  <Target Name="NormalizeHostProjectReferenceConfiguration" AfterTargets="AssignProjectConfiguration">
+    <ItemGroup>
+      <ProjectReferenceWithConfiguration Update="..\..\..\..\host\src\DevHub.Host\DevHub.Host.csproj">
+        <GlobalPropertiesToRemove></GlobalPropertiesToRemove>
+        <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+        <SetPlatform>Platform=$(Platform)</SetPlatform>
+      </ProjectReferenceWithConfiguration>
+      <_ProjectReferenceWithConfiguration Update="..\..\..\..\host\src\DevHub.Host\DevHub.Host.csproj">
+        <GlobalPropertiesToRemove></GlobalPropertiesToRemove>
+        <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+        <SetPlatform>Platform=$(Platform)</SetPlatform>
+      </_ProjectReferenceWithConfiguration>
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <Using Include="Xunit" />
