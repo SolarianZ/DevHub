@@ -1,6 +1,6 @@
 # DevHub协议与开发规划
 
-> 状态：Draft（可进入实现）
+> 状态：已落地（截至 2026-03-27，M0~M5 已完成；本文档用于维护架构说明、里程碑记录与后续演进规划）
 > 目标：在 **本机 per-user** 场景下，为多个开发工具/插件/服务提供统一的：
 > - 实例注册（AppInstance）与发现
 > - 应用启动（auto-launch / dedupe）
@@ -180,11 +180,11 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 ### 7.2 Scope 策略
 > 规则详见 **[Spec.md §5.5 (Scope Rules)](./Spec.md#55-scope-rules-normative)**。
 
-- **Global**：`scope` 为 null 或 omitted。
-- **Scoped**：`scope` 为非空字符串。
-- **默认作用域原则**：调用请求未指定 `target.scope`（null/omitted）时，仅允许命中 Global 实例。
-- **显式作用域原则**：调用请求指定 `target.scope`（非空字符串）时，仅允许命中该作用域，且找不到时禁止 fallback 到 Global。
-- **非法值原则**：`scope` 或 `target.scope` 为 `""` 或 `"global"` 字符串时，必须按 `invalid_params (-32602)` 处理。
+- **App 生效作用域**：`hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 省略、`null` 或 `""` 时生效为 Global；为非空字符串时按该字面量作用域处理，包括 `"global"`。
+- **调用默认作用域**：`hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope` 省略、`null` 或 `""` 时，仅允许命中 Global 实例。
+- **调用显式作用域**：`target.scope` 为非空字符串时，仅允许命中该作用域，且找不到时禁止 fallback 到 Global。
+- **非法值原则**：`scope` 或 `target.scope` 若存在且类型不是 `string|null`，必须按 `invalid_params (-32602)` 处理。
+- **匹配规则**：非空字符串作用域按区分大小写的精确匹配处理。
 
 ---
 
@@ -428,12 +428,12 @@ ws.onmessage = (e) => {
 - M2：已完成。
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：已完成（`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 的 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、黑盒/白盒测试、跨语言 conformance 与 CI 门禁已落地，并已补齐面向第三方开发者的无 SDK 接入指南、版本化 Schema 包、原始协议示例、conformance 使用说明与 Hub v1.x 兼容口径）。
-- 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增无 SDK 指南、版本化 Schema 包、原始协议示例与 conformance 使用说明，并明确 Hub v1.x 兼容口径，第三方无需依赖 SDK 源码即可完成接入与自测。
+- M5：已完成（`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 的 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、黑盒/白盒测试、跨语言 conformance 与 CI 门禁已落地，并已补齐面向第三方开发者的无 SDK 接入资料、版本化 Schema 包、原始协议示例与 conformance 使用说明。）
+- 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增无 SDK 指南、版本化 Schema 包、原始协议示例与 conformance 使用说明，并明确 Hub v1.x 兼容口径；当前仓库同时提供官方向量与官方适配器回归链路。
 - 2026-03-18 已完成：仓库级运行时路径文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，明确 `<dataDir>/runtime/hub.json` 固定发现规则、仅识别规范定义的环境变量，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
 - 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
 - 2026-03-15 已完成：`sdks/javascript` 的规范事件类型公开模型包含 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，`DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名对应 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
 - 2026-03-24 已完成：将原独立的 Python SDK 设计规划并入 `DevHub_M5细化任务文档.md` 与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计、任务与测试维护口径，并移除独立子文档。
-- 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。本轮仅完成静态检查与代码修复，尚未执行测试验证。
+- 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。该修复已在后续统一回归中纳入验证，详见 [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md) 中 2026-03-27 的验证记录。
 - 2026-03-08 已验证：`dotnet build host/src/DevHub.slnx -c Release`、`dotnet test host/src/DevHub.slnx -c Release --no-build`、`python3 host/tests/test_runner.py --smoke --no-header`、`python3 host/tests/test_runner.py --full --no-header` 均可通过。
 - 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 数据根目录（`DEVHUB_DATA_DIR=temp/sdk-smoke`）下，`python3 host/tests/test_runner.py --smoke --no-header` 可通过。
