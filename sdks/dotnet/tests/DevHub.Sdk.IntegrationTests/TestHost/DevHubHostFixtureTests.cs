@@ -10,6 +10,62 @@ namespace DevHub.Sdk.IntegrationTests.TestHost;
 public sealed class DevHubHostFixtureTests
 {
     [Fact]
+    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputMissing_ShouldUseNewestAvailableOutput()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            var debugPath = CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow);
+
+            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
+
+            Assert.Equal(debugPath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputIsStale_ShouldUseNewestAvailableOutput()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            CreateFakeHostAssembly(repoRoot, "Release", DateTime.UtcNow.AddMinutes(-10));
+            var debugPath = CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow);
+
+            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
+
+            Assert.Equal(debugPath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputIsNewest_ShouldUsePreferredOutput()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow.AddMinutes(-10));
+            var releasePath = CreateFakeHostAssembly(repoRoot, "Release", DateTime.UtcNow);
+
+            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
+
+            Assert.Equal(releasePath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
     public async Task Impl_HostFixture_WhenStarted_ShouldCreateIsolatedArtifactDirectories()
     {
         await using var host = await DevHubHostFixture.StartAsync();
@@ -156,6 +212,39 @@ public sealed class DevHubHostFixtureTests
         catch
         {
             return false;
+        }
+    }
+
+    private static string CreateFakeRepositoryRoot()
+    {
+        var repoRoot = Path.Combine(Path.GetTempPath(), "DevHubHostFixtureTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(repoRoot);
+        return repoRoot;
+    }
+
+    private static string CreateFakeHostAssembly(string repoRoot, string configuration, DateTime writeTimeUtc)
+    {
+        var hostAssemblyPath = Path.Combine(
+            repoRoot,
+            "host",
+            "src",
+            "DevHub.Host",
+            "bin",
+            configuration,
+            "net10.0",
+            "DevHub.Host.dll");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(hostAssemblyPath)!);
+        File.WriteAllText(hostAssemblyPath, string.Empty);
+        File.SetLastWriteTimeUtc(hostAssemblyPath, writeTimeUtc);
+        return hostAssemblyPath;
+    }
+
+    private static void DeleteDirectoryIfExists(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -13,6 +14,8 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 {
     private const string DataDirEnvironmentVariable = "DEVHUB_DATA_DIR";
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
+    private const string HostAssemblyFileName = "DevHub.Host.dll";
+    private const string HostTargetFramework = "net10.0";
 
     private readonly string _tempRoot;
     private readonly string _repoRoot;
@@ -132,11 +135,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     private async Task StartProcessAsync()
     {
-        var hostAssemblyPath = Path.Combine(_repoRoot, "host", "src", "DevHub.Host", "bin", "Release", "net10.0", "DevHub.Host.dll");
-        if (!File.Exists(hostAssemblyPath))
-        {
-            throw new InvalidOperationException($"未找到 Host 程序：{hostAssemblyPath}");
-        }
+        var hostAssemblyPath = ResolveHostAssemblyPath(_repoRoot, ResolveTestAssemblyConfiguration());
 
         var slot = Guid.NewGuid().ToString("N");
         var startInfo = new ProcessStartInfo("dotnet")
@@ -201,6 +200,79 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         throw new InvalidOperationException($"等待 hub.json 超时。stdout={_stdout} stderr={_stderr}");
     }
 
+    internal static string ResolveHostAssemblyPath(string repoRoot, string? preferredConfiguration)
+    {
+        var hostBinDirectory = Path.Combine(repoRoot, "host", "src", "DevHub.Host", "bin");
+        var checkedPaths = new List<string>();
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? preferredPath = null;
+
+        AddConfiguredCandidate(preferredConfiguration, isPreferred: true);
+        AddConfiguredCandidate("Release", isPreferred: false);
+        AddConfiguredCandidate("Debug", isPreferred: false);
+
+        if (Directory.Exists(hostBinDirectory))
+        {
+            foreach (var candidatePath in Directory.EnumerateFiles(hostBinDirectory, HostAssemblyFileName, SearchOption.AllDirectories))
+            {
+                AddCandidate(candidatePath);
+            }
+        }
+
+        string? newestCandidate = null;
+        var newestWriteTimeUtc = DateTime.MinValue;
+
+        // dotnet test 在不同项目引用关系下未必会把 Host 编译到与测试程序集一致的配置目录，
+        // 因此这里选择“最新生成的可用输出”，并在时间戳相同时优先当前测试配置。
+        foreach (var candidatePath in checkedPaths)
+        {
+            if (!File.Exists(candidatePath))
+            {
+                continue;
+            }
+
+            var writeTimeUtc = File.GetLastWriteTimeUtc(candidatePath);
+            if (newestCandidate is null ||
+                writeTimeUtc > newestWriteTimeUtc ||
+                (writeTimeUtc == newestWriteTimeUtc &&
+                 string.Equals(candidatePath, preferredPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                newestCandidate = candidatePath;
+                newestWriteTimeUtc = writeTimeUtc;
+            }
+        }
+
+        if (newestCandidate is not null)
+        {
+            return newestCandidate;
+        }
+
+        throw new InvalidOperationException($"未找到 Host 程序。已检查：{string.Join(", ", checkedPaths)}");
+
+        void AddConfiguredCandidate(string? configuration, bool isPreferred)
+        {
+            if (string.IsNullOrWhiteSpace(configuration))
+            {
+                return;
+            }
+
+            var candidatePath = Path.Combine(hostBinDirectory, configuration, HostTargetFramework, HostAssemblyFileName);
+            AddCandidate(candidatePath);
+            if (isPreferred)
+            {
+                preferredPath = candidatePath;
+            }
+        }
+
+        void AddCandidate(string candidatePath)
+        {
+            if (seenPaths.Add(candidatePath))
+            {
+                checkedPaths.Add(candidatePath);
+            }
+        }
+    }
+
     private static string ResolveRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -216,5 +288,13 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
 
         throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static string? ResolveTestAssemblyConfiguration()
+    {
+        return typeof(DevHubHostFixture)
+            .Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()?
+            .Configuration;
     }
 }
