@@ -41,16 +41,16 @@ jobs:
           python3 -m pip install requests
 
       - name: Restore
-        run: dotnet restore host/src/DevHub.slnx
+        run: dotnet restore host/DevHub.slnx
 
       - name: Build
-        run: dotnet build host/src/DevHub.slnx -c Release --no-restore
+        run: dotnet build host/DevHub.slnx -c Release --no-restore
 
       - name: Clean test result artifacts
-        run: find host/src -type d -name TestResults -prune -exec rm -rf {} +
+        run: find host -type d -name TestResults -prune -exec rm -rf {} +
 
       - name: Unit tests with coverage
-        run: dotnet test host/src/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
+        run: dotnet test host/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
 
       - name: Verify coverage thresholds (line>=90%, branch>=80%)
         shell: bash
@@ -162,7 +162,7 @@ jobs:
             temp/test_results.txt
             temp/test_results.json
             temp/test_log.txt
-            host/src/**/TestResults/**
+            host/**/TestResults/**
           if-no-files-found: warn
 
   sdk-dotnet-tests:
@@ -343,10 +343,10 @@ jobs:
           python3 -m pip install requests
 
       - name: Restore
-        run: dotnet restore host/src/DevHub.slnx
+        run: dotnet restore host/DevHub.slnx
 
       - name: Build
-        run: dotnet build host/src/DevHub.slnx -c Release --no-restore
+        run: dotnet build host/DevHub.slnx -c Release --no-restore
 
       - name: Integration tests (full)
         shell: bash
@@ -488,10 +488,10 @@ jobs:
         run: python -m pip install pywin32
 
       - name: Restore
-        run: dotnet restore host/src/DevHub.slnx
+        run: dotnet restore host/DevHub.slnx
 
       - name: Build
-        run: dotnet build host/src/DevHub.slnx -c Release --no-restore
+        run: dotnet build host/DevHub.slnx -c Release --no-restore
 
       - name: Integration tests (smoke)
         shell: pwsh

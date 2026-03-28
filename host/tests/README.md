@@ -23,6 +23,9 @@ host/tests/
 │   ├── raw_protocol_helper.py
 │   ├── adapters/
 │   └── v1.0.1/
+├── whitebox/                       # .NET 白盒测试工程
+│   ├── DevHub.Tests/
+│   └── DevHub.Host.Tests/
 └── tools/                          # 覆盖率配置与仓库级辅助脚本
     ├── coverage.runsettings
     ├── verify_coverage.py
@@ -35,6 +38,7 @@ host/tests/
 - `assets/` 保留跨工作区共享夹具，例如 `launch_noop.py` 会同时被黑盒测试与 SDK 集成测试使用。
 - `blackbox/` 只承载面向公开行为的仓库级黑盒测试；具体用例不应再依赖 `host/tests/` 顶层旧布局。
 - `conformance/` 负责跨语言协议符合性，不替代白盒测试或黑盒业务回归。
+- `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免继续与 `host/src/` 生产工程混放。
 - `tools/` 只放验证入口和辅助脚本，不混入黑盒或 conformance 用例。
 
 ## 前置要求
@@ -111,7 +115,7 @@ python -m unittest discover -s host/tests/conformance -p "test_conformance_runne
 ### 4) 覆盖率配置与校验
 
 ```bash
-dotnet test host/src/DevHub.slnx -c Release --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings
+dotnet test host/DevHub.slnx -c Release --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings
 python host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80
 ```
 

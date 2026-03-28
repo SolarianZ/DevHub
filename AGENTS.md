@@ -10,15 +10,18 @@ DevHub/
 │   ├── Spec.md                               # 权威技术规范（Single Source of Truth）
 │   └── DevHub协议与开发规划.md                # 架构演进与里程碑规划
 ├── host/                                     # Host相关代码
-│   ├── src/                                  # Host源代码（.NET）
+│   ├── DevHub.slnx                           # Host 工作区解决方案文件
+│   ├── src/                                  # Host生产代码（.NET）
 │   │   ├── DevHub.Core/                      # 核心领域模型与基础服务
-│   │   ├── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
-│   │   ├── DevHub.Tests/                     # 单元测试（白盒测试）
-│   │   ├── DevHub.Host.Tests/                # Host 级测试
-│   │   └── DevHub.slnx                       # Host 解决方案文件
-│   └── tests/                                # Host集成测试套件（黑盒测试）
-│       ├── README.md                         # 集成测试环境配置说明
-│       └── test_runner.py                    # 集成测试自动化入口脚本
+│   │   └── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
+│   └── tests/                                # Host测试与验证资产
+│       ├── whitebox/                         # .NET 白盒测试工程
+│       │   ├── DevHub.Tests/                 # Core / 领域规则测试
+│       │   └── DevHub.Host.Tests/            # Host 级白盒测试
+│       ├── README.md                         # 测试分层与执行说明
+│       ├── blackbox/                         # Python 黑盒测试与 runner
+│       ├── conformance/                      # 符合性向量、adapter、runner 与自测
+│       └── tools/                            # 覆盖率配置与辅助脚本
 ├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
 │   ├── dotnet/                               # .NET SDK 工作区
 │   │   ├── src/                              # .NET SDK 源码
@@ -72,9 +75,9 @@ DevHub/
 
 ## 构建、运行与测试命令
 
-- `dotnet build host/src/DevHub.slnx -c Release`：构建全部 .NET 项目。
+- `dotnet build host/DevHub.slnx -c Release`：构建全部 Host .NET 项目。
 - `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release`：启动本地 DevHub 守护进程。
-- `dotnet test host/src/DevHub.slnx -c Release`：运行全部单元测试。
+- `dotnet test host/DevHub.slnx -c Release`：运行全部 Host 白盒测试。
 - `python3 host/tests/blackbox/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
 - `python3 host/tests/blackbox/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
 

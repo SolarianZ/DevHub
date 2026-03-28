@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOST_DIR="$PROJECT_ROOT/host"
 HOST_SRC_DIR="$HOST_DIR/src"
 HOST_PROJECT="$HOST_SRC_DIR/DevHub.Host/DevHub.Host.csproj"
-HOST_SOLUTION="$HOST_SRC_DIR/DevHub.slnx"
+HOST_SOLUTION="$HOST_DIR/DevHub.slnx"
 
 # 颜色输出
 RED='\033[0;31m'

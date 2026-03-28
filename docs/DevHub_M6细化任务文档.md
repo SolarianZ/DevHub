@@ -12,7 +12,7 @@
 
 - 当前分支：`m6`。
 - M0~M5 已完成，Hub、`.NET SDK`、`JS/TS SDK`、`Python SDK`、Host 黑盒测试、跨语言 conformance 与 CI 门禁均已具备可工作的基线。
-- 当前仓库主干布局为：`host/src/` 承载 Host 生产代码与 .NET 白盒测试工程，`host/tests/` 承载 Python 黑盒/集成/conformance 资产，`sdks/` 下按语言拆分 SDK 工作区，`docs/` 下集中维护规范、指南、运维与版本化协议资料。
+- 当前仓库主干布局为：`host/DevHub.slnx` 作为 Host 工作区入口，`host/src/` 承载 Host 生产代码，`host/tests/whitebox/` 承载 .NET 白盒测试工程，`host/tests/` 其余目录承载 Python 黑盒/集成/conformance 与验证资产，`sdks/` 下按语言拆分 SDK 工作区，`docs/` 下集中维护规范、指南、运维与版本化协议资料。
 - M6 第一阶段已完成 `host/tests/` 分层收敛：`assets/` 承载共享夹具，`blackbox/` 承载 Python 黑盒测试与 runner，`conformance/` 承载向量 / adapter / runner / 自测，`tools/` 承载覆盖率配置与辅助脚本。
 - M6 不再以“新增协议能力”为主要目标，而是围绕“整理、优化、完善”推进发布前收尾，重点治理仓库目录、模块边界、依赖关系、测试分层和文档归档。
 - 项目尚未正式发布，M6 允许做必要的破坏性调整；但必须区分“协议核心契约”和“发布前可调整约束”：不得通过修改 Spec 掩盖核心协议问题，但若识别出不贴合核心目标的冻结承诺、兼容口径或发布策略约束，应先修正规范，再同步实现、测试与文档资产。
@@ -95,14 +95,14 @@
 
 ### 2.1 已确认的当前基线
 
-- `host/src/` 当前同时包含 `DevHub.Core`、`DevHub.Host`、`DevHub.Tests`、`DevHub.Host.Tests` 与 `DevHub.slnx`。
+- `host/DevHub.slnx` 当前作为 Host 工作区统一入口，`host/src/` 仅保留 `DevHub.Core` 与 `DevHub.Host` 两个生产工程，`host/tests/whitebox/` 承载 `DevHub.Tests` 与 `DevHub.Host.Tests`。
 - `host/tests/` 当前按 `assets/`、`blackbox/`、`conformance/`、`tools/` 四层收敛，分别承载共享夹具、黑盒测试、符合性资产与验证工具。
 - `sdks/dotnet/` 已形成独立解决方案与 `src/` / `tests/` 分层；`sdks/javascript/` 与 `sdks/python/` 也已按语言工作区独立维护。
 - `docs/` 当前集中放置规范、规划、指南、运维资料，并包含 `schema/`、`protocol-examples/`、`assets/` 等版本化资源目录。
 
 ### 2.2 M6 需要重点核查的疑点
 
-- `host/src/` 内同时放置生产工程与测试工程，虽然符合部分 .NET 仓库习惯，但与当前 `host/tests/` 的黑盒体系、`sdks/*` 的布局风格并不完全一致，需要重新判断是否仍是最佳方案。
+- `M6-REPO-002` 已完成：Host 白盒测试工程已迁移到 `host/tests/whitebox/`，`host/src/` 不再混放测试工程；后续仍需持续观察 `host/tests/` 内 Python 黑盒 / conformance / whitebox 三类资产的长期导航成本。
 - `host/tests/` 目前既包含黑盒测试，也包含 conformance runner、adapter、覆盖率配置与脚本，后续规模继续增长时可能出现职责边界模糊、导航成本升高的问题。
 - 三套 SDK 的目录形态已基本独立，但其内部抽象层级、扩展点暴露方式、单元测试粒度和集成测试夹具风格是否足够一致，仍需要系统性审查。
 - 文档已累计多类资料，M6 需要确认“规范/规划/开发/接入/运维/测试治理/版本化资产”是否已有稳定分类，避免继续以新增根级文档的方式堆叠。
@@ -120,8 +120,8 @@
 
 ### 3.1 `M6-REPO-*`（仓库布局治理）
 
-- [ ] `M6-REPO-001`：盘点 `host/`、`sdks/`、`docs/` 与测试资产的现状，输出目标目录结构与迁移原则。
-- [ ] `M6-REPO-002`：判断 Host 白盒测试工程是否继续保留在 `host/src/`，或迁移到更清晰的测试层级目录；若调整，必须同步更新 `.slnx`、CI 与文档。
+- [x] `M6-REPO-001`：盘点 `host/`、`sdks/`、`docs/` 与测试资产的现状，输出目标目录结构与迁移原则。
+- [x] `M6-REPO-002`：判断 Host 白盒测试工程是否继续保留在 `host/src/`，或迁移到更清晰的测试层级目录；若调整，必须同步更新 `.slnx`、CI 与文档。
 - [x] `M6-REPO-003`：整理 `host/tests/` 内部结构，明确黑盒测试、conformance、夹具、脚本、覆盖率配置的目录边界。
 - [ ] `M6-REPO-004`：审查 `docs/` 根目录文件数量与分类方式，必要时引入更清晰的子目录归档规则，并迁移对应文档。
 - [ ] `M6-REPO-005`：清理失效、重复或职责重叠的里程碑细化文档，保持当前活跃里程碑只有单一主文档。
@@ -184,8 +184,8 @@
 
 M6 期间凡涉及代码、目录、工程文件、测试资产或 CI 入口的改动，提交前至少应完成以下本地验证：
 
-- `dotnet build host/src/DevHub.slnx -c Release`
-- `dotnet test host/src/DevHub.slnx -c Release`
+- `dotnet build host/DevHub.slnx -c Release`
+- `dotnet test host/DevHub.slnx -c Release`
 - `dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`
 - `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`
 - `npm --prefix sdks/javascript ci`
@@ -201,6 +201,7 @@ M6 期间凡涉及代码、目录、工程文件、测试资产或 CI 入口的�
 
 补充约束：
 
+- `host/tests/blackbox/test_runner.py` 的 `fast` / `full` / `smoke` 模式默认依赖“已启动的本地 Host”；执行前应先使用独立 `DEVHUB_DATA_DIR` 启动 `host/src/DevHub.Host/DevHub.Host.csproj`，对齐 CI 的回归方式。
 - 若改动触及 `host/tests/` 结构、conformance runner 或 SDK adapter，还必须补跑对应的专项回归。
 - 若改动只涉及文档，且不影响 CI、代码路径、测试入口或工程结构，可不执行上述代码验证。
 

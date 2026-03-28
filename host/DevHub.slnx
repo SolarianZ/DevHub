@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/DevHub.Core/DevHub.Core.csproj" />
+  <Project Path="src/DevHub.Host/DevHub.Host.csproj" />
+  <Project Path="tests/whitebox/DevHub.Host.Tests/DevHub.Host.Tests.csproj" />
+  <Project Path="tests/whitebox/DevHub.Tests/DevHub.Tests.csproj" />
+</Solution>
