@@ -10,7 +10,7 @@ M6 期间的文档分类与导航规则见 [`docs/README.md`](docs/README.md)；
 
 - [.NET SDK](sdks/dotnet/README.md)：面向 C# / .NET 调用方，覆盖 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、依赖注入工厂以及 `runtime resolver` / `HTTP transport` / `WS session` 扩展点。
 - [JS/TS SDK](sdks/javascript/README.md)：面向 Node.js 调用方，覆盖运行时发现、HTTP JSON-RPC、WebSocket 事件流、类型化事件模型、本地参数校验以及可注入 `runtime resolver` / transport / session 扩展点。
-- [Python SDK](sdks/python/README.md)：面向 Python 调用方，覆盖运行时发现、HTTP JSON-RPC、WebSocket 事件流、严格 JSON 校验、统一异常模型以及可扩展的 runtime resolver / transport / session 抽象。
+- [Python SDK](sdks/python/README.md)：面向 Python 调用方，覆盖运行时发现、HTTP JSON-RPC、WebSocket 事件流、严格 JSON 校验、统一异常模型，以及通过 dependencies 注入 `runtime resolver` / `transport factory` / `session factory` 的扩展入口。
 - [无 SDK 接入指南](docs/guides/无SDK接入指南.md)：面向不准备依赖仓库内 SDK 的第三方开发者，提供原始协议接入、自测与兼容性口径。
 
 三套 SDK 都遵循统一的数据根目录发现规则：优先读取显式传入的数据根目录，其次读取环境变量 `DEVHUB_DATA_DIR`，最后回退到平台默认数据目录，并固定从 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`wsUrl` 与 `tokenFile`。

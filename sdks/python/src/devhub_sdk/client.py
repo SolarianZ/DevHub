@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -47,13 +49,35 @@ from .models import (
     PollResult,
     RequestResult,
     RespondRequest,
+    RuntimeConnectionInfo,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
 
 _ECHO_UNSET = object()
-_DEFAULT_RUNTIME_RESOLVER = FileSystemRuntimeResolver()
-_DEFAULT_HTTP_TRANSPORT = UrllibJsonRpcHttpTransport()
+
+
+def _create_default_http_transport(
+    options: DevHubClientOptions,
+    connection_info: RuntimeConnectionInfo,
+) -> JsonRpcHttpTransport:
+    return UrllibJsonRpcHttpTransport(connection_info, options)
+
+
+@dataclass(slots=True)
+class DevHubClientDependencies:
+    """创建 HTTP 客户端时可注入的依赖项。"""
+
+    runtime_resolver: RuntimeResolver = field(default_factory=FileSystemRuntimeResolver)
+    transport_factory: Callable[[DevHubClientOptions, RuntimeConnectionInfo], JsonRpcHttpTransport] = (
+        _create_default_http_transport
+    )
+
+    def __post_init__(self) -> None:
+        if self.runtime_resolver is None:
+            raise ValueError("runtime_resolver 不能为空。")
+        if not callable(self.transport_factory):
+            raise TypeError("transport_factory 必须为可调用对象。")
 
 
 class DevHubClient:
@@ -62,23 +86,30 @@ class DevHubClient:
     def __init__(
         self,
         options: DevHubClientOptions,
-        *,
-        runtime_resolver: RuntimeResolver | None = None,
-        transport: JsonRpcHttpTransport | None = None,
+        connection_info: RuntimeConnectionInfo,
+        transport: JsonRpcHttpTransport,
     ) -> None:
         """初始化客户端。"""
 
         self._options = options.clone()
         self._options.validate()
-        self._runtime_resolver = runtime_resolver or _DEFAULT_RUNTIME_RESOLVER
-        self._transport = transport or _DEFAULT_HTTP_TRANSPORT
-        self._connection_info = self._runtime_resolver.resolve(self._options)
+        self._connection_info = connection_info
+        self._transport = transport
 
     @classmethod
-    def from_runtime(cls, options: DevHubClientOptions) -> "DevHubClient":
+    def from_runtime(
+        cls,
+        options: DevHubClientOptions,
+        dependencies: DevHubClientDependencies | None = None,
+    ) -> "DevHubClient":
         """根据数据根目录创建客户端。"""
 
-        return cls(options)
+        cloned_options = options.clone()
+        cloned_options.validate()
+        resolved_dependencies = dependencies or DevHubClientDependencies()
+        connection_info = resolved_dependencies.runtime_resolver.resolve(cloned_options)
+        transport = resolved_dependencies.transport_factory(cloned_options, connection_info)
+        return cls(cloned_options, connection_info, transport)
 
     @property
     def options(self) -> DevHubClientOptions:
@@ -192,4 +223,4 @@ class DevHubClient:
         self.close()
 
     def _send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
-        return self._transport.send(self._connection_info, self._options, method, params)
+        return self._transport.send(method, params)

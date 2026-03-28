@@ -136,10 +136,10 @@
 
 ### 3.3 `M6-ARCH-SDK-*`（SDK 架构收敛）
 
-- [ ] `M6-ARCH-SDK-001`：分别审查 `.NET`、`JS/TS`、`Python` SDK 的 runtime discovery、HTTP transport、WS session、错误模型与公共模型分层是否清晰。
-- [ ] `M6-ARCH-SDK-002`：比对三套 SDK 的同构能力与扩展点设计，判断哪些差异是语言特性决定，哪些差异只是历史演进遗留。
-- [ ] `M6-ARCH-SDK-003`：清理不必要暴露的内部细节、命名漂移、重复校验路径和不稳定 public seam。
-- [ ] `M6-ARCH-SDK-004`：若需要调整未发布 SDK 的公共 API，以“更稳定、更简洁、更符合 Spec 心智模型”为准，同步补齐迁移说明和测试。
+- [x] `M6-ARCH-SDK-001`：分别审查 `.NET`、`JS/TS`、`Python` SDK 的 runtime discovery、HTTP transport、WS session、错误模型与公共模型分层是否清晰。
+- [x] `M6-ARCH-SDK-002`：比对三套 SDK 的同构能力与扩展点设计，判断哪些差异是语言特性决定，哪些差异只是历史演进遗留。
+- [x] `M6-ARCH-SDK-003`：清理不必要暴露的内部细节、命名漂移、重复校验路径和不稳定 public seam。
+- [x] `M6-ARCH-SDK-004`：若需要调整未发布 SDK 的公共 API，以“更稳定、更简洁、更符合 Spec 心智模型”为准，同步补齐迁移说明和测试。
 
 ### 3.4 `M6-TEST-*`（测试治理与 Spec 符合性审查）
 

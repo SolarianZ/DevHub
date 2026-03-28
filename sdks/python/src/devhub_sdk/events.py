@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from ._parsing import (
@@ -23,12 +24,35 @@ from .models import (
     HubRuntime,
     ListInstancesRequest,
     PingResult,
+    RuntimeConnectionInfo,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
 
-_DEFAULT_RUNTIME_RESOLVER = FileSystemRuntimeResolver()
 _ECHO_UNSET = object()
+
+
+def _create_default_ws_session(
+    options: DevHubClientOptions,
+    connection_info: RuntimeConnectionInfo,
+) -> JsonRpcWsSession:
+    return WebSocketJsonRpcSession(connection_info, options)
+
+
+@dataclass(slots=True)
+class DevHubEventsClientDependencies:
+    """创建 WebSocket 事件客户端时可注入的依赖项。"""
+
+    runtime_resolver: RuntimeResolver = field(default_factory=FileSystemRuntimeResolver)
+    session_factory: Callable[[DevHubClientOptions, RuntimeConnectionInfo], JsonRpcWsSession] = (
+        _create_default_ws_session
+    )
+
+    def __post_init__(self) -> None:
+        if self.runtime_resolver is None:
+            raise ValueError("runtime_resolver 不能为空。")
+        if not callable(self.session_factory):
+            raise TypeError("session_factory 必须为可调用对象。")
 
 
 class DevHubEventsClient:
@@ -37,26 +61,33 @@ class DevHubEventsClient:
     def __init__(
         self,
         options: DevHubClientOptions,
-        *,
-        runtime_resolver: RuntimeResolver | None = None,
-        session: JsonRpcWsSession | None = None,
+        connection_info: RuntimeConnectionInfo,
+        session: JsonRpcWsSession,
     ) -> None:
         """初始化 WebSocket 客户端。"""
 
         self._options = options.clone()
         self._options.validate()
-        self._runtime_resolver = runtime_resolver or _DEFAULT_RUNTIME_RESOLVER
-        self._connection_info = self._runtime_resolver.resolve(self._options)
-        self._session = session or WebSocketJsonRpcSession(self._connection_info, self._options)
+        self._connection_info = connection_info
+        self._session = session
         self._authenticated = False
         self._event_stream_available = False
         self._closed = False
 
     @classmethod
-    async def from_runtime(cls, options: DevHubClientOptions) -> "DevHubEventsClient":
+    async def from_runtime(
+        cls,
+        options: DevHubClientOptions,
+        dependencies: DevHubEventsClientDependencies | None = None,
+    ) -> "DevHubEventsClient":
         """根据数据根目录创建 WebSocket 客户端。"""
 
-        return cls(options)
+        cloned_options = options.clone()
+        cloned_options.validate()
+        resolved_dependencies = dependencies or DevHubEventsClientDependencies()
+        connection_info = resolved_dependencies.runtime_resolver.resolve(cloned_options)
+        session = resolved_dependencies.session_factory(cloned_options, connection_info)
+        return cls(cloned_options, connection_info, session)
 
     @property
     def runtime(self) -> HubRuntime:

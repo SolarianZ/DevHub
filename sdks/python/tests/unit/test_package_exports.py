@@ -3,8 +3,10 @@ from typing import get_type_hints
 
 from devhub_sdk import (
     ALL_EVENT_TYPES,
+    DevHubClientDependencies,
     DevHubEventType,
     DevHubClient,
+    DevHubEventsClientDependencies,
     FileSystemRuntimeResolver,
     JsonRpcHttpTransport,
     JsonRpcWsSession,
@@ -15,6 +17,8 @@ from devhub_sdk import (
     ensure_supported_event_type,
     resolve_data_directory,
 )
+from devhub_sdk.client import DevHubClientDependencies as InternalDevHubClientDependencies
+from devhub_sdk.events import DevHubEventsClientDependencies as InternalDevHubEventsClientDependencies
 from devhub_sdk.constants import ALL_EVENT_TYPES as InternalAllEventTypes
 from devhub_sdk.constants import DevHubEventType as InternalDevHubEventType
 from devhub_sdk.constants import SUPPORTED_EVENT_TYPES as InternalSupportedEventTypes
@@ -29,6 +33,8 @@ from devhub_sdk.runtime import resolve_data_directory as InternalResolveDataDire
 
 
 def test_M5_PY_UT_007_package_root_should_export_runtime_and_transport_abstractions() -> None:
+    assert DevHubClientDependencies is InternalDevHubClientDependencies
+    assert DevHubEventsClientDependencies is InternalDevHubEventsClientDependencies
     assert RuntimeResolver is InternalRuntimeResolver
     assert FileSystemRuntimeResolver is InternalFileSystemRuntimeResolver
     assert resolve_data_directory is InternalResolveDataDirectory

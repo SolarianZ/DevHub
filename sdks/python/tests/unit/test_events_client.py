@@ -14,6 +14,7 @@ from devhub_sdk import (
     DevHubClientOptions,
     DevHubEvent,
     DevHubEventsClient,
+    DevHubEventsClientDependencies,
     DevHubRpcException,
     HubRuntime,
     HubRuntimeTuning,
@@ -58,6 +59,27 @@ class FakeWsSession:
         self.closed = True
 
 
+@dataclass(slots=True)
+class FakeWsSessionFactory:
+    """用于验证会话工厂接线的 WebSocket 工厂。"""
+
+    session: FakeWsSession
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def __call__(
+        self,
+        options: DevHubClientOptions,
+        connection_info: RuntimeConnectionInfo,
+    ) -> FakeWsSession:
+        self.calls.append(
+            {
+                "connection_info": connection_info,
+                "options": options.clone(),
+            }
+        )
+        return self.session
+
+
 @pytest.mark.asyncio
 async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_should_use_abstractions() -> None:
     connection_info = _create_connection_info()
@@ -76,11 +98,14 @@ async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_sho
             )
         ],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
     try:
         await client.authenticate()
@@ -90,6 +115,7 @@ async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_sho
         await client.close()
 
     assert len(resolver.calls) == 1
+    assert len(session_factory.calls) == 1
     assert subscription_id == "sub-fake"
     assert event.type == INVOCATION_COMPLETED
     assert event.payload["invocationId"] == "invk-fake"
@@ -97,6 +123,7 @@ async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_sho
     assert session.requests[0]["params"]["token"] == "token-fake"
     assert session.requests[1]["params"] == {"types": [INVOCATION_COMPLETED]}
     assert session.closed is True
+    assert session_factory.calls[0]["options"].client_id == "ws-client"
 
 
 @pytest.mark.asyncio
@@ -126,11 +153,14 @@ async def test_M5_PY_UT_006_events_client_with_injected_session_should_support_w
         },
         events=[],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
     try:
         await client.authenticate()
@@ -165,11 +195,14 @@ async def test_M5_PY_UT_006_events_client_subscribe_without_types_should_request
         },
         events=[],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
     try:
         await client.authenticate()
@@ -192,11 +225,14 @@ async def test_M5_PY_UT_006_events_client_subscribe_with_empty_types_should_requ
         },
         events=[],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
     try:
         await client.authenticate()
@@ -593,11 +629,14 @@ async def test_M5_PY_UT_006_events_client_when_authenticate_fails_should_allow_r
         },
         events=[],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
 
     try:
@@ -685,11 +724,14 @@ async def test_M5_PY_UT_006_events_client_subscribe_when_types_contains_unknown_
         },
         events=[],
     )
+    session_factory = FakeWsSessionFactory(session)
 
-    client = DevHubEventsClient(
+    client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="ws-client"),
-        runtime_resolver=resolver,
-        session=session,
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
     )
     try:
         await client.authenticate()

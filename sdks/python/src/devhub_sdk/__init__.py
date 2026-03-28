@@ -1,4 +1,4 @@
-from .client import DevHubClient
+from .client import DevHubClient, DevHubClientDependencies
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from .constants import (
     ALL_EVENT_TYPES,
@@ -12,7 +12,7 @@ from .constants import (
     SUPPORTED_EVENT_TYPES,
     ensure_supported_event_type,
 )
-from .events import DevHubEventsClient
+from .events import DevHubEventsClient, DevHubEventsClientDependencies
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
@@ -62,10 +62,12 @@ __all__ = [
     "AppInstanceRegistration",
     "DevHubCalleeError",
     "DevHubClient",
+    "DevHubClientDependencies",
     "DevHubClientOptions",
     "DevHubEvent",
     "DevHubEventType",
     "DevHubEventsClient",
+    "DevHubEventsClientDependencies",
     "DevHubRpcErrorCode",
     "DevHubRpcException",
     "FileSystemRuntimeResolver",

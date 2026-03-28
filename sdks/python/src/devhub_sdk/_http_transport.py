@@ -16,26 +16,18 @@ class JsonRpcHttpTransport(ABC):
     """HTTP JSON-RPC 传输抽象。"""
 
     @abstractmethod
-    def send(
-        self,
-        connection_info: RuntimeConnectionInfo,
-        options: DevHubClientOptions,
-        method: str,
-        params: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         """发送 JSON-RPC 请求并返回结果载荷。"""
 
 
 class UrllibJsonRpcHttpTransport(JsonRpcHttpTransport):
     """基于 urllib 的默认 HTTP JSON-RPC 传输。"""
 
-    def send(
-        self,
-        connection_info: RuntimeConnectionInfo,
-        options: DevHubClientOptions,
-        method: str,
-        params: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def __init__(self, connection_info: RuntimeConnectionInfo, options: DevHubClientOptions) -> None:
+        self._connection_info = connection_info
+        self._options = options.clone()
+
+    def send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         request_id = f"req-{uuid4().hex}"
         payload = {
             "jsonrpc": "2.0",
@@ -46,20 +38,20 @@ class UrllibJsonRpcHttpTransport(JsonRpcHttpTransport):
             payload["params"] = params
 
         request = Request(
-            connection_info.rpc_endpoint,
+            self._connection_info.rpc_endpoint,
             data=json.dumps(payload, allow_nan=False).encode("utf-8"),
             headers={
-                "Authorization": f"Bearer {connection_info.token}",
+                "Authorization": f"Bearer {self._connection_info.token}",
                 "Content-Type": "application/json",
-                "X-DevHub-Protocol": str(options.protocol_version),
-                "X-DevHub-ClientId": options.client_id,
-                "X-DevHub-ClientSessionId": options.client_session_id,
+                "X-DevHub-Protocol": str(self._options.protocol_version),
+                "X-DevHub-ClientId": self._options.client_id,
+                "X-DevHub-ClientSessionId": self._options.client_session_id,
             },
             method="POST",
         )
 
         try:
-            with urlopen(request, timeout=options.request_timeout) as response:
+            with urlopen(request, timeout=self._options.request_timeout) as response:
                 body = response.read().decode("utf-8")
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")

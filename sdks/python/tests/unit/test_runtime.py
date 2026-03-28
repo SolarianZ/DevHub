@@ -16,7 +16,7 @@ def test_M5_PY_UT_001_runtime_discovery_with_valid_hub_json_should_read_token_fi
 
     connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
-    assert connection_info.runtime_directory == str(runtime_dir.resolve())
+    assert connection_info.runtime_directory == str(runtime_dir.absolute())
     assert connection_info.token == "token-1"
     assert connection_info.runtime.http_base_url == "http://127.0.0.1:47231"
     assert connection_info.runtime.ws_url == "ws://127.0.0.1:47231/ws"
@@ -34,7 +34,7 @@ def test_M5_PY_UT_001_runtime_discovery_when_environment_override_provided_shoul
 
     connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client"))
 
-    assert connection_info.runtime_directory == str(runtime_dir.resolve())
+    assert connection_info.runtime_directory == str(runtime_dir.absolute())
     assert connection_info.token == "token-env"
 
 
@@ -45,7 +45,7 @@ def test_M5_PY_UT_001_resolve_data_directory_when_override_and_environment_both_
 
     resolved = runtime_module.resolve_data_directory("C:/data-from-argument")
 
-    assert resolved == Path("C:/data-from-argument").resolve()
+    assert resolved == Path("C:/data-from-argument").absolute()
 
 
 def test_M5_PY_UT_001_resolve_data_directory_on_windows_should_use_local_app_data(
@@ -57,7 +57,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_windows_should_use_local_app_dat
 
     resolved = runtime_module.resolve_data_directory()
 
-    assert resolved == Path("C:/Users/tester/AppData/Local/DevHub").resolve()
+    assert resolved == Path("C:/Users/tester/AppData/Local/DevHub").absolute()
 
 
 def test_M5_PY_UT_001_resolve_data_directory_on_darwin_should_use_application_support(
@@ -70,7 +70,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_darwin_should_use_application_su
 
     resolved = runtime_module.resolve_data_directory()
 
-    assert resolved == Path("C:/Users/tester/Library/Application Support/DevHub").resolve()
+    assert resolved == Path("C:/Users/tester/Library/Application Support/DevHub").absolute()
 
 
 def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_use_xdg_data_home_when_present(
@@ -82,7 +82,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_use_xdg_data_home_w
 
     resolved = runtime_module.resolve_data_directory()
 
-    assert resolved == Path("C:/xdg-data/DevHub").resolve()
+    assert resolved == Path("C:/xdg-data/DevHub").absolute()
 
 
 def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_fallback_to_home_local_share(
@@ -95,7 +95,13 @@ def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_fallback_to_home_lo
 
     resolved = runtime_module.resolve_data_directory()
 
-    assert resolved == Path("C:/Users/tester/.local/share/DevHub").resolve()
+    assert resolved == Path("C:/Users/tester/.local/share/DevHub").absolute()
+
+
+def test_M5_PY_UT_001_resolve_data_directory_should_preserve_lexical_absolute_path() -> None:
+    resolved = runtime_module.resolve_data_directory("/var/tmp/devhub-data")
+
+    assert resolved == Path("/var/tmp/devhub-data").absolute()
 
 
 def test_M5_PY_UT_002_runtime_discovery_when_data_dir_points_to_runtime_subdirectory_should_raise(tmp_path: Path) -> None:

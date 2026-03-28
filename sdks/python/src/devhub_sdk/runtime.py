@@ -63,24 +63,28 @@ def resolve_data_directory(data_dir_override: str | None = None) -> Path:
     """解析运行时数据根目录。"""
 
     if data_dir_override and data_dir_override.strip():
-        return Path(data_dir_override).expanduser().resolve()
+        return _to_absolute_path(Path(data_dir_override).expanduser())
 
     env_data_dir = os.getenv(DATA_DIR_ENV)
     if env_data_dir and env_data_dir.strip():
-        return Path(env_data_dir).expanduser().resolve()
+        return _to_absolute_path(Path(env_data_dir).expanduser())
 
     system = platform.system()
     home = Path.home()
     if system == "Windows":
         local_app_data = os.getenv("LOCALAPPDATA")
         base = Path(local_app_data) if local_app_data else home / "AppData" / "Local"
-        return (base / "DevHub").resolve()
+        return _to_absolute_path(base / "DevHub")
     if system == "Darwin":
-        return (home / "Library" / "Application Support" / "DevHub").resolve()
+        return _to_absolute_path(home / "Library" / "Application Support" / "DevHub")
 
     xdg_data_home = os.getenv("XDG_DATA_HOME")
     base = Path(xdg_data_home).expanduser() if xdg_data_home else home / ".local" / "share"
-    return (base / "DevHub").resolve()
+    return _to_absolute_path(base / "DevHub")
+
+
+def _to_absolute_path(path: Path) -> Path:
+    return path.absolute()
 
 
 def _raise_invalid_data_directory_error_if_needed(data_directory: Path) -> None:

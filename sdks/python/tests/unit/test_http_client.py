@@ -12,6 +12,7 @@ import pytest
 
 from devhub_sdk import (
     DevHubClient,
+    DevHubClientDependencies,
     DevHubClientOptions,
     DevHubRpcException,
     HubRuntime,
@@ -50,22 +51,35 @@ class FakeHttpTransport:
     response: dict[str, Any]
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def send(
-        self,
-        connection_info: RuntimeConnectionInfo,
-        options: DevHubClientOptions,
-        method: str,
-        params: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         self.calls.append(
             {
-                "connection_info": connection_info,
-                "options": options.clone(),
                 "method": method,
                 "params": params,
             }
         )
         return self.response
+
+
+@dataclass(slots=True)
+class FakeHttpTransportFactory:
+    """用于验证传输工厂接线的 HTTP 工厂。"""
+
+    transport: FakeHttpTransport
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def __call__(
+        self,
+        options: DevHubClientOptions,
+        connection_info: RuntimeConnectionInfo,
+    ) -> FakeHttpTransport:
+        self.calls.append(
+            {
+                "connection_info": connection_info,
+                "options": options.clone(),
+            }
+        )
+        return self.transport
 
 
 def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
@@ -78,11 +92,14 @@ def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_us
             "echo": {"source": "fake"},
         }
     )
+    transport_factory = FakeHttpTransportFactory(transport)
 
-    client = DevHubClient(
+    client = DevHubClient.from_runtime(
         DevHubClientOptions(client_id="http-client"),
-        runtime_resolver=resolver,
-        transport=transport,
+        DevHubClientDependencies(
+            runtime_resolver=resolver,
+            transport_factory=transport_factory,
+        ),
     )
 
     ping = client.ping({"source": "fake"})
@@ -91,9 +108,11 @@ def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_us
     assert ping.echo == {"source": "fake"}
     assert client.runtime.http_base_url == "http://127.0.0.1:57231"
     assert len(resolver.calls) == 1
+    assert len(transport_factory.calls) == 1
     assert transport.calls[0]["method"] == "hub.ping"
     assert transport.calls[0]["params"] == {"echo": {"source": "fake"}}
-    assert transport.calls[0]["connection_info"].token == "token-fake"
+    assert transport_factory.calls[0]["connection_info"].token == "token-fake"
+    assert transport_factory.calls[0]["options"].client_id == "http-client"
 
 
 def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
@@ -141,11 +160,14 @@ def test_M5_PY_UT_003_http_client_ping_when_echo_contains_unsupported_json_shoul
             "serverTimeUtc": "2026-03-09T00:00:00Z",
         }
     )
+    transport_factory = FakeHttpTransportFactory(transport)
 
-    client = DevHubClient(
+    client = DevHubClient.from_runtime(
         DevHubClientOptions(client_id="http-client"),
-        runtime_resolver=resolver,
-        transport=transport,
+        DevHubClientDependencies(
+            runtime_resolver=resolver,
+            transport_factory=transport_factory,
+        ),
     )
 
     with pytest.raises(ValueError, match=r"echo\.callback 包含不支持的 JSON 类型。"):

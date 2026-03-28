@@ -41,27 +41,37 @@ print(ping.server_time_utc, ping.echo)
 - 直接传入 `runtime` 子目录
 - `hub.json` / `token.txt` 直放在数据根目录的布局
 
-如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，也可以直接构造客户端并注入顶层公开导出的扩展抽象：
+如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，请统一通过 `from_runtime(..., dependencies=...)` 注入公开扩展点。客户端构造函数不再承载稳定的公开注入 seam。
 
 ```python
-from devhub_sdk import DevHubClient, DevHubClientOptions, JsonRpcHttpTransport, RuntimeResolver
+from devhub_sdk import DevHubClient, DevHubClientDependencies, DevHubClientOptions
 
-client = DevHubClient(
+client = DevHubClient.from_runtime(
     DevHubClientOptions(client_id="example-client"),
-    runtime_resolver=my_runtime_resolver,  # RuntimeResolver
-    transport=my_http_transport,           # JsonRpcHttpTransport
+    DevHubClientDependencies(
+        runtime_resolver=my_runtime_resolver,
+        transport_factory=my_http_transport_factory,
+    ),
 )
 ```
 
 ```python
-from devhub_sdk import DevHubEventsClient, DevHubClientOptions, JsonRpcWsSession, RuntimeResolver
+from devhub_sdk import DevHubClientOptions, DevHubEventsClient, DevHubEventsClientDependencies
 
-events_client = DevHubEventsClient(
+events_client = await DevHubEventsClient.from_runtime(
     DevHubClientOptions(client_id="example-client"),
-    runtime_resolver=my_runtime_resolver,  # RuntimeResolver
-    session=my_ws_session,                 # JsonRpcWsSession
+    DevHubEventsClientDependencies(
+        runtime_resolver=my_runtime_resolver,
+        session_factory=my_ws_session_factory,
+    ),
 )
 ```
+
+其中：
+
+- `runtime_resolver` 负责把 `DevHubClientOptions` 解析成 `RuntimeConnectionInfo`
+- `transport_factory` 负责基于 `options + connection_info` 创建 HTTP transport
+- `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session
 
 公开事件类型模型使用 `DevHubEventType` 闭集，并同步导出 `SUPPORTED_EVENT_TYPES`、`ALL_EVENT_TYPES` 与 `ensure_supported_event_type(...)`，便于在调用侧提前完成订阅入参校验。
 
