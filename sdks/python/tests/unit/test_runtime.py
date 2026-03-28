@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,12 @@ def test_M5_PY_UT_001_resolve_data_directory_should_preserve_lexical_absolute_pa
     resolved = runtime_module.resolve_data_directory("/var/tmp/devhub-data")
 
     assert resolved == Path("/var/tmp/devhub-data").absolute()
+
+
+def test_M5_PY_UT_001_resolve_data_directory_should_collapse_dot_segments_without_resolving_symlinks() -> None:
+    resolved = runtime_module.resolve_data_directory("./a/../b")
+
+    assert resolved == Path(os.path.abspath("./a/../b"))
 
 
 def test_M5_PY_UT_002_runtime_discovery_when_data_dir_points_to_runtime_subdirectory_should_raise(tmp_path: Path) -> None:

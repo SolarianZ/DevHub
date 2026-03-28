@@ -84,7 +84,7 @@ def resolve_data_directory(data_dir_override: str | None = None) -> Path:
 
 
 def _to_absolute_path(path: Path) -> Path:
-    return path.absolute()
+    return Path(os.path.abspath(path))
 
 
 def _raise_invalid_data_directory_error_if_needed(data_directory: Path) -> None:
