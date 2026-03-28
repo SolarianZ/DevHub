@@ -35,6 +35,7 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.Equal(Path.Combine(dataDirectory, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(dataDirectory, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(dataDirectory, "runtime", "hub.json"), options.HubJsonPath);
+        Assert.Equal(Path.Combine(dataDirectory, "runtime", "prev_hub.json"), options.PreviousHubJsonPath);
     }
 
     [Fact]
@@ -52,6 +53,7 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.Equal(Path.Combine(expectedRoot, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(expectedRoot, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(expectedRoot, "runtime", "hub.json"), options.HubJsonPath);
+        Assert.Equal(Path.Combine(expectedRoot, "runtime", "prev_hub.json"), options.PreviousHubJsonPath);
     }
 
     [Fact]
@@ -71,12 +73,14 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.True(Path.IsPathFullyQualified(options.LogsPath));
         Assert.True(Path.IsPathFullyQualified(options.TokenFilePath));
         Assert.True(Path.IsPathFullyQualified(options.HubJsonPath));
+        Assert.True(Path.IsPathFullyQualified(options.PreviousHubJsonPath));
         Assert.Equal(Path.Combine(expectedRootPath, "runtime"), options.RuntimePath);
         Assert.Equal(Path.Combine(expectedRootPath, "apps", "definitions"), options.DefinitionsPath);
         Assert.Equal(Path.Combine(expectedRootPath, "apps", "instances"), options.InstancesPath);
         Assert.Equal(Path.Combine(expectedRootPath, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(expectedRootPath, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(expectedRootPath, "runtime", "hub.json"), options.HubJsonPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "runtime", "prev_hub.json"), options.PreviousHubJsonPath);
     }
 
     [Fact]
@@ -96,6 +100,16 @@ public class RuntimePathOptionsTests : IDisposable
         Assert.Equal(created.LogsPath, resolved.LogsPath);
         Assert.Equal(created.TokenFilePath, resolved.TokenFilePath);
         Assert.Equal(created.HubJsonPath, resolved.HubJsonPath);
+        Assert.Equal(created.PreviousHubJsonPath, resolved.PreviousHubJsonPath);
+    }
+
+    [Fact]
+    public void Impl_Create_WithBlankRoot_ShouldThrowArgumentException()
+    {
+        var exception = Record.Exception(() => RuntimePathOptions.Create("  "));
+
+        Assert.NotNull(exception);
+        Assert.IsType<ArgumentException>(exception);
     }
 
     /// <inheritdoc />

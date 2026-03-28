@@ -77,12 +77,21 @@ public class HostBootstrapper
             _logger.LogInformation("服务器成功启动，监听地址: {Address}", address);
             _logger.LogDebug("写入 hub.json 文件...");
             _fileSystemManager.WriteHubJson(parsedPort);
+            _fileSystemManager.ActivateHubJsonLease();
             _logger.LogInformation("DevHub 启动成功，监听端口: {Port}", parsedPort);
             _logger.LogInformation("HTTP 地址: http://127.0.0.1:{Port}", parsedPort);
             return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// 执行 Host 停止后的运行时清理。
+    /// </summary>
+    public void Cleanup()
+    {
+        _fileSystemManager.Cleanup();
     }
 
     private static bool TryParseLoopbackPort(string address, out int port)

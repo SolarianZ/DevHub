@@ -370,6 +370,41 @@ public class CoreServiceTests
     }
 
     [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Impl_ProcessLauncher_Start_WhenWorkingDirectoryProvided_ShouldLaunchProcess()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var launcher = new ProcessLauncher();
+        var workingDirectory = TestHelpers.GetTestDirectory();
+
+        try
+        {
+            var launchConfig = new LaunchConfiguration
+            {
+                ExePath = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                WorkingDirectory = workingDirectory
+            };
+
+            using var process = launcher.Start(launchConfig, "/c exit 0");
+
+            Assert.NotNull(process);
+            Assert.True(process.WaitForExit(5000));
+            Assert.Equal(0, process.ExitCode);
+        }
+        finally
+        {
+            if (Directory.Exists(workingDirectory))
+            {
+                Directory.Delete(workingDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Impl_AppRegistry_ListInstances_ShouldFilterByScope()
     {
         // Arrange

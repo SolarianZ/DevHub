@@ -14,7 +14,7 @@ namespace DevHub.Core.Services;
 /// <summary>
 /// 文件系统管理器，负责目录创建、token 管理和 hub.json 写入
 /// </summary>
-public class FileSystemManager
+public sealed class FileSystemManager : IDisposable
 {
     private const int HubJsonReplaceMaxRetryCount = 40;
     private static readonly TimeSpan HubJsonReplaceRetryDelay = TimeSpan.FromMilliseconds(50);
@@ -26,6 +26,7 @@ public class FileSystemManager
     private readonly ILogger<FileSystemManager> _logger;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
+    private readonly object _hubJsonLeaseSyncRoot = new();
     private readonly string _rootPath;
     private readonly string _runtimePath;
     private readonly string _definitionsPath;
@@ -33,12 +34,16 @@ public class FileSystemManager
     private readonly string _logsPath;
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
+    private readonly string _previousHubJsonPath;
     private readonly DateTime _sessionStartedAtUtc;
     private readonly string? _defaultHubVersion;
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
+    private bool _hubJsonLeaseRequested;
     private bool _sessionTokenInitialized;
+    private bool _disposed;
     private string? _sessionToken;
+    private FileStream? _hubJsonLeaseStream;
 
     /// <summary>
     /// 使用统一路径选项初始化文件系统管理器。
@@ -71,6 +76,7 @@ public class FileSystemManager
         _logsPath = runtimePathOptions.LogsPath;
         _tokenFilePath = runtimePathOptions.TokenFilePath;
         _hubJsonPath = runtimePathOptions.HubJsonPath;
+        _previousHubJsonPath = runtimePathOptions.PreviousHubJsonPath;
         _sessionStartedAtUtc = DateTime.UtcNow;
         _defaultHubVersion = NormalizeHubVersion(defaultHubVersion);
     }
@@ -249,6 +255,7 @@ public class FileSystemManager
 
             Directory.CreateDirectory(_runtimePath);
             _ = GetToken();
+            ReleaseHubJsonLease();
 
             var hubRuntime = new HubRuntime
             {
@@ -272,6 +279,7 @@ public class FileSystemManager
             ReplaceHubJsonAtomically(tempPath);
             EnsureCurrentUserOnlyAccess(_hubJsonPath);
             _hubJsonPermissionEnsured = true;
+            EnsureHubJsonLeaseIfRequested();
             _logger.LogInformation("成功写入 hub.json 文件: {Path}", _hubJsonPath);
         }
         catch (Exception ex)
@@ -335,6 +343,21 @@ public class FileSystemManager
         {
             _logger.LogWarning(cleanupException, "删除临时 hub.json 文件失败: {Path}", tempPath);
         }
+    }
+
+    /// <summary>
+    /// 激活当前 Host 会话对 <c>hub.json</c> 的只读独占占用。
+    /// </summary>
+    public void ActivateHubJsonLease()
+    {
+        ThrowIfDisposed();
+
+        lock (_hubJsonLeaseSyncRoot)
+        {
+            _hubJsonLeaseRequested = true;
+        }
+
+        EnsureHubJsonLeaseIfRequested();
     }
 
     private static string? NormalizeHubVersion(string? hubVersion)
@@ -441,6 +464,8 @@ public class FileSystemManager
             _logger.LogWarning("检测到 hub.json 丢失，尝试按当前端口重建，端口: {Port}", port.Value);
             WriteHubJson(port.Value);
         }
+
+        EnsureHubJsonLeaseIfRequested();
     }
 
     /// <summary>
@@ -451,12 +476,163 @@ public class FileSystemManager
         try
         {
             _logger.LogDebug("开始清理资源");
-            // 可以添加一些清理逻辑，比如删除临时文件
+            ReleaseHubJsonLease();
+
+            if (File.Exists(_hubJsonPath))
+            {
+                RotateHubJsonToPreviousSnapshot();
+                EnsureCurrentUserOnlyAccess(_previousHubJsonPath);
+                _logger.LogInformation("已将 hub.json 迁移为 prev_hub.json: {Path}", _previousHubJsonPath);
+            }
+
+            lock (_hubJsonLeaseSyncRoot)
+            {
+                _hubJsonLeaseRequested = false;
+            }
+
             _logger.LogInformation("资源清理完成");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "清理资源失败");
         }
+    }
+
+    private void RotateHubJsonToPreviousSnapshot()
+    {
+        Exception? lastException = null;
+
+        for (var retryIndex = 0; retryIndex < HubJsonReplaceMaxRetryCount; retryIndex++)
+        {
+            try
+            {
+                Directory.CreateDirectory(_runtimePath);
+                File.Move(_hubJsonPath, _previousHubJsonPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
+            {
+                lastException = ex;
+                if (retryIndex >= HubJsonReplaceMaxRetryCount - 1)
+                {
+                    break;
+                }
+
+                _logger.LogWarning(
+                    ex,
+                    "迁移 hub.json 到 prev_hub.json 失败，将重试，次数: {Retry}/{MaxRetry}，文件路径: {Path}",
+                    retryIndex + 1,
+                    HubJsonReplaceMaxRetryCount,
+                    _hubJsonPath);
+                System.Threading.Thread.Sleep(HubJsonReplaceRetryDelay);
+            }
+        }
+
+        throw new IOException($"迁移 hub.json 到 prev_hub.json 失败，已达到最大重试次数: {HubJsonReplaceMaxRetryCount}", lastException);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Cleanup();
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    private void EnsureHubJsonLeaseIfRequested()
+    {
+        ThrowIfDisposed();
+
+        lock (_hubJsonLeaseSyncRoot)
+        {
+            if (!_hubJsonLeaseRequested || _hubJsonLeaseStream is not null || !File.Exists(_hubJsonPath))
+            {
+                return;
+            }
+
+            _hubJsonLeaseStream = OpenHubJsonLeaseStream();
+        }
+    }
+
+    private FileStream OpenHubJsonLeaseStream()
+    {
+        var leaseStream = new FileStream(
+            _hubJsonPath,
+            new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read
+            });
+
+        TryLockHubJsonForSharedReads(leaseStream);
+        return leaseStream;
+    }
+
+    private void TryLockHubJsonForSharedReads(FileStream leaseStream)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        try
+        {
+            var length = leaseStream.Length;
+            leaseStream.Lock(0, length > 0 ? length : 1);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or NotSupportedException)
+        {
+            _logger.LogDebug(ex, "hub.json 共享读锁不可用，将仅保留文件共享模式占用: {Path}", _hubJsonPath);
+        }
+    }
+
+    private void ReleaseHubJsonLease()
+    {
+        lock (_hubJsonLeaseSyncRoot)
+        {
+            if (_hubJsonLeaseStream is null)
+            {
+                return;
+            }
+
+            try
+            {
+                TryUnlockHubJson(_hubJsonLeaseStream);
+                _hubJsonLeaseStream.Dispose();
+            }
+            finally
+            {
+                _hubJsonLeaseStream = null;
+            }
+        }
+    }
+
+    private void TryUnlockHubJson(FileStream leaseStream)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        try
+        {
+            var length = leaseStream.Length;
+            leaseStream.Unlock(0, length > 0 ? length : 1);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or NotSupportedException)
+        {
+            _logger.LogDebug(ex, "释放 hub.json 共享读锁时出现非阻断异常: {Path}", _hubJsonPath);
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

@@ -228,9 +228,104 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Cleanup_ShouldNotThrow()
+    public void Impl_ActivateHubJsonLease_WhenRuntimeFileExists_ShouldAllowReadAndBlockWriteOnWindows()
+    {
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
+
+        using var manager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            RuntimePathOptions.Create(_tempDirectory));
+        _ = manager.GetToken();
+        manager.WriteHubJson(48040, "v1");
+        manager.ActivateHubJsonLease();
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        var content = File.ReadAllText(hubJsonPath);
+
+        Assert.Contains("\"httpBaseUrl\": \"http://127.0.0.1:48040\"", content, StringComparison.Ordinal);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var exception = Record.Exception(() => File.WriteAllText(hubJsonPath, "{}"));
+        Assert.NotNull(exception);
+        Assert.True(exception is IOException or UnauthorizedAccessException);
+    }
+
+    [Fact]
+    public void Impl_Cleanup_WhenHubJsonExists_ShouldRotateToPrevHubJsonAndOverwriteHistory()
+    {
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
+
+        using var manager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            RuntimePathOptions.Create(_tempDirectory));
+        _ = manager.GetToken();
+        manager.WriteHubJson(48041, "v1");
+        manager.ActivateHubJsonLease();
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        var previousHubJsonPath = Path.Combine(_runtimeDirectory, "prev_hub.json");
+        File.WriteAllText(previousHubJsonPath, "legacy-prev");
+        var currentContent = File.ReadAllText(hubJsonPath);
+
+        manager.Cleanup();
+
+        Assert.False(File.Exists(hubJsonPath));
+        Assert.True(File.Exists(previousHubJsonPath));
+        Assert.Equal(currentContent, File.ReadAllText(previousHubJsonPath));
+    }
+
+    [Fact]
+    public void Impl_EnsureRuntimeArtifacts_WhenLeaseRequestedBeforeHubJsonExists_ShouldCreateAndLeaseHubJson()
+    {
+        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
+
+        using var manager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            RuntimePathOptions.Create(_tempDirectory));
+        manager.ActivateHubJsonLease();
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        Assert.False(File.Exists(hubJsonPath));
+
+        manager.EnsureRuntimeArtifacts(port: 48042);
+
+        Assert.True(File.Exists(hubJsonPath));
+        Assert.Contains("\"httpBaseUrl\": \"http://127.0.0.1:48042\"", File.ReadAllText(hubJsonPath), StringComparison.Ordinal);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var exception = Record.Exception(() => File.WriteAllText(hubJsonPath, "{}"));
+        Assert.NotNull(exception);
+        Assert.True(exception is IOException or UnauthorizedAccessException);
+    }
+
+    [Fact]
+    public void Impl_ActivateHubJsonLease_AfterDispose_ShouldThrowObjectDisposedException()
     {
         var manager = new FileSystemManager(
+            Mock.Of<ILogger<FileSystemManager>>(),
+            RuntimePathOptions.Create(_tempDirectory));
+
+        manager.Dispose();
+        manager.Dispose();
+
+        var exception = Record.Exception(() => manager.ActivateHubJsonLease());
+
+        Assert.NotNull(exception);
+        Assert.IsType<ObjectDisposedException>(exception);
+    }
+
+    [Fact]
+    public void Impl_Cleanup_ShouldNotThrow()
+    {
+        using var manager = new FileSystemManager(
             Mock.Of<ILogger<FileSystemManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
 

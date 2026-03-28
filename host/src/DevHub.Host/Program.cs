@@ -173,6 +173,8 @@ public class Program
                 }
             });
 
+            app.Lifetime.ApplicationStopped.Register(bootstrapper.Cleanup);
+
             app.Run();
             return SuccessExitCode;
         }

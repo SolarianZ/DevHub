@@ -100,6 +100,32 @@ public sealed class HostBootstrapperTests : IDisposable
         Assert.False(File.Exists(hubJsonPath));
     }
 
+    [Fact]
+    public void Impl_Cleanup_WhenHubRuntimeExists_ShouldRotateHubJsonToPrevHubJson()
+    {
+        using var context = CreateContext();
+        context.Bootstrapper.Initialize();
+
+        var ok = context.Bootstrapper.TryPersistHubRuntime(
+            [
+                "http://127.0.0.1:7103"
+            ],
+            out var port);
+
+        Assert.True(ok);
+        Assert.Equal(7103, port);
+
+        var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
+        var previousHubJsonPath = Path.Combine(_runtimeDirectory, "prev_hub.json");
+        var currentContent = File.ReadAllText(hubJsonPath);
+
+        context.Bootstrapper.Cleanup();
+
+        Assert.False(File.Exists(hubJsonPath));
+        Assert.True(File.Exists(previousHubJsonPath));
+        Assert.Equal(currentContent, File.ReadAllText(previousHubJsonPath));
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -139,7 +165,7 @@ public sealed class HostBootstrapperTests : IDisposable
             timeoutWorker,
             Mock.Of<ILogger<HostBootstrapper>>());
 
-        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, timeoutWorker);
+        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, timeoutWorker, fileSystemManager);
     }
 
     private RuntimePathOptions CreateRuntimePathOptions()
@@ -170,15 +196,18 @@ public sealed class HostBootstrapperTests : IDisposable
             HostBootstrapper bootstrapper,
             DefinitionProvider definitionProvider,
             AppRegistry appRegistry,
-            InvocationTimeoutWorker timeoutWorker)
+            InvocationTimeoutWorker timeoutWorker,
+            FileSystemManager fileSystemManager)
         {
             Bootstrapper = bootstrapper;
             DefinitionProvider = definitionProvider;
             _appRegistry = appRegistry;
             _timeoutWorker = timeoutWorker;
+            _fileSystemManager = fileSystemManager;
         }
 
         private readonly AppRegistry _appRegistry;
+        private readonly FileSystemManager _fileSystemManager;
         private readonly InvocationTimeoutWorker _timeoutWorker;
 
         public HostBootstrapper Bootstrapper { get; }
@@ -187,6 +216,7 @@ public sealed class HostBootstrapperTests : IDisposable
 
         public void Dispose()
         {
+            _fileSystemManager.Dispose();
             _timeoutWorker.Dispose();
             _appRegistry.Dispose();
         }

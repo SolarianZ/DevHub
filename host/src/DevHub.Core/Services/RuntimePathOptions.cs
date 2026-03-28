@@ -22,6 +22,7 @@ public sealed class RuntimePathOptions
         LogsPath = Path.Combine(rootPath, "logs");
         TokenFilePath = Path.Combine(RuntimePath, "token.txt");
         HubJsonPath = Path.Combine(RuntimePath, "hub.json");
+        PreviousHubJsonPath = Path.Combine(RuntimePath, "prev_hub.json");
     }
 
     /// <summary>
@@ -58,6 +59,11 @@ public sealed class RuntimePathOptions
     /// 发现文件 <c>hub.json</c> 路径。
     /// </summary>
     public string HubJsonPath { get; }
+
+    /// <summary>
+    /// 上一次 Hub 退出时保留的发现文件 <c>prev_hub.json</c> 路径。
+    /// </summary>
+    public string PreviousHubJsonPath { get; }
 
     /// <summary>
     /// 解析当前进程的路径选项。

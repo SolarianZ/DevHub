@@ -429,6 +429,7 @@ ws.onmessage = (e) => {
 - M3：已完成。
 - M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
 - M5：已完成（`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 的 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、黑盒/白盒测试、跨语言 conformance 与 CI 门禁已落地，并已补齐面向第三方开发者的无 SDK 接入资料、版本化 Schema 包、原始协议示例与 conformance 使用说明。）
+- 2026-03-28 已完成：Host 运行时发现文件生命周期增强；启动后会只读独占当前 `hub.json`（允许读取、拒绝覆盖写入），正常退出时会将其迁移为 `prev_hub.json` 以保留上一会话快照。相关 Host 白盒/进程级测试、Host 集成 smoke/full、SDK 测试、conformance 与 coverage 门禁已完成本地验证。
 - 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增无 SDK 指南、版本化 Schema 包、原始协议示例与 conformance 使用说明，并明确 Hub v1.x 兼容口径；当前仓库同时提供官方向量与官方适配器回归链路。
 - 2026-03-18 已完成：仓库级运行时路径文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，明确 `<dataDir>/runtime/hub.json` 固定发现规则、仅识别规范定义的环境变量，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
 - 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
