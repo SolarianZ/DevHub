@@ -1,5 +1,6 @@
 {
   "id": "invocation.request.target_instance_missing_returns_specific_reason",
+  "caseId": "M5-CONF-004",
   "description": "SDK request 指定不存在的 target.instanceId 时，必须返回 instance_not_found/target_instance_missing。",
   "transport": "http",
   "setup": {

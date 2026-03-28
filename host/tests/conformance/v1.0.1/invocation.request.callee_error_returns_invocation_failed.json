@@ -1,5 +1,6 @@
 {
   "id": "invocation.request.callee_error_returns_invocation_failed",
+  "caseId": "M5-CONF-004",
   "description": "SDK request 在 helper 回传应用错误时，必须归一化为 invocation_failed，并暴露 calleeError。",
   "transport": "http",
   "setup": {

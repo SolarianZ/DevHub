@@ -23,7 +23,7 @@ afterAll(async () => {
   await host?.close();
 });
 
-it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
+it("M5_E2E_004 WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client",
     dataDir: host.dataDirectory
@@ -72,7 +72,7 @@ it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
   await eventsClient.dispose();
 });
 
-it("authenticated WS should support ping and apps queries", async () => {
+it("M5_E2E_004 authenticated WS should support ping and apps queries", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-query-client",
     dataDir: host.dataDirectory
@@ -122,7 +122,7 @@ it("authenticated WS should support ping and apps queries", async () => {
   }
 });
 
-it("订阅未知事件类型应在客户端本地被拒绝", async () => {
+it("M5_E2E_005 订阅未知事件类型应在客户端本地被拒绝", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-invalid-client",
     dataDir: host.dataDirectory
@@ -143,7 +143,7 @@ it("订阅未知事件类型应在客户端本地被拒绝", async () => {
   await eventsClient.dispose();
 });
 
-it("断开后重连应需要重新订阅", async () => {
+it("M5_E2E_010 断开后重连应需要重新订阅", async () => {
   const firstClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client-1",
     dataDir: host.dataDirectory

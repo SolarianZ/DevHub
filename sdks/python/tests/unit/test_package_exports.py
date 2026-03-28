@@ -28,7 +28,7 @@ from devhub_sdk.runtime import RuntimeResolver as InternalRuntimeResolver
 from devhub_sdk.runtime import resolve_data_directory as InternalResolveDataDirectory
 
 
-def test_package_root_should_export_runtime_and_transport_abstractions() -> None:
+def test_M5_PY_UT_007_package_root_should_export_runtime_and_transport_abstractions() -> None:
     assert RuntimeResolver is InternalRuntimeResolver
     assert FileSystemRuntimeResolver is InternalFileSystemRuntimeResolver
     assert resolve_data_directory is InternalResolveDataDirectory
@@ -42,5 +42,5 @@ def test_package_root_should_export_runtime_and_transport_abstractions() -> None
     assert WebSocketJsonRpcSession is InternalWebSocketJsonRpcSession
 
 
-def test_public_client_api_should_preserve_heartbeat_return_type_annotation() -> None:
+def test_M5_PY_UT_007_public_client_api_should_preserve_heartbeat_return_type_annotation() -> None:
     assert get_type_hints(DevHubClient.heartbeat)["return"] is datetime

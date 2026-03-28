@@ -1,5 +1,6 @@
 {
   "id": "apps.definitions.list_ignores_invalid_definition_files",
+  "caseId": "M5-CONF-003",
   "description": "存在无效定义文件时，hub.apps.listDefinitions 必须忽略它们并仅返回合法定义。",
   "transport": "http",
   "setup": {

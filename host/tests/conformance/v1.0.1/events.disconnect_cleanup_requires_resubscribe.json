@@ -1,5 +1,6 @@
 {
   "id": "events.disconnect_cleanup_requires_resubscribe",
+  "caseId": "M5-CONF-007",
   "description": "首个连接断开后订阅状态必须被清理，第二个连接只有重新订阅后才会收到新事件。", 
   "transport": "ws",
   "setup": {

@@ -1,5 +1,6 @@
 {
   "id": "invocation.notify.offline_no_queue_returns_instance_not_found",
+  "caseId": "M5-CONF-004",
   "description": "SDK notify 在无在线 helper 且 queueIfOffline=false 时，必须返回 instance_not_found/offline_no_queue。",
   "transport": "http",
   "setup": {

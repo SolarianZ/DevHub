@@ -1,5 +1,6 @@
 {
   "id": "apps.instances.register_returns_instance_with_server_managed_fields",
+  "caseId": "M5-CONF-003",
   "description": "注册实例成功时，hub.apps.registerInstance 必须返回带服务端时间戳的 AppInstance。",
   "transport": "http",
   "http": {

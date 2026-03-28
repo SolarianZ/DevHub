@@ -1,5 +1,6 @@
 {
   "id": "auth.protocol_mismatch_returns_not_supported",
+  "caseId": "M5-CONF-002",
   "description": "当 X-DevHub-Protocol 不等于 1 时，Hub 必须返回 not_supported/mismatch。",
   "transport": "http",
   "http": {

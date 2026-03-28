@@ -17,7 +17,7 @@ afterEach(async () => {
   }));
 });
 
-it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
+it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
@@ -73,7 +73,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   expect(transport.send).toHaveBeenCalledTimes(1);
 });
 
-it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
+it("M5_TS_UT_004 ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(
@@ -100,7 +100,7 @@ it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
   await expect(client.ping()).rejects.toThrow("hub.ping.result.echo.callback 包含不支持的 JSON 类型。");
 });
 
-it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
+it("M5_TS_UT_004 request 应拒绝注入 transport 返回的非法 value JSON", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(
@@ -130,7 +130,7 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
   })).rejects.toThrow("hub.invoke.request.result.value.callback 包含不支持的 JSON 类型。");
 });
 
-it("notify 应应用默认选项", async () => {
+it("M5_TS_UT_006 notify 应应用默认选项", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -164,7 +164,7 @@ it("notify 应应用默认选项", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("request 应保留显式空 scope 并应用默认选项", async () => {
+it("M5_TS_UT_006 request 应保留显式空 scope 并应用默认选项", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -209,7 +209,7 @@ it("request 应保留显式空 scope 并应用默认选项", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
+it("M5_TS_UT_004 listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -240,7 +240,7 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => {
+it("M5_TS_UT_004 getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -273,7 +273,7 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
+it("M5_TS_UT_004 RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -329,7 +329,7 @@ it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   });
 });
 
-it("请求应携带协议头与鉴权头", async () => {
+it("M5_TS_UT_003 请求应携带协议头与鉴权头", async () => {
   const runtimeDir = await createRuntime();
   const clientSessionId = "11111111-1111-4111-8111-111111111111";
   const fetchSpy = vi.fn(async (input: unknown, init?: RequestInit) => {
@@ -363,7 +363,7 @@ it("请求应携带协议头与鉴权头", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
+it("M5_TS_UT_003 fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
   const runtimeDir = await createRuntime();
 
   await expect(DevHubClient.fromRuntime({
@@ -373,13 +373,13 @@ it("fromRuntime 应拒绝非法 requestTimeoutMs 类型", async () => {
   })).rejects.toThrow("requestTimeoutMs 必须为大于 0 的整数。");
 });
 
-it("fromRuntime 应拒绝空 options", async () => {
+it("M5_TS_UT_003 fromRuntime 应拒绝空 options", async () => {
   await expect(DevHubClient.fromRuntime(undefined as unknown as Parameters<typeof DevHubClient.fromRuntime>[0]))
     .rejects
     .toThrow("options 不能为空。");
 });
 
-it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
+it("M5_TS_UT_003 registerInstance 应在本地校验 invoke 布尔字段", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -402,7 +402,7 @@ it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("getDefinition should reject an invalid appId before sending the request", async () => {
+it("M5_TS_UT_003 getDefinition should reject an invalid appId before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -417,7 +417,7 @@ it("getDefinition should reject an invalid appId before sending the request", as
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("registerInstance should reject an invalid instanceId before sending the request", async () => {
+it("M5_TS_UT_003 registerInstance should reject an invalid instanceId before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -440,7 +440,7 @@ it("registerInstance should reject an invalid instanceId before sending the requ
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("notify 应在本地校验 target.instanceId 类型", async () => {
+it("M5_TS_UT_003 notify 应在本地校验 target.instanceId 类型", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -461,7 +461,7 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("launch should reject null waitForRegisterMs before sending the request", async () => {
+it("M5_TS_UT_003 launch should reject null waitForRegisterMs before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -479,7 +479,7 @@ it("launch should reject null waitForRegisterMs before sending the request", asy
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("poll 应在本地校验 waitMs 为整数", async () => {
+it("M5_TS_UT_003 poll 应在本地校验 waitMs 为整数", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -497,7 +497,7 @@ it("poll 应在本地校验 waitMs 为整数", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("request should reject null queueIfOffline before sending the request", async () => {
+it("M5_TS_UT_003 request should reject null queueIfOffline before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -518,7 +518,7 @@ it("request should reject null queueIfOffline before sending the request", async
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("notify 应在本地拒绝 waitTimeoutMs", async () => {
+it("M5_TS_UT_006 notify 应在本地拒绝 waitTimeoutMs", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -539,7 +539,7 @@ it("notify 应在本地拒绝 waitTimeoutMs", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond 应在本地校验 value 与 error 互斥", async () => {
+it("M5_TS_UT_006 respond 应在本地校验 value 与 error 互斥", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -567,7 +567,7 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond should reject an invalid invocationId before sending the request", async () => {
+it("M5_TS_UT_006 respond should reject an invalid invocationId before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -588,7 +588,7 @@ it("respond should reject an invalid invocationId before sending the request", a
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("ping 应在本地拒绝会被静默丢弃的 echo 字段", async () => {
+it("M5_TS_UT_003 ping 应在本地拒绝会被静默丢弃的 echo 字段", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -605,7 +605,7 @@ it("ping 应在本地拒绝会被静默丢弃的 echo 字段", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async () => {
+it("M5_TS_UT_003 registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -631,7 +631,7 @@ it("registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
+it("M5_TS_UT_006 notify 应在本地拒绝会被重写的空洞数组参数", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -652,7 +652,7 @@ it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("request should reject an invalid invocationId in a success payload", async () => {
+it("M5_TS_UT_004 request should reject an invalid invocationId in a success payload", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -677,7 +677,7 @@ it("request should reject an invalid invocationId in a success payload", async (
   })).rejects.toThrow(/invocationId/);
 });
 
-it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
+it("M5_TS_UT_006 respond 应在本地拒绝非法 error.data JSON 结构", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -702,7 +702,7 @@ it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond 应在本地拒绝非整数 error.code", async () => {
+it("M5_TS_UT_006 respond 应在本地拒绝非整数 error.code", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -724,7 +724,7 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond 应在本地拒绝非对象 error.data", async () => {
+it("M5_TS_UT_006 respond 应在本地拒绝非对象 error.data", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -747,7 +747,7 @@ it("respond 应在本地拒绝非对象 error.data", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
+it("M5_TS_UT_004 launch 应拒绝缺少 launchId 的成功载荷", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -769,7 +769,7 @@ it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
   })).rejects.toThrow(/launchId/);
 });
 
-it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
+it("M5_TS_UT_004 poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -806,7 +806,7 @@ it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
   })).rejects.toThrow(/clientSessionId/);
 });
 
-it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
+it("M5_TS_UT_004 ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -836,7 +836,7 @@ it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
   await expect(client.ping()).rejects.toThrow(/jsonrpc/i);
 });
 
-it("ping 应拒绝非整数 JSON-RPC error.code", async () => {
+it("M5_TS_UT_004 ping 应拒绝非整数 JSON-RPC error.code", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -858,7 +858,7 @@ it("ping 应拒绝非整数 JSON-RPC error.code", async () => {
   await expect(client.ping()).rejects.toThrow(/error\.code/i);
 });
 
-it("ping 应拒绝非对象 JSON-RPC error.data", async () => {
+it("M5_TS_UT_004 ping 应拒绝非对象 JSON-RPC error.data", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -878,7 +878,7 @@ it("ping 应拒绝非对象 JSON-RPC error.data", async () => {
   await expect(client.ping()).rejects.toThrow(/error\.data/i);
 });
 
-it("ping should reject a serverTimeUtc value that is not a full date-time", async () => {
+it("M5_TS_UT_004 ping should reject a serverTimeUtc value that is not a full date-time", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -897,7 +897,7 @@ it("ping should reject a serverTimeUtc value that is not a full date-time", asyn
   await expect(client.ping()).rejects.toThrow(/serverTimeUtc/i);
 });
 
-it("notify should reject a non-object target before sending the request", async () => {
+it("M5_TS_UT_003 notify should reject a non-object target before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -916,7 +916,7 @@ it("notify should reject a non-object target before sending the request", async 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("request should reject a non-object options payload before sending the request", async () => {
+it("M5_TS_UT_003 request should reject a non-object options payload before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -940,7 +940,7 @@ it("request should reject a non-object options payload before sending the reques
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", async () => {
+it("M5_TS_UT_004 poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -982,7 +982,7 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
   })).rejects.toThrow(/waitTimeoutMs/i);
 });
 
-it("getDefinition should accept spec-valid empty displayName and launch.exePath", async () => {
+it("M5_TS_UT_004 getDefinition should accept spec-valid empty displayName and launch.exePath", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -1025,7 +1025,7 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("getDefinition should reject null capabilities flags", async () => {
+it("M5_TS_UT_004 getDefinition should reject null capabilities flags", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -1053,7 +1053,7 @@ it("getDefinition should reject null capabilities flags", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("listInstances should reject a null meta object", async () => {
+it("M5_TS_UT_004 listInstances should reject a null meta object", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -1089,7 +1089,7 @@ it("listInstances should reject a null meta object", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async () => {
+it("M5_TS_UT_004 listInstances 应拒绝注入 transport 返回的非法 meta JSON", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(
@@ -1131,7 +1131,7 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   );
 });
 
-it("poll should reject null optional invocation booleans", async () => {
+it("M5_TS_UT_004 poll should reject null optional invocation booleans", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -1174,7 +1174,7 @@ it("poll should reject null optional invocation booleans", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
+it("M5_TS_UT_004 poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(

@@ -1,5 +1,6 @@
 {
   "id": "apps.definitions.get_returns_preloaded_definition",
+  "caseId": "M5-CONF-003",
   "description": "预置合法 AppDefinition 时，hub.apps.getDefinition 必须返回对应 definition。",
   "transport": "http",
   "setup": {

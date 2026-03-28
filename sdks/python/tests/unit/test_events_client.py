@@ -59,7 +59,7 @@ class FakeWsSession:
 
 
 @pytest.mark.asyncio
-async def test_events_client_with_injected_resolver_and_session_should_use_abstractions() -> None:
+async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_should_use_abstractions() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -100,7 +100,7 @@ async def test_events_client_with_injected_resolver_and_session_should_use_abstr
 
 
 @pytest.mark.asyncio
-async def test_events_client_with_injected_session_should_support_ws_readable_methods() -> None:
+async def test_M5_PY_UT_006_events_client_with_injected_session_should_support_ws_readable_methods() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -155,7 +155,7 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_without_types_should_request_all_events() -> None:
+async def test_M5_PY_UT_006_events_client_subscribe_without_types_should_request_all_events() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -182,7 +182,7 @@ async def test_events_client_subscribe_without_types_should_request_all_events()
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_with_empty_types_should_request_all_events() -> None:
+async def test_M5_PY_UT_006_events_client_subscribe_with_empty_types_should_request_all_events() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -209,7 +209,7 @@ async def test_events_client_subscribe_with_empty_types_should_request_all_event
 
 
 @pytest.mark.asyncio
-async def test_events_client_before_authenticate_should_reject_read_events(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_before_authenticate_should_reject_read_events(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         await websocket.wait_closed()
 
@@ -226,7 +226,7 @@ async def test_events_client_before_authenticate_should_reject_read_events(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_authenticate_subscribe_and_read_event(tmp_path: Path) -> None:
     received_messages: list[dict[str, Any]] = []
 
     async def handler(websocket) -> None:
@@ -288,7 +288,7 @@ async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_unknown_notification_received_should_fail_stream(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_when_unknown_notification_received_should_fail_stream(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -341,7 +341,7 @@ async def test_events_client_when_unknown_notification_received_should_fail_stre
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_connection_closes_after_queued_event_should_end_stream_repeatedly(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_when_connection_closes_after_queued_event_should_end_stream_repeatedly(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -405,7 +405,7 @@ async def test_events_client_when_connection_closes_after_queued_event_should_en
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_connection_terminated_should_allow_reauthenticate_and_require_resubscribe(
+async def test_M5_PY_UT_006_events_client_when_connection_terminated_should_allow_reauthenticate_and_require_resubscribe(
     tmp_path: Path,
 ) -> None:
     connection_count = 0
@@ -483,7 +483,7 @@ async def test_events_client_when_connection_terminated_should_allow_reauthentic
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_when_authenticate_fails_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()
         message = json.loads(raw)
@@ -517,7 +517,7 @@ async def test_events_client_when_authenticate_fails_should_raise_devhub_rpc_exc
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_authenticate_response_contains_non_standard_json_constant_should_raise(
+async def test_M5_PY_UT_006_events_client_when_authenticate_response_contains_non_standard_json_constant_should_raise(
     tmp_path: Path,
 ) -> None:
     async def handler(websocket) -> None:
@@ -546,7 +546,7 @@ async def test_events_client_when_authenticate_response_contains_non_standard_js
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_ws_response_id_unknown_should_raise_protocol_error(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_when_ws_response_id_unknown_should_raise_protocol_error(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()
         message = json.loads(raw)
@@ -579,7 +579,7 @@ async def test_events_client_when_ws_response_id_unknown_should_raise_protocol_e
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_authenticate_fails_should_allow_retry_on_same_client() -> None:
+async def test_M5_PY_UT_006_events_client_when_authenticate_fails_should_allow_retry_on_same_client() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -618,7 +618,7 @@ async def test_events_client_when_authenticate_fails_should_allow_retry_on_same_
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_authenticate_called_twice_should_raise(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_when_authenticate_called_twice_should_raise(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()
         message = json.loads(raw)
@@ -647,7 +647,7 @@ async def test_events_client_when_authenticate_called_twice_should_raise(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_when_types_is_single_string_should_raise(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_subscribe_when_types_is_single_string_should_raise(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()
         message = json.loads(raw)
@@ -676,7 +676,7 @@ async def test_events_client_subscribe_when_types_is_single_string_should_raise(
 
 
 @pytest.mark.asyncio
-async def test_events_client_subscribe_when_types_contains_unknown_event_should_raise_before_request() -> None:
+async def test_M5_PY_UT_006_events_client_subscribe_when_types_contains_unknown_event_should_raise_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -702,7 +702,7 @@ async def test_events_client_subscribe_when_types_contains_unknown_event_should_
 
 
 @pytest.mark.asyncio
-async def test_events_client_after_close_should_reject_subscribe_and_read(tmp_path: Path) -> None:
+async def test_M5_PY_UT_006_events_client_after_close_should_reject_subscribe_and_read(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         raw = await websocket.recv()
         message = json.loads(raw)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
 WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
+CASE_ID_PATTERN = re.compile(r"^M5-CONF-\d{3}$")
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,7 @@ def main() -> int:
     adapter_targets = resolve_adapter_targets(args)
     ensure_prerequisites(adapter_targets)
 
-    vectors = load_vectors(suite_directory, args.vector_id)
+    vectors = load_vectors(suite_directory, args.vector_id, args.case_id)
     if not vectors:
         print("未找到符合条件的向量。", file=sys.stderr)
         return 1
@@ -130,7 +132,7 @@ def main() -> int:
                     emit_failures(failures)
                     continue
 
-                print(f"PASS  {vector['id']}")
+                print(f"PASS  {format_vector_label(vector)}")
         finally:
             stop_process(process)
             log_file.close()
@@ -144,6 +146,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--suite", default="v1.0.1", help="默认扫描的 suite 目录名。")
     parser.add_argument("--directory", help="显式指定向量目录。")
     parser.add_argument("--vector-id", help="只执行指定向量 ID。")
+    parser.add_argument("--case-id", help="只执行指定 M5-CONF-* 编号。")
     parser.add_argument(
         "--official-sdk",
         action="append",
@@ -369,7 +372,11 @@ def ensure_prerequisites(adapter_targets: list[AdapterTarget]) -> None:
             )
 
 
-def load_vectors(directory: Path, vector_id: str | None) -> list[tuple[Path, dict[str, Any]]]:
+def load_vectors(
+    directory: Path,
+    vector_id: str | None,
+    case_id: str | None,
+) -> list[tuple[Path, dict[str, Any]]]:
     if not directory.is_dir():
         raise FileNotFoundError(f"未找到向量目录：{directory}")
 
@@ -378,6 +385,8 @@ def load_vectors(directory: Path, vector_id: str | None) -> list[tuple[Path, dic
         payload = json.loads(path.read_text(encoding="utf-8"))
         validate_vector_shape(path, payload)
         if vector_id and payload["id"] != vector_id:
+            continue
+        if case_id and payload["caseId"] != case_id:
             continue
         vectors.append((path, payload))
 
@@ -389,6 +398,10 @@ def validate_vector_shape(path: Path, payload: dict[str, Any]) -> None:
     missing = [field for field in required_fields if field not in payload]
     if missing:
         raise ValueError(f"向量缺少必需字段：{path} -> {missing}")
+
+    case_id = payload.get("caseId")
+    if not isinstance(case_id, str) or not CASE_ID_PATTERN.fullmatch(case_id):
+        raise ValueError(f"向量 caseId 非法：{path} -> {case_id!r}")
 
 
 def build_snapshot_run_root() -> Path:
@@ -412,12 +425,13 @@ def attach_failure_snapshots(
 
 
 def write_failure_snapshot(failure: dict[str, Any], snapshot_run_root: Path, host_log_tail: str) -> Path:
-    vector_id = sanitize_file_name(str(failure.get("vectorId", "unknown-vector")))
+    vector_id = sanitize_file_name(format_failure_label(failure))
     sdk_name = sanitize_file_name(str(failure.get("sdk", "unknown-sdk")))
     snapshot_dir = snapshot_run_root / vector_id / sdk_name
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
     payload = {
+        "caseId": get_failure_case_id(failure),
         "vectorId": failure.get("vectorId"),
         "sdk": failure.get("sdk"),
         "message": failure.get("message"),
@@ -875,7 +889,7 @@ def is_wildcard(expected: Any, actual: Any) -> bool:
 
 def emit_failures(failures: Iterable[dict[str, Any]]) -> None:
     for failure in failures:
-        print(f"FAIL  {failure['vectorId']}  [{failure['sdk']}]")
+        print(f"FAIL  {format_failure_label(failure)}  [{failure['sdk']}]")
         if failure.get("message"):
             print(f"      Message: {json.dumps(failure['message'], ensure_ascii=True)}")
         print(f"      Expected: {json.dumps(failure['expected'], ensure_ascii=True, sort_keys=True)}")
@@ -883,6 +897,36 @@ def emit_failures(failures: Iterable[dict[str, Any]]) -> None:
         print(f"      Diff: {', '.join(failure['diffFields'])}")
         if failure.get("snapshotPath"):
             print(f"      Snapshot: {failure['snapshotPath']}")
+
+
+def format_vector_label(vector: dict[str, Any]) -> str:
+    case_id = vector.get("caseId")
+    vector_id = vector["id"]
+    if isinstance(case_id, str) and case_id:
+        return f"{case_id} {vector_id}"
+    return str(vector_id)
+
+
+def get_failure_case_id(failure: dict[str, Any]) -> str | None:
+    case_id = failure.get("caseId")
+    if isinstance(case_id, str) and case_id:
+        return case_id
+
+    resolved_vector = failure.get("resolvedVector")
+    if isinstance(resolved_vector, dict):
+        resolved_case_id = resolved_vector.get("caseId")
+        if isinstance(resolved_case_id, str) and resolved_case_id:
+            return resolved_case_id
+
+    return None
+
+
+def format_failure_label(failure: dict[str, Any]) -> str:
+    vector_id = str(failure.get("vectorId", "unknown-vector"))
+    case_id = get_failure_case_id(failure)
+    if case_id:
+        return f"{case_id} {vector_id}"
+    return vector_id
 
 
 def get_dotnet_adapter_dll_path() -> Path:

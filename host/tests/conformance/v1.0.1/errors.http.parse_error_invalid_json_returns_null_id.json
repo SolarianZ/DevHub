@@ -1,5 +1,6 @@
 {
   "id": "errors.http.parse_error_invalid_json_returns_null_id",
+  "caseId": "M5-CONF-008",
   "description": "HTTP 原始非法 JSON 必须返回 parse_error，且 id=null。", 
   "transport": "http",
   "http": {

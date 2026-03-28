@@ -1,5 +1,6 @@
 {
   "id": "apps.instances.heartbeat_unknown_instance_returns_instance_not_found",
+  "caseId": "M5-CONF-003",
   "description": "实例不存在时，hub.apps.heartbeat 必须返回 instance_not_found/unknown_instance。",
   "transport": "http",
   "http": {

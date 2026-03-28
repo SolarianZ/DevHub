@@ -5,12 +5,14 @@ DevHub conformance runner 回归测试。
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -156,8 +158,111 @@ class TestConformanceRunner(unittest.TestCase):
                 completed.returncode,
                 msg=f"stdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
             )
-            self.assertIn("PASS  discovery.valid_runtime_layout_reads_token", completed.stdout)
+            self.assertIn(
+                "PASS  M5-CONF-001 discovery.valid_runtime_layout_reads_token",
+                completed.stdout,
+            )
             self.assertIn("SUMMARY  total=1 passed=1 failed=0", completed.stdout)
+
+    def test_M5_CONF_005_vector_runner_should_support_case_id_filter(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="devhub-conformance-case-id-") as temp_root_str:
+            temp_root = Path(temp_root_str)
+            adapter_path = temp_root / "dummy_adapter.py"
+            adapter_path.write_text(
+                textwrap.dedent(
+                    """
+                    import json
+                    import os
+                    import sys
+                    from pathlib import Path
+
+                    def main() -> int:
+                        if len(sys.argv) != 2:
+                            raise SystemExit("需要 execution-context.json 参数。")
+                        if os.environ.get("DEVHUB_CONFORMANCE_TEST") != "enabled":
+                            raise SystemExit("缺少 manifest env。")
+
+                        context_path = Path(sys.argv[1])
+                        context = json.loads(context_path.read_text(encoding="utf-8"))
+                        payload = dict(context["vector"]["expectedDiscovery"])
+                        payload["vectorId"] = context["vector"]["id"]
+                        print(json.dumps(payload, ensure_ascii=False))
+                        return 0
+
+                    if __name__ == "__main__":
+                        raise SystemExit(main())
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            manifest_path = temp_root / "external-adapter.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "manifestVersion": 1,
+                        "adapters": [
+                            {
+                                "name": "external-python",
+                                "command": [sys.executable, "dummy_adapter.py"],
+                                "cwd": ".",
+                                "env": {"DEVHUB_CONFORMANCE_TEST": "enabled"},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "host" / "tests" / "conformance" / "vector_runner.py"),
+                    "--adapter-manifest",
+                    str(manifest_path),
+                    "--case-id",
+                    "M5-CONF-001",
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            self.assertEqual(
+                0,
+                completed.returncode,
+                msg=f"stdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
+            )
+            self.assertIn("PASS  M5-CONF-001 discovery.valid_runtime_layout_reads_token", completed.stdout)
+            self.assertIn("PASS  M5-CONF-001 discovery.env_override_reads_runtime", completed.stdout)
+            self.assertIn("PASS  M5-CONF-001 discovery.runtime_dir_as_data_dir_rejected", completed.stdout)
+            self.assertIn("SUMMARY  total=3 passed=3 failed=0", completed.stdout)
+
+    def test_M5_CONF_006_emit_failures_should_include_case_id_and_diff_fields(self) -> None:
+        buffer = io.StringIO()
+        failure = {
+            "vectorId": "discovery.valid_runtime_layout_reads_token",
+            "sdk": "typescript",
+            "expected": {"phase": "discovery"},
+            "actual": {"phase": "error"},
+            "diffFields": ["$.phase"],
+            "resolvedVector": {
+                "id": "discovery.valid_runtime_layout_reads_token",
+                "caseId": "M5-CONF-001",
+            },
+        }
+
+        with redirect_stdout(buffer):
+            vector_runner.emit_failures([failure])
+
+        output = buffer.getvalue()
+        self.assertIn("FAIL  M5-CONF-001 discovery.valid_runtime_layout_reads_token  [typescript]", output)
+        self.assertIn("Diff: $.phase", output)
 
 
 if __name__ == "__main__":

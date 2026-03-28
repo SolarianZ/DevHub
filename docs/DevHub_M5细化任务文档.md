@@ -217,6 +217,7 @@
 
 补充约定（runner v2）：
 
+- 为支持按 DoD 编号直接检索与回归，向量在保留语义化 `id` 的同时统一补充 `caseId: "M5-CONF-xxx"`，并由 runner 提供 `--case-id` 入口按编号批量执行。
 - 在不变更 `docs/Spec.md` 的前提下，仓库内 conformance runner 允许可选扩展字段 `setup`。
 - `setup.definitions`：按顺序写入 suite Host 的 `apps/definitions`，支持 `{ fileName, definition }` 与 `{ fileName, rawText }`。
 - `setup.instances`：按顺序通过 HTTP 预注册实例，支持 `state="registered"` 与 `state="offline"`；离线状态由 runner 等待 `waitSeconds` 触发。

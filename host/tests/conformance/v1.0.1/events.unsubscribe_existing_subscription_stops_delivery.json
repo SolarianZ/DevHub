@@ -1,5 +1,6 @@
 {
   "id": "events.unsubscribe_existing_subscription_stops_delivery",
+  "caseId": "M5-CONF-007",
   "description": "对真实 subscriptionId 执行 unsubscribe 后，不应再收到后续 hub.event。", 
   "transport": "ws",
   "setup": {

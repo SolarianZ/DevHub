@@ -21,7 +21,7 @@ from devhub_sdk import (
 from ._host import DevHubHostFixture
 
 
-def test_notify_and_poll_should_round_trip() -> None:
+def test_M5_E2E_003_notify_and_poll_should_round_trip() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.notify.app", "displayName": "invoke.notify.app"})
         client = host.create_client("invoke-notify-client")
@@ -38,7 +38,7 @@ def test_notify_and_poll_should_round_trip() -> None:
         assert invocation.args["message"] == "hello"
 
 
-def test_request_respond_value_should_return_result_and_second_respond_should_conflict() -> None:
+def test_M5_E2E_003_And_008_request_respond_value_should_return_result_and_second_respond_should_conflict() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.request.app", "displayName": "invoke.request.app"})
         client = host.create_client("invoke-request-client")
@@ -70,7 +70,7 @@ def test_request_respond_value_should_return_result_and_second_respond_should_co
         assert exc_info.value.code == -32030
 
 
-def test_request_respond_error_should_map_invocation_failed() -> None:
+def test_M5_E2E_008_request_respond_error_should_map_invocation_failed() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.error.app", "displayName": "invoke.error.app"})
         client = host.create_client("invoke-error-client")
@@ -117,7 +117,7 @@ def test_request_respond_error_should_map_invocation_failed() -> None:
         assert exception.callee_error.code == 1001
 
 
-def test_request_timeout_and_expired_should_map_expected_error_codes() -> None:
+def test_M5_E2E_007_request_timeout_and_expired_should_map_expected_error_codes() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.timeout.app", "displayName": "invoke.timeout.app"})
         client = host.create_client("invoke-timeout-client")
@@ -144,7 +144,7 @@ def test_request_timeout_and_expired_should_map_expected_error_codes() -> None:
         assert expired_exc_info.value.code == DevHubRpcErrorCode.INVOCATION_EXPIRED
 
 
-def test_scope_routing_should_hit_expected_instance() -> None:
+def test_M5_E2E_006_And_011_scope_routing_should_hit_expected_instance() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.scope.app", "displayName": "invoke.scope.app"})
         client = host.create_client("invoke-scope-client")

@@ -1,5 +1,6 @@
 {
   "id": "invocation.notify.offline_pending_delivers_after_helper_registers",
+  "caseId": "M5-CONF-004",
   "description": "SDK notify 在 helper 离线且 queueIfOffline=true、autoLaunch=false 时，必须先成功入队，helper 后注册后可被拉取。",
   "transport": "http",
   "setup": {

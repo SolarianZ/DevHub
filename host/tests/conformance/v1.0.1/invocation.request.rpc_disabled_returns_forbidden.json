@@ -1,5 +1,6 @@
 {
   "id": "invocation.request.rpc_disabled_returns_forbidden",
+  "caseId": "M5-CONF-004",
   "description": "SDK request 在 AppDefinition.capabilities.rpc=false 时，必须返回 forbidden/rpc_disabled。",
   "transport": "http",
   "setup": {

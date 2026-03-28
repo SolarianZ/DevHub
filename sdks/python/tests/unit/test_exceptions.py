@@ -5,7 +5,7 @@ import pytest
 from devhub_sdk import DevHubCalleeError, DevHubRpcErrorCode, DevHubRpcException
 
 
-def test_devhub_rpc_exception_should_expose_known_code_and_helpers() -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_should_expose_known_code_and_helpers() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -42,7 +42,7 @@ def test_devhub_rpc_exception_should_expose_known_code_and_helpers() -> None:
     assert exception.try_get_data_property("missing") is None
 
 
-def test_devhub_rpc_exception_when_code_is_unknown_should_return_none() -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_code_is_unknown_should_return_none() -> None:
     exception = DevHubRpcException(
         code=-32088,
         message="custom_error",
@@ -54,7 +54,7 @@ def test_devhub_rpc_exception_when_code_is_unknown_should_return_none() -> None:
     assert exception.reason == "custom"
 
 
-def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore_helper() -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -73,7 +73,7 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore
 
 
 @pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
-def test_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_should_ignore_helper(data) -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_should_ignore_helper(data) -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -91,7 +91,7 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_sh
     assert exception.callee_error is None
 
 
-def test_devhub_rpc_exception_when_callee_error_code_is_bool_should_ignore_helper() -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_callee_error_code_is_bool_should_ignore_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -109,7 +109,7 @@ def test_devhub_rpc_exception_when_callee_error_code_is_bool_should_ignore_helpe
 
 
 @pytest.mark.parametrize("property_name", ["", "   ", None])
-def test_devhub_rpc_exception_when_property_name_is_blank_should_raise(property_name) -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_property_name_is_blank_should_raise(property_name) -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.UNAUTHORIZED,
         message="unauthorized",
@@ -122,7 +122,7 @@ def test_devhub_rpc_exception_when_property_name_is_blank_should_raise(property_
 
 
 @pytest.mark.parametrize("error_code", [None, "-32001", True])
-def test_devhub_rpc_exception_when_is_code_input_is_invalid_should_raise(error_code) -> None:
+def test_M5_PY_UT_005_devhub_rpc_exception_when_is_code_input_is_invalid_should_raise(error_code) -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.UNAUTHORIZED,
         message="unauthorized",

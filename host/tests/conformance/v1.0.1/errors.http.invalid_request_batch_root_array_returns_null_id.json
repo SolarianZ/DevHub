@@ -1,5 +1,6 @@
 {
   "id": "errors.http.invalid_request_batch_root_array_returns_null_id",
+  "caseId": "M5-CONF-008",
   "description": "HTTP 根数组 batch 必须返回单一 invalid_request，且 id=null。", 
   "transport": "http",
   "http": {

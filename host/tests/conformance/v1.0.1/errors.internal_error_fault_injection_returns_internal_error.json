@@ -1,5 +1,6 @@
 {
   "id": "errors.internal_error_fault_injection_returns_internal_error",
+  "caseId": "M5-CONF-008",
   "description": "测试故障注入命中的请求 ID 必须稳定返回 internal_error，而不引入非规范 RPC 方法。", 
   "transport": "http",
   "http": {

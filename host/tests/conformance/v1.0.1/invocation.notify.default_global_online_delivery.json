@@ -1,5 +1,6 @@
 {
   "id": "invocation.notify.default_global_online_delivery",
+  "caseId": "M5-CONF-004",
   "description": "SDK notify 省略 options 时，必须按默认 global 路由投递到在线 helper，并体现默认 ttlMs=60000。",
   "transport": "http",
   "setup": {

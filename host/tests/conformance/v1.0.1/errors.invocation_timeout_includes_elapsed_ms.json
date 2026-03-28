@@ -1,5 +1,6 @@
 {
   "id": "errors.invocation_timeout_includes_elapsed_ms",
+  "caseId": "M5-CONF-008",
   "description": "原始 HTTP request 在 waitTimeoutMs 到期时，必须返回 invocation_timeout，并包含 invocationId 与 elapsedMs。", 
   "transport": "http",
   "setup": {

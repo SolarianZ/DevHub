@@ -24,7 +24,7 @@ afterAll(async () => {
   await host?.close();
 });
 
-it("HTTP 链路应可完成基础流程", async () => {
+it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-flow-client",
     dataDir: host.dataDirectory
@@ -78,7 +78,7 @@ it("HTTP 链路应可完成基础流程", async () => {
   await client.dispose();
 });
 
-it("launch 应覆盖 started / starting / already_running", async () => {
+it("M5_E2E_002 launch 应覆盖 started / starting / already_running", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-launch-client",
     dataDir: host.dataDirectory

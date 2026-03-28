@@ -68,18 +68,22 @@
 | `M5-DN-UT-004` | RPC 错误响应映射为 `DevHubRpcException` | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/RpcErrorMappingTests.cs` |
 | `M5-DN-UT-005` | WS 首条必须认证（未认证调用被拒绝） | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Events/WsLifecycleTests.cs` |
 | `M5-DN-UT-006` | `target.scope` 与 `target.instanceId` 默认值构造逻辑 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Rpc/InvocationRequestBuilderTests.cs` |
+| `M5-DN-UT-007` | DI 注册与 `DevHubClientOptions` 绑定协同生效 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/DependencyInjection/ServiceCollectionExtensionsTests.cs` |
+| `M5-DN-UT-008` | 公共扩展点、事件类型解析与 `calleeError` 辅助模型稳定性 | .NET 白盒 | `sdks/dotnet/tests/DevHub.Sdk.UnitTests/PublicSeams/PublicExtensionPointTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.UnitTests/Models/DevHubCalleeErrorTests.cs` |
 | `M5-TS-UT-001` | Node runtime discovery 成功路径 | TS 白盒 | `sdks/javascript/tests/unit/runtime.test.ts` |
 | `M5-TS-UT-002` | discovery 缺失/非法字段错误映射 | TS 白盒 | `sdks/javascript/tests/unit/runtime.test.ts` |
 | `M5-TS-UT-003` | HTTP header 与 `protocolVersion/clientId/clientSessionId` 校验 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-TS-UT-004` | JSON-RPC 错误映射为 `DevHubRpcError` | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
 | `M5-TS-UT-005` | WS 连接鉴权生命周期与事件流中断处理 | TS 白盒 | `sdks/javascript/tests/unit/events-client.test.ts` |
 | `M5-TS-UT-006` | `hub.invoke.respond` 的 `value/error` 互斥参数构造 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` |
+| `M5-TS-UT-007` | `runtimeResolver/transportFactory/sessionFactory` 公共扩展点与顶层导出稳定性 | TS 白盒 | `sdks/javascript/tests/unit/client.test.ts` / `sdks/javascript/tests/unit/events-client.test.ts` / `sdks/javascript/tests/unit/package-exports.test.ts` |
 | `M5-PY-UT-001` | runtime discovery 成功路径、默认数据根目录派生、`DEVHUB_DATA_DIR` 覆盖与 `tokenFile` 读取 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
 | `M5-PY-UT-002` | dataDir 输入约束、`runtime/` 子目录误传、直放 `hub.json` 布局与 `ClientOptions` 非法值校验 | Python 白盒 | `sdks/python/tests/unit/test_runtime.py` |
 | `M5-PY-UT-003` | HTTP header 组装、本地参数校验、错误映射与响应结构严格解析 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` |
 | `M5-PY-UT-004` | `notify/request/poll/respond` 载荷默认值、`args` 省略/null 语义、互斥约束与 JSON 校验 | Python 白盒 | `sdks/python/tests/unit/test_payloads.py` |
 | `M5-PY-UT-005` | 模型解析、已知错误码辅助字段、`calleeError` 提取与 JSON-RPC envelope 校验 | Python 白盒 | `sdks/python/tests/unit/test_parsing.py` / `sdks/python/tests/unit/test_exceptions.py` / `sdks/python/tests/unit/test_jsonrpc.py` |
 | `M5-PY-UT-006` | WS 鉴权生命周期、未知事件类型拒绝、连接终止语义与包根扩展点导出 | Python 白盒 | `sdks/python/tests/unit/test_events_client.py` / `sdks/python/tests/unit/test_package_exports.py` |
+| `M5-PY-UT-007` | `RuntimeResolver/JsonRpcHttpTransport/JsonRpcWsSession` 公共扩展点稳定性 | Python 白盒 | `sdks/python/tests/unit/test_http_client.py` / `sdks/python/tests/unit/test_events_client.py` / `sdks/python/tests/unit/test_package_exports.py` |
 | `M5-E2E-001` | SDK `Ping` 正向调用闭环（HTTP） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/javascript/tests/integration/http-flow.test.ts` / `sdks/python/tests/integration/test_http_flow.py` |
 | `M5-E2E-002` | SDK `apps.*` 管理链路（register/list/heartbeat/unregister/launch） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` / `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/LaunchFlowTests.cs` / `sdks/javascript/tests/integration/http-flow.test.ts` / `sdks/python/tests/integration/test_http_flow.py` |
 | `M5-E2E-003` | SDK `invoke.notify/request/poll/respond` 主链路 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
@@ -90,15 +94,20 @@
 | `M5-E2E-008` | `delivery_conflict` / `invocation_failed` 错误路径 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
 | `M5-E2E-009` | 缺失 `X-DevHub-ClientId` 返回 `-32600 invalid_request` | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/HttpFlowTests.cs` |
 | `M5-E2E-010` | WS 断开后订阅状态清理（重连后需重新订阅） | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Events/EventsFlowTests.cs` / `sdks/javascript/tests/integration/events-flow.test.ts` / `sdks/python/tests/integration/test_events_flow.py` |
-| `M5-E2E-011` | `target.scope=""` 路由至 global，`target.scope="global"` 仅命中字面量作用域 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` |
+| `M5-E2E-011` | `target.scope=""` 路由至 global，`target.scope="global"` 仅命中字面量作用域 | SDK 黑盒 | `sdks/dotnet/tests/DevHub.Sdk.IntegrationTests/Http/InvocationFlowTests.cs` / `sdks/javascript/tests/integration/invocation-flow.test.ts` / `sdks/python/tests/integration/test_invocation_flow.py` |
 | `M5-CONF-001` | Discovery 类向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/discovery.*.json` |
 | `M5-CONF-002` | Auth 类向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/auth.*.json` |
 | `M5-CONF-003` | AppDef/AppInstance 向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/apps.*.json` |
 | `M5-CONF-004` | Notify/Request 向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/invocation.*.json` |
-| `M5-CONF-005` | `.NET`、`TS` 与 `Python` 对同向量结果语义比较 | 契约 | `host/tests/conformance/vector_runner.py` |
-| `M5-CONF-006` | 契约失败报告输出（向量ID/实际/期望/差异字段） | 契约 | `host/tests/conformance/vector_runner.py` |
+| `M5-CONF-005` | `.NET`、`TS` 与 `Python` 对同向量结果语义比较 | 契约 | `host/tests/conformance/vector_runner.py` / `host/tests/test_conformance_runner.py` |
+| `M5-CONF-006` | 契约失败报告输出（向量ID/实际/期望/差异字段） | 契约 | `host/tests/conformance/vector_runner.py` / `host/tests/test_conformance_runner.py` |
 | `M5-CONF-007` | Events 断连清理向量执行与断言 | 契约 | `host/tests/conformance/v1.0.1/events.*.json` |
 | `M5-CONF-008` | Spec §8 全量错误码与 `error.data` 字段向量断言 | 契约 | `host/tests/conformance/v1.0.1/errors.*.json` |
+
+补充约定：
+
+- `host/tests/conformance/v1.0.1/*.json` 在保留语义化 `id` 的同时，统一补充 `caseId: "M5-CONF-xxx"` 以支持按编号检索。
+- `host/tests/conformance/vector_runner.py` 支持 `--case-id M5-CONF-xxx` 按编号批量回归，也保留 `--vector-id <semantic-id>` 精确定位单条向量。
 
 ---
 

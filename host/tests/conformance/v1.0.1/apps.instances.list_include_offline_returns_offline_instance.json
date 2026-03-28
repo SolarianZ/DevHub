@@ -1,5 +1,6 @@
 {
   "id": "apps.instances.list_include_offline_returns_offline_instance",
+  "caseId": "M5-CONF-003",
   "description": "includeOffline=true 时，hub.apps.listInstances 必须返回离线实例。",
   "transport": "http",
   "setup": {

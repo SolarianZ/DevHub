@@ -68,7 +68,7 @@ class FakeHttpTransport:
         return self.response
 
 
-def test_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
+def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -96,7 +96,7 @@ def test_http_client_with_injected_resolver_and_transport_should_use_abstraction
     assert transport.calls[0]["connection_info"].token == "token-fake"
 
 
-def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -115,7 +115,7 @@ def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -
         thread.join(timeout=5)
 
 
-def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -132,7 +132,7 @@ def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> 
         thread.join(timeout=5)
 
 
-def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
+def test_M5_PY_UT_003_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -154,7 +154,7 @@ def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_befor
     assert transport.calls == []
 
 
-def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_unauthorized_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -171,7 +171,7 @@ def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception
         thread.join(timeout=5)
 
 
-def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_invalid_error_data_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -185,7 +185,7 @@ def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tm
         thread.join(timeout=5)
 
 
-def test_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_response_with_non_standard_json_constant)
     server, thread = _start_http_server(scenario)
     try:
@@ -199,7 +199,7 @@ def test_http_client_when_response_contains_non_standard_json_constant_should_ra
         thread.join(timeout=5)
 
 
-def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_list_definitions_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -215,7 +215,7 @@ def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None
         thread.join(timeout=5)
 
 
-def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_request_missing_value_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -229,7 +229,7 @@ def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Pa
         thread.join(timeout=5)
 
 
-def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
+def test_M5_PY_UT_003_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_launch_invalid_status_response)
     server, thread = _start_http_server(scenario)
     try:

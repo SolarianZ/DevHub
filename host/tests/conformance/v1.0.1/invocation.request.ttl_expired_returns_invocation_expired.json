@@ -1,5 +1,6 @@
 {
   "id": "invocation.request.ttl_expired_returns_invocation_expired",
+  "caseId": "M5-CONF-004",
   "description": "SDK request 在无 helper 在线、ttlMs==waitTimeoutMs==1000 且允许排队时，必须返回 invocation_expired。",
   "transport": "http",
   "setup": {

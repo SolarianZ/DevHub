@@ -1,5 +1,6 @@
 {
   "id": "invocation.request.second_respond_returns_delivery_conflict_after_success",
+  "caseId": "M5-CONF-004",
   "description": "SDK request 在 helper 首次 respond 成功后，第二次 respond 必须返回 delivery_conflict，caller 仍收到成功结果。",
   "transport": "http",
   "setup": {
