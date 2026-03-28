@@ -4,17 +4,18 @@
 
 ## 1. 适用范围
 
-- 权威协议来源始终是 [`Spec.md`](./Spec.md)。
+- 权威协议来源始终是 [`Spec.md`](../spec/Spec.md)。
+- 文档分类与治理口径见 [`docs/README.md`](../README.md)；M6 期间“核心目标必需约束 / 发布前可调整约束”的区分以 [`Spec.md` §1.4](../spec/Spec.md#14-m6-期间的规范治理口径) 为准。
 - 本文只整理“不依赖 SDK 源码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
-- 当前文档、Schema 与协议示例描述的是仓库内的**当前公开基线**；在首次正式对外发布前，若为对齐核心目标而修正规范，本指南与配套资产会同步更新，不应将任意 M6 中间态提交视为永久冻结承诺。
+- 当前文档、Schema 与协议示例描述的是仓库内的**当前公开基线**；在首次正式对外发布前，若为对齐核心目标而修正规范，本指南与配套资产会同步更新。
 
 如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需要组合下列公开资料即可完成接入：
 
-- [`Spec.md`](./Spec.md)
-- [`docs/schema/v1.0.1/README.md`](./schema/v1.0.1/README.md)
-- [`docs/protocol-examples/v1.0.1/README.md`](./protocol-examples/v1.0.1/README.md)
-- [`host/tests/conformance/README.md`](../host/tests/conformance/README.md)
+- [`Spec.md`](../spec/Spec.md)
+- [`docs/spec/schema/v1.0.1/README.md`](../spec/schema/v1.0.1/README.md)
+- [`docs/spec/protocol-examples/v1.0.1/README.md`](../spec/protocol-examples/v1.0.1/README.md)
+- [`host/tests/conformance/README.md`](../../host/tests/conformance/README.md)
 
 ## 2. 运行时发现
 
@@ -65,15 +66,15 @@ HTTP 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对
 
 最小健康检查可以直接调用 `hub.ping`。原始 JSON 示例见：
 
-- [`ping.request.json`](./protocol-examples/v1.0.1/http/ping.request.json)
-- [`ping.success.json`](./protocol-examples/v1.0.1/http/ping.success.json)
+- [`ping.request.json`](../spec/protocol-examples/v1.0.1/http/ping.request.json)
+- [`ping.success.json`](../spec/protocol-examples/v1.0.1/http/ping.success.json)
 
 如果要接入实例注册与调用链路，可继续参考：
 
-- [`register-instance.request.json`](./protocol-examples/v1.0.1/http/register-instance.request.json)
-- [`register-instance.success.json`](./protocol-examples/v1.0.1/http/register-instance.success.json)
-- [`invoke-request.request.json`](./protocol-examples/v1.0.1/http/invoke-request.request.json)
-- [`invoke-request.success.json`](./protocol-examples/v1.0.1/http/invoke-request.success.json)
+- [`register-instance.request.json`](../spec/protocol-examples/v1.0.1/http/register-instance.request.json)
+- [`register-instance.success.json`](../spec/protocol-examples/v1.0.1/http/register-instance.success.json)
+- [`invoke-request.request.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.request.json)
+- [`invoke-request.success.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.success.json)
 
 ## 4. WebSocket 鉴权与事件订阅
 
@@ -87,13 +88,13 @@ WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。
 
 原始 JSON 示例见：
 
-- [`authenticate.request.json`](./protocol-examples/v1.0.1/ws/authenticate.request.json)
-- [`authenticate.success.json`](./protocol-examples/v1.0.1/ws/authenticate.success.json)
-- [`subscribe.request.json`](./protocol-examples/v1.0.1/ws/subscribe.request.json)
-- [`subscribe.success.json`](./protocol-examples/v1.0.1/ws/subscribe.success.json)
-- [`event.notification.json`](./protocol-examples/v1.0.1/ws/event.notification.json)
-- [`unsubscribe.request.json`](./protocol-examples/v1.0.1/ws/unsubscribe.request.json)
-- [`unsubscribe.success.json`](./protocol-examples/v1.0.1/ws/unsubscribe.success.json)
+- [`authenticate.request.json`](../spec/protocol-examples/v1.0.1/ws/authenticate.request.json)
+- [`authenticate.success.json`](../spec/protocol-examples/v1.0.1/ws/authenticate.success.json)
+- [`subscribe.request.json`](../spec/protocol-examples/v1.0.1/ws/subscribe.request.json)
+- [`subscribe.success.json`](../spec/protocol-examples/v1.0.1/ws/subscribe.success.json)
+- [`event.notification.json`](../spec/protocol-examples/v1.0.1/ws/event.notification.json)
+- [`unsubscribe.request.json`](../spec/protocol-examples/v1.0.1/ws/unsubscribe.request.json)
+- [`unsubscribe.success.json`](../spec/protocol-examples/v1.0.1/ws/unsubscribe.success.json)
 
 ## 5. 错误语义与处理建议
 
@@ -130,7 +131,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 可直接参考原始错误示例：
 
-- [`invoke-request.invocation-failed.error.json`](./protocol-examples/v1.0.1/http/invoke-request.invocation-failed.error.json)
+- [`invoke-request.invocation-failed.error.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.invocation-failed.error.json)
 
 ### 5.3 客户端兼容建议
 
@@ -142,7 +143,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 如果你需要做严格输入输出校验，可直接消费仓库内发布的 v1.0.1 Schema：
 
-- [`docs/schema/v1.0.1/README.md`](./schema/v1.0.1/README.md)
+- [`docs/spec/schema/v1.0.1/README.md`](../spec/schema/v1.0.1/README.md)
 
 其中至少包含：
 
@@ -156,7 +157,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 如果你需要快速拼接请求或对照消息形态，请优先使用：
 
-- [`docs/protocol-examples/v1.0.1/README.md`](./protocol-examples/v1.0.1/README.md)
+- [`docs/spec/protocol-examples/v1.0.1/README.md`](../spec/protocol-examples/v1.0.1/README.md)
 
 ## 7. Conformance 自测入口
 
@@ -164,7 +165,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 使用说明见：
 
-- [`host/tests/conformance/README.md`](../host/tests/conformance/README.md)
+- [`host/tests/conformance/README.md`](../../host/tests/conformance/README.md)
 
 如果你只是要复用官方向量与 runner 来验证“自研 adapter / 自研客户端”，最小前提是先构建 Host，并准备一个外部 adapter manifest：
 
@@ -200,10 +201,10 @@ python host/tests/conformance/vector_runner.py \
 
 本仓库当前采用“协议版本”和“包版本”分离的兼容策略：
 
-- 在 M6 期间，以下口径描述的是当前公开基线，而不是对后续所有提交都不再变化的永久承诺；若 `Spec.md` 为对齐核心目标而修订，本指南、Schema、示例、SDK 与 conformance 资产会同步调整。
+- 在 M6 期间，以下口径描述的是当前公开基线；若 [`Spec.md`](../spec/Spec.md) 为对齐核心目标而修订，本指南、Schema、示例、SDK 与 conformance 资产会同步调整。
 - 当前公开基线是 `protocolVersion=1` 与当前仓库维护的 Hub v1.x 协议资料。
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
-- 首次正式对外发布后，只要客户端严格遵循 [`Spec.md`](./Spec.md) §9 的兼容规则，就可以与 Hub v1.x 正常协作。
+- 首次正式对外发布后，只要客户端严格遵循 [`Spec.md`](../spec/Spec.md) §9 的兼容规则，就可以与 Hub v1.x 正常协作。
 
 首次正式对外发布后的 v1.x 内允许的兼容扩展：
 

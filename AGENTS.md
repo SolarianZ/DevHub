@@ -1,14 +1,22 @@
 # DevHub 开发指导文档
 
-本仓库包含 DevHub 协议规范、核心实现及测试套件。`docs/Spec.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/Spec.md` 迁就实现。
+本仓库包含 DevHub 协议规范、核心实现及测试套件。`docs/spec/Spec.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/spec/Spec.md` 迁就实现。
 
 ## 项目结构
 
 ```text
 DevHub/
-├── docs/                                     # 协议规范与设计文档
-│   ├── Spec.md                               # 权威技术规范（Single Source of Truth）
-│   └── DevHub协议与开发规划.md                # 架构演进与里程碑规划
+├── docs/                                     # 协议规范、架构、指南与运维文档
+│   ├── README.md                             # 文档导航与分类规则
+│   ├── spec/                                # 权威规范与版本化协议资产
+│   │   ├── Spec.md                          # 权威技术规范（Single Source of Truth）
+│   │   ├── schema/                          # 版本化 Schema 资产
+│   │   └── protocol-examples/               # 版本化原始协议示例
+│   ├── architecture/                        # 架构演进与专题评估
+│   ├── milestones/                          # 当前阶段任务文档
+│   ├── guides/                              # 开发与接入指南
+│   ├── operations/                          # 部署与排障文档
+│   └── assets/                              # 文档静态资源
 ├── host/                                     # Host相关代码
 │   ├── DevHub.slnx                           # Host 工作区解决方案文件
 │   ├── src/                                  # Host生产代码（.NET）
@@ -104,7 +112,7 @@ DevHub/
 ### 测试规范
 
 - 遵循测试金字塔，以单元测试为主体，以集成测试验证完整公开契约。
-- 测试必须以 `docs/Spec.md`、核心业务路径、改动范围、历史缺陷和高风险分支为依据；严禁依据当前实现反推用例。
+- 测试必须以 `docs/spec/Spec.md`、核心业务路径、改动范围、历史缺陷和高风险分支为依据；严禁依据当前实现反推用例。
 - 断言应优先验证外部可观察结果，包括返回值、状态变化、输出契约、异常语义与协作边界。
 - 除明确白盒场景外，不得复制实现逻辑或依赖私有调用顺序。
 
@@ -152,5 +160,5 @@ DevHub/
 
 ## 参考资料
 
-- [协议规范 (`docs/Spec.md`)](docs/Spec.md)
-- [架构与开发规划 (`docs/DevHub协议与开发规划.md`)](docs/DevHub协议与开发规划.md)
+- [协议规范 (`docs/spec/Spec.md`)](docs/spec/Spec.md)
+- [架构与开发规划 (`docs/architecture/DevHub协议与开发规划.md`)](docs/architecture/DevHub协议与开发规划.md)

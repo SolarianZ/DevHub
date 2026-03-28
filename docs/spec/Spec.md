@@ -1097,7 +1097,7 @@ M6 期间，conformance 与仓库级回归默认把“协议核心契约”作�
 
 ## 附录 B：符合性测试运行示例
 
-以下命令是“官方符合性套件”的示意调用格式，当前仓库未内置 `devhub-conformance-cli` 可执行文件；仓库内可直接执行的验证命令请参考 [`开发指南`](./开发指南.md) 与 [`host/tests/README.md`](../host/tests/README.md)。
+以下命令是“官方符合性套件”的示意调用格式，当前仓库未内置 `devhub-conformance-cli` 可执行文件；仓库内可直接执行的验证命令请参考 [`开发指南`](../guides/开发指南.md) 与 [`host/tests/README.md`](../../host/tests/README.md)。
 
 ```bash
 # 针对本地 Hub 运行官方符合性套件

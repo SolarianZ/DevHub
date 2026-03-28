@@ -1,6 +1,6 @@
 # DevHub Python SDK
 
-DevHub Python SDK 基于 `docs/Spec.md` 中的 DevHub Hub v1.x 协议实现，覆盖运行时发现、HTTP JSON-RPC 与 WebSocket 事件订阅。
+DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现，覆盖运行时发现、HTTP JSON-RPC 与 WebSocket 事件订阅。
 
 ## 能力范围
 

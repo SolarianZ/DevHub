@@ -13,13 +13,13 @@
 - `invocation.json`
 - `hub-runtime.json`
 
-以上 4 个文件直接整理自 [`docs/Spec.md`](../../Spec.md) §5。
+以上 4 个文件直接整理自 [`Spec.md`](../../Spec.md) §5。
 
 - `rpc-request.json`
 - `rpc-response.json`
 - `error-response.json`
 
-以上 3 个文件依据 [`docs/Spec.md`](../../Spec.md) §3.1、§6.1 与 §8 整理。
+以上 3 个文件依据 [`Spec.md`](../../Spec.md) §3.1、§6.1 与 §8 整理。
 
 ## 2. 版本与 URI 约定
 
@@ -51,4 +51,4 @@
 
 如果需要请求/响应示例，请同时参考：
 
-- [`docs/protocol-examples/v1.0.1/README.md`](../../protocol-examples/v1.0.1/README.md)
+- [`protocol-examples/v1.0.1/README.md`](../../protocol-examples/v1.0.1/README.md)

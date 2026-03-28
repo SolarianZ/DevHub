@@ -9,7 +9,7 @@
 
 ## 当前能力范围
 
-当前 `.NET SDK` 已覆盖 `docs/Spec.md` 中当前已实现的公开协议能力：
+当前 `.NET SDK` 已覆盖 `docs/spec/Spec.md` 中当前已实现的公开协议能力：
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`

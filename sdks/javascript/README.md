@@ -1,6 +1,6 @@
 # DevHub JS/TS SDK
 
-DevHub JS/TS SDK 基于 `docs/Spec.md` 的 Hub v1.x 协议，目标运行时为 Node.js。
+DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行时为 Node.js。
 
 ## 当前状态
 

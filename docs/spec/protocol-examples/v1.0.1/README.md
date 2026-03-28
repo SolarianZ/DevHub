@@ -7,7 +7,7 @@
 - `http/`：HTTP `POST /rpc` 的 JSON 请求体与响应体示例
 - `ws/`：WebSocket 入站 / 出站 JSON-RPC 消息示例
 
-这些文件只描述 JSON 消息本身，不重复封装 SDK 调用，也不替代 [`docs/Spec.md`](../../Spec.md)。
+这些文件只描述 JSON 消息本身，不重复封装 SDK 调用，也不替代 [`Spec.md`](../../Spec.md)。
 
 ## 2. 占位符约定
 
@@ -65,5 +65,5 @@ WebSocket：
 
 ## 5. 与 Schema / Conformance 的关系
 
-- 如果你需要做结构校验，请配合 [`docs/schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
+- 如果你需要做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
 - 如果你需要验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 使用。

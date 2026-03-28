@@ -25,8 +25,8 @@ DevHub 和 MCP 的**表层相似性**确实存在：两者都以 JSON-RPC 2.0 �
 
 ### 2.1 DevHub 侧依据
 
-- 权威规范：[Spec.md](./Spec.md)
-- 架构规划：[DevHub协议与开发规划.md](./DevHub%E5%8D%8F%E8%AE%AE%E4%B8%8E%E5%BC%80%E5%8F%91%E8%A7%84%E5%88%92.md)
+- 权威规范：[Spec.md](../spec/Spec.md)
+- 架构规划：[DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 - Host 入口与传输层：
   - [Program.cs](../host/src/DevHub.Host/Program.cs)
   - [RpcHttpEndpointHandler.cs](../host/src/DevHub.Host/RpcHttpEndpointHandler.cs)

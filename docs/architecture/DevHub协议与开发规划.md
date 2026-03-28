@@ -11,8 +11,9 @@
 > v1 明确不做：跨机器、强一致持久队列、分布式锁、复杂权限系统。
 >
 > M6 治理口径：在首次正式对外发布前，`Spec.md` 是当前仓库实现、测试与文档收敛的权威基线，而不是永久冻结承诺；若某兼容承诺或发布策略约束阻碍对核心目标的纠偏，允许先修正规范，再同步实现、测试、SDK 与版本化资产。
+> 文档分类与导航见 [docs/README.md](../README.md)。
 >
-> **注意：本文档侧重于架构设计、工程实现建议与开发规划。详细的协议规范（JSON结构、错误码、时序强制要求等）请严格遵循 [Spec.md](./Spec.md)。**
+> **注意：本文档侧重于架构设计、工程实现建议与开发规划。详细的协议规范（JSON结构、错误码、时序强制要求等）请严格遵循 [Spec.md](../spec/Spec.md)。**
 
 ---
 
@@ -76,7 +77,7 @@
 | scope         | 工作空间隔离标识（例如 `p4ws://...`、`git://...`），global 表示无 scope |
 | global scope  | “不带 scope / scope 为 null”的默认范围                                  |
 
-> 详细定义请参考 **[Spec.md §5 (Data Models)](./Spec.md#5-data-models-with-json-schema)**。
+> 详细定义请参考 **[Spec.md §5](../spec/Spec.md)**。
 
 ---
 
@@ -131,7 +132,7 @@ flowchart LR
 - 不同数据根目录可并行运行多个 Host，前提是彼此完全隔离。
 
 ### 4.2 数据目录（Windows 参考）
-> 规范定义见 **[Spec.md §4.1.1](./Spec.md)**。
+> 规范定义见 **[Spec.md §4.1.1](../spec/Spec.md)**。
 
 - Root：`%LOCALAPPDATA%\DevHub\`
   - `runtime\hub.json`：Hub 运行信息
@@ -141,7 +142,7 @@ flowchart LR
   - `logs\*.log`
 
 ### 4.3 Hub 发现（Discovery）
-> 规范定义见 **[Spec.md §4.1.2 (hub.json)](./Spec.md)**。
+> 规范定义见 **[Spec.md §4.1.2 (hub.json)](../spec/Spec.md)**。
 
 Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 `protocolVersion`。
 
@@ -149,7 +150,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 
 ## 5. 安全模型
 
-> 规范定义见 **[Spec.md §4.2 (HTTP Headers)](./Spec.md#42-http-headers-must-be-present)** 及 **[Spec.md §4.3 (WebSocket Authentication)](./Spec.md#43-websocket-authentication-flow)**。
+> 规范定义见 **[Spec.md §4.2](../spec/Spec.md)** 及 **[Spec.md §4.3](../spec/Spec.md)**。
 
 ### 5.1 核心机制
 - **Token**：Hub 启动时生成随机 token 写入文件，仅当前 OS 用户可读（文件 ACL）。
@@ -161,7 +162,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 
 ## 6. 传输与消息格式
 
-> 规范定义见 **[Spec.md §3 (Transport & Message Format)](./Spec.md#3-transport--message-format)**。
+> 规范定义见 **[Spec.md §3](../spec/Spec.md)**。
 
 - **协议**：JSON-RPC 2.0。
 - **HTTP**：POST `{httpBaseUrl}/rpc`，始终返回 200 OK。
@@ -172,7 +173,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 
 ## 7. 数据模型
 
-> 规范定义与 Schema 见 **[Spec.md §5 (Data Models)](./Spec.md#5-data-models-with-json-schema)**。
+> 规范定义与 Schema 见 **[Spec.md §5](../spec/Spec.md)**。
 
 ### 7.1 核心模型
 - **AppDefinition**：静态定义（`appId`, `launch` 配置与能力开关）。
@@ -180,7 +181,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 - **Invocation**：调用对象（`invocationId`, `target`, `method`, `options`, `delivery`）。
 
 ### 7.2 Scope 策略
-> 规则详见 **[Spec.md §5.5 (Scope Rules)](./Spec.md#55-scope-rules-normative)**。
+> 规则详见 **[Spec.md §5.5](../spec/Spec.md)**。
 
 - **App 生效作用域**：`hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 省略、`null` 或 `""` 时生效为 Global；为非空字符串时按该字面量作用域处理，包括 `"global"`。
 - **调用默认作用域**：`hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope` 省略、`null` 或 `""` 时，仅允许命中 Global 实例。
@@ -192,7 +193,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 
 ## 8. 方法定义
 
-> 完整 API 定义、参数与返回值见 **[Spec.md §6 (RPC Methods)](./Spec.md#6-rpc-methods)**。
+> 完整 API 定义、参数与返回值见 **[Spec.md §6](../spec/Spec.md)**。
 
 ### 8.1 基础与管理
 - `hub.ping`
@@ -211,7 +212,7 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 
 ## 9. 路由规则
 
-> 规范定义见 **[Spec.md §7.1 (Routing Decision Matrix)](./Spec.md#71-routing-decision-matrix-normative)**。
+> 规范定义见 **[Spec.md §7.1](../spec/Spec.md)**。
 
 Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路由至在线实例或进入 Pending 队列。
 
@@ -219,7 +220,7 @@ Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路�
 
 ## 10. 离线、排队与 autoLaunch 行为矩阵
 
-> 规范定义见 **[Spec.md §7.1 (Routing Decision Matrix)](./Spec.md#71-routing-decision-matrix-normative)** 及 **[Spec.md §7.2 (Invocation State Machine)](./Spec.md#72-invocation-state-machine)**。
+> 规范定义见 **[Spec.md §7.1](../spec/Spec.md)** 及 **[Spec.md §7.2](../spec/Spec.md)**。
 
 行为由 `options.queueIfOffline` 和 `options.autoLaunch` 控制。
 - 若无在线实例且 `queueIfOffline=true`：进入 Pending 队列。
@@ -230,7 +231,7 @@ Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路�
 
 ## 11. 事件系统
 
-> 规范定义见 **[Spec.md §6.3.14+ (Events)](./Spec.md#6314-hubeventssubscribe-ws-only)**。
+> 规范定义见 **[Spec.md §6.3.14+](../spec/Spec.md)**。
 
 - **订阅**：`hub.events.subscribe` / `unsubscribe`。
 - **推送**：`hub.event` 通知。
@@ -240,7 +241,7 @@ Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路�
 
 ## 12. 错误码规范
 
-> 规范定义见 **[Spec.md §8 (Error Codes)](./Spec.md#8-error-codes)**。
+> 规范定义见 **[Spec.md §8](../spec/Spec.md)**。
 
 - 标准 JSON-RPC 错误（-326xx, -32700）。
 - DevHub 自定义错误（-320xx），如 `unauthorized`, `forbidden`, `instance_not_found`, `invocation_timeout` 等。
@@ -249,7 +250,7 @@ Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路�
 
 ## 13. 实现建议（v1 必要工程细节）
 
-> 本节是“必须考虑的工程落点”，用于指导 Hub 的具体实现，需确保数值与逻辑符合 **[Spec.md §7.3 (Key Timing Constraints)](./Spec.md#73-key-timing-constraints)**。
+> 本节是“必须考虑的工程落点”，用于指导 Hub 的具体实现，需确保数值与逻辑符合 **[Spec.md §7.3](../spec/Spec.md)**。
 
 ### 13.1 并发与取消
 - `invoke.request` 内部等待建议用 `TaskCompletionSource` + `CancellationToken`。
@@ -320,7 +321,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 **当前处于M6里程碑**
 - 围绕发布前收尾，完成仓库目录、工程边界、架构设计、测试分层与文档体系的系统性审查和必要调整。
 - 产品还未对外发布，允许对接口做必要破坏性修改；默认应先修实现和测试来对齐核心契约，但若识别出只是过早冻结的兼容承诺或发布策略约束不合理，也允许修正规范并同步相关资产。
-- 详细任务见 [DevHub_M6细化任务文档.md](./DevHub_M6细化任务文档.md)。
+- 详细任务见 [DevHub_M6细化任务文档.md](../milestones/DevHub_M6细化任务文档.md)。
 
 ---
 
