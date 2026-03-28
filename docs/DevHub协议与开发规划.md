@@ -1,6 +1,6 @@
 # DevHub协议与开发规划
 
-> 状态：已落地（截至 2026-03-27，M0~M5 已完成；本文档用于维护架构说明、里程碑记录与后续演进规划）
+> 状态：持续维护中（截至 2026-03-28，M0~M5 已完成，M6 进行中；本文档用于维护架构说明、里程碑记录与后续演进规划）
 > 目标：在 **本机 per-user** 场景下，为多个开发工具/插件/服务提供统一的：
 > - 实例注册（AppInstance）与发现
 > - 应用启动（auto-launch / dedupe）
@@ -301,50 +301,24 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 
 ---
 
-## 14. 开发里程碑（更新版）
+## 14. 开发里程碑
 
 ### 14.1 里程碑概览
 
-| Milestone | 目标                               | 交付物                                                                                        | 备注               |
-| --------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ------------------ |
-| M0        | 文档冻结 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物 |
-| M1        | Hub（HTTP）基础能力 + Spec v1 冻结 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（协议定稿） | WS 可先不做        |
-| M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心            |
-| M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                    |
-| M4        | WebSocket（认证 + events）         | `/ws`、hub.ws.authenticate、subscribe/unsubscribe、hub.event 推送                             | UI/监控可接入      |
-| M5        | SDK（.NET + JS/TS + Python）       | .NET SDK、JS/TS SDK、Python SDK、签名测试向量、契约测试                                       | Spec 已前置        |
-| M6        | 治理与诊断增强（可选）             | 指标、日志、dump、限流配置                                                                    | 不阻塞 v1          |
+| Milestone | 目标                               | 交付物                                                                                        | 备注                               |
+| --------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------- |
+| M0        | 文档冻结 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物                 |
+| M1        | Hub（HTTP）基础能力 + Spec v1 冻结 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（协议定稿） | WS 可先不做                        |
+| M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心                            |
+| M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                                    |
+| M4        | WebSocket（认证 + events）         | `/ws`、hub.ws.authenticate、subscribe/unsubscribe、hub.event 推送                             | UI/监控可接入                      |
+| M5        | SDK（.NET + JS/TS + Python）       | .NET SDK、JS/TS SDK、Python SDK、签名测试向量、契约测试                                       | Spec 已前置                        |
+| M6        | 仓库整理、架构收敛与测试治理       | 目录重组、Host/SDK 架构审查与重构、测试分层治理、文档整理                                     | 发布前最后一轮，可做必要破坏性调整 |
 
-### 14.2 里程碑验收清单（最小可验收）
-**M0**
-- 本规划文档冻结；**Spec.md** 冻结；核心数据模型与 RPC 契约进入可评审状态。
-
-**M1**
-- 启动 Hub 生成 `<dataDir>/runtime/hub.json` 与 `<dataDir>/runtime/token.txt`。
-- `hub.ping` 返回 ok；缺 token 返回 `unauthorized`。
-- `hub.apps.listDefinitions` 能读取 `apps/definitions/*.json`。
-- `hub.apps.registerInstance` 后可 `listInstances` 看到；`lastSeen` 更新。
-- 实现行为符合 **Spec.md** 要求。
-
-**M2**
-- `invoke.request`：caller -> hub -> callee poll -> respond -> caller 收到结果。
-- `invoke.notify`：可入队并被 poll 取走。
-- `queueIfOffline + autoLaunch` 能触发 `hub.apps.launch`，注册后投递。
-- lease 到期可重投递；TTL 到期返回 `invocation_expired`。
-
-**M3**
-- register/launch/invoke 在 `scope` 解释上统一遵循 Spec §5.5。
-- 调用未指定 `target.scope` 时仅命中 Global；指定时仅命中显式 Scope 且禁止 fallback 到 Global。
-
-**M4**
-- WS 必须先 `hub.ws.authenticate`；未认证调用返回 `unauthorized`。
-- `subscribe/unsubscribe` 可用；断线自动清理订阅。
-- 事件覆盖注册、投递、完成/失败。
-
-**M5**
-- 基于 **Spec.md** 完成 .NET SDK、JS/TS SDK 与 Python SDK。
-- 通过 Hub↔SDK 契约测试（正向/异常/兼容性场景）。
-- Python SDK 的工程与设计基线并入 [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md) 与 [DevHub_M5测试任务拆分文档.md](./DevHub_M5测试任务拆分文档.md) 统一维护。
+**当前处于M6里程碑**
+- 围绕发布前收尾，完成仓库目录、工程边界、架构设计、测试分层与文档体系的系统性审查和必要调整。
+- 产品还未对外发布，允许对接口做必要破坏性修改，但不得通过修改 **Spec.md** 迁就实现。
+- 详细任务见 [DevHub_M6细化任务文档.md](./DevHub_M6细化任务文档.md)。
 
 ---
 
@@ -417,24 +391,3 @@ ws.onmessage = (e) => {
   }
 };
 ```
-
----
-
-## 17. 当前里程碑状态（截至 2026-03-27）
-
-- 当前分支：`m5`。
-- M0：已完成。
-- M1：已完成。
-- M2：已完成。
-- M3：已完成。
-- M4：已完成（`/ws`、`hub.ws.authenticate`、`hub.events.subscribe/unsubscribe`、`hub.event` 事件推送已落地，当前分支白盒/黑盒回归通过）。
-- M5：已完成（`.NET SDK`、`JS/TS SDK` 与 `Python SDK` 的 runtime discovery、HTTP JSON-RPC、WebSocket events、统一错误模型、黑盒/白盒测试、跨语言 conformance 与 CI 门禁已落地，并已补齐面向第三方开发者的无 SDK 接入资料、版本化 Schema 包、原始协议示例与 conformance 使用说明。）
-- 2026-03-28 已完成：Host 运行时发现文件生命周期增强；启动后会只读独占当前 `hub.json`（允许读取、拒绝覆盖写入），正常退出时会将其迁移为 `prev_hub.json` 以保留上一会话快照。相关 Host 白盒/进程级测试、Host 集成 smoke/full、SDK 测试、conformance 与 coverage 门禁已完成本地验证。
-- 2026-03-27 已完成：补齐第三方无 SDK 接入资料，新增无 SDK 指南、版本化 Schema 包、原始协议示例与 conformance 使用说明，并明确 Hub v1.x 兼容口径；当前仓库同时提供官方向量与官方适配器回归链路。
-- 2026-03-18 已完成：仓库级运行时路径文档采用 `DEVHUB_DATA_DIR` 数据根目录语义，明确 `<dataDir>/runtime/hub.json` 固定发现规则、仅识别规范定义的环境变量，以及“同一 OS 用户 + 同一数据根目录单实例 / 不同数据根目录可并行”的多 Host 规则。
-- 2026-03-17 已完成：收紧 `.NET SDK` 的 WebSocket 事件客户端协议校验，遇到“带 `id` 但缺少 `result/error` 的响应”或“非 `hub.event` 的服务端通知”时立即失败，并补充对应白盒回归测试，避免非法服务端消息被静默吞掉。
-- 2026-03-15 已完成：`sdks/javascript` 的规范事件类型公开模型包含 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES` 导出，`DevHubEvent.type` / `DevHubEventsClient.subscribe()` 的 TypeScript 签名对应 Spec 定义的 6 个事件类型，避免调用方在编译期继续以裸字符串漂移。
-- 2026-03-24 已完成：将原独立的 Python SDK 设计规划并入 `DevHub_M5细化任务文档.md` 与 `DevHub_M5测试任务拆分文档.md`，统一 `.NET` / `JS/TS` / `Python` SDK 的设计、任务与测试维护口径，并移除独立子文档。
-- 2026-03-14 已完成：修复 `hub.json.hubVersion` 对齐收尾问题，Host 对公开 HTTP/WS 响应统一省略 `null` 可选字段，避免 JS/Python SDK 在更严格的发现/载荷解析下出现 definitions、instances、events 链路兼容性回归；同时修正 JS runtime discovery 的 `hubVersion` 错误提示文本。该修复已在后续统一回归中纳入验证，详见 [DevHub_M5细化任务文档.md](./DevHub_M5细化任务文档.md) 中 2026-03-27 的验证记录。
-- 2026-03-08 已验证：`dotnet build host/src/DevHub.slnx -c Release`、`dotnet test host/src/DevHub.slnx -c Release --no-build`、`python3 host/tests/test_runner.py --smoke --no-header`、`python3 host/tests/test_runner.py --full --no-header` 均可通过。
-- 2026-03-09 已验证：`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`、`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 可通过；在隔离本地 Host 数据根目录（`DEVHUB_DATA_DIR=temp/sdk-smoke`）下，`python3 host/tests/test_runner.py --smoke --no-header` 可通过。
