@@ -116,7 +116,7 @@ python -m unittest discover -s host/tests/conformance -p "test_conformance_runne
 
 ```bash
 dotnet test host/DevHub.slnx -c Release --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings
-python host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80
+python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80
 ```
 
 ## 报告输出

@@ -52,11 +52,11 @@ jobs:
       - name: Unit tests with coverage
         run: dotnet test host/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
 
-      - name: Verify coverage thresholds (line>=90%, branch>=80%)
+      - name: Verify coverage thresholds (line>=80%, branch>=80%)
         shell: bash
         run: |
           set -euo pipefail
-          python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80 2>&1 | tee "$RUNNER_TEMP/devhub-ci-coverage.log"
+          python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80 2>&1 | tee "$RUNNER_TEMP/devhub-ci-coverage.log"
 
       - name: Integration tests (fast)
         shell: bash

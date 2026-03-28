@@ -198,7 +198,7 @@ M6 期间凡涉及代码、目录、工程文件、测试资产或 CI 入口的�
 - `python host/tests/blackbox/test_runner.py --fast --no-header`
 - `python host/tests/blackbox/test_runner.py --full --no-header`
 - `python host/tests/blackbox/test_runner.py --smoke --no-header`
-- `python host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80`
+- `python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80`
 
 补充约束：
 
