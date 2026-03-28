@@ -1,6 +1,6 @@
 {
   "id": "auth.missing_protocol_returns_not_supported",
-  "caseId": "M5-CONF-002",
+  "caseId": "CONF-002",
   "description": "缺失 X-DevHub-Protocol 时，Hub 必须返回 not_supported/missing。",
   "transport": "http",
   "http": {

@@ -1,6 +1,6 @@
 {
   "id": "invocation.request.default_global_roundtrip_uses_spec_defaults",
-  "caseId": "M5-CONF-004",
+  "caseId": "CONF-004",
   "description": "SDK request 省略 options 时，必须按默认 global 路由完成往返，并体现默认 ttlMs=300000、waitTimeoutMs=120000。",
   "transport": "http",
   "setup": {

@@ -1,6 +1,6 @@
 {
   "id": "apps.instances.register_invalid_scope_returns_invalid_params",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "注册实例时 scope 类型非法时，hub.apps.registerInstance 必须返回 invalid_params/invalid_scope。",
   "transport": "http",
   "http": {

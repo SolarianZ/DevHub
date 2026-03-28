@@ -1,6 +1,6 @@
 {
   "id": "events.subscribe_receives_registered_event",
-  "caseId": "M5-CONF-007",
+  "caseId": "CONF-007",
   "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。", 
   "transport": "ws",
   "setup": {

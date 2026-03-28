@@ -174,7 +174,7 @@ dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 python host/tests/conformance/vector_runner.py --adapter-manifest path/to/devhub.adapter.json
 ```
 
-manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。详细契约见 [`host/tests/conformance/README.md`](../host/tests/conformance/README.md) 的 “Manifest 契约” 与 “Adapter 输入输出契约”。
+manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源码或参考官方适配器实现细节。
 
 如果你只想聚焦某条向量，可运行：
 
@@ -182,6 +182,14 @@ manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自�
 python host/tests/conformance/vector_runner.py \
   --adapter-manifest path/to/devhub.adapter.json \
   --vector-id auth.valid_credentials_ping_success
+```
+
+如果你想按签名案例分组过滤，可运行：
+
+```bash
+python host/tests/conformance/vector_runner.py \
+  --adapter-manifest path/to/devhub.adapter.json \
+  --case-id CONF-001
 ```
 
 如果你想把第三方实现与仓库内官方适配器一起对照跑，再额外准备官方 SDK 产物，并显式传入：

@@ -1,6 +1,6 @@
 {
   "id": "discovery.runtime_dir_as_data_dir_rejected",
-  "caseId": "M5-CONF-001",
+  "caseId": "CONF-001",
   "description": "当直接把 runtime 子目录当作 dataDir 传入时，SDK 必须拒绝该旧布局。",
   "transport": "http",
   "setup": {

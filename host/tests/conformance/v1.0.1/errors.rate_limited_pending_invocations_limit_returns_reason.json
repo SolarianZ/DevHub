@@ -1,6 +1,6 @@
 {
   "id": "errors.rate_limited_pending_invocations_limit_returns_reason",
-  "caseId": "M5-CONF-008",
+  "caseId": "CONF-008",
   "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。", 
   "transport": "http",
   "setup": {

@@ -1,6 +1,6 @@
 {
   "id": "apps.definitions.list_returns_preloaded_definition",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "预置合法 AppDefinition 时，hub.apps.listDefinitions 必须返回该定义。",
   "transport": "http",
   "setup": {

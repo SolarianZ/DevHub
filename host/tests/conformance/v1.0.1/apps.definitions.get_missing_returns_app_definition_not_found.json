@@ -1,6 +1,6 @@
 {
   "id": "apps.definitions.get_missing_returns_app_definition_not_found",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "获取不存在的 AppDefinition 时，hub.apps.getDefinition 必须返回 app_definition_not_found。",
   "transport": "http",
   "http": {

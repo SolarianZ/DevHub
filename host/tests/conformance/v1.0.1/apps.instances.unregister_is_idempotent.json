@@ -1,6 +1,6 @@
 {
   "id": "apps.instances.unregister_is_idempotent",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "实例不存在时，hub.apps.unregisterInstance 仍必须返回 ok=true。",
   "transport": "http",
   "http": {

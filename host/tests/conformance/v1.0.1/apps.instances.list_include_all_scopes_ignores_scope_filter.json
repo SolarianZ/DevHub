@@ -1,6 +1,6 @@
 {
   "id": "apps.instances.list_include_all_scopes_ignores_scope_filter",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "includeAllScopes=true 时，hub.apps.listInstances 必须忽略 scope 参数并返回所有作用域。",
   "transport": "http",
   "setup": {

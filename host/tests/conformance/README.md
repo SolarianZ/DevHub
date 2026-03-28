@@ -141,10 +141,11 @@ adapter 启动后会收到一个 `execution-context.json` 路径。该文件至�
 
 ### 6.2 输出
 
-adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后一条可解析 JSON 作为结果。推荐输出形态：
+adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后一条可解析 JSON 作为结果。该对象必须满足以下中立契约：
 
 ```json
 {
+  "vectorId": "discovery.valid_runtime_layout_reads_token",
   "phase": "discovery",
   "outcome": "success",
   "actual": {
@@ -154,11 +155,57 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 }
 ```
 
-补充约束：
+通用要求：
 
 - `sdk` 字段可省略；runner 会统一覆盖为 manifest 中的 `name`。
-- 如 adapter 需要表达自身失败，应输出 `error` 对象；若直接非零退出且未输出合法 JSON，runner 会按进程失败处理。
-- Invocation / Events / WS 场景可继续沿用仓库内官方适配器的输出字段约定，例如 `operation`、`phase=sdk-invocation`、`phase=sdk-events`、`phase=ws`。
+- `vectorId` 必须等于当前执行向量的 `vector.id`。
+- `outcome` 只允许 `success` 或 `error`。
+- `actual` 字段必须存在；其值可以是对象、数组、标量或 `null`。
+- `error` 为非 `null` 时，必须是对象，且至少包含非空字符串字段 `message`。
+- 若 adapter 直接非零退出且未输出合法 JSON，runner 会按进程失败处理，而不是按契约失败处理。
+
+按向量类型区分的必填字段：
+
+- Discovery 向量：`phase` 必须为 `discovery`
+- 原始 HTTP JSON-RPC 向量：`phase` 必须为 `rpc`
+- SDK Invocation 向量：`phase` 必须为 `sdk-invocation`，且 `operation` 必须为 `notify` 或 `request`
+- SDK Events 向量：`phase` 必须为 `sdk-events`
+- Raw WebSocket 向量：`phase` 必须为 `ws`
+
+常见示例：
+
+```json
+{
+  "vectorId": "auth.valid_credentials_ping_success",
+  "phase": "rpc",
+  "outcome": "success",
+  "actual": {
+    "jsonrpc": "2.0",
+    "id": "ping-1",
+    "result": {
+      "ok": true
+    }
+  },
+  "error": null
+}
+```
+
+```json
+{
+  "vectorId": "invocation.request.default_global_roundtrip_uses_spec_defaults",
+  "phase": "sdk-invocation",
+  "operation": "request",
+  "outcome": "success",
+  "actual": {
+    "ok": true,
+    "invocationId": "invocation-1",
+    "value": {
+      "pong": true
+    }
+  },
+  "error": null
+}
+```
 
 ## 7. 第三方最小闭环
 
@@ -167,7 +214,7 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 1. 阅读 [`docs/spec/Spec.md`](../../docs/spec/Spec.md)、[`docs/spec/schema/v1.0.1/README.md`](../../docs/spec/schema/v1.0.1/README.md) 与 [`docs/spec/protocol-examples/v1.0.1/README.md`](../../docs/spec/protocol-examples/v1.0.1/README.md)。
 2. 用自己的技术栈实现一个 adapter，读取 `execution-context.json` 并执行对应向量。
 3. 编写 adapter manifest。
-4. 运行 `python host/tests/conformance/vector_runner.py --adapter-manifest <manifest>`。
+4. 运行 `python host/tests/conformance/vector_runner.py --adapter-manifest <manifest>`，必要时再用 `--case-id CONF-001` 或 `--vector-id ...` 缩小范围。
 
 这样即可在不依赖仓库内 SDK 源码的前提下，直接复用官方向量与 runner 完成自测。
 
@@ -176,7 +223,7 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 通过时会输出：
 
 ```text
-PASS  auth.valid_credentials_ping_success
+PASS  CONF-002 auth.valid_credentials_ping_success
 ...
 SUMMARY  total=52 passed=52 failed=0
 ```

@@ -1,6 +1,6 @@
 {
   "id": "errors.ws.authenticate_invalid_token_returns_unauthorized_and_disconnect",
-  "caseId": "M5-CONF-008",
+  "caseId": "CONF-008",
   "description": "WS 使用非法 token 鉴权时，必须返回 unauthorized/invalid_token 且断开连接。", 
   "transport": "ws",
   "request": {

@@ -1,6 +1,6 @@
 {
   "id": "discovery.valid_runtime_layout_reads_token",
-  "caseId": "M5-CONF-001",
+  "caseId": "CONF-001",
   "description": "SDK 必须从 <dataDir>/runtime/hub.json 读取端点，并继续通过 tokenFile 读取令牌。",
   "transport": "http",
   "setup": {

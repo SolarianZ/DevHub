@@ -1,6 +1,6 @@
 {
   "id": "errors.invocation_expired_includes_elapsed_ms",
-  "caseId": "M5-CONF-008",
+  "caseId": "CONF-008",
   "description": "原始 HTTP request 在 ttlMs 到期时，必须返回 invocation_expired，并包含 invocationId 与 elapsedMs。", 
   "transport": "http",
   "setup": {

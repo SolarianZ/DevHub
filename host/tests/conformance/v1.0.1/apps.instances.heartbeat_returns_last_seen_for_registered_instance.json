@@ -1,6 +1,6 @@
 {
   "id": "apps.instances.heartbeat_returns_last_seen_for_registered_instance",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "实例已注册时，hub.apps.heartbeat 必须返回最新 lastSeenUtc。",
   "transport": "http",
   "setup": {

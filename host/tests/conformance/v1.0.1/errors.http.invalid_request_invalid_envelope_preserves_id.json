@@ -1,6 +1,6 @@
 {
   "id": "errors.http.invalid_request_invalid_envelope_preserves_id",
-  "caseId": "M5-CONF-008",
+  "caseId": "CONF-008",
   "description": "HTTP 非法 JSON-RPC 信封必须返回 invalid_request，并保留可用 request id。", 
   "transport": "http",
   "http": {

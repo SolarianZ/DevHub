@@ -104,10 +104,11 @@
 
 - `M6-REPO-002` 已完成：Host 白盒测试工程已迁移到 `host/tests/whitebox/`，`host/src/` 不再混放测试工程；后续仍需持续观察 `host/tests/` 内 Python 黑盒 / conformance / whitebox 三类资产的长期导航成本。
 - `M6-ARCH-HOST-002`、`M6-ARCH-HOST-003`、`M6-TEST-003` 与 `M6-TEST-005` 已完成一组阶段收敛：`DevHub.Host` 的 transport 校验已按 HTTP/WS/JSON-RPC/事件订阅等职责拆分，`HttpNotificationSpecTests` / `WebSocketLifecycleSpecTests` 已复用统一 harness，Host transport 相关白盒测试已迁回 `host/tests/whitebox/DevHub.Host.Tests/`，`DevHub.Tests` 不再直接依赖 `DevHub.Host`。
+- `M6-TEST-004` 已完成一组阶段收敛：conformance runner 已显式校验第三方 adapter 输出契约，`caseId` 已从里程碑耦合的 `M5-CONF-*` 收敛为中立的 `CONF-*`，第三方接入说明不再要求通过阅读官方适配器源码理解输出格式。
 - `host/tests/` 目前既包含黑盒测试，也包含 conformance runner、adapter、覆盖率配置与脚本，后续规模继续增长时可能出现职责边界模糊、导航成本升高的问题。
 - 三套 SDK 的目录形态已基本独立，但其内部抽象层级、扩展点暴露方式、单元测试粒度和集成测试夹具风格是否足够一致，仍需要系统性审查。
 - `M6-REPO-004` 与 `M6-DOC-001` 已完成：`docs/` 根目录仅保留导航入口与分类目录，后续新增文档应进入既有分类，不再继续根级平铺。
-- 当前未发现额外仍在生效的旧里程碑细化文档；后续只需继续保持 `docs/milestones/` 下由单一 M6 主文档承接活跃治理任务。
+- `M6-REPO-005` 已完成：当前未发现额外仍在生效的旧里程碑细化文档；后续只需继续保持 `docs/milestones/` 下由单一 M6 主文档承接活跃治理任务。
 
 ---
 
@@ -125,7 +126,7 @@
 - [x] `M6-REPO-002`：判断 Host 白盒测试工程是否继续保留在 `host/src/`，或迁移到更清晰的测试层级目录；若调整，必须同步更新 `.slnx`、CI 与文档。
 - [x] `M6-REPO-003`：整理 `host/tests/` 内部结构，明确黑盒测试、conformance、夹具、脚本、覆盖率配置的目录边界。
 - [x] `M6-REPO-004`：审查 `docs/` 根目录文件数量与分类方式，必要时引入更清晰的子目录归档规则，并迁移对应文档。
-- [ ] `M6-REPO-005`：清理失效、重复或职责重叠的里程碑细化文档，保持当前活跃里程碑只有单一主文档。
+- [x] `M6-REPO-005`：清理失效、重复或职责重叠的里程碑细化文档，保持当前活跃里程碑只有单一主文档。
 
 ### 3.2 `M6-ARCH-HOST-*`（Host 架构收敛）
 
@@ -146,7 +147,7 @@
 - [x] `M6-TEST-001`：按“白盒 / 黑盒 / conformance”三层重新审查现有测试，明确每个测试文件的职责与允许依赖的信息边界。
 - [x] `M6-TEST-002`：识别并修正黑盒测试中对内部实现、内部目录布局、私有状态或调试行为的依赖。
 - [x] `M6-TEST-003`：识别并修正白盒测试中对具体实现细节的过度绑定，保留真正必要的内部规则断言。
-- [ ] `M6-TEST-004`：审查 conformance 向量、adapter 与 runner 的中立性，防止测试口径被某一实现“带偏”。
+- [x] `M6-TEST-004`：审查 conformance 向量、adapter 与 runner 的中立性，防止测试口径被某一实现“带偏”。
 - [x] `M6-TEST-005`：补齐因架构或目录调整而新增的回归场景，删除重复、脆弱、低价值的测试资产。
 - [x] `M6-TEST-006`：统一本地验证矩阵与 CI 门禁口径，确保 M6 期间每次代码调整都有可复制的最小完整回归路径。
 

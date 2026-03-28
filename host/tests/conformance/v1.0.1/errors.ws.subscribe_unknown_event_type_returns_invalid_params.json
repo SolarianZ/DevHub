@@ -1,6 +1,6 @@
 {
   "id": "errors.ws.subscribe_unknown_event_type_returns_invalid_params",
-  "caseId": "M5-CONF-008",
+  "caseId": "CONF-008",
   "description": "WS 鉴权后订阅未知事件类型时，必须返回 invalid_params 并带 reason/type。", 
   "transport": "ws",
   "request": {

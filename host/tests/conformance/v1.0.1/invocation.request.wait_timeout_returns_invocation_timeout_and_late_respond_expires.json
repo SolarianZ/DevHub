@@ -1,6 +1,6 @@
 {
   "id": "invocation.request.wait_timeout_returns_invocation_timeout_and_late_respond_expires",
-  "caseId": "M5-CONF-004",
+  "caseId": "CONF-004",
   "description": "SDK request 在 helper 超过 waitTimeoutMs 后才 respond 时，必须返回 invocation_timeout，且迟到 respond 被拒绝为 invocation_expired。",
   "transport": "http",
   "setup": {

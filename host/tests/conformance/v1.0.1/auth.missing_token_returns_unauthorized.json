@@ -1,6 +1,6 @@
 {
   "id": "auth.missing_token_returns_unauthorized",
-  "caseId": "M5-CONF-002",
+  "caseId": "CONF-002",
   "description": "缺失 Authorization 时，Hub 必须返回 unauthorized/missing_token。",
   "transport": "http",
   "http": {

@@ -1,6 +1,6 @@
 {
   "id": "invocation.request.explicit_scope_routes_only_to_scoped_instance",
-  "caseId": "M5-CONF-004",
+  "caseId": "CONF-004",
   "description": "SDK request 显式 target.scope 时，必须只命中对应 scoped helper 并成功完成往返。",
   "transport": "http",
   "setup": {

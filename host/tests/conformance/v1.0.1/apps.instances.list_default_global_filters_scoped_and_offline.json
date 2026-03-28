@@ -1,6 +1,6 @@
 {
   "id": "apps.instances.list_default_global_filters_scoped_and_offline",
-  "caseId": "M5-CONF-003",
+  "caseId": "CONF-003",
   "description": "默认 listInstances 必须仅返回 global 在线实例，过滤 scoped 与 offline。",
   "transport": "http",
   "setup": {

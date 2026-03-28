@@ -26,6 +26,9 @@ if str(HOST_ROOT) not in sys.path:
 from tests.conformance import vector_runner  # type: ignore  # noqa: E402
 
 
+SUITE_DIRECTORY = REPO_ROOT / "host" / "tests" / "conformance" / "v1.0.1"
+
+
 class TestConformanceRunner(unittest.TestCase):
     """验证 conformance runner 的外部适配器挂接能力。"""
 
@@ -159,12 +162,12 @@ class TestConformanceRunner(unittest.TestCase):
                 msg=f"stdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
             )
             self.assertIn(
-                "PASS  M5-CONF-001 discovery.valid_runtime_layout_reads_token",
+                "PASS  CONF-001 discovery.valid_runtime_layout_reads_token",
                 completed.stdout,
             )
             self.assertIn("SUMMARY  total=1 passed=1 failed=0", completed.stdout)
 
-    def test_M5_CONF_005_vector_runner_should_support_case_id_filter(self) -> None:
+    def test_CONF_005_vector_runner_should_support_case_id_filter(self) -> None:
         with tempfile.TemporaryDirectory(prefix="devhub-conformance-case-id-") as temp_root_str:
             temp_root = Path(temp_root_str)
             adapter_path = temp_root / "dummy_adapter.py"
@@ -224,7 +227,7 @@ class TestConformanceRunner(unittest.TestCase):
                     "--adapter-manifest",
                     str(manifest_path),
                     "--case-id",
-                    "M5-CONF-001",
+                    "CONF-001",
                 ],
                 cwd=REPO_ROOT,
                 capture_output=True,
@@ -238,12 +241,12 @@ class TestConformanceRunner(unittest.TestCase):
                 completed.returncode,
                 msg=f"stdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
             )
-            self.assertIn("PASS  M5-CONF-001 discovery.valid_runtime_layout_reads_token", completed.stdout)
-            self.assertIn("PASS  M5-CONF-001 discovery.env_override_reads_runtime", completed.stdout)
-            self.assertIn("PASS  M5-CONF-001 discovery.runtime_dir_as_data_dir_rejected", completed.stdout)
+            self.assertIn("PASS  CONF-001 discovery.valid_runtime_layout_reads_token", completed.stdout)
+            self.assertIn("PASS  CONF-001 discovery.env_override_reads_runtime", completed.stdout)
+            self.assertIn("PASS  CONF-001 discovery.runtime_dir_as_data_dir_rejected", completed.stdout)
             self.assertIn("SUMMARY  total=3 passed=3 failed=0", completed.stdout)
 
-    def test_M5_CONF_006_emit_failures_should_include_case_id_and_diff_fields(self) -> None:
+    def test_CONF_006_emit_failures_should_include_case_id_and_diff_fields(self) -> None:
         buffer = io.StringIO()
         failure = {
             "vectorId": "discovery.valid_runtime_layout_reads_token",
@@ -253,7 +256,7 @@ class TestConformanceRunner(unittest.TestCase):
             "diffFields": ["$.phase"],
             "resolvedVector": {
                 "id": "discovery.valid_runtime_layout_reads_token",
-                "caseId": "M5-CONF-001",
+                "caseId": "CONF-001",
             },
         }
 
@@ -261,8 +264,115 @@ class TestConformanceRunner(unittest.TestCase):
             vector_runner.emit_failures([failure])
 
         output = buffer.getvalue()
-        self.assertIn("FAIL  M5-CONF-001 discovery.valid_runtime_layout_reads_token  [typescript]", output)
+        self.assertIn("FAIL  CONF-001 discovery.valid_runtime_layout_reads_token  [typescript]", output)
         self.assertIn("Diff: $.phase", output)
+
+    def test_validate_adapter_result_contract_when_phase_missing_should_report_contract_phase(self) -> None:
+        vector = load_vector("discovery.valid_runtime_layout_reads_token")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": vector["id"],
+                "outcome": "success",
+                "actual": {},
+                "error": None,
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.phase", failure["diffFields"])
+
+    def test_validate_adapter_result_contract_when_phase_mismatched_should_report_contract_phase(self) -> None:
+        vector = load_vector("auth.valid_credentials_ping_success")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": vector["id"],
+                "phase": "ws",
+                "outcome": "success",
+                "actual": {},
+                "error": None,
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.phase", failure["diffFields"])
+
+    def test_validate_adapter_result_contract_when_sdk_invocation_operation_missing_should_report_contract_operation(self) -> None:
+        vector = load_vector("invocation.request.default_global_roundtrip_uses_spec_defaults")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": vector["id"],
+                "phase": "sdk-invocation",
+                "outcome": "success",
+                "actual": {},
+                "error": None,
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.operation", failure["diffFields"])
+
+    def test_validate_adapter_result_contract_when_sdk_invocation_operation_invalid_should_report_contract_operation(self) -> None:
+        vector = load_vector("invocation.request.default_global_roundtrip_uses_spec_defaults")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": vector["id"],
+                "phase": "sdk-invocation",
+                "operation": "launch",
+                "outcome": "success",
+                "actual": {},
+                "error": None,
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.operation", failure["diffFields"])
+
+    def test_validate_adapter_result_contract_when_vector_id_mismatch_should_report_contract_vector_id(self) -> None:
+        vector = load_vector("discovery.valid_runtime_layout_reads_token")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": "other.vector",
+                "phase": "discovery",
+                "outcome": "success",
+                "actual": {},
+                "error": None,
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.vectorId", failure["diffFields"])
+
+    def test_validate_adapter_result_contract_when_error_message_missing_should_report_contract_error_message(self) -> None:
+        vector = load_vector("discovery.valid_runtime_layout_reads_token")
+
+        failure = vector_runner.validate_adapter_result_contract(
+            vector,
+            {
+                "vectorId": vector["id"],
+                "phase": "discovery",
+                "outcome": "error",
+                "actual": None,
+                "error": {},
+            },
+        )
+
+        self.assertIsNotNone(failure)
+        self.assertIn("$contract.error.message", failure["diffFields"])
+
+
+def load_vector(vector_id: str) -> dict[str, object]:
+    path = SUITE_DIRECTORY / f"{vector_id}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

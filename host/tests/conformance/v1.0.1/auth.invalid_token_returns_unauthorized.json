@@ -1,6 +1,6 @@
 {
   "id": "auth.invalid_token_returns_unauthorized",
-  "caseId": "M5-CONF-002",
+  "caseId": "CONF-002",
   "description": "当 Bearer token 非法时，Hub 必须返回 unauthorized/invalid_token。",
   "transport": "http",
   "http": {

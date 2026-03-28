@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M5 conformance runner。
+DevHub conformance runner。
 """
 
 from __future__ import annotations
@@ -47,7 +47,8 @@ WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
 WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
-CASE_ID_PATTERN = re.compile(r"^M5-CONF-\d{3}$")
+CASE_ID_PATTERN = re.compile(r"^CONF-\d{3}$")
+ALLOWED_ADAPTER_OUTCOMES = frozenset({"success", "error"})
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,14 @@ class AdapterTarget:
         environment["DEVHUB_CONFORMANCE_CONTEXT"] = str(context_path)
         environment.update(self.env_overrides)
         return environment
+
+
+@dataclass(frozen=True)
+class AdapterOutputContract:
+    """描述单类向量期望的 adapter 输出契约。"""
+
+    phase: str
+    allowed_operations: tuple[str, ...] | None = None
 
 
 def main() -> int:
@@ -146,7 +155,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--suite", default="v1.0.1", help="默认扫描的 suite 目录名。")
     parser.add_argument("--directory", help="显式指定向量目录。")
     parser.add_argument("--vector-id", help="只执行指定向量 ID。")
-    parser.add_argument("--case-id", help="只执行指定 M5-CONF-* 编号。")
+    parser.add_argument("--case-id", help="只执行指定 CONF-* 编号。")
     parser.add_argument(
         "--official-sdk",
         action="append",
@@ -495,6 +504,26 @@ def run_vector(
 
             helper_invocation_id = adapter_result.pop("_helperInvocationId", None)
             adapter_meta = adapter_result.pop("_adapterMeta", None)
+            should_validate_contract = adapter_result.pop("_contractValidated", False)
+
+            if should_validate_contract:
+                contract_failure = validate_adapter_result_contract(execution.resolved_vector, adapter_result)
+                if contract_failure is not None:
+                    failures.append(
+                        {
+                            "vectorId": execution.resolved_vector["id"],
+                            "sdk": adapter.name,
+                            "expected": contract_failure["expected"],
+                            "actual": contract_failure["actual"],
+                            "diffFields": contract_failure["diffFields"],
+                            "message": contract_failure["message"],
+                            "vectorPath": str(vector_path),
+                            "resolvedVector": execution.resolved_vector,
+                            "adapterMeta": adapter_meta,
+                        }
+                    )
+                    continue
+
             if helper_invocation_id is not None:
                 caller_invocation_id = extract_caller_invocation_id(adapter_result)
                 if caller_invocation_id and caller_invocation_id != helper_invocation_id:
@@ -697,6 +726,7 @@ def wait_adapter_process(adapter: AdapterTarget, process: subprocess.Popen[str],
                 "stderr": stderr.strip(),
             },
             "actual": None,
+            "_contractValidated": False,
             "_adapterMeta": build_adapter_meta(adapter, process.returncode, stdout, stderr),
         }
 
@@ -717,6 +747,7 @@ def parse_adapter_output(adapter: AdapterTarget, stdout: str, stderr: str, exit_
                 "stderr": stderr,
             },
             "actual": None,
+            "_contractValidated": False,
             "_adapterMeta": build_adapter_meta(adapter, exit_code, stdout, stderr),
         }
 
@@ -727,6 +758,7 @@ def parse_adapter_output(adapter: AdapterTarget, stdout: str, stderr: str, exit_
             "exitCode": exit_code,
             "stderr": stderr,
         }
+    parsed["_contractValidated"] = True
     parsed["_adapterMeta"] = build_adapter_meta(adapter, exit_code, stdout, stderr)
     return parsed
 
@@ -802,6 +834,91 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
         return comparable
 
     return result.get("actual")
+
+
+def validate_adapter_result_contract(vector: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    contract = resolve_adapter_output_contract(vector)
+    diffs: list[str] = []
+
+    if result.get("vectorId") != vector["id"]:
+        diffs.append("$contract.vectorId")
+
+    if result.get("phase") != contract.phase:
+        diffs.append("$contract.phase")
+
+    if result.get("outcome") not in ALLOWED_ADAPTER_OUTCOMES:
+        diffs.append("$contract.outcome")
+
+    if "actual" not in result:
+        diffs.append("$contract.actual")
+
+    if contract.allowed_operations is not None and result.get("operation") not in contract.allowed_operations:
+        diffs.append("$contract.operation")
+
+    error = result.get("error")
+    if error is not None:
+        if not isinstance(error, dict):
+            diffs.append("$contract.error")
+        else:
+            message = error.get("message")
+            if not isinstance(message, str) or not message.strip():
+                diffs.append("$contract.error.message")
+
+    if not diffs:
+        return None
+
+    return {
+        "expected": build_adapter_contract_expectation(vector, contract),
+        "actual": build_adapter_contract_actual(result),
+        "diffFields": diffs,
+        "message": "适配器输出不符合 conformance 输出契约。",
+    }
+
+
+def resolve_adapter_output_contract(vector: dict[str, Any]) -> AdapterOutputContract:
+    if "expectedDiscovery" in vector:
+        return AdapterOutputContract(phase="discovery")
+
+    request = vector.get("request")
+    kind = request.get("kind") if isinstance(request, dict) else None
+    if kind in {"sdk.notify", "sdk.request"}:
+        return AdapterOutputContract(phase="sdk-invocation", allowed_operations=("notify", "request"))
+    if kind == "sdk.events":
+        return AdapterOutputContract(phase="sdk-events")
+    if kind == "raw.ws" or vector.get("transport") == "ws":
+        return AdapterOutputContract(phase="ws")
+    return AdapterOutputContract(phase="rpc")
+
+
+def build_adapter_contract_expectation(
+    vector: dict[str, Any],
+    contract: AdapterOutputContract,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "vectorId": vector["id"],
+        "phase": contract.phase,
+        "outcome": sorted(ALLOWED_ADAPTER_OUTCOMES),
+        "actualPresent": True,
+        "error": {
+            "message": "required when error is not null",
+        },
+    }
+    if contract.allowed_operations is not None:
+        payload["operation"] = list(contract.allowed_operations)
+    return payload
+
+
+def build_adapter_contract_actual(result: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "vectorId": result.get("vectorId"),
+        "phase": result.get("phase"),
+        "outcome": result.get("outcome"),
+        "actualPresent": "actual" in result,
+        "error": result.get("error"),
+    }
+    if "operation" in result:
+        payload["operation"] = result.get("operation")
+    return payload
 
 
 def extract_caller_invocation_id(result: dict[str, Any]) -> str | None:
