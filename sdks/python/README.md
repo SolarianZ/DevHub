@@ -88,7 +88,7 @@ python3 -m pytest tests/integration
 如果需要在仓库根目录执行针对 DevHub Host 的仓库级黑盒 smoke：
 
 ```bash
-python3 host/tests/test_runner.py --smoke --no-header
+python3 host/tests/blackbox/test_runner.py --smoke --no-header
 ```
 
 请先在另一个终端启动本地 Hub：

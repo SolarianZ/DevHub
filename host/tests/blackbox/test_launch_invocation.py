@@ -4,19 +4,18 @@ DevHub M2 Launch + Invocation 冒烟测试
 """
 
 import os
-import sys
 import uuid
 import json
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     DiscoveryService,
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_shared_test_asset_path,
     get_test_python_executable,
     new_instance_id,
     safe_remove,
@@ -29,7 +28,7 @@ class TestLaunchInvocation(unittest.TestCase):
     """Launch + Invocation 测试类"""
 
     def _launch_script_path(self):
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
+        return get_shared_test_asset_path("launch_noop.py")
 
     def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
         launch_config = None

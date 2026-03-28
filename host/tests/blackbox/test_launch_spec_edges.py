@@ -4,19 +4,18 @@ DevHub M2/M3 Launch 规范边界补充测试
 """
 
 import os
-import sys
 import uuid
 import json
 import time
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     DiscoveryService,
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_shared_test_asset_path,
     get_test_python_executable,
     safe_remove,
     write_app_definition,
@@ -31,7 +30,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return f"m2-launch-edge-{suffix}-{uuid.uuid4().hex[:6]}"
 
     def _launch_script_path(self):
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py"))
+        return get_shared_test_asset_path("launch_noop.py")
 
     def _build_launch_config(self, dedupe_key_template=None):
         launch_config = {

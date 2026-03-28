@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(HOST_ROOT) not in sys.path:
     sys.path.insert(0, str(HOST_ROOT))
 
-from tests.test_base import get_test_project_root  # type: ignore  # noqa: E402
+from tests.blackbox.test_base import get_test_project_root  # type: ignore  # noqa: E402
 from tests.conformance.raw_protocol_helper import (  # type: ignore  # noqa: E402
     OrchestrationFailure,
     RawProtocolHelper,

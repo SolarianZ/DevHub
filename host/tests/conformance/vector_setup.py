@@ -10,17 +10,12 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-HOST_ROOT = Path(__file__).resolve().parents[2]
-if str(HOST_ROOT) not in sys.path:
-    sys.path.insert(0, str(HOST_ROOT))
-
-from tests.test_base import (  # type: ignore  # noqa: E402
+from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
     TEST_HUB_ENV_JSON_ENV_VAR,
     RpcClient,
     start_isolated_hub_process,

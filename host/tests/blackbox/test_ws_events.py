@@ -4,7 +4,6 @@ DevHub M4 WebSocket 鉴权与事件测试
 """
 
 import os
-import sys
 import json
 import uuid
 import time
@@ -13,10 +12,8 @@ import base64
 import hashlib
 from urllib.parse import urlparse
 
-# 添加项目根目录到 Python 模块搜索路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     RpcClient,
     RpcAssertions,
     TestResult,

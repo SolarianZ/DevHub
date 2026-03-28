@@ -4,13 +4,11 @@ DevHub M4 WS 传输矩阵补充测试
 """
 
 import os
-import sys
 import uuid
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -20,7 +18,7 @@ from tests.test_base import (
     unregister_instances,
     write_app_definition,
 )
-from tests.test_ws_events import SimpleWebSocketClient
+from tests.blackbox.test_ws_events import SimpleWebSocketClient
 
 
 class TestWsTransportMatrix(unittest.TestCase):

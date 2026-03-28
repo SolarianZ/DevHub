@@ -50,13 +50,13 @@ jobs:
         run: find host/src -type d -name TestResults -prune -exec rm -rf {} +
 
       - name: Unit tests with coverage
-        run: dotnet test host/src/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
+        run: dotnet test host/src/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
 
       - name: Verify coverage thresholds (line>=90%, branch>=80%)
         shell: bash
         run: |
           set -euo pipefail
-          python3 host/tests/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80 2>&1 | tee "$RUNNER_TEMP/devhub-ci-coverage.log"
+          python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80 2>&1 | tee "$RUNNER_TEMP/devhub-ci-coverage.log"
 
       - name: Integration tests (fast)
         shell: bash
@@ -148,7 +148,7 @@ jobs:
             false
           fi
 
-          python3 host/tests/test_runner.py --fast --no-header 2>&1 | tee "$runner_log"
+          python3 host/tests/blackbox/test_runner.py --fast --no-header 2>&1 | tee "$runner_log"
 
       - name: Upload build-and-test diagnostics
         if: failure()
@@ -295,7 +295,7 @@ jobs:
         run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
       - name: Run conformance runner self-tests
-        run: python -m unittest discover -s host/tests -p "test_conformance_runner.py"
+        run: python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
 
       - name: Build .NET SDK and conformance adapter
         run: dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
@@ -438,7 +438,7 @@ jobs:
             false
           fi
 
-          python3 host/tests/test_runner.py --full --no-header 2>&1 | tee "$runner_log"
+          python3 host/tests/blackbox/test_runner.py --full --no-header 2>&1 | tee "$runner_log"
 
       - name: Upload integration-full diagnostics
         if: failure()
@@ -585,7 +585,7 @@ jobs:
               throw "Host bootstrap failed in smoke job."
             }
 
-            python host/tests/test_runner.py --smoke --no-header 2>&1 | Tee-Object -FilePath $runnerLog
+            python host/tests/blackbox/test_runner.py --smoke --no-header 2>&1 | Tee-Object -FilePath $runnerLog
             $testExitCode = $LASTEXITCODE
             if ($testExitCode -ne 0) {
               Show-Diagnostics $testExitCode

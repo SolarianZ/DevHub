@@ -4,21 +4,19 @@ DevHub M3 Scope 路由专项测试
 """
 
 import os
-import sys
 import uuid
 import json
 import time
 import threading
 import unittest
 
-# 添加项目根目录到 Python 模块搜索路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     DiscoveryService,
     RpcClient,
     RpcAssertions,
     TestResult,
+    get_shared_test_asset_path,
     get_test_python_executable,
     new_instance_id,
     safe_remove,
@@ -34,7 +32,7 @@ class TestScopeRouting(unittest.TestCase):
         if include_launch:
             launch_config = {
                 "exePath": get_test_python_executable(),
-                "argsTemplate": os.path.abspath(os.path.join(os.path.dirname(__file__), "assets", "launch_noop.py")),
+                "argsTemplate": get_shared_test_asset_path("launch_noop.py"),
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template

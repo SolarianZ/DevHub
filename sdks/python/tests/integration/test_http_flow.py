@@ -176,7 +176,7 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
 
 def _launch_script_path() -> Path:
-    return Path(__file__).resolve().parents[4] / "tests" / "assets" / "launch_noop.py"
+    return Path(__file__).resolve().parents[4] / "host" / "tests" / "assets" / "launch_noop.py"
 
 
 def _launch_probe_script_path() -> Path:

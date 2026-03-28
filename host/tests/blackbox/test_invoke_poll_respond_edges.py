@@ -4,15 +4,13 @@ DevHub M2/M3 Invocation poll/respond 规范边界补充测试
 """
 
 import os
-import sys
 import time
 import uuid
 import json
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     DiscoveryService,
     RpcClient,
     RpcAssertions,

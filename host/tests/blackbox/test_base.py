@@ -13,12 +13,16 @@ import requests
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 TEST_HUB_COMMAND_ENV_VAR = "DEVHUB_TEST_HUB_COMMAND"
 TEST_HUB_CWD_ENV_VAR = "DEVHUB_TEST_HUB_CWD"
 TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
+TESTS_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
 
 
 @contextmanager
@@ -125,7 +129,12 @@ def get_test_python_executable() -> str:
 
 def get_test_project_root() -> str:
     """获取测试仓库根目录。"""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    return str(REPO_ROOT)
+
+
+def get_shared_test_asset_path(*relative_parts: str) -> str:
+    """获取仓库级共享测试夹具的绝对路径。"""
+    return str(SHARED_ASSETS_ROOT.joinpath(*relative_parts).resolve())
 
 
 def normalize_path_for_comparison(path: str) -> str:
@@ -967,6 +976,6 @@ class TestReport:
 
 def create_temp_directory():
     """创建 temp 目录"""
-    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "temp")
-    os.makedirs(temp_dir, exist_ok=True)
-    return temp_dir
+    temp_dir = REPO_ROOT / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return str(temp_dir)

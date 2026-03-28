@@ -75,8 +75,8 @@ DevHub/
 - `dotnet build host/src/DevHub.slnx -c Release`：构建全部 .NET 项目。
 - `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release`：启动本地 DevHub 守护进程。
 - `dotnet test host/src/DevHub.slnx -c Release`：运行全部单元测试。
-- `python3 host/tests/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
-- `python3 host/tests/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
+- `python3 host/tests/blackbox/test_runner.py --smoke --no-header`：执行快速集成测试冒烟验证。
+- `python3 host/tests/blackbox/test_runner.py --full --no-header`：执行更完整但更慢的集成测试集。
 
 ## 技术栈与工程约束
 
@@ -134,7 +134,7 @@ DevHub/
 
 ### 最小验证要求
 
-- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 host/tests/test_runner.py --smoke --no-header` 冒烟验证。
+- 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少完成最小相关 `dotnet test` 目标与 `python3 host/tests/blackbox/test_runner.py --smoke --no-header` 冒烟验证。
 
 ## 提交与协作要求
 

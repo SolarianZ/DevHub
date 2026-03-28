@@ -4,15 +4,12 @@ DevHub M1 internal_error / parse_error / invalid_request 测试
 """
 
 import os
-import sys
 import uuid
 import unittest
 import requests
 
-# 添加项目根目录到 Python 模块搜索路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     DiscoveryService,
     RpcAssertions,
     RpcClient,

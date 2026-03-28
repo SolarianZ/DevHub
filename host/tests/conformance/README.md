@@ -21,6 +21,8 @@ conformance 的目标不是替代单元测试，而是从“第三方消费者�
 ```text
 host/tests/conformance/
 ├── README.md
+├── __init__.py
+├── test_conformance_runner.py
 ├── vector_runner.py
 ├── vector_setup.py
 ├── raw_protocol_helper.py
@@ -53,6 +55,12 @@ dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 npm --prefix sdks/javascript ci
 npm --prefix sdks/javascript run build
 python -m pip install -e "./sdks/python[test]" requests
+```
+
+如需先验证 runner 自身的 manifest / 过滤 / 失败输出逻辑，可执行：
+
+```bash
+python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
 ```
 
 常用变体：

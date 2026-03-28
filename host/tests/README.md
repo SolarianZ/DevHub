@@ -1,7 +1,41 @@
-# DevHub Python 集成测试说明（M1~M4 四模式）
+# DevHub 仓库级测试说明
 
-- 测试以 `docs/Spec.md` 为最高优先级规范。
-- 测试只覆盖应当前里程碑（参考当前Git分支）的内容，不应覆盖未来里程碑的内容。
+- 仓库级测试以 `docs/Spec.md` 为最高优先级规范。
+- 这部分资产只覆盖当前分支所属里程碑，不应提前绑定未来里程碑行为。
+
+## 目录分层
+
+```text
+host/tests/
+├── README.md
+├── __init__.py
+├── assets/                         # 仓库级共享测试夹具
+├── blackbox/                       # Python 黑盒测试与统一 runner
+│   ├── __init__.py
+│   ├── test_base.py
+│   ├── test_runner.py
+│   └── test_*.py
+├── conformance/                    # 符合性向量、adapter、runner 与自测
+│   ├── __init__.py
+│   ├── test_conformance_runner.py
+│   ├── vector_runner.py
+│   ├── vector_setup.py
+│   ├── raw_protocol_helper.py
+│   ├── adapters/
+│   └── v1.0.1/
+└── tools/                          # 覆盖率配置与仓库级辅助脚本
+    ├── coverage.runsettings
+    ├── verify_coverage.py
+    ├── check_text_encoding.py
+    └── build_run_hub.sh
+```
+
+补充说明：
+
+- `assets/` 保留跨工作区共享夹具，例如 `launch_noop.py` 会同时被黑盒测试与 SDK 集成测试使用。
+- `blackbox/` 只承载面向公开行为的仓库级黑盒测试；具体用例不应再依赖 `host/tests/` 顶层旧布局。
+- `conformance/` 负责跨语言协议符合性，不替代白盒测试或黑盒业务回归。
+- `tools/` 只放验证入口和辅助脚本，不混入黑盒或 conformance 用例。
 
 ## 前置要求
 
@@ -18,11 +52,11 @@
 dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
-### 2) 运行 Python 集成测试
+### 2) 运行黑盒测试
 
 #### 可选：为隔离 Hub 用例配置启动夹具
 
-`test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动隔离 Hub 进程。默认情况下，夹具会回退到仓库内的 Host 启动命令；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
+`host/tests/blackbox/test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动隔离 Hub 进程。默认情况下，夹具会回退到仓库内的 Host 启动命令；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
 
 - `--isolated-hub-command` / `DEVHUB_TEST_HUB_COMMAND`：隔离 Hub 启动命令，支持 shell 字符串或 JSON 数组。
 - `--isolated-hub-cwd` / `DEVHUB_TEST_HUB_CWD`：隔离 Hub 启动命令的工作目录。
@@ -30,42 +64,55 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
 说明：Windows 上若临时目录同时出现 8.3 短路径与长路径表示，启动与发现夹具会按“同一文件位置”而非字符串字面值进行比较，避免 `DEVHUB_DATA_DIR` 用例出现误报。
 
-如必须通过实现专用环境变量启动隔离实例，应在上述夹具配置中注入，而不是在具体测试用例中写死。并行或隔离场景下，必须为每个 Host 分配独立 `DEVHUB_DATA_DIR`。
-
-#### Default 模式
+#### Default
 
 ```bash
-python3 host/tests/test_runner.py
+python3 host/tests/blackbox/test_runner.py
 ```
 
 示例：
 
 ```bash
-python3 host/tests/test_runner.py --isolated-hub-command "dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
+python3 host/tests/blackbox/test_runner.py --isolated-hub-command "dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
 ```
 
-#### Fast 模式
-
-在默认模式基础上，跳过超时测试，更快反馈。
+#### Fast
 
 ```bash
-python3 host/tests/test_runner.py --fast
+python3 host/tests/blackbox/test_runner.py --fast
 ```
 
-#### Full 模式
-
-严格覆盖功能，在默认模式基础上，增加压力测试等，含耗时场景。
+#### Full
 
 ```bash
-python3 host/tests/test_runner.py --full
+python3 host/tests/blackbox/test_runner.py --full
 ```
 
-#### Smoke 模式
-
-跨平台最小冒烟回归，覆盖发现/鉴权/WS/Request 主链路，推荐用于 CI 三平台快速门禁。
+#### Smoke
 
 ```bash
-python3 host/tests/test_runner.py --smoke
+python3 host/tests/blackbox/test_runner.py --smoke
+```
+
+### 3) 运行 conformance
+
+仓库级符合性向量：
+
+```bash
+python host/tests/conformance/vector_runner.py
+```
+
+conformance runner 自测：
+
+```bash
+python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
+```
+
+### 4) 覆盖率配置与校验
+
+```bash
+dotnet test host/src/DevHub.slnx -c Release --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings
+python host/tests/tools/verify_coverage.py --root . --line-threshold 0.90 --branch-threshold 0.80
 ```
 
 ## 报告输出

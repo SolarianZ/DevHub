@@ -8,32 +8,34 @@ import sys
 import logging
 import threading
 import time
+from pathlib import Path
 
-# 添加项目根目录到 Python 模块搜索路径
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+HOST_ROOT = Path(__file__).resolve().parents[2]
+if str(HOST_ROOT) not in sys.path:
+    sys.path.insert(0, str(HOST_ROOT))
 
-from tests.test_base import (
+from tests.blackbox.test_base import (
     TEST_HUB_COMMAND_ENV_VAR,
     TEST_HUB_CWD_ENV_VAR,
     TEST_HUB_ENV_JSON_ENV_VAR,
     TestReport,
     create_temp_directory,
 )
-from tests.test_launch_discovery import TestLaunchDiscovery
-from tests.test_auth_protocol import TestAuthProtocol
-from tests.test_ws_events import TestWsEvents
-from tests.test_ws_transport_matrix import TestWsTransportMatrix
-from tests.test_app_definitions import TestAppDefinitions
-from tests.test_app_instances import TestAppInstances
-from tests.test_scope_routing import TestScopeRouting
-from tests.test_invocation_notify import TestInvocationNotify
-from tests.test_invocation_request import TestInvocationRequest
-from tests.test_invocation_poll_respond import TestInvocationPollRespond
-from tests.test_invoke_poll_respond_edges import TestInvokePollRespondEdges
-from tests.test_launch_invocation import TestLaunchInvocation
-from tests.test_launch_spec_edges import TestLaunchSpecEdges
-from tests.test_invalid_params import TestInvalidParams
-from tests.test_internal_errors import TestInternalErrors
+from tests.blackbox.test_launch_discovery import TestLaunchDiscovery
+from tests.blackbox.test_auth_protocol import TestAuthProtocol
+from tests.blackbox.test_ws_events import TestWsEvents
+from tests.blackbox.test_ws_transport_matrix import TestWsTransportMatrix
+from tests.blackbox.test_app_definitions import TestAppDefinitions
+from tests.blackbox.test_app_instances import TestAppInstances
+from tests.blackbox.test_scope_routing import TestScopeRouting
+from tests.blackbox.test_invocation_notify import TestInvocationNotify
+from tests.blackbox.test_invocation_request import TestInvocationRequest
+from tests.blackbox.test_invocation_poll_respond import TestInvocationPollRespond
+from tests.blackbox.test_invoke_poll_respond_edges import TestInvokePollRespondEdges
+from tests.blackbox.test_launch_invocation import TestLaunchInvocation
+from tests.blackbox.test_launch_spec_edges import TestLaunchSpecEdges
+from tests.blackbox.test_invalid_params import TestInvalidParams
+from tests.blackbox.test_internal_errors import TestInternalErrors
 
 
 def setup_logging(log_file):
@@ -296,7 +298,7 @@ def run_all_tests(full=False, fast=False, smoke=False):
 
 def print_usage():
     """打印使用说明"""
-    print("Usage: python test_runner.py [options]")
+    print("Usage: python host/tests/blackbox/test_runner.py [options]")
     print()
     print("Options:")
     print("  -h, --help    Show this help message and exit")
