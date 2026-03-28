@@ -10,6 +10,8 @@
 > v1 核心原则：**能稳定跑通闭环**，**避免过度设计**。
 > v1 明确不做：跨机器、强一致持久队列、分布式锁、复杂权限系统。
 >
+> M6 治理口径：在首次正式对外发布前，`Spec.md` 是当前仓库实现、测试与文档收敛的权威基线，而不是永久冻结承诺；若某兼容承诺或发布策略约束阻碍对核心目标的纠偏，允许先修正规范，再同步实现、测试、SDK 与版本化资产。
+>
 > **注意：本文档侧重于架构设计、工程实现建议与开发规划。详细的协议规范（JSON结构、错误码、时序强制要求等）请严格遵循 [Spec.md](./Spec.md)。**
 
 ---
@@ -307,8 +309,8 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 
 | Milestone | 目标                               | 交付物                                                                                        | 备注                               |
 | --------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------- |
-| M0        | 文档冻结 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物                 |
-| M1        | Hub（HTTP）基础能力 + Spec v1 冻结 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（协议定稿） | WS 可先不做                        |
+| M0        | 文档基线 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物                 |
+| M1        | Hub（HTTP）基础能力 + Spec v1 基线确立 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（当前公开基线） | WS 可先不做                        |
 | M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心                            |
 | M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                                    |
 | M4        | WebSocket（认证 + events）         | `/ws`、hub.ws.authenticate、subscribe/unsubscribe、hub.event 推送                             | UI/监控可接入                      |
@@ -317,7 +319,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 
 **当前处于M6里程碑**
 - 围绕发布前收尾，完成仓库目录、工程边界、架构设计、测试分层与文档体系的系统性审查和必要调整。
-- 产品还未对外发布，允许对接口做必要破坏性修改，但不得通过修改 **Spec.md** 迁就实现。
+- 产品还未对外发布，允许对接口做必要破坏性修改；默认应先修实现和测试来对齐核心契约，但若识别出只是过早冻结的兼容承诺或发布策略约束不合理，也允许修正规范并同步相关资产。
 - 详细任务见 [DevHub_M6细化任务文档.md](./DevHub_M6细化任务文档.md)。
 
 ---

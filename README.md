@@ -20,7 +20,7 @@ DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon）�
 - [运维排障手册](docs/运维排障手册.md)：日志定位、常见故障与恢复步骤。
 - [协议规范](docs/Spec.md)：公开协议与对外契约。
 - [无 SDK 接入指南](docs/无SDK接入指南.md)：面向第三方开发者的原始协议接入、错误语义与自测入口。
-- [版本化 Schema 包](docs/schema/v1.0.1/README.md)：v1.0.1 对外发布的 Draft-07 Schema 文件。
+- [版本化 Schema 包](docs/schema/v1.0.1/README.md)：当前仓库维护的 v1.0.1 Draft-07 Schema 资产。
 - [原始协议示例](docs/protocol-examples/v1.0.1/README.md)：HTTP / WebSocket 原始 JSON 示例。
 - [架构与开发规划](docs/DevHub协议与开发规划.md)：架构背景、里程碑与当前状态。
 - [集成测试说明](host/tests/README.md)：Python 黑盒测试夹具与执行方式。
