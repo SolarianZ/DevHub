@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+namespace DevHub.Host.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -17,7 +17,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers.Remove("Authorization");
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -39,7 +39,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers["Authorization"] = "Bearer bad-token";
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -61,7 +61,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers.Remove("X-DevHub-Protocol");
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -84,7 +84,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers["X-DevHub-Protocol"] = "2";
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -108,7 +108,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers.Remove("X-DevHub-ClientId");
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -131,7 +131,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers.Remove("X-DevHub-ClientSessionId");
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -154,7 +154,7 @@ public class TransportValidationTests
         var headers = BuildValidHeaders();
         headers["X-DevHub-ClientSessionId"] = "not-a-guid";
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -176,7 +176,7 @@ public class TransportValidationTests
     {
         var headers = BuildValidHeaders();
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "text/plain",
             headers,
             () => "token-1",
@@ -198,7 +198,7 @@ public class TransportValidationTests
     {
         var headers = BuildValidHeaders();
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             null,
             headers,
             () => "token-1",
@@ -222,7 +222,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -249,7 +249,7 @@ public class TransportValidationTests
             Params = JsonSerializer.SerializeToElement("bad")
         };
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -275,7 +275,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -300,7 +300,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -325,7 +325,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -350,7 +350,7 @@ public class TransportValidationTests
             clientId = "client-a"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -376,7 +376,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -405,7 +405,7 @@ public class TransportValidationTests
             clientSessionId = "bad-guid"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -431,7 +431,7 @@ public class TransportValidationTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => true,
@@ -460,7 +460,7 @@ public class TransportValidationTests
         });
 
         var markCalled = false;
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (clientId, sessionId) =>
@@ -497,7 +497,7 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32600, "invalid_request", "req-envelope");
@@ -516,7 +516,7 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32600, "invalid_request", "req-params");
@@ -533,7 +533,7 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32600, "invalid_request", "req-missing-method");
@@ -551,7 +551,7 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32600, "invalid_request", null);
@@ -568,7 +568,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("""{ "types": ["unknown.type"] }""")
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-subscribe");
@@ -585,7 +585,7 @@ public class TransportValidationTests
             Params = null
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
 
         Assert.True(ok);
         Assert.Null(types);
@@ -603,7 +603,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("""{ "types": [1] }""")
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-non-string-type");
@@ -620,7 +620,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("null")
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
 
         Assert.True(ok);
         Assert.Null(types);
@@ -638,7 +638,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("""{ "types": "invocation.completed" }""")
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-types-not-array");
@@ -655,7 +655,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("""{ "types": [""] }""")
         };
 
-        var ok = DevHubTransportValidator.TryReadSubscriptionTypes(request, out _, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-empty-type");
@@ -672,7 +672,7 @@ public class TransportValidationTests
             Params = ParseJsonElement("{}")
         };
 
-        var ok = DevHubTransportValidator.TryReadUnsubscribeParam(request, out _, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadUnsubscribeParam(request, out _, out var errorResponse);
 
         Assert.False(ok);
         AssertError(errorResponse, -32602, "invalid_params", "req-unsubscribe");
@@ -689,7 +689,7 @@ public class TransportValidationTests
     [Trait("SpecRef", "8.3")]
     public void Spec_8_3_ErrorMessage_ShouldMatchCodeMapping(int code, string message)
     {
-        var response = DevHubTransportValidator.CreateErrorResponse(code, message, "req-error-map");
+        var response = TransportResponseFactory.CreateErrorResponse(code, message, "req-error-map");
         AssertError(response, code, message, "req-error-map");
     }
 

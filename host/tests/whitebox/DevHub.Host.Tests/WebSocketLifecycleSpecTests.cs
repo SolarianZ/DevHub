@@ -7,7 +7,6 @@ using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Events;
 using DevHub.Host.Tests.TestHelpers;
-using static DevHub.Host.Tests.TestHelpers.HostWebSocketTestInvoker;
 using static DevHub.Host.Tests.TestHelpers.JsonRpcTestMessageHelper;
 
 /// <summary>
@@ -19,6 +18,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;
+    private readonly List<IDisposable> _createdContexts = [];
 
     /// <summary>
     /// 初始化测试上下文。
@@ -58,7 +58,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             });
 
         var socket = new ScriptedWebSocket([request]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         var response = FindResponseById(responses, "unauth-first");
@@ -90,7 +90,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([authWithoutId]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         Assert.Single(responses);
@@ -137,7 +137,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth1, auth2]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
 
@@ -174,7 +174,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var response = FindResponseById(ParseSentMessages(socket), "auth-6.3.2-ok");
         Assert.NotEqual(JsonValueKind.Undefined, response.ValueKind);
@@ -203,7 +203,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var response = FindResponseById(ParseSentMessages(socket), "auth-6.3.2-missing-client-id");
         Assert.NotEqual(JsonValueKind.Undefined, response.ValueKind);
@@ -266,7 +266,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
 
@@ -310,7 +310,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([unauthNotify]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         Assert.Empty(responses);
@@ -325,7 +325,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         var invalidJson = "{\"jsonrpc\":\"2.0\",\"id\":\"bad\",\"method\":\"hub.ping\",\"params\":";
 
         var socket = new ScriptedWebSocket([invalidJson]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         Assert.Single(responses);
@@ -360,7 +360,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         """;
 
         var socket = new ScriptedWebSocket([batchRequest]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         Assert.Single(responses);
@@ -407,7 +407,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, pollOverWs]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
 
@@ -447,7 +447,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         """;
 
         var socket = new ScriptedWebSocket([auth, arrayParamsRequest]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
 
@@ -492,7 +492,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribe], autoCloseWhenQueueDrained: false);
-        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
         var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub", TimeSpan.FromSeconds(2));
         Assert.True(authResponse.TryGetProperty("result", out var authResult));
@@ -569,7 +569,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
-        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
         await Task.Delay(120);
 
@@ -625,7 +625,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
-        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
         await Task.Delay(120);
 
@@ -682,7 +682,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribe], autoCloseWhenQueueDrained: false);
-        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
         var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub-filter", TimeSpan.FromSeconds(2));
         Assert.True(authResponse.TryGetProperty("result", out var authResult));
@@ -764,7 +764,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, unsubscribeUnknown]);
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         var unsubscribeResponse = FindResponseById(responses, "unsub-unknown");
@@ -801,7 +801,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribe], closeFrameDelay: TimeSpan.FromMilliseconds(400));
-        var runTask = InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
         await Task.Delay(120);
 
@@ -873,7 +873,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
         });
 
         var socket = new ScriptedWebSocket([auth, subscribe], closeFrameDelay: TimeSpan.FromMilliseconds(400));
-        await InvokeHandleWebSocketConnectionAsync(socket, context.Router, context.FileSystemManager, context.EventBus);
+        await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
         var subscribeResponse = FindResponseById(responses, "sub-cleanup");
@@ -907,6 +907,11 @@ public class WebSocketLifecycleSpecTests : IDisposable
     /// </summary>
     public void Dispose()
     {
+        foreach (var context in _createdContexts)
+        {
+            context.Dispose();
+        }
+
         if (Directory.Exists(_tempRoot))
         {
             Directory.Delete(_tempRoot, recursive: true);
@@ -930,7 +935,12 @@ public class WebSocketLifecycleSpecTests : IDisposable
         throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
     }
 
-    private HostTestContext CreateHostContext() => HostTestContextFactory.Create(_tempRoot);
+    private HostTestContext CreateHostContext()
+    {
+        var context = HostTestContextFactory.Create(_tempRoot);
+        _createdContexts.Add(context);
+        return context;
+    }
 
     private void WriteDefinition(string appId)
     {

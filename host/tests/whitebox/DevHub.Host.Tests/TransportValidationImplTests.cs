@@ -1,4 +1,4 @@
-namespace DevHub.Tests;
+namespace DevHub.Host.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
@@ -15,7 +15,7 @@ public class TransportValidationImplTests
     {
         var headers = BuildValidHeaders();
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => throw new InvalidOperationException("token provider failed"),
@@ -37,7 +37,7 @@ public class TransportValidationImplTests
         headers["X-DevHub-ClientId"] = " client-a ";
         headers["x-devhub-clientsessionid"] = " 11111111-1111-1111-1111-111111111111 ";
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json; charset=utf-8",
             headers,
             () => "token-1",
@@ -58,7 +58,7 @@ public class TransportValidationImplTests
         var headers = BuildValidHeaders();
         headers.Remove("Authorization");
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",
@@ -87,7 +87,7 @@ public class TransportValidationImplTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out var request, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
         Assert.True(ok);
         Assert.Null(errorResponse);
@@ -106,7 +106,7 @@ public class TransportValidationImplTests
         }
         """);
 
-        var ok = DevHubTransportValidator.TryBuildRpcRequest(root, out var request, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
         Assert.True(ok);
         Assert.Null(errorResponse);
@@ -134,27 +134,27 @@ public class TransportValidationImplTests
             Params = arrayParams
         };
 
-        Assert.True(DevHubTransportValidator.IsHubMethodParamsArray(hubRequest));
-        Assert.False(DevHubTransportValidator.IsHubMethodParamsArray(nonHubRequest));
+        Assert.True(JsonRpcEnvelopeParser.IsHubMethodParamsArray(hubRequest));
+        Assert.False(JsonRpcEnvelopeParser.IsHubMethodParamsArray(nonHubRequest));
     }
 
     [Fact]
     public void Impl_6_2_IsHttpOnlyMethod_ShouldMatchTransportBoundary()
     {
-        Assert.True(DevHubTransportValidator.IsHttpOnlyMethod("hub.invoke.request"));
-        Assert.True(DevHubTransportValidator.IsHttpOnlyMethod("hub.apps.launch"));
-        Assert.False(DevHubTransportValidator.IsHttpOnlyMethod("hub.events.subscribe"));
-        Assert.False(DevHubTransportValidator.IsHttpOnlyMethod("hub.ws.authenticate"));
+        Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.invoke.request"));
+        Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.launch"));
+        Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.events.subscribe"));
+        Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.ws.authenticate"));
     }
 
     [Fact]
     public void Impl_6_2_IsWebSocketOnlyMethod_ShouldMatchTransportBoundary()
     {
-        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ws.authenticate"));
-        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.events.subscribe"));
-        Assert.True(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.events.unsubscribe"));
-        Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.ping"));
-        Assert.False(DevHubTransportValidator.IsWebSocketOnlyMethod("hub.invoke.request"));
+        Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ws.authenticate"));
+        Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.events.subscribe"));
+        Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.events.unsubscribe"));
+        Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ping"));
+        Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.invoke.request"));
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class TransportValidationImplTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => throw new InvalidOperationException("token provider failed"),
             (_, _) => true,
@@ -193,7 +193,7 @@ public class TransportValidationImplTests
             clientSessionId = "11111111-1111-1111-1111-111111111111"
         });
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             request,
             () => "token-1",
             (_, _) => false,
@@ -218,7 +218,7 @@ public class TransportValidationImplTests
             ["authorization"] = "Bearer token-1"
         };
 
-        var ok = DevHubTransportValidator.TryValidateHttpHeaders(
+        var ok = HttpTransportRequestValidator.TryValidate(
             "application/json",
             headers,
             () => "token-1",

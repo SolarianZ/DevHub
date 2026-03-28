@@ -73,7 +73,7 @@ public class RpcHttpEndpointHandler
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "JSON 解析失败，返回 parse_error，ClientId: {ClientId}", clientId);
-                return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null), JsonOptions);
+                return Results.Json(TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), JsonOptions);
             }
 
             using (requestDocument)
@@ -82,16 +82,16 @@ public class RpcHttpEndpointHandler
                 if (root.ValueKind == JsonValueKind.Array)
                 {
                     _logger.LogWarning("收到批量请求，按规范拒绝，ClientId: {ClientId}", clientId);
-                    return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
+                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
                 }
 
                 if (root.ValueKind != JsonValueKind.Object)
                 {
                     _logger.LogWarning("收到非对象 JSON-RPC 根节点，ClientId: {ClientId}", clientId);
-                    return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
+                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
                 }
 
-                if (!DevHubTransportValidator.TryBuildRpcRequest(root, out var rpcRequest, out var requestErrorResponse))
+                if (!JsonRpcEnvelopeParser.TryParse(root, out var rpcRequest, out var requestErrorResponse))
                 {
                     _logger.LogWarning("JSON-RPC 信封无效，ClientId: {ClientId}", clientId);
                     return Results.Json(requestErrorResponse, JsonOptions);
@@ -108,7 +108,7 @@ public class RpcHttpEndpointHandler
                     pair => pair.Key,
                     pair => pair.Value.ToString(),
                     StringComparer.OrdinalIgnoreCase);
-                if (!DevHubTransportValidator.TryValidateHttpHeaders(
+                if (!HttpTransportRequestValidator.TryValidate(
                         request.ContentType,
                         requestHeaders,
                         _fileSystemManager.GetToken,
@@ -131,7 +131,7 @@ public class RpcHttpEndpointHandler
                 rpcRequest.ClientId = validatedClientId;
                 rpcRequest.ClientSessionId = validatedClientSessionId;
 
-                if (DevHubTransportValidator.IsHubMethodParamsArray(rpcRequest))
+                if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                 {
                     _logger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",
                         rpcRequest.Method, rpcRequest.Id);
@@ -141,10 +141,10 @@ public class RpcHttpEndpointHandler
                         return Results.Empty;
                     }
 
-                    return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions);
+                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions);
                 }
 
-                if (DevHubTransportValidator.IsWebSocketOnlyMethod(rpcRequest.Method))
+                if (TransportMethodPolicy.IsWebSocketOnlyMethod(rpcRequest.Method))
                 {
                     _logger.LogWarning("HTTP 调用了 WS-only 方法，返回 not_supported，Method: {Method}, RequestId: {RequestId}",
                         rpcRequest.Method, rpcRequest.Id);
@@ -155,7 +155,7 @@ public class RpcHttpEndpointHandler
                     }
 
                     return Results.Json(
-                        DevHubTransportValidator.CreateErrorResponse(
+                        TransportResponseFactory.CreateErrorResponse(
                             -32099,
                             "not_supported",
                             rpcRequest.Id,
@@ -192,7 +192,7 @@ public class RpcHttpEndpointHandler
                 return Results.Empty;
             }
 
-            return Results.Json(DevHubTransportValidator.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions);
+            return Results.Json(TransportResponseFactory.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions);
         }
     }
 }

@@ -1,13 +1,7 @@
 namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
-using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
-using DevHub.Core.Services.Invocation;
-using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Handlers;
-using Microsoft.Extensions.Logging;
-using Moq;
 
 /// <summary>
 /// Host 测试上下文工厂。
@@ -15,68 +9,49 @@ using Moq;
 internal static class HostTestContextFactory
 {
     /// <summary>
-    /// 创建 Host WS 生命周期测试所需上下文。
+    /// 创建 Host transport 规范测试所需上下文。
     /// </summary>
     /// <param name="rootDirectory">测试专用根目录。</param>
-    /// <returns>可用于调用 Host WS 入口的上下文。</returns>
+    /// <returns>可用于调用 Host transport 入口的上下文。</returns>
     internal static HostTestContext Create(string rootDirectory)
     {
-        var runtimePathOptions = RuntimePathOptions.Create(rootDirectory);
-        var fileSystemManager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), runtimePathOptions);
-        fileSystemManager.InitializeDirectories();
-        var token = fileSystemManager.GetToken();
-
-        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
-        var definitionProvider = new DefinitionProvider(definitionLoader);
-        definitionProvider.Refresh();
-        var eventBus = new HubEventBus(Mock.Of<ILogger<HubEventBus>>());
-
-        var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock(), eventBus);
-        var requestWaiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), runtimePathOptions);
-        var launchCoordinator = new LaunchCoordinator(
-            definitionProvider,
-            appRegistry,
-            runtimeHttpBaseUrlProvider,
-            new ProcessLauncher(),
-            new SystemClock(),
-            Mock.Of<ILogger<LaunchCoordinator>>());
-
-        var handlers = new IRpcHandler[]
-        {
-            new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>()),
-            new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>()),
-            new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>(), eventBus),
-            new InvocationHandler(
-                appRegistry,
-                definitionProvider,
-                routingService,
-                invocationStore,
-                requestWaiter,
-                launchCoordinator,
-                new SystemClock(),
-                Mock.Of<ILogger<InvocationHandler>>(),
-                eventBus),
-            new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>())
-        };
-
-        var router = new RpcRouter(handlers, Mock.Of<ILogger<RpcRouter>>());
-        return new HostTestContext(router, fileSystemManager, eventBus, token);
+        return new HostTestContext(new HostTransportTestHarness(rootDirectory));
     }
 }
 
 /// <summary>
-/// Host 测试运行上下文。
+/// Host transport 测试上下文。
 /// </summary>
-/// <param name="Router">RPC 路由器。</param>
-/// <param name="FileSystemManager">文件系统管理器。</param>
-/// <param name="EventBus">事件总线。</param>
-/// <param name="Token">当前测试环境 token。</param>
-internal sealed record HostTestContext(
-    RpcRouter Router,
-    FileSystemManager FileSystemManager,
-    HubEventBus EventBus,
-    string Token);
+internal sealed class HostTestContext : IDisposable
+{
+    private readonly HostTransportTestHarness _harness;
 
+    internal HostTestContext(HostTransportTestHarness harness)
+    {
+        _harness = harness;
+    }
+
+    /// <summary>
+    /// 事件总线。
+    /// </summary>
+    internal HubEventBus EventBus => _harness.EventBus;
+
+    /// <summary>
+    /// 当前测试环境 token。
+    /// </summary>
+    internal string Token => _harness.Token;
+
+    /// <summary>
+    /// 调用 WebSocket 连接生命周期入口。
+    /// </summary>
+    internal Task InvokeWebSocketConnectionAsync(ScriptedWebSocket socket, CancellationToken cancellationToken = default)
+    {
+        return _harness.InvokeWebSocketConnectionAsync(socket, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _harness.Dispose();
+    }
+}

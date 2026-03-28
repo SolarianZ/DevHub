@@ -61,6 +61,7 @@ def collect_coverage_keys(file_path):
     branch_covered = set()
 
     for package_name, file_name, line_node in iter_class_lines(root):
+        source_label = build_source_label(package_name, file_name)
         line_number_raw = line_node.attrib.get("number")
         if line_number_raw is None:
             continue
@@ -70,7 +71,7 @@ def collect_coverage_keys(file_path):
         except ValueError:
             continue
 
-        line_key = (package_name, file_name, line_number)
+        line_key = (source_label, line_number)
         line_total.add(line_key)
 
         hits_raw = line_node.attrib.get("hits", "0")
@@ -91,7 +92,7 @@ def collect_coverage_keys(file_path):
         if condition_nodes:
             for condition_node in condition_nodes:
                 condition_number = condition_node.attrib.get("number", "0")
-                condition_key = (package_name, file_name, line_number, condition_number)
+                condition_key = (source_label, line_number, condition_number)
                 branch_total.add(condition_key)
 
                 coverage_percent = parse_percent(condition_node.attrib.get("coverage", "0%"))
@@ -100,7 +101,7 @@ def collect_coverage_keys(file_path):
         else:
             covered_count, total_count = parse_condition_coverage(line_node.attrib.get("condition-coverage", ""))
             for index in range(total_count):
-                condition_key = (package_name, file_name, line_number, f"auto-{index}")
+                condition_key = (source_label, line_number, f"auto-{index}")
                 branch_total.add(condition_key)
                 if index < covered_count:
                     branch_covered.add(condition_key)
@@ -128,7 +129,6 @@ def build_source_label(package_name, file_name):
             or normalized_file_name.startswith(f"{normalized_package_name}/")
             or normalized_file_name == normalized_package_path
             or normalized_file_name.startswith(f"{normalized_package_path}/")
-            or "/" in normalized_file_name
         ):
             return normalized_file_name
 
@@ -147,14 +147,14 @@ def build_file_coverage_stats(line_total, line_covered, branch_total, branch_cov
         "branch_covered": 0,
     })
 
-    for package_name, file_name, _ in line_total:
-        stats[build_source_label(package_name, file_name)]["line_total"] += 1
-    for package_name, file_name, _ in line_covered:
-        stats[build_source_label(package_name, file_name)]["line_covered"] += 1
-    for package_name, file_name, _, _ in branch_total:
-        stats[build_source_label(package_name, file_name)]["branch_total"] += 1
-    for package_name, file_name, _, _ in branch_covered:
-        stats[build_source_label(package_name, file_name)]["branch_covered"] += 1
+    for source_label, _ in line_total:
+        stats[source_label]["line_total"] += 1
+    for source_label, _ in line_covered:
+        stats[source_label]["line_covered"] += 1
+    for source_label, _, _ in branch_total:
+        stats[source_label]["branch_total"] += 1
+    for source_label, _, _ in branch_covered:
+        stats[source_label]["branch_covered"] += 1
 
     return stats
 

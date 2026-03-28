@@ -103,6 +103,7 @@
 ### 2.2 M6 需要重点核查的疑点
 
 - `M6-REPO-002` 已完成：Host 白盒测试工程已迁移到 `host/tests/whitebox/`，`host/src/` 不再混放测试工程；后续仍需持续观察 `host/tests/` 内 Python 黑盒 / conformance / whitebox 三类资产的长期导航成本。
+- `M6-ARCH-HOST-002`、`M6-ARCH-HOST-003`、`M6-TEST-003` 与 `M6-TEST-005` 已完成一组阶段收敛：`DevHub.Host` 的 transport 校验已按 HTTP/WS/JSON-RPC/事件订阅等职责拆分，`HttpNotificationSpecTests` / `WebSocketLifecycleSpecTests` 已复用统一 harness，Host transport 相关白盒测试已迁回 `host/tests/whitebox/DevHub.Host.Tests/`，`DevHub.Tests` 不再直接依赖 `DevHub.Host`。
 - `host/tests/` 目前既包含黑盒测试，也包含 conformance runner、adapter、覆盖率配置与脚本，后续规模继续增长时可能出现职责边界模糊、导航成本升高的问题。
 - 三套 SDK 的目录形态已基本独立，但其内部抽象层级、扩展点暴露方式、单元测试粒度和集成测试夹具风格是否足够一致，仍需要系统性审查。
 - `M6-REPO-004` 与 `M6-DOC-001` 已完成：`docs/` 根目录仅保留导航入口与分类目录，后续新增文档应进入既有分类，不再继续根级平铺。
@@ -129,8 +130,8 @@
 ### 3.2 `M6-ARCH-HOST-*`（Host 架构收敛）
 
 - [ ] `M6-ARCH-HOST-001`：审查 `DevHub.Core` 中领域模型、RPC 处理、事件总线、文件系统访问、运行时路径和启动编排的职责边界。
-- [ ] `M6-ARCH-HOST-002`：审查 `DevHub.Host` 对 `DevHub.Core` 的承载关系，避免协议处理、传输校验、宿主编排与框架接线互相穿透。
-- [ ] `M6-ARCH-HOST-003`：审查 Host 内部扩展点与测试缝是否过度侵入正式实现；仅保留必要、可解释、可维护的 seam。
+- [x] `M6-ARCH-HOST-002`：审查 `DevHub.Host` 对 `DevHub.Core` 的承载关系，避免协议处理、传输校验、宿主编排与框架接线互相穿透。
+- [x] `M6-ARCH-HOST-003`：审查 Host 内部扩展点与测试缝是否过度侵入正式实现；仅保留必要、可解释、可维护的 seam。
 - [ ] `M6-ARCH-HOST-004`：对识别出的边界失衡或重复抽象做集中重构，确保调用链清晰且便于后续维护。
 
 ### 3.3 `M6-ARCH-SDK-*`（SDK 架构收敛）
@@ -144,9 +145,9 @@
 
 - [x] `M6-TEST-001`：按“白盒 / 黑盒 / conformance”三层重新审查现有测试，明确每个测试文件的职责与允许依赖的信息边界。
 - [x] `M6-TEST-002`：识别并修正黑盒测试中对内部实现、内部目录布局、私有状态或调试行为的依赖。
-- [ ] `M6-TEST-003`：识别并修正白盒测试中对具体实现细节的过度绑定，保留真正必要的内部规则断言。
+- [x] `M6-TEST-003`：识别并修正白盒测试中对具体实现细节的过度绑定，保留真正必要的内部规则断言。
 - [ ] `M6-TEST-004`：审查 conformance 向量、adapter 与 runner 的中立性，防止测试口径被某一实现“带偏”。
-- [ ] `M6-TEST-005`：补齐因架构或目录调整而新增的回归场景，删除重复、脆弱、低价值的测试资产。
+- [x] `M6-TEST-005`：补齐因架构或目录调整而新增的回归场景，删除重复、脆弱、低价值的测试资产。
 - [x] `M6-TEST-006`：统一本地验证矩阵与 CI 门禁口径，确保 M6 期间每次代码调整都有可复制的最小完整回归路径。
 
 ### 3.5 `M6-DOC-*`（文档整理与治理）

@@ -122,7 +122,7 @@ public class WebSocketSessionHandler
                 catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "WS JSON 解析失败，ConnectionId: {ConnectionId}", connectionId);
-                    await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
+                    await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
 
                     if (!isAuthenticated)
                     {
@@ -138,7 +138,7 @@ public class WebSocketSessionHandler
                     var root = requestDocument.RootElement;
                     if (root.ValueKind == JsonValueKind.Array || root.ValueKind != JsonValueKind.Object)
                     {
-                        await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                        await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
                         if (!isAuthenticated)
                         {
                             await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", cancellationToken);
@@ -148,7 +148,7 @@ public class WebSocketSessionHandler
                         continue;
                     }
 
-                    if (!DevHubTransportValidator.TryBuildRpcRequest(root, out var rpcRequest, out var envelopeError))
+                    if (!JsonRpcEnvelopeParser.TryParse(root, out var rpcRequest, out var envelopeError))
                     {
                         await SendWebSocketJsonAsync(webSocket, envelopeError, cancellationToken);
                         if (!isAuthenticated)
@@ -170,7 +170,7 @@ public class WebSocketSessionHandler
                             {
                                 await SendWebSocketJsonAsync(
                                     webSocket,
-                                    DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                    TransportResponseFactory.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
                                     cancellationToken);
                             }
 
@@ -180,7 +180,7 @@ public class WebSocketSessionHandler
 
                         if (rpcRequest.Id is null)
                         {
-                            await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
+                            await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), cancellationToken);
                             await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "auth_request_id_required", cancellationToken);
                             break;
                         }
@@ -192,7 +192,7 @@ public class WebSocketSessionHandler
                         {
                             await SendWebSocketJsonAsync(
                                 webSocket,
-                                DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
+                                TransportResponseFactory.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }),
                                 cancellationToken);
                             await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_required", cancellationToken);
                         }
@@ -204,11 +204,11 @@ public class WebSocketSessionHandler
                         break;
                     }
 
-                    if (DevHubTransportValidator.IsHubMethodParamsArray(rpcRequest))
+                    if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                     {
                         if (rpcRequest.Id is not null)
                         {
-                            await SendWebSocketJsonAsync(webSocket, DevHubTransportValidator.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
+                            await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
                         }
 
                         continue;
@@ -217,7 +217,6 @@ public class WebSocketSessionHandler
                     JsonRpcResponse? response = null;
                     var closeAfterResponse = false;
                     (response, closeAfterResponse) = await DispatchWebSocketRpcAsync(
-                        webSocket,
                         connectionId,
                         rpcRequest,
                         isAuthenticated,
@@ -282,7 +281,6 @@ public class WebSocketSessionHandler
     }
 
     private async Task<(JsonRpcResponse? Response, bool CloseAfterResponse)> DispatchWebSocketRpcAsync(
-        WebSocket webSocket,
         string connectionId,
         JsonRpcRequest rpcRequest,
         bool isAuthenticated,
@@ -307,10 +305,10 @@ public class WebSocketSessionHandler
                 return (HandleUnsubscribe(connectionId, rpcRequest), false);
 
             default:
-                if (DevHubTransportValidator.IsHttpOnlyMethod(rpcRequest.Method))
+                if (TransportMethodPolicy.IsHttpOnlyMethod(rpcRequest.Method))
                 {
                     return (
-                        DevHubTransportValidator.CreateErrorResponse(
+                        TransportResponseFactory.CreateErrorResponse(
                             -32099,
                             "not_supported",
                             rpcRequest.Id,
@@ -332,10 +330,10 @@ public class WebSocketSessionHandler
     {
         if (isAuthenticated)
         {
-            return (DevHubTransportValidator.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" }), false);
+            return (TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id, new { reason = "already_authenticated" }), false);
         }
 
-        var response = DevHubTransportValidator.HandleWsAuthenticate(
+        var response = WebSocketAuthenticationProcessor.Authenticate(
             rpcRequest,
             _fileSystemManager.GetToken,
             (clientId, sessionId) => _eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
@@ -359,28 +357,28 @@ public class WebSocketSessionHandler
 
     private (JsonRpcResponse Response, bool CloseAfterResponse) HandleSubscribe(string connectionId, JsonRpcRequest rpcRequest)
     {
-        if (!DevHubTransportValidator.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
+        if (!EventSubscriptionRequestParser.TryReadSubscriptionTypes(rpcRequest, out var subscriptionTypes, out var subscribeError))
         {
             return (subscribeError, false);
         }
 
         if (!_eventBus.TrySubscribe(connectionId, subscriptionTypes, out var subscriptionId))
         {
-            return (DevHubTransportValidator.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }), true);
+            return (TransportResponseFactory.CreateErrorResponse(-32001, "unauthorized", rpcRequest.Id, new { reason = "missing_token" }), true);
         }
 
-        return (DevHubTransportValidator.CreateSubscribeSuccessResponse(rpcRequest.Id, subscriptionId), false);
+        return (TransportResponseFactory.CreateSubscribeSuccessResponse(rpcRequest.Id, subscriptionId), false);
     }
 
     private JsonRpcResponse HandleUnsubscribe(string connectionId, JsonRpcRequest rpcRequest)
     {
-        if (!DevHubTransportValidator.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
+        if (!EventSubscriptionRequestParser.TryReadUnsubscribeParam(rpcRequest, out var subscriptionIdToRemove, out var unsubscribeError))
         {
             return unsubscribeError;
         }
 
         _eventBus.Unsubscribe(connectionId, subscriptionIdToRemove);
-        return DevHubTransportValidator.CreateUnsubscribeSuccessResponse(rpcRequest.Id);
+        return TransportResponseFactory.CreateUnsubscribeSuccessResponse(rpcRequest.Id);
     }
 
     private static async Task<WebSocketReceiveEnvelope> ReceiveTextMessageAsync(WebSocket webSocket, CancellationToken cancellationToken)

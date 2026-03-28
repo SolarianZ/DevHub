@@ -1,14 +1,11 @@
 namespace DevHub.Host.Tests;
 
+using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Linq;
-using DevHub.Host;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Moq;
 
 /// <summary>
 /// HTTP 通知行为规范测试。
@@ -38,70 +35,27 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "3.1")]
     public async Task Spec_3_1_HttpNotification_ShouldReturn200WithEmptyBody()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot);
-        var handler = new RpcHttpEndpointHandler(
-            hostContext.Router,
-            hostContext.FileSystemManager,
-            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
-
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Method = HttpMethods.Post;
-        httpContext.Request.ContentType = "application/json";
-        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
-        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
-        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-notify-client";
-        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
+        using var harness = CreateHarness();
 
         const string notificationJson = """
             {"jsonrpc":"2.0","method":"hub.ping","params":{"echo":"notify"}}
             """;
-        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(notificationJson));
-        httpContext.Response.Body = new MemoryStream();
+        var response = await ExecuteHttpRequestAsync(harness, notificationJson, "http-notify-client");
 
-        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
-        await result.ExecuteAsync(httpContext);
-
-        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
-        httpContext.Response.Body.Position = 0;
-        using var reader = new StreamReader(httpContext.Response.Body, Encoding.UTF8, leaveOpen: true);
-        var bodyText = await reader.ReadToEndAsync();
-        Assert.True(string.IsNullOrEmpty(bodyText));
+        Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+        Assert.True(string.IsNullOrEmpty(response.BodyText));
     }
 
     [Fact]
     [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot);
-        var handler = new RpcHttpEndpointHandler(
-            hostContext.Router,
-            hostContext.FileSystemManager,
-            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
-
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Method = HttpMethods.Post;
-        httpContext.Request.ContentType = "application/json";
-        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
-        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
-        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-ws-only-client";
-        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
-        httpContext.RequestServices = new ServiceCollection()
-            .AddLogging()
-            .AddOptions()
-            .BuildServiceProvider();
-        httpContext.Response.Body = new MemoryStream();
+        using var harness = CreateHarness();
 
         const string requestJson = """
             {"jsonrpc":"2.0","id":"http-ws-only","method":"hub.events.subscribe","params":{}}
             """;
-        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
-
-        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
-        await result.ExecuteAsync(httpContext);
-
-        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
-        httpContext.Response.Body.Position = 0;
-        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-ws-only-client");
         var root = responseDocument.RootElement;
 
         Assert.Equal("http-ws-only", root.GetProperty("id").GetString());
@@ -116,37 +70,14 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "6.1")]
     public async Task Spec_6_1_HttpHubMethod_WhenParamsIsArray_ShouldReturnInvalidParams()
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot);
-        var handler = new RpcHttpEndpointHandler(
-            hostContext.Router,
-            hostContext.FileSystemManager,
-            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
-
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Method = HttpMethods.Post;
-        httpContext.Request.ContentType = "application/json";
-        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
-        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
-        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-array-client";
-        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
-        httpContext.RequestServices = new ServiceCollection()
-            .AddLogging()
-            .AddOptions()
-            .BuildServiceProvider();
-        httpContext.Response.Body = new MemoryStream();
+        using var harness = CreateHarness();
 
         const string requestJson = """
             {"jsonrpc":"2.0","id":"http-array-params","method":"hub.ping","params":[1,2,3]}
             """;
-        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
-
-        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
-        await result.ExecuteAsync(httpContext);
-
-        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
-        httpContext.Response.Body.Position = 0;
-        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-array-client");
         var root = responseDocument.RootElement;
+
         Assert.Equal("http-array-params", root.GetProperty("id").GetString());
         var error = root.GetProperty("error");
         Assert.Equal(-32602, error.GetProperty("code").GetInt32());
@@ -159,36 +90,13 @@ public class HttpNotificationSpecTests : IDisposable
     [InlineData("1.5", 1.5d)]
     public async Task Spec_6_1_HttpRequest_WhenIdIsNumber_ShouldKeepIdCorrelation(string requestIdLiteral, double expectedId)
     {
-        var hostContext = HostTestContextFactory.Create(_tempRoot);
-        var handler = new RpcHttpEndpointHandler(
-            hostContext.Router,
-            hostContext.FileSystemManager,
-            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
-
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Method = HttpMethods.Post;
-        httpContext.Request.ContentType = "application/json";
-        httpContext.Request.Headers["Authorization"] = $"Bearer {hostContext.Token}";
-        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
-        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-numeric-id-client";
-        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
-        httpContext.RequestServices = new ServiceCollection()
-            .AddLogging()
-            .AddOptions()
-            .BuildServiceProvider();
-        httpContext.Response.Body = new MemoryStream();
+        using var harness = CreateHarness();
 
         var requestJson = $"{{\"jsonrpc\":\"2.0\",\"id\":{requestIdLiteral},\"method\":\"hub.ping\",\"params\":{{}}}}";
-        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
-
-        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
-        await result.ExecuteAsync(httpContext);
-
-        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
-        httpContext.Response.Body.Position = 0;
-        using var responseDocument = await JsonDocument.ParseAsync(httpContext.Response.Body);
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-numeric-id-client");
         var root = responseDocument.RootElement;
         var responseId = root.GetProperty("id");
+
         Assert.Equal(JsonValueKind.Number, responseId.ValueKind);
         Assert.Equal(expectedId, responseId.GetDouble(), precision: 6);
         Assert.True(root.GetProperty("result").GetProperty("ok").GetBoolean());
@@ -208,15 +116,10 @@ public class HttpNotificationSpecTests : IDisposable
             }
             """);
 
-        var hostContext = HostTestContextFactory.Create(_tempRoot);
-        var handler = new RpcHttpEndpointHandler(
-            hostContext.Router,
-            hostContext.FileSystemManager,
-            Mock.Of<ILogger<RpcHttpEndpointHandler>>());
+        using var harness = CreateHarness();
 
         using var registerResponse = await ExecuteJsonRequestAsync(
-            handler,
-            hostContext.Token,
+            harness,
             """
             {
               "jsonrpc": "2.0",
@@ -238,8 +141,7 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.True(registerResponse.RootElement.GetProperty("result").GetProperty("ok").GetBoolean());
 
         using var definitionResponse = await ExecuteJsonRequestAsync(
-            handler,
-            hostContext.Token,
+            harness,
             """
             {
               "jsonrpc": "2.0",
@@ -258,8 +160,7 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.False(definition.TryGetProperty("capabilities", out _));
 
         using var listInstancesResponse = await ExecuteJsonRequestAsync(
-            handler,
-            hostContext.Token,
+            harness,
             """
             {
               "jsonrpc": "2.0",
@@ -294,17 +195,20 @@ public class HttpNotificationSpecTests : IDisposable
         }
     }
 
-    private static async Task<JsonDocument> ExecuteJsonRequestAsync(
-        RpcHttpEndpointHandler handler,
-        string token,
-        string requestJson)
+    private HostTransportTestHarness CreateHarness() => new(_tempRoot);
+
+    private static async Task<(int StatusCode, string BodyText)> ExecuteHttpRequestAsync(
+        HostTransportTestHarness harness,
+        string requestJson,
+        string clientId,
+        string? contentType = "application/json")
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = HttpMethods.Post;
-        httpContext.Request.ContentType = "application/json";
-        httpContext.Request.Headers["Authorization"] = $"Bearer {token}";
+        httpContext.Request.ContentType = contentType;
+        httpContext.Request.Headers["Authorization"] = $"Bearer {harness.Token}";
         httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
-        httpContext.Request.Headers["X-DevHub-ClientId"] = "http-null-omit-client";
+        httpContext.Request.Headers["X-DevHub-ClientId"] = clientId;
         httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
         httpContext.RequestServices = new ServiceCollection()
             .AddLogging()
@@ -313,10 +217,21 @@ public class HttpNotificationSpecTests : IDisposable
         httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
         httpContext.Response.Body = new MemoryStream();
 
-        var result = await handler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
         await result.ExecuteAsync(httpContext);
 
         httpContext.Response.Body.Position = 0;
-        return await JsonDocument.ParseAsync(httpContext.Response.Body);
+        using var reader = new StreamReader(httpContext.Response.Body, Encoding.UTF8, leaveOpen: true);
+        var bodyText = await reader.ReadToEndAsync();
+        return (httpContext.Response.StatusCode, bodyText);
+    }
+
+    private static async Task<JsonDocument> ExecuteJsonRequestAsync(
+        HostTransportTestHarness harness,
+        string requestJson,
+        string clientId = "http-null-omit-client")
+    {
+        var response = await ExecuteHttpRequestAsync(harness, requestJson, clientId);
+        return JsonDocument.Parse(response.BodyText);
     }
 }
