@@ -159,6 +159,9 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Equal("ws.app", definition.AppId);
         Assert.Equal("inst-1", instances.Single().InstanceId);
 
+        var listDefinitionsRequest = connection.SentTexts.Single(sent => sent.Contains("hub.apps.listDefinitions", StringComparison.Ordinal));
+        Assert.DoesNotContain("\"params\"", listDefinitionsRequest, StringComparison.Ordinal);
+
         Assert.Collection(connection.SentTexts,
             sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.ping", sent, StringComparison.Ordinal),

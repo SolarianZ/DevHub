@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk;
@@ -175,12 +176,11 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         try
         {
             var payload = JsonSerializer.Serialize(
-                new
+                new JsonRpcRequestEnvelope
                 {
-                    jsonrpc = "2.0",
-                    id = requestId,
-                    method,
-                    @params = parameters
+                    Id = requestId,
+                    Method = method,
+                    Params = parameters
                 },
                 DevHubJson.SerializerOptions);
 
@@ -536,5 +536,17 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     private static string CreateRequestId()
     {
         return $"ws-{Guid.NewGuid():N}";
+    }
+
+    private sealed class JsonRpcRequestEnvelope
+    {
+        public string Jsonrpc { get; set; } = "2.0";
+
+        public string Id { get; set; } = string.Empty;
+
+        public string Method { get; set; } = string.Empty;
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public object? Params { get; set; }
     }
 }

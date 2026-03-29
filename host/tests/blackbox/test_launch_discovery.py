@@ -431,8 +431,8 @@ class TestLaunchDiscovery(unittest.TestCase):
                             stop_event.set()
                             return
                         finally:
-                            self._stop_process(process)
                             restart_in_progress.set()
+                            self._stop_process(process)
                             time.sleep(0.1)
 
                 reader_thread = threading.Thread(target=read_hub_runtime_continuously, daemon=True)

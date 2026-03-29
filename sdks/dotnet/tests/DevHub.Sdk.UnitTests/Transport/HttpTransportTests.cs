@@ -41,6 +41,7 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Equal("client-a", handler.LastRequest.ClientId);
         Assert.Equal("11111111-1111-1111-1111-111111111111", handler.LastRequest.ClientSessionId);
         Assert.EndsWith("/rpc", handler.LastRequest.RequestUri, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"params\"", handler.LastRequest.Body, StringComparison.Ordinal);
     }
 
     [Fact]

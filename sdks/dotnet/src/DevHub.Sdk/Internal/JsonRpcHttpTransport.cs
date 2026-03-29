@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk;
@@ -243,6 +244,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
         public string Method { get; set; } = string.Empty;
 
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public object? Params { get; set; }
     }
 }
