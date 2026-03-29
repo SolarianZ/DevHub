@@ -1,18 +1,29 @@
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import signal
 import subprocess
+import tempfile
 import time
 from collections import deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Thread
+from threading import Lock, Thread
 from typing import Any, Mapping
 from uuid import uuid4
 
 from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubEventsClient
+
+PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_PYTHON_SDK_HOST_ASSEMBLY"
+HOST_BUILD_CONFIGURATION = "Release"
+HOST_TARGET_FRAMEWORK = "net10.0"
+
+_shared_host_assembly_path: Path | None = None
+_shared_host_build_root: Path | None = None
+_shared_host_assembly_lock = Lock()
 
 
 class DevHubHostFixture:
@@ -103,9 +114,7 @@ class DevHubHostFixture:
         self.close()
 
     def _start_process(self) -> None:
-        host_assembly_path = (
-            self._repo_root / "host" / "src" / "DevHub.Host" / "bin" / "Release" / "net10.0" / "DevHub.Host.dll"
-        )
+        host_assembly_path = _resolve_host_assembly_path(self._repo_root)
         if not host_assembly_path.is_file():
             raise RuntimeError(f"未找到 Host 程序：{host_assembly_path}")
 
@@ -195,6 +204,105 @@ def _resolve_repo_root() -> Path:
     raise RuntimeError("无法定位仓库根目录。")
 
 
+def _resolve_host_assembly_path(repo_root: Path) -> Path:
+    global _shared_host_assembly_path
+    global _shared_host_build_root
+
+    with _shared_host_assembly_lock:
+        if _shared_host_assembly_path is not None and _shared_host_assembly_path.is_file():
+            return _shared_host_assembly_path
+
+        build_root = Path(tempfile.mkdtemp(prefix="devhub-python-sdk-host-build-"))
+        try:
+            host_assembly_path = _prepare_isolated_host_assembly(repo_root, build_root)
+        except Exception:
+            shutil.rmtree(build_root, ignore_errors=True)
+            raise
+
+        _shared_host_build_root = build_root
+        _shared_host_assembly_path = host_assembly_path
+        return host_assembly_path
+
+
+def _resolve_configured_host_assembly_path(repo_root: Path, configured_path: str) -> Path:
+    resolved_path = Path(configured_path)
+    if not resolved_path.is_absolute():
+        resolved_path = (repo_root / resolved_path).resolve()
+
+    if resolved_path.is_file():
+        return resolved_path
+
+    raise RuntimeError(
+        f"环境变量 {PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE} 指定的 Host 程序不存在：{resolved_path}"
+    )
+
+
+def _resolve_built_host_assembly_path(repo_root: Path) -> Path:
+    host_assembly_path = (
+        repo_root / "host" / "src" / "DevHub.Host" / "bin" / HOST_BUILD_CONFIGURATION / HOST_TARGET_FRAMEWORK / "DevHub.Host.dll"
+    )
+    if host_assembly_path.is_file():
+        return host_assembly_path
+
+    raise RuntimeError(f"未找到已构建的 Host 程序：{host_assembly_path}")
+
+
+def _prepare_isolated_host_assembly(repo_root: Path, build_root: Path) -> Path:
+    configured_path = os.environ.get(PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE, "").strip()
+    if configured_path:
+        source_host_assembly_path = _resolve_configured_host_assembly_path(repo_root, configured_path)
+    else:
+        source_host_assembly_path = _ensure_built_host_assembly(repo_root)
+
+    runtime_directory = build_root / "runtime"
+    runtime_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_host_assembly_path.parent, runtime_directory, dirs_exist_ok=True)
+
+    host_assembly_path = runtime_directory / "DevHub.Host.dll"
+    if host_assembly_path.is_file():
+        return host_assembly_path
+
+    raise RuntimeError(f"未找到隔离复制后的 Host 程序：{host_assembly_path}")
+
+
+def _ensure_built_host_assembly(repo_root: Path) -> Path:
+    try:
+        return _resolve_built_host_assembly_path(repo_root)
+    except RuntimeError:
+        _build_host_assembly(repo_root)
+        return _resolve_built_host_assembly_path(repo_root)
+
+
+def _build_host_assembly(repo_root: Path) -> None:
+    host_project_path = repo_root / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
+    if not host_project_path.is_file():
+        raise RuntimeError(f"未找到 Host 工程：{host_project_path}")
+
+    completed = subprocess.run(
+        [
+            "dotnet",
+            "build",
+            str(host_project_path),
+            "-c",
+            HOST_BUILD_CONFIGURATION,
+            "--nologo",
+        ],
+        cwd=repo_root,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"构建 Host 失败。stdout={completed.stdout or ''} stderr={completed.stderr or ''}"
+        )
+
+
 def _create_isolated_process_kwargs() -> dict[str, Any]:
     if os.name == "nt":
         return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
@@ -223,3 +331,18 @@ def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
     except ProcessLookupError:
         return
+
+
+def _cleanup_shared_host_build_root() -> None:
+    global _shared_host_assembly_path
+    global _shared_host_build_root
+
+    build_root = _shared_host_build_root
+    _shared_host_assembly_path = None
+    _shared_host_build_root = None
+
+    if build_root is not None:
+        shutil.rmtree(build_root, ignore_errors=True)
+
+
+atexit.register(_cleanup_shared_host_build_root)

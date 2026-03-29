@@ -77,11 +77,12 @@ events_client = await DevHubEventsClient.from_runtime(
 
 ## 集成测试隔离模式
 
-`python3 -m pytest tests/integration` 运行的是 Python SDK 自己的集成测试。这组测试会为每个用例自启独立临时 Host，并为该 Host 分配独立临时 `DEVHUB_DATA_DIR`；测试结束后会关闭 Host 并回收其派生进程树。
+`python3 -m pytest tests/integration` 运行的是 Python SDK 自己的集成测试。这组测试会先准备独立临时 Host 运行副本，再为每个用例自启该临时 Host，并为该 Host 分配独立临时 `DEVHUB_DATA_DIR`；测试结束后会关闭 Host 并回收其派生进程树。
 
 这意味着：
 
 - SDK 集成测试不会连接开发机默认数据根目录下的常驻 Hub。
+- SDK 集成测试不会直接运行源码树下共享的 `host/src/DevHub.Host/bin/...` 输出，因此与其他本地 `dotnet build/test` 并行时更不容易发生文件锁冲突。
 - 同一台机器可以并行运行 Python / JavaScript / .NET SDK 的集成测试，因为每套测试都使用各自独立的临时 Host 与数据根目录。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
 

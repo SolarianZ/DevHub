@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
@@ -14,8 +16,12 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 {
     private const string DataDirEnvironmentVariable = "DEVHUB_DATA_DIR";
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
+    private const string PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_DOTNET_SDK_HOST_ASSEMBLY";
     private const string HostAssemblyFileName = "DevHub.Host.dll";
     private const string HostTargetFramework = "net10.0";
+    private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> SharedHostAssemblyBuilds = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentBag<string> SharedHostBuildRoots = new();
+    private static int _cleanupHandlerRegistered;
 
     private readonly string _tempRoot;
     private readonly string _repoRoot;
@@ -135,7 +141,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     private async Task StartProcessAsync()
     {
-        var hostAssemblyPath = ResolveHostAssemblyPath(_repoRoot, ResolveTestAssemblyConfiguration());
+        var hostAssemblyPath = await ResolveHostAssemblyPathAsync(_repoRoot, ResolveTestAssemblyConfiguration());
 
         var slot = Guid.NewGuid().ToString("N");
         var startInfo = new ProcessStartInfo("dotnet")
@@ -200,7 +206,45 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         throw new InvalidOperationException($"等待 hub.json 超时。stdout={_stdout} stderr={_stderr}");
     }
 
-    internal static string ResolveHostAssemblyPath(string repoRoot, string? preferredConfiguration)
+    internal static async Task<string> ResolveHostAssemblyPathAsync(string repoRoot, string? preferredConfiguration)
+    {
+        var effectiveConfiguration = string.IsNullOrWhiteSpace(preferredConfiguration)
+            ? "Release"
+            : preferredConfiguration.Trim();
+        var cacheKey = $"{Path.GetFullPath(repoRoot)}|{effectiveConfiguration}";
+        var lazyBuild = SharedHostAssemblyBuilds.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<Task<string>>(
+                () => PrepareIsolatedHostAssemblyAsync(repoRoot, effectiveConfiguration),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        try
+        {
+            return await lazyBuild.Value;
+        }
+        catch
+        {
+            SharedHostAssemblyBuilds.TryRemove(cacheKey, out _);
+            throw;
+        }
+    }
+
+    internal static string ResolveConfiguredHostAssemblyPath(string repoRoot, string configuredPath)
+    {
+        var resolvedPath = Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(repoRoot, configuredPath));
+
+        if (File.Exists(resolvedPath))
+        {
+            return resolvedPath;
+        }
+
+        throw new InvalidOperationException(
+            $"环境变量 {PrebuiltHostAssemblyEnvironmentVariable} 指定的 Host 程序不存在：{resolvedPath}");
+    }
+
+    internal static string ResolveBuiltHostAssemblyPath(string repoRoot, string? preferredConfiguration)
     {
         var hostBinDirectory = Path.Combine(repoRoot, "host", "src", "DevHub.Host", "bin");
         var checkedPaths = new List<string>();
@@ -222,8 +266,6 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         string? newestCandidate = null;
         var newestWriteTimeUtc = DateTime.MinValue;
 
-        // dotnet test 在不同项目引用关系下未必会把 Host 编译到与测试程序集一致的配置目录，
-        // 因此这里选择“最新生成的可用输出”，并在时间戳相同时优先当前测试配置。
         foreach (var candidatePath in checkedPaths)
         {
             if (!File.Exists(candidatePath))
@@ -270,6 +312,152 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
             {
                 checkedPaths.Add(candidatePath);
             }
+        }
+    }
+
+    private static async Task<string> PrepareIsolatedHostAssemblyAsync(string repoRoot, string configuration)
+    {
+        var sourceHostAssemblyPath = await ResolveSourceHostAssemblyPathAsync(repoRoot, configuration);
+        var sourceDirectory = Path.GetDirectoryName(sourceHostAssemblyPath)
+            ?? throw new InvalidOperationException($"无法解析 Host 输出目录：{sourceHostAssemblyPath}");
+
+        var buildRoot = Path.Combine(
+            Path.GetTempPath(),
+            "DevHubDotNetSdkHostRuntime",
+            $"{configuration.ToLowerInvariant()}-{Guid.NewGuid():N}");
+        var runtimeDirectory = Path.Combine(buildRoot, "runtime");
+        Directory.CreateDirectory(runtimeDirectory);
+        CopyDirectory(sourceDirectory, runtimeDirectory);
+        RegisterBuildRootForCleanup(buildRoot);
+
+        var isolatedAssemblyPath = Path.Combine(runtimeDirectory, HostAssemblyFileName);
+        if (File.Exists(isolatedAssemblyPath))
+        {
+            return isolatedAssemblyPath;
+        }
+
+        throw new InvalidOperationException($"未找到隔离复制后的 Host 程序：{isolatedAssemblyPath}");
+    }
+
+    private static async Task<string> ResolveSourceHostAssemblyPathAsync(string repoRoot, string configuration)
+    {
+        var configuredHostAssemblyPath = Environment.GetEnvironmentVariable(PrebuiltHostAssemblyEnvironmentVariable)?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredHostAssemblyPath))
+        {
+            return ResolveConfiguredHostAssemblyPath(repoRoot, configuredHostAssemblyPath);
+        }
+
+        try
+        {
+            return ResolveBuiltHostAssemblyPath(repoRoot, configuration);
+        }
+        catch (InvalidOperationException)
+        {
+            await BuildHostAssemblyAsync(repoRoot, configuration);
+            return ResolveBuiltHostAssemblyPath(repoRoot, configuration);
+        }
+    }
+
+    private static async Task BuildHostAssemblyAsync(string repoRoot, string configuration)
+    {
+        var hostProjectPath = Path.Combine(repoRoot, "host", "src", "DevHub.Host", "DevHub.Host.csproj");
+        if (!File.Exists(hostProjectPath))
+        {
+            throw new InvalidOperationException($"未找到 Host 工程：{hostProjectPath}");
+        }
+
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = repoRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        startInfo.ArgumentList.Add("build");
+        startInfo.ArgumentList.Add(hostProjectPath);
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add(configuration);
+        startInfo.ArgumentList.Add("--nologo");
+
+        using var process = new Process
+        {
+            StartInfo = startInfo
+        };
+
+        process.OutputDataReceived += (_, args) =>
+        {
+            if (args.Data is not null)
+            {
+                stdout.AppendLine(args.Data);
+            }
+        };
+
+        process.ErrorDataReceived += (_, args) =>
+        {
+            if (args.Data is not null)
+            {
+                stderr.AppendLine(args.Data);
+            }
+        };
+
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("启动 Host 构建失败。");
+        }
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"构建 Host 失败。stdout={stdout} stderr={stderr}");
+        }
+    }
+
+    private static void CopyDirectory(string sourceDirectory, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+
+        foreach (var filePath in Directory.EnumerateFiles(sourceDirectory))
+        {
+            var fileName = Path.GetFileName(filePath);
+            File.Copy(filePath, Path.Combine(targetDirectory, fileName), overwrite: true);
+        }
+
+        foreach (var directoryPath in Directory.EnumerateDirectories(sourceDirectory))
+        {
+            var directoryName = Path.GetFileName(directoryPath);
+            CopyDirectory(directoryPath, Path.Combine(targetDirectory, directoryName));
+        }
+    }
+
+    private static void RegisterBuildRootForCleanup(string buildRoot)
+    {
+        SharedHostBuildRoots.Add(buildRoot);
+
+        if (Interlocked.Exchange(ref _cleanupHandlerRegistered, 1) == 0)
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                foreach (var root in SharedHostBuildRoots)
+                {
+                    try
+                    {
+                        if (Directory.Exists(root))
+                        {
+                            Directory.Delete(root, recursive: true);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            };
         }
     }
 

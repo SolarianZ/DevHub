@@ -345,9 +345,9 @@ catch (DevHubRpcException ex)
 
 ## 集成测试隔离模式
 
-`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 运行的 `.NET SDK` 集成测试会自行启动独立临时 Host，并为每个测试用例分配独立临时 `DEVHUB_DATA_DIR`。
+`dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 运行的 `.NET SDK` 集成测试会先准备独立临时 Host 运行副本，再自行启动该临时 Host，并为每个测试用例分配独立临时 `DEVHUB_DATA_DIR`。
 
-这些测试不会复用开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
+这些测试不会复用开发机默认数据目录下的常驻 Hub，也不会直接运行源码树下共享的 `host/src/DevHub.Host/bin/...` 输出；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
 
 因此，同一台机器可以并行运行 `.NET / Python / JS` SDK 集成测试，因为每套测试都必须拥有自己的临时 Host 与独立数据根目录。
 

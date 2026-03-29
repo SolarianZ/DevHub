@@ -10,16 +10,18 @@ namespace DevHub.Sdk.IntegrationTests.TestHost;
 public sealed class DevHubHostFixtureTests
 {
     [Fact]
-    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputMissing_ShouldUseNewestAvailableOutput()
+    public void Impl_ResolveConfiguredHostAssemblyPath_WhenRelativePathProvided_ShouldResolveAgainstRepositoryRoot()
     {
         var repoRoot = CreateFakeRepositoryRoot();
         try
         {
-            var debugPath = CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow);
+            var hostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("artifacts", "DevHub.Host.dll"));
 
-            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
+            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPath(
+                repoRoot,
+                Path.Combine("artifacts", "DevHub.Host.dll"));
 
-            Assert.Equal(debugPath, resolvedPath);
+            Assert.Equal(hostAssemblyPath, resolvedPath);
         }
         finally
         {
@@ -28,17 +30,16 @@ public sealed class DevHubHostFixtureTests
     }
 
     [Fact]
-    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputIsStale_ShouldUseNewestAvailableOutput()
+    public void Impl_ResolveConfiguredHostAssemblyPath_WhenAbsolutePathProvided_ShouldPreserveAbsolutePath()
     {
         var repoRoot = CreateFakeRepositoryRoot();
         try
         {
-            CreateFakeHostAssembly(repoRoot, "Release", DateTime.UtcNow.AddMinutes(-10));
-            var debugPath = CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow);
+            var hostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("absolute", "DevHub.Host.dll"));
 
-            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
+            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPath(repoRoot, hostAssemblyPath);
 
-            Assert.Equal(debugPath, resolvedPath);
+            Assert.Equal(hostAssemblyPath, resolvedPath);
         }
         finally
         {
@@ -47,17 +48,16 @@ public sealed class DevHubHostFixtureTests
     }
 
     [Fact]
-    public void Impl_ResolveHostAssemblyPath_WhenPreferredOutputIsNewest_ShouldUsePreferredOutput()
+    public void Impl_ResolveConfiguredHostAssemblyPath_WhenConfiguredPathMissing_ShouldThrow()
     {
         var repoRoot = CreateFakeRepositoryRoot();
         try
         {
-            CreateFakeHostAssembly(repoRoot, "Debug", DateTime.UtcNow.AddMinutes(-10));
-            var releasePath = CreateFakeHostAssembly(repoRoot, "Release", DateTime.UtcNow);
-
-            var resolvedPath = DevHubHostFixture.ResolveHostAssemblyPath(repoRoot, "Release");
-
-            Assert.Equal(releasePath, resolvedPath);
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => DevHubHostFixture.ResolveConfiguredHostAssemblyPath(
+                    repoRoot,
+                    Path.Combine("missing", "DevHub.Host.dll")));
+            Assert.Contains("DEVHUB_DOTNET_SDK_HOST_ASSEMBLY", exception.Message);
         }
         finally
         {
@@ -222,21 +222,11 @@ public sealed class DevHubHostFixtureTests
         return repoRoot;
     }
 
-    private static string CreateFakeHostAssembly(string repoRoot, string configuration, DateTime writeTimeUtc)
+    private static string CreateConfiguredHostAssembly(string repoRoot, string relativePath)
     {
-        var hostAssemblyPath = Path.Combine(
-            repoRoot,
-            "host",
-            "src",
-            "DevHub.Host",
-            "bin",
-            configuration,
-            "net10.0",
-            "DevHub.Host.dll");
-
+        var hostAssemblyPath = Path.Combine(repoRoot, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(hostAssemblyPath)!);
         File.WriteAllText(hostAssemblyPath, string.Empty);
-        File.SetLastWriteTimeUtc(hostAssemblyPath, writeTimeUtc);
         return hostAssemblyPath;
     }
 
