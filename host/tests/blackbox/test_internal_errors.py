@@ -110,9 +110,14 @@ class TestInternalErrors(unittest.TestCase):
                     "expected_id": "bad-envelope-2"
                 },
                 {
-                    "name": "params 非 object/array/null",
+                    "name": "params 非 object/array",
                     "payload": {"jsonrpc": "2.0", "id": "bad-envelope-3", "method": "hub.ping", "params": "invalid"},
                     "expected_id": "bad-envelope-3"
+                },
+                {
+                    "name": "params 为 null",
+                    "payload": {"jsonrpc": "2.0", "id": "bad-envelope-4", "method": "hub.ping", "params": None},
+                    "expected_id": "bad-envelope-4"
                 }
             ]
 

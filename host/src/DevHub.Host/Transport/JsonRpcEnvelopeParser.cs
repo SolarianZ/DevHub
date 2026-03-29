@@ -44,7 +44,7 @@ internal static class JsonRpcEnvelopeParser
         object? requestParams = null;
         if (root.TryGetProperty("params", out var paramsElement))
         {
-            if (paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Array and not JsonValueKind.Null)
+            if (paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Array)
             {
                 errorResponse = TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", requestId);
                 return false;

@@ -463,6 +463,46 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
+    public async Task Spec_6_1_AfterAuthenticate_HubMethodParamsNullOverWs_ShouldReturnInvalidRequest()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-null-params",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-null-client",
+                clientSessionId = "98989898-9898-9898-9898-989898989898"
+            }
+        });
+
+        const string nullParamsRequest = """
+        {"jsonrpc":"2.0","id":"ws-null-params","method":"hub.ping","params":null}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, nullParamsRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+
+        var authResponse = FindResponseById(responses, "auth-null-params");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var invalidRequestResponse = FindResponseById(responses, "ws-null-params");
+        Assert.NotEqual(JsonValueKind.Undefined, invalidRequestResponse.ValueKind);
+        Assert.True(invalidRequestResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.14")]
     [Trait("SpecRef", "6.3.15")]
     public async Task Spec_6_3_14_And_6_3_15_SubscribeThenUnsubscribe_ShouldStopEventDelivery()

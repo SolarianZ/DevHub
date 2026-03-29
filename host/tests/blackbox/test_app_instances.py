@@ -440,6 +440,22 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ includeAllScopes=true 未包含 scoped 实例")
                 return result
 
+            response_all_invalid_scope_type = client.call("hub.apps.listInstances", {
+                "scope": 123,
+                "includeAllScopes": True,
+                "includeOffline": True
+            })
+            if not RpcAssertions.expect_success(result, response_all_invalid_scope_type, ["instances"]):
+                return result
+
+            all_instances_invalid_scope_type = response_all_invalid_scope_type["result"]["instances"]
+            if not any(inst.get("instanceId") == instance_id_1 for inst in all_instances_invalid_scope_type):
+                result.mark_failure("❌ includeAllScopes=true + 非法 scope 类型 未包含 global 实例")
+                return result
+            if not any(inst.get("instanceId") == instance_id_2 for inst in all_instances_invalid_scope_type):
+                result.mark_failure("❌ includeAllScopes=true + 非法 scope 类型 未包含 scoped 实例")
+                return result
+
             result.mark_success()
 
         except Exception as e:

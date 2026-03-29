@@ -269,17 +269,6 @@ public class AppInstancesHandler : IRpcHandler
                     appId = appIdProperty.GetString();
                 }
 
-                if (!RpcParamReader.TryGetOptionalScope(
-                        paramsElement,
-                        "scope",
-                        "invalid_scope",
-                        out scope,
-                        out var scopeErrorData))
-                {
-                    _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
-                    return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
-                }
-
                 if (paramsElement.TryGetProperty("includeAllScopes", out var includeAllScopesProperty))
                 {
                     if (includeAllScopesProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
@@ -289,6 +278,29 @@ public class AppInstancesHandler : IRpcHandler
                     }
 
                     includeAllScopes = includeAllScopesProperty.GetBoolean();
+                }
+
+                if (!RpcParamReader.TryGetOptionalScope(
+                        paramsElement,
+                        "scope",
+                        "invalid_scope",
+                        out scope,
+                        out var scopeErrorData))
+                {
+                    if (includeAllScopes)
+                    {
+                        scope = null;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
+                        return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+                    }
+                }
+
+                if (includeAllScopes)
+                {
+                    scope = null;
                 }
 
                 if (paramsElement.TryGetProperty("includeOffline", out var includeOfflineProperty))

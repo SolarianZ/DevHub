@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -334,6 +335,43 @@ public class LaunchScopeTests : IDisposable
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenPreviousProcessExitedWithoutRegistration_ShouldAllowRetryWithinDedupeWindow()
+    {
+        WriteDefinition(
+            "launch-exit-retry.app",
+            rpcEnabled: true,
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            argsTemplate: "--version");
+
+        var coordinator = CreateCoordinator();
+
+        var firstLaunch = await coordinator.LaunchAsync(
+            appId: "launch-exit-retry.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(firstLaunch.Ok);
+        Assert.Equal("started", firstLaunch.Status);
+        Assert.True(firstLaunch.Pid.HasValue);
+
+        WaitForProcessExit(firstLaunch.Pid.Value, TimeSpan.FromSeconds(5));
+
+        var secondLaunch = await coordinator.LaunchAsync(
+            appId: "launch-exit-retry.app",
+            scope: null,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(secondLaunch.Ok);
+        Assert.Equal("started", secondLaunch.Status);
+        Assert.NotEqual(firstLaunch.LaunchId, secondLaunch.LaunchId);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -399,6 +437,30 @@ public class LaunchScopeTests : IDisposable
 
         var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+    }
+
+    private static void WaitForProcessExit(int pid, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                if (process.HasExited)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return;
+            }
+
+            Thread.Sleep(50);
+        }
+
+        throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
 

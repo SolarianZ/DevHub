@@ -28,12 +28,6 @@ internal static class EventSubscriptionRequestParser
             return false;
         }
 
-        if (paramsElement.ValueKind == JsonValueKind.Null)
-        {
-            errorResponse = null!;
-            return true;
-        }
-
         if (paramsElement.ValueKind != JsonValueKind.Object)
         {
             errorResponse = TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id);

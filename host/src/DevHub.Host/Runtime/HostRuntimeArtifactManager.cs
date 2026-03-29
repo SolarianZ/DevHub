@@ -35,6 +35,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     private readonly string _previousHubJsonPath;
     private readonly DateTime _sessionStartedAtUtc;
     private readonly string? _defaultHubVersion;
+    private readonly Action<string>? _enforceCurrentUserOnlyAccessOverride;
     private bool _tokenPermissionEnsured;
     private bool _hubJsonPermissionEnsured;
     private bool _hubJsonLeaseRequested;
@@ -64,6 +65,21 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         RuntimePathOptions runtimePathOptions,
         RuntimeTuningOptions runtimeTuningOptions,
         string? defaultHubVersion = null)
+        : this(
+            logger,
+            runtimePathOptions,
+            runtimeTuningOptions,
+            defaultHubVersion,
+            enforceCurrentUserOnlyAccessOverride: null)
+    {
+    }
+
+    internal HostRuntimeArtifactManager(
+        ILogger<HostRuntimeArtifactManager> logger,
+        RuntimePathOptions runtimePathOptions,
+        RuntimeTuningOptions runtimeTuningOptions,
+        string? defaultHubVersion,
+        Action<string>? enforceCurrentUserOnlyAccessOverride)
     {
         _logger = logger;
         _runtimeTuningOptions = runtimeTuningOptions;
@@ -73,6 +89,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         _previousHubJsonPath = runtimePathOptions.PreviousHubJsonPath;
         _sessionStartedAtUtc = DateTime.UtcNow;
         _defaultHubVersion = NormalizeHubVersion(defaultHubVersion);
+        _enforceCurrentUserOnlyAccessOverride = enforceCurrentUserOnlyAccessOverride;
     }
 
     /// <summary>
@@ -142,13 +159,13 @@ public sealed class HostRuntimeArtifactManager : IDisposable
             _logger.LogDebug("Token 文件不存在，将为当前 Hub 会话生成新 token，文件路径: {FilePath}", _tokenFilePath);
         }
 
-            EnsureRuntimeDirectory();
+        EnsureRuntimeDirectory();
 
-            var newToken = GenerateNewToken();
+        var newToken = GenerateNewToken();
         _logger.LogDebug("成功生成新 token，长度: {TokenLength} 字符", newToken.Length);
 
         File.WriteAllText(_tokenFilePath, newToken);
-        EnsureCurrentUserOnlyAccess(_tokenFilePath);
+        EnsureRequiredCurrentUserOnlyAccess(_tokenFilePath);
         _tokenPermissionEnsured = true;
 
         _logger.LogInformation("成功生成并写入当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
@@ -175,7 +192,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
 
         if (!_tokenPermissionEnsured)
         {
-            EnsureCurrentUserOnlyAccess(_tokenFilePath);
+            EnsureRequiredCurrentUserOnlyAccess(_tokenFilePath);
             _tokenPermissionEnsured = true;
         }
     }
@@ -227,7 +244,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
             File.WriteAllText(tempPath, JsonSerializer.Serialize(hubRuntime, HubJsonSerializerOptions));
 
             ReplaceHubJsonAtomically(tempPath);
-            EnsureCurrentUserOnlyAccess(_hubJsonPath);
+            EnsureRequiredCurrentUserOnlyAccess(_hubJsonPath);
             _hubJsonPermissionEnsured = true;
             EnsureHubJsonLeaseIfRequested();
             _logger.LogInformation("成功写入 hub.json 文件: {Path}", _hubJsonPath);
@@ -320,24 +337,49 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     /// <summary>
     /// 设置文件仅当前用户可访问
     /// </summary>
-    private void EnsureCurrentUserOnlyAccess(string filePath)
+    private void EnsureRequiredCurrentUserOnlyAccess(string filePath)
     {
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                EnsureCurrentUserOnlyAccessOnWindows(filePath);
-                return;
-            }
+            ApplyCurrentUserOnlyAccess(filePath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"无法将运行时安全文件权限收敛为仅当前用户可访问: {filePath}",
+                ex);
+        }
+    }
 
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-            {
-                EnsureCurrentUserOnlyAccessOnUnix(filePath);
-            }
+    private void TryEnsureCurrentUserOnlyAccess(string filePath)
+    {
+        try
+        {
+            ApplyCurrentUserOnlyAccess(filePath);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "无法设置文件权限（仅当前用户可访问），文件路径: {FilePath}", filePath);
+        }
+    }
+
+    private void ApplyCurrentUserOnlyAccess(string filePath)
+    {
+        if (_enforceCurrentUserOnlyAccessOverride is not null)
+        {
+            _enforceCurrentUserOnlyAccessOverride(filePath);
+            return;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            EnsureCurrentUserOnlyAccessOnWindows(filePath);
+            return;
+        }
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            EnsureCurrentUserOnlyAccessOnUnix(filePath);
         }
     }
 
@@ -405,7 +447,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
 
         if (!_hubJsonPermissionEnsured && File.Exists(_hubJsonPath))
         {
-            EnsureCurrentUserOnlyAccess(_hubJsonPath);
+            EnsureRequiredCurrentUserOnlyAccess(_hubJsonPath);
             _hubJsonPermissionEnsured = true;
         }
 
@@ -431,7 +473,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
             if (File.Exists(_hubJsonPath))
             {
                 RotateHubJsonToPreviousSnapshot();
-                EnsureCurrentUserOnlyAccess(_previousHubJsonPath);
+                TryEnsureCurrentUserOnlyAccess(_previousHubJsonPath);
                 _logger.LogInformation("已将 hub.json 迁移为 prev_hub.json: {Path}", _previousHubJsonPath);
             }
 

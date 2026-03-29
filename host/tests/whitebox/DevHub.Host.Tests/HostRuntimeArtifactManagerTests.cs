@@ -131,6 +131,31 @@ public sealed class HostRuntimeArtifactManagerTests
     }
 
     [Fact]
+    public void Impl_GetToken_WhenAclEnforcementFails_ShouldThrow()
+    {
+        var testRoot = CreateTestDirectory();
+
+        try
+        {
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
+
+            var manager = new HostRuntimeArtifactManager(
+                Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
+                RuntimePathOptions.Resolve(),
+                RuntimeTuningOptions.Default,
+                defaultHubVersion: null,
+                _ => throw new UnauthorizedAccessException("acl denied"));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => manager.GetToken());
+            Assert.IsType<UnauthorizedAccessException>(exception.InnerException);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(testRoot);
+        }
+    }
+
+    [Fact]
     public void Impl_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
     {
         var testRoot = CreateTestDirectory();
@@ -232,6 +257,37 @@ public sealed class HostRuntimeArtifactManagerTests
             Assert.Equal(45, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
             Assert.Equal(20, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
             Assert.Equal(55, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(testRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_WriteHubJson_WhenAclEnforcementFails_ShouldThrow()
+    {
+        var testRoot = CreateTestDirectory();
+
+        try
+        {
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
+
+            var manager = new HostRuntimeArtifactManager(
+                Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
+                RuntimePathOptions.Resolve(),
+                RuntimeTuningOptions.Default,
+                defaultHubVersion: null,
+                filePath =>
+                {
+                    if (string.Equals(Path.GetFileName(filePath), "hub.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new UnauthorizedAccessException("acl denied");
+                    }
+                });
+
+            var exception = Assert.Throws<InvalidOperationException>(() => manager.WriteHubJson(49002, "acl-failure"));
+            Assert.IsType<UnauthorizedAccessException>(exception.InnerException);
         }
         finally
         {

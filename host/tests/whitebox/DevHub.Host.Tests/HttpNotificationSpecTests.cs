@@ -84,6 +84,24 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.Equal("invalid_params", error.GetProperty("message").GetString());
     }
 
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public async Task Spec_6_1_HttpHubMethod_WhenParamsIsNull_ShouldReturnInvalidRequest()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-null-params","method":"hub.ping","params":null}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-null-params-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-null-params", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
     [Theory]
     [Trait("SpecRef", "6.1")]
     [InlineData("7", 7d)]

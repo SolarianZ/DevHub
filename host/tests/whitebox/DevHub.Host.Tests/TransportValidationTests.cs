@@ -524,6 +524,25 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.1")]
+    public void Spec_6_1_TryBuildRpcRequest_ParamsJsonNull_ShouldReturnInvalidRequest()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "method": "hub.ping",
+          "id": "req-params-null",
+          "params": null
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", "req-params-null");
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
     public void Spec_6_1_TryBuildRpcRequest_MissingMethod_ShouldReturnInvalidRequest()
     {
         var root = ParseJsonElement("""
@@ -611,7 +630,7 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.3.14")]
-    public void Spec_6_3_14_Subscribe_WhenParamsJsonNull_ShouldAllowSubscribeAll()
+    public void Spec_6_3_14_Subscribe_WhenParamsJsonNull_ShouldReturnInvalidParams()
     {
         var request = new JsonRpcRequest
         {
@@ -620,11 +639,10 @@ public class TransportValidationTests
             Params = ParseJsonElement("null")
         };
 
-        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out var types, out var errorResponse);
+        var ok = EventSubscriptionRequestParser.TryReadSubscriptionTypes(request, out _, out var errorResponse);
 
-        Assert.True(ok);
-        Assert.Null(types);
-        Assert.Null(errorResponse);
+        Assert.False(ok);
+        AssertError(errorResponse, -32602, "invalid_params", "req-subscribe-json-null");
     }
 
     [Fact]

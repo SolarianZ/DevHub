@@ -3,6 +3,7 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace DevHub.Core.Services.Invocation;
 
@@ -110,15 +111,7 @@ public class LaunchCoordinator
         DedupeLaunchRecord? existingRecord;
         lock (_dedupeSyncRoot)
         {
-            CleanupExpiredDedupeRecords(now);
-            if (_dedupeRecords.TryGetValue(resolvedDedupeKey, out var record))
-            {
-                existingRecord = record;
-            }
-            else
-            {
-                existingRecord = null;
-            }
+            existingRecord = TryGetActiveDedupeRecord(resolvedDedupeKey, now);
         }
 
         if (existingRecord is not null)
@@ -132,8 +125,8 @@ public class LaunchCoordinator
         var launchId = BuildLaunchId();
         lock (_dedupeSyncRoot)
         {
-            CleanupExpiredDedupeRecords(_clock.UtcNow);
-            if (_dedupeRecords.TryGetValue(resolvedDedupeKey, out var record))
+            var nextNow = _clock.UtcNow;
+            if (TryGetActiveDedupeRecord(resolvedDedupeKey, nextNow) is { } record)
             {
                 return LaunchOperationResult.CreateSuccess(
                     status: "already_running",
@@ -144,7 +137,9 @@ public class LaunchCoordinator
             _dedupeRecords[resolvedDedupeKey] = new DedupeLaunchRecord
             {
                 LaunchId = launchId,
-                CreatedAtUtc = _clock.UtcNow,
+                AppId = appId,
+                Scope = scope,
+                CreatedAtUtc = nextNow,
                 Pid = null
             };
         }
@@ -186,6 +181,11 @@ public class LaunchCoordinator
         }
 
         var isRegistered = await WaitForRegistrationAsync(appId, scope, waitForRegisterMs, cancellationToken);
+        if (isRegistered)
+        {
+            RemoveDedupeRecord(resolvedDedupeKey, launchId);
+        }
+
         var status = isRegistered ? "started" : "starting";
         return LaunchOperationResult.CreateSuccess(status, launchId, process.Id);
     }
@@ -301,7 +301,6 @@ public class LaunchCoordinator
             if (_dedupeRecords.TryGetValue(dedupeKey, out var record) && record.LaunchId == launchId)
             {
                 record.Pid = pid;
-                record.CreatedAtUtc = _clock.UtcNow;
             }
         }
     }
@@ -330,9 +329,56 @@ public class LaunchCoordinator
         }
     }
 
+    private DedupeLaunchRecord? TryGetActiveDedupeRecord(string dedupeKey, DateTime now)
+    {
+        CleanupExpiredDedupeRecords(now);
+
+        if (!_dedupeRecords.TryGetValue(dedupeKey, out var record))
+        {
+            return null;
+        }
+
+        if (HasObservedRegistration(record) || !IsLaunchStillInProgress(record))
+        {
+            _dedupeRecords.Remove(dedupeKey);
+            return null;
+        }
+
+        return record;
+    }
+
+    private bool HasObservedRegistration(DedupeLaunchRecord record)
+    {
+        return _appRegistry
+            .ListInstances(record.AppId, record.Scope, includeAllScopes: false, includeOffline: true)
+            .Any(instance => instance.RegisteredAtUtc.HasValue && instance.RegisteredAtUtc.Value >= record.CreatedAtUtc);
+    }
+
+    private static bool IsLaunchStillInProgress(DedupeLaunchRecord record)
+    {
+        if (!record.Pid.HasValue)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(record.Pid.Value);
+            return !process.HasExited;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private sealed class DedupeLaunchRecord
     {
         public required string LaunchId { get; init; }
+
+        public required string AppId { get; init; }
+
+        public required string? Scope { get; init; }
 
         public required DateTime CreatedAtUtc { get; set; }
 

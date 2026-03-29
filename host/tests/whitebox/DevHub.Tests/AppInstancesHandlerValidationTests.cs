@@ -335,6 +335,55 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreInvalidScopeType()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-global",
+            AppId = "app.validation.scope",
+            Scope = null,
+            Pid = 2001,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        });
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-scoped",
+            AppId = "app.validation.scope",
+            Scope = "workspace-a",
+            Pid = 2002,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        });
+
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "list-ignore-invalid-scope",
+            Method = HubRpcMethods.HubAppsListInstances,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                scope = 123,
+                includeAllScopes = true,
+                includeOffline = true
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var instances = JsonSerializer.SerializeToElement(response.Result).GetProperty("instances").EnumerateArray().ToList();
+        Assert.Contains(instances, instance => instance.GetProperty("instanceId").GetString() == "inst-global");
+        Assert.Contains(instances, instance => instance.GetProperty("instanceId").GetString() == "inst-scoped");
+    }
+
+    [Fact]
     public async Task Impl_Methods_WhenLoggerThrowsInTry_ShouldReturnInternalError()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
