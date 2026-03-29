@@ -82,8 +82,9 @@ events_client = await DevHubEventsClient.from_runtime(
 这意味着：
 
 - SDK 集成测试不会连接开发机默认数据根目录下的常驻 Hub。
-- SDK 集成测试不会直接运行源码树下共享的 `host/src/DevHub.Host/bin/...` 输出，因此与其他本地 `dotnet build/test` 并行时更不容易发生文件锁冲突。
-- 同一台机器可以并行运行 Python / JavaScript / .NET SDK 的集成测试，因为每套测试都使用各自独立的临时 Host 与数据根目录。
+- SDK 集成测试会把可用的 Host 程序复制到自己的临时目录后再启动；但在当前机器尚无可用 Host 输出时，仍可能先触发一次对 `host/src/DevHub.Host` 的构建。
+- 因此，“临时 Host + 独立数据根目录”只说明运行时状态彼此隔离，并不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行；若多个测试进程同时触发 Host 构建，仍可能出现文件锁冲突。
+- 如果需要并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发 Host 构建。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
 
 ## 验证命令

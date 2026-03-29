@@ -347,9 +347,11 @@ catch (DevHubRpcException ex)
 
 `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release` 运行的 `.NET SDK` 集成测试会先准备独立临时 Host 运行副本，再自行启动该临时 Host，并为每个测试用例分配独立临时 `DEVHUB_DATA_DIR`。
 
-这些测试不会复用开发机默认数据目录下的常驻 Hub，也不会直接运行源码树下共享的 `host/src/DevHub.Host/bin/...` 输出；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
+这些测试不会复用开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
 
-因此，同一台机器可以并行运行 `.NET / Python / JS` SDK 集成测试，因为每套测试都必须拥有自己的临时 Host 与独立数据根目录。
+默认情况下，测试会优先复用已存在的 `host/src/DevHub.Host/bin/...` 构建输出并复制到临时目录；若当前机器尚无可用输出，则仍可能先触发一次对 `host/src/DevHub.Host` 的构建。因此，“临时 Host + 独立数据根目录”只说明运行时状态彼此隔离，并不等同于默认无条件支持 `.NET / Python / JS` 三套 SDK 集成测试并行执行。
+
+如果需要在同一台机器上并行跑多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_DOTNET_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发对源码树下 Host 构建产物的竞争。
 
 仓库级 smoke、手工联调或示例运行可以连接本机已启动的 Hub，但那属于另一种运行方式，不等同于 SDK 集成测试模式。
 
