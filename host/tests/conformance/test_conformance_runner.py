@@ -167,6 +167,90 @@ class TestConformanceRunner(unittest.TestCase):
             )
             self.assertIn("SUMMARY  total=1 passed=1 failed=0", completed.stdout)
 
+    def test_vector_runner_with_external_manifest_when_contract_invalid_should_report_fail_and_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="devhub-conformance-contract-invalid-") as temp_root_str:
+            temp_root = Path(temp_root_str)
+            adapter_path = temp_root / "invalid_adapter.py"
+            adapter_path.write_text(
+                textwrap.dedent(
+                    """
+                    import json
+                    import sys
+                    from pathlib import Path
+
+                    def main() -> int:
+                        if len(sys.argv) != 2:
+                            raise SystemExit("需要 execution-context.json 参数。")
+                        context_path = Path(sys.argv[1])
+                        context = json.loads(context_path.read_text(encoding="utf-8"))
+                        print(json.dumps(
+                            {
+                                "vectorId": context["vector"]["id"],
+                                "outcome": "success",
+                                "actual": {},
+                                "error": None,
+                            },
+                            ensure_ascii=False,
+                        ))
+                        return 0
+
+                    if __name__ == "__main__":
+                        raise SystemExit(main())
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            manifest_path = temp_root / "external-adapter.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "manifestVersion": 1,
+                        "adapters": [
+                            {
+                                "name": "external-python",
+                                "command": [sys.executable, "invalid_adapter.py"],
+                                "cwd": ".",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "host" / "tests" / "conformance" / "vector_runner.py"),
+                    "--adapter-manifest",
+                    str(manifest_path),
+                    "--vector-id",
+                    "discovery.valid_runtime_layout_reads_token",
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            self.assertEqual(
+                1,
+                completed.returncode,
+                msg=f"stdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}",
+            )
+            self.assertIn(
+                "FAIL  CONF-001 discovery.valid_runtime_layout_reads_token  [external-python]",
+                completed.stdout,
+            )
+            self.assertIn('Message: "\\u9002\\u914d\\u5668\\u8f93\\u51fa\\u4e0d\\u7b26\\u5408 conformance \\u8f93\\u51fa\\u5951\\u7ea6\\u3002"', completed.stdout)
+            self.assertIn("Diff: $contract.phase", completed.stdout)
+            self.assertIn("Snapshot:", completed.stdout)
+            self.assertIn("SUMMARY  total=1 passed=0 failed=1", completed.stdout)
+
     def test_CONF_005_vector_runner_should_support_case_id_filter(self) -> None:
         with tempfile.TemporaryDirectory(prefix="devhub-conformance-case-id-") as temp_root_str:
             temp_root = Path(temp_root_str)
