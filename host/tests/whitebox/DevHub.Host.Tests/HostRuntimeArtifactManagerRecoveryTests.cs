@@ -1,15 +1,17 @@
-namespace DevHub.Tests;
+namespace DevHub.Host.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Services;
+using DevHub.Host.Runtime;
+using DevHub.Host.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// FileSystemManager 恢复与自愈行为测试。
+/// HostRuntimeArtifactManager 恢复与自愈行为测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public sealed class FileSystemManagerRecoveryTests : IDisposable
+public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 {
     private const string DefaultHubVersion = "1.0.1-test";
     private readonly string _tempDirectory;
@@ -20,7 +22,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     /// <summary>
     /// 初始化测试上下文。
     /// </summary>
-    public FileSystemManagerRecoveryTests()
+    public HostRuntimeArtifactManagerRecoveryTests()
     {
         _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubFileSystemManagerRecoveryTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempDirectory, "runtime");
@@ -41,7 +43,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         var tokenPath = Path.Combine(_runtimeDirectory, "token.txt");
         File.WriteAllText(tokenPath, "legacy-token");
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         var newToken = manager.GetToken();
 
         Assert.NotEqual("legacy-token", newToken);
@@ -53,7 +55,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         var token = manager.GetToken();
 
         var tokenPath = Path.Combine(_runtimeDirectory, "token.txt");
@@ -71,8 +73,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Resolve(),
             RuntimeTuningOptions.Default,
             DefaultHubVersion);
@@ -98,7 +100,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         _ = manager.GetToken();
         manager.WriteHubJson(48000, "v1");
 
@@ -116,7 +118,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         _ = manager.GetToken();
         manager.WriteHubJson(48030, "v1");
 
@@ -145,7 +147,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         var isolatedLogs = Path.Combine(isolatedRoot, "logs");
 
         var runtimeOptions = RuntimePathOptions.Create(isolatedRoot);
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), runtimeOptions);
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), runtimeOptions);
 
         manager.InitializeDirectories();
 
@@ -161,7 +163,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         _ = manager.GetToken();
 
         var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
@@ -177,7 +179,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         var token = manager.GetToken();
 
         manager.WriteHubJson(48010, "v1.2.3");
@@ -202,7 +204,7 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        var manager = new FileSystemManager(Mock.Of<ILogger<FileSystemManager>>(), RuntimePathOptions.Resolve());
+        var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
         _ = manager.GetToken();
         manager.WriteHubJson(48020, "v1");
 
@@ -232,8 +234,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        using var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        using var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
         _ = manager.GetToken();
         manager.WriteHubJson(48040, "v1");
@@ -259,8 +261,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        using var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        using var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
         _ = manager.GetToken();
         manager.WriteHubJson(48041, "v1");
@@ -283,8 +285,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     {
         using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _tempDirectory);
 
-        using var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        using var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
         manager.ActivateHubJsonLease();
 
@@ -309,8 +311,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     [Fact]
     public void Impl_ActivateHubJsonLease_AfterDispose_ShouldThrowObjectDisposedException()
     {
-        var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
 
         manager.Dispose();
@@ -325,8 +327,8 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
     [Fact]
     public void Impl_Cleanup_ShouldNotThrow()
     {
-        using var manager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        using var manager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             RuntimePathOptions.Create(_tempDirectory));
 
         var exception = Record.Exception(() => manager.Cleanup());
@@ -349,5 +351,4 @@ public sealed class FileSystemManagerRecoveryTests : IDisposable
         }
     }
 }
-
 

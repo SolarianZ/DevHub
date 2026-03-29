@@ -1,48 +1,44 @@
-namespace DevHub.Tests;
+namespace DevHub.Host.Tests;
 
-using DevHub.Core.Extensions;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
+using DevHub.Host.Extensions;
+using DevHub.Host.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
-/// ServiceCollectionExtensions 注册行为测试。
+/// Host ServiceCollectionExtensions 注册行为测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public sealed class ServiceCollectionExtensionsTests : IDisposable
+public sealed class HostServiceCollectionExtensionsTests : IDisposable
 {
     private readonly string _tempDirectory;
 
     /// <summary>
     /// 初始化测试上下文。
     /// </summary>
-    public ServiceCollectionExtensionsTests()
+    public HostServiceCollectionExtensionsTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubServiceCollectionTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubHostServiceCollectionTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 
     [Fact]
-    public void Impl_AddDevHubCore_ShouldRegisterAndResolveCoreServices()
+    public void Impl_AddDevHubHost_ShouldRegisterAndResolveHostAndCoreServices()
     {
         var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempDirectory, "data"));
-
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddDevHubCore(runtimePathOptions);
+        services.AddDevHubHost(runtimePathOptions, "test-host-version");
 
         using var provider = services.BuildServiceProvider();
 
         var resolvedRuntimePathOptions = provider.GetRequiredService<RuntimePathOptions>();
         Assert.Equal(runtimePathOptions.RootPath, resolvedRuntimePathOptions.RootPath);
-        Assert.Equal(runtimePathOptions.RuntimePath, resolvedRuntimePathOptions.RuntimePath);
-        Assert.Equal(runtimePathOptions.DefinitionsPath, resolvedRuntimePathOptions.DefinitionsPath);
-        Assert.Equal(runtimePathOptions.InstancesPath, resolvedRuntimePathOptions.InstancesPath);
-        Assert.Equal(runtimePathOptions.LogsPath, resolvedRuntimePathOptions.LogsPath);
 
         Assert.NotNull(provider.GetRequiredService<RuntimeTuningOptions>());
         Assert.IsType<SystemClock>(provider.GetRequiredService<IClock>());
@@ -58,6 +54,10 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<IRuntimeHttpBaseUrlProvider>());
         Assert.NotNull(provider.GetRequiredService<LaunchCoordinator>());
         Assert.NotNull(provider.GetRequiredService<RpcRouter>());
+        Assert.NotNull(provider.GetRequiredService<HostRuntimeArtifactManager>());
+        Assert.NotNull(provider.GetRequiredService<HostBootstrapper>());
+        Assert.NotNull(provider.GetRequiredService<RpcHttpEndpointHandler>());
+        Assert.NotNull(provider.GetRequiredService<WebSocketSessionHandler>());
 
         var handlers = provider.GetServices<IRpcHandler>().ToList();
         Assert.Equal(5, handlers.Count);

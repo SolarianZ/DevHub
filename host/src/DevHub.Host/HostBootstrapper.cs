@@ -1,5 +1,6 @@
 using DevHub.Core.Services;
 using DevHub.Core.Services.Invocation;
+using DevHub.Host.Runtime;
 
 namespace DevHub.Host;
 
@@ -11,7 +12,7 @@ namespace DevHub.Host;
 /// </remarks>
 public class HostBootstrapper
 {
-    private readonly FileSystemManager _fileSystemManager;
+    private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationTimeoutWorker _invocationTimeoutWorker;
     private readonly ILogger<HostBootstrapper> _logger;
@@ -19,17 +20,17 @@ public class HostBootstrapper
     /// <summary>
     /// 初始化 Host 启动编排器。
     /// </summary>
-    /// <param name="fileSystemManager">文件系统管理器。</param>
+    /// <param name="runtimeArtifactManager">Host 运行时产物管理器。</param>
     /// <param name="definitionProvider">定义提供器。</param>
     /// <param name="invocationTimeoutWorker">调用超时工作器。</param>
     /// <param name="logger">日志记录器。</param>
     public HostBootstrapper(
-        FileSystemManager fileSystemManager,
+        HostRuntimeArtifactManager runtimeArtifactManager,
         IDefinitionProvider definitionProvider,
         InvocationTimeoutWorker invocationTimeoutWorker,
         ILogger<HostBootstrapper> logger)
     {
-        _fileSystemManager = fileSystemManager;
+        _runtimeArtifactManager = runtimeArtifactManager;
         _definitionProvider = definitionProvider;
         _invocationTimeoutWorker = invocationTimeoutWorker;
         _logger = logger;
@@ -41,11 +42,11 @@ public class HostBootstrapper
     public void Initialize()
     {
         _logger.LogDebug("初始化文件系统目录结构...");
-        _fileSystemManager.InitializeDirectories();
+        _runtimeArtifactManager.InitializeDirectories();
         _logger.LogInformation("文件系统初始化完成");
 
         _logger.LogDebug("确保 token 文件存在...");
-        _fileSystemManager.GetToken();
+        _runtimeArtifactManager.GetToken();
         _logger.LogInformation("Token 文件准备完成");
 
         _logger.LogDebug("刷新应用程序定义快照...");
@@ -76,8 +77,8 @@ public class HostBootstrapper
             port = parsedPort;
             _logger.LogInformation("服务器成功启动，监听地址: {Address}", address);
             _logger.LogDebug("写入 hub.json 文件...");
-            _fileSystemManager.WriteHubJson(parsedPort);
-            _fileSystemManager.ActivateHubJsonLease();
+            _runtimeArtifactManager.WriteHubJson(parsedPort);
+            _runtimeArtifactManager.ActivateHubJsonLease();
             _logger.LogInformation("DevHub 启动成功，监听端口: {Port}", parsedPort);
             _logger.LogInformation("HTTP 地址: http://127.0.0.1:{Port}", parsedPort);
             return true;
@@ -91,7 +92,7 @@ public class HostBootstrapper
     /// </summary>
     public void Cleanup()
     {
-        _fileSystemManager.Cleanup();
+        _runtimeArtifactManager.Cleanup();
     }
 
     private static bool TryParseLoopbackPort(string address, out int port)

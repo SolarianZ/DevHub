@@ -10,13 +10,10 @@ using DevHub.Core.Models.Rpc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Runtime.Versioning;
-using System.Security.AccessControl;
-using System.Security.Principal;
 
 [Trait("Category", "Impl")]
 public class CoreServiceTests
 {
-    private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
     private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
     private readonly Mock<ILogger<HubPingHandler>> _mockHubPingLogger;
@@ -24,7 +21,6 @@ public class CoreServiceTests
 
     public CoreServiceTests()
     {
-        _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
         _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
         _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
         _mockHubPingLogger = new Mock<ILogger<HubPingHandler>>();
@@ -32,247 +28,17 @@ public class CoreServiceTests
     }
 
     [Fact]
-    public void Impl_FileSystemManager_GetToken_ShouldWriteTokenToConfiguredDataDirectory()
-    {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            var token = fileSystemManager.GetToken();
-            var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
-
-            Assert.False(string.IsNullOrWhiteSpace(token));
-            Assert.True(File.Exists(tokenPath));
-            AssertUnixUserOnlyMode(tokenPath);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void Impl_FileSystemManager_GetToken_ShouldGenerateValidToken()
-    {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            var token1 = fileSystemManager.GetToken();
-            var token2 = fileSystemManager.GetToken();
-
-            Assert.False(string.IsNullOrWhiteSpace(token1));
-            Assert.Equal(token1, token2);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    [SupportedOSPlatform("windows")]
-    public void Impl_FileSystemManager_GetToken_OnWindows_ShouldRemoveExplicitAllowRulesForOtherPrincipals()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            Directory.CreateDirectory(runtimeDirectory);
-            var tokenPath = Path.Combine(runtimeDirectory, "token.txt");
-            File.WriteAllText(tokenPath, "legacy-token");
-
-            var currentUserSid = WindowsIdentity.GetCurrent().User;
-            Assert.NotNull(currentUserSid);
-
-            var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-            var tokenFile = new FileInfo(tokenPath);
-            var security = tokenFile.GetAccessControl(AccessControlSections.Access);
-            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-            security.AddAccessRule(new FileSystemAccessRule(currentUserSid!, FileSystemRights.FullControl, AccessControlType.Allow));
-            security.AddAccessRule(new FileSystemAccessRule(administratorsSid, FileSystemRights.Read, AccessControlType.Allow));
-            tokenFile.SetAccessControl(security);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            var token = fileSystemManager.GetToken();
-
-            Assert.False(string.IsNullOrWhiteSpace(token));
-            AssertWindowsUserOnlyAcl(tokenPath);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void Impl_FileSystemManager_GetToken_NewManager_ShouldRotateTokenForNewSession()
-    {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            var fileSystemManager1 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            var fileSystemManager2 = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-
-            var token1 = fileSystemManager1.GetToken();
-            var token2 = fileSystemManager2.GetToken();
-
-            Assert.False(string.IsNullOrWhiteSpace(token1));
-            Assert.False(string.IsNullOrWhiteSpace(token2));
-            Assert.NotEqual(token1, token2);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void Impl_FileSystemManager_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
-    {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            _ = fileSystemManager.GetToken();
-            fileSystemManager.WriteHubJson(47231, "test-hub");
-
-            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
-            Assert.True(File.Exists(hubJsonPath));
-            Assert.False(File.Exists(hubJsonPath + ".tmp"));
-
-            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
-            Assert.Equal(1, hubJson.GetProperty("protocolVersion").GetInt32());
-            Assert.Equal("http://127.0.0.1:47231", hubJson.GetProperty("httpBaseUrl").GetString());
-            Assert.Equal("ws://127.0.0.1:47231/ws", hubJson.GetProperty("wsUrl").GetString());
-
-            var tokenFile = hubJson.GetProperty("tokenFile").GetString();
-            Assert.False(string.IsNullOrWhiteSpace(tokenFile));
-            Assert.True(Path.IsPathFullyQualified(tokenFile!));
-            Assert.Equal(Path.Combine(runtimeDirectory, "token.txt"), tokenFile);
-
-            var runtimeTuning = hubJson.GetProperty("runtimeTuning");
-            Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
-            Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
-            Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
-
-            AssertUnixUserOnlyMode(hubJsonPath);
-            AssertUnixUserOnlyMode(tokenFile!);
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void Impl_FileSystemManager_WriteHubJson_WhenOverwritten_ShouldKeepSingleRuntimeFile()
-    {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-            _ = fileSystemManager.GetToken();
-
-            fileSystemManager.WriteHubJson(48001, "v1");
-            fileSystemManager.WriteHubJson(48002, "v2");
-
-            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
-            Assert.True(File.Exists(hubJsonPath));
-            Assert.False(File.Exists(hubJsonPath + ".tmp"));
-
-            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
-            Assert.Equal("http://127.0.0.1:48002", hubJson.GetProperty("httpBaseUrl").GetString());
-            Assert.Equal("ws://127.0.0.1:48002/ws", hubJson.GetProperty("wsUrl").GetString());
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
     public void Impl_RuntimeTuningOptions_Resolve_WhenEnvironmentValuesAreValid_ShouldApplyOverridesToHubRuntime()
     {
-        var testRoot = TestHelpers.GetTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
+        using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
+        using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
+        using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
 
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-            using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
-            using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
-            using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
+        var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
 
-            var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
-            Assert.Equal(45, tuningOptions.LeaseSeconds);
-            Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
-            Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
-
-            var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve(), tuningOptions);
-            _ = fileSystemManager.GetToken();
-            fileSystemManager.WriteHubJson(49001, "runtime-override");
-
-            var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
-            var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
-            var runtimeTuning = hubJson.GetProperty("runtimeTuning");
-            Assert.Equal(45, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
-            Assert.Equal(20, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
-            Assert.Equal(55, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
-        }
-        finally
-        {
-            if (Directory.Exists(testRoot))
-            {
-                Directory.Delete(testRoot, recursive: true);
-            }
-        }
+        Assert.Equal(45, tuningOptions.LeaseSeconds);
+        Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
+        Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
     }
 
     [Fact]
@@ -507,49 +273,6 @@ public class CoreServiceTests
         }
     }
 
-    private static void AssertUnixUserOnlyMode(string filePath)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            AssertWindowsUserOnlyAcl(filePath);
-            return;
-        }
-
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return;
-        }
-
-        var mode = File.GetUnixFileMode(filePath);
-        var effective = mode &
-            (UnixFileMode.UserRead
-            | UnixFileMode.UserWrite
-            | UnixFileMode.UserExecute
-            | UnixFileMode.GroupRead
-            | UnixFileMode.GroupWrite
-            | UnixFileMode.GroupExecute
-            | UnixFileMode.OtherRead
-            | UnixFileMode.OtherWrite
-            | UnixFileMode.OtherExecute);
-
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, effective);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static void AssertWindowsUserOnlyAcl(string filePath)
-    {
-        var security = new FileInfo(filePath).GetAccessControl(AccessControlSections.Access);
-        var rules = security
-            .GetAccessRules(true, true, typeof(SecurityIdentifier))
-            .Cast<FileSystemAccessRule>()
-            .Where(rule => rule.AccessControlType == AccessControlType.Allow)
-            .ToList();
-
-        var currentUserSid = WindowsIdentity.GetCurrent().User;
-        Assert.NotNull(currentUserSid);
-        Assert.Contains(rules, rule => Equals(rule.IdentityReference, currentUserSid));
-        Assert.DoesNotContain(rules, rule => !Equals(rule.IdentityReference, currentUserSid));
-    }
 }
 
 public static class TestHelpers
@@ -561,6 +284,4 @@ public static class TestHelpers
         return testDirectory;
     }
 }
-
-
 

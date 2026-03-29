@@ -15,16 +15,28 @@ namespace DevHub.Core.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// 注册 DevHub M1/M2 阶段核心服务。
+    /// 注册 DevHub Core 核心服务，并自动解析运行时路径选项。
     /// </summary>
     /// <param name="services">依赖注入服务集合。</param>
     /// <returns>原服务集合，便于链式调用。</returns>
-    /// <remarks>
-    /// 本方法仅负责服务装配，不承担启动流程控制或运行时状态初始化。
-    /// </remarks>
     public static IServiceCollection AddDevHubCore(this IServiceCollection services)
     {
-        var runtimePathOptions = RuntimePathOptions.Resolve();
+        return services.AddDevHubCore(RuntimePathOptions.Resolve());
+    }
+
+    /// <summary>
+    /// 注册 DevHub Core 核心服务。
+    /// </summary>
+    /// <param name="services">依赖注入服务集合。</param>
+    /// <param name="runtimePathOptions">显式传入的运行时路径选项。</param>
+    /// <returns>原服务集合，便于链式调用。</returns>
+    /// <remarks>
+    /// 本方法仅负责 Core 服务装配，不承担 Host 启动流程控制或运行时文件初始化。
+    /// </remarks>
+    public static IServiceCollection AddDevHubCore(this IServiceCollection services, RuntimePathOptions runtimePathOptions)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(runtimePathOptions);
 
         services.AddSingleton(runtimePathOptions);
         services.AddSingleton<RuntimeTuningOptions>(sp =>
@@ -35,11 +47,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProcessLauncher, ProcessLauncher>();
 
         // 注册核心服务
-        services.AddSingleton<FileSystemManager>(sp =>
-            new FileSystemManager(
-                sp.GetRequiredService<ILogger<FileSystemManager>>(),
-                sp.GetRequiredService<RuntimePathOptions>(),
-                sp.GetRequiredService<RuntimeTuningOptions>()));
         services.AddSingleton<AppRegistry>(sp =>
             new AppRegistry(
                 sp.GetRequiredService<IClock>(),
@@ -79,7 +86,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<RuntimeTuningOptions>(),
                 sp.GetRequiredService<ILogger<LaunchCoordinator>>()));
 
-        // 注册RPC处理器
+        // 注册 RPC 处理器
         services.AddSingleton<IRpcHandler, HubPingHandler>();
         services.AddSingleton<IRpcHandler>(sp =>
             new AppDefinitionsHandler(
@@ -105,7 +112,7 @@ public static class ServiceCollectionExtensions
                 sp.GetService<HubEventBus>()));
         services.AddSingleton<IRpcHandler, LaunchHandler>();
 
-        // 注册RPC路由器
+        // 注册 RPC 路由器
         services.AddSingleton<RpcRouter>();
 
         return services;

@@ -1,5 +1,5 @@
-using DevHub.Core.Extensions;
 using DevHub.Core.Services;
+using DevHub.Host.Extensions;
 using Serilog;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -124,16 +124,7 @@ public class Program
             builder.Host.UseSerilog();
             builder.Services.AddAuthorization();
             builder.Services.AddOpenApi();
-            builder.Services.AddDevHubCore();
-            builder.Services.AddSingleton<FileSystemManager>(sp =>
-                new FileSystemManager(
-                    sp.GetRequiredService<ILogger<FileSystemManager>>(),
-                    sp.GetRequiredService<RuntimePathOptions>(),
-                    sp.GetRequiredService<RuntimeTuningOptions>(),
-                    hubVersion));
-            builder.Services.AddSingleton<HostBootstrapper>();
-            builder.Services.AddSingleton<RpcHttpEndpointHandler>();
-            builder.Services.AddSingleton<WebSocketSessionHandler>();
+            builder.Services.AddDevHubHost(runtimePathOptions, hubVersion);
 
             var app = builder.Build();
             var logger = app.Services.GetRequiredService<ILogger<Program>>();

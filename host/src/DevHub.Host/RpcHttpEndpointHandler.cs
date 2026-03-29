@@ -1,6 +1,6 @@
 using DevHub.Core.Models.Rpc;
-using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
+using DevHub.Host.Runtime;
 using DevHub.Host.Transport;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -19,22 +19,22 @@ public class RpcHttpEndpointHandler
     };
 
     private readonly RpcRouter _rpcRouter;
-    private readonly FileSystemManager _fileSystemManager;
+    private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
     private readonly ILogger<RpcHttpEndpointHandler> _logger;
 
     /// <summary>
     /// 初始化 HTTP RPC 端点处理器。
     /// </summary>
     /// <param name="rpcRouter">RPC 路由器。</param>
-    /// <param name="fileSystemManager">文件系统管理器。</param>
+    /// <param name="runtimeArtifactManager">Host 运行时产物管理器。</param>
     /// <param name="logger">日志记录器。</param>
     public RpcHttpEndpointHandler(
         RpcRouter rpcRouter,
-        FileSystemManager fileSystemManager,
+        HostRuntimeArtifactManager runtimeArtifactManager,
         ILogger<RpcHttpEndpointHandler> logger)
     {
         _rpcRouter = rpcRouter;
-        _fileSystemManager = fileSystemManager;
+        _runtimeArtifactManager = runtimeArtifactManager;
         _logger = logger;
     }
 
@@ -55,7 +55,7 @@ public class RpcHttpEndpointHandler
 
         try
         {
-            _fileSystemManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
+            _runtimeArtifactManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
 
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
             clientId = clientIdValue;
@@ -111,7 +111,7 @@ public class RpcHttpEndpointHandler
                 if (!HttpTransportRequestValidator.TryValidate(
                         request.ContentType,
                         requestHeaders,
-                        _fileSystemManager.GetToken,
+                        _runtimeArtifactManager.GetToken,
                         rpcRequest.Id,
                         out var errorResponse,
                         out var validatedClientId,

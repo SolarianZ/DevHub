@@ -11,7 +11,6 @@ using Moq;
 [Trait("Category", "Impl")]
 public class NegativeTests : IDisposable
 {
-    private readonly Mock<ILogger<FileSystemManager>> _mockFsLogger;
     private readonly Mock<ILogger<DefinitionLoader>> _mockDefinitionLogger;
     private readonly Mock<ILogger<AppRegistry>> _mockRegistryLogger;
     private readonly Mock<ILogger<AppInstancesHandler>> _mockInstancesLogger;
@@ -20,7 +19,6 @@ public class NegativeTests : IDisposable
 
     public NegativeTests()
     {
-        _mockFsLogger = new Mock<ILogger<FileSystemManager>>();
         _mockDefinitionLogger = new Mock<ILogger<DefinitionLoader>>();
         _mockRegistryLogger = new Mock<ILogger<AppRegistry>>();
         _mockInstancesLogger = new Mock<ILogger<AppInstancesHandler>>();
@@ -78,23 +76,6 @@ public class NegativeTests : IDisposable
 
         // Assert
         Assert.Null(result);
-    }
-
-    [Fact]
-    public void Impl_FileSystemManager_InitializeDirectories_ShouldCreateConfiguredDirectories()
-    {
-        // Arrange
-        var runtimeDirectory = Path.Combine(_testDirectory, "runtime");
-
-        using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, _testDirectory);
-        var fileSystemManager = new FileSystemManager(_mockFsLogger.Object, RuntimePathOptions.Resolve());
-
-        // Act
-        fileSystemManager.InitializeDirectories();
-
-        // Assert
-        Assert.True(Directory.Exists(_testDirectory));
-        Assert.True(Directory.Exists(runtimeDirectory));
     }
 
     [Fact]
@@ -233,6 +214,5 @@ public class NegativeTests : IDisposable
         }
     }
 }
-
 
 

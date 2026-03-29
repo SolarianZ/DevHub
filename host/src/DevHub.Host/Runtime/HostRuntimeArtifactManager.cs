@@ -9,12 +9,14 @@ using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace DevHub.Core.Services;
+using DevHub.Core.Services;
+
+namespace DevHub.Host.Runtime;
 
 /// <summary>
-/// 文件系统管理器，负责目录创建、token 管理和 hub.json 写入
+/// Host 运行时产物管理器，负责目录创建、token 管理和 hub.json 写入。
 /// </summary>
-public sealed class FileSystemManager : IDisposable
+public sealed class HostRuntimeArtifactManager : IDisposable
 {
     private const int HubJsonReplaceMaxRetryCount = 40;
     private static readonly TimeSpan HubJsonReplaceRetryDelay = TimeSpan.FromMilliseconds(50);
@@ -23,7 +25,7 @@ public sealed class FileSystemManager : IDisposable
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly ILogger<FileSystemManager> _logger;
+    private readonly ILogger<HostRuntimeArtifactManager> _logger;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
     private readonly object _hubJsonLeaseSyncRoot = new();
@@ -46,23 +48,23 @@ public sealed class FileSystemManager : IDisposable
     private FileStream? _hubJsonLeaseStream;
 
     /// <summary>
-    /// 使用统一路径选项初始化文件系统管理器。
+    /// 使用统一路径选项初始化 Host 运行时产物管理器。
     /// </summary>
     /// <param name="logger">日志记录器。</param>
     /// <param name="runtimePathOptions">运行时路径选项。</param>
-    public FileSystemManager(ILogger<FileSystemManager> logger, RuntimePathOptions runtimePathOptions)
+    public HostRuntimeArtifactManager(ILogger<HostRuntimeArtifactManager> logger, RuntimePathOptions runtimePathOptions)
         : this(logger, runtimePathOptions, RuntimeTuningOptions.Default, defaultHubVersion: null)
     {
     }
 
     /// <summary>
-    /// 使用统一路径选项和运行时调优参数初始化文件系统管理器。
+    /// 使用统一路径选项和运行时调优参数初始化 Host 运行时产物管理器。
     /// </summary>
     /// <param name="logger">日志记录器。</param>
     /// <param name="runtimePathOptions">运行时路径选项。</param>
     /// <param name="runtimeTuningOptions">运行时调优参数。</param>
-    public FileSystemManager(
-        ILogger<FileSystemManager> logger,
+    public HostRuntimeArtifactManager(
+        ILogger<HostRuntimeArtifactManager> logger,
         RuntimePathOptions runtimePathOptions,
         RuntimeTuningOptions runtimeTuningOptions,
         string? defaultHubVersion = null)

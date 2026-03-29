@@ -4,6 +4,7 @@ using System.Text.Json;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
+using DevHub.Host.Runtime;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -144,8 +145,8 @@ public sealed class HostBootstrapperTests : IDisposable
     private BootstrapperContext CreateContext()
     {
         var runtimePathOptions = CreateRuntimePathOptions();
-        var fileSystemManager = new FileSystemManager(
-            Mock.Of<ILogger<FileSystemManager>>(),
+        var runtimeArtifactManager = new HostRuntimeArtifactManager(
+            Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             runtimePathOptions,
             RuntimeTuningOptions.Default,
             ExpectedHubVersion);
@@ -160,12 +161,12 @@ public sealed class HostBootstrapperTests : IDisposable
         var timeoutWorker = new InvocationTimeoutWorker(invocationStore, requestWaiter, new SystemClock(), Mock.Of<ILogger<InvocationTimeoutWorker>>());
 
         var bootstrapper = new HostBootstrapper(
-            fileSystemManager,
+            runtimeArtifactManager,
             definitionProvider,
             timeoutWorker,
             Mock.Of<ILogger<HostBootstrapper>>());
 
-        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, timeoutWorker, fileSystemManager);
+        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, timeoutWorker, runtimeArtifactManager);
     }
 
     private RuntimePathOptions CreateRuntimePathOptions()
@@ -197,17 +198,17 @@ public sealed class HostBootstrapperTests : IDisposable
             DefinitionProvider definitionProvider,
             AppRegistry appRegistry,
             InvocationTimeoutWorker timeoutWorker,
-            FileSystemManager fileSystemManager)
+            HostRuntimeArtifactManager runtimeArtifactManager)
         {
             Bootstrapper = bootstrapper;
             DefinitionProvider = definitionProvider;
             _appRegistry = appRegistry;
             _timeoutWorker = timeoutWorker;
-            _fileSystemManager = fileSystemManager;
+            _runtimeArtifactManager = runtimeArtifactManager;
         }
 
         private readonly AppRegistry _appRegistry;
-        private readonly FileSystemManager _fileSystemManager;
+        private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
         private readonly InvocationTimeoutWorker _timeoutWorker;
 
         public HostBootstrapper Bootstrapper { get; }
@@ -216,7 +217,7 @@ public sealed class HostBootstrapperTests : IDisposable
 
         public void Dispose()
         {
-            _fileSystemManager.Dispose();
+            _runtimeArtifactManager.Dispose();
             _timeoutWorker.Dispose();
             _appRegistry.Dispose();
         }

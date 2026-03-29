@@ -2,6 +2,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Rpc;
+using DevHub.Host.Runtime;
 using DevHub.Host.Transport;
 using System.Net.WebSockets;
 using System.Text;
@@ -21,7 +22,7 @@ public class WebSocketSessionHandler
     };
 
     private readonly RpcRouter _rpcRouter;
-    private readonly FileSystemManager _fileSystemManager;
+    private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
     private readonly HubEventBus _eventBus;
     private readonly ILogger<WebSocketSessionHandler> _logger;
 
@@ -29,17 +30,17 @@ public class WebSocketSessionHandler
     /// 初始化 WebSocket 会话处理器。
     /// </summary>
     /// <param name="rpcRouter">RPC 路由器。</param>
-    /// <param name="fileSystemManager">文件系统管理器。</param>
+    /// <param name="runtimeArtifactManager">Host 运行时产物管理器。</param>
     /// <param name="eventBus">事件总线。</param>
     /// <param name="logger">日志记录器。</param>
     public WebSocketSessionHandler(
         RpcRouter rpcRouter,
-        FileSystemManager fileSystemManager,
+        HostRuntimeArtifactManager runtimeArtifactManager,
         HubEventBus eventBus,
         ILogger<WebSocketSessionHandler> logger)
     {
         _rpcRouter = rpcRouter;
-        _fileSystemManager = fileSystemManager;
+        _runtimeArtifactManager = runtimeArtifactManager;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -59,7 +60,7 @@ public class WebSocketSessionHandler
             return;
         }
 
-        _fileSystemManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
+        _runtimeArtifactManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
 
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
         await HandleWebSocketConnectionAsync(webSocket, cancellationToken);
@@ -335,7 +336,7 @@ public class WebSocketSessionHandler
 
         var response = WebSocketAuthenticationProcessor.Authenticate(
             rpcRequest,
-            _fileSystemManager.GetToken,
+                    _runtimeArtifactManager.GetToken,
             (clientId, sessionId) => _eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
             out var authenticated,
             out var nextClientId,
