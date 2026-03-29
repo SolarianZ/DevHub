@@ -453,6 +453,34 @@ class TestConformanceRunner(unittest.TestCase):
         self.assertIsNotNone(failure)
         self.assertIn("$contract.error.message", failure["diffFields"])
 
+    def test_run_adapter_when_process_times_out_should_return_process_error(self) -> None:
+        adapter = vector_runner.AdapterTarget(
+            name="timeout-adapter",
+            command_prefix=(sys.executable, "dummy.py"),
+            working_directory=REPO_ROOT,
+            env_overrides={},
+            source="manifest",
+            is_official=False,
+        )
+
+        timeout = subprocess.TimeoutExpired(
+            cmd=["python", "dummy.py"],
+            timeout=vector_runner.ADAPTER_TIMEOUT_SECONDS,
+            output="partial stdout\n",
+            stderr="partial stderr\n",
+        )
+
+        with mock.patch.object(vector_runner.subprocess, "run", side_effect=timeout):
+            result = vector_runner.run_adapter(adapter, ["python", "dummy.py"], REPO_ROOT / "execution-context.json")
+
+        self.assertEqual("timeout-adapter", result["sdk"])
+        self.assertIsNone(result["actual"])
+        self.assertFalse(result["_contractValidated"])
+        self.assertEqual("适配器进程执行超时。", result["error"]["message"])
+        self.assertEqual("partial stdout", result["error"]["stdout"])
+        self.assertEqual("partial stderr", result["error"]["stderr"])
+        self.assertIsNone(result["error"]["exitCode"])
+
 
 def load_vector(vector_id: str) -> dict[str, object]:
     path = SUITE_DIRECTORY / f"{vector_id}.json"

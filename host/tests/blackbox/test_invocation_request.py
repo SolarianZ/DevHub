@@ -294,6 +294,18 @@ class TestInvocationRequest(unittest.TestCase):
             }
 
             request_error_holder = {}
+            poll_holder = {}
+
+            def callee_poll_worker():
+                poll_client = RpcClient(base_url, token)
+                poll_response = poll_client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                poll_holder["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if len(items) == 1:
+                    poll_holder["invocationId"] = items[0].get("invocationId")
 
             def caller_worker():
                 try:
@@ -302,9 +314,12 @@ class TestInvocationRequest(unittest.TestCase):
                 except Exception as exc:
                     request_error_holder["error"] = str(exc)
 
+            poll_thread = threading.Thread(target=callee_poll_worker, daemon=True)
             caller_thread = threading.Thread(target=caller_worker, daemon=True)
+            poll_thread.start()
             caller_thread.start()
             caller_thread.join(timeout=2)
+            poll_thread.join(timeout=3)
 
             if "response" in request_error_holder:
                 result.mark_failure(f"❌ caller 中断场景不应收到同步响应: {request_error_holder['response']}")
@@ -314,17 +329,16 @@ class TestInvocationRequest(unittest.TestCase):
                 result.mark_failure(f"❌ caller 中断场景未出现超时类异常: {request_error_holder}")
                 return result
 
-            poll_response = client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+            poll_response = poll_holder.get("poll")
+            if not isinstance(poll_response, dict):
+                result.mark_failure(f"❌ callee poll 未返回有效响应: {poll_holder}")
+                return result
             if not RpcAssertions.expect_success(result, poll_response, ["items"]):
                 return result
 
             items = poll_response.get("result", {}).get("items", [])
-            if len(items) == 0:
-                result.mark_success()
-                return result
-
             if len(items) != 1:
-                result.mark_failure(f"❌ poll 返回异常 items 数量: {poll_response}")
+                result.mark_failure(f"❌ caller 中断后未稳定拉取到唯一 invocation: {poll_response}")
                 return result
 
             invocation_id = items[0].get("invocationId")

@@ -267,6 +267,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             read_errors = []
             update_errors = []
             read_count = 0
+            has_observed_snapshot = False
             rewrite_observations = []
             stop_event = threading.Event()
             result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
@@ -296,17 +297,26 @@ class TestLaunchDiscovery(unittest.TestCase):
                             raise ValueError(f"runtimeTuning.{field} is invalid: {runtime_tuning}")
 
                 def read_hub_runtime_continuously():
-                    nonlocal read_count
+                    nonlocal read_count, has_observed_snapshot
 
                     while not stop_event.is_set():
                         try:
                             with open(hub_json_path, "r", encoding="utf-8") as f:
                                 hub_info = json.load(f)
                             validate_hub_runtime_snapshot(hub_info)
+                            has_observed_snapshot = True
                         except FileNotFoundError:
+                            if has_observed_snapshot:
+                                read_errors.append("reader saw hub.json disappear after a valid snapshot")
+                                stop_event.set()
+                                return
                             time.sleep(0.002)
                             continue
                         except PermissionError:
+                            if has_observed_snapshot:
+                                read_errors.append("reader lost access to hub.json after a valid snapshot")
+                                stop_event.set()
+                                return
                             time.sleep(0.002)
                             continue
                         except json.JSONDecodeError as e:

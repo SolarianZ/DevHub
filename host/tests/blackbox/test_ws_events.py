@@ -10,6 +10,7 @@ import time
 import socket
 import base64
 import hashlib
+import ssl
 from urllib.parse import urlparse
 
 
@@ -37,16 +38,27 @@ class SimpleWebSocketClient:
 
     def connect(self):
         parsed = urlparse(self.ws_url)
-        if parsed.scheme != "ws":
-            raise ValueError(f"Only ws:// is supported in tests, got: {self.ws_url}")
+        if parsed.scheme not in {"ws", "wss"}:
+            raise ValueError(f"Only ws:// or wss:// is supported in tests, got: {self.ws_url}")
 
         host = parsed.hostname or "127.0.0.1"
-        port = parsed.port or 80
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
 
-        self.sock = socket.create_connection((host, port), timeout=self.timeout)
+        raw_sock = socket.create_connection((host, port), timeout=self.timeout)
+        try:
+            if parsed.scheme == "wss":
+                tls_context = ssl.create_default_context()
+                tls_context.check_hostname = False
+                tls_context.verify_mode = ssl.CERT_NONE
+                self.sock = tls_context.wrap_socket(raw_sock, server_hostname=host)
+            else:
+                self.sock = raw_sock
+        except Exception:
+            raw_sock.close()
+            raise
         self.sock.settimeout(self.timeout)
 
         sec_key = base64.b64encode(os.urandom(16)).decode("ascii")

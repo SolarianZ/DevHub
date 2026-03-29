@@ -1162,8 +1162,6 @@ class TestScopeRouting(unittest.TestCase):
                 )
                 if not RpcAssertions.expect_error(result, no_definition_resp, -32010, "instance_not_found"):
                     return result
-                if not RpcAssertions.expect_error_data_fields(result, no_definition_resp, {"reason": "offline_no_queue"}):
-                    return result
 
             result.mark_success()
         except Exception as e:

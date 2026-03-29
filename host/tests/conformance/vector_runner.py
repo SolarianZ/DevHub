@@ -49,6 +49,7 @@ WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
 CASE_ID_PATTERN = re.compile(r"^CONF-\d{3}$")
 ALLOWED_ADAPTER_OUTCOMES = frozenset({"success", "error"})
+ADAPTER_TIMEOUT_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -699,15 +700,33 @@ def run_adapter_with_orchestration(
 
 
 def run_adapter(adapter: AdapterTarget, command: list[str], context_path: Path) -> dict[str, Any]:
-    completed = subprocess.run(
-        command,
-        cwd=adapter.working_directory,
-        env=adapter.build_environment(context_path),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=adapter.working_directory,
+            env=adapter.build_environment(context_path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=ADAPTER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = normalize_process_output(exc.stdout)
+        stderr = normalize_process_output(exc.stderr)
+        return {
+            "sdk": adapter.name,
+            "error": {
+                "message": "适配器进程执行超时。",
+                "exitCode": None,
+                "stdout": stdout,
+                "stderr": stderr,
+            },
+            "actual": None,
+            "_contractValidated": False,
+            "_adapterMeta": build_adapter_meta(adapter, None, stdout, stderr),
+        }
+
     return parse_adapter_output(adapter, completed.stdout, completed.stderr, completed.returncode)
 
 
@@ -731,6 +750,14 @@ def wait_adapter_process(adapter: AdapterTarget, process: subprocess.Popen[str],
         }
 
     return parse_adapter_output(adapter, stdout, stderr, process.returncode or 0)
+
+
+def normalize_process_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace").strip()
+    return value.strip()
 
 
 def parse_adapter_output(adapter: AdapterTarget, stdout: str, stderr: str, exit_code: int) -> dict[str, Any]:
