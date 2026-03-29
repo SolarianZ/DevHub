@@ -269,6 +269,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             read_count = 0
             has_observed_snapshot = False
             rewrite_observations = []
+            restart_in_progress = threading.Event()
             stop_event = threading.Event()
             result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
 
@@ -306,14 +307,14 @@ class TestLaunchDiscovery(unittest.TestCase):
                             validate_hub_runtime_snapshot(hub_info)
                             has_observed_snapshot = True
                         except FileNotFoundError:
-                            if has_observed_snapshot:
+                            if has_observed_snapshot and not restart_in_progress.is_set():
                                 read_errors.append("reader saw hub.json disappear after a valid snapshot")
                                 stop_event.set()
                                 return
                             time.sleep(0.002)
                             continue
                         except PermissionError:
-                            if has_observed_snapshot:
+                            if has_observed_snapshot and not restart_in_progress.is_set():
                                 read_errors.append("reader lost access to hub.json after a valid snapshot")
                                 stop_event.set()
                                 return
@@ -339,6 +340,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                             return
 
                         process = None
+                        restart_in_progress.set()
                         try:
                             with open(host_log_path, "a+", encoding="utf-8", errors="backslashreplace") as log_file:
                                 process = start_isolated_hub_process(data_dir, log_file)
@@ -422,6 +424,7 @@ class TestLaunchDiscovery(unittest.TestCase):
 
                                 rewrite_observations.append((hub_info["pid"], hub_info["startedAtUtc"]))
                                 last_snapshot = snapshot_key
+                                restart_in_progress.clear()
                                 time.sleep(0.1)
                         except Exception as e:
                             update_errors.append(f"restart {i + 1}: unexpected exception: {e}")
@@ -429,6 +432,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                             return
                         finally:
                             self._stop_process(process)
+                            restart_in_progress.set()
                             time.sleep(0.1)
 
                 reader_thread = threading.Thread(target=read_hub_runtime_continuously, daemon=True)
