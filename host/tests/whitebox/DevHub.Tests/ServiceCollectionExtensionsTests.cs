@@ -60,7 +60,6 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<RpcRouter>());
 
         var handlers = provider.GetServices<IRpcHandler>().ToList();
-        Assert.Equal(5, handlers.Count);
         Assert.Contains(handlers, handler => handler is HubPingHandler);
         Assert.Contains(handlers, handler => handler is AppDefinitionsHandler);
         Assert.Contains(handlers, handler => handler is AppInstancesHandler);

@@ -12,10 +12,6 @@ public class TestGovernanceTests
         """(?ms)(\[(?:Fact|Theory)\][\r\n \t]*(?:\[[^\]]+\][\r\n \t]*)*)(public\s+(?:async\s+)?(?:Task|void)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\()""",
         RegexOptions.Compiled);
 
-    private static readonly Regex SpecNameRegex = new(
-        """^Spec_(\d+)_(\d+)(?:_(\d+))?_""",
-        RegexOptions.Compiled);
-
     private static readonly Regex SpecRefRegex = new(
         """\[Trait\("SpecRef",\s*"([^"]+)"\)\]""",
         RegexOptions.Compiled);
@@ -56,22 +52,18 @@ public class TestGovernanceTests
                     continue;
                 }
 
-                var clauseMatch = SpecNameRegex.Match(methodName);
+                var expectedClauses = GetExpectedSpecRefs(methodName);
                 Assert.True(
-                    clauseMatch.Success,
+                    expectedClauses.Count > 0,
                     $"Spec 测试命名不符合条款格式: {Path.GetFileName(testFile)}::{methodName}");
 
-                var expectedClause = clauseMatch.Groups[1].Value + "." + clauseMatch.Groups[2].Value;
-                if (clauseMatch.Groups[3].Success)
-                {
-                    expectedClause += "." + clauseMatch.Groups[3].Value;
-                }
-
-                var specRefMatch = SpecRefRegex.Match(attributesBlock);
+                var specRefMatches = SpecRefRegex.Matches(attributesBlock)
+                    .Select(matchItem => matchItem.Groups[1].Value)
+                    .ToList();
                 Assert.True(
-                    specRefMatch.Success,
+                    specRefMatches.Count > 0,
                     $"Spec 测试缺少 SpecRef 标记: {Path.GetFileName(testFile)}::{methodName}");
-                Assert.Equal(expectedClause, specRefMatch.Groups[1].Value);
+                Assert.Equal(expectedClauses, specRefMatches);
             }
         }
     }
@@ -140,5 +132,54 @@ public class TestGovernanceTests
         }
 
         throw new InvalidOperationException("无法定位 DevHub.Host.Tests.csproj。");
+    }
+
+    private static IReadOnlyList<string> GetExpectedSpecRefs(string methodName)
+    {
+        const string prefix = "Spec_";
+        if (!methodName.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var tokens = methodName[prefix.Length..].Split('_', StringSplitOptions.RemoveEmptyEntries);
+        var results = new List<string>();
+
+        for (var index = 0; index < tokens.Length;)
+        {
+            if (string.Equals(tokens[index], "And", StringComparison.Ordinal))
+            {
+                index += 1;
+                continue;
+            }
+
+            if (!IsClauseToken(tokens[index]) || index + 1 >= tokens.Length || !IsClauseToken(tokens[index + 1]))
+            {
+                break;
+            }
+
+            var clause = $"{tokens[index]}.{tokens[index + 1]}";
+            index += 2;
+
+            if (index < tokens.Length && IsClauseToken(tokens[index]))
+            {
+                clause += $".{tokens[index]}";
+                index += 1;
+            }
+
+            results.Add(clause);
+
+            if (index >= tokens.Length || !string.Equals(tokens[index], "And", StringComparison.Ordinal))
+            {
+                break;
+            }
+        }
+
+        return results;
+    }
+
+    private static bool IsClauseToken(string token)
+    {
+        return token.All(char.IsDigit);
     }
 }

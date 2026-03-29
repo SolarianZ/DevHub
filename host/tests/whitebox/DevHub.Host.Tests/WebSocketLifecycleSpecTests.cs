@@ -569,7 +569,18 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
-        await Task.Delay(120);
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-after-unsubscribe",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-after-unsubscribe", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
         socket.EnqueueClose();
         await runTask;
 
@@ -608,10 +619,16 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { types = Array.Empty<string>() }
         });
 
-        var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var socket = new ScriptedWebSocket([auth, subscribeAll], autoCloseWhenQueueDrained: false);
         var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
-        await Task.Delay(120);
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub-all", TimeSpan.FromSeconds(2));
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var subscribeResponse = await WaitForResponseByIdAsync(socket, "sub-all", TimeSpan.FromSeconds(2));
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
 
         context.EventBus.Publish(new HubEventMessage
         {
@@ -624,14 +641,23 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-sub-all",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-sub-all", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        var hubEvent = await WaitForHubEventAsync(socket, "app.instance.registered", TimeSpan.FromSeconds(2));
+
+        socket.EnqueueClose();
         await runTask;
 
-        var messages = ParseSentMessages(socket);
-        var hubEvent = messages.FirstOrDefault(m =>
-            m.TryGetProperty("method", out var method)
-            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
-
-        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
         var parameters = hubEvent.GetProperty("params");
         Assert.Equal("app.instance.registered", parameters.GetProperty("type").GetString());
     }
@@ -664,10 +690,16 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { }
         });
 
-        var socket = new ScriptedWebSocket([auth, subscribeAll], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var socket = new ScriptedWebSocket([auth, subscribeAll], autoCloseWhenQueueDrained: false);
         var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
-        await Task.Delay(120);
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub-omitted", TimeSpan.FromSeconds(2));
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var subscribeResponse = await WaitForResponseByIdAsync(socket, "sub-omitted", TimeSpan.FromSeconds(2));
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
 
         context.EventBus.Publish(new HubEventMessage
         {
@@ -681,14 +713,23 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-sub-omitted",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-sub-omitted", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        var hubEvent = await WaitForHubEventAsync(socket, "invocation.failed", TimeSpan.FromSeconds(2));
+
+        socket.EnqueueClose();
         await runTask;
 
-        var messages = ParseSentMessages(socket);
-        var hubEvent = messages.FirstOrDefault(m =>
-            m.TryGetProperty("method", out var method)
-            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
-
-        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
         var parameters = hubEvent.GetProperty("params");
         Assert.Equal("invocation.failed", parameters.GetProperty("type").GetString());
     }
@@ -755,7 +796,20 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
-        await Task.Delay(120);
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-sub-filter",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-sub-filter", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        _ = await WaitForHubEventAsync(socket, "invocation.completed", TimeSpan.FromSeconds(2));
+
         socket.EnqueueClose();
         await runTask;
 
@@ -840,10 +894,16 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { types = new[] { "invocation.completed" } }
         });
 
-        var socket = new ScriptedWebSocket([auth, subscribe], closeFrameDelay: TimeSpan.FromMilliseconds(400));
+        var socket = new ScriptedWebSocket([auth, subscribe], autoCloseWhenQueueDrained: false);
         var runTask = context.InvokeWebSocketConnectionAsync(socket);
 
-        await Task.Delay(120);
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-event", TimeSpan.FromSeconds(2));
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var subscribeResponse = await WaitForResponseByIdAsync(socket, "sub-event", TimeSpan.FromSeconds(2));
+        Assert.True(subscribeResponse.TryGetProperty("result", out var subscribeResult));
+        Assert.True(subscribeResult.GetProperty("ok").GetBoolean());
 
         context.EventBus.Publish(new HubEventMessage
         {
@@ -857,14 +917,23 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-event",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-event", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        var hubEvent = await WaitForHubEventAsync(socket, "invocation.completed", TimeSpan.FromSeconds(2));
+
+        socket.EnqueueClose();
         await runTask;
 
-        var messages = ParseSentMessages(socket);
-        var hubEvent = messages.FirstOrDefault(m =>
-            m.TryGetProperty("method", out var method)
-            && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
-
-        Assert.NotEqual(JsonValueKind.Undefined, hubEvent.ValueKind);
         Assert.False(hubEvent.TryGetProperty("id", out _));
 
         var parameters = hubEvent.GetProperty("params");
@@ -934,7 +1003,6 @@ public class WebSocketLifecycleSpecTests : IDisposable
             }
         });
 
-        await Task.Delay(80);
         var responsesAfterClose = ParseSentMessages(socket);
         Assert.DoesNotContain(
             responsesAfterClose,
@@ -973,6 +1041,28 @@ public class WebSocketLifecycleSpecTests : IDisposable
         }
 
         throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
+    }
+
+    private static async Task<JsonElement> WaitForHubEventAsync(ScriptedWebSocket socket, string eventType, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var hubEvent = ParseSentMessages(socket).FirstOrDefault(message =>
+                message.TryGetProperty("method", out var method)
+                && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal)
+                && message.TryGetProperty("params", out var parameters)
+                && string.Equals(parameters.GetProperty("type").GetString(), eventType, StringComparison.Ordinal));
+
+            if (hubEvent.ValueKind != JsonValueKind.Undefined)
+            {
+                return hubEvent;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 type={eventType} 的 hub.event 通知。");
     }
 
     private HostTestContext CreateHostContext()

@@ -126,7 +126,6 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         using var beforeDocument = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
         var beforeStartedAtUtc = beforeDocument.RootElement.GetProperty("startedAtUtc").GetString();
 
-        Thread.Sleep(20);
         File.Delete(hubJsonPath);
 
         manager.EnsureRuntimeArtifacts(port: 48031);
@@ -244,9 +243,8 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         manager.ActivateHubJsonLease();
 
         var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
-        var content = File.ReadAllText(hubJsonPath);
-
-        Assert.Contains("\"httpBaseUrl\": \"http://127.0.0.1:48040\"", content, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        Assert.Equal("http://127.0.0.1:48040", document.RootElement.GetProperty("httpBaseUrl").GetString());
 
         if (!OperatingSystem.IsWindows())
         {
@@ -298,7 +296,8 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         manager.EnsureRuntimeArtifacts(port: 48042);
 
         Assert.True(File.Exists(hubJsonPath));
-        Assert.Contains("\"httpBaseUrl\": \"http://127.0.0.1:48042\"", File.ReadAllText(hubJsonPath), StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
+        Assert.Equal("http://127.0.0.1:48042", document.RootElement.GetProperty("httpBaseUrl").GetString());
 
         if (!OperatingSystem.IsWindows())
         {
