@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1~M4 测试运行器（default/smoke/fast/full）
+DevHub 仓库级黑盒测试运行器（default/smoke/fast/full）
 """
 
 import os
@@ -150,14 +150,14 @@ def run_all_tests(full=False, fast=False, smoke=False):
         coverage = "跨平台最小冒烟回归（发现/鉴权/WS 传输矩阵/request 主链路）"
     elif full:
         mode = "full"
-        coverage = "M1~M4 严格覆盖（含 lease 重投递 full 严格断言/并发去重 full 场景/scope 扩展与 WS failed 事件场景）"
+        coverage = "仓库级黑盒严格回归（含 lease 重投递 full 严格断言/并发去重 full 场景/scope 扩展与 WS failed 事件场景）"
     elif fast:
         mode = "fast"
-        coverage = "M1~M4 快速回归（跳过 lease 重投递与并发 dedupe 等长耗时场景）"
+        coverage = "仓库级黑盒快速回归（跳过 lease 重投递与并发 dedupe 等长耗时场景）"
     else:
         mode = "default"
-        coverage = "M1~M4 默认回归（核心链路 + Spec MUST，含轻量 lease 重投递与轻量并发 dedupe）"
-    logger.info("开始 DevHub M1~M4 功能测试，模式: %s", mode)
+        coverage = "仓库级黑盒默认回归（核心链路 + Spec MUST，含轻量 lease 重投递与轻量并发 dedupe）"
+    logger.info("开始 DevHub 仓库级黑盒测试，模式: %s", mode)
 
     # 创建测试报告
     report = TestReport(mode=mode, coverage=coverage)
@@ -315,7 +315,7 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="DevHub M1~M4 功能测试运行器")
+    parser = argparse.ArgumentParser(description="DevHub 仓库级黑盒测试运行器")
     parser.add_argument("--no-header", action="store_true", help="Don't print test header")
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -337,7 +337,7 @@ def main():
 
     if not args.no_header:
         print("=" * 60)
-        print("DevHub M1~M4 功能测试")
+        print("DevHub 仓库级黑盒测试")
         print("=" * 60)
         print()
 

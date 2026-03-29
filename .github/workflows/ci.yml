@@ -6,13 +6,13 @@ on:
       - "host/**"
       - "sdks/**"
       - ".github/workflows/**"
-      - "docs/Spec.md"
+      - "docs/spec/**"
   pull_request:
     paths:
       - "host/**"
       - "sdks/**"
       - ".github/workflows/**"
-      - "docs/Spec.md"
+      - "docs/spec/**"
 
 jobs:
   build-and-test:

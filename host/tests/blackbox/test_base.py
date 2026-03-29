@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 测试基础类和工具函数
+DevHub 仓库级黑盒测试基础类和工具函数
 """
 
 import os
@@ -895,7 +895,7 @@ class TestReport:
     测试报告类
     """
 
-    def __init__(self, mode="default", coverage="全部 M1 必测 + Spec MUST（默认）"):
+    def __init__(self, mode="default", coverage="仓库级黑盒默认回归（核心链路 + Spec MUST）"):
         self.results = []
         self.start_time = datetime.now()
         self.end_time = None
@@ -946,7 +946,7 @@ class TestReport:
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("=" * 60 + "\n")
-            f.write("DevHub M1~M4 功能测试报告\n")
+            f.write("DevHub 仓库级黑盒测试报告\n")
             f.write("=" * 60 + "\n\n")
             f.write(f"测试时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"完成时间: {self.end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
