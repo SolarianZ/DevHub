@@ -104,7 +104,7 @@
 
 - `M6-REPO-002` 已完成：Host 白盒测试工程已迁移到 `host/tests/whitebox/`，`host/src/` 不再混放测试工程；后续仍需持续观察 `host/tests/` 内 Python 黑盒 / conformance / whitebox 三类资产的长期导航成本。
 - `M6-ARCH-HOST-002`、`M6-ARCH-HOST-003`、`M6-TEST-003` 与 `M6-TEST-005` 已完成一组阶段收敛：`DevHub.Host` 的 transport 校验已按 HTTP/WS/JSON-RPC/事件订阅等职责拆分，`HttpNotificationSpecTests` / `WebSocketLifecycleSpecTests` 已复用统一 harness，Host transport 相关白盒测试已迁回 `host/tests/whitebox/DevHub.Host.Tests/`，`DevHub.Tests` 不再直接依赖 `DevHub.Host`。
-- `M6-ARCH-HOST-001`、`M6-ARCH-HOST-004` 与 `M6-DOC-004` 已完成收尾收敛：Host 运行时产物管理与宿主装配已从 `DevHub.Core` 通用注册中剥离并回归 `DevHub.Host` 边界，`AddDevHubHost(...)` 成为 Host 统一装配入口，`DevHub.Tests` 不再承载 `hub.json` / `token.txt` / lease 等 Host runtime 文件行为白盒测试，M6 任务状态与发布前注意事项也已同步回写到规划文档。
+- `M6-ARCH-HOST-001`、`M6-ARCH-HOST-004` 与 `M6-DOC-004` 已完成收尾收敛：Host 运行时产物管理与宿主装配已从 `DevHub.Core` 通用注册中剥离并回归 `DevHub.Host` 边界，`AddDevHubHost(...)` 成为 Host 统一装配入口，`HostDataDirectoryInitializer` 与 `HostRuntimeArtifactManager` 已按“目录骨架初始化 / runtime 发现产物管理”拆分职责，`DevHub.Tests` 不再承载 `hub.json` / `token.txt` / lease 等 Host runtime 文件行为白盒测试，M6 任务状态与发布前注意事项也已同步回写到规划文档。
 - `M6-TEST-004` 已完成一组阶段收敛：conformance runner 已显式校验第三方 adapter 输出契约，`caseId` 已从里程碑耦合的 `M5-CONF-*` 收敛为中立的 `CONF-*`，第三方接入说明不再要求通过阅读官方适配器源码理解输出格式。
 - `host/tests/` 目前既包含黑盒测试，也包含 conformance runner、adapter、覆盖率配置与脚本，后续规模继续增长时可能出现职责边界模糊、导航成本升高的问题。
 - 三套 SDK 的目录形态已基本独立，但其内部抽象层级、扩展点暴露方式、单元测试粒度和集成测试夹具风格是否足够一致，仍需要系统性审查。

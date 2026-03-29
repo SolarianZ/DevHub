@@ -14,7 +14,7 @@ using DevHub.Core.Services;
 namespace DevHub.Host.Runtime;
 
 /// <summary>
-/// Host 运行时产物管理器，负责目录创建、token 管理和 hub.json 写入。
+/// Host 运行时产物管理器，负责 runtime 目录下的 token、hub.json 与 lease 生命周期。
 /// </summary>
 public sealed class HostRuntimeArtifactManager : IDisposable
 {
@@ -29,11 +29,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly object _tokenSyncRoot = new();
     private readonly object _hubJsonLeaseSyncRoot = new();
-    private readonly string _rootPath;
     private readonly string _runtimePath;
-    private readonly string _definitionsPath;
-    private readonly string _instancesPath;
-    private readonly string _logsPath;
     private readonly string _tokenFilePath;
     private readonly string _hubJsonPath;
     private readonly string _previousHubJsonPath;
@@ -71,11 +67,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     {
         _logger = logger;
         _runtimeTuningOptions = runtimeTuningOptions;
-        _rootPath = runtimePathOptions.RootPath;
         _runtimePath = runtimePathOptions.RuntimePath;
-        _definitionsPath = runtimePathOptions.DefinitionsPath;
-        _instancesPath = runtimePathOptions.InstancesPath;
-        _logsPath = runtimePathOptions.LogsPath;
         _tokenFilePath = runtimePathOptions.TokenFilePath;
         _hubJsonPath = runtimePathOptions.HubJsonPath;
         _previousHubJsonPath = runtimePathOptions.PreviousHubJsonPath;
@@ -84,24 +76,12 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     }
 
     /// <summary>
-    /// 初始化文件系统目录结构
+    /// 确保 runtime 目录存在。
     /// </summary>
-    public void InitializeDirectories()
+    public void EnsureRuntimeDirectory()
     {
         try
         {
-            _logger.LogDebug("开始初始化文件系统目录结构");
-
-            if (!Directory.Exists(_rootPath))
-            {
-                Directory.CreateDirectory(_rootPath);
-                _logger.LogInformation("成功创建根目录: {Path}", _rootPath);
-            }
-            else
-            {
-                _logger.LogDebug("根目录已存在: {Path}", _rootPath);
-            }
-
             if (!Directory.Exists(_runtimePath))
             {
                 Directory.CreateDirectory(_runtimePath);
@@ -111,42 +91,10 @@ public sealed class HostRuntimeArtifactManager : IDisposable
             {
                 _logger.LogDebug("运行时目录已存在: {Path}", _runtimePath);
             }
-
-            if (!Directory.Exists(_definitionsPath))
-            {
-                Directory.CreateDirectory(_definitionsPath);
-                _logger.LogInformation("成功创建应用程序定义目录: {Path}", _definitionsPath);
-            }
-            else
-            {
-                _logger.LogDebug("应用程序定义目录已存在: {Path}", _definitionsPath);
-            }
-
-            if (!Directory.Exists(_instancesPath))
-            {
-                Directory.CreateDirectory(_instancesPath);
-                _logger.LogInformation("成功创建实例目录: {Path}", _instancesPath);
-            }
-            else
-            {
-                _logger.LogDebug("实例目录已存在: {Path}", _instancesPath);
-            }
-
-            if (!Directory.Exists(_logsPath))
-            {
-                Directory.CreateDirectory(_logsPath);
-                _logger.LogInformation("成功创建日志目录: {Path}", _logsPath);
-            }
-            else
-            {
-                _logger.LogDebug("日志目录已存在: {Path}", _logsPath);
-            }
-
-            _logger.LogDebug("文件系统目录结构初始化完成");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "初始化文件系统目录结构失败");
+            _logger.LogError(ex, "初始化运行时目录失败");
             throw;
         }
     }
@@ -194,9 +142,9 @@ public sealed class HostRuntimeArtifactManager : IDisposable
             _logger.LogDebug("Token 文件不存在，将为当前 Hub 会话生成新 token，文件路径: {FilePath}", _tokenFilePath);
         }
 
-        Directory.CreateDirectory(_runtimePath);
+            EnsureRuntimeDirectory();
 
-        var newToken = GenerateNewToken();
+            var newToken = GenerateNewToken();
         _logger.LogDebug("成功生成新 token，长度: {TokenLength} 字符", newToken.Length);
 
         File.WriteAllText(_tokenFilePath, newToken);
@@ -220,7 +168,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         if (!File.Exists(_tokenFilePath))
         {
             _logger.LogWarning("检测到 token 文件丢失，正在恢复当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
-            Directory.CreateDirectory(_runtimePath);
+            EnsureRuntimeDirectory();
             File.WriteAllText(_tokenFilePath, _sessionToken);
             _tokenPermissionEnsured = false;
         }
@@ -255,7 +203,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         {
             _logger.LogDebug("开始写入 hub.json 文件，监听端口: {Port}, Hub版本: {HubVersion}", port, effectiveHubVersion);
 
-            Directory.CreateDirectory(_runtimePath);
+            EnsureRuntimeDirectory();
             _ = GetToken();
             ReleaseHubJsonLease();
 
@@ -448,11 +396,11 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     private static extern int Chmod(string path, int mode);
 
     /// <summary>
-    /// 轻量确保运行时文件可用，避免运行期间文件被删除导致发现失败
+    /// 轻量确保运行时发现产物可用，避免运行期间文件被删除导致发现失败。
     /// </summary>
     public void EnsureRuntimeArtifacts(int? port = null)
     {
-        InitializeDirectories();
+        EnsureRuntimeDirectory();
         GetToken();
 
         if (!_hubJsonPermissionEnsured && File.Exists(_hubJsonPath))

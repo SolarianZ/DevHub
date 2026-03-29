@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 internal sealed class HostTransportTestHarness : IDisposable
 {
     private readonly ServiceProvider _serviceProvider;
+    private readonly HostDataDirectoryInitializer _dataDirectoryInitializer;
 
     /// <summary>
     /// 初始化统一测试夹具。
@@ -21,12 +22,13 @@ internal sealed class HostTransportTestHarness : IDisposable
     internal HostTransportTestHarness(string rootDirectory)
     {
         _serviceProvider = BuildServiceProvider(rootDirectory);
+        _dataDirectoryInitializer = _serviceProvider.GetRequiredService<HostDataDirectoryInitializer>();
         RuntimeArtifactManager = _serviceProvider.GetRequiredService<HostRuntimeArtifactManager>();
         EventBus = _serviceProvider.GetRequiredService<HubEventBus>();
         HttpHandler = _serviceProvider.GetRequiredService<RpcHttpEndpointHandler>();
         WebSocketHandler = _serviceProvider.GetRequiredService<WebSocketSessionHandler>();
 
-        RuntimeArtifactManager.InitializeDirectories();
+        _dataDirectoryInitializer.InitializeDirectories();
         Token = RuntimeArtifactManager.GetToken();
         RefreshDefinitions();
     }
@@ -37,7 +39,7 @@ internal sealed class HostTransportTestHarness : IDisposable
     internal string Token { get; }
 
     /// <summary>
-    /// 文件系统管理器。
+    /// Host 运行时产物管理器。
     /// </summary>
     internal HostRuntimeArtifactManager RuntimeArtifactManager { get; }
 

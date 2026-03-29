@@ -12,6 +12,7 @@ namespace DevHub.Host;
 /// </remarks>
 public class HostBootstrapper
 {
+    private readonly HostDataDirectoryInitializer _dataDirectoryInitializer;
     private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationTimeoutWorker _invocationTimeoutWorker;
@@ -20,16 +21,19 @@ public class HostBootstrapper
     /// <summary>
     /// 初始化 Host 启动编排器。
     /// </summary>
+    /// <param name="dataDirectoryInitializer">Host 数据目录骨架初始化器。</param>
     /// <param name="runtimeArtifactManager">Host 运行时产物管理器。</param>
     /// <param name="definitionProvider">定义提供器。</param>
     /// <param name="invocationTimeoutWorker">调用超时工作器。</param>
     /// <param name="logger">日志记录器。</param>
     public HostBootstrapper(
+        HostDataDirectoryInitializer dataDirectoryInitializer,
         HostRuntimeArtifactManager runtimeArtifactManager,
         IDefinitionProvider definitionProvider,
         InvocationTimeoutWorker invocationTimeoutWorker,
         ILogger<HostBootstrapper> logger)
     {
+        _dataDirectoryInitializer = dataDirectoryInitializer;
         _runtimeArtifactManager = runtimeArtifactManager;
         _definitionProvider = definitionProvider;
         _invocationTimeoutWorker = invocationTimeoutWorker;
@@ -41,9 +45,9 @@ public class HostBootstrapper
     /// </summary>
     public void Initialize()
     {
-        _logger.LogDebug("初始化文件系统目录结构...");
-        _runtimeArtifactManager.InitializeDirectories();
-        _logger.LogInformation("文件系统初始化完成");
+        _logger.LogDebug("初始化 Host 数据目录骨架...");
+        _dataDirectoryInitializer.InitializeDirectories();
+        _logger.LogInformation("Host 数据目录初始化完成");
 
         _logger.LogDebug("确保 token 文件存在...");
         _runtimeArtifactManager.GetToken();

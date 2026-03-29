@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using DevHub.Core.Services;
@@ -19,6 +20,12 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">依赖注入服务集合。</param>
     /// <returns>原服务集合，便于链式调用。</returns>
+    /// <remarks>
+    /// 该重载仅保留为兼容入口；仓库内部应统一使用显式传入 <see cref="RuntimePathOptions"/> 的重载，
+    /// 避免再次引入隐式环境解析耦合。
+    /// </remarks>
+    [Obsolete("请改用 AddDevHubCore(IServiceCollection, RuntimePathOptions)。该重载仅保留为兼容入口。", error: false)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IServiceCollection AddDevHubCore(this IServiceCollection services)
     {
         return services.AddDevHubCore(RuntimePathOptions.Resolve());

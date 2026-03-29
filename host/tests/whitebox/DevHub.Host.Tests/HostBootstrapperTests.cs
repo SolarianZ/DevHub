@@ -145,6 +145,9 @@ public sealed class HostBootstrapperTests : IDisposable
     private BootstrapperContext CreateContext()
     {
         var runtimePathOptions = CreateRuntimePathOptions();
+        var dataDirectoryInitializer = new HostDataDirectoryInitializer(
+            Mock.Of<ILogger<HostDataDirectoryInitializer>>(),
+            runtimePathOptions);
         var runtimeArtifactManager = new HostRuntimeArtifactManager(
             Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
             runtimePathOptions,
@@ -161,6 +164,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var timeoutWorker = new InvocationTimeoutWorker(invocationStore, requestWaiter, new SystemClock(), Mock.Of<ILogger<InvocationTimeoutWorker>>());
 
         var bootstrapper = new HostBootstrapper(
+            dataDirectoryInitializer,
             runtimeArtifactManager,
             definitionProvider,
             timeoutWorker,

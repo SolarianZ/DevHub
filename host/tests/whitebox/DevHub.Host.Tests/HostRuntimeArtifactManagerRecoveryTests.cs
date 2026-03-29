@@ -138,24 +138,26 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
     }
 
     [Fact]
-    public void Impl_InitializeDirectories_WhenUsingIsolatedRoot_ShouldCreateAllFolders()
+    public void Impl_EnsureRuntimeArtifacts_WhenUsingIsolatedRoot_ShouldOnlyCreateRuntimeArtifacts()
     {
         var isolatedRoot = Path.Combine(_tempDirectory, "isolated-root");
         var isolatedRuntime = Path.Combine(isolatedRoot, "runtime");
         var isolatedDefinitions = Path.Combine(isolatedRoot, "apps", "definitions");
         var isolatedInstances = Path.Combine(isolatedRoot, "apps", "instances");
         var isolatedLogs = Path.Combine(isolatedRoot, "logs");
+        var isolatedToken = Path.Combine(isolatedRuntime, "token.txt");
 
         var runtimeOptions = RuntimePathOptions.Create(isolatedRoot);
         var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), runtimeOptions);
 
-        manager.InitializeDirectories();
+        manager.EnsureRuntimeArtifacts();
 
         Assert.True(Directory.Exists(isolatedRoot));
         Assert.True(Directory.Exists(isolatedRuntime));
-        Assert.True(Directory.Exists(isolatedDefinitions));
-        Assert.True(Directory.Exists(isolatedInstances));
-        Assert.True(Directory.Exists(isolatedLogs));
+        Assert.True(File.Exists(isolatedToken));
+        Assert.False(Directory.Exists(isolatedDefinitions));
+        Assert.False(Directory.Exists(isolatedInstances));
+        Assert.False(Directory.Exists(isolatedLogs));
     }
 
     [Fact]
@@ -351,4 +353,3 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         }
     }
 }
-

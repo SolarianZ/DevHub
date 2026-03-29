@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(runtimePathOptions);
 
         services.AddDevHubCore(runtimePathOptions);
+        services.AddSingleton<HostDataDirectoryInitializer>();
         services.AddSingleton<HostRuntimeArtifactManager>(sp =>
             new HostRuntimeArtifactManager(
                 sp.GetRequiredService<ILogger<HostRuntimeArtifactManager>>(),

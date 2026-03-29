@@ -54,6 +54,7 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<IRuntimeHttpBaseUrlProvider>());
         Assert.NotNull(provider.GetRequiredService<LaunchCoordinator>());
         Assert.NotNull(provider.GetRequiredService<RpcRouter>());
+        Assert.NotNull(provider.GetRequiredService<HostDataDirectoryInitializer>());
         Assert.NotNull(provider.GetRequiredService<HostRuntimeArtifactManager>());
         Assert.NotNull(provider.GetRequiredService<HostBootstrapper>());
         Assert.NotNull(provider.GetRequiredService<RpcHttpEndpointHandler>());

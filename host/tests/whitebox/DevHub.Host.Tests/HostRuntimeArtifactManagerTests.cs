@@ -131,34 +131,6 @@ public sealed class HostRuntimeArtifactManagerTests
     }
 
     [Fact]
-    public void Impl_InitializeDirectories_ShouldCreateConfiguredDirectories()
-    {
-        var testRoot = CreateTestDirectory();
-        var runtimeDirectory = Path.Combine(testRoot, "runtime");
-        var definitionsDirectory = Path.Combine(testRoot, "apps", "definitions");
-        var instancesDirectory = Path.Combine(testRoot, "apps", "instances");
-        var logsDirectory = Path.Combine(testRoot, "logs");
-
-        try
-        {
-            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
-            var manager = new HostRuntimeArtifactManager(Mock.Of<ILogger<HostRuntimeArtifactManager>>(), RuntimePathOptions.Resolve());
-
-            manager.InitializeDirectories();
-
-            Assert.True(Directory.Exists(testRoot));
-            Assert.True(Directory.Exists(runtimeDirectory));
-            Assert.True(Directory.Exists(definitionsDirectory));
-            Assert.True(Directory.Exists(instancesDirectory));
-            Assert.True(Directory.Exists(logsDirectory));
-        }
-        finally
-        {
-            DeleteDirectoryIfExists(testRoot);
-        }
-    }
-
-    [Fact]
     public void Impl_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
     {
         var testRoot = CreateTestDirectory();
