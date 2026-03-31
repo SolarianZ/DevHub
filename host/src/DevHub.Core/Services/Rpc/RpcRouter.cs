@@ -81,7 +81,7 @@ public class RpcRouter
         {
             // 尝试前缀匹配（处理如 "hub.apps" 这样的前缀路由）
             var matchingPrefixes = _handlers.Where(h =>
-                request.Method.StartsWith(h.Key + ".", StringComparison.OrdinalIgnoreCase)).ToList();
+                request.Method.StartsWith(h.Key + ".", StringComparison.Ordinal)).ToList();
 
             foreach (var (prefix, handlers) in matchingPrefixes)
             {

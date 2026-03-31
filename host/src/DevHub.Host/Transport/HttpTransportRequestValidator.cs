@@ -9,6 +9,28 @@ namespace DevHub.Host.Transport;
 internal static class HttpTransportRequestValidator
 {
     /// <summary>
+    /// 校验 HTTP Content-Type。
+    /// </summary>
+    internal static bool TryValidateContentType(
+        string? contentType,
+        object? requestId,
+        out JsonRpcResponse errorResponse)
+    {
+        if (!IsValidJsonContentType(contentType))
+        {
+            errorResponse = TransportResponseFactory.CreateErrorResponse(
+                -32600,
+                "invalid_request",
+                requestId,
+                new { reason = "invalid_content_type", received = contentType });
+            return false;
+        }
+
+        errorResponse = null!;
+        return true;
+    }
+
+    /// <summary>
     /// 校验 HTTP 请求头、协议版本与访问令牌。
     /// </summary>
     internal static bool TryValidate(
@@ -23,34 +45,8 @@ internal static class HttpTransportRequestValidator
         validatedClientId = null;
         validatedClientSessionId = null;
 
-        if (!IsValidJsonContentType(contentType))
+        if (!TryValidateContentType(contentType, requestId, out errorResponse))
         {
-            errorResponse = TransportResponseFactory.CreateErrorResponse(
-                -32600,
-                "invalid_request",
-                requestId,
-                new { reason = "invalid_content_type", received = contentType });
-            return false;
-        }
-
-        if (!TryGetHeader(headers, "X-DevHub-Protocol", out var protocolRaw) || string.IsNullOrWhiteSpace(protocolRaw))
-        {
-            errorResponse = TransportResponseFactory.CreateErrorResponse(
-                -32099,
-                "not_supported",
-                requestId,
-                new { expected = 1, reason = "missing" });
-            return false;
-        }
-
-        var protocol = protocolRaw.Trim();
-        if (!string.Equals(protocol, "1", StringComparison.Ordinal))
-        {
-            errorResponse = TransportResponseFactory.CreateErrorResponse(
-                -32099,
-                "not_supported",
-                requestId,
-                new { expected = 1, received = protocol, reason = "mismatch" });
             return false;
         }
 
@@ -87,6 +83,27 @@ internal static class HttpTransportRequestValidator
                 "unauthorized",
                 requestId,
                 new { reason = "invalid_token" });
+            return false;
+        }
+
+        if (!TryGetHeader(headers, "X-DevHub-Protocol", out var protocolRaw) || string.IsNullOrWhiteSpace(protocolRaw))
+        {
+            errorResponse = TransportResponseFactory.CreateErrorResponse(
+                -32099,
+                "not_supported",
+                requestId,
+                new { expected = 1, reason = "missing" });
+            return false;
+        }
+
+        var protocol = protocolRaw.Trim();
+        if (!string.Equals(protocol, "1", StringComparison.Ordinal))
+        {
+            errorResponse = TransportResponseFactory.CreateErrorResponse(
+                -32099,
+                "not_supported",
+                requestId,
+                new { expected = 1, received = protocol, reason = "mismatch" });
             return false;
         }
 

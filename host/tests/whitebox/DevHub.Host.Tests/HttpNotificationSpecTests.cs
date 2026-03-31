@@ -102,6 +102,29 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.Equal("invalid_request", error.GetProperty("message").GetString());
     }
 
+    [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpInvalidContentType_ShouldBeRejectedBeforeJsonParse()
+    {
+        using var harness = CreateHarness();
+
+        var response = await ExecuteHttpRequestAsync(
+            harness,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"ignored\",\"method\":\"hub.ping\",\"params\":",
+            "http-content-type-client",
+            contentType: "text/plain");
+
+        Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+
+        using var responseDocument = JsonDocument.Parse(response.BodyText);
+        var root = responseDocument.RootElement;
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+        Assert.Equal("invalid_content_type", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
     [Theory]
     [Trait("SpecRef", "6.1")]
     [InlineData("7", 7d)]

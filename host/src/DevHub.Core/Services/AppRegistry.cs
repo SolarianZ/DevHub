@@ -102,6 +102,8 @@ public class AppRegistry : IDisposable
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, JsonSerializer.Serialize(instance));
 
         var now = _clock.UtcNow;
+        var registeredAtUtc = instance.RegisteredAtUtc == default ? now : instance.RegisteredAtUtc;
+        var invoke = instance.Invoke ?? new InvokeCapability();
 
         var instanceToRegister = new AppInstance
         {
@@ -109,9 +111,9 @@ public class AppRegistry : IDisposable
             AppId = instance.AppId,
             Scope = instance.Scope,
             Pid = instance.Pid,
-            RegisteredAtUtc = instance.RegisteredAtUtc ?? now,
+            RegisteredAtUtc = registeredAtUtc,
             LastSeenUtc = now,
-            Invoke = instance.Invoke,
+            Invoke = invoke,
             Endpoints = instance.Endpoints,
             Meta = instance.Meta
         };
@@ -123,7 +125,7 @@ public class AppRegistry : IDisposable
             existing.Scope = instance.Scope;
             existing.Pid = instance.Pid;
             existing.LastSeenUtc = now;
-            existing.Invoke = instance.Invoke;
+            existing.Invoke = invoke;
             existing.Endpoints = instance.Endpoints;
             existing.Meta = instance.Meta;
 

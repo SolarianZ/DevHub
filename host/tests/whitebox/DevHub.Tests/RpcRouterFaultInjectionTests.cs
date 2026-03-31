@@ -53,6 +53,34 @@ public sealed class RpcRouterFaultInjectionTests
     }
 
     [Fact]
+    public async Task Impl_RouteAsync_WhenPrefixOnlyDiffersByCase_ShouldReturnMethodNotFound()
+    {
+        var handler = new Mock<IRpcHandler>();
+        handler.SetupGet(static candidate => candidate.Method).Returns("hub.apps");
+        handler
+            .Setup(static candidate => candidate.HandleAsync(It.IsAny<JsonRpcRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new JsonRpcResponse
+            {
+                Id = "case-sensitive-prefix",
+                Result = new { ok = true }
+            });
+
+        var router = new RpcRouter([handler.Object], Mock.Of<ILogger<RpcRouter>>());
+
+        var response = await router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "case-sensitive-prefix",
+            Method = "hub.Apps.listDefinitions",
+            Params = null
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32601, response.Error.Code);
+        Assert.Equal("method_not_found", response.Error.Message);
+        handler.Verify(static candidate => candidate.HandleAsync(It.IsAny<JsonRpcRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public void Impl_ParseConfiguredRequestIds_WhenConfigured_ShouldNormalizeAndDeduplicate()
     {
         var requestIds = RpcTestFaultInjectionPolicy.ParseConfiguredRequestIds(

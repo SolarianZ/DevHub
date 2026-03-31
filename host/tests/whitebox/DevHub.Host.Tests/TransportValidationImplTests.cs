@@ -77,6 +77,28 @@ public class TransportValidationImplTests
     }
 
     [Fact]
+    public void Impl_4_2_HttpHeaders_WhenAuthorizationMissingAndProtocolInvalid_ShouldReturnUnauthorizedFirst()
+    {
+        var headers = BuildValidHeaders();
+        headers.Remove("Authorization");
+        headers["X-DevHub-Protocol"] = "2";
+
+        var ok = HttpTransportRequestValidator.TryValidate(
+            "application/json",
+            headers,
+            () => "token-1",
+            "req-auth-priority",
+            out var errorResponse,
+            out var clientId,
+            out var clientSessionId);
+
+        Assert.False(ok);
+        Assert.Null(clientId);
+        Assert.Null(clientSessionId);
+        AssertError(errorResponse, -32001, "unauthorized", "req-auth-priority");
+    }
+
+    [Fact]
     public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
     {
         var root = ParseJsonElement("""

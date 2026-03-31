@@ -60,6 +60,13 @@ public class RpcHttpEndpointHandler
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
             clientId = clientIdValue;
 
+            if (!HttpTransportRequestValidator.TryValidateContentType(request.ContentType, requestId: null, out var contentTypeError))
+            {
+                _logger.LogWarning("HTTP Content-Type 校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    clientId, contentTypeError.Error?.Code, contentTypeError.Error?.Message);
+                return Results.Json(contentTypeError, JsonOptions);
+            }
+
             using var reader = new StreamReader(request.Body);
             var body = await reader.ReadToEndAsync(cancellationToken);
 

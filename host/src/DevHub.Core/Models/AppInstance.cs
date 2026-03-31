@@ -30,27 +30,27 @@ public class AppInstance
     /// 进程ID
     /// </summary>
     [JsonPropertyName("pid")]
-    public int? Pid { get; set; }
+    public int Pid { get; set; }
 
     /// <summary>
     /// 注册时间（UTC，由 Hub 设置）
     /// </summary>
     [JsonPropertyName("registeredAtUtc")]
-    public DateTime? RegisteredAtUtc { get; set; }
+    public DateTime RegisteredAtUtc { get; set; }
 
     /// <summary>
     /// 最后活跃时间（UTC，由 Hub 更新）
     /// 用于在线判定：now - lastSeenUtc <= 在线阈值 表示在线
     /// </summary>
     [JsonPropertyName("lastSeenUtc")]
-    public DateTime? LastSeenUtc { get; set; }
+    public DateTime LastSeenUtc { get; set; }
 
     /// <summary>
     /// 调用能力配置
     /// 指示实例是否支持 poll 和 respond 操作
     /// </summary>
     [JsonPropertyName("invoke")]
-    public InvokeCapability? Invoke { get; set; }
+    public InvokeCapability Invoke { get; set; } = new();
 
     /// <summary>
     /// 端点信息

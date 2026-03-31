@@ -362,7 +362,7 @@ public class InvocationHandler : IRpcHandler
             Method = method,
             Args = paramsElement.TryGetProperty("args", out var argsElement)
                 ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
-                : new Dictionary<string, object?>(),
+                : null,
             Kind = mode == InvocationMode.Notify ? InvocationKind.Notify : InvocationKind.Request,
             CreatedAtUtc = _clock.UtcNow,
             Options = options,
@@ -461,7 +461,7 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId });
         }
 
-        if (instance.Invoke?.Poll != true)
+        if (!instance.Invoke.Poll)
         {
             return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
         }
@@ -538,7 +538,7 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId }));
         }
 
-        if (instance.Invoke?.Respond != true)
+        if (!instance.Invoke.Respond)
         {
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
         }

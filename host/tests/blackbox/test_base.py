@@ -23,6 +23,7 @@ TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
+_UNSET = object()
 
 
 @contextmanager
@@ -618,7 +619,7 @@ class RpcClient:
         self,
         app_id,
         method,
-        args=None,
+        args=_UNSET,
         target_scope=None,
         target_instance_id=None,
         ttl_ms=60000,
@@ -629,14 +630,13 @@ class RpcClient:
         if auto_launch is None:
             auto_launch = target_instance_id is None
 
-        return {
+        params = {
             "appId": app_id,
             "target": {
                 "scope": target_scope,
                 "instanceId": target_instance_id
             },
             "method": method,
-            "args": args or {},
             "options": {
                 "ttlMs": ttl_ms,
                 "queueIfOffline": queue_if_offline,
@@ -644,11 +644,16 @@ class RpcClient:
             }
         }
 
+        if args is not _UNSET:
+            params["args"] = args
+
+        return params
+
     def invoke_notify(
         self,
         app_id,
         method,
-        args=None,
+        args=_UNSET,
         target_scope=None,
         target_instance_id=None,
         ttl_ms=60000,
@@ -673,7 +678,7 @@ class RpcClient:
         self,
         app_id,
         method,
-        args=None,
+        args=_UNSET,
         target_scope=None,
         target_instance_id=None,
         options=None,
@@ -688,7 +693,6 @@ class RpcClient:
                 "instanceId": target_instance_id
             },
             "method": method,
-            "args": args or {},
             "options": options or {
                 "ttlMs": 300000,
                 "waitTimeoutMs": 120000,
@@ -696,6 +700,10 @@ class RpcClient:
                 "autoLaunch": default_auto_launch
             }
         }
+
+        if args is not _UNSET:
+            params["args"] = args
+
         return self.call("hub.invoke.request", params=params, request_id=request_id)
 
     def launch_app(

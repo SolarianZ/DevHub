@@ -351,7 +351,7 @@ public class LaunchCoordinator
     {
         return _appRegistry
             .ListInstances(record.AppId, record.Scope, includeAllScopes: false, includeOffline: true)
-            .Any(instance => instance.RegisteredAtUtc.HasValue && instance.RegisteredAtUtc.Value >= record.CreatedAtUtc);
+            .Any(instance => instance.RegisteredAtUtc >= record.CreatedAtUtc);
     }
 
     private static bool IsLaunchStillInProgress(DedupeLaunchRecord record)

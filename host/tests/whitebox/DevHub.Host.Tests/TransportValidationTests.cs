@@ -56,6 +56,29 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "4.2")]
+    public void Spec_4_2_HttpHeaders_WhenAuthorizationMissingAndProtocolInvalid_ShouldPreferUnauthorized()
+    {
+        var headers = BuildValidHeaders();
+        headers.Remove("Authorization");
+        headers["X-DevHub-Protocol"] = "2";
+
+        var ok = HttpTransportRequestValidator.TryValidate(
+            "application/json",
+            headers,
+            () => "token-1",
+            "req-auth-before-protocol",
+            out var errorResponse,
+            out _,
+            out _);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32001, "unauthorized", "req-auth-before-protocol");
+        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
+        Assert.Equal("missing_token", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "4.2")]
     public void Spec_4_2_HttpHeaders_MissingProtocol_ShouldReturnNotSupportedMissing()
     {
         var headers = BuildValidHeaders();
@@ -259,7 +282,7 @@ public class TransportValidationTests
             out var closeAfterResponse);
 
         Assert.False(authenticated);
-        Assert.False(closeAfterResponse);
+        Assert.True(closeAfterResponse);
         AssertError(response, -32602, "invalid_params", "ws-auth-params");
     }
 
@@ -335,7 +358,7 @@ public class TransportValidationTests
             out var closeAfterResponse);
 
         Assert.False(authenticated);
-        Assert.False(closeAfterResponse);
+        Assert.True(closeAfterResponse);
         AssertError(response, -32602, "invalid_params", "ws-auth");
     }
 
@@ -360,7 +383,7 @@ public class TransportValidationTests
             out var closeAfterResponse);
 
         Assert.False(authenticated);
-        Assert.False(closeAfterResponse);
+        Assert.True(closeAfterResponse);
         AssertError(response, -32602, "invalid_params", "ws-auth");
     }
 
@@ -415,7 +438,7 @@ public class TransportValidationTests
             out var closeAfterResponse);
 
         Assert.False(authenticated);
-        Assert.False(closeAfterResponse);
+        Assert.True(closeAfterResponse);
         AssertError(response, -32602, "invalid_params", "ws-auth");
     }
 

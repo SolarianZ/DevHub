@@ -27,6 +27,7 @@ internal static class WebSocketAuthenticationProcessor
 
         if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
         {
+            closeAfterResponse = true;
             return TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id);
         }
 
@@ -61,6 +62,7 @@ internal static class WebSocketAuthenticationProcessor
             || clientIdElement.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(clientIdElement.GetString()))
         {
+            closeAfterResponse = true;
             return TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id);
         }
 
@@ -68,6 +70,7 @@ internal static class WebSocketAuthenticationProcessor
             || sessionIdElement.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(sessionIdElement.GetString()))
         {
+            closeAfterResponse = true;
             return TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id);
         }
 
@@ -75,6 +78,7 @@ internal static class WebSocketAuthenticationProcessor
         var parsedClientSessionId = sessionIdElement.GetString()!.Trim();
         if (!Guid.TryParseExact(parsedClientSessionId, "D", out _))
         {
+            closeAfterResponse = true;
             return TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id);
         }
 

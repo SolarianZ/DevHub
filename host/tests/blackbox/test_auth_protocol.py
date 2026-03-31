@@ -504,7 +504,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id="auth-content-type-id"
+                expected_id=None
             ):
                 return result
 

@@ -91,7 +91,12 @@ public class WebSocketSessionHandler
                 while (!receiveTask.IsCompleted)
                 {
                     await SendPendingHubEventsAsync(webSocket, connectionId, cancellationToken);
-                    var completedTask = await Task.WhenAny(receiveTask, Task.Delay(50, cancellationToken));
+                    if (receiveTask.IsCompleted)
+                    {
+                        break;
+                    }
+
+                    var completedTask = await Task.WhenAny(receiveTask, _eventBus.WaitForDeliveryAsync(connectionId, cancellationToken).AsTask());
                     if (completedTask == receiveTask)
                     {
                         break;
@@ -210,6 +215,12 @@ public class WebSocketSessionHandler
                         if (rpcRequest.Id is not null)
                         {
                             await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), cancellationToken);
+                        }
+
+                        if (!isAuthenticated)
+                        {
+                            await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "authentication_failed", cancellationToken);
+                            break;
                         }
 
                         continue;

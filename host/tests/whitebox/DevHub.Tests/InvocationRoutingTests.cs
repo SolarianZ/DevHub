@@ -922,6 +922,54 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal("hello-scalar", items[0].GetProperty("args").GetString());
     }
 
+    [Fact]
+    public async Task Impl_InvocationHandler_Notify_WhenArgsOmitted_ShouldKeepNullInsteadOfEmptyObject()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "missing-args-inst",
+            AppId = "missing-args.app",
+            Scope = null,
+            Pid = 3622,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var notifyResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-missing-args",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "missing-args.app",
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "missing.args",
+                options = new { ttlMs = 60000, queueIfOffline = true, autoLaunch = false }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(notifyResponse.Error);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-missing-args",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "missing-args-inst",
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("args").ValueKind);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -1015,7 +1063,6 @@ public class InvocationRoutingTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 
 
 

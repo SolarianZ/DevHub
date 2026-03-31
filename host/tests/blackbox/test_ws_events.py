@@ -1249,6 +1249,49 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_017_authenticate_invalid_params_should_close_and_block_retry(self):
+        """M4-WS-017: 首条鉴权 invalid_params 后必须断连，不能在同连接重试。"""
+        result = TestResult("M4-WS-017 鉴权 invalid_params 后断连且禁止重试")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "bad-auth-params",
+                    "method": "hub.ws.authenticate",
+                    "params": {
+                        "token": token,
+                        "protocolVersion": 1,
+                        "clientSessionId": str(uuid.uuid4())
+                    }
+                })
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="bad-auth-params"):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 鉴权 invalid_params 后连接未关闭")
+                    return result
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_text('{"jsonrpc":"2.0","id":"bad-auth-array","method":"hub.ws.authenticate","params":[1,2,3]}')
+
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="bad-auth-array"):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ 鉴权 params 数组 invalid_params 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_m4_ws_001_first_message_must_authenticate(),
@@ -1268,6 +1311,7 @@ class TestWsEvents:
             self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
             self.test_m4_ws_015_first_authenticate_without_id_should_invalid_request(),
             self.test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request(),
+            self.test_m4_ws_017_authenticate_invalid_params_should_close_and_block_retry(),
         ]
 
         if full:

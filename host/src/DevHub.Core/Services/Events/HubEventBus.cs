@@ -70,12 +70,9 @@ public sealed class HubEventBus
             return false;
         }
 
-        lock (state.SyncRoot)
-        {
-            state.IsAuthenticated = true;
-            state.ClientId = clientId;
-            state.ClientSessionId = clientSessionId;
-        }
+        state.IsAuthenticated = true;
+        state.ClientId = clientId;
+        state.ClientSessionId = clientSessionId;
 
         _logger.LogInformation("WS 连接认证成功，ConnectionId: {ConnectionId}, ClientId: {ClientId}", connectionId, clientId);
         return true;
@@ -194,6 +191,7 @@ public sealed class HubEventBus
                     TimeUtc = message.TimeUtc,
                     Payload = message.Payload
                 });
+                state.DeliverySignal.TrySetResult(true);
                 totalPendingEstimate += 1;
             }
         }
@@ -223,7 +221,30 @@ public sealed class HubEventBus
             results.Add(delivery);
         }
 
+        if (state.PendingDeliveries.IsEmpty)
+        {
+            ResetDeliverySignal(state);
+        }
+
         return results;
+    }
+
+    /// <summary>
+    /// 等待连接出现新的待发送事件。
+    /// </summary>
+    public ValueTask<bool> WaitForDeliveryAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        if (!_connections.TryGetValue(connectionId, out var state))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        if (!state.PendingDeliveries.IsEmpty)
+        {
+            return ValueTask.FromResult(true);
+        }
+
+        return WaitForDeliveryCoreAsync(state, cancellationToken);
     }
 
     /// <summary>
@@ -267,8 +288,6 @@ public sealed class HubEventBus
 
     private sealed class ConnectionState
     {
-        public object SyncRoot { get; } = new();
-
         public bool IsAuthenticated { get; set; }
 
         public string? ClientId { get; set; }
@@ -278,6 +297,8 @@ public sealed class HubEventBus
         public ConcurrentDictionary<string, HubEventSubscription> Subscriptions { get; } = new();
 
         public ConcurrentQueue<HubEventDelivery> PendingDeliveries { get; } = new();
+
+        public TaskCompletionSource<bool> DeliverySignal = CreateDeliverySignal();
     }
 
     private sealed class HubEventSubscription
@@ -286,5 +307,33 @@ public sealed class HubEventBus
 
         public HashSet<string>? Types { get; init; }
     }
-}
 
+    private static async ValueTask<bool> WaitForDeliveryCoreAsync(ConnectionState state, CancellationToken cancellationToken)
+    {
+        await state.DeliverySignal.Task.WaitAsync(cancellationToken);
+        return true;
+    }
+
+    private static void ResetDeliverySignal(ConnectionState state)
+    {
+        while (true)
+        {
+            var current = state.DeliverySignal;
+            if (!current.Task.IsCompleted || !state.PendingDeliveries.IsEmpty)
+            {
+                return;
+            }
+
+            var replacement = CreateDeliverySignal();
+            if (Interlocked.CompareExchange(ref state.DeliverySignal, replacement, current) == current)
+            {
+                return;
+            }
+        }
+    }
+
+    private static TaskCompletionSource<bool> CreateDeliverySignal()
+    {
+        return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+}

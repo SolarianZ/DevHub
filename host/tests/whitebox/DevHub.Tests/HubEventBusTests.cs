@@ -180,7 +180,30 @@ public class HubEventBusTests
         var deliveries = bus.DrainDeliveries("conn-bounded", maxCount: HubEventBus.MaxPendingDeliveriesPerConnection + 256);
         Assert.Equal(HubEventBus.MaxPendingDeliveriesPerConnection, deliveries.Count);
     }
-}
 
+    [Fact]
+    public async Task Impl_WaitForDeliveryAsync_WhenMultipleWaitersExist_ShouldWakeCurrentConnectionWithoutLosingSignal()
+    {
+        var bus = new HubEventBus(_logger.Object);
+        bus.RegisterConnection("conn-wait");
+        Assert.True(bus.TryMarkAuthenticated("conn-wait", "client", Guid.NewGuid().ToString("D")));
+        Assert.True(bus.TrySubscribe("conn-wait", ["app.instance.registered"], out _));
+
+        var staleWaiter = bus.WaitForDeliveryAsync("conn-wait", CancellationToken.None).AsTask();
+        var currentWaiter = bus.WaitForDeliveryAsync("conn-wait", CancellationToken.None).AsTask();
+
+        bus.Publish(new HubEventMessage
+        {
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new { appId = "demo.app", instanceId = "inst-1" }
+        });
+
+        await Task.WhenAll(staleWaiter, currentWaiter);
+        var deliveries = bus.DrainDeliveries("conn-wait", maxCount: 10);
+        Assert.Single(deliveries);
+        Assert.Equal("app.instance.registered", deliveries[0].Type);
+    }
+}
 
 

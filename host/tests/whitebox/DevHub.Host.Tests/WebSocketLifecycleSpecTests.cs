@@ -210,6 +210,94 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(response.TryGetProperty("error", out var error));
         Assert.Equal(-32602, error.GetProperty("code").GetInt32());
         Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "4.3")]
+    public async Task Spec_4_3_Authenticate_WhenInvalidParams_ShouldRejectRetryOnSameConnection()
+    {
+        var context = CreateHostContext();
+
+        var invalidAuth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-invalid-first",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientSessionId = "11111111-1111-1111-1111-111111111111"
+            }
+        });
+
+        var validRetry = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-valid-retry",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-test-client",
+                clientSessionId = "22222222-2222-2222-2222-222222222222"
+            }
+        });
+
+        var socket = new ScriptedWebSocket([invalidAuth, validRetry]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var invalidResponse = FindResponseById(responses, "auth-invalid-first");
+        Assert.NotEqual(JsonValueKind.Undefined, invalidResponse.ValueKind);
+        Assert.True(invalidResponse.TryGetProperty("error", out var invalidError));
+        Assert.Equal(-32602, invalidError.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", invalidError.GetProperty("message").GetString());
+
+        var retryResponse = FindResponseById(responses, "auth-valid-retry");
+        Assert.Equal(JsonValueKind.Undefined, retryResponse.ValueKind);
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "4.3")]
+    public async Task Spec_4_3_Authenticate_WhenParamsIsArray_ShouldReturnInvalidParamsAndClose()
+    {
+        var context = CreateHostContext();
+
+        const string invalidArrayAuth = """
+        {"jsonrpc":"2.0","id":"auth-array-invalid","method":"hub.ws.authenticate","params":[1,2,3]}
+        """;
+
+        var validRetry = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-array-retry",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-array-client",
+                clientSessionId = "33333333-3333-3333-3333-333333333333"
+            }
+        });
+
+        var socket = new ScriptedWebSocket([invalidArrayAuth, validRetry]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var invalidResponse = FindResponseById(responses, "auth-array-invalid");
+        Assert.NotEqual(JsonValueKind.Undefined, invalidResponse.ValueKind);
+        Assert.True(invalidResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+
+        var retryResponse = FindResponseById(responses, "auth-array-retry");
+        Assert.Equal(JsonValueKind.Undefined, retryResponse.ValueKind);
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
     }
 
     [Fact]
