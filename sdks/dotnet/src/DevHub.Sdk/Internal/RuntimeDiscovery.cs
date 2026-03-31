@@ -123,7 +123,7 @@ internal static class RuntimeDiscovery
         ValidateHttpBaseUrl(runtime.HttpBaseUrl, hubJsonPath);
         ValidateWebSocketUrl(runtime.WsUrl, hubJsonPath);
 
-        if (string.IsNullOrWhiteSpace(runtime.TokenFile) || !Path.IsPathRooted(runtime.TokenFile))
+        if (string.IsNullOrWhiteSpace(runtime.TokenFile) || !Path.IsPathFullyQualified(runtime.TokenFile))
         {
             throw new InvalidOperationException($"hub.json.tokenFile 非法：{hubJsonPath}");
         }

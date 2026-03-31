@@ -106,10 +106,14 @@ public sealed class JsonRpcWebSocketSessionFactory : IDevHubWebSocketSessionFact
 /// </summary>
 public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 {
+    private static readonly TimeSpan AbandonedRequestRetention = TimeSpan.FromMinutes(5);
+
     private readonly DevHubWebSocketSessionOptions _options;
     private readonly IWebSocketConnectionFactory _connectionFactory;
     private readonly Func<string> _requestIdFactory;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingRequests;
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _abandonedRequests;
+    private readonly SemaphoreSlim _connectionLock;
     private readonly SemaphoreSlim _sendLock;
     private readonly CancellationTokenSource _disposeCts;
 
@@ -137,6 +141,8 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _requestIdFactory = requestIdFactory ?? CreateRequestId;
         _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JsonElement>>(StringComparer.Ordinal);
+        _abandonedRequests = new ConcurrentDictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+        _connectionLock = new SemaphoreSlim(1, 1);
         _sendLock = new SemaphoreSlim(1, 1);
         _disposeCts = new CancellationTokenSource();
     }
@@ -145,17 +151,28 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     public async Task EnsureConnectedAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        if (_connection is not null)
-        {
-            return;
-        }
-
         using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-        _connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token);
-        _connectionReceiveLoopCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
-        _receiverLoopTask = Task.Run(
-            () => RunReceiveLoopAsync(_connection, _connectionReceiveLoopCts, _connectionReceiveLoopCts.Token),
-            CancellationToken.None);
+        await _connectionLock.WaitAsync(linkedCts.Token);
+        try
+        {
+            ThrowIfDisposed();
+            if (_connection is not null)
+            {
+                return;
+            }
+
+            var connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token);
+            var connectionReceiveLoopCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+            _connection = connection;
+            _connectionReceiveLoopCts = connectionReceiveLoopCts;
+            _receiverLoopTask = Task.Run(
+                () => RunReceiveLoopAsync(connection, connectionReceiveLoopCts, connectionReceiveLoopCts.Token),
+                CancellationToken.None);
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -163,6 +180,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        CleanupExpiredAbandonedRequests();
 
         await EnsureConnectedAsync(cancellationToken);
         var connection = _connection ?? throw new InvalidOperationException("当前 WebSocket 尚未建立连接。");
@@ -197,6 +215,11 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             using var linkedCts = CreateLinkedTokenSource(cancellationToken);
             return await waiter.Task.WaitAsync(linkedCts.Token);
         }
+        catch (OperationCanceledException)
+        {
+            MarkPendingRequestAsAbandoned(requestId);
+            throw;
+        }
         catch
         {
             _pendingRequests.TryRemove(requestId, out _);
@@ -207,37 +230,44 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     /// <inheritdoc />
     public async Task DisconnectAsync(string reason, CancellationToken cancellationToken = default)
     {
-        ThrowIfDisposed();
-        _suppressNextTerminationCallback = true;
-
-        if (_connection is null && _receiverLoopTask is null)
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
         {
-            _suppressNextTerminationCallback = false;
-            return;
-        }
+            ThrowIfDisposed();
+            _suppressNextTerminationCallback = true;
 
-        foreach (var pendingRequest in _pendingRequests.ToArray())
-        {
-            if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
+            if (_connection is null && _receiverLoopTask is null)
             {
-                pending.TrySetException(new InvalidOperationException("WebSocket 连接已关闭。"));
-            }
-        }
-
-        _connectionReceiveLoopCts?.Cancel();
-        await DisposeConnectionAsync(reason, cancellationToken);
-
-        if (_receiverLoopTask is not null)
-        {
-            try
-            {
-                await _receiverLoopTask;
-            }
-            catch
-            {
+                _suppressNextTerminationCallback = false;
+                return;
             }
 
+            FailPendingRequests(new InvalidOperationException("WebSocket 连接已关闭。"));
+            _abandonedRequests.Clear();
+
+            var connection = _connection;
+            var receiverLoopTask = _receiverLoopTask;
+
+            _connection = null;
             _receiverLoopTask = null;
+
+            _connectionReceiveLoopCts?.Cancel();
+            await DisposeConnectionAsync(connection, reason, cancellationToken);
+
+            if (receiverLoopTask is not null)
+            {
+                try
+                {
+                    await receiverLoopTask;
+                }
+                catch
+                {
+                }
+            }
+        }
+        finally
+        {
+            _connectionLock.Release();
         }
     }
 
@@ -249,33 +279,46 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             return;
         }
 
-        _disposed = true;
-        _disposeCts.Cancel();
-        _connectionReceiveLoopCts?.Cancel();
-
-        await DisposeConnectionAsync("client_dispose", CancellationToken.None);
-
-        if (_receiverLoopTask is not null)
+        await _connectionLock.WaitAsync(CancellationToken.None);
+        try
         {
-            try
+            if (_disposed)
             {
-                await _receiverLoopTask;
-            }
-            catch
-            {
+                return;
             }
 
+            _disposed = true;
+            _disposeCts.Cancel();
+
+            var connection = _connection;
+            var receiverLoopTask = _receiverLoopTask;
+
+            _connection = null;
             _receiverLoopTask = null;
-        }
 
-        foreach (var pendingRequest in _pendingRequests.ToArray())
-        {
-            if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
+            _connectionReceiveLoopCts?.Cancel();
+            await DisposeConnectionAsync(connection, "client_dispose", CancellationToken.None);
+
+            if (receiverLoopTask is not null)
             {
-                pending.TrySetException(new ObjectDisposedException(nameof(JsonRpcWebSocketSession)));
+                try
+                {
+                    await receiverLoopTask;
+                }
+                catch
+                {
+                }
             }
         }
+        finally
+        {
+            _connectionLock.Release();
+        }
 
+        FailPendingRequests(new ObjectDisposedException(nameof(JsonRpcWebSocketSession)));
+        _abandonedRequests.Clear();
+
+        _connectionLock.Dispose();
         _sendLock.Dispose();
         _disposeCts.Dispose();
     }
@@ -335,15 +378,15 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         }
         finally
         {
-            foreach (var pendingRequest in _pendingRequests.ToArray())
+            Interlocked.CompareExchange(ref _connection, null, connection);
+            if (ReferenceEquals(_connectionReceiveLoopCts, connectionReceiveLoopCts))
             {
-                if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
-                {
-                    pending.TrySetException(terminalException ?? new InvalidOperationException("WebSocket 连接已关闭。"));
-                }
+                _connectionReceiveLoopCts = null;
             }
 
-            await DisposeConnectionAsync("connection_closed", CancellationToken.None);
+            FailPendingRequests(terminalException ?? new InvalidOperationException("WebSocket 连接已关闭。"));
+            _abandonedRequests.Clear();
+            await DisposeConnectionAsync(connection, "connection_closed", CancellationToken.None);
 
             if (!_disposed && !_suppressNextTerminationCallback)
             {
@@ -351,11 +394,6 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             }
 
             _suppressNextTerminationCallback = false;
-            if (ReferenceEquals(_connectionReceiveLoopCts, connectionReceiveLoopCts))
-            {
-                _connectionReceiveLoopCts = null;
-            }
-
             connectionReceiveLoopCts.Dispose();
         }
     }
@@ -364,6 +402,12 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     {
         if (!_pendingRequests.TryRemove(requestId, out var waiter))
         {
+            CleanupExpiredAbandonedRequests();
+            if (_abandonedRequests.TryRemove(requestId, out _))
+            {
+                return;
+            }
+
             throw new InvalidOperationException("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。");
         }
 
@@ -494,15 +538,51 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         };
     }
 
-    private async Task DisposeConnectionAsync(string reason, CancellationToken cancellationToken)
+    private void MarkPendingRequestAsAbandoned(string requestId)
     {
-        if (_connection is null)
+        if (_pendingRequests.TryRemove(requestId, out _))
+        {
+            _abandonedRequests[requestId] = DateTimeOffset.UtcNow.Add(AbandonedRequestRetention);
+        }
+    }
+
+    private void CleanupExpiredAbandonedRequests()
+    {
+        if (_abandonedRequests.IsEmpty)
         {
             return;
         }
 
-        var connection = _connection;
-        _connection = null;
+        var now = DateTimeOffset.UtcNow;
+        foreach (var abandonedRequest in _abandonedRequests)
+        {
+            if (abandonedRequest.Value <= now)
+            {
+                _abandonedRequests.TryRemove(abandonedRequest.Key, out _);
+            }
+        }
+    }
+
+    private void FailPendingRequests(Exception exception)
+    {
+        foreach (var pendingRequest in _pendingRequests.ToArray())
+        {
+            if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
+            {
+                pending.TrySetException(exception);
+            }
+        }
+    }
+
+    private static async Task DisposeConnectionAsync(
+        IWebSocketConnection? connection,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (connection is null)
+        {
+            return;
+        }
 
         try
         {
