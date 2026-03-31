@@ -15,6 +15,7 @@ public sealed class LaunchFlowTests
         await host.WriteDefinitionAsync(CreateLaunchDefinition("launch.started.app"));
         await host.WriteDefinitionAsync(CreateLaunchDefinition("launch.starting.app"));
         await host.WriteDefinitionAsync(CreateLaunchDefinition("launch.running.app"));
+        await host.WriteDefinitionAsync(CreateLaunchDefinition("launch.dedupe.app"));
 
         await using var client = await host.CreateClientAsync("launch-client");
 
@@ -52,6 +53,25 @@ public sealed class LaunchFlowTests
         });
         Assert.Equal("already_running", alreadyRunning.Status);
         Assert.Equal(registered.Pid, alreadyRunning.Pid);
+
+        var firstDedupeLaunch = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.dedupe.app",
+            DedupeKey = "launch-dedupe-key",
+            WaitForRegisterMs = 0
+        });
+        var secondDedupeLaunch = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.dedupe.app",
+            DedupeKey = "launch-dedupe-key",
+            WaitForRegisterMs = 0
+        });
+
+        Assert.Equal("started", firstDedupeLaunch.Status);
+        Assert.True(firstDedupeLaunch.Pid > 0);
+        Assert.Equal("already_running", secondDedupeLaunch.Status);
+        Assert.Equal(firstDedupeLaunch.LaunchId, secondDedupeLaunch.LaunchId);
+        Assert.Equal(firstDedupeLaunch.Pid, secondDedupeLaunch.Pid);
     }
 
     private static AppDefinition CreateLaunchDefinition(string appId)
