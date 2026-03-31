@@ -169,6 +169,106 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         }, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:47231/", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://devhub.example.com:47231", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://127.0.0.1:47231", "ws://127.0.0.1:47231/ws/", "wsUrl")]
+    [InlineData("http://127.0.0.1:47231", "wss://devhub.example.com/ws", "wsUrl")]
+    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenEndpointViolatesSpec_ShouldThrowInvalidOperationException(
+        string httpBaseUrl,
+        string wsUrl,
+        string invalidProperty)
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-1");
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = httpBaseUrl,
+            WsUrl = wsUrl,
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None));
+
+        Assert.Contains($"hub.json.{invalidProperty}", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenTokenFileIsNotAbsolutePath_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = CreateDataDirectory();
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.1:47231",
+            WsUrl = "ws://127.0.0.1:47231/ws",
+            TokenFile = "token.txt",
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None));
+
+        Assert.Contains("hub.json.tokenFile", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenTokenFileIsBlank_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, " \r\n\t ");
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.1:47231",
+            WsUrl = "ws://127.0.0.1:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None));
+
+        Assert.Contains("token 文件为空", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task M5_DN_UT_001_RuntimeDiscovery_WhenEnvironmentOverrideProvided_ShouldUseEnvironmentDataDir()
     {

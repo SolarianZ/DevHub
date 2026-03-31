@@ -124,6 +124,77 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void M5_DN_UT_006_LaunchBuilder_ShouldOmitOptionalFieldsByDefault()
+    {
+        var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app"
+        });
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
+        Assert.False(document.RootElement.TryGetProperty("scope", out _));
+        Assert.False(document.RootElement.TryGetProperty("dedupeKey", out _));
+        Assert.False(document.RootElement.TryGetProperty("waitForRegisterMs", out _));
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_LaunchBuilder_ShouldPreserveOptionalFields()
+    {
+        var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app",
+            Scope = string.Empty,
+            DedupeKey = "launch-key",
+            WaitForRegisterMs = 0
+        });
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
+        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
+        Assert.Equal("launch-key", document.RootElement.GetProperty("dedupeKey").GetString());
+        Assert.Equal(0, document.RootElement.GetProperty("waitForRegisterMs").GetInt32());
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_LaunchBuilder_WhenWaitForRegisterNegative_ShouldThrowArgumentOutOfRangeException()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app",
+            WaitForRegisterMs = -1
+        }));
+
+        Assert.Equal("WaitForRegisterMs", exception.ParamName);
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_ListInstancesBuilder_WhenNoFilterSpecified_ShouldReturnNull()
+    {
+        var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest());
+
+        Assert.Null(payload);
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_ListInstancesBuilder_ShouldOnlyIncludeExplicitFilters()
+    {
+        var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest
+        {
+            AppId = "test.app",
+            Scope = string.Empty,
+            IncludeAllScopes = true,
+            IncludeOffline = true
+        });
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
+        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
+        Assert.True(document.RootElement.GetProperty("includeAllScopes").GetBoolean());
+        Assert.True(document.RootElement.GetProperty("includeOffline").GetBoolean());
+    }
+
+    [Fact]
     public void M5_DN_UT_006_RespondBuilder_WhenValueExplicitlyNull_ShouldWriteJsonNull()
     {
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest

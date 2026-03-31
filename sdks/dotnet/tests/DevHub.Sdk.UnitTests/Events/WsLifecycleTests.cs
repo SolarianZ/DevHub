@@ -12,6 +12,22 @@ public sealed class WsLifecycleTests : IDisposable
 {
     private readonly string _tempRoot;
 
+    public static TheoryData<string, string> InvalidEventNotifications => new()
+    {
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"","type":"invocation.completed","timeUtc":"2026-03-09T00:00:00Z","payload":{"invocationId":"invk-1"}}}""",
+            "subscriptionId"
+        },
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"unknown.type","timeUtc":"2026-03-09T00:00:00Z","payload":{"invocationId":"invk-1"}}}""",
+            "type"
+        },
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"invocation.completed","timeUtc":"0001-01-01T00:00:00+00:00","payload":{"invocationId":"invk-1"}}}""",
+            "timeUtc"
+        }
+    };
+
     public WsLifecycleTests()
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubSdkWsTests", Guid.NewGuid().ToString("N"));
@@ -85,6 +101,54 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Collection(connection.SentTexts,
             sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.events.subscribe", sent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldUnsubscribe()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-unsub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-unsub-1","result":{"ok":true}}""")
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-unsub-1").Create);
+
+        await client.AuthenticateAsync();
+        await client.UnsubscribeAsync("sub-1");
+
+        Assert.Collection(connection.SentTexts,
+            sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
+            sent =>
+            {
+                Assert.Contains("hub.events.unsubscribe", sent, StringComparison.Ordinal);
+                Assert.Contains("\"subscriptionId\":\"sub-1\"", sent, StringComparison.Ordinal);
+            });
     }
 
     [Fact]
@@ -433,6 +497,60 @@ public sealed class WsLifecycleTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthenticateAsync());
         Assert.Contains("响应", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidEventNotifications))]
+    public async Task M5_DN_UT_005_EventsClient_WhenEventPayloadViolatesSpec_ShouldFaultEventStream(
+        string notificationJson,
+        string expectedMessage)
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage(notificationJson),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        var exception = await Record.ExceptionAsync(async () =>
+        {
+            await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        });
+
+        Assert.NotNull(exception);
+        Assert.Contains(expectedMessage, CollectExceptionMessages(exception!), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -809,5 +927,17 @@ public sealed class WsLifecycleTests : IDisposable
             return _requestIds.Dequeue();
         }
     }
-}
 
+    private static string CollectExceptionMessages(Exception exception)
+    {
+        var messages = new List<string>();
+        Exception? current = exception;
+        while (current is not null)
+        {
+            messages.Add(current.Message);
+            current = current.InnerException;
+        }
+
+        return string.Join(" | ", messages);
+    }
+}
