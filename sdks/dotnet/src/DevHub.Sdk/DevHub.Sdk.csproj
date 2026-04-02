@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <TargetFramework>
+      <!-- 这个空标签用于清空工作区 Directory.Build.props 继承的单目标框架配置，避免与当前项目的多目标配置冲突。 -->
+    </TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>DevHub.Sdk</RootNamespace>
     <AssemblyName>DevHub.Sdk</AssemblyName>
     <PackageId>DevHub.Sdk</PackageId>
