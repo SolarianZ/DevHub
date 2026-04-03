@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text.Json;
 using DevHub.Sdk.IntegrationTests.TestHost;
 using DevHub.Sdk.Models;
 
@@ -25,7 +24,7 @@ public sealed class HttpFlowTests
 
         var ping = await client.PingAsync(new { value = 1 });
         Assert.True(ping.Ok);
-        Assert.Equal(1, ping.Echo!.Value.GetProperty("value").GetInt32());
+        Assert.Equal(1, (int)ping.Echo!["value"]!);
 
         var definitions = await client.ListDefinitionsAsync();
         Assert.Contains(definitions, definition => definition.AppId == "http.flow.app");
@@ -78,8 +77,8 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32600, exception.Code);
         Assert.Equal("invalid_request", exception.Message);
-        Assert.Equal("missing_header", exception.Data!.Value.GetProperty("reason").GetString());
-        Assert.Equal("X-DevHub-ClientId", exception.Data!.Value.GetProperty("header").GetString());
+        Assert.Equal("missing_header", (string?)exception.Data!["reason"]!);
+        Assert.Equal("X-DevHub-ClientId", (string?)exception.Data!["header"]!);
     }
 
     [Fact]
@@ -95,7 +94,7 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32001, exception.Code);
         Assert.Equal("unauthorized", exception.Message);
-        Assert.Equal("invalid_token", exception.Data!.Value.GetProperty("reason").GetString());
+        Assert.Equal("invalid_token", (string?)exception.Data!["reason"]!);
     }
 
     [Fact]
@@ -112,8 +111,8 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32099, exception.Code);
         Assert.Equal("not_supported", exception.Message);
-        Assert.Equal("mismatch", exception.Data!.Value.GetProperty("reason").GetString());
-        Assert.Equal("2", exception.Data!.Value.GetProperty("received").GetString());
+        Assert.Equal("mismatch", (string?)exception.Data!["reason"]!);
+        Assert.Equal("2", (string?)exception.Data!["received"]!);
     }
 
     [Fact]

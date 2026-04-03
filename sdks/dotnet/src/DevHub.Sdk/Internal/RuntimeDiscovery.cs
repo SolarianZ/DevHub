@@ -1,5 +1,6 @@
-using System.Text.Json;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.Internal;
 
@@ -22,11 +23,11 @@ internal static class RuntimeDiscovery
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var hubJsonStream = File.OpenRead(hubJsonPath);
-        using var hubJsonDocument = await JsonDocument.ParseAsync(hubJsonStream, cancellationToken: cancellationToken);
-        ValidateHubVersion(hubJsonDocument.RootElement, hubJsonPath);
+        var hubJsonContent = await CompatibilityIo.ReadAllTextAsync(hubJsonPath, cancellationToken);
+        var hubJsonObject = DevHubJson.ParseObject(hubJsonContent);
+        ValidateHubVersion(hubJsonObject, hubJsonPath);
 
-        var runtime = hubJsonDocument.RootElement.Deserialize<HubRuntime>(DevHubJson.SerializerOptions)
+        var runtime = DevHubJson.Deserialize<HubRuntime>(hubJsonObject)
             ?? throw new InvalidOperationException($"hub.json 解析失败：{hubJsonPath}");
 
         ValidateRuntime(runtime, hubJsonPath);
@@ -142,11 +143,10 @@ internal static class RuntimeDiscovery
         }
     }
 
-    private static void ValidateHubVersion(JsonElement root, string hubJsonPath)
+    private static void ValidateHubVersion(JObject root, string hubJsonPath)
     {
-        if (root.ValueKind == JsonValueKind.Object
-            && root.TryGetProperty("hubVersion", out var hubVersionProperty)
-            && hubVersionProperty.ValueKind != JsonValueKind.String)
+        if (root.TryGetValue("hubVersion", out var hubVersionToken)
+            && hubVersionToken.Type != JTokenType.String)
         {
             throw new InvalidOperationException($"hub.json.hubVersion 非法：{hubJsonPath}");
         }

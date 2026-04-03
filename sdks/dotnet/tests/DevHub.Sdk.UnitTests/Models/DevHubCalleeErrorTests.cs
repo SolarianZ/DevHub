@@ -18,11 +18,11 @@ public sealed class DevHubCalleeErrorTests
 
         Assert.Equal(1001, error.Code);
         Assert.Equal("app_error", error.Message);
-        Assert.True(error.Data.HasValue);
-        Assert.Equal("boom", error.Data!.Value.GetProperty("errorCode").GetString());
-        Assert.Equal(2, error.Data!.Value.GetProperty("retryCount").GetInt32());
-        Assert.False(error.Data!.Value.TryGetProperty("ErrorCode", out _));
-        Assert.False(error.Data!.Value.TryGetProperty("RetryCount", out _));
+        Assert.NotNull(error.Data);
+        Assert.Equal("boom", (string?)error.Data!["errorCode"]!);
+        Assert.Equal(2, (int)error.Data!["retryCount"]!);
+        Assert.Null(error.Data!["ErrorCode"]);
+        Assert.Null(error.Data!["RetryCount"]);
     }
 
     [Fact]

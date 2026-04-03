@@ -1,5 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace DevHub.Sdk.Models;
 
@@ -77,7 +76,7 @@ public readonly struct DevHubEventType : IEquatable<DevHubEventType>
     /// <summary>
     /// 当前值是否为受支持事件类型。
     /// </summary>
-    public bool IsSupported => !string.IsNullOrWhiteSpace(_value) && KnownTypes.ContainsKey(_value);
+    public bool IsSupported => !string.IsNullOrWhiteSpace(_value) && KnownTypes.ContainsKey(_value!);
 
     /// <summary>
     /// 解析事件类型。
@@ -164,28 +163,34 @@ public readonly struct DevHubEventType : IEquatable<DevHubEventType>
 /// <summary>
 /// <see cref="DevHubEventType" /> 的 JSON 转换器。
 /// </summary>
-public sealed class DevHubEventTypeJsonConverter : JsonConverter<DevHubEventType>
+public sealed class DevHubEventTypeJsonConverter : JsonConverter
 {
     /// <inheritdoc />
-    public override DevHubEventType Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override bool CanConvert(Type objectType)
     {
-        var value = reader.GetString();
+        return objectType == typeof(DevHubEventType);
+    }
+
+    /// <inheritdoc />
+    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+    {
+        var value = reader.Value as string;
         if (DevHubEventType.TryParse(value, out var eventType))
         {
             return eventType;
         }
 
-        throw new JsonException("hub.event.params.type 必须是受支持的 DevHub 事件类型。");
+        throw new JsonSerializationException("hub.event.params.type 必须是受支持的 DevHub 事件类型。");
     }
 
     /// <inheritdoc />
-    public override void Write(Utf8JsonWriter writer, DevHubEventType value, JsonSerializerOptions options)
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
     {
-        if (!value.IsSupported)
+        if (value is not DevHubEventType eventType || !eventType.IsSupported)
         {
-            throw new JsonException("事件类型必须是受支持的 DevHub 事件类型。");
+            throw new JsonSerializationException("事件类型必须是受支持的 DevHub 事件类型。");
         }
 
-        writer.WriteStringValue(value.Value);
+        writer.WriteValue(eventType.Value);
     }
 }

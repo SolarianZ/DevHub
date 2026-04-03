@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevHub.Sdk;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 {
@@ -150,7 +151,7 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
             {
                 ok = requestResult.Ok,
                 invocationId = requestResult.InvocationId,
-                value = ConvertJsonElement(requestResult.Value)
+                value = ConvertJToken(requestResult.Value)
             },
             null);
     }
@@ -612,7 +613,7 @@ object NormalizeEvent(DevHubEvent @event)
     {
         ["subscriptionId"] = @event.SubscriptionId,
         ["type"] = @event.Type.Value,
-        ["payload"] = ConvertJsonElement(@event.Payload)
+        ["payload"] = ConvertJToken(@event.Payload)
     };
 }
 
@@ -817,7 +818,7 @@ object NormalizeInvocationError(DevHubRpcException exception)
         };
         if (calleeError.Data is { } data)
         {
-            calleePayload["data"] = ConvertJsonElement(data);
+            calleePayload["data"] = ConvertJToken(data);
         }
 
         payload["calleeError"] = calleePayload;
@@ -834,6 +835,16 @@ object? ConvertJsonElement(JsonElement? element)
     }
 
     return JsonSerializer.Deserialize<object>(element.Value.GetRawText(), jsonOptions);
+}
+
+object? ConvertJToken(JToken? token)
+{
+    if (token is null)
+    {
+        return null;
+    }
+
+    return JsonSerializer.Deserialize<object>(token.ToString(Newtonsoft.Json.Formatting.None), jsonOptions);
 }
 
 JsonElement ReadRequiredArray(JsonElement element, string propertyName)

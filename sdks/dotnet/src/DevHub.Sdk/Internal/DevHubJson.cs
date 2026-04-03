@@ -1,27 +1,95 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace DevHub.Sdk.Internal;
 
 internal static class DevHubJson
 {
-    internal static JsonSerializerOptions SerializerOptions { get; } = CreateSerializerOptions();
+    internal static JsonSerializerSettings SerializerSettings { get; } = CreateSerializerSettings();
 
-    internal static JsonElement? Clone(JsonElement? element)
+    internal static JsonSerializer CreateSerializer()
     {
-        return element?.Clone();
+        return JsonSerializer.CreateDefault(SerializerSettings);
     }
 
-    private static JsonSerializerOptions CreateSerializerOptions()
+    internal static JToken? Clone(JToken? token)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        return token?.DeepClone();
+    }
+
+    internal static string Serialize(object? value)
+    {
+        return JsonConvert.SerializeObject(value, SerializerSettings);
+    }
+
+    internal static T? Deserialize<T>(string json)
+    {
+        CompatibilityGuards.ThrowIfNull(json, nameof(json));
+        return JsonConvert.DeserializeObject<T>(json, SerializerSettings);
+    }
+
+    internal static T? Deserialize<T>(JToken token)
+    {
+        CompatibilityGuards.ThrowIfNull(token, nameof(token));
+        return token.ToObject<T>(CreateSerializer());
+    }
+
+    internal static JToken SerializeToToken(object? value)
+    {
+        if (value is null)
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            PropertyNameCaseInsensitive = true
+            return JValue.CreateNull();
+        }
+
+        if (value is JToken token)
+        {
+            return token.DeepClone();
+        }
+
+        return JToken.FromObject(value, CreateSerializer());
+    }
+
+    internal static JToken ParseToken(string json)
+    {
+        CompatibilityGuards.ThrowIfNull(json, nameof(json));
+
+        using var stringReader = new StringReader(json);
+        using var jsonReader = new JsonTextReader(stringReader)
+        {
+            DateParseHandling = DateParseHandling.None
         };
 
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
-        return options;
+        return JToken.ReadFrom(jsonReader);
+    }
+
+    internal static JObject ParseObject(string json)
+    {
+        var token = ParseToken(json);
+        if (token.Type != JTokenType.Object)
+        {
+            throw new JsonException("JSON 根必须为对象。");
+        }
+
+        return (JObject)token;
+    }
+
+    private static JsonSerializerSettings CreateSerializerSettings()
+    {
+        var settings = new JsonSerializerSettings
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            NullValueHandling = NullValueHandling.Include,
+            DateParseHandling = DateParseHandling.None
+        };
+
+        settings.Converters.Add(new StringEnumConverter
+        {
+            CamelCaseText = true,
+            AllowIntegerValues = false
+        });
+
+        return settings;
     }
 }

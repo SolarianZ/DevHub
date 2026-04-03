@@ -1,6 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.Models;
 
@@ -12,20 +12,21 @@ public sealed class PingResult
     /// <summary>
     /// 是否成功。
     /// </summary>
-    [JsonPropertyName("ok")]
+    [JsonProperty("ok")]
     public bool Ok { get; set; }
 
     /// <summary>
     /// 服务端时间。
     /// </summary>
-    [JsonPropertyName("serverTimeUtc")]
+    [JsonProperty("serverTimeUtc")]
     public DateTimeOffset ServerTimeUtc { get; set; }
 
     /// <summary>
     /// 回显数据。
     /// </summary>
-    [JsonPropertyName("echo")]
-    public JsonElement? Echo { get; set; }
+    [JsonProperty("echo")]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Echo { get; set; }
 }
 
 /// <summary>
@@ -62,25 +63,25 @@ public sealed class LaunchResult
     /// <summary>
     /// 是否成功。
     /// </summary>
-    [JsonPropertyName("ok")]
+    [JsonProperty("ok")]
     public bool Ok { get; set; }
 
     /// <summary>
     /// 启动状态。
     /// </summary>
-    [JsonPropertyName("status")]
+    [JsonProperty("status")]
     public string Status { get; set; } = string.Empty;
 
     /// <summary>
     /// 关联进程标识。
     /// </summary>
-    [JsonPropertyName("pid")]
+    [JsonProperty("pid")]
     public int? Pid { get; set; }
 
     /// <summary>
     /// 启动请求标识。
     /// </summary>
-    [JsonPropertyName("launchId")]
+    [JsonProperty("launchId")]
     public string LaunchId { get; set; } = string.Empty;
 }
 
@@ -149,13 +150,13 @@ public sealed class NotifyResult
     /// <summary>
     /// 是否成功。
     /// </summary>
-    [JsonPropertyName("ok")]
+    [JsonProperty("ok")]
     public bool Ok { get; set; }
 
     /// <summary>
     /// 调用标识。
     /// </summary>
-    [JsonPropertyName("invocationId")]
+    [JsonProperty("invocationId")]
     public string InvocationId { get; set; } = string.Empty;
 }
 
@@ -167,20 +168,21 @@ public sealed class RequestResult
     /// <summary>
     /// 是否成功。
     /// </summary>
-    [JsonPropertyName("ok")]
+    [JsonProperty("ok")]
     public bool Ok { get; set; }
 
     /// <summary>
     /// 调用标识。
     /// </summary>
-    [JsonPropertyName("invocationId")]
+    [JsonProperty("invocationId")]
     public string InvocationId { get; set; } = string.Empty;
 
     /// <summary>
     /// 被调用方返回值。
     /// </summary>
-    [JsonPropertyName("value")]
-    public JsonElement? Value { get; set; }
+    [JsonProperty("value")]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Value { get; set; }
 }
 
 /// <summary>
@@ -212,19 +214,19 @@ public sealed class PollResult
     /// <summary>
     /// 是否成功。
     /// </summary>
-    [JsonPropertyName("ok")]
+    [JsonProperty("ok")]
     public bool Ok { get; set; }
 
     /// <summary>
     /// 服务端时间。
     /// </summary>
-    [JsonPropertyName("serverTimeUtc")]
+    [JsonProperty("serverTimeUtc")]
     public DateTimeOffset ServerTimeUtc { get; set; }
 
     /// <summary>
     /// 拉取到的调用条目。
     /// </summary>
-    [JsonPropertyName("items")]
+    [JsonProperty("items")]
     public List<Invocation> Items { get; set; } = [];
 }
 
@@ -273,61 +275,62 @@ public sealed class Invocation
     /// <summary>
     /// 调用标识。
     /// </summary>
-    [JsonPropertyName("invocationId")]
+    [JsonProperty("invocationId")]
     public string InvocationId { get; set; } = string.Empty;
 
     /// <summary>
     /// 应用标识。
     /// </summary>
-    [JsonPropertyName("appId")]
+    [JsonProperty("appId")]
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
     /// 调用目标。
     /// </summary>
-    [JsonPropertyName("target")]
+    [JsonProperty("target")]
     public InvocationTarget? Target { get; set; }
 
     /// <summary>
     /// 方法名。
     /// </summary>
-    [JsonPropertyName("method")]
+    [JsonProperty("method")]
     public string Method { get; set; } = string.Empty;
 
     /// <summary>
     /// 调用参数。
     /// </summary>
-    [JsonPropertyName("args")]
-    public JsonElement? Args { get; set; }
+    [JsonProperty("args")]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Args { get; set; }
 
     /// <summary>
     /// 调用类型。
     /// </summary>
-    [JsonPropertyName("kind")]
+    [JsonProperty("kind")]
     public InvocationKind Kind { get; set; }
 
     /// <summary>
     /// 创建时间。
     /// </summary>
-    [JsonPropertyName("createdAtUtc")]
+    [JsonProperty("createdAtUtc")]
     public DateTimeOffset CreatedAtUtc { get; set; }
 
     /// <summary>
     /// 调用选项。
     /// </summary>
-    [JsonPropertyName("options")]
+    [JsonProperty("options")]
     public InvocationOptions? Options { get; set; }
 
     /// <summary>
     /// 投递信息。
     /// </summary>
-    [JsonPropertyName("delivery")]
+    [JsonProperty("delivery")]
     public InvocationDelivery? Delivery { get; set; }
 
     /// <summary>
     /// 调用方信息。
     /// </summary>
-    [JsonPropertyName("caller")]
+    [JsonProperty("caller")]
     public InvocationCaller? Caller { get; set; }
 }
 
@@ -339,15 +342,13 @@ public sealed class InvocationTarget
     /// <summary>
     /// 目标作用域。
     /// </summary>
-    [JsonPropertyName("scope")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    [JsonProperty("scope")]
     public string? Scope { get; set; }
 
     /// <summary>
     /// 目标实例标识。
     /// </summary>
-    [JsonPropertyName("instanceId")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("instanceId", NullValueHandling = NullValueHandling.Ignore)]
     public string? InstanceId { get; set; }
 }
 
@@ -359,29 +360,25 @@ public sealed class InvocationOptions
     /// <summary>
     /// 生存时间，单位毫秒。
     /// </summary>
-    [JsonPropertyName("ttlMs")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("ttlMs", NullValueHandling = NullValueHandling.Ignore)]
     public int? TtlMs { get; set; }
 
     /// <summary>
     /// 请求等待超时，单位毫秒。
     /// </summary>
-    [JsonPropertyName("waitTimeoutMs")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("waitTimeoutMs", NullValueHandling = NullValueHandling.Ignore)]
     public int? WaitTimeoutMs { get; set; }
 
     /// <summary>
     /// 目标离线时是否允许入队。
     /// </summary>
-    [JsonPropertyName("queueIfOffline")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("queueIfOffline", NullValueHandling = NullValueHandling.Ignore)]
     public bool? QueueIfOffline { get; set; }
 
     /// <summary>
     /// 目标离线时是否允许自动拉起。
     /// </summary>
-    [JsonPropertyName("autoLaunch")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("autoLaunch", NullValueHandling = NullValueHandling.Ignore)]
     public bool? AutoLaunch { get; set; }
 }
 
@@ -393,13 +390,13 @@ public sealed class InvocationDelivery
     /// <summary>
     /// 当前租约时长，单位秒。
     /// </summary>
-    [JsonPropertyName("leaseSeconds")]
+    [JsonProperty("leaseSeconds")]
     public int LeaseSeconds { get; set; }
 
     /// <summary>
     /// 当前投递尝试次数。
     /// </summary>
-    [JsonPropertyName("attempt")]
+    [JsonProperty("attempt")]
     public int Attempt { get; set; }
 }
 
@@ -411,13 +408,13 @@ public sealed class InvocationCaller
     /// <summary>
     /// 调用方客户端标识。
     /// </summary>
-    [JsonPropertyName("clientId")]
+    [JsonProperty("clientId")]
     public string ClientId { get; set; } = string.Empty;
 
     /// <summary>
     /// 调用方客户端会话标识。
     /// </summary>
-    [JsonPropertyName("clientSessionId")]
+    [JsonProperty("clientSessionId")]
     public string ClientSessionId { get; set; } = string.Empty;
 }
 
@@ -441,14 +438,37 @@ public enum InvocationKind
 /// <summary>
 /// 调用类型 JSON 转换器。
 /// </summary>
-public sealed class InvocationKindJsonConverter : JsonStringEnumConverter<InvocationKind>
+public sealed class InvocationKindJsonConverter : JsonConverter
 {
     /// <summary>
     /// 初始化转换器。
     /// </summary>
-    public InvocationKindJsonConverter()
-        : base(JsonNamingPolicy.CamelCase, allowIntegerValues: false)
+    public override bool CanConvert(Type objectType)
     {
+        return objectType == typeof(InvocationKind);
+    }
+
+    /// <inheritdoc />
+    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+    {
+        var value = reader.Value as string;
+        return value switch
+        {
+            "request" => InvocationKind.Request,
+            "notify" => InvocationKind.Notify,
+            _ => throw new JsonSerializationException("Invocation.kind 必须为 request 或 notify。")
+        };
+    }
+
+    /// <inheritdoc />
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+    {
+        if (value is not InvocationKind kind)
+        {
+            throw new JsonSerializationException("Invocation.kind 类型非法。");
+        }
+
+        writer.WriteValue(kind == InvocationKind.Request ? "request" : "notify");
     }
 }
 
@@ -460,26 +480,27 @@ public sealed class DevHubEvent
     /// <summary>
     /// 订阅标识。
     /// </summary>
-    [JsonPropertyName("subscriptionId")]
+    [JsonProperty("subscriptionId")]
     public string SubscriptionId { get; set; } = string.Empty;
 
     /// <summary>
     /// 事件类型。
     /// </summary>
-    [JsonPropertyName("type")]
+    [JsonProperty("type")]
     public DevHubEventType Type { get; set; }
 
     /// <summary>
     /// 事件发生时间。
     /// </summary>
-    [JsonPropertyName("timeUtc")]
+    [JsonProperty("timeUtc")]
     public DateTimeOffset TimeUtc { get; set; }
 
     /// <summary>
     /// 事件载荷。
     /// </summary>
-    [JsonPropertyName("payload")]
-    public JsonElement? Payload { get; set; }
+    [JsonProperty("payload")]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Payload { get; set; }
 }
 
 /// <summary>
@@ -490,21 +511,21 @@ public sealed class DevHubCalleeError
     /// <summary>
     /// 错误码。
     /// </summary>
-    [JsonPropertyName("code")]
+    [JsonProperty("code")]
     public int Code { get; set; }
 
     /// <summary>
     /// 错误消息。
     /// </summary>
-    [JsonPropertyName("message")]
+    [JsonProperty("message")]
     public string Message { get; set; } = string.Empty;
 
     /// <summary>
     /// 错误附加数据。
     /// </summary>
-    [JsonPropertyName("data")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public JsonElement? Data { get; set; }
+    [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Data { get; set; }
 
     /// <summary>
     /// 使用任意 JSON 数据构造错误对象。
@@ -515,11 +536,11 @@ public sealed class DevHubCalleeError
     /// <returns>错误对象。</returns>
     public static DevHubCalleeError Create(int code, string message, object? data = null)
     {
-        JsonElement? serializedData = null;
+        JToken? serializedData = null;
         if (data is not null)
         {
-            var jsonData = JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions);
-            if (jsonData.ValueKind != JsonValueKind.Object)
+            var jsonData = DevHubJson.SerializeToToken(data);
+            if (jsonData.Type != JTokenType.Object)
             {
                 throw new ArgumentException("data 必须序列化为 JSON 对象。", nameof(data));
             }

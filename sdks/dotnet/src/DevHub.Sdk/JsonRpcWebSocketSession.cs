@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk;
 
@@ -12,7 +12,7 @@ namespace DevHub.Sdk;
 public sealed class DevHubWebSocketSessionOptions
 {
     private Uri? _webSocketEndpoint;
-    private Action<JsonElement>? _onEvent;
+    private Action<JObject>? _onEvent;
     private Action<Exception?>? _onTerminated;
 
     /// <summary>
@@ -32,7 +32,7 @@ public sealed class DevHubWebSocketSessionOptions
     /// <summary>
     /// 收到 <c>hub.event</c> 通知时的回调。
     /// </summary>
-    public Action<JsonElement> OnEvent
+    public Action<JObject> OnEvent
     {
         get => _onEvent ?? throw new InvalidOperationException("OnEvent 尚未设置。");
         set => _onEvent = value ?? throw new ArgumentNullException(nameof(value));
@@ -66,7 +66,7 @@ public interface IDevHubWebSocketSession : IAsyncDisposable
     /// <param name="parameters">参数对象。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>响应中的 <c>result</c> 对象。</returns>
-    Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default);
+    Task<JObject> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 主动断开当前连接，但保留 session 以供后续重连复用。
@@ -111,7 +111,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     private readonly DevHubWebSocketSessionOptions _options;
     private readonly IWebSocketConnectionFactory _connectionFactory;
     private readonly Func<string> _requestIdFactory;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingRequests;
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _pendingRequests;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _abandonedRequests;
     private readonly SemaphoreSlim _connectionLock;
     private readonly SemaphoreSlim _sendLock;
@@ -140,7 +140,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _requestIdFactory = requestIdFactory ?? CreateRequestId;
-        _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JsonElement>>(StringComparer.Ordinal);
+        _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JObject>>(StringComparer.Ordinal);
         _abandonedRequests = new ConcurrentDictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         _connectionLock = new SemaphoreSlim(1, 1);
         _sendLock = new SemaphoreSlim(1, 1);
@@ -176,7 +176,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     }
 
     /// <inheritdoc />
-    public async Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
+    public async Task<JObject> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(method, nameof(method));
@@ -185,7 +185,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         await EnsureConnectedAsync(cancellationToken);
         var connection = _connection ?? throw new InvalidOperationException("当前 WebSocket 尚未建立连接。");
         var requestId = _requestIdFactory();
-        var waiter = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var waiter = new TaskCompletionSource<JObject>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pendingRequests.TryAdd(requestId, waiter))
         {
             throw new InvalidOperationException($"重复的请求标识：{requestId}");
@@ -193,14 +193,13 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
         try
         {
-            var payload = JsonSerializer.Serialize(
+            var payload = DevHubJson.Serialize(
                 new JsonRpcRequestEnvelope
                 {
                     Id = requestId,
                     Method = method,
                     Params = parameters
-                },
-                DevHubJson.SerializerOptions);
+                });
 
             await _sendLock.WaitAsync(cancellationToken);
             try
@@ -345,24 +344,23 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
                     throw new InvalidOperationException("WebSocket JSON-RPC 消息必须为文本。");
                 }
 
-                if (string.IsNullOrWhiteSpace(message.Text))
+                if (message.Text is not { } text || string.IsNullOrWhiteSpace(text))
                 {
                     throw new InvalidOperationException("WebSocket JSON-RPC 消息不能为空。");
                 }
 
-                using var document = JsonDocument.Parse(message.Text);
-                var root = document.RootElement;
+                var root = DevHubJson.ParseObject(text);
                 ValidateIncomingEnvelope(root);
 
-                if (TryHandleResponse(root, out var requestId, out var resultElement))
+                if (TryHandleResponse(root, out var requestId, out var resultElement, out var errorToken))
                 {
-                    CompletePendingRequest(requestId, root, resultElement);
+                    CompletePendingRequest(requestId, resultElement, errorToken);
                     continue;
                 }
 
                 if (TryGetEventParams(root, out var paramsElement))
                 {
-                    _options.OnEvent(paramsElement.Clone());
+                    _options.OnEvent((JObject)paramsElement!.DeepClone());
                     continue;
                 }
 
@@ -398,7 +396,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         }
     }
 
-    private void CompletePendingRequest(string requestId, JsonElement root, JsonElement resultElement)
+    private void CompletePendingRequest(string requestId, JObject? resultElement, JToken? errorToken)
     {
         if (!_pendingRequests.TryRemove(requestId, out var waiter))
         {
@@ -411,37 +409,53 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             throw new InvalidOperationException("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。");
         }
 
-        if (root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
+        if (errorToken is not null)
         {
-            var code = errorElement.GetProperty("code").GetInt32();
-            var message = errorElement.GetProperty("message").GetString() ?? "internal_error";
-            JsonElement? data = null;
-            if (errorElement.TryGetProperty("data", out var dataElement))
+            if (errorToken.Type != JTokenType.Object)
             {
-                data = dataElement.Clone();
+                waiter.TrySetException(new InvalidOperationException("WebSocket JSON-RPC error 对象非法。"));
+                return;
+            }
+
+            var errorObject = (JObject)errorToken;
+            if (!errorObject.TryGetValue("code", out var codeToken) || !TryReadInt32(codeToken, out var code))
+            {
+                waiter.TrySetException(new InvalidOperationException("WebSocket JSON-RPC error.code 非法。"));
+                return;
+            }
+
+            var message = errorObject.TryGetValue("message", out var messageToken) && messageToken.Type == JTokenType.String
+                ? (string?)messageToken ?? "internal_error"
+                : "internal_error";
+
+            JToken? data = null;
+            if (errorObject.TryGetValue("data", out var dataToken))
+            {
+                data = dataToken.DeepClone();
             }
 
             waiter.TrySetException(new DevHubRpcException(code, message, data, requestId));
             return;
         }
 
-        waiter.TrySetResult(resultElement.Clone());
+        waiter.TrySetResult((JObject)resultElement!.DeepClone());
     }
 
-    private static bool TryHandleResponse(JsonElement root, out string requestId, out JsonElement resultElement)
+    private static bool TryHandleResponse(JObject root, out string requestId, out JObject? resultElement, out JToken? errorToken)
     {
         requestId = string.Empty;
-        resultElement = default;
+        resultElement = null;
+        errorToken = null;
 
-        if (!root.TryGetProperty("id", out _))
+        if (!root.TryGetValue("id", out _))
         {
             return false;
         }
 
         requestId = ReadResponseId(root);
 
-        var hasResult = root.TryGetProperty("result", out resultElement);
-        var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
+        var hasResult = root.TryGetValue("result", out var resultToken);
+        var hasError = root.TryGetValue("error", out errorToken) && errorToken.Type != JTokenType.Null;
         if (!hasResult && !hasError)
         {
             return false;
@@ -452,90 +466,118 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             throw new InvalidOperationException("WebSocket JSON-RPC 响应必须且只能包含 result 或 error。");
         }
 
-        if (hasResult && resultElement.ValueKind != JsonValueKind.Object)
+        if (hasResult && resultToken!.Type != JTokenType.Object)
         {
             throw new InvalidOperationException("WebSocket JSON-RPC result 必须为对象。");
         }
 
+        if (hasResult)
+        {
+            resultElement = (JObject)resultToken!;
+        }
+
         return true;
     }
 
-    private static bool TryGetEventParams(JsonElement root, out JsonElement paramsElement)
+    private static bool TryGetEventParams(JObject root, out JObject? paramsElement)
     {
-        paramsElement = default;
-        if (!root.TryGetProperty("method", out var methodElement) || methodElement.ValueKind != JsonValueKind.String)
+        paramsElement = null;
+        if (!root.TryGetValue("method", out var methodToken) || methodToken.Type != JTokenType.String)
         {
             return false;
         }
 
-        if (!string.Equals(methodElement.GetString(), "hub.event", StringComparison.Ordinal))
+        if (!string.Equals((string?)methodToken, "hub.event", StringComparison.Ordinal))
         {
             return false;
         }
 
-        if (root.TryGetProperty("id", out _))
+        if (root.TryGetValue("id", out _))
         {
             throw new InvalidOperationException("hub.event 必须为通知，禁止包含 id。");
         }
 
-        if (!root.TryGetProperty("params", out paramsElement) || paramsElement.ValueKind != JsonValueKind.Object)
+        if (!root.TryGetValue("params", out var paramsToken) || paramsToken.Type != JTokenType.Object)
         {
             throw new InvalidOperationException("hub.event.params 非法。");
         }
 
-        if (root.TryGetProperty("result", out _) ||
-            root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null)
+        if (root.TryGetValue("result", out _) ||
+            root.TryGetValue("error", out var errorToken) && errorToken.Type != JTokenType.Null)
         {
             throw new InvalidOperationException("hub.event 通知禁止包含 result 或 error。");
         }
 
+        paramsElement = (JObject)paramsToken;
         return true;
     }
 
-    private static void ThrowUnexpectedIncomingMessage(JsonElement root)
+    private static void ThrowUnexpectedIncomingMessage(JObject root)
     {
-        if (root.TryGetProperty("id", out _))
+        if (root.TryGetValue("id", out _))
         {
             throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 响应。");
         }
 
-        if (root.TryGetProperty("method", out var methodElement) && methodElement.ValueKind == JsonValueKind.String)
+        if (root.TryGetValue("method", out var methodToken) && methodToken.Type == JTokenType.String)
         {
-            var method = methodElement.GetString() ?? string.Empty;
+            var method = (string?)methodToken ?? string.Empty;
             throw new InvalidOperationException($"收到不受支持的 WebSocket 通知：{method}");
         }
 
         throw new InvalidOperationException("收到无法识别的 WebSocket JSON-RPC 消息。");
     }
 
-    private static void ValidateIncomingEnvelope(JsonElement root)
+    private static void ValidateIncomingEnvelope(JObject root)
     {
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 消息根必须为对象。");
-        }
-
-        if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
-            jsonRpcElement.ValueKind != JsonValueKind.String ||
-            !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
+        if (!root.TryGetValue("jsonrpc", out var jsonRpcToken) ||
+            jsonRpcToken.Type != JTokenType.String ||
+            !string.Equals((string?)jsonRpcToken, "2.0", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("WebSocket JSON-RPC 消息的 jsonrpc 版本非法。");
         }
     }
 
-    private static string ReadResponseId(JsonElement root)
+    private static string ReadResponseId(JObject root)
     {
-        if (!root.TryGetProperty("id", out var idElement))
+        if (!root.TryGetValue("id", out var idToken))
         {
             throw new InvalidOperationException("WebSocket JSON-RPC 响应缺少 id 字段。");
         }
 
-        return idElement.ValueKind switch
+        return idToken.Type switch
         {
-            JsonValueKind.String => idElement.GetString() ?? string.Empty,
-            JsonValueKind.Number => idElement.GetRawText(),
+            JTokenType.String => (string?)idToken ?? string.Empty,
+            JTokenType.Integer => Convert.ToString(((JValue)idToken).Value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            JTokenType.Float => Convert.ToString(((JValue)idToken).Value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
             _ => throw new InvalidOperationException("WebSocket JSON-RPC 响应的 id 类型非法。")
         };
+    }
+
+    private static bool TryReadInt32(JToken token, out int value)
+    {
+        if (token.Type == JTokenType.Integer)
+        {
+            var numericValue = ((JValue)token).Value;
+            switch (numericValue)
+            {
+                case int intValue:
+                    value = intValue;
+                    return true;
+                case long longValue when longValue >= int.MinValue && longValue <= int.MaxValue:
+                    value = (int)longValue;
+                    return true;
+                case short shortValue:
+                    value = shortValue;
+                    return true;
+                case byte byteValue:
+                    value = byteValue;
+                    return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private void MarkPendingRequestAsAbandoned(string requestId)
@@ -626,7 +668,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
         public string Method { get; set; } = string.Empty;
 
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public object? Params { get; set; }
     }
 }

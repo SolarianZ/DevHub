@@ -1,18 +1,19 @@
-using System.Text.Json;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.Internal;
 
 internal static class ResponsePayloadReader
 {
-    internal static T DeserializeRequired<T>(JsonElement result, string location)
+    internal static T DeserializeRequired<T>(JToken result, string location)
     {
         try
         {
-            var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
+            var value = DevHubJson.Deserialize<T>(result);
             return value ?? throw new InvalidOperationException($"无法解析 {location}。");
         }
-        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        catch (Exception exception) when (exception is JsonException or NotSupportedException or ArgumentException)
         {
             throw new InvalidOperationException($"无法解析 {location}。", exception);
         }
@@ -26,18 +27,18 @@ internal static class ResponsePayloadReader
         }
     }
 
-    internal static JsonElement EnsurePropertyExists(
-        JsonElement payload,
+    internal static JToken EnsurePropertyExists(
+        JToken payload,
         string location,
         string propertyName,
-        JsonValueKind? expectedKind = null)
+        JTokenType? expectedType = null)
     {
-        if (!payload.TryGetProperty(propertyName, out var propertyValue))
+        if (payload is not JObject payloadObject || !payloadObject.TryGetValue(propertyName, out var propertyValue))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
         }
 
-        if (expectedKind is { } kind && propertyValue.ValueKind != kind)
+        if (expectedType is { } kind && propertyValue.Type != kind)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
@@ -70,35 +71,33 @@ internal static class ResponsePayloadReader
         }
     }
 
-    internal static void ValidateAppDefinitionElement(JsonElement element, string location)
+    internal static void ValidateAppDefinitionElement(JToken element, string location)
     {
-        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureElementKind(element, location, JTokenType.Object);
         EnsureStringProperty(element, location, "appId");
         EnsureStringProperty(element, location, "displayName");
         EnsureOptionalStringProperty(element, location, "description");
 
-        if (element.TryGetProperty("capabilities", out var capabilitiesElement) &&
-            capabilitiesElement.ValueKind != JsonValueKind.Null)
+        if (TryGetProperty(element, "capabilities", out var capabilitiesToken) && capabilitiesToken.Type != JTokenType.Null)
         {
-            EnsureElementKind(capabilitiesElement, $"{location}.capabilities", JsonValueKind.Object);
-            EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "rpc");
-            EnsureOptionalBooleanProperty(capabilitiesElement, $"{location}.capabilities", "events");
+            EnsureElementKind(capabilitiesToken, $"{location}.capabilities", JTokenType.Object);
+            EnsureOptionalBooleanProperty(capabilitiesToken, $"{location}.capabilities", "rpc");
+            EnsureOptionalBooleanProperty(capabilitiesToken, $"{location}.capabilities", "events");
         }
 
-        if (element.TryGetProperty("launch", out var launchElement) &&
-            launchElement.ValueKind != JsonValueKind.Null)
+        if (TryGetProperty(element, "launch", out var launchToken) && launchToken.Type != JTokenType.Null)
         {
-            EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
-            EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
-            EnsureOptionalStringProperty(launchElement, $"{location}.launch", "argsTemplate");
-            EnsureOptionalStringProperty(launchElement, $"{location}.launch", "workingDirectory");
-            EnsureOptionalStringProperty(launchElement, $"{location}.launch", "dedupeKeyTemplate");
+            EnsureElementKind(launchToken, $"{location}.launch", JTokenType.Object);
+            EnsureStringProperty(launchToken, $"{location}.launch", "exePath");
+            EnsureOptionalStringProperty(launchToken, $"{location}.launch", "argsTemplate");
+            EnsureOptionalStringProperty(launchToken, $"{location}.launch", "workingDirectory");
+            EnsureOptionalStringProperty(launchToken, $"{location}.launch", "dedupeKeyTemplate");
         }
     }
 
-    internal static void ValidateAppInstanceElement(JsonElement element, string location)
+    internal static void ValidateAppInstanceElement(JToken element, string location)
     {
-        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureElementKind(element, location, JTokenType.Object);
         EnsureStringProperty(element, location, "instanceId");
         EnsureStringProperty(element, location, "appId");
         EnsureOptionalStringOrNullProperty(element, location, "scope");
@@ -106,147 +105,181 @@ internal static class ResponsePayloadReader
         EnsureStringProperty(element, location, "registeredAtUtc");
         EnsureStringProperty(element, location, "lastSeenUtc");
 
-        var invokeElement = EnsurePropertyExists(element, location, "invoke", JsonValueKind.Object);
-        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "poll");
-        EnsureBooleanProperty(invokeElement, $"{location}.invoke", "respond");
+        var invokeToken = EnsurePropertyExists(element, location, "invoke", JTokenType.Object);
+        EnsureBooleanProperty(invokeToken, $"{location}.invoke", "poll");
+        EnsureBooleanProperty(invokeToken, $"{location}.invoke", "respond");
 
-        if (element.TryGetProperty("meta", out var metaElement) &&
-            metaElement.ValueKind != JsonValueKind.Null)
+        if (TryGetProperty(element, "meta", out var metaToken) && metaToken.Type != JTokenType.Null)
         {
-            EnsureElementKind(metaElement, $"{location}.meta", JsonValueKind.Object);
+            EnsureElementKind(metaToken, $"{location}.meta", JTokenType.Object);
         }
     }
 
-    internal static void ValidateInvocationElement(JsonElement element, string location)
+    internal static void ValidateInvocationElement(JToken element, string location)
     {
-        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureElementKind(element, location, JTokenType.Object);
         EnsureStringProperty(element, location, "invocationId");
         EnsureStringProperty(element, location, "appId");
-        var targetElement = EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "scope");
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "instanceId");
+        var targetToken = EnsurePropertyExists(element, location, "target", JTokenType.Object);
+        EnsureOptionalStringOrNullProperty(targetToken, $"{location}.target", "scope");
+        EnsureOptionalStringOrNullProperty(targetToken, $"{location}.target", "instanceId");
         EnsureStringProperty(element, location, "method");
         EnsureStringProperty(element, location, "kind");
         EnsureStringProperty(element, location, "createdAtUtc");
 
-        if (element.TryGetProperty("options", out var optionsElement) &&
-            optionsElement.ValueKind != JsonValueKind.Null)
+        if (TryGetProperty(element, "options", out var optionsToken) && optionsToken.Type != JTokenType.Null)
         {
-            EnsureElementKind(optionsElement, $"{location}.options", JsonValueKind.Object);
-            EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "ttlMs", 1000);
-            EnsureOptionalIntegerPropertyAtLeast(optionsElement, $"{location}.options", "waitTimeoutMs", 1);
-            EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "queueIfOffline");
-            EnsureOptionalBooleanProperty(optionsElement, $"{location}.options", "autoLaunch");
+            EnsureElementKind(optionsToken, $"{location}.options", JTokenType.Object);
+            EnsureOptionalIntegerPropertyAtLeast(optionsToken, $"{location}.options", "ttlMs", 1000);
+            EnsureOptionalIntegerPropertyAtLeast(optionsToken, $"{location}.options", "waitTimeoutMs", 1);
+            EnsureOptionalBooleanProperty(optionsToken, $"{location}.options", "queueIfOffline");
+            EnsureOptionalBooleanProperty(optionsToken, $"{location}.options", "autoLaunch");
         }
 
-        var callerElement = EnsurePropertyExists(element, location, "caller", JsonValueKind.Object);
-        EnsureStringProperty(callerElement, $"{location}.caller", "clientId");
-        EnsureStringProperty(callerElement, $"{location}.caller", "clientSessionId");
+        var callerToken = EnsurePropertyExists(element, location, "caller", JTokenType.Object);
+        EnsureStringProperty(callerToken, $"{location}.caller", "clientId");
+        EnsureStringProperty(callerToken, $"{location}.caller", "clientSessionId");
 
-        if (element.TryGetProperty("delivery", out var deliveryElement) &&
-            deliveryElement.ValueKind != JsonValueKind.Null)
+        if (TryGetProperty(element, "delivery", out var deliveryToken) && deliveryToken.Type != JTokenType.Null)
         {
-            EnsureElementKind(deliveryElement, $"{location}.delivery", JsonValueKind.Object);
-            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "leaseSeconds");
-            EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "attempt");
+            EnsureElementKind(deliveryToken, $"{location}.delivery", JTokenType.Object);
+            EnsurePositiveIntegerProperty(deliveryToken, $"{location}.delivery", "leaseSeconds");
+            EnsurePositiveIntegerProperty(deliveryToken, $"{location}.delivery", "attempt");
         }
     }
 
-    private static void EnsureElementKind(JsonElement element, string location, JsonValueKind expectedKind)
+    private static void EnsureElementKind(JToken element, string location, JTokenType expectedKind)
     {
-        if (element.ValueKind != expectedKind)
+        if (element.Type != expectedKind)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：JSON 类型非法。");
         }
     }
 
-    private static void EnsureStringProperty(JsonElement element, string location, string propertyName)
+    private static void EnsureStringProperty(JToken element, string location, string propertyName)
     {
-        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
-        if (string.IsNullOrWhiteSpace(propertyValue.GetString()))
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.String);
+        if (string.IsNullOrWhiteSpace((string?)propertyValue))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
         }
     }
 
-    private static void EnsureBooleanProperty(JsonElement element, string location, string propertyName)
+    private static void EnsureBooleanProperty(JToken element, string location, string propertyName)
     {
         var propertyValue = EnsurePropertyExists(element, location, propertyName);
-        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        if (propertyValue.Type != JTokenType.Boolean)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
-    private static void EnsureOptionalBooleanProperty(JsonElement element, string location, string propertyName)
+    private static void EnsureOptionalBooleanProperty(JToken element, string location, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
         {
             return;
         }
 
-        if (propertyValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        if (propertyValue.Type != JTokenType.Boolean)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
-    private static void EnsureOptionalStringProperty(JsonElement element, string location, string propertyName)
+    private static void EnsureOptionalStringProperty(JToken element, string location, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
         {
             return;
         }
 
-        if (propertyValue.ValueKind != JsonValueKind.String)
+        if (propertyValue.Type != JTokenType.String)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
-    private static void EnsureOptionalStringOrNullProperty(JsonElement element, string location, string propertyName)
+    private static void EnsureOptionalStringOrNullProperty(JToken element, string location, string propertyName)
     {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
         {
             return;
         }
 
-        if (propertyValue.ValueKind == JsonValueKind.Null)
+        if (propertyValue.Type == JTokenType.Null)
         {
             return;
         }
 
-        if (propertyValue.ValueKind != JsonValueKind.String)
+        if (propertyValue.Type != JTokenType.String)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
-    private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)
+    private static void EnsurePositiveIntegerProperty(JToken element, string location, string propertyName)
     {
-        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.Number);
-        if (!propertyValue.TryGetInt32(out var value) || value < 1)
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.Integer);
+        if (!TryReadInt32(propertyValue, out var value) || value < 1)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 1。");
         }
     }
 
     private static void EnsureOptionalIntegerPropertyAtLeast(
-        JsonElement element,
+        JToken element,
         string location,
         string propertyName,
         int minimumValue)
     {
-        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
         {
             return;
         }
 
-        if (propertyValue.ValueKind != JsonValueKind.Number ||
-            !propertyValue.TryGetInt32(out var value) ||
+        if (propertyValue.Type != JTokenType.Integer ||
+            !TryReadInt32(propertyValue, out var value) ||
             value < minimumValue)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 {minimumValue}。");
         }
+    }
+
+    private static bool TryGetProperty(JToken element, string propertyName, out JToken propertyValue)
+    {
+        if (element is JObject elementObject && elementObject.TryGetValue(propertyName, out propertyValue))
+        {
+            return true;
+        }
+
+        propertyValue = null!;
+        return false;
+    }
+
+    private static bool TryReadInt32(JToken token, out int value)
+    {
+        if (token.Type == JTokenType.Integer)
+        {
+            var numericValue = ((JValue)token).Value;
+            switch (numericValue)
+            {
+                case int intValue:
+                    value = intValue;
+                    return true;
+                case long longValue when longValue >= int.MinValue && longValue <= int.MaxValue:
+                    value = (int)longValue;
+                    return true;
+                case short shortValue:
+                    value = shortValue;
+                    return true;
+                case byte byteValue:
+                    value = byteValue;
+                    return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }

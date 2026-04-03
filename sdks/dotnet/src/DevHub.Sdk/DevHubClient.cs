@@ -1,6 +1,6 @@
-using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk;
 
@@ -101,13 +101,13 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
-        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
+        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JTokenType.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
         ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
 
         var index = 0;
-        foreach (var definitionElement in definitionsElement.EnumerateArray())
+        foreach (var definitionElement in definitionsElement.Children())
         {
             ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
             index++;
@@ -125,8 +125,8 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
-        ResponsePayloadReader.ValidateAppDefinitionElement(
-            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
+            ResponsePayloadReader.ValidateAppDefinitionElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JTokenType.Object),
             "hub.apps.getDefinition.result.definition");
 
         var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
@@ -146,8 +146,8 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppInstance> RegisterInstanceAsync(AppInstanceRegistration instance, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
-        ResponsePayloadReader.ValidateAppInstanceElement(
-            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
+            ResponsePayloadReader.ValidateAppInstanceElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JTokenType.Object),
             "hub.apps.registerInstance.result.instance");
 
         var payload = ResponsePayloadReader.DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
@@ -196,13 +196,13 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
-        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
+        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JTokenType.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
         ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
 
         var index = 0;
-        foreach (var instanceElement in instancesElement.EnumerateArray())
+        foreach (var instanceElement in instancesElement.Children())
         {
             ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
             index++;
@@ -274,10 +274,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
-        var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
+        var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JTokenType.Array);
 
         var index = 0;
-        foreach (var itemElement in itemsElement.EnumerateArray())
+        foreach (var itemElement in itemsElement.Children())
         {
             ResponsePayloadReader.ValidateInvocationElement(itemElement, $"hub.invoke.poll.result.items[{index}]");
             index++;

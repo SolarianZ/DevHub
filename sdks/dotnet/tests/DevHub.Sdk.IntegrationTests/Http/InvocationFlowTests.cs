@@ -1,4 +1,3 @@
-using System.Text.Json;
 using DevHub.Sdk.IntegrationTests.TestHost;
 using DevHub.Sdk.Models;
 
@@ -33,7 +32,7 @@ public sealed class InvocationFlowTests
         var invocation = await WaitForSingleInvocationAsync(client, "notify-inst-1");
         Assert.Equal(notifyResult.InvocationId, invocation.InvocationId);
         Assert.Equal(InvocationKind.Notify, invocation.Kind);
-        Assert.Equal("hello", invocation.Args!.Value.GetProperty("message").GetString());
+        Assert.Equal("hello", (string?)invocation.Args!["message"]!);
     }
 
     [Fact]
@@ -72,7 +71,7 @@ public sealed class InvocationFlowTests
 
         var requestResult = await requestTask;
         Assert.True(requestResult.Ok);
-        Assert.Equal(2, requestResult.Value!.Value.GetProperty("value").GetInt32());
+        Assert.Equal(2, (int)requestResult.Value!["value"]!);
 
         var conflict = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RespondAsync(new RespondRequest
         {
@@ -160,7 +159,7 @@ public sealed class InvocationFlowTests
         Assert.NotNull(exception.CalleeError);
         Assert.Equal(1001, exception.CalleeError!.Code);
         Assert.Equal("app_error", exception.CalleeError.Message);
-        Assert.Equal(1001, exception.Data!.Value.GetProperty("calleeError").GetProperty("code").GetInt32());
+        Assert.Equal(1001, (int)exception.Data!["calleeError"]!["code"]!);
     }
 
     [Fact]

@@ -31,7 +31,7 @@ public sealed class EventsFlowTests
         var registeredEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(subscriptionId, registeredEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppInstanceRegistered, registeredEvent.Type);
-        Assert.Equal("events-inst-1", registeredEvent.Payload!.Value.GetProperty("instanceId").GetString());
+        Assert.Equal("events-inst-1", (string?)registeredEvent.Payload!["instanceId"]!);
 
         await client.UnregisterInstanceAsync("events-inst-1");
         await AssertNoEventWithinAsync(eventsClient, TimeSpan.FromMilliseconds(600));
@@ -72,7 +72,7 @@ public sealed class EventsFlowTests
             Assert.True(await initialEnumerator.MoveNextAsync());
             Assert.Equal(initialSubscriptionId, initialEnumerator.Current.SubscriptionId);
             Assert.Equal(DevHubEventTypes.AppInstanceRegistered, initialEnumerator.Current.Type);
-            Assert.Equal("events-reconnect-inst-1", initialEnumerator.Current.Payload!.Value.GetProperty("instanceId").GetString());
+            Assert.Equal("events-reconnect-inst-1", (string?)initialEnumerator.Current.Payload!["instanceId"]!);
 
             Assert.NotNull(connectionFactory.CurrentConnection);
             await connectionFactory.CurrentConnection!.InitiateCloseAsync();
@@ -90,7 +90,7 @@ public sealed class EventsFlowTests
         var reconnectedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(resubscribedId, reconnectedEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppInstanceRegistered, reconnectedEvent.Type);
-        Assert.Equal("events-reconnect-inst-3", reconnectedEvent.Payload!.Value.GetProperty("instanceId").GetString());
+        Assert.Equal("events-reconnect-inst-3", (string?)reconnectedEvent.Payload!["instanceId"]!);
     }
 
     [Fact]

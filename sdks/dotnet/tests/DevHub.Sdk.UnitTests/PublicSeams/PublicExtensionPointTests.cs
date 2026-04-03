@@ -1,5 +1,5 @@
-using System.Text.Json;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.UnitTests.PublicSeams;
 
@@ -132,11 +132,11 @@ public sealed class PublicExtensionPointTests
     {
         public List<string> Methods { get; } = [];
 
-        public Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
+        public Task<JObject> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
         {
             Methods.Add(method);
 
-            var payload = JsonSerializer.SerializeToElement(new
+            var payload = JObject.FromObject(new
             {
                 ok = true,
                 serverTimeUtc = "2026-03-09T00:00:00Z",
@@ -185,13 +185,13 @@ public sealed class PublicExtensionPointTests
             return Task.CompletedTask;
         }
 
-        public Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
+        public Task<JObject> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
         {
             Methods.Add(method);
 
             if (string.Equals(method, "hub.ws.authenticate", StringComparison.Ordinal))
             {
-                return Task.FromResult(JsonSerializer.SerializeToElement(new
+                return Task.FromResult(JObject.FromObject(new
                 {
                     ok = true,
                     protocolVersion = 1
@@ -200,7 +200,7 @@ public sealed class PublicExtensionPointTests
 
             if (string.Equals(method, "hub.events.subscribe", StringComparison.Ordinal))
             {
-                _options.OnEvent(JsonSerializer.SerializeToElement(new
+                _options.OnEvent(JObject.FromObject(new
                 {
                     subscriptionId = "sub-public",
                     type = "invocation.completed",
@@ -211,7 +211,7 @@ public sealed class PublicExtensionPointTests
                     }
                 }));
 
-                return Task.FromResult(JsonSerializer.SerializeToElement(new
+                return Task.FromResult(JObject.FromObject(new
                 {
                     ok = true,
                     subscriptionId = "sub-public"

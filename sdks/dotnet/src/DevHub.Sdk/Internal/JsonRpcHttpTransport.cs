@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk;
 
@@ -19,7 +19,7 @@ public interface IDevHubHttpTransport : IAsyncDisposable
     /// <param name="parameters">参数对象。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>响应中的 <c>result</c> 对象。</returns>
-    Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken);
+    Task<JObject> SendAsync(string method, object? parameters, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -93,7 +93,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
     }
 
     /// <inheritdoc />
-    public async Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
+    public async Task<JObject> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
     {
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(method, nameof(method));
 
@@ -104,14 +104,13 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         requestMessage.Headers.TryAddWithoutValidation("X-DevHub-ClientId", _options.ClientId);
         requestMessage.Headers.TryAddWithoutValidation("X-DevHub-ClientSessionId", _options.ClientSessionId.ToString("D"));
 
-        var payload = JsonSerializer.Serialize(
+        var payload = DevHubJson.Serialize(
             new JsonRpcRequestEnvelope
             {
                 Id = requestId,
                 Method = method,
                 Params = parameters
-            },
-            DevHubJson.SerializerOptions);
+            });
 
         requestMessage.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
@@ -124,8 +123,8 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
             throw new InvalidOperationException($"HTTP 请求失败：{(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}，响应体：{body}");
         }
 
-        using var document = JsonDocument.Parse(body);
-        return ValidateResponseEnvelope(document.RootElement, requestId);
+        var root = DevHubJson.ParseObject(body);
+        return ValidateResponseEnvelope(root, requestId);
     }
 
     internal HttpClient HttpClient => _httpClient;
@@ -157,16 +156,11 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         return $"req-{Guid.NewGuid():N}";
     }
 
-    private static JsonElement ValidateResponseEnvelope(JsonElement root, string requestId)
+    private static JObject ValidateResponseEnvelope(JObject root, string requestId)
     {
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("JSON-RPC 响应根必须为对象。");
-        }
-
-        if (!root.TryGetProperty("jsonrpc", out var jsonRpcElement) ||
-            jsonRpcElement.ValueKind != JsonValueKind.String ||
-            !string.Equals(jsonRpcElement.GetString(), "2.0", StringComparison.Ordinal))
+        if (!root.TryGetValue("jsonrpc", out var jsonRpcToken) ||
+            jsonRpcToken.Type != JTokenType.String ||
+            !string.Equals((string?)jsonRpcToken, "2.0", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("JSON-RPC 响应的 jsonrpc 版本非法。");
         }
@@ -177,8 +171,8 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
             throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
         }
 
-        var hasResult = root.TryGetProperty("result", out var resultElement);
-        var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
+        var hasResult = root.TryGetValue("result", out var resultToken);
+        var hasError = root.TryGetValue("error", out var errorToken) && errorToken.Type != JTokenType.Null;
         if (hasResult == hasError)
         {
             throw new InvalidOperationException("JSON-RPC 响应必须且只能包含 result 或 error。");
@@ -186,54 +180,89 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
         if (hasError)
         {
-            ThrowRpcException(errorElement, requestId);
+            ThrowRpcException(errorToken!, requestId);
         }
 
-        if (resultElement.ValueKind != JsonValueKind.Object)
+        if (resultToken!.Type != JTokenType.Object)
         {
             throw new InvalidOperationException("JSON-RPC result 必须为对象。");
         }
 
-        return resultElement.Clone();
+        return (JObject)resultToken.DeepClone();
     }
 
-    private static string ReadResponseId(JsonElement root)
+    private static string ReadResponseId(JObject root)
     {
-        if (!root.TryGetProperty("id", out var idElement))
+        if (!root.TryGetValue("id", out var idToken))
         {
             throw new InvalidOperationException("JSON-RPC 响应缺少 id 字段。");
         }
 
-        return idElement.ValueKind switch
+        return idToken.Type switch
         {
-            JsonValueKind.String => idElement.GetString() ?? string.Empty,
-            JsonValueKind.Number => idElement.GetRawText(),
+            JTokenType.String => (string?)idToken ?? string.Empty,
+            JTokenType.Integer => Convert.ToString(((JValue)idToken).Value, CultureInfo.InvariantCulture) ?? string.Empty,
+            JTokenType.Float => Convert.ToString(((JValue)idToken).Value, CultureInfo.InvariantCulture) ?? string.Empty,
             _ => throw new InvalidOperationException("JSON-RPC 响应的 id 类型非法。")
         };
     }
 
-    private static void ThrowRpcException(JsonElement errorElement, string requestId)
+    private static void ThrowRpcException(JToken errorToken, string requestId)
     {
-        if (errorElement.ValueKind != JsonValueKind.Object)
+        if (errorToken.Type != JTokenType.Object)
         {
             throw new InvalidOperationException("JSON-RPC error 对象非法。");
         }
 
-        var code = errorElement.TryGetProperty("code", out var codeElement) && codeElement.TryGetInt32(out var parsedCode)
+        var errorObject = (JObject)errorToken;
+        var code = errorObject.TryGetValue("code", out var codeToken) && TryReadInt32(codeToken, out var parsedCode)
             ? parsedCode
             : throw new InvalidOperationException("JSON-RPC error.code 非法。");
 
-        var message = errorElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == JsonValueKind.String
-            ? messageElement.GetString()!
-            : throw new InvalidOperationException("JSON-RPC error.message 非法。");
-
-        JsonElement? data = null;
-        if (errorElement.TryGetProperty("data", out var dataElement))
+        if (!errorObject.TryGetValue("message", out var messageToken) || messageToken.Type != JTokenType.String)
         {
-            data = dataElement.Clone();
+            throw new InvalidOperationException("JSON-RPC error.message 非法。");
+        }
+
+        var message = (string?)messageToken;
+        if (message is null)
+        {
+            throw new InvalidOperationException("JSON-RPC error.message 非法。");
+        }
+
+        JToken? data = null;
+        if (errorObject.TryGetValue("data", out var dataToken))
+        {
+            data = dataToken.DeepClone();
         }
 
         throw new DevHubRpcException(code, message, data, requestId);
+    }
+
+    private static bool TryReadInt32(JToken token, out int value)
+    {
+        if (token.Type == JTokenType.Integer)
+        {
+            var numericValue = ((JValue)token).Value;
+            switch (numericValue)
+            {
+                case int intValue:
+                    value = intValue;
+                    return true;
+                case long longValue when longValue >= int.MinValue && longValue <= int.MaxValue:
+                    value = (int)longValue;
+                    return true;
+                case short shortValue:
+                    value = shortValue;
+                    return true;
+                case byte byteValue:
+                    value = byteValue;
+                    return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private sealed class JsonRpcRequestEnvelope
@@ -244,7 +273,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
         public string Method { get; set; } = string.Empty;
 
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public object? Params { get; set; }
     }
 }

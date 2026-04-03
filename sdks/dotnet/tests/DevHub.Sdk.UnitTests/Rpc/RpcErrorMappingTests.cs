@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Newtonsoft.Json;
 
 namespace DevHub.Sdk.UnitTests.Rpc;
 
@@ -44,19 +45,19 @@ public sealed class RpcErrorMappingTests : IDisposable
         Assert.Equal("req-fixed", exception.RequestId);
         Assert.Equal(DevHubRpcErrorCode.InvocationFailed, exception.KnownCode);
         Assert.True(exception.Is(DevHubRpcErrorCode.InvocationFailed));
-        Assert.True(exception.Data.HasValue);
+        Assert.NotNull(exception.Data);
         var errorData = exception.Data ?? throw new InvalidOperationException("缺少 error.data。");
-        Assert.Equal(errorData.GetRawText(), exception.ErrorData?.GetRawText());
+        Assert.Equal(errorData.ToString(Formatting.None), exception.ErrorData?.ToString(Formatting.None));
         Assert.Equal("invk-1", exception.InvocationId);
-        Assert.Equal("invk-1", errorData.GetProperty("invocationId").GetString());
-        Assert.Equal(1001, errorData.GetProperty("calleeError").GetProperty("code").GetInt32());
+        Assert.Equal("invk-1", (string?)errorData["invocationId"]!);
+        Assert.Equal(1001, (int)errorData["calleeError"]!["code"]!);
         Assert.True(exception.TryGetDataProperty("calleeError", out var calleeError));
-        Assert.Equal("app_error", calleeError.GetProperty("message").GetString());
+        Assert.Equal("app_error", (string?)calleeError!["message"]!);
         Assert.True(exception.TryGetCalleeError(out var typedCalleeError));
         Assert.NotNull(typedCalleeError);
         Assert.Equal(1001, typedCalleeError!.Code);
         Assert.Equal("app_error", typedCalleeError.Message);
-        Assert.Equal("boom", typedCalleeError.Data!.Value.GetProperty("reason").GetString());
+        Assert.Equal("boom", (string?)typedCalleeError.Data!["reason"]!);
         Assert.Equal(typedCalleeError.Code, exception.CalleeError?.Code);
     }
 

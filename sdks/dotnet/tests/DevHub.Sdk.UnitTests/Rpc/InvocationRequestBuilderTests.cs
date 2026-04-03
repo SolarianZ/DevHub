@@ -1,6 +1,6 @@
-using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.UnitTests.Rpc;
 
@@ -18,12 +18,12 @@ public sealed class InvocationRequestBuilderTests
             Method = "test.notify"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        var options = document.RootElement.GetProperty("options");
-        Assert.Equal(60000, options.GetProperty("ttlMs").GetInt32());
-        Assert.True(options.GetProperty("queueIfOffline").GetBoolean());
-        Assert.True(options.GetProperty("autoLaunch").GetBoolean());
-        Assert.False(document.RootElement.TryGetProperty("target", out _));
+        var document = ToJObject(payload);
+        var options = (JObject)document["options"]!;
+        Assert.Equal(60000, (int)options["ttlMs"]!);
+        Assert.True((bool)options["queueIfOffline"]!);
+        Assert.True((bool)options["autoLaunch"]!);
+        Assert.Null(document["target"]);
     }
 
     [Fact]
@@ -35,12 +35,12 @@ public sealed class InvocationRequestBuilderTests
             Method = "test.request"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        var options = document.RootElement.GetProperty("options");
-        Assert.Equal(300000, options.GetProperty("ttlMs").GetInt32());
-        Assert.Equal(120000, options.GetProperty("waitTimeoutMs").GetInt32());
-        Assert.True(options.GetProperty("queueIfOffline").GetBoolean());
-        Assert.True(options.GetProperty("autoLaunch").GetBoolean());
+        var document = ToJObject(payload);
+        var options = (JObject)document["options"]!;
+        Assert.Equal(300000, (int)options["ttlMs"]!);
+        Assert.Equal(120000, (int)options["waitTimeoutMs"]!);
+        Assert.True((bool)options["queueIfOffline"]!);
+        Assert.True((bool)options["autoLaunch"]!);
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public sealed class InvocationRequestBuilderTests
             }
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal(string.Empty, document.RootElement.GetProperty("target").GetProperty("scope").GetString());
+        var document = ToJObject(payload);
+        Assert.Equal(string.Empty, (string?)document["target"]!["scope"]!);
     }
 
     [Fact]
@@ -118,9 +118,9 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal(10, document.RootElement.GetProperty("maxCount").GetInt32());
-        Assert.Equal(25000, document.RootElement.GetProperty("waitMs").GetInt32());
+        var document = ToJObject(payload);
+        Assert.Equal(10, (int)document["maxCount"]!);
+        Assert.Equal(25000, (int)document["waitMs"]!);
     }
 
     [Fact]
@@ -131,11 +131,11 @@ public sealed class InvocationRequestBuilderTests
             AppId = "test.app"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.False(document.RootElement.TryGetProperty("scope", out _));
-        Assert.False(document.RootElement.TryGetProperty("dedupeKey", out _));
-        Assert.False(document.RootElement.TryGetProperty("waitForRegisterMs", out _));
+        var document = ToJObject(payload);
+        Assert.Equal("test.app", (string?)document["appId"]!);
+        Assert.Null(document["scope"]);
+        Assert.Null(document["dedupeKey"]);
+        Assert.Null(document["waitForRegisterMs"]);
     }
 
     [Fact]
@@ -149,11 +149,11 @@ public sealed class InvocationRequestBuilderTests
             WaitForRegisterMs = 0
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
-        Assert.Equal("launch-key", document.RootElement.GetProperty("dedupeKey").GetString());
-        Assert.Equal(0, document.RootElement.GetProperty("waitForRegisterMs").GetInt32());
+        var document = ToJObject(payload);
+        Assert.Equal("test.app", (string?)document["appId"]!);
+        Assert.Equal(string.Empty, (string?)document["scope"]!);
+        Assert.Equal("launch-key", (string?)document["dedupeKey"]!);
+        Assert.Equal(0, (int)document["waitForRegisterMs"]!);
     }
 
     [Fact]
@@ -187,11 +187,11 @@ public sealed class InvocationRequestBuilderTests
             IncludeOffline = true
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
-        Assert.True(document.RootElement.GetProperty("includeAllScopes").GetBoolean());
-        Assert.True(document.RootElement.GetProperty("includeOffline").GetBoolean());
+        var document = ToJObject(payload!);
+        Assert.Equal("test.app", (string?)document["appId"]!);
+        Assert.Equal(string.Empty, (string?)document["scope"]!);
+        Assert.True((bool)document["includeAllScopes"]!);
+        Assert.True((bool)document["includeOffline"]!);
     }
 
     [Fact]
@@ -204,9 +204,9 @@ public sealed class InvocationRequestBuilderTests
             Value = null
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
-        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
-        Assert.False(document.RootElement.TryGetProperty("error", out _));
+        var document = ToJObject(payload);
+        Assert.Equal(JTokenType.Null, document["value"]!.Type);
+        Assert.Null(document["error"]);
     }
 
     [Fact]
@@ -252,10 +252,15 @@ public sealed class InvocationRequestBuilderTests
             {
                 Code = 1001,
                 Message = "app_error",
-                Data = JsonSerializer.SerializeToElement("boom")
+                Data = JValue.CreateString("boom")
             }
         }));
 
         Assert.Contains("Error.Data", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static JObject ToJObject(object payload)
+    {
+        return JObject.FromObject(payload, DevHubJson.CreateSerializer());
     }
 }

@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Threading.Channels;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk;
 
@@ -123,8 +123,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                 },
                 cancellationToken);
 
-            var payload = JsonSerializer.Deserialize<AuthenticateResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-                ?? throw new InvalidOperationException("无法解析 hub.ws.authenticate 结果。");
+            var payload = ResponsePayloadReader.DeserializeRequired<AuthenticateResultContract>(result, "hub.ws.authenticate.result");
 
             if (!payload.Ok || payload.ProtocolVersion != 1)
             {
@@ -175,13 +174,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     {
         EnsureAuthenticated();
         var result = await _session.SendRequestAsync("hub.apps.listDefinitions", null, cancellationToken);
-        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
+        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JTokenType.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
         ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
 
         var index = 0;
-        foreach (var definitionElement in definitionsElement.EnumerateArray())
+        foreach (var definitionElement in definitionsElement.Children())
         {
             ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
             index++;
@@ -205,7 +204,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             cancellationToken);
 
         ResponsePayloadReader.ValidateAppDefinitionElement(
-            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JTokenType.Object),
             "hub.apps.getDefinition.result.definition");
 
         var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
@@ -232,13 +231,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             RequestPayloadFactory.BuildListInstancesParams(request),
             cancellationToken);
 
-        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
+        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JTokenType.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
         ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
 
         var index = 0;
-        foreach (var instanceElement in instancesElement.EnumerateArray())
+        foreach (var instanceElement in instancesElement.Children())
         {
             ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
             index++;
@@ -276,8 +275,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         var result = await _session.SendRequestAsync("hub.events.subscribe", parameters, cancellationToken);
-        var payload = JsonSerializer.Deserialize<SubscribeResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-            ?? throw new InvalidOperationException("无法解析 hub.events.subscribe 结果。");
+        var payload = ResponsePayloadReader.DeserializeRequired<SubscribeResultContract>(result, "hub.events.subscribe.result");
 
         if (!payload.Ok || string.IsNullOrWhiteSpace(payload.SubscriptionId))
         {
@@ -305,8 +303,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             },
             cancellationToken);
 
-        var payload = JsonSerializer.Deserialize<OkOnlyContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-            ?? throw new InvalidOperationException("无法解析 hub.events.unsubscribe 结果。");
+        var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.events.unsubscribe.result");
 
         if (!payload.Ok)
         {
@@ -340,10 +337,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         await _session.DisposeAsync();
     }
 
-    private void HandleEvent(JsonElement paramsElement)
+    private void HandleEvent(JObject paramsElement)
     {
-        var evt = JsonSerializer.Deserialize<DevHubEvent>(paramsElement.GetRawText(), DevHubJson.SerializerOptions)
-            ?? throw new InvalidOperationException("无法解析 hub.event.params。");
+        var evt = ResponsePayloadReader.DeserializeRequired<DevHubEvent>(paramsElement, "hub.event.params");
         ValidateEvent(evt);
 
         if (!_eventChannel.Writer.TryWrite(evt))

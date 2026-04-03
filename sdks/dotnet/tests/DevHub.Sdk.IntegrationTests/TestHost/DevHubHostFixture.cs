@@ -2,10 +2,10 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
 
@@ -72,11 +72,13 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     {
         Directory.CreateDirectory(DefinitionsDirectory);
         var path = Path.Combine(DefinitionsDirectory, $"{definition.AppId}.json");
-        var content = JsonSerializer.Serialize(
+        var content = JsonConvert.SerializeObject(
             definition,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            new JsonSerializerSettings
             {
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                NullValueHandling = NullValueHandling.Ignore,
+                DateParseHandling = DateParseHandling.None
             });
         await File.WriteAllTextAsync(path, content);
     }

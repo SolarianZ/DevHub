@@ -1,5 +1,6 @@
-using System.Text.Json;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.Internal;
 
@@ -287,18 +288,18 @@ internal static class RequestPayloadFactory
 
     private static void EnsureSerializesToObject(object value, string paramName, string propertyName)
     {
-        JsonElement jsonValue;
+        JToken jsonValue;
 
         try
         {
-            jsonValue = JsonSerializer.SerializeToElement(value, DevHubJson.SerializerOptions);
+            jsonValue = DevHubJson.SerializeToToken(value);
         }
-        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        catch (Exception exception) when (exception is JsonException or NotSupportedException or ArgumentException)
         {
             throw new ArgumentException($"{propertyName} 必须可序列化为 JSON 对象。", paramName, exception);
         }
 
-        if (jsonValue.ValueKind != JsonValueKind.Object)
+        if (jsonValue.Type != JTokenType.Object)
         {
             throw new ArgumentException($"{propertyName} 必须序列化为 JSON 对象。", paramName);
         }
@@ -317,12 +318,12 @@ internal static class RequestPayloadFactory
 
         if (error.Data is { } data)
         {
-            if (data.ValueKind != JsonValueKind.Object)
+            if (data.Type != JTokenType.Object)
             {
                 throw new ArgumentException("Error.Data 必须为 JSON 对象。", paramName);
             }
 
-            payload["data"] = JsonSerializer.Deserialize<object>(data.GetRawText(), DevHubJson.SerializerOptions);
+            payload["data"] = data.DeepClone();
         }
 
         return payload;

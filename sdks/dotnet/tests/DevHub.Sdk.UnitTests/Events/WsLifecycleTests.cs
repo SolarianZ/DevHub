@@ -353,7 +353,7 @@ public sealed class WsLifecycleTests : IDisposable
         await using (var firstEnumerator = client.ReadEventsAsync().GetAsyncEnumerator())
         {
             Assert.True(await firstEnumerator.MoveNextAsync());
-            Assert.Equal("invk-1", firstEnumerator.Current.Payload!.Value.GetProperty("invocationId").GetString());
+            Assert.Equal("invk-1", (string?)firstEnumerator.Current.Payload!["invocationId"]!);
             Assert.False(await firstEnumerator.MoveNextAsync());
         }
 
@@ -363,7 +363,7 @@ public sealed class WsLifecycleTests : IDisposable
         await using (var secondEnumerator = client.ReadEventsAsync().GetAsyncEnumerator())
         {
             Assert.True(await secondEnumerator.MoveNextAsync());
-            Assert.Equal("invk-2", secondEnumerator.Current.Payload!.Value.GetProperty("invocationId").GetString());
+            Assert.Equal("invk-2", (string?)secondEnumerator.Current.Payload!["invocationId"]!);
             Assert.Equal(DevHubEventTypes.InvocationCompleted, secondEnumerator.Current.Type);
         }
 
@@ -400,7 +400,7 @@ public sealed class WsLifecycleTests : IDisposable
         var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.AuthenticateAsync());
         Assert.Equal(-32001, exception.Code);
         Assert.Equal("unauthorized", exception.Message);
-        Assert.Equal("invalid_token", exception.Data!.Value.GetProperty("reason").GetString());
+        Assert.Equal("invalid_token", (string?)exception.Data!["reason"]!);
     }
 
     [Fact]

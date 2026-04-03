@@ -1,5 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using DevHub.Sdk.Internal;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.Models;
 
@@ -11,31 +12,31 @@ public sealed class AppDefinition
     /// <summary>
     /// 应用标识。
     /// </summary>
-    [JsonPropertyName("appId")]
+    [JsonProperty("appId")]
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
     /// 显示名称。
     /// </summary>
-    [JsonPropertyName("displayName")]
+    [JsonProperty("displayName")]
     public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>
     /// 应用描述。
     /// </summary>
-    [JsonPropertyName("description")]
+    [JsonProperty("description")]
     public string? Description { get; set; }
 
     /// <summary>
     /// 能力声明。
     /// </summary>
-    [JsonPropertyName("capabilities")]
+    [JsonProperty("capabilities")]
     public AppCapabilities? Capabilities { get; set; }
 
     /// <summary>
     /// 启动配置。
     /// </summary>
-    [JsonPropertyName("launch")]
+    [JsonProperty("launch")]
     public LaunchConfiguration? Launch { get; set; }
 }
 
@@ -47,13 +48,13 @@ public sealed class AppCapabilities
     /// <summary>
     /// 是否允许 RPC。
     /// </summary>
-    [JsonPropertyName("rpc")]
+    [JsonProperty("rpc")]
     public bool? Rpc { get; set; }
 
     /// <summary>
     /// 是否声明事件能力。
     /// </summary>
-    [JsonPropertyName("events")]
+    [JsonProperty("events")]
     public bool? Events { get; set; }
 }
 
@@ -65,25 +66,25 @@ public sealed class LaunchConfiguration
     /// <summary>
     /// 可执行文件路径。
     /// </summary>
-    [JsonPropertyName("exePath")]
+    [JsonProperty("exePath")]
     public string? ExePath { get; set; }
 
     /// <summary>
     /// 参数模板。
     /// </summary>
-    [JsonPropertyName("argsTemplate")]
+    [JsonProperty("argsTemplate")]
     public string? ArgsTemplate { get; set; }
 
     /// <summary>
     /// 工作目录。
     /// </summary>
-    [JsonPropertyName("workingDirectory")]
+    [JsonProperty("workingDirectory")]
     public string? WorkingDirectory { get; set; }
 
     /// <summary>
     /// 去重键模板。
     /// </summary>
-    [JsonPropertyName("dedupeKeyTemplate")]
+    [JsonProperty("dedupeKeyTemplate")]
     public string? DedupeKeyTemplate { get; set; }
 }
 
@@ -95,50 +96,51 @@ public sealed class AppInstance
     /// <summary>
     /// 实例标识。
     /// </summary>
-    [JsonPropertyName("instanceId")]
+    [JsonProperty("instanceId")]
     public string InstanceId { get; set; } = string.Empty;
 
     /// <summary>
     /// 应用标识。
     /// </summary>
-    [JsonPropertyName("appId")]
+    [JsonProperty("appId")]
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
     /// 作用域。
     /// </summary>
-    [JsonPropertyName("scope")]
+    [JsonProperty("scope")]
     public string? Scope { get; set; }
 
     /// <summary>
     /// 进程标识。
     /// </summary>
-    [JsonPropertyName("pid")]
+    [JsonProperty("pid")]
     public int? Pid { get; set; }
 
     /// <summary>
     /// 注册时间。
     /// </summary>
-    [JsonPropertyName("registeredAtUtc")]
+    [JsonProperty("registeredAtUtc")]
     public DateTimeOffset? RegisteredAtUtc { get; set; }
 
     /// <summary>
     /// 最后在线时间。
     /// </summary>
-    [JsonPropertyName("lastSeenUtc")]
+    [JsonProperty("lastSeenUtc")]
     public DateTimeOffset? LastSeenUtc { get; set; }
 
     /// <summary>
     /// 调用能力。
     /// </summary>
-    [JsonPropertyName("invoke")]
+    [JsonProperty("invoke")]
     public InvokeCapability? Invoke { get; set; }
 
     /// <summary>
     /// 元数据。
     /// </summary>
-    [JsonPropertyName("meta")]
-    public JsonElement? Meta { get; set; }
+    [JsonProperty("meta")]
+    [JsonConverter(typeof(NullableJTokenJsonConverter))]
+    public JToken? Meta { get; set; }
 }
 
 /// <summary>
@@ -149,38 +151,37 @@ public sealed class AppInstanceRegistration
     /// <summary>
     /// 实例标识。
     /// </summary>
-    [JsonPropertyName("instanceId")]
+    [JsonProperty("instanceId")]
     public string InstanceId { get; set; } = string.Empty;
 
     /// <summary>
     /// 应用标识。
     /// </summary>
-    [JsonPropertyName("appId")]
+    [JsonProperty("appId")]
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
     /// 作用域。
     /// </summary>
-    [JsonPropertyName("scope")]
+    [JsonProperty("scope")]
     public string? Scope { get; set; }
 
     /// <summary>
     /// 进程标识。
     /// </summary>
-    [JsonPropertyName("pid")]
+    [JsonProperty("pid")]
     public int Pid { get; set; }
 
     /// <summary>
     /// 调用能力。
     /// </summary>
-    [JsonPropertyName("invoke")]
+    [JsonProperty("invoke")]
     public InvokeCapability Invoke { get; set; } = new();
 
     /// <summary>
     /// 元数据。
     /// </summary>
-    [JsonPropertyName("meta")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("meta", NullValueHandling = NullValueHandling.Ignore)]
     public object? Meta { get; set; }
 }
 
@@ -192,13 +193,13 @@ public sealed class InvokeCapability
     /// <summary>
     /// 是否支持轮询。
     /// </summary>
-    [JsonPropertyName("poll")]
+    [JsonProperty("poll")]
     public bool Poll { get; set; }
 
     /// <summary>
     /// 是否支持响应。
     /// </summary>
-    [JsonPropertyName("respond")]
+    [JsonProperty("respond")]
     public bool Respond { get; set; }
 }
 
@@ -210,49 +211,49 @@ public sealed class HubRuntime
     /// <summary>
     /// 协议版本。
     /// </summary>
-    [JsonPropertyName("protocolVersion")]
+    [JsonProperty("protocolVersion")]
     public int ProtocolVersion { get; set; }
 
     /// <summary>
     /// Hub 版本。
     /// </summary>
-    [JsonPropertyName("hubVersion")]
+    [JsonProperty("hubVersion")]
     public string? HubVersion { get; set; }
 
     /// <summary>
     /// 进程标识。
     /// </summary>
-    [JsonPropertyName("pid")]
+    [JsonProperty("pid")]
     public int Pid { get; set; }
 
     /// <summary>
     /// HTTP 基础地址。
     /// </summary>
-    [JsonPropertyName("httpBaseUrl")]
+    [JsonProperty("httpBaseUrl")]
     public string HttpBaseUrl { get; set; } = string.Empty;
 
     /// <summary>
     /// WebSocket 地址。
     /// </summary>
-    [JsonPropertyName("wsUrl")]
+    [JsonProperty("wsUrl")]
     public string WsUrl { get; set; } = string.Empty;
 
     /// <summary>
     /// 令牌文件路径。
     /// </summary>
-    [JsonPropertyName("tokenFile")]
+    [JsonProperty("tokenFile")]
     public string TokenFile { get; set; } = string.Empty;
 
     /// <summary>
     /// 启动时间。
     /// </summary>
-    [JsonPropertyName("startedAtUtc")]
+    [JsonProperty("startedAtUtc")]
     public DateTimeOffset StartedAtUtc { get; set; }
 
     /// <summary>
     /// 运行时调优参数。
     /// </summary>
-    [JsonPropertyName("runtimeTuning")]
+    [JsonProperty("runtimeTuning")]
     public HubRuntimeTuning RuntimeTuning { get; set; } = new();
 }
 
@@ -264,18 +265,18 @@ public sealed class HubRuntimeTuning
     /// <summary>
     /// 调用租约秒数。
     /// </summary>
-    [JsonPropertyName("leaseSeconds")]
+    [JsonProperty("leaseSeconds")]
     public int LeaseSeconds { get; set; }
 
     /// <summary>
     /// 在线阈值秒数。
     /// </summary>
-    [JsonPropertyName("onlineThresholdSeconds")]
+    [JsonProperty("onlineThresholdSeconds")]
     public int OnlineThresholdSeconds { get; set; }
 
     /// <summary>
     /// 启动去重窗口秒数。
     /// </summary>
-    [JsonPropertyName("launchDedupeWindowSeconds")]
+    [JsonProperty("launchDedupeWindowSeconds")]
     public int LaunchDedupeWindowSeconds { get; set; }
 }

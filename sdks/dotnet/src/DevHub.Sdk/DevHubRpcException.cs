@@ -1,6 +1,6 @@
-using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk;
 
@@ -9,7 +9,7 @@ namespace DevHub.Sdk;
 /// </summary>
 public sealed class DevHubRpcException : Exception
 {
-    private readonly JsonElement? _data;
+    private readonly JToken? _data;
 
     /// <summary>
     /// 初始化异常。
@@ -18,11 +18,11 @@ public sealed class DevHubRpcException : Exception
     /// <param name="message">错误消息。</param>
     /// <param name="data">错误扩展数据。</param>
     /// <param name="requestId">请求标识。</param>
-    internal DevHubRpcException(int code, string message, JsonElement? data, string requestId)
+    internal DevHubRpcException(int code, string message, JToken? data, string requestId)
         : base(message)
     {
         Code = code;
-        _data = data;
+        _data = DevHubJson.Clone(data);
         RequestId = requestId;
     }
 
@@ -34,12 +34,12 @@ public sealed class DevHubRpcException : Exception
     /// <summary>
     /// 错误扩展数据。
     /// </summary>
-    public new JsonElement? Data => _data;
+    public new JToken? Data => DevHubJson.Clone(_data);
 
     /// <summary>
     /// 错误扩展数据的显式别名。
     /// </summary>
-    public JsonElement? ErrorData => _data;
+    public JToken? ErrorData => DevHubJson.Clone(_data);
 
     /// <summary>
     /// 若错误码属于规范内已知集合，则返回对应枚举值；否则返回 <see langword="null"/>。
@@ -82,15 +82,14 @@ public sealed class DevHubRpcException : Exception
     /// <param name="propertyName">属性名。</param>
     /// <param name="value">读取到的属性值。</param>
     /// <returns>读取成功时返回 <see langword="true"/>。</returns>
-    public bool TryGetDataProperty(string propertyName, out JsonElement value)
+    public bool TryGetDataProperty(string propertyName, out JToken? value)
     {
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(propertyName, nameof(propertyName));
 
-        if (_data is { } data &&
-            data.ValueKind == JsonValueKind.Object &&
-            data.TryGetProperty(propertyName, out var propertyValue))
+        if (_data is JObject data &&
+            data.TryGetValue(propertyName, out var propertyValue))
         {
-            value = propertyValue.Clone();
+            value = propertyValue.DeepClone();
             return true;
         }
 
@@ -106,9 +105,11 @@ public sealed class DevHubRpcException : Exception
     /// <returns>读取成功时返回 <see langword="true"/>。</returns>
     public bool TryGetDataString(string propertyName, out string? value)
     {
-        if (TryGetDataProperty(propertyName, out var propertyValue) && propertyValue.ValueKind == JsonValueKind.String)
+        if (TryGetDataProperty(propertyName, out var propertyValue) &&
+            propertyValue is not null &&
+            propertyValue.Type == JTokenType.String)
         {
-            value = propertyValue.GetString();
+            value = (string?)propertyValue;
             return true;
         }
 
@@ -123,9 +124,11 @@ public sealed class DevHubRpcException : Exception
     /// <returns>读取并解析成功时返回 <see langword="true"/>。</returns>
     public bool TryGetCalleeError(out DevHubCalleeError? value)
     {
-        if (TryGetDataProperty("calleeError", out var propertyValue) && propertyValue.ValueKind == JsonValueKind.Object)
+        if (TryGetDataProperty("calleeError", out var propertyValue) &&
+            propertyValue is not null &&
+            propertyValue.Type == JTokenType.Object)
         {
-            var calleeError = JsonSerializer.Deserialize<DevHubCalleeError>(propertyValue.GetRawText(), DevHubJson.SerializerOptions);
+            var calleeError = DevHubJson.Deserialize<DevHubCalleeError>(propertyValue);
             if (calleeError is not null && !string.IsNullOrWhiteSpace(calleeError.Message))
             {
                 value = calleeError;

@@ -1,7 +1,8 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace DevHub.Sdk.UnitTests.Discovery;
 
@@ -10,9 +11,11 @@ namespace DevHub.Sdk.UnitTests.Discovery;
 /// </summary>
 public sealed class RuntimeDiscoveryTests : IDisposable
 {
-    private static readonly JsonSerializerOptions HubJsonSerializerOptions = new()
+    private static readonly JsonSerializerSettings HubJsonSerializerSettings = new()
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        NullValueHandling = NullValueHandling.Ignore,
+        DateParseHandling = DateParseHandling.None
     };
 
     private readonly string _tempRoot;
@@ -109,7 +112,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
         await File.WriteAllTextAsync(tokenFile, "token-1");
 
-        using var document = JsonDocument.Parse($$"""
+        var payload = JObject.Parse($$"""
         {
           "protocolVersion": 1,
           "pid": 12345,
@@ -125,10 +128,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         }
         """);
 
-        var payload = document.RootElement.EnumerateObject()
-            .Where(property => !string.Equals(property.Name, missingProperty, StringComparison.Ordinal))
-            .ToDictionary(static property => property.Name, static property => property.Value.Clone());
-        await File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), JsonSerializer.Serialize(payload));
+        payload.Property(missingProperty)?.Remove();
+        await File.WriteAllTextAsync(Path.Combine(runtimeDir, "hub.json"), payload.ToString(Formatting.None));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
         {
@@ -401,7 +402,9 @@ public sealed class RuntimeDiscoveryTests : IDisposable
 
     private static Task WriteHubJsonAsync(string dataDir, HubRuntime runtime)
     {
-        return File.WriteAllTextAsync(Path.Combine(GetRuntimeDirectory(dataDir), "hub.json"), JsonSerializer.Serialize(runtime, HubJsonSerializerOptions));
+        return File.WriteAllTextAsync(
+            Path.Combine(GetRuntimeDirectory(dataDir), "hub.json"),
+            JsonConvert.SerializeObject(runtime, HubJsonSerializerSettings));
     }
 
     private static string GetExpectedDefaultDataDirectory()
