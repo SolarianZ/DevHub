@@ -49,6 +49,31 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 <PackageReference Include="DevHub.Sdk" Version="1.0.0" />
 ```
 
+## Unity 2019.4 适配说明
+
+当前分支发布的 `DevHub.Sdk` 仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线；不再发布 `net8.0` 或 `net10.0` 资产。
+
+SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
+
+- `PingResult.Echo`、`RequestResult.Value`、`Invocation.Args`、`DevHubEvent.Payload`、`DevHubRpcException.ErrorData` 等公开载荷现在使用 `JToken` / `JObject`
+- 旧版基于 `System.Text.Json` 的 `JsonElement`、`JsonDocument`、`GetRawText()` 与对应特性不再属于当前 Unity 分支的公开契约
+- 若消费端需要读取载荷字段，推荐使用 `JObject` / `JToken` 的属性访问与 `Value<T>()` 系列 API
+
+## SDK 包依赖边界
+
+当前 `DevHub.Sdk` 包仅保留与仍在公开支持的能力直接对应的外部依赖：
+
+- `Newtonsoft.Json 9.0.1`：用于 runtime discovery、HTTP JSON-RPC、WebSocket 会话、公开模型标注与 `JToken` / `JObject` 载荷访问
+- `Microsoft.Bcl.AsyncInterfaces`：为 `DevHubEventsClient.ReadEventsAsync()` 等 `IAsyncEnumerable<T>` / `IAsyncDisposable` 能力提供 `netstandard2.0` 兼容支持
+- `System.Threading.Channels`：支撑事件客户端内部的异步事件缓冲与消费队列
+- `Microsoft.Extensions.DependencyInjection.Abstractions` 与 `Microsoft.Extensions.Options`：支撑 `AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory` 这组仍保留的依赖注入入口
+
+不会再进入当前 SDK 发布产物的依赖包括：
+
+- `System.Text.Json`
+- `Microsoft.Extensions.Http`
+- `Microsoft.Extensions.Logging.Abstractions`
+
 ## Runtime Discovery
 
 SDK 会按以下优先级解析数据根目录：
@@ -243,7 +268,7 @@ var requestResult = await client.RequestAsync(new InvokeRequest
     }
 });
 
-Console.WriteLine(requestResult.Value?.GetRawText());
+Console.WriteLine(requestResult.Value?.ToString(Newtonsoft.Json.Formatting.None));
 ```
 
 ### 认领调用并响应
@@ -295,7 +320,7 @@ var subscriptionId = await eventsClient.SubscribeAsync(new[]
 
 await foreach (var evt in eventsClient.ReadEventsAsync())
 {
-    Console.WriteLine($"{evt.TimeUtc:O} {evt.Type}: {evt.Payload?.GetRawText()}");
+    Console.WriteLine($"{evt.TimeUtc:O} {evt.Type}: {evt.Payload?.ToString(Newtonsoft.Json.Formatting.None)}");
 }
 
 await eventsClient.UnsubscribeAsync(subscriptionId);
@@ -313,7 +338,7 @@ try
 catch (DevHubRpcException ex)
 {
     Console.WriteLine($"code={ex.Code}, knownCode={ex.KnownCode}, reason={ex.Reason}, requestId={ex.RequestId}");
-    Console.WriteLine(ex.ErrorData?.GetRawText());
+    Console.WriteLine(ex.ErrorData?.ToString(Newtonsoft.Json.Formatting.None));
 
     if (ex.CalleeError is { } calleeError)
     {
