@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.UnitTests.Transport;
 
@@ -42,6 +44,37 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Equal("11111111-1111-1111-1111-111111111111", handler.LastRequest.ClientSessionId);
         Assert.EndsWith("/rpc", handler.LastRequest.RequestUri, StringComparison.Ordinal);
         Assert.DoesNotContain("\"params\"", handler.LastRequest.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_003_HttpTransport_WhenPingEchoUsesDictionary_ShouldPreserveOriginalKeys()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-ping");
+
+        _ = await client.PingAsync(new Dictionary<string, object?>
+        {
+            ["FooBar"] = 1,
+            ["Nested"] = new Dictionary<string, object?>
+            {
+                ["InnerKey"] = "value"
+            }
+        }, CancellationToken.None);
+
+        var request = JObject.Parse(handler.LastRequest!.Body);
+        Assert.Equal(1, (int)request["params"]!["echo"]!["FooBar"]!);
+        Assert.Null(request["params"]!["echo"]!["fooBar"]);
+        Assert.Equal("value", (string?)request["params"]!["echo"]!["Nested"]!["InnerKey"]!);
+        Assert.Null(request["params"]!["echo"]!["Nested"]!["innerKey"]);
     }
 
     [Fact]
@@ -112,6 +145,54 @@ public sealed class HttpTransportTests : IDisposable
 
         using var cancellationTokenSource = new CancellationTokenSource(millisecondsDelay: 50);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.PingAsync(cancellationToken: cancellationTokenSource.Token));
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_003_HttpTransport_WhenRequestTimeoutOccursDuringBodyRead_ShouldThrowOperationCanceledException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new DelayedBodyHandler("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}");
+
+        try
+        {
+            await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir,
+                RequestTimeout = TimeSpan.FromMilliseconds(50)
+            }, handler, () => "req-ping");
+
+            var requestTask = client.PingAsync(cancellationToken: CancellationToken.None);
+            await AssertCancelsPromptlyAsync(requestTask, handler);
+        }
+        finally
+        {
+            handler.ReleaseBody();
+        }
+    }
+
+    [Fact]
+    public async Task M5_DN_UT_003_HttpTransport_WhenCallerCancellationOccursDuringBodyRead_ShouldThrowOperationCanceledException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new DelayedBodyHandler("{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}");
+
+        try
+        {
+            await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            }, handler, () => "req-ping");
+
+            using var cancellationTokenSource = new CancellationTokenSource(millisecondsDelay: 50);
+            var requestTask = client.PingAsync(cancellationToken: cancellationTokenSource.Token);
+            await AssertCancelsPromptlyAsync(requestTask, handler);
+        }
+        finally
+        {
+            handler.ReleaseBody();
+        }
     }
 
     [Fact]
@@ -479,6 +560,74 @@ public sealed class HttpTransportTests : IDisposable
         }
     }
 
+    private static async Task AssertCancelsPromptlyAsync(Task requestTask, DelayedBodyHandler handler)
+    {
+        var completedTask = await Task.WhenAny(requestTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        if (!ReferenceEquals(requestTask, completedTask))
+        {
+            handler.ReleaseBody();
+            Assert.Fail("响应头已返回后，body 读取未能及时响应取消。");
+        }
+
+        var exception = await Record.ExceptionAsync(async () => await requestTask);
+        Assert.NotNull(exception);
+        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+    }
+
+    private sealed class DelayedBodyHandler : HttpMessageHandler
+    {
+        private readonly DelayedJsonContent _content;
+
+        public DelayedBodyHandler(string body)
+        {
+            _content = new DelayedJsonContent(body);
+        }
+
+        public void ReleaseBody()
+        {
+            _content.Release();
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = _content
+            });
+        }
+    }
+
+    private sealed class DelayedJsonContent : HttpContent
+    {
+        private readonly byte[] _bodyBytes;
+        private readonly TaskCompletionSource<bool> _releaseSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public DelayedJsonContent(string body)
+        {
+            _bodyBytes = Encoding.UTF8.GetBytes(body);
+            Headers.ContentType = new MediaTypeHeaderValue("application/json")
+            {
+                CharSet = Encoding.UTF8.WebName
+            };
+        }
+
+        public void Release()
+        {
+            _releaseSource.TrySetResult(true);
+        }
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            await _releaseSource.Task;
+            await stream.WriteAsync(_bodyBytes, 0, _bodyBytes.Length);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = _bodyBytes.Length;
+            return true;
+        }
+    }
+
     private sealed record CapturedRequest(string RequestUri, string Authorization, string Protocol, string ClientId, string ClientSessionId, string Body);
 }
-

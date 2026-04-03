@@ -49,7 +49,7 @@ internal static class CompatibilityIo
         CompatibilityGuards.ThrowIfNull(content, nameof(content));
         cancellationToken.ThrowIfCancellationRequested();
 
-        var body = await content.ReadAsStringAsync();
+        var body = await content.ReadAsStringAsync().WaitAsyncCompat(cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         return body;

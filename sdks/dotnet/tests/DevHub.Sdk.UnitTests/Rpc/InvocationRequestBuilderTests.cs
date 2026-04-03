@@ -44,6 +44,30 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void M5_DN_UT_006_RequestBuilder_ShouldPreserveDictionaryArgKeys()
+    {
+        var payload = RequestPayloadFactory.BuildRequestParams(new InvokeRequest
+        {
+            AppId = "test.app",
+            Method = "test.request",
+            Args = new Dictionary<string, object?>
+            {
+                ["FooBar"] = 1,
+                ["Nested"] = new Dictionary<string, object?>
+                {
+                    ["InnerKey"] = "value"
+                }
+            }
+        });
+
+        var document = ToJObject(payload);
+        Assert.Equal(1, (int)document["args"]!["FooBar"]!);
+        Assert.Null(document["args"]!["fooBar"]);
+        Assert.Equal("value", (string?)document["args"]!["Nested"]!["InnerKey"]!);
+        Assert.Null(document["args"]!["Nested"]!["innerKey"]);
+    }
+
+    [Fact]
     public void M5_DN_UT_006_NotifyBuilder_WhenWaitTimeoutSpecified_ShouldThrowArgumentException()
     {
         var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
@@ -207,6 +231,30 @@ public sealed class InvocationRequestBuilderTests
         var document = ToJObject(payload);
         Assert.Equal(JTokenType.Null, document["value"]!.Type);
         Assert.Null(document["error"]);
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_RespondBuilder_ShouldPreserveDictionaryValueKeys()
+    {
+        var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InvocationId = "invk-1",
+            Value = new Dictionary<string, object?>
+            {
+                ["FooBar"] = true,
+                ["Nested"] = new Dictionary<string, object?>
+                {
+                    ["InnerKey"] = "value"
+                }
+            }
+        });
+
+        var document = ToJObject(payload);
+        Assert.True((bool)document["value"]!["FooBar"]!);
+        Assert.Null(document["value"]!["fooBar"]);
+        Assert.Equal("value", (string?)document["value"]!["Nested"]!["InnerKey"]!);
+        Assert.Null(document["value"]!["Nested"]!["innerKey"]);
     }
 
     [Fact]

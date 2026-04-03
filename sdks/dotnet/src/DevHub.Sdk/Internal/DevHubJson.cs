@@ -79,7 +79,14 @@ internal static class DevHubJson
     {
         var settings = new JsonSerializerSettings
         {
-            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy
+                {
+                    ProcessDictionaryKeys = false,
+                    OverrideSpecifiedNames = false
+                }
+            },
             NullValueHandling = NullValueHandling.Include,
             DateParseHandling = DateParseHandling.None
         };

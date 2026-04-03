@@ -26,6 +26,25 @@ public sealed class DevHubCalleeErrorTests
     }
 
     [Fact]
+    public void M5_DN_UT_008_CalleeErrorCreate_WhenDataIsDictionary_ShouldPreserveOriginalKeys()
+    {
+        var error = DevHubCalleeError.Create(1001, "app_error", new Dictionary<string, object?>
+        {
+            ["FooBar"] = "boom",
+            ["Nested"] = new Dictionary<string, object?>
+            {
+                ["InnerKey"] = 2
+            }
+        });
+
+        Assert.NotNull(error.Data);
+        Assert.Equal("boom", (string?)error.Data!["FooBar"]!);
+        Assert.Null(error.Data!["fooBar"]);
+        Assert.Equal(2, (int)error.Data!["Nested"]!["InnerKey"]!);
+        Assert.Null(error.Data!["Nested"]!["innerKey"]);
+    }
+
+    [Fact]
     public void M5_DN_UT_008_CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
