@@ -14,7 +14,7 @@ public sealed class DevHubEventsClientDependencies
     public IDevHubRuntimeResolver RuntimeResolver
     {
         get => _runtimeResolver;
-        init => _runtimeResolver = value ?? throw new ArgumentNullException(nameof(value));
+        set => _runtimeResolver = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>
@@ -23,6 +23,6 @@ public sealed class DevHubEventsClientDependencies
     public IDevHubWebSocketSessionFactory SessionFactory
     {
         get => _sessionFactory;
-        init => _sessionFactory = value ?? throw new ArgumentNullException(nameof(value));
+        set => _sessionFactory = value ?? throw new ArgumentNullException(nameof(value));
     }
 }

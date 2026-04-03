@@ -84,7 +84,7 @@ public sealed class DevHubRpcException : Exception
     /// <returns>读取成功时返回 <see langword="true"/>。</returns>
     public bool TryGetDataProperty(string propertyName, out JsonElement value)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(propertyName, nameof(propertyName));
 
         if (_data is { } data &&
             data.ValueKind == JsonValueKind.Object &&

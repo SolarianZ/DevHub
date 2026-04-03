@@ -1,3 +1,4 @@
+using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk;
@@ -15,9 +16,9 @@ public sealed class DevHubRuntimeConnectionInfo
     /// <param name="runtime">Hub 运行时发现信息。</param>
     public DevHubRuntimeConnectionInfo(string runtimeDirectory, string token, HubRuntime runtime)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeDirectory);
-        ArgumentException.ThrowIfNullOrWhiteSpace(token);
-        ArgumentNullException.ThrowIfNull(runtime);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(runtimeDirectory, nameof(runtimeDirectory));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(token, nameof(token));
+        CompatibilityGuards.ThrowIfNull(runtime, nameof(runtime));
 
         RuntimeDirectory = runtimeDirectory;
         Token = token;

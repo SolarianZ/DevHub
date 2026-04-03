@@ -1,3 +1,4 @@
+using DevHub.Sdk.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -42,7 +43,7 @@ public static class DevHubServiceCollectionExtensions
     /// <returns>原始服务集合。</returns>
     public static IServiceCollection AddDevHubSdk(this IServiceCollection services)
     {
-        ArgumentNullException.ThrowIfNull(services);
+        CompatibilityGuards.ThrowIfNull(services, nameof(services));
 
         services.AddOptions<DevHubClientOptions>();
         services.TryAddSingleton<IDevHubRuntimeResolver, FileSystemDevHubRuntimeResolver>();
@@ -61,7 +62,7 @@ public static class DevHubServiceCollectionExtensions
     /// <returns>原始服务集合。</returns>
     public static IServiceCollection AddDevHubSdk(this IServiceCollection services, Action<DevHubClientOptions> configure)
     {
-        ArgumentNullException.ThrowIfNull(configure);
+        CompatibilityGuards.ThrowIfNull(configure, nameof(configure));
 
         services.AddDevHubSdk();
         services.Configure(configure);

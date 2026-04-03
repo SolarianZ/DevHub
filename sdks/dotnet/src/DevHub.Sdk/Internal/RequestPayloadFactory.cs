@@ -7,7 +7,7 @@ internal static class RequestPayloadFactory
 {
     internal static object BuildGetDefinitionParams(string appId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(appId, nameof(appId));
         return new Dictionary<string, object?>
         {
             ["appId"] = appId
@@ -16,10 +16,10 @@ internal static class RequestPayloadFactory
 
     internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance)
     {
-        ArgumentNullException.ThrowIfNull(instance);
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
-        ArgumentNullException.ThrowIfNull(instance.Invoke);
+        CompatibilityGuards.ThrowIfNull(instance, nameof(instance));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instance.InstanceId, nameof(instance.InstanceId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instance.AppId, nameof(instance.AppId));
+        CompatibilityGuards.ThrowIfNull(instance.Invoke, nameof(instance.Invoke));
 
         if (instance.Pid < 1)
         {
@@ -61,7 +61,7 @@ internal static class RequestPayloadFactory
 
     internal static object BuildHeartbeatParams(string instanceId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instanceId, nameof(instanceId));
         return new Dictionary<string, object?>
         {
             ["instanceId"] = instanceId
@@ -70,7 +70,7 @@ internal static class RequestPayloadFactory
 
     internal static object BuildUnregisterParams(string instanceId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instanceId, nameof(instanceId));
         return new Dictionary<string, object?>
         {
             ["instanceId"] = instanceId
@@ -110,8 +110,8 @@ internal static class RequestPayloadFactory
 
     internal static object BuildLaunchParams(LaunchRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
+        CompatibilityGuards.ThrowIfNull(request, nameof(request));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.AppId, nameof(request.AppId));
 
         if (request.WaitForRegisterMs is { } waitForRegisterMs && waitForRegisterMs < 0)
         {
@@ -153,8 +153,8 @@ internal static class RequestPayloadFactory
 
     internal static object BuildPollParams(PollRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
+        CompatibilityGuards.ThrowIfNull(request, nameof(request));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.InstanceId, nameof(request.InstanceId));
 
         var maxCount = request.MaxCount ?? 10;
         var waitMs = request.WaitMs ?? 25000;
@@ -179,9 +179,9 @@ internal static class RequestPayloadFactory
 
     internal static object BuildRespondParams(RespondRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
+        CompatibilityGuards.ThrowIfNull(request, nameof(request));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.InstanceId, nameof(request.InstanceId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.InvocationId, nameof(request.InvocationId));
 
         var hasValue = request.HasValue;
         var hasError = request.Error is not null;
@@ -210,9 +210,9 @@ internal static class RequestPayloadFactory
 
     private static object BuildInvokeParams(InvokeRequest request, bool isRequest)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Method);
+        CompatibilityGuards.ThrowIfNull(request, nameof(request));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.AppId, nameof(request.AppId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.Method, nameof(request.Method));
 
         var target = request.Target ?? new InvocationTarget();
         if (target.InstanceId is not null && string.IsNullOrWhiteSpace(target.InstanceId))
@@ -306,8 +306,8 @@ internal static class RequestPayloadFactory
 
     private static object BuildCalleeErrorPayload(DevHubCalleeError error, string paramName)
     {
-        ArgumentNullException.ThrowIfNull(error);
-        ArgumentException.ThrowIfNullOrWhiteSpace(error.Message);
+        CompatibilityGuards.ThrowIfNull(error, nameof(error));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(error.Message, nameof(error.Message));
 
         var payload = new Dictionary<string, object?>
         {

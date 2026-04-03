@@ -9,7 +9,7 @@ internal static class RuntimeDiscovery
 
     internal static async Task<DevHubRuntimeConnectionInfo> DiscoverAsync(DevHubClientOptions options, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        CompatibilityGuards.ThrowIfNull(options, nameof(options));
         options.Validate();
 
         var dataDirectory = ResolveDataDirectory(options.DataDir);
@@ -22,7 +22,7 @@ internal static class RuntimeDiscovery
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        await using var hubJsonStream = File.OpenRead(hubJsonPath);
+        using var hubJsonStream = File.OpenRead(hubJsonPath);
         using var hubJsonDocument = await JsonDocument.ParseAsync(hubJsonStream, cancellationToken: cancellationToken);
         ValidateHubVersion(hubJsonDocument.RootElement, hubJsonPath);
 
@@ -36,7 +36,7 @@ internal static class RuntimeDiscovery
             throw new InvalidOperationException($"未找到 token 文件：{runtime.TokenFile}");
         }
 
-        var token = (await File.ReadAllTextAsync(runtime.TokenFile, cancellationToken)).Trim();
+        var token = (await CompatibilityIo.ReadAllTextAsync(runtime.TokenFile, cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
             throw new InvalidOperationException($"token 文件为空：{runtime.TokenFile}");
@@ -65,7 +65,7 @@ internal static class RuntimeDiscovery
 
     internal static string GetRuntimeDirectory(string dataDirectory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(dataDirectory, nameof(dataDirectory));
         return Path.Combine(dataDirectory, "runtime");
     }
 
@@ -84,14 +84,14 @@ internal static class RuntimeDiscovery
 
     private static string GetDefaultDataDirectory()
     {
-        if (OperatingSystem.IsWindows())
+        if (CompatibilityPlatform.IsWindows())
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "DevHub");
         }
 
-        if (OperatingSystem.IsMacOS())
+        if (CompatibilityPlatform.IsMacOS())
         {
             return Path.Combine(
                 GetUserHomePath(),
@@ -123,7 +123,7 @@ internal static class RuntimeDiscovery
         ValidateHttpBaseUrl(runtime.HttpBaseUrl, hubJsonPath);
         ValidateWebSocketUrl(runtime.WsUrl, hubJsonPath);
 
-        if (string.IsNullOrWhiteSpace(runtime.TokenFile) || !Path.IsPathFullyQualified(runtime.TokenFile))
+        if (string.IsNullOrWhiteSpace(runtime.TokenFile) || !CompatibilityPath.IsPathFullyQualified(runtime.TokenFile))
         {
             throw new InvalidOperationException($"hub.json.tokenFile 非法：{hubJsonPath}");
         }

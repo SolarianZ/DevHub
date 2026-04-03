@@ -18,33 +18,33 @@ public sealed class DevHubWebSocketSessionOptions
     /// <summary>
     /// WebSocket 端点。
     /// </summary>
-    public required Uri WebSocketEndpoint
+    public Uri WebSocketEndpoint
     {
         get => _webSocketEndpoint ?? throw new InvalidOperationException("WebSocketEndpoint 尚未设置。");
-        init => _webSocketEndpoint = value ?? throw new ArgumentNullException(nameof(value));
+        set => _webSocketEndpoint = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>
     /// 请求超时。
     /// </summary>
-    public TimeSpan? RequestTimeout { get; init; }
+    public TimeSpan? RequestTimeout { get; set; }
 
     /// <summary>
     /// 收到 <c>hub.event</c> 通知时的回调。
     /// </summary>
-    public required Action<JsonElement> OnEvent
+    public Action<JsonElement> OnEvent
     {
         get => _onEvent ?? throw new InvalidOperationException("OnEvent 尚未设置。");
-        init => _onEvent = value ?? throw new ArgumentNullException(nameof(value));
+        set => _onEvent = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>
     /// 连接终止时的回调。
     /// </summary>
-    public required Action<Exception?> OnTerminated
+    public Action<Exception?> OnTerminated
     {
         get => _onTerminated ?? throw new InvalidOperationException("OnTerminated 尚未设置。");
-        init => _onTerminated = value ?? throw new ArgumentNullException(nameof(value));
+        set => _onTerminated = value ?? throw new ArgumentNullException(nameof(value));
     }
 }
 
@@ -179,7 +179,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     public async Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(method, nameof(method));
         CleanupExpiredAbandonedRequests();
 
         await EnsureConnectedAsync(cancellationToken);
@@ -213,7 +213,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             }
 
             using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-            return await waiter.Task.WaitAsync(linkedCts.Token);
+            return await waiter.Task.WaitAsyncCompat(linkedCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -610,7 +610,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        CompatibilityGuards.ThrowIfDisposed(_disposed, this);
     }
 
     private static string CreateRequestId()

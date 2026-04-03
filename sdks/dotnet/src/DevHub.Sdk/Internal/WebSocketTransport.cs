@@ -22,13 +22,13 @@ internal interface IWebSocketConnection : IAsyncDisposable
 
 internal sealed class WebSocketReceiveMessage
 {
-    public required WebSocketMessageType MessageType { get; init; }
+    public WebSocketMessageType MessageType { get; set; }
 
-    public string? Text { get; init; }
+    public string? Text { get; set; }
 
-    public WebSocketCloseStatus? CloseStatus { get; init; }
+    public WebSocketCloseStatus? CloseStatus { get; set; }
 
-    public string? CloseStatusDescription { get; init; }
+    public string? CloseStatusDescription { get; set; }
 }
 
 internal sealed class ClientWebSocketConnectionFactory : IWebSocketConnectionFactory
@@ -55,7 +55,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
     public async Task SendTextAsync(string text, CancellationToken cancellationToken)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
-        await _clientWebSocket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        await _clientWebSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
     }
 
     public async Task<WebSocketReceiveMessage> ReceiveAsync(CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
 
         while (true)
         {
-            var result = await _clientWebSocket.ReceiveAsync(buffer, cancellationToken);
+            var result = await _clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
             if (result.MessageType == WebSocketMessageType.Close)
             {
                 return new WebSocketReceiveMessage
@@ -78,7 +78,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
 
             if (result.Count > 0)
             {
-                await stream.WriteAsync(buffer.AsMemory(0, result.Count), cancellationToken);
+                await stream.WriteAsync(buffer, 0, result.Count, cancellationToken);
             }
 
             if (result.EndOfMessage)
@@ -103,6 +103,6 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
     public ValueTask DisposeAsync()
     {
         _clientWebSocket.Dispose();
-        return ValueTask.CompletedTask;
+        return default;
     }
 }

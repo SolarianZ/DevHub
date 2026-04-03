@@ -95,7 +95,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
     /// <inheritdoc />
     public async Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(method, nameof(method));
 
         var requestId = _requestIdFactory();
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, _connectionInfo.RpcEndpoint);
@@ -117,7 +117,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
         using var linkedCts = CreateLinkedTokenSource(cancellationToken);
         using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
-        var body = await responseMessage.Content.ReadAsStringAsync(linkedCts.Token);
+        var body = await CompatibilityIo.ReadAsStringAsync(responseMessage.Content, linkedCts.Token);
 
         if (!responseMessage.IsSuccessStatusCode)
         {
@@ -138,7 +138,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
             _httpClient.Dispose();
         }
 
-        return ValueTask.CompletedTask;
+        return default;
     }
 
     private CancellationTokenSource CreateLinkedTokenSource(CancellationToken cancellationToken)

@@ -295,7 +295,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(subscriptionId, nameof(subscriptionId));
 
         var result = await _session.SendRequestAsync(
             "hub.events.unsubscribe",
@@ -414,7 +414,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        CompatibilityGuards.ThrowIfDisposed(_disposed, this);
     }
 
     private static Channel<DevHubEvent> CreateEventChannel()
