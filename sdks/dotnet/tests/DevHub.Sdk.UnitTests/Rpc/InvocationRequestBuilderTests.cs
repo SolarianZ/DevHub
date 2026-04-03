@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 using Newtonsoft.Json.Linq;
@@ -65,6 +66,23 @@ public sealed class InvocationRequestBuilderTests
         Assert.Null(document["args"]!["fooBar"]);
         Assert.Equal("value", (string?)document["args"]!["Nested"]!["InnerKey"]!);
         Assert.Null(document["args"]!["Nested"]!["innerKey"]);
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_RequestBuilder_ShouldSerializeTopLevelJsonElementArgs()
+    {
+        using var argsDocument = JsonDocument.Parse("""{"message":"hello-default-global","nested":{"count":2}}""");
+        var payload = RequestPayloadFactory.BuildRequestParams(new InvokeRequest
+        {
+            AppId = "test.app",
+            Method = "test.request",
+            Args = argsDocument.RootElement.Clone()
+        });
+
+        var document = ToJObject(payload);
+        Assert.Equal("hello-default-global", (string?)document["args"]!["message"]!);
+        Assert.Equal(2, (int)document["args"]!["nested"]!["count"]!);
+        Assert.Null(document["args"]!["valueKind"]);
     }
 
     [Fact]
@@ -258,6 +276,26 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void M5_DN_UT_006_RespondBuilder_ShouldSerializeNestedJsonElementValue()
+    {
+        using var valueDocument = JsonDocument.Parse("""{"message":"hello","count":2}""");
+        var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InvocationId = "invk-1",
+            Value = new Dictionary<string, object?>
+            {
+                ["Payload"] = valueDocument.RootElement.Clone()
+            }
+        });
+
+        var document = ToJObject(payload);
+        Assert.Equal("hello", (string?)document["value"]!["Payload"]!["message"]!);
+        Assert.Equal(2, (int)document["value"]!["Payload"]!["count"]!);
+        Assert.Null(document["value"]!["Payload"]!["valueKind"]);
+    }
+
+    [Fact]
     public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
@@ -272,6 +310,29 @@ public sealed class InvocationRequestBuilderTests
             },
             Meta = new[] { 1, 2, 3 }
         }));
+    }
+
+    [Fact]
+    public void M5_DN_UT_006_RegisterInstanceBuilder_ShouldSerializeJsonElementMetaAsObject()
+    {
+        using var metaDocument = JsonDocument.Parse("""{"FooBar":true,"Nested":{"InnerKey":"value"}}""");
+        var payload = RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "test.app",
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            },
+            Meta = metaDocument.RootElement.Clone()
+        });
+
+        var document = ToJObject(payload);
+        Assert.True((bool)document["instance"]!["meta"]!["FooBar"]!);
+        Assert.Equal("value", (string?)document["instance"]!["meta"]!["Nested"]!["InnerKey"]!);
+        Assert.Null(document["instance"]!["meta"]!["valueKind"]);
     }
 
     [Fact]
@@ -309,6 +370,6 @@ public sealed class InvocationRequestBuilderTests
 
     private static JObject ToJObject(object payload)
     {
-        return JObject.FromObject(payload, DevHubJson.CreateSerializer());
+        return JObject.Parse(DevHubJson.Serialize(payload));
     }
 }

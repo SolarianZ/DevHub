@@ -51,7 +51,7 @@ internal static class RequestPayloadFactory
 
         if (instance.Meta is not null)
         {
-            instancePayload["meta"] = instance.Meta;
+            instancePayload["meta"] = DevHubJson.SerializeToToken(instance.Meta);
         }
 
         return new Dictionary<string, object?>
@@ -199,7 +199,7 @@ internal static class RequestPayloadFactory
 
         if (hasValue)
         {
-            payload["value"] = request.Value;
+            payload["value"] = DevHubJson.SerializeToToken(request.Value);
         }
         else
         {
@@ -260,7 +260,7 @@ internal static class RequestPayloadFactory
         {
             ["appId"] = request.AppId,
             ["method"] = request.Method,
-            ["args"] = request.Args,
+            ["args"] = DevHubJson.SerializeToToken(request.Args),
             ["options"] = new Dictionary<string, object?>
             {
                 ["ttlMs"] = ttlMs,
