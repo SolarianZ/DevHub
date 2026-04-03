@@ -387,3 +387,32 @@ dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 ```
+
+## 发布产物验收基线
+
+`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 生成的 `DevHub.Sdk.1.0.0.nupkg` 当前仅包含以下发布资产：
+
+- `lib/netstandard2.0/DevHub.Sdk.dll`
+- `lib/netstandard2.0/DevHub.Sdk.xml`
+- `README.md`
+
+包 `.nuspec` 当前声明的直接依赖如下：
+
+- `Newtonsoft.Json 9.0.1`
+- `Microsoft.Bcl.AsyncInterfaces 10.0.2`
+- `System.Threading.Channels 8.0.0`
+- `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2`
+- `Microsoft.Extensions.Options 10.0.2`
+
+当前不会进入包依赖图的项目包括：
+
+- `System.Text.Json`
+- `Microsoft.Extensions.Http`
+- `Microsoft.Extensions.Logging.Abstractions`
+
+与 Unity 单目标适配相关的保留项与测试差异如下：
+
+- `System.Threading.Channels` 与 `Microsoft.Bcl.AsyncInterfaces` 继续保留，用于事件流 API 的异步缓冲、`IAsyncEnumerable<T>` 与 `IAsyncDisposable`
+- `Microsoft.Extensions.DependencyInjection.Abstractions` 与 `Microsoft.Extensions.Options` 继续保留，用于 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
+- SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不会进入 NuGet 发布产物
+- `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前分支按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准
