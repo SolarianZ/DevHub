@@ -124,3 +124,7 @@ sdks/javascript/dist/
 # Temp files
 [Tt]emp/
 **/__pycache__/
+
+# AI
+.codex/
+openspec/
