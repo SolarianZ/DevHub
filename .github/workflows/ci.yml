@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload build-and-test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-and-test-diagnostics
           path: |
@@ -308,7 +308,7 @@ jobs:
 
       - name: Upload conformance diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sdk-conformance-diagnostics
           path: |
@@ -442,7 +442,7 @@ jobs:
 
       - name: Upload integration-full diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: integration-full-diagnostics
           path: |
@@ -607,7 +607,7 @@ jobs:
 
       - name: Upload cross-platform smoke diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cross-platform-smoke-${{ matrix.os }}-diagnostics
           path: |
