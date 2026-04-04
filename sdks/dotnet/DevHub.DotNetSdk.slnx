@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj" />
     <Project Path="src/DevHub.Sdk/DevHub.Sdk.csproj" />
   </Folder>
   <Folder Name="/tests/">

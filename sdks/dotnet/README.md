@@ -3,7 +3,8 @@
 当前目录用于维护独立于主工程的 DevHub .NET SDK 工作区。
 
 - 解决方案：`DevHub.DotNetSdk.slnx`
-- SDK 项目：`src/DevHub.Sdk/`
+- 核心 SDK 项目：`src/DevHub.Sdk/`
+- 可选 DI companion package：`src/DevHub.Sdk.DependencyInjection/`
 - 单元测试项目：`tests/DevHub.Sdk.UnitTests/`
 - 集成测试项目：`tests/DevHub.Sdk.IntegrationTests/`
 
@@ -18,7 +19,7 @@
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
 - 统一错误模型：`DevHubRpcException`
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
-- 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
+- 可选依赖注入 companion package：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试
 
 ## 文档边界
@@ -29,29 +30,46 @@
 
 ## 安装方式
 
-当前仓库内建议通过以下两种方式消费：
+按消费方式选择引用边界：
 
-### 方式一：项目引用
+### 核心 SDK：直接创建客户端
 
 ```xml
 <ProjectReference Include="..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
 ```
 
-### 方式二：本地打包后引用
-
-```powershell
-dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
-```
-
-然后在消费项目中引用生成的本地包：
-
 ```xml
 <PackageReference Include="DevHub.Sdk" Version="1.0.0" />
 ```
 
+### 可选 DI companion package：`IServiceCollection` 集成
+
+若消费方需要 `AddDevHubSdk()`、`IDevHubClientFactory` 或 `IDevHubEventsClientFactory`，请引用 `DevHub.Sdk.DependencyInjection`。
+
+项目引用方式：
+
+```xml
+<ProjectReference Include="..\..\sdks\dotnet\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" />
+```
+
+NuGet 引用方式：
+
+```xml
+<PackageReference Include="DevHub.Sdk.DependencyInjection" Version="1.0.0" />
+```
+
+### 本地打包
+
+```powershell
+dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
+```
+
+生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DependencyInjection` 会直接依赖 `DevHub.Sdk`。
+
 ## Unity 2019.4 适配说明
 
-当前分支发布的 `DevHub.Sdk` 仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线；不再发布 `net8.0` 或 `net10.0` 资产。
+当前分支发布的 `DevHub.Sdk` 与 `DevHub.Sdk.DependencyInjection` 均仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线。
 
 SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 
@@ -61,18 +79,25 @@ SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 
 ## SDK 包依赖边界
 
-当前 `DevHub.Sdk` 包仅保留与仍在公开支持的能力直接对应的外部依赖：
+`DevHub.Sdk` 主包仅保留与核心 SDK 能力直接对应的外部依赖：
 
 - `Newtonsoft.Json 9.0.1`：用于 runtime discovery、HTTP JSON-RPC、WebSocket 会话、公开模型标注与 `JToken` / `JObject` 载荷访问
 - `Microsoft.Bcl.AsyncInterfaces`：为 `DevHubEventsClient.ReadEventsAsync()` 等 `IAsyncEnumerable<T>` / `IAsyncDisposable` 能力提供 `netstandard2.0` 兼容支持
 - `System.Threading.Channels`：支撑事件客户端内部的异步事件缓冲与消费队列
-- `Microsoft.Extensions.DependencyInjection.Abstractions` 与 `Microsoft.Extensions.Options`：支撑 `AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory` 这组仍保留的依赖注入入口
 
-不会再进入当前 SDK 发布产物的依赖包括：
+`DevHub.Sdk.DependencyInjection` 可选包承载容器集成入口，并直接依赖：
+
+- `DevHub.Sdk 1.0.0`
+- `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2`
+- `Microsoft.Extensions.Options 10.0.2`
+
+当前 `DevHub.Sdk` 主包发布产物不包含以下依赖：
 
 - `System.Text.Json`
 - `Microsoft.Extensions.Http`
 - `Microsoft.Extensions.Logging.Abstractions`
+- `Microsoft.Extensions.DependencyInjection.Abstractions`
+- `Microsoft.Extensions.Options`
 
 ## Runtime Discovery
 
@@ -136,6 +161,8 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 ```
 
 ### 3. 使用依赖注入工厂
+
+先引用 `DevHub.Sdk.DependencyInjection`，类型命名空间仍保持为 `DevHub.Sdk`：
 
 ```csharp
 using DevHub.Sdk;
@@ -355,6 +382,8 @@ catch (DevHubRpcException ex)
 
 ## 公开 API
 
+### `DevHub.Sdk` 主包
+
 - `DevHubClientOptions`
 - `DevHubClient`
 - `DevHubEventsClient`
@@ -362,11 +391,15 @@ catch (DevHubRpcException ex)
 - `IDevHubRuntimeResolver`
 - `IDevHubHttpTransport` / `IDevHubHttpTransportFactory`
 - `IDevHubWebSocketSession` / `IDevHubWebSocketSessionFactory`
-- `IDevHubClientFactory` / `IDevHubEventsClientFactory`
 - `DevHubRpcException`
 - `DevHubRpcErrorCode`
 - `DevHubEventType` / `DevHubEventTypes`
 - `DevHub.Sdk.Models.*`
+
+### `DevHub.Sdk.DependencyInjection` 可选包
+
+- `DevHubServiceCollectionExtensions.AddDevHubSdk()`
+- `IDevHubClientFactory` / `IDevHubEventsClientFactory`
 
 ## 集成测试隔离模式
 
@@ -386,33 +419,46 @@ catch (DevHubRpcException ex)
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
 
 ## 发布产物验收基线
 
-`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 生成的 `DevHub.Sdk.1.0.0.nupkg` 当前仅包含以下发布资产：
+`dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack` 生成的 `DevHub.Sdk.1.0.0.nupkg` 包含以下发布资产：
 
 - `lib/netstandard2.0/DevHub.Sdk.dll`
 - `lib/netstandard2.0/DevHub.Sdk.xml`
 - `README.md`
 
-包 `.nuspec` 当前声明的直接依赖如下：
+包 `.nuspec` 声明的直接依赖如下：
 
 - `Newtonsoft.Json 9.0.1`
 - `Microsoft.Bcl.AsyncInterfaces 10.0.2`
 - `System.Threading.Channels 8.0.0`
+
+`dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack` 生成的 `DevHub.Sdk.DependencyInjection.1.0.0.nupkg` 包含以下发布资产：
+
+- `lib/netstandard2.0/DevHub.Sdk.DependencyInjection.dll`
+- `lib/netstandard2.0/DevHub.Sdk.DependencyInjection.xml`
+- `README.md`
+
+其 `.nuspec` 声明的直接依赖如下：
+
+- `DevHub.Sdk 1.0.0`
 - `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2`
 - `Microsoft.Extensions.Options 10.0.2`
 
-当前不会进入包依赖图的项目包括：
+`DevHub.Sdk` 主包依赖图不包含以下项目：
 
 - `System.Text.Json`
 - `Microsoft.Extensions.Http`
 - `Microsoft.Extensions.Logging.Abstractions`
+- `Microsoft.Extensions.DependencyInjection.Abstractions`
+- `Microsoft.Extensions.Options`
 
 与 Unity 单目标适配相关的保留项与测试差异如下：
 
 - `System.Threading.Channels` 与 `Microsoft.Bcl.AsyncInterfaces` 继续保留，用于事件流 API 的异步缓冲、`IAsyncEnumerable<T>` 与 `IAsyncDisposable`
-- `Microsoft.Extensions.DependencyInjection.Abstractions` 与 `Microsoft.Extensions.Options` 继续保留，用于 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
-- SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不会进入 NuGet 发布产物
+- `DevHub.Sdk.DependencyInjection` 单独承载 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
+- SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不进入 NuGet 发布产物
 - `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前分支按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准
