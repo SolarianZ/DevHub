@@ -1,49 +1,198 @@
-name: release-package
+name: release
 
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - main-snapshot
+          - stable
+      release_tag:
+        description: Required when channel=stable and the current ref is not a version tag
+        required: false
+        type: string
   push:
+    branches:
+      - preview
+      - main
     tags:
       - "v*"
 
 jobs:
-  package:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            rid: linux-x64
-          - os: windows-latest
-            rid: win-x64
-          - os: macos-latest
-            rid: osx-arm64
+  package-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish Host
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Resolve release metadata
+        id: meta
         shell: bash
         run: |
           set -euo pipefail
-          dotnet publish host/src/DevHub.Host/DevHub.Host.csproj \
-            -c Release \
-            -r "${{ matrix.rid }}" \
-            --self-contained false \
-            -p:PublishSingleFile=true \
-            -o "artifacts/${{ matrix.rid }}"
 
-      - name: Upload artifact
+          short_sha="${GITHUB_SHA::7}"
+          commit_stamp="$(git show -s --date=format:%Y%m%dT%H%M%SZ --format=%cd "$GITHUB_SHA")"
+          channel=""
+          release_tag=""
+          release_id=""
+          release_name=""
+          prerelease="true"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/preview" ]]; then
+            channel="preview"
+            release_tag="preview-latest"
+            release_id="preview-latest"
+            release_name="DevHub Preview"
+            prerelease="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            channel="main-snapshot"
+            release_tag="main-${commit_stamp}-${short_sha}"
+            release_id="${release_tag}"
+            release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
+            prerelease="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            channel="stable"
+            release_tag="${GITHUB_REF_NAME}"
+            release_id="${release_tag}"
+            release_name="DevHub ${release_tag}"
+            prerelease="false"
+          else
+            channel="${{ inputs.channel }}"
+            case "${channel}" in
+              preview)
+                release_tag="preview-latest"
+                release_id="preview-latest"
+                release_name="DevHub Preview"
+                prerelease="true"
+                ;;
+              main-snapshot)
+                release_tag="main-${commit_stamp}-${short_sha}"
+                release_id="${release_tag}"
+                release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
+                prerelease="true"
+                ;;
+              stable)
+                release_tag="${{ inputs.release_tag }}"
+                if [[ -z "${release_tag}" ]]; then
+                  if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+                    release_tag="${GITHUB_REF_NAME}"
+                  else
+                    echo "Stable release requires a version tag such as v1.0.1." >&2
+                    exit 1
+                  fi
+                fi
+                release_id="${release_tag}"
+                release_name="DevHub ${release_tag}"
+                prerelease="false"
+                ;;
+              *)
+                echo "Unsupported release channel: ${channel}" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          {
+            echo "channel=${channel}"
+            echo "release_tag=${release_tag}"
+            echo "release_id=${release_id}"
+            echo "release_name=${release_name}"
+            echo "prerelease=${prerelease}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Package release assets
+        run: |
+          python scripts/release/package_release.py \
+            --release-id "${{ steps.meta.outputs.release_id }}" \
+            --channel "${{ steps.meta.outputs.channel }}" \
+            --release-tag "${{ steps.meta.outputs.release_tag }}" \
+            --release-name "${{ steps.meta.outputs.release_name }}" \
+            --commit "${GITHUB_SHA}"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_dir="artifacts/release/${{ steps.meta.outputs.release_id }}"
+          release_tag="${{ steps.meta.outputs.release_tag }}"
+          release_name="${{ steps.meta.outputs.release_name }}"
+          channel="${{ steps.meta.outputs.channel }}"
+
+          release_files=(
+            "$release_dir"/host/*.zip
+            "$release_dir"/sdk/dotnet/*
+            "$release_dir"/sdk/javascript/*.tgz
+            "$release_dir"/sdk/python/*
+            "$release_dir"/release-manifest.json
+            "$release_dir"/release-notes.md
+          )
+
+          if [[ "${channel}" == "preview" ]]; then
+            gh release delete "${release_tag}" --yes --cleanup-tag || true
+            gh release create "${release_tag}" "${release_files[@]}" \
+              --title "${release_name}" \
+              --notes-file "$release_dir/release-notes.md" \
+              --prerelease \
+              --target "${GITHUB_SHA}"
+          elif [[ "${channel}" == "main-snapshot" ]]; then
+            gh release delete "${release_tag}" --yes --cleanup-tag || true
+            gh release create "${release_tag}" "${release_files[@]}" \
+              --title "${release_name}" \
+              --notes-file "$release_dir/release-notes.md" \
+              --prerelease \
+              --target "${GITHUB_SHA}"
+          else
+            if gh release view "${release_tag}" >/dev/null 2>&1; then
+              gh release upload "${release_tag}" "${release_files[@]}" --clobber
+              gh release edit "${release_tag}" \
+                --title "${release_name}" \
+                --notes-file "$release_dir/release-notes.md"
+            else
+              gh release create "${release_tag}" "${release_files[@]}" \
+                --title "${release_name}" \
+                --notes-file "$release_dir/release-notes.md" \
+                --target "${GITHUB_SHA}"
+            fi
+          fi
+
+      - name: Upload release diagnostics
+        if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: devhub-${{ matrix.rid }}
-          path: artifacts/${{ matrix.rid }}
-          if-no-files-found: error
+          name: release-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn

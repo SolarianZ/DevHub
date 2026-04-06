@@ -4,9 +4,13 @@
 
 ## 语言路径
 
-- [`.NET SDK`](../../../sdks/dotnet/README.md)：`.NET` 工作区、运行时发现、HTTP / WebSocket 用法与验证命令。
-- [`JS/TS SDK`](../../../sdks/javascript/README.md)：Node.js 工作区、运行时发现、事件流与验证命令。
-- [`Python SDK`](../../../sdks/python/README.md)：Python 工作区、运行时发现、事件流与验证命令。
+- [`.NET SDK 接入指南`](./dotnet.md)：环境准备、连接 Host、最小 `PingAsync()` 示例与验证方式。
+- [`JS/TS SDK 接入指南`](./javascript.md)：Node.js 环境准备、运行时发现、最小 `client.ping()` 示例与验证方式。
+- [`Python SDK 接入指南`](./python.md)：Python 环境准备、运行时发现、最小 `client.ping()` 示例与验证方式。
+- [`.NET SDK README`](../../../sdks/dotnet/README.md)：`.NET SDK` 工作区、完整 API、测试与本地打包说明。
+- [`JS/TS SDK README`](../../../sdks/javascript/README.md)：`JS/TS SDK` 工作区、完整 API、测试与本地打包说明。
+- [`Python SDK README`](../../../sdks/python/README.md)：`Python SDK` 工作区、完整 API、测试与本地打包说明。
+- [`Host 快速上手`](../getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和最小验证入口。
 - [`无 SDK 接入指南`](../无SDK接入指南.md)：不依赖仓库内 SDK 时的协议接入路径。
 
 ## 正式发布前占位
@@ -18,3 +22,12 @@ TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 <SDK 
 ```
 
 当前各语言 README 中保留的仓库内命令仅用于本地开发、测试或本地打包验证，不代表正式发布安装入口。
+
+## 接入闭环
+
+推荐按以下顺序完成接入：
+
+1. 先按 [`../getting-started/host-quickstart.md`](../getting-started/host-quickstart.md) 启动 Host 并确认 `hub.ping` 成功。
+2. 再按对应语言文档准备环境、创建客户端并读取 `<dataDir>/runtime/hub.json`。
+3. 需要深入了解 API、测试命令或扩展点时，再进入对应工作区 README。
+4. 如果最终决定不依赖官方 SDK，可切换到 [`../无SDK接入指南.md`](../无SDK接入指南.md)。

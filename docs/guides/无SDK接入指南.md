@@ -2,6 +2,11 @@
 
 本文面向不准备直接使用仓库内 `.NET` / `JS/TS` / `Python` SDK 的第三方开发者，说明如何仅基于公开协议资料完成 DevHub Hub v1.x 的原始接入与自测。
 
+如果你只是需要先启动 Host 或对照官方 SDK 的最小上手路径，可先阅读：
+
+- [`getting-started/host-quickstart.md`](./getting-started/host-quickstart.md)
+- [`sdk/README.md`](./sdk/README.md)
+
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Spec.md`](../spec/Spec.md)。

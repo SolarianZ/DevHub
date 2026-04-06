@@ -4,9 +4,15 @@
 
 ## 当前入口
 
+- [`repository-contribution.md`](./repository-contribution.md)：贡献流程、验证要求、本地打包与发布准备入口。
 - [`../开发指南.md`](../开发指南.md)：本地开发环境、构建、运行与验证流程。
+- [`../../operations/publishing/release-process.md`](../../operations/publishing/release-process.md)：preview / main / stable 发布流程与 GitHub Release 约定。
+- [`../../operations/publishing/release-checklist.md`](../../operations/publishing/release-checklist.md)：发布前检查和发布后核验清单。
 - [`../../architecture/DevHub协议与开发规划.md`](../../architecture/DevHub协议与开发规划.md)：架构背景、模块边界与里程碑规划。
 - [`../../milestones/DevHub_M6任务文档.md`](../../milestones/DevHub_M6任务文档.md)：当前阶段任务与验收边界。
 - [`../../spec/Spec.md`](../../spec/Spec.md)：公开行为与协议契约的唯一权威标准。
+- [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：仓库根目录贡献入口。
+- [`../../../CHANGELOG.md`](../../../CHANGELOG.md)：变更跟踪入口。
+- [`../../../SECURITY.md`](../../../SECURITY.md)：安全与支持入口。
 
-后续仓库级贡献说明、变更跟踪与安全/支持说明也将从本分组统一导航。
+仓库改造、发布维护和外部协作都以本分组为入口，再按主题跳转到根目录治理文件或 `docs/operations/publishing/` 下的专题文档。

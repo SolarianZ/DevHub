@@ -2,6 +2,12 @@
 
 DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行时为 Node.js。
 
+## 接入导航
+
+- [`../../docs/guides/sdk/javascript.md`](../../docs/guides/sdk/javascript.md)：面向外部调用方的 `JS/TS SDK` 接入指南。
+- [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
+
 ## 当前状态
 
 - 已提供工程骨架。

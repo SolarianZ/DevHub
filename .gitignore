@@ -18,6 +18,9 @@ x86/
 build/
 Publish/
 *.deploy.*
+!scripts/
+!scripts/release/
+!scripts/release/**
 
 # NuGet
 *.nupkg

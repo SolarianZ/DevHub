@@ -12,11 +12,15 @@
 ### Host 上手
 
 - [`guides/getting-started/README.md`](./guides/getting-started/README.md)：首次启动 Host、运行时发现和最小验证入口。
+- [`guides/getting-started/host-quickstart.md`](./guides/getting-started/host-quickstart.md)：前置条件、启动方式、`hub.json` / `tokenFile` 发现与最小 `hub.ping` 验证。
 - [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：当前可直接参考的部署、启动和数据根目录说明。
 
 ### SDK 接入
 
 - [`guides/sdk/README.md`](./guides/sdk/README.md)：官方 SDK 接入路径导航。
+- [`guides/sdk/dotnet.md`](./guides/sdk/dotnet.md)
+- [`guides/sdk/javascript.md`](./guides/sdk/javascript.md)
+- [`guides/sdk/python.md`](./guides/sdk/python.md)
 - [`../sdks/dotnet/README.md`](../sdks/dotnet/README.md)
 - [`../sdks/javascript/README.md`](../sdks/javascript/README.md)
 - [`../sdks/python/README.md`](../sdks/python/README.md)
@@ -28,13 +32,20 @@
 ### 仓库改造与贡献
 
 - [`guides/contributor/README.md`](./guides/contributor/README.md)：仓库开发、贡献与治理入口。
+- [`guides/contributor/repository-contribution.md`](./guides/contributor/repository-contribution.md)
 - [`guides/开发指南.md`](./guides/开发指南.md)：当前开发环境、构建、运行与验证流程。
 - [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md)
 - [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md)
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
+- [`../CHANGELOG.md`](../CHANGELOG.md)
+- [`../SECURITY.md`](../SECURITY.md)
 
 ### 发布与维护
 
 - [`operations/publishing/README.md`](./operations/publishing/README.md)：发布路径、资产约定与 TODO 占位规范入口。
+- [`operations/publishing/release-process.md`](./operations/publishing/release-process.md)
+- [`operations/publishing/release-asset-layout.md`](./operations/publishing/release-asset-layout.md)
+- [`operations/publishing/release-checklist.md`](./operations/publishing/release-checklist.md)
 - [`operations/运维排障手册.md`](./operations/运维排障手册.md)：运行与排障说明。
 
 ## 3. 分类与落点
@@ -51,6 +62,7 @@
 - [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：部署、启动与运行时数据说明。
 - [`operations/运维排障手册.md`](./operations/运维排障手册.md)：排障与恢复说明。
 - [`assets/`](./assets/)：文档静态资源。
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)、[`../CHANGELOG.md`](../CHANGELOG.md)、[`../SECURITY.md`](../SECURITY.md)：仓库级治理入口。
 
 ## 4. 正式发布前 TODO 占位规范
 

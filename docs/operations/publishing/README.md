@@ -4,6 +4,9 @@
 
 ## 当前入口
 
+- [`release-process.md`](./release-process.md)：`preview`、`main` 和稳定版的发布流程、触发方式与 GitHub Release 约定。
+- [`release-asset-layout.md`](./release-asset-layout.md)：统一发布资产布局、命名规则和 manifest 结构。
+- [`release-checklist.md`](./release-checklist.md)：发布前检查项、发布后核验步骤和 dry-run 入口。
 - [`../部署与运行指南.md`](../部署与运行指南.md)：当前运行、部署与数据根目录说明。
 - [`../运维排障手册.md`](../运维排障手册.md)：运行期排障与恢复说明。
 - [`../../README.md`](../../README.md)：文档总入口。
@@ -37,4 +40,4 @@ TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHu
 
 - 已经成立的仓库内开发命令、本地打包命令和测试命令可以保留，但必须明确其适用范围是仓库内开发或本地验证。
 - 涉及版本、下载与安装的占位必须说明未来会被哪个 GitHub Release 资产或版本信息替换。
-- 后续发布流程、检查清单和发布说明文档都会落在本分组下。
+- 本分组中的发布流程、资产布局和检查清单文档必须与 `scripts/release/package_release.py` 和 `.github/workflows/release.yml` 的实际行为保持一致。
