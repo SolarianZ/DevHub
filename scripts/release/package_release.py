@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -26,6 +27,7 @@ JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
 PYTHON_SDK_DIR = REPO_ROOT / "sdks" / "python"
 DEFAULT_HOST_RIDS = ("win-x64", "linux-x64", "osx-arm64")
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
+SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 
 
 @dataclass
@@ -65,16 +67,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    release_id = args.release_id
     output_root = Path(args.output_root).resolve()
-    output_dir = output_root / release_id
-    checks_dir = output_dir / "checks"
-
-    release_tag = args.release_tag or release_id
+    release_id = validate_release_label(args.release_id, field_name="release-id")
+    release_tag = validate_release_label(args.release_tag or release_id, field_name="release-tag")
     release_name = args.release_name or f"DevHub {release_id}"
     commit = args.commit or read_git_output(["git", "rev-parse", "HEAD"]).strip()
     host_rids = tuple(args.host_rids or DEFAULT_HOST_RIDS)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    output_dir = resolve_release_output_dir(output_root, release_id)
+    checks_dir = output_dir / "checks"
 
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -132,6 +133,32 @@ def validation_summary_with_integrity(records: Sequence[ValidationRecord]) -> di
     }
 
 
+def validate_release_label(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise RuntimeError(f"{field_name} 不能为空。")
+    if not SAFE_RELEASE_LABEL_PATTERN.fullmatch(normalized):
+        raise RuntimeError(
+            f"{field_name} 只能包含字母、数字、点、下划线、连字符或加号，且必须以字母或数字开头：{value!r}"
+        )
+    return normalized
+
+
+def resolve_release_output_dir(output_root: Path, release_id: str) -> Path:
+    resolved_output_root = output_root.resolve()
+    candidate = (resolved_output_root / release_id).resolve()
+
+    try:
+        candidate.relative_to(resolved_output_root)
+    except ValueError as exc:
+        raise RuntimeError(f"release-id 解析后的输出目录超出发布根目录：{candidate}") from exc
+
+    if candidate == resolved_output_root:
+        raise RuntimeError("release-id 不能直接指向发布根目录。")
+
+    return candidate
+
+
 def run_release_validation(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
     run_logged_command(
         name="Host build",
@@ -145,6 +172,13 @@ def run_release_validation(checks_dir: Path, validation_records: list[Validation
         command=["dotnet", "test", str(REPO_ROOT / "host" / "DevHub.slnx"), "-c", "Release"],
         cwd=REPO_ROOT,
         log_path=checks_dir / "host-tests.log",
+        validation_records=validation_records,
+    )
+    run_logged_command(
+        name="Host smoke dependencies",
+        command=[sys.executable, "-m", "pip", "install", "requests"],
+        cwd=REPO_ROOT,
+        log_path=checks_dir / "smoke-dependencies.log",
         validation_records=validation_records,
     )
     run_host_smoke(checks_dir, validation_records)
@@ -178,7 +212,7 @@ def run_release_validation(checks_dir: Path, validation_records: list[Validation
     )
     run_logged_command(
         name="Python SDK install",
-        command=[sys.executable, "-m", "pip", "install", "-e", "./sdks/python[test]", "requests"],
+        command=[sys.executable, "-m", "pip", "install", "-e", "./sdks/python[test]"],
         cwd=REPO_ROOT,
         log_path=checks_dir / "python-install.log",
         validation_records=validation_records,
