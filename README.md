@@ -20,7 +20,7 @@ M6 期间的文档分类与导航规则见 [`docs/README.md`](docs/README.md)；
 - [文档总入口](docs/README.md)：规范、规划、里程碑、开发、接入、运维与版本化协议资产的统一导航。
 - [协议规范](docs/spec/Spec.md)：公开协议与对外契约。
 - [架构与开发规划](docs/architecture/DevHub协议与开发规划.md)：架构背景、里程碑与当前状态。
-- [当前 M6 任务文档](docs/milestones/DevHub_M6细化任务文档.md)：本阶段治理任务与验收边界。
+- [当前 M6 任务文档](docs/milestones/DevHub_M6任务文档.md)：本阶段治理任务与验收边界。
 - [开发指南](docs/guides/开发指南.md)：开发环境、仓库结构、本地构建、运行与验证流程。
 - [无 SDK 接入指南](docs/guides/无SDK接入指南.md)：面向第三方开发者的原始协议接入、错误语义与自测入口。
 - [部署与运行指南](docs/operations/部署与运行指南.md)：发布、启动、数据根目录布局、配置项与上线后校验。

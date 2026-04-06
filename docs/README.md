@@ -18,7 +18,7 @@
   - [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md)
   - [`architecture/MCP-Report.md`](./architecture/MCP-Report.md)
 - [`milestones/`](./milestones/): 当前阶段任务文档。
-  - [`milestones/DevHub_M6细化任务文档.md`](./milestones/DevHub_M6细化任务文档.md)
+  - [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md)
 - [`guides/`](./guides/): 面向开发者与接入方的使用文档。
   - [`guides/开发指南.md`](./guides/开发指南.md)
   - [`guides/无SDK接入指南.md`](./guides/无SDK接入指南.md)
