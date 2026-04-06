@@ -27,9 +27,9 @@
 
 仓库级 `host/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
 
-## 安装方式
+## 当前仓库内使用方式
 
-当前仓库内建议通过以下两种方式消费：
+本节命令仅用于仓库内开发或本地打包验证，不代表正式发布后的安装入口。
 
 ### 方式一：项目引用
 
@@ -43,10 +43,19 @@
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 ```
 
-然后在消费项目中引用生成的本地包：
+然后在消费项目中引用生成的本地包。若用于本地打包验证，请以实际生成的 `.nupkg` 文件名为准，不要从文档复制固定版本号：
 
 ```xml
-<PackageReference Include="DevHub.Sdk" Version="1.0.0" />
+<!-- TODO(devhub-release): 首个正式 GitHub Release 发布后，用正式发布资产中的 SDK 版本替换 TODO-FIRST-RELEASE-VERSION。当前阶段不要填写未发布版本号。 -->
+<PackageReference Include="DevHub.Sdk" Version="TODO-FIRST-RELEASE-VERSION" />
+```
+
+## 正式发布包占位
+
+正式 GitHub Release 资产尚未固定前，`.NET SDK` 的公开安装说明统一使用以下占位写法：
+
+```text
+TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub .NET SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
 ```
 
 ## Runtime Discovery
