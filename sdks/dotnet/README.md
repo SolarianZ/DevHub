@@ -7,6 +7,7 @@
 - 可选 DI companion package：`src/DevHub.Sdk.DependencyInjection/`
 - 单元测试项目：`tests/DevHub.Sdk.UnitTests/`
 - 集成测试项目：`tests/DevHub.Sdk.IntegrationTests/`
+- conformance 适配器项目：`tests/DevHub.Sdk.ConformanceAdapter/`
 
 ## 当前能力范围
 
@@ -20,13 +21,14 @@
 - 统一错误模型：`DevHubRpcException`
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
 - 可选依赖注入 companion package：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
-- SDK 单元测试 + SDK↔Hub 黑盒集成测试
+- SDK 单元测试 + SDK↔Hub 黑盒集成测试 + conformance 适配器
 
 ## 文档边界
 
 本文档只覆盖 `.NET SDK` 本身的公开能力、用法与验证命令。
 
 仓库级 `host/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
+工作区中的 `tests/DevHub.Sdk.ConformanceAdapter/` 仅用于对接仓库级 conformance runner，不构成面向消费方的公开 API。
 
 ## 安装方式
 

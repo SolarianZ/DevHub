@@ -6,54 +6,56 @@
 
 ```text
 DevHub/
-├── docs/                                     # 协议规范、架构、指南与运维文档
-│   ├── README.md                             # 文档导航与分类规则
-│   ├── spec/                                # 权威规范与版本化协议资产
-│   │   ├── Spec.md                          # 权威技术规范（Single Source of Truth）
-│   │   ├── schema/                          # 版本化 Schema 资产
-│   │   └── protocol-examples/               # 版本化原始协议示例
-│   ├── architecture/                        # 架构演进与专题评估
-│   ├── milestones/                          # 当前阶段任务文档
-│   ├── guides/                              # 开发与接入指南
-│   ├── operations/                          # 部署与排障文档
-│   └── assets/                              # 文档静态资源
-├── host/                                     # Host相关代码
-│   ├── DevHub.slnx                           # Host 工作区解决方案文件
-│   ├── src/                                  # Host生产代码（.NET）
-│   │   ├── DevHub.Core/                      # 核心领域模型与基础服务
-│   │   └── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
-│   └── tests/                                # Host测试与验证资产
-│       ├── whitebox/                         # .NET 白盒测试工程
-│       │   ├── DevHub.Tests/                 # Core / 领域规则测试
-│       │   └── DevHub.Host.Tests/            # Host 级白盒测试
-│       ├── README.md                         # 测试分层与执行说明
-│       ├── blackbox/                         # Python 黑盒测试与 runner
-│       ├── conformance/                      # 符合性向量、runner 与自测
-│       └── tools/                            # 覆盖率配置与辅助脚本
-├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
-│   ├── dotnet/                               # .NET SDK 工作区
-│   │   ├── src/                              # .NET SDK 源码
-│   │   │   └── DevHub.Sdk/                   # .NET SDK 核心库
-│   │   ├── tests/                            # .NET SDK 测试项目
-│   │   │   ├── DevHub.Sdk.UnitTests/         # .NET SDK 单元测试
-│   │   │   └── DevHub.Sdk.IntegrationTests/  # .NET SDK 集成测试
-│   │   ├── DevHub.DotNetSdk.slnx             # .NET SDK 解决方案文件
-│   │   ├── Directory.Build.props             # .NET SDK 工作区公共构建配置
-│   │   ├── Directory.Packages.props          # .NET SDK 工作区统一依赖版本管理
-│   │   └── README.md                         # .NET SDK 使用与开发说明
-│   ├── javascript/                           # JavaScript / TypeScript SDK 工作区
-│   │   ├── src/                              # JS/TS SDK 源码
-│   │   ├── tests/                            # JS/TS SDK 单元测试与集成测试
-│   │   ├── package.json                      # JS/TS SDK 包定义
-│   │   └── README.md                         # JS/TS SDK 使用与开发说明
-│   └── python/                               # Python SDK 工作区
-│       ├── src/                              # Python SDK 源码
-│       │   └── devhub_sdk/                   # Python SDK 核心包
-│       ├── tests/                            # Python SDK 单元测试与集成测试
-│       ├── pyproject.toml                    # Python SDK 构建配置
-│       └── README.md                         # Python SDK 使用与开发说明
-├── temp/                                     # 生成的测试报告与临时产物
-└── LICENSE                                   # 许可证文件
+├── docs/                                        # 协议规范、架构、指南与运维文档
+│   ├── README.md                                # 文档导航与分类规则
+│   ├── spec/                                    # 权威规范与版本化协议资产
+│   │   ├── Spec.md                              # 权威技术规范（Single Source of Truth）
+│   │   ├── schema/                              # 版本化 Schema 资产
+│   │   └── protocol-examples/                   # 版本化原始协议示例
+│   ├── architecture/                            # 架构演进与专题评估
+│   ├── milestones/                              # 当前阶段任务文档
+│   ├── guides/                                  # 开发与接入指南
+│   ├── operations/                              # 部署与排障文档
+│   └── assets/                                  # 文档静态资源
+├── host/                                        # Host相关代码
+│   ├── DevHub.slnx                              # Host 工作区解决方案文件
+│   ├── src/                                     # Host生产代码（.NET）
+│   │   ├── DevHub.Core/                         # 核心领域模型与基础服务
+│   │   └── DevHub.Host/                         # 基于 ASP.NET Core 的宿主程序
+│   └── tests/                                   # Host测试与验证资产
+│       ├── whitebox/                            # .NET 白盒测试工程
+│       │   ├── DevHub.Tests/                    # Core / 领域规则测试
+│       │   └── DevHub.Host.Tests/               # Host 级白盒测试
+│       ├── README.md                            # 测试分层与执行说明
+│       ├── blackbox/                            # Python 黑盒测试与 runner
+│       ├── conformance/                         # 符合性向量、runner 与自测
+│       └── tools/                               # 覆盖率配置与辅助脚本
+├── sdks/                                        # 多语言 SDK、示例代码与相关开发资源
+│   ├── dotnet/                                  # .NET SDK 工作区
+│   │   ├── src/                                 # .NET SDK 源码
+│   │   │   ├── DevHub.Sdk/                      # .NET SDK 核心库
+│   │   │   └── DevHub.Sdk.DependencyInjection/  # .NET SDK 可选 DI companion package
+│   │   ├── tests/                               # .NET SDK 测试项目
+│   │   │   ├── DevHub.Sdk.UnitTests/            # .NET SDK 单元测试
+│   │   │   ├── DevHub.Sdk.IntegrationTests/     # .NET SDK 集成测试
+│   │   │   └── DevHub.Sdk.ConformanceAdapter/   # .NET SDK conformance 适配器
+│   │   ├── DevHub.DotNetSdk.slnx                # .NET SDK 解决方案文件
+│   │   ├── Directory.Build.props                # .NET SDK 工作区公共构建配置
+│   │   ├── Directory.Packages.props             # .NET SDK 工作区统一依赖版本管理
+│   │   └── README.md                            # .NET SDK 使用与开发说明
+│   ├── javascript/                              # JavaScript / TypeScript SDK 工作区
+│   │   ├── src/                                 # JS/TS SDK 源码
+│   │   ├── tests/                               # JS/TS SDK 单元测试与集成测试
+│   │   ├── package.json                         # JS/TS SDK 包定义
+│   │   └── README.md                            # JS/TS SDK 使用与开发说明
+│   └── python/                                  # Python SDK 工作区
+│       ├── src/                                 # Python SDK 源码
+│       │   └── devhub_sdk/                      # Python SDK 核心包
+│       ├── tests/                               # Python SDK 单元测试与集成测试
+│       ├── pyproject.toml                       # Python SDK 构建配置
+│       └── README.md                            # Python SDK 使用与开发说明
+├── temp/                                        # 生成的测试报告与临时产物
+└── LICENSE                                      # 许可证文件
 ```
 
 ## 运行时数据规约
