@@ -1,6 +1,6 @@
 # DevHub Conformance 说明
 
-本目录承载 DevHub Hub v1.0.1 的跨语言符合性向量与运行器。
+本目录承载 DevHub Spec v1.0.1 协议基线的跨语言符合性向量与运行器。
 
 - 对仓库开发者，它是官方 `.NET` / `JS/TS` / `Python` 适配器的统一回归入口。
 - 对第三方接入方，它也是可公开挂接“自研 adapter”的官方自测入口。

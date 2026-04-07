@@ -85,7 +85,7 @@ public sealed class ServiceCollectionExtensionsTests
         var hubJson = JsonSerializer.Serialize(new
         {
             protocolVersion = 1,
-            hubVersion = "1.0.0",
+            hubVersion = "0.6.0",
             pid = 12345,
             httpBaseUrl = "http://127.0.0.1:47231",
             wsUrl = "ws://127.0.0.1:47231/ws",

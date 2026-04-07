@@ -33,7 +33,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         await WriteHubJsonAsync(dataDir, new HubRuntime
         {
             ProtocolVersion = 1,
-            HubVersion = "1.0.1",
+            HubVersion = "0.6.0",
             Pid = 12345,
             HttpBaseUrl = "http://127.0.0.1:47231",
             WsUrl = "ws://127.0.0.1:47231/ws",
@@ -55,7 +55,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
 
         Assert.Equal("token-1", connectionInfo.Token);
         Assert.Equal(runtimeDir, connectionInfo.RuntimeDirectory);
-        Assert.Equal("1.0.1", connectionInfo.Runtime.HubVersion);
+        Assert.Equal("0.6.0", connectionInfo.Runtime.HubVersion);
         Assert.Equal("http://127.0.0.1:47231", connectionInfo.Runtime.HttpBaseUrl);
         Assert.Equal("ws://127.0.0.1:47231/ws", connectionInfo.Runtime.WsUrl);
         Assert.Equal(tokenFile, connectionInfo.Runtime.TokenFile);

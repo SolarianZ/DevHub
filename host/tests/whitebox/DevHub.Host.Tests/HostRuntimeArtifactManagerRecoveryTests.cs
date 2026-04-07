@@ -13,7 +13,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 {
-    private const string DefaultHubVersion = "1.0.1-test";
+    private const string DefaultHubVersion = "0.6.0-test";
     private readonly string _tempDirectory;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;

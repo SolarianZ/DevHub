@@ -77,7 +77,7 @@ public sealed class PublicExtensionPointTests
         var runtime = new HubRuntime
         {
             ProtocolVersion = 1,
-            HubVersion = "1.0.0",
+            HubVersion = "0.6.0",
             Pid = 12345,
             HttpBaseUrl = "http://127.0.0.1:57231",
             WsUrl = "ws://127.0.0.1:57231/ws",
