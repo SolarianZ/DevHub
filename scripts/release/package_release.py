@@ -597,6 +597,11 @@ def create_zip_archive(source_dir: Path, archive_path: Path, root_name: str) -> 
 
 
 def read_msbuild_version(project_path: Path) -> str:
+    for property_name in ("Version", "VersionPrefix"):
+        version = read_msbuild_property(project_path, property_name)
+        if version:
+            return version
+
     root = ElementTree.fromstring(project_path.read_text(encoding="utf-8"))
     version = root.findtext(".//Version")
     if version:
@@ -605,6 +610,23 @@ def read_msbuild_version(project_path: Path) -> str:
     if version:
         return version.strip()
     raise RuntimeError(f"Unable to resolve version from {project_path}.")
+
+
+def read_msbuild_property(project_path: Path, property_name: str) -> str | None:
+    completed = subprocess.run(
+        ["dotnet", "msbuild", str(project_path), f"-getProperty:{property_name}"],
+        cwd=REPO_ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        return None
+
+    value = completed.stdout.strip()
+    return value or None
 
 
 def read_json_version(package_json_path: Path) -> str:
