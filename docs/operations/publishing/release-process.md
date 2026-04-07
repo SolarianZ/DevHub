@@ -54,6 +54,8 @@
 
 ## 4. 本地一键打包与 CI 的关系
 
+- 仓库发布版本统一以 `eng/Version.props` 为唯一来源；Host 与 `.NET SDK` 直接消费该文件，`JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与之保持同步。
+- `scripts/release/package_release.py` 会在打包开始前执行版本一致性校验，发现 `package.json`、`package-lock.json` 或 `pyproject.toml` 与 `eng/Version.props` 漂移时直接失败。
 - 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产。
 - `.github/workflows/release.yml` 只负责设置发布通道元数据、调用同一脚本并把输出上传到 GitHub Release。
 - 当前阶段不会把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，也不会把 `Python SDK` 发布到 PyPI。

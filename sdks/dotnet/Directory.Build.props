@@ -1,7 +1,13 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)../../eng/Version.props" />
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>$(DevHubVersion)</Version>
+    <AssemblyVersion>$(DevHubAssemblyVersion)</AssemblyVersion>
+    <FileVersion>$(DevHubFileVersion)</FileVersion>
+    <InformationalVersion>$(DevHubInformationalVersion)</InformationalVersion>
   </PropertyGroup>
 </Project>

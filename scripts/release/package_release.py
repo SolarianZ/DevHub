@@ -21,6 +21,7 @@ import tomllib
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+VERSION_SYNC_SCRIPT = REPO_ROOT / "scripts" / "release" / "sync_versions.py"
 HOST_PROJECT = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
 DOTNET_SDK_PROJECT = REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj"
 JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
@@ -67,6 +68,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    ensure_version_metadata_consistency()
     output_root = Path(args.output_root).resolve()
     release_id = validate_release_label(args.release_id, field_name="release-id")
     release_tag = validate_release_label(args.release_tag or release_id, field_name="release-tag")
@@ -131,6 +133,16 @@ def validation_summary_with_integrity(records: Sequence[ValidationRecord]) -> di
         "executedAtUtc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "records": [asdict(record) for record in records],
     }
+
+
+def ensure_version_metadata_consistency() -> None:
+    subprocess.run(
+        [sys.executable, str(VERSION_SYNC_SCRIPT), "--check"],
+        cwd=REPO_ROOT,
+        check=True,
+        text=True,
+        encoding="utf-8",
+    )
 
 
 def validate_release_label(value: str, field_name: str) -> str:
