@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\TestHelpers\EnvironmentVariableScope.cs" Link="TestHelpers\EnvironmentVariableScope.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="DevHub.Whitebox.TestHelpers" />
     <Using Include="Xunit" />
   </ItemGroup>
 

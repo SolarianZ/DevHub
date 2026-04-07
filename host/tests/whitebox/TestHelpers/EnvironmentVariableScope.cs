@@ -1,7 +1,7 @@
-namespace DevHub.Tests;
+namespace DevHub.Whitebox.TestHelpers;
 
 /// <summary>
-/// 测试期间临时设置环境变量，并在释放时恢复原值。
+/// 在测试期间临时设置环境变量，并在释放时恢复原值。
 /// </summary>
 internal sealed class EnvironmentVariableScope : IDisposable
 {
@@ -12,7 +12,7 @@ internal sealed class EnvironmentVariableScope : IDisposable
     /// 创建环境变量作用域。
     /// </summary>
     /// <param name="name">环境变量名称。</param>
-    /// <param name="value">临时值（null 表示清除）。</param>
+    /// <param name="value">临时值；为 <see langword="null"/> 时表示清除该环境变量。</param>
     public EnvironmentVariableScope(string name, string? value)
     {
         _name = name;
@@ -28,4 +28,3 @@ internal sealed class EnvironmentVariableScope : IDisposable
         Environment.SetEnvironmentVariable(_name, _originalValue);
     }
 }
-
