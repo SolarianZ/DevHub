@@ -9,6 +9,8 @@ namespace DevHub.Sdk.UnitTests.DependencyInjection;
 /// </summary>
 public sealed class ServiceCollectionExtensionsTests
 {
+    private const string ExpectedHubVersion = "test-hub-version";
+
     [Fact]
     public async Task M5_DN_UT_007_AddDevHubSdk_WithConfigureDelegate_ShouldCreateHttpAndEventsClients()
     {
@@ -85,7 +87,7 @@ public sealed class ServiceCollectionExtensionsTests
         var hubJson = JsonSerializer.Serialize(new
         {
             protocolVersion = 1,
-            hubVersion = "0.6.0",
+            hubVersion = ExpectedHubVersion,
             pid = 12345,
             httpBaseUrl = "http://127.0.0.1:47231",
             wsUrl = "ws://127.0.0.1:47231/ws",
