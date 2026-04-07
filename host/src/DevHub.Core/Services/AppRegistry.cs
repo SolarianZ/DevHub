@@ -114,7 +114,6 @@ public class AppRegistry : IDisposable
             RegisteredAtUtc = registeredAtUtc,
             LastSeenUtc = now,
             Invoke = invoke,
-            Endpoints = instance.Endpoints,
             Meta = instance.Meta
         };
 
@@ -126,7 +125,6 @@ public class AppRegistry : IDisposable
             existing.Pid = instance.Pid;
             existing.LastSeenUtc = now;
             existing.Invoke = invoke;
-            existing.Endpoints = instance.Endpoints;
             existing.Meta = instance.Meta;
 
             _logger.LogInformation("已更新应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",

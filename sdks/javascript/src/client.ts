@@ -51,6 +51,7 @@ import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 
 export interface JsonRpcTransport {
   send(method: string, params?: Record<string, unknown> | null): Promise<Record<string, unknown>>;
+  dispose?(): Promise<void> | void;
 }
 
 export type JsonRpcTransportFactory = (
@@ -70,6 +71,7 @@ export class DevHubClient {
   readonly connection: RuntimeConnectionInfo;
 
   private readonly transport: JsonRpcTransport;
+  private disposed = false;
 
   private constructor(
     options: NormalizedDevHubClientOptions,
@@ -156,7 +158,12 @@ export class DevHubClient {
   }
 
   async dispose(): Promise<void> {
-    return Promise.resolve();
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    await this.transport.dispose?.();
   }
 }
 

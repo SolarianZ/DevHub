@@ -180,6 +180,9 @@ public class HttpNotificationSpecTests : IDisposable
             }
             """);
         Assert.True(registerResponse.RootElement.GetProperty("result").GetProperty("ok").GetBoolean());
+        var registeredInstance = registerResponse.RootElement.GetProperty("result").GetProperty("instance");
+        Assert.False(registeredInstance.TryGetProperty("meta", out _));
+        Assert.False(registeredInstance.TryGetProperty("endpoints", out _));
 
         using var definitionResponse = await ExecuteJsonRequestAsync(
             harness,
@@ -223,6 +226,7 @@ public class HttpNotificationSpecTests : IDisposable
         var instance = Assert.Single(instances);
         Assert.Equal("http-null-omit-inst", instance.GetProperty("instanceId").GetString());
         Assert.False(instance.TryGetProperty("meta", out _));
+        Assert.False(instance.TryGetProperty("endpoints", out _));
     }
 
     /// <summary>
@@ -242,9 +246,11 @@ public class HttpNotificationSpecTests : IDisposable
         HostTransportTestHarness harness,
         string requestJson,
         string clientId,
-        string? contentType = "application/json")
+        string? contentType = "application/json",
+        int localPort = 0)
     {
         var httpContext = new DefaultHttpContext();
+        httpContext.Connection.LocalPort = localPort;
         httpContext.Request.Method = HttpMethods.Post;
         httpContext.Request.ContentType = contentType;
         httpContext.Request.Headers["Authorization"] = $"Bearer {harness.Token}";
@@ -258,7 +264,7 @@ public class HttpNotificationSpecTests : IDisposable
         httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
         httpContext.Response.Body = new MemoryStream();
 
-        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, currentPort: null, CancellationToken.None);
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
         await result.ExecuteAsync(httpContext);
 
         httpContext.Response.Body.Position = 0;

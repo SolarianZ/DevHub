@@ -19,6 +19,9 @@ class JsonRpcHttpTransport(ABC):
     def send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         """发送 JSON-RPC 请求并返回结果载荷。"""
 
+    def close(self) -> None:
+        """关闭传输并释放底层资源。"""
+
 
 class UrllibJsonRpcHttpTransport(JsonRpcHttpTransport):
     """基于 urllib 的默认 HTTP JSON-RPC 传输。"""

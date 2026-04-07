@@ -11,7 +11,7 @@ using DevHub.Host.Transport;
 public class TransportValidationImplTests
 {
     [Fact]
-    public void Impl_4_2_HttpHeaders_TokenProviderThrows_ShouldReturnUnauthorizedInvalidToken()
+    public void Impl_4_2_HttpHeaders_TokenProviderThrows_ShouldReturnInternalError()
     {
         var headers = BuildValidHeaders();
 
@@ -25,9 +25,8 @@ public class TransportValidationImplTests
             out _);
 
         Assert.False(ok);
-        AssertError(errorResponse, -32001, "unauthorized", "req-auth-provider-exception");
-        var data = JsonSerializer.SerializeToElement(errorResponse.Error!.Data);
-        Assert.Equal("invalid_token", data.GetProperty("reason").GetString());
+        AssertError(errorResponse, -32603, "internal_error", "req-auth-provider-exception");
+        Assert.Null(errorResponse.Error!.Data);
     }
 
     [Fact]
@@ -180,7 +179,7 @@ public class TransportValidationImplTests
     }
 
     [Fact]
-    public void Impl_4_3_WsAuthenticate_TokenProviderThrows_ShouldReturnUnauthorizedAndClose()
+    public void Impl_4_3_WsAuthenticate_TokenProviderThrows_ShouldReturnInternalErrorAndClose()
     {
         var request = CreateWsAuthenticateRequest(new
         {
@@ -201,7 +200,8 @@ public class TransportValidationImplTests
 
         Assert.False(authenticated);
         Assert.True(closeAfterResponse);
-        AssertError(response, -32001, "unauthorized", "ws-auth");
+        AssertError(response, -32603, "internal_error", "ws-auth");
+        Assert.Null(response.Error!.Data);
     }
 
     [Fact]

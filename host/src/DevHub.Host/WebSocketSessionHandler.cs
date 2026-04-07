@@ -49,10 +49,9 @@ public class WebSocketSessionHandler
     /// 处理 WS 入口请求。
     /// </summary>
     /// <param name="context">HTTP 上下文。</param>
-    /// <param name="currentPort">当前监听端口。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>处理任务。</returns>
-    public async Task HandleEndpointAsync(HttpContext context, int? currentPort, CancellationToken cancellationToken)
+    public async Task HandleEndpointAsync(HttpContext context, CancellationToken cancellationToken)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -60,6 +59,7 @@ public class WebSocketSessionHandler
             return;
         }
 
+        var currentPort = context.Connection.LocalPort;
         _runtimeArtifactManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
 
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
@@ -347,12 +347,13 @@ public class WebSocketSessionHandler
 
         var response = WebSocketAuthenticationProcessor.Authenticate(
             rpcRequest,
-                    _runtimeArtifactManager.GetToken,
+            _runtimeArtifactManager.GetToken,
             (clientId, sessionId) => _eventBus.TryMarkAuthenticated(connectionId, clientId, sessionId),
             out var authenticated,
             out var nextClientId,
             out var nextClientSessionId,
-            out var closeAfterResponse);
+            out var closeAfterResponse,
+            _logger);
 
         if (authenticated)
         {

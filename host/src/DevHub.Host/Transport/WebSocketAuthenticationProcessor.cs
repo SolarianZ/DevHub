@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Host.Transport;
 
@@ -18,7 +19,8 @@ internal static class WebSocketAuthenticationProcessor
         out bool authenticated,
         out string? clientId,
         out string? clientSessionId,
-        out bool closeAfterResponse)
+        out bool closeAfterResponse,
+        ILogger? logger = null)
     {
         authenticated = false;
         clientId = null;
@@ -91,10 +93,11 @@ internal static class WebSocketAuthenticationProcessor
                 return TransportResponseFactory.CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
             }
         }
-        catch
+        catch (Exception ex)
         {
             closeAfterResponse = true;
-            return TransportResponseFactory.CreateErrorResponse(-32001, "unauthorized", request.Id, new { reason = "invalid_token" });
+            logger?.LogError(ex, "读取当前访问令牌失败，返回 internal_error。RequestId: {RequestId}", request.Id);
+            return TransportResponseFactory.CreateErrorResponse(-32603, "internal_error", request.Id);
         }
 
         if (!markAuthenticated(parsedClientId, parsedClientSessionId))

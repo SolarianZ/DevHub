@@ -17,6 +17,60 @@ afterEach(async () => {
   }));
 });
 
+it("M6_TS_UT_001 dispose should forward to an injected transport and remain idempotent", async () => {
+  const connection = createConnectionInfo();
+  const transport = {
+    send: vi.fn(async () => ({
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z"
+    })),
+    dispose: vi.fn(async () => {})
+  };
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-dispose-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => transport
+    }
+  );
+
+  await client.dispose();
+  await client.dispose();
+
+  expect(transport.dispose).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_001 dispose should tolerate transports without a dispose hook", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-dispose-optional-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z"
+        })
+      })
+    }
+  );
+
+  await expect(client.dispose()).resolves.toBeUndefined();
+  await expect(client.dispose()).resolves.toBeUndefined();
+});
+
 it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {

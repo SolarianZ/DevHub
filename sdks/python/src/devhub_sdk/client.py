@@ -95,6 +95,7 @@ class DevHubClient:
         self._options.validate()
         self._connection_info = connection_info
         self._transport = transport
+        self._closed = False
 
     @classmethod
     def from_runtime(
@@ -211,6 +212,12 @@ class DevHubClient:
 
     def close(self) -> None:
         """关闭客户端。"""
+
+        if self._closed:
+            return
+
+        self._closed = True
+        self._transport.close()
 
     def __enter__(self) -> "DevHubClient":
         """上下文管理器入口。"""

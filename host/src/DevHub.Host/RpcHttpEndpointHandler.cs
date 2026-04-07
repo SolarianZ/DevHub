@@ -42,10 +42,9 @@ public class RpcHttpEndpointHandler
     /// 处理 /rpc POST 请求。
     /// </summary>
     /// <param name="request">HTTP 请求。</param>
-    /// <param name="currentPort">当前监听端口。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>处理结果。</returns>
-    public async Task<IResult> HandleAsync(HttpRequest request, int? currentPort, CancellationToken cancellationToken)
+    public async Task<IResult> HandleAsync(HttpRequest request, CancellationToken cancellationToken)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         string? clientId = null;
@@ -55,6 +54,7 @@ public class RpcHttpEndpointHandler
 
         try
         {
+            var currentPort = request.HttpContext.Connection.LocalPort;
             _runtimeArtifactManager.EnsureRuntimeArtifacts(currentPort > 0 ? currentPort : null);
 
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
@@ -122,7 +122,8 @@ public class RpcHttpEndpointHandler
                         rpcRequest.Id,
                         out var errorResponse,
                         out var validatedClientId,
-                        out var validatedClientSessionId))
+                        out var validatedClientSessionId,
+                        _logger))
                 {
                     _logger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
                         rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);

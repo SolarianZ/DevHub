@@ -141,16 +141,14 @@ public class Program
             app.UseAuthorization();
             app.UseWebSockets();
 
-            var currentPort = 0;
-
             app.Map("/ws", async (HttpContext context, WebSocketSessionHandler wsHandler, CancellationToken cancellationToken) =>
             {
-                await wsHandler.HandleEndpointAsync(context, currentPort > 0 ? currentPort : null, cancellationToken);
+                await wsHandler.HandleEndpointAsync(context, cancellationToken);
             });
 
             app.MapPost("/rpc", async (HttpRequest request, RpcHttpEndpointHandler rpcHandler, CancellationToken cancellationToken) =>
             {
-                return await rpcHandler.HandleAsync(request, currentPort > 0 ? currentPort : null, cancellationToken);
+                return await rpcHandler.HandleAsync(request, cancellationToken);
             });
 
             logger.LogDebug("启动服务器...");
@@ -158,10 +156,7 @@ public class Program
 
             app.Lifetime.ApplicationStarted.Register(() =>
             {
-                if (bootstrapper.TryPersistHubRuntime(app.Urls, out var parsedPort))
-                {
-                    currentPort = parsedPort;
-                }
+                _ = bootstrapper.TryPersistHubRuntime(app.Urls, out _);
             });
 
             app.Lifetime.ApplicationStopped.Register(bootstrapper.Cleanup);

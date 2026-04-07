@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Host.Transport;
 
@@ -40,7 +41,8 @@ internal static class HttpTransportRequestValidator
         object? requestId,
         out JsonRpcResponse errorResponse,
         out string? validatedClientId,
-        out string? validatedClientSessionId)
+        out string? validatedClientSessionId,
+        ILogger? logger = null)
     {
         validatedClientId = null;
         validatedClientSessionId = null;
@@ -76,13 +78,13 @@ internal static class HttpTransportRequestValidator
                 return false;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogError(ex, "读取当前访问令牌失败，返回 internal_error。RequestId: {RequestId}", requestId);
             errorResponse = TransportResponseFactory.CreateErrorResponse(
-                -32001,
-                "unauthorized",
-                requestId,
-                new { reason = "invalid_token" });
+                -32603,
+                "internal_error",
+                requestId);
             return false;
         }
 
