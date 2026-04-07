@@ -1,0 +1,26 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{cs,csx}]
+indent_size = 4
+
+[*.{csproj,props,targets,slnx,xml,xaml}]
+indent_size = 2
+
+[*.{json,yml,yaml,js,jsx,ts,tsx}]
+indent_size = 2
+
+[*.{py,toml,sh,ps1,psm1,bat,cmd}]
+indent_size = 4
+
+[*.{bat,cmd,ps1,psm1}]
+end_of_line = crlf

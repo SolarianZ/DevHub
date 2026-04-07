@@ -14,7 +14,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public sealed class HostBootstrapperTests : IDisposable
 {
-    private const string ExpectedHubVersion = "1.0.1-test";
+    private const string ExpectedHubVersion = "test-host-version";
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
     private readonly string _definitionsDirectory;

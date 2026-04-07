@@ -1,6 +1,6 @@
 {
   "name": "@devhub/sdk",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "DevHub 协议 JavaScript/TypeScript SDK",
   "private": true,
   "type": "module",

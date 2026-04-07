@@ -2,6 +2,12 @@
 
 DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现，覆盖运行时发现、HTTP JSON-RPC 与 WebSocket 事件订阅。
 
+## 接入导航
+
+- [`../../docs/guides/sdk/python.md`](../../docs/guides/sdk/python.md)：面向外部调用方的 `Python SDK` 接入指南。
+- [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
+
 ## 能力范围
 
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局（`<dataDir>/runtime/hub.json`）
@@ -11,10 +17,18 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 - 本地 JSON 校验：在发送前严格校验 `echo`、`meta`、`args`、`value`、`error.data`，拒绝 `NaN`、回调、循环引用等非法 JSON 结构
 - 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
 
-## 安装
+## 当前仓库内安装方式
+
+以下命令用于仓库内开发与测试，不代表正式发布后的安装入口：
 
 ```bash
 python3 -m pip install -e '.[test]'
+```
+
+正式 GitHub Release 资产尚未固定前，公开安装说明统一使用以下占位写法：
+
+```text
+TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
 ```
 
 ## 快速示例

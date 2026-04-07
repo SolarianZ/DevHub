@@ -1,6 +1,6 @@
 # DevHub Conformance 说明
 
-本目录承载 DevHub Hub v1.0.1 的跨语言符合性向量与运行器。
+本目录承载 DevHub Spec v1.0.1 协议基线的跨语言符合性向量与运行器。
 
 - 对仓库开发者，它是官方 `.NET` / `JS/TS` / `Python` 适配器的统一回归入口。
 - 对第三方接入方，它也是可公开挂接“自研 adapter”的官方自测入口。
@@ -26,9 +26,6 @@ host/tests/conformance/
 ├── vector_runner.py
 ├── vector_setup.py
 ├── raw_protocol_helper.py
-├── adapters/
-│   ├── devhub_conformance_js.mjs
-│   └── devhub_conformance_py.py
 └── v1.0.1/
     └── *.json
 ```
@@ -38,7 +35,10 @@ host/tests/conformance/
 - `v1.0.1/*.json`：签名向量文件
 - `vector_runner.py`：统一运行器
 - `raw_protocol_helper.py`：中立原始协议编排 helper
-- `adapters/`：仓库内官方适配器
+- 官方适配器实现位于各 SDK 工作区测试目录：
+- `.NET`：`sdks/dotnet/tests/DevHub.Sdk.ConformanceAdapter/`
+- `JS/TS`：`sdks/javascript/tests/conformance/devhub_conformance_js.mjs`
+- `Python`：`sdks/python/tests/conformance/devhub_conformance_py.py`
 
 ## 3. 官方回归模式
 

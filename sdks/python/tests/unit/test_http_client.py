@@ -50,6 +50,7 @@ class FakeHttpTransport:
 
     response: dict[str, Any]
     calls: list[dict[str, Any]] = field(default_factory=list)
+    close_calls: int = 0
 
     def send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         self.calls.append(
@@ -59,6 +60,9 @@ class FakeHttpTransport:
             }
         )
         return self.response
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 @dataclass(slots=True)
@@ -113,6 +117,54 @@ def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_us
     assert transport.calls[0]["params"] == {"echo": {"source": "fake"}}
     assert transport_factory.calls[0]["connection_info"].token == "token-fake"
     assert transport_factory.calls[0]["options"].client_id == "http-client"
+
+
+def test_M6_PY_UT_001_http_client_close_should_forward_to_transport_once() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(
+            runtime_resolver=resolver,
+            transport_factory=transport_factory,
+        ),
+    )
+
+    client.close()
+    client.close()
+
+    assert transport.close_calls == 1
+
+
+def test_M6_PY_UT_001_http_client_context_manager_should_close_transport_on_exit() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+
+    with DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(
+            runtime_resolver=resolver,
+            transport_factory=transport_factory,
+        ),
+    ) as client:
+        assert client.runtime.http_base_url == "http://127.0.0.1:57231"
+
+    assert transport.close_calls == 1
 
 
 def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:

@@ -2,6 +2,11 @@
 
 本文面向不准备直接使用仓库内 `.NET` / `JS/TS` / `Python` SDK 的第三方开发者，说明如何仅基于公开协议资料完成 DevHub Hub v1.x 的原始接入与自测。
 
+如果你只是需要先启动 Host 或对照官方 SDK 的最小上手路径，可先阅读：
+
+- [`getting-started/host-quickstart.md`](./getting-started/host-quickstart.md)
+- [`sdk/README.md`](./sdk/README.md)
+
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Spec.md`](../spec/Spec.md)。
@@ -161,7 +166,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 ## 7. Conformance 自测入口
 
-仓库内的 conformance 向量是面向 Hub v1.0.1 的最小公开符合性基线。你可以用它验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
+仓库内的 conformance 向量面向 Spec v1.0.1 协议基线。你可以用它验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
 
 使用说明见：
 

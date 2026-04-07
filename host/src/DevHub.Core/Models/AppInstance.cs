@@ -53,13 +53,6 @@ public class AppInstance
     public InvokeCapability Invoke { get; set; } = new();
 
     /// <summary>
-    /// 端点信息
-    /// </summary>
-    [JsonIgnore]
-    [JsonPropertyName("endpoints")]
-    public Dictionary<string, string>? Endpoints { get; set; }
-
-    /// <summary>
     /// 元数据
     /// </summary>
     [JsonPropertyName("meta")]

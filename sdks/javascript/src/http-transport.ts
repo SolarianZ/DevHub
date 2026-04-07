@@ -60,4 +60,7 @@ export class JsonRpcHttpTransport {
       }
     }
   }
+
+  async dispose(): Promise<void> {
+  }
 }

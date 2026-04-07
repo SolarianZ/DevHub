@@ -5,6 +5,8 @@ namespace DevHub.Sdk.UnitTests.PublicSeams;
 
 public sealed class PublicExtensionPointTests
 {
+    private const string ExpectedHubVersion = "test-hub-version";
+
     [Fact]
     public async Task M5_DN_UT_008_DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndTransportFactory_ShouldUsePublicSeams()
     {
@@ -77,7 +79,7 @@ public sealed class PublicExtensionPointTests
         var runtime = new HubRuntime
         {
             ProtocolVersion = 1,
-            HubVersion = "1.0.0",
+            HubVersion = ExpectedHubVersion,
             Pid = 12345,
             HttpBaseUrl = "http://127.0.0.1:57231",
             WsUrl = "ws://127.0.0.1:57231/ws",
