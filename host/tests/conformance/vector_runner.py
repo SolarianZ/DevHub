@@ -267,12 +267,12 @@ def build_official_adapter_targets(official_names: list[str]) -> list[AdapterTar
         if sdk_name == "python":
             command_prefix = (
                 sys.executable,
-                str(SCRIPT_DIR / "adapters" / "devhub_conformance_py.py"),
+                str(get_python_adapter_script_path()),
             )
         elif sdk_name == "typescript":
             command_prefix = (
                 "node",
-                str(SCRIPT_DIR / "adapters" / "devhub_conformance_js.mjs"),
+                str(get_typescript_adapter_script_path()),
             )
         elif sdk_name == "dotnet":
             command_prefix = (
@@ -374,7 +374,15 @@ def ensure_prerequisites(adapter_targets: list[AdapterTarget]) -> None:
                 "'dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release'。"
             )
 
+    if "python" in selected_official:
+        python_adapter = get_python_adapter_script_path()
+        if not python_adapter.is_file():
+            raise FileNotFoundError(f"未找到 Python conformance 适配器脚本：{python_adapter}")
+
     if "typescript" in selected_official:
+        typescript_adapter = get_typescript_adapter_script_path()
+        if not typescript_adapter.is_file():
+            raise FileNotFoundError(f"未找到 JS/TS conformance 适配器脚本：{typescript_adapter}")
         javascript_dist = REPO_ROOT / "sdks" / "javascript" / "dist" / "index.js"
         if not javascript_dist.is_file():
             raise FileNotFoundError(
@@ -1085,6 +1093,14 @@ def get_dotnet_adapter_dll_path() -> Path:
         / "net10.0"
         / "DevHub.Sdk.ConformanceAdapter.dll"
     )
+
+
+def get_python_adapter_script_path() -> Path:
+    return REPO_ROOT / "sdks" / "python" / "tests" / "conformance" / "devhub_conformance_py.py"
+
+
+def get_typescript_adapter_script_path() -> Path:
+    return REPO_ROOT / "sdks" / "javascript" / "tests" / "conformance" / "devhub_conformance_js.mjs"
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ import requests
 import websockets
 
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PYTHON_SDK_ROOT = REPO_ROOT / "sdks" / "python" / "src"
+SDK_ROOT = Path(__file__).resolve().parents[2]
+PYTHON_SDK_ROOT = SDK_ROOT / "src"
 if str(PYTHON_SDK_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_SDK_ROOT))
 

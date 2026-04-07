@@ -28,7 +28,7 @@ DevHub/
 │       │   └── DevHub.Host.Tests/            # Host 级白盒测试
 │       ├── README.md                         # 测试分层与执行说明
 │       ├── blackbox/                         # Python 黑盒测试与 runner
-│       ├── conformance/                      # 符合性向量、adapter、runner 与自测
+│       ├── conformance/                      # 符合性向量、runner 与自测
 │       └── tools/                            # 覆盖率配置与辅助脚本
 ├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
 │   ├── dotnet/                               # .NET SDK 工作区

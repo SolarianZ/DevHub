@@ -7,7 +7,7 @@ import {
   DevHubEventsClient,
   DevHubRpcError,
   discoverRuntime
-} from "../../../../sdks/javascript/dist/index.js";
+} from "../../dist/index.js";
 
 const WebSocketCtor = globalThis.WebSocket;
 
