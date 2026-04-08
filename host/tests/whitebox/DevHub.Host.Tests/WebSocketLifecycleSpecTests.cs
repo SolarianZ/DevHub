@@ -511,6 +511,54 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.1")]
+    public async Task Spec_3_1_AfterAuthenticate_MessageTooLarge_ShouldReturnInvalidRequestAndClose()
+    {
+        var context = CreateHostContext();
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-message-too-large",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-message-too-large-client",
+                clientSessionId = "55555555-5555-5555-5555-555555555555"
+            }
+        });
+
+        var oversizedRequest = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ws-message-too-large",
+            method = "hub.ping",
+            @params = new
+            {
+                echo = new string('x', 1024 * 1024)
+            }
+        });
+
+        var socket = new ScriptedWebSocket([auth, oversizedRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var authResponse = FindResponseById(responses, "auth-message-too-large");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var oversizeResponse = Assert.Single(responses, message =>
+            message.TryGetProperty("error", out var error)
+            && error.GetProperty("code").GetInt32() == -32600
+            && message.TryGetProperty("id", out var id)
+            && id.ValueKind == JsonValueKind.Null);
+        Assert.Equal("invalid_request", oversizeResponse.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+        Assert.Equal("message_too_large", socket.CloseStatusDescription);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.1")]
     public async Task Spec_6_1_AfterAuthenticate_HubMethodParamsArrayOverWs_ShouldReturnInvalidParams()
     {

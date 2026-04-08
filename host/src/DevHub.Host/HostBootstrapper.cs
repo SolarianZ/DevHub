@@ -70,8 +70,9 @@ public class HostBootstrapper
     public bool TryPersistHubRuntime(IEnumerable<string> addresses, out int port)
     {
         port = 0;
+        var addressList = addresses.ToArray();
 
-        foreach (var address in addresses)
+        foreach (var address in addressList)
         {
             if (!TryParseLoopbackPort(address, out var parsedPort))
             {
@@ -88,6 +89,9 @@ public class HostBootstrapper
             return true;
         }
 
+        _logger.LogWarning(
+            "未找到可用于持久化 hub.json 的回环 HTTP 地址。Addresses: {Addresses}",
+            string.Join(", ", addressList));
         return false;
     }
 

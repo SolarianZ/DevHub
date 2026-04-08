@@ -48,7 +48,7 @@ public class HubEventNotificationFactoryTests
     }
 
     [Fact]
-    public void Impl_HubEventNotification_WhenPayloadIsNull_ShouldOmitPayloadField()
+    public void Impl_HubEventNotification_WhenPayloadIsNull_ShouldWritePayloadAsNull()
     {
         var delivery = new HubEventDelivery
         {
@@ -63,8 +63,8 @@ public class HubEventNotificationFactoryTests
         var json = JsonSerializer.SerializeToElement(notification);
 
         var parameters = json.GetProperty("params");
-        Assert.False(parameters.TryGetProperty("payload", out _));
+        Assert.True(parameters.TryGetProperty("payload", out var payload));
+        Assert.Equal(JsonValueKind.Null, payload.ValueKind);
     }
 }
-
 

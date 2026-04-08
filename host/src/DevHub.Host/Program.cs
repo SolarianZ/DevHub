@@ -156,7 +156,10 @@ public class Program
 
             app.Lifetime.ApplicationStarted.Register(() =>
             {
-                _ = bootstrapper.TryPersistHubRuntime(app.Urls, out _);
+                PersistHubRuntimeOrStop(
+                    () => bootstrapper.TryPersistHubRuntime(app.Urls, out _),
+                    app.Lifetime.StopApplication,
+                    logger);
             });
 
             app.Lifetime.ApplicationStopped.Register(bootstrapper.Cleanup);
@@ -209,5 +212,33 @@ public class Program
                 [SerilogFileSinkPathKey] = Path.Combine(logsPath, "devhub-.log")
             })
             .Build();
+    }
+
+    /// <summary>
+    /// 在应用启动后持久化运行时发现文件；失败时主动停止应用，避免进入不可发现状态。
+    /// </summary>
+    /// <param name="tryPersistHubRuntime">执行运行时发现文件持久化的委托。</param>
+    /// <param name="stopApplication">停止应用的回调。</param>
+    /// <param name="logger">日志记录器。</param>
+    internal static void PersistHubRuntimeOrStop(
+        Func<bool> tryPersistHubRuntime,
+        Action stopApplication,
+        Microsoft.Extensions.Logging.ILogger logger)
+    {
+        try
+        {
+            if (tryPersistHubRuntime())
+            {
+                return;
+            }
+
+            logger.LogCritical("Hub 运行时发现文件持久化失败，Host 将停止运行以避免客户端发现错误。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Hub 运行时发现文件持久化失败，Host 将停止运行以避免客户端发现错误。");
+        }
+
+        stopApplication();
     }
 }

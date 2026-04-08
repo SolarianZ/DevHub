@@ -13,6 +13,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     private readonly TimeSpan _closeFrameDelay;
     private readonly object _framesLock = new();
     private readonly object _sentTextsLock = new();
+    private SocketFrame? _activeFrame;
     private WebSocketState _state;
     private WebSocketCloseStatus? _closeStatus;
     private string? _closeStatusDescription;
@@ -135,10 +136,22 @@ internal sealed class ScriptedWebSocket : WebSocket
 
         while (true)
         {
+            if (_activeFrame is not null)
+            {
+                frame = _activeFrame;
+                break;
+            }
+
             await _frameSignal.WaitAsync(cancellationToken);
 
             lock (_framesLock)
             {
+                if (_activeFrame is not null)
+                {
+                    frame = _activeFrame;
+                    break;
+                }
+
                 if (_frames.Count == 0)
                 {
                     if (_state != WebSocketState.Open)
@@ -150,12 +163,14 @@ internal sealed class ScriptedWebSocket : WebSocket
                 }
 
                 frame = _frames.Dequeue();
+                _activeFrame = frame;
                 break;
             }
         }
 
         if (frame.MessageType == WebSocketMessageType.Close)
         {
+            _activeFrame = null;
             if (_closeFrameDelay > TimeSpan.Zero)
             {
                 await Task.Delay(_closeFrameDelay, cancellationToken);
@@ -170,8 +185,18 @@ internal sealed class ScriptedWebSocket : WebSocket
             throw new InvalidOperationException("WebSocket 接收缓冲区不能为空。");
         }
 
-        frame.Payload.CopyTo(buffer.Array, buffer.Offset);
-        return new WebSocketReceiveResult(frame.Payload.Length, frame.MessageType, true);
+        var remainingCount = frame.Payload.Length - frame.Offset;
+        var bytesToCopy = Math.Min(remainingCount, buffer.Count);
+        Buffer.BlockCopy(frame.Payload, frame.Offset, buffer.Array, buffer.Offset, bytesToCopy);
+        frame.Offset += bytesToCopy;
+
+        var endOfMessage = frame.Offset >= frame.Payload.Length;
+        if (endOfMessage)
+        {
+            _activeFrame = null;
+        }
+
+        return new WebSocketReceiveResult(bytesToCopy, frame.MessageType, endOfMessage);
     }
 
     /// <inheritdoc />
@@ -210,8 +235,20 @@ internal sealed class ScriptedWebSocket : WebSocket
         _frameSignal.Release();
     }
 
-    private sealed record SocketFrame(WebSocketMessageType MessageType, byte[] Payload)
+    private sealed class SocketFrame
     {
+        public SocketFrame(WebSocketMessageType messageType, byte[] payload)
+        {
+            MessageType = messageType;
+            Payload = payload;
+        }
+
+        public WebSocketMessageType MessageType { get; }
+
+        public byte[] Payload { get; }
+
+        public int Offset { get; set; }
+
         public static SocketFrame Text(string text)
         {
             return new SocketFrame(WebSocketMessageType.Text, Encoding.UTF8.GetBytes(text));
