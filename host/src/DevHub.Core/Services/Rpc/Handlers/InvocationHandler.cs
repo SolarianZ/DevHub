@@ -328,26 +328,6 @@ public class InvocationHandler : IRpcHandler
                 RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" }));
         }
 
-        if (_runtimeTuningOptions.PendingInvocationsLimit > 0)
-        {
-            var activeInvocationCount = _store.GetActiveInvocationCount();
-            if (activeInvocationCount >= _runtimeTuningOptions.PendingInvocationsLimit)
-            {
-                return new InvocationBuildResult(
-                    null,
-                    RpcErrorFactory.Create(
-                        request.Id,
-                        -32040,
-                        "rate_limited",
-                        new
-                        {
-                            reason = "pending_invocations_limit_exceeded",
-                            limit = _runtimeTuningOptions.PendingInvocationsLimit,
-                            active = activeInvocationCount
-                        }));
-            }
-        }
-
         var candidates = _routingService.GetOnlineCandidates(appId, target);
         LogRouteDecision(request.Method, appId, target, candidates.Count);
         if (candidates.Count == 0)
@@ -429,7 +409,32 @@ public class InvocationHandler : IRpcHandler
             waiterTask = _requestWaiter.Register(invocation.InvocationId);
         }
 
-        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
+        var created = _store.TryCreateInvocation(
+            invocation,
+            hasOnlineCandidates: candidates.Count > 0,
+            _runtimeTuningOptions.PendingInvocationsLimit,
+            out var activeInvocationCount);
+        if (!created)
+        {
+            if (waiterTask is not null)
+            {
+                _requestWaiter.Cleanup(invocation.InvocationId);
+            }
+
+            return new InvocationBuildResult(
+                null,
+                RpcErrorFactory.Create(
+                    request.Id,
+                    -32040,
+                    "rate_limited",
+                    new
+                    {
+                        reason = "pending_invocations_limit_exceeded",
+                        limit = _runtimeTuningOptions.PendingInvocationsLimit,
+                        active = activeInvocationCount
+                    }));
+        }
+
         PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
         return new InvocationBuildResult(invocation, null, waiterTask);
     }

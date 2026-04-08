@@ -41,9 +41,38 @@ public class InvocationStore
     {
         lock (_syncRoot)
         {
-            invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
-            _all[invocation.InvocationId] = invocation;
-            return invocation;
+            return CreateInvocationCore(invocation, hasOnlineCandidates);
+        }
+    }
+
+    /// <summary>
+    /// 在挂起 invocation 上限约束下，原子地创建并存储调用。
+    /// </summary>
+    /// <param name="invocation">调用对象。</param>
+    /// <param name="hasOnlineCandidates">是否存在在线候选。</param>
+    /// <param name="pendingInvocationsLimit">挂起 invocation 总量上限；0 表示不启用。</param>
+    /// <param name="activeInvocationCount">
+    /// 当前活动 invocation 数量。
+    /// 创建成功时返回创建后的数量；创建失败时返回拒绝时的数量。
+    /// </param>
+    /// <returns>创建成功返回 <see langword="true"/>；若因超过上限被拒绝则返回 <see langword="false"/>。</returns>
+    public bool TryCreateInvocation(
+        InvocationModel invocation,
+        bool hasOnlineCandidates,
+        int pendingInvocationsLimit,
+        out int activeInvocationCount)
+    {
+        lock (_syncRoot)
+        {
+            activeInvocationCount = CountActiveInvocationsUnsafe();
+            if (pendingInvocationsLimit > 0 && activeInvocationCount >= pendingInvocationsLimit)
+            {
+                return false;
+            }
+
+            _ = CreateInvocationCore(invocation, hasOnlineCandidates);
+            activeInvocationCount += 1;
+            return true;
         }
     }
 
@@ -64,7 +93,7 @@ public class InvocationStore
     {
         lock (_syncRoot)
         {
-            return _all.Values.Count(static invocation => invocation.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered);
+            return CountActiveInvocationsUnsafe();
         }
     }
 
@@ -382,6 +411,18 @@ public class InvocationStore
         {
             _logger.LogDebug("已清理终态 Invocation，Count: {Count}, RetentionMinutes: {RetentionMinutes}", toRemove.Count, TerminalInvocationRetention.TotalMinutes);
         }
+    }
+
+    private InvocationModel CreateInvocationCore(InvocationModel invocation, bool hasOnlineCandidates)
+    {
+        invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
+        _all[invocation.InvocationId] = invocation;
+        return invocation;
+    }
+
+    private int CountActiveInvocationsUnsafe()
+    {
+        return _all.Values.Count(static invocation => invocation.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered);
     }
 }
 

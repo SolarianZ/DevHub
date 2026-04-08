@@ -457,6 +457,61 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Notify_WhenPendingInvocationLimitReachedConcurrently_ShouldAllowOnlySingleInvocation()
+    {
+        const string firstAppId = "invocation-rate-limited-concurrent-a";
+        const string secondAppId = "invocation-rate-limited-concurrent-b";
+        WriteDefinition(firstAppId, rpcEnabled: true, includeLaunch: true);
+        WriteDefinition(secondAppId, rpcEnabled: true, includeLaunch: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
+        using var processLauncher = new BlockingProcessLauncher(expectedStarts: 2);
+        var context = CreateHandlerContext(
+            appRegistry,
+            runtimeTuningOptions: runtimeTuningOptions,
+            processLauncher: processLauncher);
+
+        Task<JsonRpcResponse> SendAsync(string requestId, string appId, string methodName) => Task.Run(() =>
+            context.Handler.HandleAsync(new JsonRpcRequest
+            {
+                Id = requestId,
+                Method = HubRpcMethods.HubInvokeNotify,
+                Params = JsonSerializer.SerializeToElement(new
+                {
+                    appId,
+                    target = new { scope = (string?)null, instanceId = (string?)null },
+                    method = methodName,
+                    options = new
+                    {
+                        ttlMs = 60000,
+                        queueIfOffline = true,
+                        autoLaunch = true
+                    }
+                })
+            }, CancellationToken.None));
+
+        var firstTask = SendAsync("notify-rate-limit-concurrent-first", firstAppId, "task.queue.concurrent.first");
+        var secondTask = SendAsync("notify-rate-limit-concurrent-second", secondAppId, "task.queue.concurrent.second");
+
+        Assert.True(processLauncher.WaitUntilBlocked(TimeSpan.FromSeconds(5)));
+        processLauncher.Release();
+
+        var responses = await Task.WhenAll(firstTask, secondTask);
+
+        Assert.Single(responses, static response => response.Error is null);
+
+        var rateLimited = Assert.Single(responses, static response => response.Error?.Code == -32040);
+        Assert.Equal("rate_limited", rateLimited.Error!.Message);
+
+        var errorData = JsonSerializer.SerializeToElement(rateLimited.Error.Data);
+        Assert.Equal("pending_invocations_limit_exceeded", errorData.GetProperty("reason").GetString());
+        Assert.Equal(1, errorData.GetProperty("limit").GetInt32());
+        Assert.Equal(1, errorData.GetProperty("active").GetInt32());
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+    }
+
+    [Fact]
     public async Task Impl_HandleAsync_WhenMethodUnknown_ShouldReturnMethodNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -613,10 +668,21 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     private InvocationHandler CreateHandler(
         AppRegistry appRegistry,
         IClock? clock = null,
-        RuntimeTuningOptions? runtimeTuningOptions = null)
+        RuntimeTuningOptions? runtimeTuningOptions = null,
+        IProcessLauncher? processLauncher = null)
+    {
+        return CreateHandlerContext(appRegistry, clock, runtimeTuningOptions, processLauncher).Handler;
+    }
+
+    private InvocationHandlerTestContext CreateHandlerContext(
+        AppRegistry appRegistry,
+        IClock? clock = null,
+        RuntimeTuningOptions? runtimeTuningOptions = null,
+        IProcessLauncher? processLauncher = null)
     {
         var effectiveClock = clock ?? new SystemClock();
         var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
+        var effectiveProcessLauncher = processLauncher ?? new ProcessLauncher();
 
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -630,36 +696,49 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             definitionProvider,
             appRegistry,
             runtimeHttpBaseUrlProvider,
-            new ProcessLauncher(),
+            effectiveProcessLauncher,
             effectiveClock,
             effectiveRuntimeTuningOptions,
             Mock.Of<ILogger<LaunchCoordinator>>());
 
-        return new InvocationHandler(
-            appRegistry,
-            definitionProvider,
-            routingService,
-            store,
-            waiter,
-            launchCoordinator,
-            effectiveClock,
-            Mock.Of<ILogger<InvocationHandler>>(),
-            effectiveRuntimeTuningOptions);
+        return new InvocationHandlerTestContext
+        {
+            Handler = new InvocationHandler(
+                appRegistry,
+                definitionProvider,
+                routingService,
+                store,
+                waiter,
+                launchCoordinator,
+                effectiveClock,
+                Mock.Of<ILogger<InvocationHandler>>(),
+                effectiveRuntimeTuningOptions),
+            Store = store
+        };
     }
 
-    private void WriteDefinition(string appId, bool rpcEnabled)
+    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
         var path = Path.Combine(_definitionsDirectory, $"{appId}.json");
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            appId,
-            displayName = appId,
-            capabilities = new
+            ["appId"] = appId,
+            ["displayName"] = appId,
+            ["capabilities"] = new
             {
                 rpc = rpcEnabled,
                 events = false
             }
         };
+
+        if (includeLaunch)
+        {
+            payload["launch"] = new
+            {
+                exePath = "dotnet",
+                argsTemplate = "--version"
+            };
+        }
 
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
@@ -690,6 +769,48 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 var current = Interlocked.Increment(ref _readCount);
                 return _start.AddTicks(_delta.Ticks * current);
             }
+        }
+    }
+
+    private sealed class InvocationHandlerTestContext
+    {
+        public required InvocationHandler Handler { get; init; }
+
+        public required InvocationStore Store { get; init; }
+    }
+
+    private sealed class BlockingProcessLauncher : IProcessLauncher, IDisposable
+    {
+        private readonly CountdownEvent _started;
+        private readonly ManualResetEventSlim _release = new(false);
+
+        public BlockingProcessLauncher(int expectedStarts)
+        {
+            _started = new CountdownEvent(expectedStarts);
+        }
+
+        public Process? Start(DevHub.Core.Models.LaunchConfiguration launchConfig, string? arguments)
+        {
+            _started.Signal();
+            _release.Wait();
+            return Process.GetCurrentProcess();
+        }
+
+        public bool WaitUntilBlocked(TimeSpan timeout)
+        {
+            return _started.Wait(timeout);
+        }
+
+        public void Release()
+        {
+            _release.Set();
+        }
+
+        public void Dispose()
+        {
+            _release.Set();
+            _release.Dispose();
+            _started.Dispose();
         }
     }
 }
