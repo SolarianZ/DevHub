@@ -7,7 +7,6 @@
     <PackageId>DevHub.Sdk</PackageId>
     <Description>DevHub 协议的 .NET SDK，提供 runtime discovery、HTTP JSON-RPC 与 WebSocket events 客户端。</Description>
     <Authors>DevHub Contributors</Authors>
-    <VersionPrefix>0.6.0</VersionPrefix>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/SolarianZ/DevHub</PackageProjectUrl>

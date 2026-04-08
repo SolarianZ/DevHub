@@ -21,7 +21,14 @@
 3. 修改完成后，执行与 GitHub CI 一致的最小相关验证。
 4. 提交前同步更新 README、导航文档和必要的维护说明。
 
-### 2.2 发布准备与本地打包
+### 2.2 版本维护约定
+
+- 仓库发布版本统一以 `eng/Version.props` 为唯一来源。
+- Host 与 `.NET SDK` 通过 MSBuild 导入该文件消费版本属性。
+- `JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与该文件保持同步。
+- 修改版本号后，先运行同步脚本，再执行发布 dry-run 或相关 CI 验证。
+
+### 2.3 发布准备与本地打包
 
 本地发布准备统一通过仓库级脚本完成：
 

@@ -1,4 +1,6 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)../eng/Version.props" />
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -6,9 +8,9 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'DevHub.Core' Or '$(MSBuildProjectName)' == 'DevHub.Host'">
-    <Version>0.6.0</Version>
-    <AssemblyVersion>0.6.0.0</AssemblyVersion>
-    <FileVersion>0.6.0.0</FileVersion>
-    <InformationalVersion>0.6.0</InformationalVersion>
+    <Version>$(DevHubVersion)</Version>
+    <AssemblyVersion>$(DevHubAssemblyVersion)</AssemblyVersion>
+    <FileVersion>$(DevHubFileVersion)</FileVersion>
+    <InformationalVersion>$(DevHubInformationalVersion)</InformationalVersion>
   </PropertyGroup>
 </Project>

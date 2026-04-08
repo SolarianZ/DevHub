@@ -15,6 +15,7 @@
 - 修改代码后，按 GitHub CI 相关范围执行本地验证；至少覆盖受影响的构建、测试和必要的 smoke 或打包自检。
 - 文档导航、README 和维护说明应与仓库当前状态保持一致。
 - 当前阶段的发布准备相关改动，优先通过 `python scripts/release/package_release.py --release-id local-dry-run --channel local` 进行本地闭环验证。
+- 仓库发布版本统一以 `eng/Version.props` 为源；调整版本号后，同步执行 `python3 scripts/release/sync_versions.py` 更新 JS / Python 包元数据。
 
 ## Pull Request 建议
 

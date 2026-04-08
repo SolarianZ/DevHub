@@ -12,7 +12,13 @@
 
 ### 1.2 代码与验证
 
-执行统一打包入口：
+若本次改动包含版本号调整，先执行：
+
+```bash
+python3 scripts/release/sync_versions.py
+```
+
+确认 `eng/Version.props`、`sdks/javascript/package.json`、`sdks/javascript/package-lock.json` 与 `sdks/python/pyproject.toml` 已同步后，再执行统一打包入口：
 
 ```bash
 python scripts/release/package_release.py --release-id local-dry-run --channel local
