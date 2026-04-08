@@ -93,7 +93,7 @@ it("M5_TS_UT_001 discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir"
   expect(result.token).toBe("token-env");
 });
 
-it("M5_TS_UT_002 discoverRuntime 只应读取 <dataDir>/runtime/hub.json", async () => {
+it("M5_TS_UT_002 discoverRuntime 应拒绝 dataDir 根目录直放 hub.json/token.txt 的旧布局", async () => {
   const dataDir = await createTempRoot("devhub-js-sdk-runtime-legacy-root-unit-");
   const tokenFile = path.join(dataDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-legacy", "utf-8");
@@ -111,12 +111,19 @@ it("M5_TS_UT_002 discoverRuntime 只应读取 <dataDir>/runtime/hub.json", async
     }
   });
 
-  await expect(discoverRuntime(dataDir)).rejects.toThrow(`未找到 hub.json：${path.join(dataDir, "runtime", "hub.json")}`);
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
+});
+
+it("M5_TS_UT_002 discoverRuntime 应拒绝仅在 dataDir 根目录直放 token.txt 的旧布局", async () => {
+  const dataDir = await createTempRoot("devhub-js-sdk-runtime-legacy-token-root-unit-");
+  await fsPromises.writeFile(path.join(dataDir, "token.txt"), "token-legacy", "utf-8");
+
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
 });
 
 it("M5_TS_UT_002 discoverRuntime 应拒绝直接传入 runtime 子目录", async () => {
   const { runtimeDir } = await createPopulatedDataDirectory();
-  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/不能直接传入 runtime 目录/);
+  await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
 });
 
 it("M5_TS_UT_002 discoverRuntime 应拒绝非法 runtimeTuning", async () => {

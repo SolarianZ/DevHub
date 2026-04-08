@@ -36,6 +36,32 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
+    public async Task M6_DN_UT_001_DevHubClient_AfterDispose_ShouldRejectRpcWithoutInvokingTransport()
+    {
+        var connectionInfo = CreateConnectionInfo();
+        var transportFactory = new RecordingHttpTransportFactory();
+
+        var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "public-http-client",
+                DataDir = @"D:\sdk-test\data"
+            },
+            new DevHubClientDependencies
+            {
+                RuntimeResolver = new RecordingRuntimeResolver(connectionInfo),
+                TransportFactory = transportFactory
+            });
+
+        await client.DisposeAsync();
+        await client.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.PingAsync());
+        Assert.Empty(transportFactory.Transport.Methods);
+        Assert.Equal(1, transportFactory.Transport.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task M5_DN_UT_008_DevHubEventsClient_FromRuntime_WithInjectedRuntimeResolverAndSessionFactory_ShouldUsePublicSeams()
     {
         var connectionInfo = CreateConnectionInfo();
@@ -134,6 +160,8 @@ public sealed class PublicExtensionPointTests
     {
         public List<string> Methods { get; } = [];
 
+        public int DisposeCallCount { get; private set; }
+
         public Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
         {
             Methods.Add(method);
@@ -153,6 +181,7 @@ public sealed class PublicExtensionPointTests
 
         public ValueTask DisposeAsync()
         {
+            DisposeCallCount++;
             return ValueTask.CompletedTask;
         }
     }

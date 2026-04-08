@@ -215,6 +215,31 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Contains("result", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("\"bad_data\"")]
+    [InlineData("null")]
+    [InlineData("[1,2,3]")]
+    public async Task M5_DN_UT_004_HttpTransport_WhenErrorDataIsNotObject_ShouldThrowInvalidOperationException(string errorDataLiteral)
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                $"{{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"error\":{{\"code\":-32001,\"message\":\"unauthorized\",\"data\":{errorDataLiteral}}}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-ping");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("error.data", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
     {
@@ -481,4 +506,3 @@ public sealed class HttpTransportTests : IDisposable
 
     private sealed record CapturedRequest(string RequestUri, string Authorization, string Protocol, string ClientId, string ClientSessionId, string Body);
 }
-

@@ -230,6 +230,11 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         JsonElement? data = null;
         if (errorElement.TryGetProperty("data", out var dataElement))
         {
+            if (dataElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("JSON-RPC error.data 非法。");
+            }
+
             data = dataElement.Clone();
         }
 

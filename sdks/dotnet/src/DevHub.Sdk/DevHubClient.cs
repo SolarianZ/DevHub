@@ -10,6 +10,7 @@ namespace DevHub.Sdk;
 public sealed class DevHubClient : IAsyncDisposable
 {
     private readonly IDevHubHttpTransport _transport;
+    private bool _disposed;
 
     private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, IDevHubHttpTransport transport)
     {
@@ -85,6 +86,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>Ping 结果。</returns>
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
         var result = await _transport.SendAsync("hub.ping", parameters, cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
@@ -100,6 +102,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>应用定义列表。</returns>
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
         var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JsonValueKind.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
@@ -124,6 +127,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
         ResponsePayloadReader.ValidateAppDefinitionElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JsonValueKind.Object),
@@ -145,6 +149,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>注册后的实例。</returns>
     public async Task<AppInstance> RegisterInstanceAsync(AppInstanceRegistration instance, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
@@ -168,6 +173,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>服务端返回的最后在线时间。</returns>
     public async Task<DateTimeOffset> HeartbeatAsync(string instanceId, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.heartbeat", RequestPayloadFactory.BuildHeartbeatParams(instanceId), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
@@ -182,6 +188,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task UnregisterInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.unregisterInstance", RequestPayloadFactory.BuildUnregisterParams(instanceId), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
@@ -195,6 +202,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>实例列表。</returns>
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
         var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JsonValueKind.Array);
         var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
@@ -219,6 +227,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>启动结果。</returns>
     public async Task<LaunchResult> LaunchAsync(LaunchRequest request, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.launch.result");
@@ -242,6 +251,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>通知结果。</returns>
     public async Task<NotifyResult> NotifyAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.notify.result");
@@ -257,6 +267,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>请求结果。</returns>
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
         ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.request.result", "value");
         var payload = ResponsePayloadReader.DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
@@ -273,6 +284,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>轮询结果。</returns>
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
         var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
 
@@ -297,15 +309,27 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task RespondAsync(RespondRequest request, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return _transport.DisposeAsync();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        await _transport.DisposeAsync();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
     private sealed class TestHttpTransportFactory : IDevHubHttpTransportFactory
