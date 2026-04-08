@@ -28,19 +28,19 @@ DevHub 和 MCP 的**表层相似性**确实存在：两者都以 JSON-RPC 2.0 �
 - 权威规范：[Spec.md](../spec/Spec.md)
 - 架构规划：[DevHub协议与开发规划.md](./DevHub协议与开发规划.md)
 - Host 入口与传输层：
-  - [Program.cs](../host/src/DevHub.Host/Program.cs)
-  - [RpcHttpEndpointHandler.cs](../host/src/DevHub.Host/RpcHttpEndpointHandler.cs)
-  - [WebSocketSessionHandler.cs](../host/src/DevHub.Host/WebSocketSessionHandler.cs)
-  - [DevHubTransportValidator.cs](../host/src/DevHub.Host/Transport/DevHubTransportValidator.cs)
+  - [Program.cs](../../host/src/DevHub.Host/Program.cs)
+  - [RpcHttpEndpointHandler.cs](../../host/src/DevHub.Host/RpcHttpEndpointHandler.cs)
+  - [WebSocketSessionHandler.cs](../../host/src/DevHub.Host/WebSocketSessionHandler.cs)
+  - [DevHubTransportValidator.cs](../../host/src/DevHub.Host/Transport/DevHubTransportValidator.cs)
 - Core 调用编排：
-  - [InvocationHandler.cs](../host/src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs)
-  - [LaunchCoordinator.cs](../host/src/DevHub.Core/Services/Invocation/LaunchCoordinator.cs)
-  - [AppRegistry.cs](../host/src/DevHub.Core/Services/AppRegistry.cs)
+  - [InvocationHandler.cs](../../host/src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs)
+  - [LaunchCoordinator.cs](../../host/src/DevHub.Core/Services/Invocation/LaunchCoordinator.cs)
+  - [AppRegistry.cs](../../host/src/DevHub.Core/Services/AppRegistry.cs)
 - SDK/测试耦合点：
-  - [.NET RuntimeDiscovery](../sdks/dotnet/src/DevHub.Sdk/Internal/RuntimeDiscovery.cs)
-  - [.NET JsonRpcHttpTransport](../sdks/dotnet/src/DevHub.Sdk/Internal/JsonRpcHttpTransport.cs)
-  - [Python HTTP transport](../sdks/python/src/devhub_sdk/_http_transport.py)
-  - [JavaScript HTTP transport](../sdks/javascript/src/http-transport.ts)
+  - [.NET RuntimeDiscovery](../../sdks/dotnet/src/DevHub.Sdk/Internal/RuntimeDiscovery.cs)
+  - [.NET JsonRpcHttpTransport](../../sdks/dotnet/src/DevHub.Sdk/Internal/JsonRpcHttpTransport.cs)
+  - [Python HTTP transport](../../sdks/python/src/devhub_sdk/_http_transport.py)
+  - [JavaScript HTTP transport](../../sdks/javascript/src/http-transport.ts)
   - `host/tests/` 下的鉴权、发现、调用与 WS 相关集成测试
 
 ### 2.2 MCP 侧依据

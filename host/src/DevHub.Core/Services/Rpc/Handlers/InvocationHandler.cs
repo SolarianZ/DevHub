@@ -33,6 +33,11 @@ public class InvocationHandler : IRpcHandler
         Expired
     }
 
+    private readonly record struct RequestWaitBudget(
+        int TtlRemainingMs,
+        int WaitRemainingMs,
+        RequestTimeoutResolution TimeoutResolution);
+
     private readonly AppRegistry _appRegistry;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationRoutingService _routingService;
@@ -145,13 +150,25 @@ public class InvocationHandler : IRpcHandler
         var invocation = enqueueResult.Invocation!;
         var waiterTask = enqueueResult.WaiterTask!;
 
-        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
-        var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
-        var waitRemaining = Math.Max(1, waitTimeoutMs);
-        var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
-        var timeoutResolution = waitTimeoutMs < invocation.Options.TtlMs
-            ? RequestTimeoutResolution.Timeout
-            : RequestTimeoutResolution.Expired;
+        var waitBudget = BuildRequestWaitBudget(invocation);
+        var timeoutWindowMs = Math.Min(waitBudget.TtlRemainingMs, waitBudget.WaitRemainingMs);
+        if (timeoutWindowMs <= 0)
+        {
+            if (waiterTask.IsCompleted)
+            {
+                var completion = await waiterTask;
+                return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+            }
+
+            return await HandleRequestTimeoutAsync(
+                request,
+                invocation,
+                waiterTask,
+                Task.CompletedTask,
+                timeoutWindowMs,
+                waitBudget.TimeoutResolution,
+                cancellationToken);
+        }
 
         var timeoutTask = Task.Delay(timeoutWindowMs, cancellationToken);
         var completionTask = await Task.WhenAny(waiterTask, timeoutTask);
@@ -168,7 +185,7 @@ public class InvocationHandler : IRpcHandler
             waiterTask,
             timeoutTask,
             timeoutWindowMs,
-            timeoutResolution,
+            waitBudget.TimeoutResolution,
             cancellationToken);
     }
 
@@ -248,6 +265,31 @@ public class InvocationHandler : IRpcHandler
             invocationId = invocation.InvocationId,
             elapsedMs = timeoutElapsedMs
         });
+    }
+
+    private RequestWaitBudget BuildRequestWaitBudget(InvocationModel invocation)
+    {
+        var elapsedSinceCreatedMs = GetElapsedSinceCreatedMs(invocation);
+        var ttlRemainingMs = GetRemainingBudgetMs(invocation.Options.TtlMs, elapsedSinceCreatedMs);
+        var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
+        var waitRemainingMs = GetRemainingBudgetMs(waitTimeoutMs, elapsedSinceCreatedMs);
+
+        return new RequestWaitBudget(
+            ttlRemainingMs,
+            waitRemainingMs,
+            waitRemainingMs < ttlRemainingMs
+                ? RequestTimeoutResolution.Timeout
+                : RequestTimeoutResolution.Expired);
+    }
+
+    private int GetElapsedSinceCreatedMs(InvocationModel invocation)
+    {
+        return (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+    }
+
+    private static int GetRemainingBudgetMs(int totalBudgetMs, int elapsedSinceCreatedMs)
+    {
+        return Math.Max(0, totalBudgetMs - elapsedSinceCreatedMs);
     }
 
     private async Task<InvocationBuildResult> BuildAndEnqueueInvocationAsync(

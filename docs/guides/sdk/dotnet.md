@@ -19,7 +19,7 @@ TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHu
 仓库内联调时，可以直接引用 SDK 项目：
 
 ```xml
-<ProjectReference Include="..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+<ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
 ```
 
 ### 2.2 使用本地打包产物
@@ -52,7 +52,7 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
     ClientId = "quickstart-dotnet"
 });
 
-var ping = await client.PingAsync(new { hello = "world" });
+var ping = await client.PingAsync(new { echo = "world" });
 Console.WriteLine($"ok={ping.Ok}, serverTimeUtc={ping.ServerTimeUtc:O}");
 ```
 

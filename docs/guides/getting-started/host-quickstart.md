@@ -112,7 +112,7 @@ curl -sS -X POST "$http_base_url/rpc" \
   -H "X-DevHub-Protocol: 1" \
   -H "X-DevHub-ClientId: quickstart-client" \
   -H "X-DevHub-ClientSessionId: 00000000-0000-0000-0000-000000000011" \
-  -d '{"jsonrpc":"2.0","id":"quickstart-ping","method":"hub.ping","params":{"hello":"world"}}'
+  -d '{"jsonrpc":"2.0","id":"quickstart-ping","method":"hub.ping","params":{"echo":"world"}}'
 ```
 
 ### 4.2 Windows PowerShell
@@ -133,7 +133,7 @@ $body = @{
   jsonrpc = "2.0"
   id      = "quickstart-ping"
   method  = "hub.ping"
-  params  = @{ hello = "world" }
+  params  = @{ echo = "world" }
 } | ConvertTo-Json -Depth 5
 
 Invoke-RestMethod -Method Post -Uri "$($hub.httpBaseUrl)/rpc" -Headers $headers -ContentType "application/json" -Body $body

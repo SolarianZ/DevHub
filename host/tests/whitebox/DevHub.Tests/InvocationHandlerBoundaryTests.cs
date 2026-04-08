@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
@@ -361,6 +362,44 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }, CancellationToken.None);
 
         AssertError(response, -32011, "invocation_expired");
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenWaitBudgetAlreadyElapsed_ShouldTimeoutWithoutWaitingExtraWindow()
+    {
+        const string appId = "invocation-wait-budget-elapsed";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(600));
+        using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry, clock);
+
+        var stopwatch = Stopwatch.StartNew();
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-wait-budget-elapsed",
+            Method = HubRpcMethods.HubInvokeRequest,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "task.run",
+                options = new
+                {
+                    ttlMs = 2000,
+                    waitTimeoutMs = 500,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        stopwatch.Stop();
+
+        AssertError(response, -32012, "invocation_timeout");
+        Assert.True(stopwatch.ElapsedMilliseconds < 350, $"Expected timeout without waiting the stale wait window, actual={stopwatch.ElapsedMilliseconds}ms.");
+
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.True(errorData.GetProperty("elapsedMs").GetInt32() >= 500);
     }
 
     [Fact]
