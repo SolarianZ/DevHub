@@ -16,6 +16,7 @@ namespace DevHub.Host;
 /// </summary>
 public class WebSocketSessionHandler
 {
+    private const int MaxInboundTextMessageBytes = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -107,6 +108,20 @@ public class WebSocketSessionHandler
                 if (receiveEnvelope.IsCloseFrame)
                 {
                     _logger.LogInformation("WS 收到关闭帧，ConnectionId: {ConnectionId}", connectionId);
+                    break;
+                }
+
+                if (receiveEnvelope.IsMessageTooLarge)
+                {
+                    _logger.LogWarning(
+                        "WS 消息超过最大长度限制，主动关闭连接，ConnectionId: {ConnectionId}, MaxBytes: {MaxBytes}",
+                        connectionId,
+                        MaxInboundTextMessageBytes);
+                    await SendWebSocketJsonAsync(
+                        webSocket,
+                        TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null),
+                        cancellationToken);
+                    await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "message_too_large", cancellationToken);
                     break;
                 }
 
@@ -404,22 +419,27 @@ public class WebSocketSessionHandler
             var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
             if (receiveResult.MessageType == WebSocketMessageType.Close)
             {
-                return new WebSocketReceiveEnvelope(true, false, null);
+                return new WebSocketReceiveEnvelope(true, false, false, null);
             }
 
             if (receiveResult.MessageType != WebSocketMessageType.Text)
             {
-                return new WebSocketReceiveEnvelope(false, false, null);
+                return new WebSocketReceiveEnvelope(false, false, false, null);
             }
 
             if (receiveResult.Count > 0)
             {
+                if (stream.Length + receiveResult.Count > MaxInboundTextMessageBytes)
+                {
+                    return new WebSocketReceiveEnvelope(false, true, true, null);
+                }
+
                 stream.Write(buffer, 0, receiveResult.Count);
             }
 
             if (receiveResult.EndOfMessage)
             {
-                return new WebSocketReceiveEnvelope(false, true, Encoding.UTF8.GetString(stream.ToArray()));
+                return new WebSocketReceiveEnvelope(false, true, false, Encoding.UTF8.GetString(stream.ToArray()));
             }
         }
     }
@@ -457,5 +477,5 @@ public class WebSocketSessionHandler
         }
     }
 
-    private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, string? Text);
+    private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, bool IsMessageTooLarge, string? Text);
 }

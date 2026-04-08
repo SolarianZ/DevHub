@@ -68,6 +68,48 @@ public sealed class TransportEndpointRecoveryImplTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_RpcHttpEndpointHandler_ShouldLeaveRequestBodyOpenAfterHandleAsync()
+    {
+        using var harness = new HostTransportTestHarness(_tempRoot);
+
+        var requestBody = new MemoryStream(Encoding.UTF8.GetBytes(
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "leave-open-body",
+              "method": "hub.ping",
+              "params": {
+                "echo": "leave-open"
+              }
+            }
+            """));
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = HttpMethods.Post;
+        httpContext.Request.ContentType = "application/json";
+        httpContext.Request.Headers["Authorization"] = $"Bearer {harness.Token}";
+        httpContext.Request.Headers["X-DevHub-Protocol"] = "1";
+        httpContext.Request.Headers["X-DevHub-ClientId"] = "leave-open-client";
+        httpContext.Request.Headers["X-DevHub-ClientSessionId"] = Guid.NewGuid().ToString("D");
+        httpContext.Request.Body = requestBody;
+        httpContext.RequestServices = new ServiceCollection()
+            .AddLogging()
+            .AddOptions()
+            .BuildServiceProvider();
+        httpContext.Response.Body = new MemoryStream();
+
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        requestBody.Position = 0;
+        using var reader = new StreamReader(requestBody, Encoding.UTF8, leaveOpen: true);
+        var bodyText = await reader.ReadToEndAsync();
+
+        Assert.Contains("\"leave-open-body\"", bodyText, StringComparison.Ordinal);
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+    }
+
+    [Fact]
     public async Task Impl_WebSocketSessionHandler_WhenHubJsonMissing_ShouldRebuildRuntimeUsingConnectionLocalPort()
     {
         using var harness = new HostTransportTestHarness(_tempRoot);

@@ -118,11 +118,16 @@ async function resolveHubRuntimePaths(dataDirectory: string): Promise<{
   hubJsonPath: string;
 }> {
   const legacyHubJsonPath = path.join(dataDirectory, "hub.json");
-  if (
-    path.basename(dataDirectory).toLowerCase() === "runtime"
-    && await fileExists(legacyHubJsonPath)
-  ) {
-    throw new Error(`discoverRuntime 只接受 dataDir，不能直接传入 runtime 目录：${dataDirectory}`);
+  const legacyTokenFilePath = path.join(dataDirectory, "token.txt");
+  const [hasLegacyHubJson, hasLegacyTokenFile] = await Promise.all([
+    fileExists(legacyHubJsonPath),
+    fileExists(legacyTokenFilePath)
+  ]);
+
+  if (hasLegacyHubJson || hasLegacyTokenFile) {
+    throw new Error(
+      `dataDir 必须指向数据根目录，不支持直接传入 runtime 子目录或旧版 hub.json/token.txt 直放布局：${dataDirectory}`
+    );
   }
 
   return {

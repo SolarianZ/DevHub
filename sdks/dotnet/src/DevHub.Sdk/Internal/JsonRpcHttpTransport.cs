@@ -233,6 +233,11 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         JToken? data = null;
         if (errorObject.TryGetValue("data", out var dataToken))
         {
+            if (dataToken.Type != JTokenType.Object)
+            {
+                throw new InvalidOperationException("JSON-RPC error.data 非法。");
+            }
+
             data = dataToken.DeepClone();
         }
 

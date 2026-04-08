@@ -76,6 +76,42 @@ public class InvocationStoreTests
     }
 
     [Fact]
+    public async Task Impl_TryCreateInvocation_WhenPendingLimitReachedConcurrently_ShouldOnlyStoreSingleInvocation()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        using var ready = new CountdownEvent(2);
+        using var release = new ManualResetEventSlim(false);
+
+        Task<(bool Created, int ActiveCount)> CreateAsync(string invocationId) => Task.Run(() =>
+        {
+            var invocation = CreateNotify("atomic-limit.app", targetScope: null, targetInstanceId: null);
+            invocation.InvocationId = invocationId;
+            ready.Signal();
+            release.Wait();
+            var created = store.TryCreateInvocation(
+                invocation,
+                hasOnlineCandidates: true,
+                pendingInvocationsLimit: 1,
+                out var activeInvocationCount);
+            return (created, activeInvocationCount);
+        });
+
+        var firstTask = CreateAsync("invk-atomic-limit-1");
+        var secondTask = CreateAsync("invk-atomic-limit-2");
+
+        Assert.True(ready.Wait(TimeSpan.FromSeconds(5)));
+        release.Set();
+
+        var results = await Task.WhenAll(firstTask, secondTask);
+
+        Assert.Single(results, static result => result.Created);
+        Assert.Single(results, static result => !result.Created && result.ActiveCount == 1);
+        Assert.Equal(1, store.GetActiveInvocationCount());
+    }
+
+    [Fact]
     public async Task Impl_DeliveredRespondWithError_ShouldTransitionToFailed()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);

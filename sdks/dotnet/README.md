@@ -18,7 +18,7 @@
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
 - 公开扩展点：`runtime resolver`、`HTTP transport`、`WS session`
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
-- 统一错误模型：`DevHubRpcException`
+- 统一错误模型：`DevHubRpcException`（协议要求 `error.data` 为对象；非对象响应会被视为非法 JSON-RPC 包）
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
 - 可选依赖注入 companion package：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试 + conformance 适配器

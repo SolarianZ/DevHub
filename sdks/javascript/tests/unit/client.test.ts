@@ -71,6 +71,35 @@ it("M6_TS_UT_001 dispose should tolerate transports without a dispose hook", asy
   await expect(client.dispose()).resolves.toBeUndefined();
 });
 
+it("M6_TS_UT_001 disposed client should reject further RPCs without calling transport", async () => {
+  const connection = createConnectionInfo();
+  const transport = {
+    send: vi.fn(async () => ({
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z"
+    })),
+    dispose: vi.fn(async () => {})
+  };
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-disposed-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => transport
+    }
+  );
+
+  await client.dispose();
+
+  await expect(client.ping()).rejects.toThrow(/disposed/i);
+  expect(transport.send).not.toHaveBeenCalled();
+});
+
 it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {

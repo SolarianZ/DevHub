@@ -167,6 +167,33 @@ def test_M6_PY_UT_001_http_client_context_manager_should_close_transport_on_exit
     assert transport.close_calls == 1
 
 
+def test_M6_PY_UT_001_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(
+            runtime_resolver=resolver,
+            transport_factory=transport_factory,
+        ),
+    )
+
+    client.close()
+
+    with pytest.raises(RuntimeError, match="HTTP 客户端已关闭"):
+        client.ping()
+
+    assert transport.calls == []
+
+
 def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)

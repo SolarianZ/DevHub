@@ -33,6 +33,11 @@ public class InvocationHandler : IRpcHandler
         Expired
     }
 
+    private readonly record struct RequestWaitBudget(
+        int TtlRemainingMs,
+        int WaitRemainingMs,
+        RequestTimeoutResolution TimeoutResolution);
+
     private readonly AppRegistry _appRegistry;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly InvocationRoutingService _routingService;
@@ -145,13 +150,25 @@ public class InvocationHandler : IRpcHandler
         var invocation = enqueueResult.Invocation!;
         var waiterTask = enqueueResult.WaiterTask!;
 
-        var ttlRemaining = Math.Max(1, invocation.Options.TtlMs - (int)(_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
-        var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
-        var waitRemaining = Math.Max(1, waitTimeoutMs);
-        var timeoutWindowMs = Math.Min(ttlRemaining, waitRemaining);
-        var timeoutResolution = waitTimeoutMs < invocation.Options.TtlMs
-            ? RequestTimeoutResolution.Timeout
-            : RequestTimeoutResolution.Expired;
+        var waitBudget = BuildRequestWaitBudget(invocation);
+        var timeoutWindowMs = Math.Min(waitBudget.TtlRemainingMs, waitBudget.WaitRemainingMs);
+        if (timeoutWindowMs <= 0)
+        {
+            if (waiterTask.IsCompleted)
+            {
+                var completion = await waiterTask;
+                return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+            }
+
+            return await HandleRequestTimeoutAsync(
+                request,
+                invocation,
+                waiterTask,
+                Task.CompletedTask,
+                timeoutWindowMs,
+                waitBudget.TimeoutResolution,
+                cancellationToken);
+        }
 
         var timeoutTask = Task.Delay(timeoutWindowMs, cancellationToken);
         var completionTask = await Task.WhenAny(waiterTask, timeoutTask);
@@ -168,7 +185,7 @@ public class InvocationHandler : IRpcHandler
             waiterTask,
             timeoutTask,
             timeoutWindowMs,
-            timeoutResolution,
+            waitBudget.TimeoutResolution,
             cancellationToken);
     }
 
@@ -250,6 +267,31 @@ public class InvocationHandler : IRpcHandler
         });
     }
 
+    private RequestWaitBudget BuildRequestWaitBudget(InvocationModel invocation)
+    {
+        var elapsedSinceCreatedMs = GetElapsedSinceCreatedMs(invocation);
+        var ttlRemainingMs = GetRemainingBudgetMs(invocation.Options.TtlMs, elapsedSinceCreatedMs);
+        var waitTimeoutMs = invocation.Options.WaitTimeoutMs ?? DefaultRequestWaitTimeoutMs;
+        var waitRemainingMs = GetRemainingBudgetMs(waitTimeoutMs, elapsedSinceCreatedMs);
+
+        return new RequestWaitBudget(
+            ttlRemainingMs,
+            waitRemainingMs,
+            waitRemainingMs < ttlRemainingMs
+                ? RequestTimeoutResolution.Timeout
+                : RequestTimeoutResolution.Expired);
+    }
+
+    private int GetElapsedSinceCreatedMs(InvocationModel invocation)
+    {
+        return (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
+    }
+
+    private static int GetRemainingBudgetMs(int totalBudgetMs, int elapsedSinceCreatedMs)
+    {
+        return Math.Max(0, totalBudgetMs - elapsedSinceCreatedMs);
+    }
+
     private async Task<InvocationBuildResult> BuildAndEnqueueInvocationAsync(
         JsonRpcRequest request,
         InvocationMode mode,
@@ -284,26 +326,6 @@ public class InvocationHandler : IRpcHandler
             return new InvocationBuildResult(
                 null,
                 RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "rpc_disabled" }));
-        }
-
-        if (_runtimeTuningOptions.PendingInvocationsLimit > 0)
-        {
-            var activeInvocationCount = _store.GetActiveInvocationCount();
-            if (activeInvocationCount >= _runtimeTuningOptions.PendingInvocationsLimit)
-            {
-                return new InvocationBuildResult(
-                    null,
-                    RpcErrorFactory.Create(
-                        request.Id,
-                        -32040,
-                        "rate_limited",
-                        new
-                        {
-                            reason = "pending_invocations_limit_exceeded",
-                            limit = _runtimeTuningOptions.PendingInvocationsLimit,
-                            active = activeInvocationCount
-                        }));
-            }
         }
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
@@ -387,7 +409,32 @@ public class InvocationHandler : IRpcHandler
             waiterTask = _requestWaiter.Register(invocation.InvocationId);
         }
 
-        _store.CreateInvocation(invocation, hasOnlineCandidates: candidates.Count > 0);
+        var created = _store.TryCreateInvocation(
+            invocation,
+            hasOnlineCandidates: candidates.Count > 0,
+            _runtimeTuningOptions.PendingInvocationsLimit,
+            out var activeInvocationCount);
+        if (!created)
+        {
+            if (waiterTask is not null)
+            {
+                _requestWaiter.Cleanup(invocation.InvocationId);
+            }
+
+            return new InvocationBuildResult(
+                null,
+                RpcErrorFactory.Create(
+                    request.Id,
+                    -32040,
+                    "rate_limited",
+                    new
+                    {
+                        reason = "pending_invocations_limit_exceeded",
+                        limit = _runtimeTuningOptions.PendingInvocationsLimit,
+                        active = activeInvocationCount
+                    }));
+        }
+
         PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
         return new InvocationBuildResult(invocation, null, waiterTask);
     }

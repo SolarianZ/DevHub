@@ -24,6 +24,10 @@ class JsonRpcWsSession(ABC):
         """发送一条 JSON-RPC 请求并返回结果载荷。"""
 
     @abstractmethod
+    async def disconnect(self, reason: str) -> None:
+        """断开当前连接代次，但保留会话对象供后续重连使用。"""
+
+    @abstractmethod
     async def read_events(self) -> AsyncIterator[DevHubEvent]:
         """读取事件流。"""
 
@@ -112,13 +116,16 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
                 return
             yield item
 
+    async def disconnect(self, reason: str) -> None:
+        self._ensure_open()
+        await self._disconnect_current_connection(reason)
+
     async def close(self) -> None:
         if self._closed:
             return
 
         self._closed = True
-        await self._shutdown_connection()
-        self._complete_event_stream(self._stream)
+        await self._disconnect_current_connection("session_closed")
 
     async def _ensure_connected(self) -> None:
         if self._websocket is not None:
@@ -221,12 +228,21 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         await self._shutdown_connection()
         self._complete_event_stream(self._stream, error)
 
-    async def _shutdown_connection(self) -> None:
+    async def _disconnect_current_connection(self, reason: str) -> None:
+        self._terminated = True
+        self._fail_pending(RuntimeError("WebSocket 连接已关闭。"))
+        await self._shutdown_connection(reason)
+        self._complete_event_stream(self._stream)
+
+    async def _shutdown_connection(self, reason: str | None = None) -> None:
         websocket = self._websocket
         self._websocket = None
         if websocket is not None:
             try:
-                await websocket.close()
+                if reason:
+                    await websocket.close(reason=reason)
+                else:
+                    await websocket.close()
             except Exception:
                 pass
         receiver_task = self._receiver_task

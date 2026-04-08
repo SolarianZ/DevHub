@@ -1,42 +1,39 @@
 name: release
 
 on:
+  workflow_run:
+    workflows:
+      - ci
+    types:
+      - completed
   workflow_dispatch:
     inputs:
-      channel:
-        description: Release channel
-        type: choice
-        required: true
-        default: preview
-        options:
-          - preview
-          - main-snapshot
-          - stable
-      release_tag:
-        description: Required when channel=stable and the current ref is not a version tag
-        required: false
+      target_ref:
+        description: Release target (`preview`, `main`, or a `v*` tag)
         type: string
-  push:
-    branches:
-      - preview
-      - main
-    tags:
-      - "v*"
+        required: true
 
 jobs:
   package-and-publish:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
 
     env:
       PYTHONUNBUFFERED: "1"
 
     steps:
-      - name: Checkout
+      - name: Checkout target
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.target_ref }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -57,73 +54,99 @@ jobs:
 
       - name: Resolve release metadata
         id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TARGET_REF: ${{ inputs.target_ref }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          short_sha="${GITHUB_SHA::7}"
-          commit_stamp="$(git show -s --date=format:%Y%m%dT%H%M%SZ --format=%cd "$GITHUB_SHA")"
+          commit_sha="$(git rev-parse HEAD)"
+          short_sha="${commit_sha::7}"
+          commit_stamp="$(git show -s --date=format:%Y%m%dT%H%M%SZ --format=%cd "$commit_sha")"
+          should_publish="true"
+          source_branch=""
           channel=""
           release_tag=""
           release_id=""
           release_name=""
           prerelease="true"
 
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/preview" ]]; then
-            channel="preview"
-            release_tag="preview-latest"
-            release_id="preview-latest"
-            release_name="DevHub Preview"
-            prerelease="true"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            channel="main-snapshot"
-            release_tag="main-${commit_stamp}-${short_sha}"
-            release_id="${release_tag}"
-            release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
-            prerelease="true"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            channel="stable"
-            release_tag="${GITHUB_REF_NAME}"
-            release_id="${release_tag}"
-            release_name="DevHub ${release_tag}"
-            prerelease="false"
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            source_branch="${WORKFLOW_RUN_HEAD_BRANCH}"
           else
-            channel="${{ inputs.channel }}"
-            case "${channel}" in
-              preview)
-                release_tag="preview-latest"
-                release_id="preview-latest"
-                release_name="DevHub Preview"
-                prerelease="true"
+            case "${INPUT_TARGET_REF}" in
+              preview|refs/heads/preview)
+                source_branch="preview"
                 ;;
-              main-snapshot)
-                release_tag="main-${commit_stamp}-${short_sha}"
-                release_id="${release_tag}"
-                release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
-                prerelease="true"
+              main|refs/heads/main)
+                source_branch="main"
                 ;;
-              stable)
-                release_tag="${{ inputs.release_tag }}"
-                if [[ -z "${release_tag}" ]]; then
-                  if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-                    release_tag="${GITHUB_REF_NAME}"
-                  else
-                    echo "Stable release requires a version tag such as v1.0.1." >&2
-                    exit 1
-                  fi
-                fi
-                release_id="${release_tag}"
-                release_name="DevHub ${release_tag}"
-                prerelease="false"
+              v*|refs/tags/v*)
                 ;;
               *)
-                echo "Unsupported release channel: ${channel}" >&2
+                echo "workflow_dispatch target_ref must be preview, main, or a v* tag." >&2
                 exit 1
                 ;;
             esac
           fi
 
+          mapfile -t version_tags < <(git tag --points-at "${commit_sha}" --list 'v*' | sort)
+
+          if [[ "${source_branch}" == "preview" ]]; then
+            channel="preview"
+            release_tag="preview-latest"
+            release_id="preview-latest"
+            release_name="DevHub Preview"
+            prerelease="true"
+          elif [[ "${source_branch}" == "main" ]]; then
+            channel="main-snapshot"
+            release_tag="main-${commit_stamp}-${short_sha}"
+            release_id="${release_tag}"
+            release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
+            prerelease="true"
+          elif [[ ${#version_tags[@]} -eq 1 ]]; then
+            channel="stable"
+            release_tag="${version_tags[0]}"
+            release_id="${release_tag}"
+            release_name="DevHub ${release_tag}"
+            prerelease="false"
+          else
+            if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+              should_publish="false"
+            else
+              echo "workflow_dispatch target_ref did not resolve to preview, main, or a unique v* tag on the checked-out commit." >&2
+              exit 1
+            fi
+          fi
+
+          if [[ "${should_publish}" == "true" && "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            ci_runs_json="$(
+              gh api "/repos/${REPOSITORY}/actions/workflows/ci.yml/runs" \
+                -f event=push \
+                -f status=completed \
+                -f per_page=100 \
+                -f head_sha="${commit_sha}"
+            )"
+
+            has_successful_ci="$(
+              printf '%s' "${ci_runs_json}" | python3 -c "import json, sys; data = json.load(sys.stdin); print('true' if any(run.get('conclusion') == 'success' for run in data.get('workflow_runs', [])) else 'false')"
+            )"
+
+            if [[ "${has_successful_ci}" != "true" ]]; then
+              echo "workflow_dispatch target commit has no successful ci run: ${commit_sha}" >&2
+              exit 1
+            fi
+          fi
+
           {
+            echo "should_publish=${should_publish}"
+            echo "commit_sha=${commit_sha}"
             echo "channel=${channel}"
             echo "release_tag=${release_tag}"
             echo "release_id=${release_id}"
@@ -131,16 +154,23 @@ jobs:
             echo "prerelease=${prerelease}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Skip non-release workflow run
+        if: steps.meta.outputs.should_publish != 'true'
+        shell: bash
+        run: echo "This workflow_run does not map to preview, main, or a unique v* release target."
+
       - name: Package release assets
+        if: steps.meta.outputs.should_publish == 'true'
         run: |
           python scripts/release/package_release.py \
             --release-id "${{ steps.meta.outputs.release_id }}" \
             --channel "${{ steps.meta.outputs.channel }}" \
             --release-tag "${{ steps.meta.outputs.release_tag }}" \
             --release-name "${{ steps.meta.outputs.release_name }}" \
-            --commit "${GITHUB_SHA}"
+            --commit "${{ steps.meta.outputs.commit_sha }}"
 
       - name: Publish GitHub Release
+        if: steps.meta.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -167,14 +197,14 @@ jobs:
               --title "${release_name}" \
               --notes-file "$release_dir/release-notes.md" \
               --prerelease \
-              --target "${GITHUB_SHA}"
+              --target "${{ steps.meta.outputs.commit_sha }}"
           elif [[ "${channel}" == "main-snapshot" ]]; then
             gh release delete "${release_tag}" --yes --cleanup-tag || true
             gh release create "${release_tag}" "${release_files[@]}" \
               --title "${release_name}" \
               --notes-file "$release_dir/release-notes.md" \
               --prerelease \
-              --target "${GITHUB_SHA}"
+              --target "${{ steps.meta.outputs.commit_sha }}"
           else
             if gh release view "${release_tag}" >/dev/null 2>&1; then
               gh release upload "${release_tag}" "${release_files[@]}" --clobber
@@ -185,12 +215,12 @@ jobs:
               gh release create "${release_tag}" "${release_files[@]}" \
                 --title "${release_name}" \
                 --notes-file "$release_dir/release-notes.md" \
-                --target "${GITHUB_SHA}"
+                --target "${{ steps.meta.outputs.commit_sha }}"
             fi
           fi
 
       - name: Upload release diagnostics
-        if: failure()
+        if: failure() && steps.meta.outputs.should_publish == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: release-diagnostics-${{ github.run_id }}

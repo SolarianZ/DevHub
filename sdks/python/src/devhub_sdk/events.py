@@ -124,6 +124,10 @@ class DevHubEventsClient:
         except Exception:
             self._authenticated = False
             self._event_stream_available = False
+            try:
+                await self._session.disconnect("authenticate_failed")
+            except Exception:
+                pass
             raise
 
         self._authenticated = True

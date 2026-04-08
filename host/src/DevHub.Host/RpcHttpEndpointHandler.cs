@@ -2,6 +2,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services.Rpc;
 using DevHub.Host.Runtime;
 using DevHub.Host.Transport;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -67,7 +68,7 @@ public class RpcHttpEndpointHandler
                 return Results.Json(contentTypeError, JsonOptions);
             }
 
-            using var reader = new StreamReader(request.Body);
+            using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
             var body = await reader.ReadToEndAsync(cancellationToken);
 
             _logger.LogDebug("收到RPC请求，客户端ID: {ClientId}，请求体长度: {BodyLength}", clientId, body.Length);

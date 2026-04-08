@@ -2,6 +2,7 @@ namespace DevHub.Host.Tests;
 
 using System.Reflection;
 using DevHub.Core.Services;
+using Microsoft.Extensions.Logging;
 using HostProgram = DevHub.Host.Program;
 
 /// <summary>
@@ -107,6 +108,61 @@ public sealed class ProgramTests : IDisposable
         Assert.NotEqual(upperKey, lowerKey);
     }
 
+    [Fact]
+    public void Impl_PersistHubRuntimeOrStop_WhenPersistSucceeds_ShouldKeepRunning()
+    {
+        var logger = new CapturingLogger();
+        var stopped = false;
+
+        InvokePrivateStaticVoid(
+            "PersistHubRuntimeOrStop",
+            (Func<bool>)(() => true),
+            (Action)(() => stopped = true),
+            logger);
+
+        Assert.False(stopped);
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public void Impl_PersistHubRuntimeOrStop_WhenPersistFails_ShouldLogCriticalAndStopApplication()
+    {
+        var logger = new CapturingLogger();
+        var stopped = false;
+
+        InvokePrivateStaticVoid(
+            "PersistHubRuntimeOrStop",
+            (Func<bool>)(() => false),
+            (Action)(() => stopped = true),
+            logger);
+
+        Assert.True(stopped);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Critical, entry.Level);
+        Assert.Contains("Hub 运行时发现文件持久化失败", entry.Message, StringComparison.Ordinal);
+        Assert.Null(entry.Exception);
+    }
+
+    [Fact]
+    public void Impl_PersistHubRuntimeOrStop_WhenPersistThrows_ShouldLogCriticalAndStopApplication()
+    {
+        var logger = new CapturingLogger();
+        var stopped = false;
+        var expectedException = new InvalidOperationException("persist failed");
+
+        InvokePrivateStaticVoid(
+            "PersistHubRuntimeOrStop",
+            (Func<bool>)(() => throw expectedException),
+            (Action)(() => stopped = true),
+            logger);
+
+        Assert.True(stopped);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Critical, entry.Level);
+        Assert.Same(expectedException, entry.Exception);
+        Assert.Contains("Hub 运行时发现文件持久化失败", entry.Message, StringComparison.Ordinal);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -129,5 +185,48 @@ public sealed class ProgramTests : IDisposable
 
         var result = method.Invoke(null, args);
         return Assert.IsType<T>(result);
+    }
+
+    private static void InvokePrivateStaticVoid(string methodName, params object[] args)
+    {
+        var method = typeof(HostProgram).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+        _ = method.Invoke(null, args);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
+        {
+            return NullScope.Instance;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

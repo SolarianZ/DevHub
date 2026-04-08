@@ -230,4 +230,9 @@ class DevHubClient:
         self.close()
 
     def _send(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        self._ensure_not_closed()
         return self._transport.send(method, params)
+
+    def _ensure_not_closed(self) -> None:
+        if self._closed:
+            raise RuntimeError("当前 HTTP 客户端已关闭。")

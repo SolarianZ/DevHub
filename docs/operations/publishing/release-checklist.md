@@ -37,6 +37,11 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - `python -m pytest sdks/python/tests`
 - Host / SDK 资产完整性检查、manifest 与 release notes 生成
 
+若通过 GitHub Actions 执行远端发布：
+
+- 自动发布只会在成功完成的 `ci` 之后由 `release.yml` 的 `workflow_run` 触发。
+- `workflow_dispatch` 只允许填写 `preview`、`main` 或 `v*` tag 作为 `target_ref`，且目标提交必须已有成功的 `ci`。
+
 ### 1.3 资产检查
 
 发布前至少确认：
@@ -52,15 +57,18 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 - 确认本次目标是刷新当前 preview 通道的最新资产，而不是生成历史快照。
 - 确认 release tag 使用 `preview-latest`。
+- 确认 `preview` 分支对应提交已经通过 `ci`。
 
 ### 2.2 Main 快照预发布
 
 - 确认 release id / tag 使用 `main-<utc-date>-<sha7>` 规则。
 - 确认 release notes 中包含本次提交 SHA，便于回溯。
+- 确认 `main` 分支对应提交已经通过 `ci`。
 
 ### 2.3 稳定版
 
 - 确认稳定版 tag 已准备好，例如 `v1.0.1`。
+- 确认该 tag 对应提交已经通过 `ci`，再进入发布或重跑发布。
 - 确认本次发布不再保留面向外部用户的 TODO 安装占位，或明确哪些占位仍待后续收口。
 
 ## 3. 发布后核验

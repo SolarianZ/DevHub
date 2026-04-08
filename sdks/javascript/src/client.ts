@@ -101,29 +101,35 @@ export class DevHubClient {
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {
+    this.throwIfDisposed();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
     return parsePingResult(await this.transport.send("hub.ping", params));
   }
 
   async listDefinitions(): Promise<AppDefinition[]> {
+    this.throwIfDisposed();
     return parseDefinitionsResult(await this.transport.send("hub.apps.listDefinitions"));
   }
 
   async getDefinition(appId: string): Promise<AppDefinition> {
+    this.throwIfDisposed();
     return parseDefinitionResult(await this.transport.send("hub.apps.getDefinition", buildGetDefinitionParams(appId)));
   }
 
   async registerInstance(instance: AppInstanceRegistration): Promise<AppInstance> {
+    this.throwIfDisposed();
     return parseRegisterInstanceResult(
       await this.transport.send("hub.apps.registerInstance", buildRegisterInstanceParams(instance))
     );
   }
 
   async heartbeat(instanceId: string): Promise<Date> {
+    this.throwIfDisposed();
     return parseHeartbeatResult(await this.transport.send("hub.apps.heartbeat", buildHeartbeatParams(instanceId)));
   }
 
   async unregisterInstance(instanceId: string): Promise<void> {
+    this.throwIfDisposed();
     parseVoidOkResult(
       await this.transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId)),
       "hub.apps.unregisterInstance.result"
@@ -131,26 +137,32 @@ export class DevHubClient {
   }
 
   async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
+    this.throwIfDisposed();
     return parseInstancesResult(await this.transport.send("hub.apps.listInstances", buildListInstancesParams(request)));
   }
 
   async launch(request: LaunchRequest): Promise<LaunchResult> {
+    this.throwIfDisposed();
     return parseLaunchResult(await this.transport.send("hub.apps.launch", buildLaunchParams(request)));
   }
 
   async notify(request: InvokeRequest): Promise<NotifyResult> {
+    this.throwIfDisposed();
     return parseNotifyResult(await this.transport.send("hub.invoke.notify", buildInvokeParams(request, false)));
   }
 
   async request(request: InvokeRequest): Promise<RequestResult> {
+    this.throwIfDisposed();
     return parseRequestResult(await this.transport.send("hub.invoke.request", buildInvokeParams(request, true)));
   }
 
   async poll(request: PollRequest): Promise<PollResult> {
+    this.throwIfDisposed();
     return parsePollResult(await this.transport.send("hub.invoke.poll", buildPollParams(request)));
   }
 
   async respond(request: RespondRequest): Promise<void> {
+    this.throwIfDisposed();
     parseVoidOkResult(
       await this.transport.send("hub.invoke.respond", buildRespondParams(request)),
       "hub.invoke.respond.result"
@@ -164,6 +176,12 @@ export class DevHubClient {
 
     this.disposed = true;
     await this.transport.dispose?.();
+  }
+
+  private throwIfDisposed(): void {
+    if (this.disposed) {
+      throw new Error("The client has been disposed.");
+    }
   }
 }
 

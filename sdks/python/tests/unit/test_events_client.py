@@ -42,6 +42,7 @@ class FakeWsSession:
     responses: dict[str, dict[str, Any] | BaseException]
     events: list[DevHubEvent]
     requests: list[dict[str, Any]] = field(default_factory=list)
+    disconnect_reasons: list[str] = field(default_factory=list)
     closed: bool = False
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
@@ -50,6 +51,9 @@ class FakeWsSession:
         if isinstance(response, BaseException):
             raise response
         return response
+
+    async def disconnect(self, reason: str) -> None:
+        self.disconnect_reasons.append(reason)
 
     async def read_events(self) -> AsyncIterator[DevHubEvent]:
         for event in self.events:
@@ -643,6 +647,7 @@ async def test_M5_PY_UT_006_events_client_when_authenticate_fails_should_allow_r
         with pytest.raises(DevHubRpcException):
             await client.authenticate()
 
+        assert session.disconnect_reasons == ["authenticate_failed"]
         assert session.closed is False
 
         session.responses["hub.ws.authenticate"] = {"ok": True, "protocolVersion": 1}
