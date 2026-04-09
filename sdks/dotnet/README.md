@@ -1,5 +1,7 @@
 # DevHub .NET SDK
 
+**当前分支专为Unity项目调整了 .NET SDK 。若要使用通用 .NET SDK ，请查看 [main分支](https://github.com/SolarianZ/DevHub/tree/main) 。**
+
 当前目录用于维护独立于主工程的 DevHub .NET SDK 工作区。
 
 - 解决方案：`DevHub.DotNetSdk.slnx`
@@ -435,8 +437,8 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 包 `.nuspec` 声明的直接依赖如下：
 
 - `Newtonsoft.Json 9.0.1`
-- `Microsoft.Bcl.AsyncInterfaces 10.0.2`
-- `System.Threading.Channels 8.0.0`
+- `Microsoft.Bcl.AsyncInterfaces 1.1.0`
+- `System.Threading.Channels 4.7.0`
 
 `dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack` 生成的 `DevHub.Sdk.DependencyInjection.1.0.0.nupkg` 包含以下发布资产：
 
