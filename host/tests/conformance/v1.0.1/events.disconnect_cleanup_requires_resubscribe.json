@@ -53,6 +53,7 @@
       {
         "action": "register_instance",
         "client": "http",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "events-disconnect-window-inst-1",
           "appId": "events.disconnect.cleanup",
@@ -75,6 +76,7 @@
       {
         "action": "register_instance",
         "client": "http",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "events-disconnect-window-inst-2",
           "appId": "events.disconnect.cleanup",

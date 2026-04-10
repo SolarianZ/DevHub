@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-get",
+  "result": {
+    "ok": true,
+    "definition": {
+      "appId": "sample.app",
+      "displayName": "Sample App",
+      "capabilities": {
+        "rpc": true
+      }
+    }
+  }
+}

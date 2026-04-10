@@ -8,6 +8,7 @@
       {
         "state": "offline",
         "waitSeconds": 3,
+        "password": "conformance-password",
         "instance": {
           "instanceId": "apps-instance-offline-only",
           "appId": "apps.instance.list.offline.app",

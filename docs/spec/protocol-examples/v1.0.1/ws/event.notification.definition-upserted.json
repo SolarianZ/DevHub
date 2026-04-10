@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "method": "hub.event",
+  "params": {
+    "subscriptionId": "${SUBSCRIPTION_ID}",
+    "type": "app.definition.upserted",
+    "timeUtc": "${EVENT_TIME_UTC}",
+    "payload": {
+      "appId": "sample.app",
+      "definition": {
+        "appId": "sample.app",
+        "displayName": "Sample App"
+      }
+    }
+  }
+}

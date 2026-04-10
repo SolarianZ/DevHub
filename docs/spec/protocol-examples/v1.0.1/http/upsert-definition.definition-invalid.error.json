@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-upsert-invalid",
+  "error": {
+    "code": -32602,
+    "message": "invalid_params",
+    "data": {
+      "reason": "definition_invalid",
+      "errors": [
+        {
+          "path": "definition.appId",
+          "code": "invalid_app_id",
+          "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+        }
+      ]
+    }
+  }
+}

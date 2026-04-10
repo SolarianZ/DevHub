@@ -18,6 +18,7 @@
     "beforeCaller": [
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "errors-request-timeout-inst",
           "appId": "errors.invocation.timeout",

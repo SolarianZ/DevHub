@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-unregister",
+  "method": "hub.apps.unregisterInstance",
+  "params": {
+    "instanceId": "sample-instance-1",
+    "password": "sample-password-1"
+  }
+}

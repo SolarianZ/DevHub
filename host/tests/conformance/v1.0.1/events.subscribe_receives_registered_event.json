@@ -41,6 +41,7 @@
       {
         "action": "register_instance",
         "client": "http",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "events-register-inst-1",
           "appId": "events.subscribe.registered",

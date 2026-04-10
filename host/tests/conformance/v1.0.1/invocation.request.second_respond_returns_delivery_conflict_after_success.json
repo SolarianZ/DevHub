@@ -18,6 +18,7 @@
     "beforeCaller": [
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "request-delivery-conflict-inst",
           "appId": "invoke.request.delivery-conflict",

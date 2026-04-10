@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/app-instance-registration.json",
+  "type": "object",
+  "required": [
+    "instanceId",
+    "appId",
+    "pid",
+    "invoke"
+  ],
+  "properties": {
+    "instanceId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[a-zA-Z0-9._:-]+$"
+    },
+    "appId": {
+      "type": "string"
+    },
+    "scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "invoke": {
+      "type": "object",
+      "required": [
+        "poll",
+        "respond"
+      ],
+      "properties": {
+        "poll": {
+          "type": "boolean"
+        },
+        "respond": {
+          "type": "boolean"
+        }
+      }
+    },
+    "meta": {
+      "type": "object"
+    }
+  }
+}

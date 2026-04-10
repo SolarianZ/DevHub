@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "method": "hub.event",
+  "params": {
+    "subscriptionId": "${SUBSCRIPTION_ID}",
+    "type": "app.definition.deleted",
+    "timeUtc": "${EVENT_TIME_UTC}",
+    "payload": {
+      "appId": "sample.app"
+    }
+  }
+}

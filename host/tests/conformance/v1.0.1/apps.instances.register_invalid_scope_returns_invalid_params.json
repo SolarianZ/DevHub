@@ -17,6 +17,7 @@
     "id": "apps-instances-register-invalid-scope",
     "method": "hub.apps.registerInstance",
     "params": {
+      "password": "conformance-password",
       "instance": {
         "instanceId": "apps-instance-register-invalid-scope",
         "appId": "apps.instance.invalid-scope.app",
