@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
             RpcTestFaultInjectionPolicy.Resolve(sp.GetRequiredService<ILogger<RpcTestFaultInjectionPolicy>>()));
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IProcessLauncher, ProcessLauncher>();
+        services.AddSingleton<AppDefinitionValidator>();
 
         // 注册核心服务
         services.AddSingleton<AppRegistry>(sp =>
@@ -62,8 +63,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DefinitionLoader>(sp =>
             new DefinitionLoader(
                 sp.GetRequiredService<RuntimePathOptions>().DefinitionsPath,
-                sp.GetRequiredService<ILogger<DefinitionLoader>>()));
+                sp.GetRequiredService<ILogger<DefinitionLoader>>(),
+                sp.GetRequiredService<AppDefinitionValidator>()));
         services.AddSingleton<IDefinitionProvider, DefinitionProvider>();
+        services.AddSingleton<IDefinitionManager>(sp =>
+            new DefinitionManager(
+                sp.GetRequiredService<RuntimePathOptions>(),
+                sp.GetRequiredService<IDefinitionProvider>(),
+                sp.GetRequiredService<AppDefinitionValidator>(),
+                sp.GetRequiredService<IClock>(),
+                sp.GetRequiredService<ILogger<DefinitionManager>>(),
+                sp.GetService<HubEventBus>()));
         services.AddSingleton<HubEventBus>();
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>(sp =>
@@ -98,6 +108,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRpcHandler>(sp =>
             new AppDefinitionsHandler(
                 sp.GetRequiredService<IDefinitionProvider>(),
+                sp.GetRequiredService<IDefinitionManager>(),
                 sp.GetRequiredService<ILogger<AppDefinitionsHandler>>()));
         services.AddSingleton<IRpcHandler>(sp =>
             new AppInstancesHandler(

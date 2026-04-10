@@ -17,7 +17,9 @@ public class HubEventBusTests
     {
         var eventTypes = HubEventBus.GetSupportedEventTypes();
 
-        Assert.Equal(6, eventTypes.Count);
+        Assert.Equal(8, eventTypes.Count);
+        Assert.Contains("app.definition.upserted", eventTypes);
+        Assert.Contains("app.definition.deleted", eventTypes);
         Assert.Contains("app.instance.registered", eventTypes);
         Assert.Contains("app.instance.unregistered", eventTypes);
         Assert.Contains("invocation.queued", eventTypes);
@@ -205,5 +207,4 @@ public class HubEventBusTests
         Assert.Equal("app.instance.registered", deliveries[0].Type);
     }
 }
-
 

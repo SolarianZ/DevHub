@@ -16,6 +16,7 @@ using Moq;
 [Trait("Category", "Spec")]
 public class ScopeRoutingSpecTests : IDisposable
 {
+    private const string InstancePassword = "scope-routing-password";
     private readonly string _tempDirectory;
 
     public ScopeRoutingSpecTests()
@@ -231,6 +232,7 @@ public class ScopeRoutingSpecTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "spec-5.5-register-invalid",
@@ -614,7 +616,11 @@ public class ScopeRoutingSpecTests : IDisposable
         {
             Id = $"register-{instanceId}",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new { instance })
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                password = InstancePassword,
+                instance
+            })
         }, CancellationToken.None);
     }
 

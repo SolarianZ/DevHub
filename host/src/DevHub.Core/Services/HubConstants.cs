@@ -5,6 +5,10 @@ namespace DevHub.Core.Services;
 /// </summary>
 public static class HubEventTypes
 {
+    public const string AppDefinitionUpserted = "app.definition.upserted";
+
+    public const string AppDefinitionDeleted = "app.definition.deleted";
+
     public const string AppInstanceRegistered = "app.instance.registered";
 
     public const string AppInstanceUnregistered = "app.instance.unregistered";
@@ -36,6 +40,12 @@ public static class HubRpcMethods
     public const string HubAppsListDefinitions = "hub.apps.listDefinitions";
 
     public const string HubAppsGetDefinition = "hub.apps.getDefinition";
+
+    public const string HubAppsValidateDefinition = "hub.apps.validateDefinition";
+
+    public const string HubAppsUpsertDefinition = "hub.apps.upsertDefinition";
+
+    public const string HubAppsDeleteDefinition = "hub.apps.deleteDefinition";
 
     public const string HubAppsRegisterInstance = "hub.apps.registerInstance";
 

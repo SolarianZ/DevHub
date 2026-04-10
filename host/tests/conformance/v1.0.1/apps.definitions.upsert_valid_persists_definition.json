@@ -1,0 +1,76 @@
+{
+  "id": "apps.definitions.upsert_valid_persists_definition",
+  "caseId": "CONF-003",
+  "description": "写入合法 AppDefinition 时，hub.apps.upsertDefinition 必须返回 definition，并在后续读取中可见。",
+  "transport": "http",
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.getDefinition",
+        "requestId": "apps-definitions-upsert-get",
+        "params": {
+          "appId": "apps.upsert.persisted.app"
+        },
+        "expectedResult": {
+          "ok": true,
+          "definition": {
+            "appId": "apps.upsert.persisted.app",
+            "displayName": "Apps Upsert Persisted",
+            "description": "用于 conformance upsert 持久化验证。"
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.deleteDefinition",
+        "requestId": "apps-definitions-upsert-cleanup",
+        "params": {
+          "appId": "apps.upsert.persisted.app"
+        },
+        "expectedResult": {
+          "ok": true
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000035"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-upsert",
+    "method": "hub.apps.upsertDefinition",
+    "params": {
+      "definition": {
+        "appId": "apps.upsert.persisted.app",
+        "displayName": "Apps Upsert Persisted",
+        "description": "用于 conformance upsert 持久化验证。"
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-upsert",
+    "result": {
+      "ok": true,
+      "definition": {
+        "appId": "apps.upsert.persisted.app",
+        "displayName": "Apps Upsert Persisted",
+        "description": "用于 conformance upsert 持久化验证。"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

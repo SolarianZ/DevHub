@@ -14,6 +14,8 @@ public sealed class HubEventBus
 
     private static readonly string[] SupportedEventTypes =
     [
+        HubEventTypes.AppDefinitionUpserted,
+        HubEventTypes.AppDefinitionDeleted,
         HubEventTypes.AppInstanceRegistered,
         HubEventTypes.AppInstanceUnregistered,
         HubEventTypes.InvocationQueued,

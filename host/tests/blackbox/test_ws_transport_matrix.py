@@ -345,6 +345,33 @@ class TestWsTransportMatrix(unittest.TestCase):
                             "value": {"ok": True},
                         },
                     ),
+                    (
+                        "matrix-ws-http-only-validate-definition",
+                        "hub.apps.validateDefinition",
+                        {
+                            "definition": {
+                                "appId": "matrix.ws.http.only.validate",
+                                "displayName": "WS HTTP-only Validate",
+                            }
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-upsert-definition",
+                        "hub.apps.upsertDefinition",
+                        {
+                            "definition": {
+                                "appId": "matrix.ws.http.only.upsert",
+                                "displayName": "WS HTTP-only Upsert",
+                            }
+                        },
+                    ),
+                    (
+                        "matrix-ws-http-only-delete-definition",
+                        "hub.apps.deleteDefinition",
+                        {
+                            "appId": "matrix.ws.http.only.delete",
+                        },
+                    ),
                 ]
 
                 for request_id, method, params in cases:

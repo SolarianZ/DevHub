@@ -13,6 +13,9 @@ internal static class TransportMethodPolicy
     internal static bool IsHttpOnlyMethod(string method)
     {
         return method is
+            HubRpcMethods.HubAppsValidateDefinition or
+            HubRpcMethods.HubAppsUpsertDefinition or
+            HubRpcMethods.HubAppsDeleteDefinition or
             HubRpcMethods.HubAppsRegisterInstance or
             HubRpcMethods.HubAppsHeartbeat or
             HubRpcMethods.HubAppsUnregisterInstance or

@@ -1,0 +1,47 @@
+{
+  "id": "apps.definitions.validate_invalid_returns_structured_errors",
+  "caseId": "CONF-003",
+  "description": "校验非法 AppDefinition 时，hub.apps.validateDefinition 必须返回结构化字段错误。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000034"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-invalid",
+    "method": "hub.apps.validateDefinition",
+    "params": {
+      "definition": {
+        "appId": "Invalid App",
+        "displayName": "Broken Definition"
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-invalid",
+    "result": {
+      "ok": true,
+      "valid": false,
+      "errors": [
+        {
+          "path": "definition.appId",
+          "code": "invalid_app_id",
+          "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "error"
+  ]
+}

@@ -47,9 +47,11 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<RuntimeTuningOptions>());
         Assert.IsType<SystemClock>(provider.GetRequiredService<IClock>());
         Assert.IsType<ProcessLauncher>(provider.GetRequiredService<IProcessLauncher>());
+        Assert.NotNull(provider.GetRequiredService<AppDefinitionValidator>());
         Assert.NotNull(provider.GetRequiredService<AppRegistry>());
         Assert.NotNull(provider.GetRequiredService<DefinitionLoader>());
         Assert.NotNull(provider.GetRequiredService<IDefinitionProvider>());
+        Assert.NotNull(provider.GetRequiredService<IDefinitionManager>());
         Assert.NotNull(provider.GetRequiredService<HubEventBus>());
         Assert.NotNull(provider.GetRequiredService<InvocationRoutingService>());
         Assert.NotNull(provider.GetRequiredService<InvocationStore>());

@@ -24,6 +24,7 @@ TESTS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
 _UNSET = object()
+DEFAULT_INSTANCE_PASSWORD = "test-instance-password"
 
 
 @contextmanager
@@ -432,17 +433,27 @@ def new_instance_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
 
 
-def unregister_instances(instance_ids: Iterable[Optional[str]]):
+def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]):
     """按实例 ID 列表执行幂等注销（用于测试清理）。"""
-    ids = [instance_id for instance_id in instance_ids if instance_id]
-    if not ids:
+    registrations = []
+    for item in instance_ids:
+        if not item:
+            continue
+        if isinstance(item, tuple):
+            if not item[0]:
+                continue
+            registrations.append(item)
+        else:
+            registrations.append((item, DEFAULT_INSTANCE_PASSWORD))
+
+    if not registrations:
         return
 
     try:
         base_url, token = DiscoveryService.get_hub_info()
         client = RpcClient(base_url, token)
-        for instance_id in ids:
-            client.unregister_instance(instance_id)
+        for instance_id, password in registrations:
+            client.unregister_instance(instance_id, password=password)
     except Exception:
         pass
 
@@ -519,6 +530,9 @@ class RpcClient:
         :param request_id: 请求 ID
         :return: 响应字典
         """
+        if isinstance(params, dict):
+            params = self._with_default_instance_password(method, params)
+
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -528,6 +542,20 @@ class RpcClient:
 
         _, response = self.post_json(payload, headers=self.headers, timeout=30)
         return response
+
+    @staticmethod
+    def _with_default_instance_password(method, params):
+        if method == "hub.apps.registerInstance" and "password" not in params and isinstance(params.get("instance"), dict):
+            enriched = dict(params)
+            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
+            return enriched
+
+        if method == "hub.apps.unregisterInstance" and "password" not in params and "instanceId" in params:
+            enriched = dict(params)
+            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
+            return enriched
+
+        return params
 
     def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
         """
@@ -565,9 +593,20 @@ class RpcClient:
         _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
         return response
 
-    def register_instance(self, instance_id, app_id, scope=None, poll=True, respond=True, pid=12345):
+    def register_instance(
+        self,
+        instance_id,
+        app_id,
+        scope=None,
+        poll=True,
+        respond=True,
+        pid=12345,
+        password=DEFAULT_INSTANCE_PASSWORD,
+        meta=None,
+    ):
         """注册实例。"""
-        return self.call("hub.apps.registerInstance", {
+        params = {
+            "password": password,
             "instance": {
                 "instanceId": instance_id,
                 "appId": app_id,
@@ -578,15 +617,18 @@ class RpcClient:
                     "respond": respond
                 }
             }
-        })
+        }
+        if meta is not None:
+            params["instance"]["meta"] = meta
+        return self.call("hub.apps.registerInstance", params)
 
     def heartbeat_instance(self, instance_id):
         """发送实例心跳。"""
         return self.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-    def unregister_instance(self, instance_id):
+    def unregister_instance(self, instance_id, password=DEFAULT_INSTANCE_PASSWORD):
         """注销实例。"""
-        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": password})
 
     def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None):
         """执行一次 poll。"""

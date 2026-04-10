@@ -162,6 +162,9 @@ public class TransportValidationImplTests
     [Fact]
     public void Impl_6_2_IsHttpOnlyMethod_ShouldMatchTransportBoundary()
     {
+        Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.validateDefinition"));
+        Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.upsertDefinition"));
+        Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.deleteDefinition"));
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.invoke.request"));
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.launch"));
         Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.events.subscribe"));

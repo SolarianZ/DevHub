@@ -10,7 +10,13 @@ import uuid
 import unittest
 
 
-from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.blackbox.test_base import (
+    DEFAULT_INSTANCE_PASSWORD,
+    DiscoveryService,
+    RpcAssertions,
+    RpcClient,
+    TestResult,
+)
 
 
 class TestAppInstances(unittest.TestCase):
@@ -54,21 +60,54 @@ class TestAppInstances(unittest.TestCase):
 
     def _cleanup_test_instances(self, instance_ids, result=None):
         """按 instanceId 清理测试实例，并记录清理失败信息。"""
-        targets = [instance_id for instance_id in instance_ids if instance_id]
+        targets = []
+        for item in instance_ids:
+            if not item:
+                continue
+            if isinstance(item, tuple):
+                if not item[0]:
+                    continue
+                targets.append(item)
+            else:
+                targets.append((item, DEFAULT_INSTANCE_PASSWORD))
+
         if not targets:
             return
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            for instance_id in targets:
-                response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+            for instance_id, password in targets:
+                response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": password})
                 error = response.get("error") if isinstance(response, dict) else None
                 if error and error.get("message") != "instance_not_found" and result is not None:
                     result.add_detail(f"WARN cleanup instance failed: instanceId={instance_id}, error={error}")
         except Exception as exc:
             if result is not None:
                 result.add_detail(f"WARN cleanup exception: {exc}")
+
+    @staticmethod
+    def _register_payload(instance_id, app_id, pid, scope=None, poll=True, respond=True, password=DEFAULT_INSTANCE_PASSWORD, meta=None):
+        payload = {
+            "password": password,
+            "instance": {
+                "instanceId": instance_id,
+                "appId": app_id,
+                "scope": scope,
+                "pid": pid,
+                "invoke": {"poll": poll, "respond": respond}
+            }
+        }
+        if meta is not None:
+            payload["instance"]["meta"] = meta
+        return payload
+
+    @staticmethod
+    def _unregister_payload(instance_id, password=DEFAULT_INSTANCE_PASSWORD):
+        return {
+            "instanceId": instance_id,
+            "password": password
+        }
 
     def _validate_app_instance_fields(self, result, instance):
         """验证 AppInstance 包含必备字段"""
@@ -77,6 +116,10 @@ class TestAppInstances(unittest.TestCase):
             if field not in instance:
                 result.mark_failure(f"❌ 实例缺少必备字段: {field}")
                 return False
+
+        if "password" in instance:
+            result.mark_failure("❌ 注册结果不应泄漏 password 字段")
+            return False
 
         import re
         rfc3339_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z'
@@ -374,6 +417,101 @@ class TestAppInstances(unittest.TestCase):
 
         except Exception as e:
             result.mark_failure(str(e))
+
+        return result
+
+    def test_register_instance_password_mismatch_rejected(self):
+        """测试同一 instanceId 使用错误密码更新时被拒绝"""
+        result = TestResult("测试同一 instanceId 使用错误密码更新时被拒绝")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-password-guard"
+            correct_password = "correct-password"
+            wrong_password = "wrong-password"
+
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, app_id, 22345, password=correct_password),
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            mismatch_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-password-guard-updated", 22346, scope="scope-updated", password=wrong_password),
+            )
+            if not RpcAssertions.expect_error(result, mismatch_response, -32002, "forbidden"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, mismatch_response, {"reason": "instance_password_mismatch"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "includeAllScopes": True, "includeOffline": True})
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            instances = list_response["result"]["instances"]
+            target = next((inst for inst in instances if inst.get("instanceId") == instance_id), None)
+            if target is None:
+                result.mark_failure("❌ 密码不匹配后原实例丢失")
+                return result
+            if target.get("appId") != app_id or target.get("pid") != 22345 or target.get("scope") is not None:
+                result.mark_failure(f"❌ 密码不匹配后实例被错误更新: {target}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances([(locals().get("instance_id"), locals().get("correct_password"))], result)
+
+        return result
+
+    def test_unregister_instance_password_mismatch_rejected(self):
+        """测试注销时密码不匹配会被拒绝且实例保持存在"""
+        result = TestResult("测试注销时密码不匹配会被拒绝且实例保持存在")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-unregister-password-guard"
+            correct_password = "correct-password"
+            wrong_password = "wrong-password"
+
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, app_id, 22347, password=correct_password),
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            unregister_response = client.call(
+                "hub.apps.unregisterInstance",
+                self._unregister_payload(instance_id, password=wrong_password),
+            )
+            if not RpcAssertions.expect_error(result, unregister_response, -32002, "forbidden"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, unregister_response, {"reason": "instance_password_mismatch"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "includeAllScopes": True, "includeOffline": True})
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            if not any(inst.get("instanceId") == instance_id for inst in list_response["result"]["instances"]):
+                result.mark_failure("❌ 注销密码不匹配后实例不应被删除")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances([(locals().get("instance_id"), locals().get("correct_password"))], result)
 
         return result
 
@@ -885,6 +1023,8 @@ class TestAppInstances(unittest.TestCase):
             self.test_heartbeat_nonexistent_instance,
             self.test_unregister_instance,
             self.test_unregister_nonexistent_instance,
+            self.test_register_instance_password_mismatch_rejected,
+            self.test_unregister_instance_password_mismatch_rejected,
             self.test_list_instances_with_params,
             self.test_list_instances_default_global_scope,
             self.test_register_instance_with_global_scope,

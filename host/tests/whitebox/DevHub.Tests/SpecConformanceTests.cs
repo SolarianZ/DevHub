@@ -11,6 +11,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public class SpecConformanceTests : IDisposable
 {
+    private const string InstancePassword = "spec-conformance-password";
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _instancesLogger = new();
@@ -158,17 +159,14 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-1",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "test-instance-001",
-                    appId = "test-app",
-                    scope = (string?)null,
-                    pid = 12345,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "test-instance-001",
+                appId = "test-app",
+                scope = (string?)null,
+                pid = 12345,
+                invoke = new { poll = true, respond = true }
+            }))
         };
 
         // Act
@@ -202,16 +200,13 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-2",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "test-instance-002",
-                    appId = "test-app",
-                    pid = 0,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "test-instance-002",
+                appId = "test-app",
+                pid = 0,
+                invoke = new { poll = true, respond = true }
+            }))
         };
 
         // scope 类型非法（非 string/null）
@@ -219,17 +214,14 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-3",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "test-instance-003",
-                    appId = "test-app",
-                    scope = 123,
-                    pid = 123,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "test-instance-003",
+                appId = "test-app",
+                scope = 123,
+                pid = 123,
+                invoke = new { poll = true, respond = true }
+            }))
         };
 
         // invoke 缺失
@@ -237,15 +229,12 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-4",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "test-instance-004",
-                    appId = "test-app",
-                    pid = 123
-                }
-            })
+                instanceId = "test-instance-004",
+                appId = "test-app",
+                pid = 123
+            }))
         };
 
         // Act
@@ -276,17 +265,14 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-register",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "test-instance-unregister",
-                    appId = "test-app",
-                    scope = (string?)null,
-                    pid = 45678,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "test-instance-unregister",
+                appId = "test-app",
+                scope = (string?)null,
+                pid = 45678,
+                invoke = new { poll = true, respond = true }
+            }))
         };
 
         await handler.HandleAsync(registerRequest, CancellationToken.None);
@@ -295,7 +281,7 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-unregister-1",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "test-instance-unregister" })
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("test-instance-unregister"))
         };
 
         var firstResponse = await handler.HandleAsync(unregisterRequest, CancellationToken.None);
@@ -338,17 +324,14 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-register-offline",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "instance-offline",
-                    appId = "list-offline-default.app",
-                    scope = (string?)null,
-                    pid = 5102,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "instance-offline",
+                appId = "list-offline-default.app",
+                scope = (string?)null,
+                pid = 5102,
+                invoke = new { poll = true, respond = true }
+            }))
         }, CancellationToken.None);
 
         clock.Advance(TimeSpan.FromSeconds(31));
@@ -357,17 +340,14 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-register-online",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "instance-online",
-                    appId = "list-offline-default.app",
-                    scope = (string?)null,
-                    pid = 5101,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "instance-online",
+                appId = "list-offline-default.app",
+                scope = (string?)null,
+                pid = 5101,
+                invoke = new { poll = true, respond = true }
+            }))
         }, CancellationToken.None);
 
         var defaultListResponse = await handler.HandleAsync(new JsonRpcRequest
@@ -398,34 +378,28 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-register-global",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "instance-global",
-                    appId = "list-all-scopes.app",
-                    scope = (string?)null,
-                    pid = 5201,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "instance-global",
+                appId = "list-all-scopes.app",
+                scope = (string?)null,
+                pid = 5201,
+                invoke = new { poll = true, respond = true }
+            }))
         }, CancellationToken.None);
 
         await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "req-register-scoped",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
-                {
-                    instanceId = "instance-scoped",
-                    appId = "list-all-scopes.app",
-                    scope = "workspace-A",
-                    pid = 5202,
-                    invoke = new { poll = true, respond = true }
-                }
-            })
+                instanceId = "instance-scoped",
+                appId = "list-all-scopes.app",
+                scope = "workspace-A",
+                pid = 5202,
+                invoke = new { poll = true, respond = true }
+            }))
         }, CancellationToken.None);
 
         var listResponse = await handler.HandleAsync(new JsonRpcRequest
@@ -477,7 +451,24 @@ public class SpecConformanceTests : IDisposable
             UtcNow = UtcNow.Add(duration);
         }
     }
-}
 
+    private static object CreateRegisterParams(object instance)
+    {
+        return new
+        {
+            password = InstancePassword,
+            instance
+        };
+    }
+
+    private static object CreateUnregisterParams(string instanceId)
+    {
+        return new
+        {
+            instanceId,
+            password = InstancePassword
+        };
+    }
+}
 
 

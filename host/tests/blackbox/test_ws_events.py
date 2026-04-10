@@ -232,6 +232,13 @@ class TestWsEvents:
     def _new_app_id(suffix):
         return f"m4-ws-{suffix}-{uuid.uuid4().hex[:6]}"
 
+    @staticmethod
+    def _definition_payload(app_id, display_name=None):
+        return {
+            "appId": app_id,
+            "displayName": display_name or app_id,
+        }
+
     def _authenticate(self, ws, token, request_id="ws-auth-1"):
         ws.send_json({
             "jsonrpc": "2.0",
@@ -342,6 +349,31 @@ class TestWsEvents:
                 found_types.append(event_type)
 
         return found_types
+
+    def _wait_for_event(self, result: TestResult, ws, expected_type, expected_subscription_id=None, timeout_sec=6):
+        deadline = time.time() + timeout_sec
+
+        while time.time() < deadline:
+            timeout = max(0.1, deadline - time.time())
+            try:
+                message = ws.recv_json(timeout=timeout)
+            except TimeoutError:
+                continue
+            except WebSocketClosed:
+                break
+
+            if not isinstance(message, dict) or message.get("method") != "hub.event":
+                continue
+
+            params = self._assert_event_notification_contract(result, message, expected_subscription_id)
+            if params is None:
+                return None
+
+            if params.get("type") == expected_type:
+                return params
+
+        result.mark_failure(f"❌ 未收到 {expected_type} 事件")
+        return None
 
     def test_m4_ws_001_first_message_must_authenticate(self):
         """M4-WS-001: 首条非鉴权请求（带 id）应返回 unauthorized。"""
@@ -1001,6 +1033,135 @@ class TestWsEvents:
 
         return result
 
+    def test_m4_ws_012d_should_push_definition_upserted_event(self):
+        """M4-WS-012D: upsertDefinition 成功后应推送 app.definition.upserted。"""
+        result = TestResult("M4-WS-012D 事件推送 app.definition.upserted")
+        app_id = self._new_app_id("definition-upserted")
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+            definition = self._definition_payload(app_id, "Definition Upserted Event")
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-12d")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-12d",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.definition.upserted"]
+                    }
+                })
+                subscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
+
+                upsert_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="upsert-12d")
+                if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                    return result
+
+                event_params = self._wait_for_event(
+                    result,
+                    ws,
+                    "app.definition.upserted",
+                    expected_subscription_id=subscription_id,
+                    timeout_sec=6,
+                )
+                if event_params is None:
+                    return result
+
+                payload = event_params.get("payload", {})
+                if payload.get("appId") != app_id:
+                    result.mark_failure(f"❌ upserted payload.appId 不匹配: {payload}")
+                    return result
+
+                event_definition = payload.get("definition")
+                if not isinstance(event_definition, dict):
+                    result.mark_failure(f"❌ upserted payload.definition 非对象: {payload}")
+                    return result
+
+                if event_definition.get("appId") != app_id:
+                    result.mark_failure(f"❌ upserted payload.definition.appId 不匹配: {payload}")
+                    return result
+
+                if event_definition.get("displayName") != definition["displayName"]:
+                    result.mark_failure(f"❌ upserted payload.definition.displayName 不匹配: {payload}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                http_base_url, _, token = self._runtime_hub_info()
+                RpcClient(http_base_url, token).call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="cleanup-12d")
+            except Exception:
+                pass
+
+        return result
+
+    def test_m4_ws_012e_should_push_definition_deleted_event(self):
+        """M4-WS-012E: deleteDefinition 成功后应推送 app.definition.deleted。"""
+        result = TestResult("M4-WS-012E 事件推送 app.definition.deleted")
+        app_id = self._new_app_id("definition-deleted")
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+            definition = self._definition_payload(app_id, "Definition Deleted Event")
+
+            seed_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="seed-12e")
+            if not RpcAssertions.expect_success(result, seed_response, ["definition"]):
+                return result
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-12e")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-12e",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.definition.deleted"]
+                    }
+                })
+                subscribe_response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
+                    return result
+                subscription_id = subscribe_response["result"].get("subscriptionId")
+
+                delete_response = rpc_client.call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="delete-12e")
+                if not RpcAssertions.expect_success(result, delete_response):
+                    return result
+
+                event_params = self._wait_for_event(
+                    result,
+                    ws,
+                    "app.definition.deleted",
+                    expected_subscription_id=subscription_id,
+                    timeout_sec=6,
+                )
+                if event_params is None:
+                    return result
+
+                payload = event_params.get("payload", {})
+                if payload.get("appId") != app_id:
+                    result.mark_failure(f"❌ deleted payload.appId 不匹配: {payload}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(self):
         """M4-WS-012B: 取消订阅未知 subscriptionId 仍应返回 ok。"""
         result = TestResult("M4-WS-012B unknown subscriptionId 取消订阅幂等")
@@ -1307,6 +1468,8 @@ class TestWsEvents:
             self.test_m4_ws_012_should_push_unregistered_event(),
             self.test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
             self.test_m4_ws_012c_unsubscribe_existing_id_should_stop_delivery(),
+            self.test_m4_ws_012d_should_push_definition_upserted_event(),
+            self.test_m4_ws_012e_should_push_definition_deleted_event(),
             self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
             self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
             self.test_m4_ws_015_first_authenticate_without_id_should_invalid_request(),
