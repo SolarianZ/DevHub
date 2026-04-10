@@ -227,15 +227,63 @@ async function runEvents(context) {
       if (action === "register_instance") {
         const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
         const instance = buildAppInstanceRegistration(ensureRecord(step.instance, `request.steps[${index}].instance`));
-        await client.registerInstance(instance);
-        registeredInstances.push({ clientName: ensureString(step.client, `request.steps[${index}].client`), instanceId: instance.instanceId });
+        const password = ensureString(step.password, `request.steps[${index}].password`);
+        await client.registerInstance(instance, password);
+        registeredInstances.push({
+          clientName: ensureString(step.client, `request.steps[${index}].client`),
+          instanceId: instance.instanceId,
+          password
+        });
         continue;
       }
 
       if (action === "unregister_instance") {
         const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
         const instanceId = String(resolveCaptureValue(step, captures, index, "instanceId"));
-        await client.unregisterInstance(instanceId);
+        const password = ensureString(step.password, `request.steps[${index}].password`);
+        await client.unregisterInstance(instanceId, password);
+        continue;
+      }
+
+      if (action === "validate_definition") {
+        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const result = await client.validateDefinition(
+          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        );
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = normalizeDefinitionValidationResult(result);
+        }
+        continue;
+      }
+
+      if (action === "upsert_definition") {
+        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const result = await client.upsertDefinition(
+          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        );
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+        }
+        continue;
+      }
+
+      if (action === "get_definition") {
+        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
+        const result = await client.getDefinition(appId);
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+        }
+        continue;
+      }
+
+      if (action === "delete_definition") {
+        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
+        await client.deleteDefinition(appId);
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = { ok: true };
+        }
         continue;
       }
 
@@ -323,7 +371,7 @@ async function runEvents(context) {
         continue;
       }
       try {
-        await client.unregisterInstance(registered.instanceId);
+        await client.unregisterInstance(registered.instanceId, registered.password);
       } catch {
       }
     }
@@ -439,6 +487,52 @@ function buildAppInstanceRegistration(payload) {
   };
 }
 
+function buildAppDefinition(payload) {
+  const definition = {
+    appId: ensureString(payload.appId, "definition.appId"),
+    displayName: ensureStringValue(payload.displayName, "definition.displayName")
+  };
+
+  if ("description" in payload && payload.description !== undefined) {
+    definition.description = ensureStringValue(payload.description, "definition.description");
+  }
+
+  if ("capabilities" in payload && payload.capabilities !== undefined) {
+    const capabilities = ensureRecord(payload.capabilities, "definition.capabilities");
+    definition.capabilities = {};
+    if ("rpc" in capabilities) {
+      definition.capabilities.rpc = ensureBoolean(capabilities.rpc, "definition.capabilities.rpc");
+    }
+    if ("events" in capabilities) {
+      definition.capabilities.events = ensureBoolean(capabilities.events, "definition.capabilities.events");
+    }
+  }
+
+  if ("launch" in payload && payload.launch !== undefined) {
+    const launch = ensureRecord(payload.launch, "definition.launch");
+    definition.launch = {
+      exePath: ensureStringValue(launch.exePath, "definition.launch.exePath")
+    };
+    if ("argsTemplate" in launch && launch.argsTemplate !== undefined) {
+      definition.launch.argsTemplate = ensureStringValue(launch.argsTemplate, "definition.launch.argsTemplate");
+    }
+    if ("workingDirectory" in launch && launch.workingDirectory !== undefined) {
+      definition.launch.workingDirectory = ensureStringValue(
+        launch.workingDirectory,
+        "definition.launch.workingDirectory"
+      );
+    }
+    if ("dedupeKeyTemplate" in launch && launch.dedupeKeyTemplate !== undefined) {
+      definition.launch.dedupeKeyTemplate = ensureStringValue(
+        launch.dedupeKeyTemplate,
+        "definition.launch.dedupeKeyTemplate"
+      );
+    }
+  }
+
+  return definition;
+}
+
 function normalizeInvocationError(error) {
   const actual = {
     code: error.code,
@@ -471,6 +565,14 @@ function normalizeEvent(event) {
     subscriptionId: event.subscriptionId,
     type: event.type,
     payload: event.payload
+  };
+}
+
+function normalizeDefinitionValidationResult(result) {
+  return {
+    ok: result.ok,
+    valid: result.valid,
+    errors: result.errors
   };
 }
 
@@ -529,6 +631,13 @@ function ensureArray(value, pathLabel) {
 function ensureString(value, pathLabel) {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${pathLabel} 必须为非空字符串。`);
+  }
+  return value;
+}
+
+function ensureStringValue(value, pathLabel) {
+  if (typeof value !== "string") {
+    throw new Error(`${pathLabel} 必须为字符串。`);
   }
   return value;
 }

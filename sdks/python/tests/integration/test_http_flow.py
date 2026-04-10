@@ -6,7 +6,16 @@ import sys
 import time
 from pathlib import Path
 
-from devhub_sdk import AppInstanceRegistration, InvokeCapability, ListInstancesRequest
+import pytest
+
+from devhub_sdk import (
+    AppDefinition,
+    AppInstanceRegistration,
+    DevHubRpcErrorCode,
+    DevHubRpcException,
+    InvokeCapability,
+    ListInstancesRequest,
+)
 from devhub_sdk.models import LaunchRequest
 
 from ._host import DevHubHostFixture
@@ -41,7 +50,8 @@ def test_M5_E2E_001_And_002_ping_and_apps_flow_should_succeed() -> None:
                 pid=99999,
                 invoke=InvokeCapability(poll=True, respond=True),
                 meta={"source": "integration"},
-            )
+            ),
+            _instance_password("http-flow-inst-1"),
         )
         assert registered.instance_id == "http-flow-inst-1"
 
@@ -51,9 +61,45 @@ def test_M5_E2E_001_And_002_ping_and_apps_flow_should_succeed() -> None:
         last_seen_utc = client.heartbeat("http-flow-inst-1")
         assert last_seen_utc is not None
 
-        client.unregister_instance("http-flow-inst-1")
+        client.unregister_instance("http-flow-inst-1", _instance_password("http-flow-inst-1"))
         instances_after_unregister = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
         assert instances_after_unregister == []
+
+
+def test_M6_E2E_001_definition_management_should_round_trip_and_surface_host_validation() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("http-definition-client")
+
+        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ")
+        invalid = client.validate_definition(invalid_definition)
+        assert invalid.ok is True
+        assert invalid.valid is False
+        assert invalid.errors
+        assert invalid.errors[0].path.startswith("definition.")
+
+        definition = AppDefinition(
+            app_id="http.manage.app",
+            display_name="Managed HTTP App",
+            description="通过 Python SDK 写入。",
+        )
+        valid = client.validate_definition(definition)
+        assert valid.valid is True
+        assert valid.errors == []
+
+        upserted = client.upsert_definition(definition)
+        assert upserted.app_id == "http.manage.app"
+        assert client.get_definition("http.manage.app").display_name == "Managed HTTP App"
+
+        with pytest.raises(DevHubRpcException) as upsert_error:
+            client.upsert_definition(invalid_definition)
+        assert upsert_error.value.code == DevHubRpcErrorCode.INVALID_PARAMS
+        assert upsert_error.value.reason == "definition_invalid"
+        assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
+
+        client.delete_definition("http.manage.app")
+        with pytest.raises(DevHubRpcException) as deleted_error:
+            client.get_definition("http.manage.app")
+        assert deleted_error.value.code == DevHubRpcErrorCode.APP_DEFINITION_NOT_FOUND
 
 
 def test_M5_E2E_002_launch_should_round_trip_and_apply_dedupe_window() -> None:
@@ -165,7 +211,8 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
                 app_id="parallel.http.app",
                 pid=99994,
                 invoke=InvokeCapability(poll=True, respond=True),
-            )
+            ),
+            _instance_password("parallel-http-inst-a"),
         )
 
         instances_a = client_a.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
@@ -177,6 +224,10 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
 def _launch_script_path() -> Path:
     return Path(__file__).resolve().parents[4] / "host" / "tests" / "assets" / "launch_noop.py"
+
+
+def _instance_password(instance_id: str) -> str:
+    return f"python-sdk-{instance_id}"
 
 
 def _launch_probe_script_path() -> Path:

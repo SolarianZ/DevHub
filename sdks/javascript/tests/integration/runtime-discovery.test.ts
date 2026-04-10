@@ -7,6 +7,8 @@ import { APP_INSTANCE_REGISTERED, DevHubEventsClient } from "../../src/events.js
 import { discoverRuntime } from "../../src/runtime.js";
 import { DevHubHostFixture } from "./host.js";
 
+const INSTANCE_PASSWORD = "runtime-discovery-password";
+
 let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
@@ -18,7 +20,7 @@ afterAll(async () => {
 });
 
 it("运行时发现应返回有效连接信息", async () => {
-  const info = await discoverRuntime(host.dataDirectory);
+  const info = await discoverRuntime(getHost().dataDirectory);
   expect(info.runtime.protocolVersion).toBe(1);
   expect(info.runtime.pid).toBeGreaterThan(0);
   expect(info.runtime.httpBaseUrl).toMatch(/^https?:\/\//);
@@ -29,14 +31,14 @@ it("运行时发现应返回有效连接信息", async () => {
 });
 
 it("集成 Host 应写入独立目录树", async () => {
-  const info = await discoverRuntime(host.dataDirectory);
+  const info = await discoverRuntime(getHost().dataDirectory);
 
   const [dataDirStat, runtimeStat, definitionsStat, instancesStat, logsStat] = await Promise.all([
-    fsPromises.stat(host.dataDirectory),
-    fsPromises.stat(host.runtimeDirectory),
-    fsPromises.stat(host.definitionsDirectory),
-    waitForDirectory(host.instancesDirectory),
-    waitForDirectory(host.logsDirectory)
+    fsPromises.stat(getHost().dataDirectory),
+    fsPromises.stat(getHost().runtimeDirectory),
+    fsPromises.stat(getHost().definitionsDirectory),
+    waitForDirectory(getHost().instancesDirectory),
+    waitForDirectory(getHost().logsDirectory)
   ]);
 
   expect(dataDirStat.isDirectory()).toBe(true);
@@ -44,26 +46,26 @@ it("集成 Host 应写入独立目录树", async () => {
   expect(definitionsStat.isDirectory()).toBe(true);
   expect(instancesStat.isDirectory()).toBe(true);
   expect(logsStat.isDirectory()).toBe(true);
-  expect(path.dirname(info.runtime.tokenFile)).toBe(host.runtimeDirectory);
+  expect(path.dirname(info.runtime.tokenFile)).toBe(getHost().runtimeDirectory);
 
-  const logFiles = await waitForLogFiles(host.logsDirectory);
+  const logFiles = await waitForLogFiles(getHost().logsDirectory);
   expect(logFiles.some((file) => file.endsWith(".log"))).toBe(true);
 });
 
 it("fromRuntime 应构造客户端连接", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "integration-client",
-    dataDir: host.dataDirectory
+    dataDir: getHost().dataDirectory
   });
 
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "integration-events-client",
-    dataDir: host.dataDirectory
+    dataDir: getHost().dataDirectory
   });
 
   try {
-    expect(client.connection.runtimeDirectory).toBe(host.runtimeDirectory);
-    expect(eventsClient.connection.runtimeDirectory).toBe(host.runtimeDirectory);
+    expect(client.connection.runtimeDirectory).toBe(getHost().runtimeDirectory);
+    expect(eventsClient.connection.runtimeDirectory).toBe(getHost().runtimeDirectory);
     expect(client.connection.token.length).toBeGreaterThan(0);
     expect(eventsClient.connection.token.length).toBeGreaterThan(0);
   } finally {
@@ -137,7 +139,7 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
           poll: true,
           respond: true
         }
-      });
+      }, INSTANCE_PASSWORD);
 
       const firstDelivered = await nextWithTimeout(firstIterator, 5_000);
       expect(firstDelivered.done).toBe(false);
@@ -156,7 +158,7 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
           poll: true,
           respond: true
         }
-      });
+      }, INSTANCE_PASSWORD);
 
       const secondDelivered = await nextWithTimeout(secondIterator, 5_000);
       expect(secondDelivered.done).toBe(false);
@@ -218,6 +220,14 @@ async function waitForLogFiles(logsDirectory: string): Promise<string[]> {
   }
 
   return await fsPromises.readdir(logsDirectory);
+}
+
+function getHost(): DevHubHostFixture {
+  if (!host) {
+    throw new Error("Host fixture not started.");
+  }
+
+  return host;
 }
 
 async function nextWithTimeout<T>(iterator: AsyncIterator<T>, timeoutMs: number): Promise<IteratorResult<T>> {

@@ -142,15 +142,110 @@ public sealed class DevHubClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 调用 <c>hub.apps.validateDefinition</c>。
+    /// </summary>
+    /// <param name="definition">候选应用定义。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>定义校验结果。</returns>
+    public async Task<DefinitionValidationResult> ValidateDefinitionAsync(
+        AppDefinition definition,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var result = await _transport.SendAsync(
+            "hub.apps.validateDefinition",
+            RequestPayloadFactory.BuildValidateDefinitionParams(definition),
+            cancellationToken);
+
+        var errorsElement = ResponsePayloadReader.EnsurePropertyExists(
+            result,
+            "hub.apps.validateDefinition.result",
+            "errors",
+            JsonValueKind.Array);
+        ResponsePayloadReader.ValidateValidationIssuesElement(errorsElement, "hub.apps.validateDefinition.result.errors");
+
+        var payload = ResponsePayloadReader.DeserializeRequired<DefinitionValidationContract>(
+            result,
+            "hub.apps.validateDefinition.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.validateDefinition.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Errors, "hub.apps.validateDefinition.result", "errors");
+
+        if (payload.Valid && payload.Errors.Count != 0)
+        {
+            throw new InvalidOperationException("hub.apps.validateDefinition.result 返回结果非法：valid=true 时 errors 必须为空。");
+        }
+
+        if (!payload.Valid && payload.Errors.Count == 0)
+        {
+            throw new InvalidOperationException("hub.apps.validateDefinition.result 返回结果非法：valid=false 时 errors 不能为空。");
+        }
+
+        return new DefinitionValidationResult
+        {
+            Ok = payload.Ok,
+            Valid = payload.Valid,
+            Errors = payload.Errors
+        };
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.upsertDefinition</c>。
+    /// </summary>
+    /// <param name="definition">待创建或更新的应用定义。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>最新生效的应用定义。</returns>
+    public async Task<AppDefinition> UpsertDefinitionAsync(AppDefinition definition, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var result = await _transport.SendAsync(
+            "hub.apps.upsertDefinition",
+            RequestPayloadFactory.BuildUpsertDefinitionParams(definition),
+            cancellationToken);
+        ResponsePayloadReader.ValidateAppDefinitionElement(
+            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.upsertDefinition.result", "definition", JsonValueKind.Object),
+            "hub.apps.upsertDefinition.result.definition");
+
+        var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.upsertDefinition.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.upsertDefinition.result");
+        ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.upsertDefinition.result", "definition");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.upsertDefinition.result", "definition.appId");
+        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.upsertDefinition.result", "definition.displayName");
+        return payload.Definition;
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.deleteDefinition</c>。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task DeleteDefinitionAsync(string appId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var result = await _transport.SendAsync(
+            "hub.apps.deleteDefinition",
+            RequestPayloadFactory.BuildDeleteDefinitionParams(appId),
+            cancellationToken);
+        var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.deleteDefinition.result");
+        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.deleteDefinition.result");
+    }
+
+    /// <summary>
     /// 调用 <c>hub.apps.registerInstance</c>。
     /// </summary>
     /// <param name="instance">实例注册载荷。</param>
+    /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>注册后的实例。</returns>
-    public async Task<AppInstance> RegisterInstanceAsync(AppInstanceRegistration instance, CancellationToken cancellationToken = default)
+    public async Task<AppInstance> RegisterInstanceAsync(
+        AppInstanceRegistration instance,
+        string password,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.registerInstance", RequestPayloadFactory.BuildRegisterInstanceParams(instance), cancellationToken);
+        var result = await _transport.SendAsync(
+            "hub.apps.registerInstance",
+            RequestPayloadFactory.BuildRegisterInstanceParams(instance, password),
+            cancellationToken);
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
             "hub.apps.registerInstance.result.instance");
@@ -185,11 +280,18 @@ public sealed class DevHubClient : IAsyncDisposable
     /// 调用 <c>hub.apps.unregisterInstance</c>。
     /// </summary>
     /// <param name="instanceId">实例标识。</param>
+    /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task UnregisterInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    public async Task UnregisterInstanceAsync(
+        string instanceId,
+        string password,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.unregisterInstance", RequestPayloadFactory.BuildUnregisterParams(instanceId), cancellationToken);
+        var result = await _transport.SendAsync(
+            "hub.apps.unregisterInstance",
+            RequestPayloadFactory.BuildUnregisterParams(instanceId, password),
+            cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
     }

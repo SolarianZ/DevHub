@@ -2,9 +2,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { DevHubClient } from "../../src/client.js";
+import { DevHubRpcErrorCode } from "../../src/errors.js";
 import { DevHubHostFixture } from "./host.js";
 
 const launchScriptPath = fileURLToPath(new URL("../assets/launch_noop.mjs", import.meta.url));
+const INSTANCE_PASSWORD = "http-flow-password";
 
 let host: DevHubHostFixture | undefined;
 
@@ -27,7 +29,7 @@ afterAll(async () => {
 it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-flow-client",
-    dataDir: host.dataDirectory
+    dataDir: getHost().dataDirectory
   });
 
   const ping = await client.ping({ value: 1 });
@@ -46,6 +48,34 @@ it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
     rpc: true
   });
 
+  const validation = await client.validateDefinition({
+    appId: "http.managed.app",
+    displayName: ""
+  });
+  expect(validation.ok).toBe(true);
+  expect(validation.valid).toBe(false);
+  expect(validation.errors[0]).toMatchObject({
+    path: "definition.displayName",
+    code: "missing_display_name"
+  });
+
+  const upserted = await client.upsertDefinition({
+    appId: "http.managed.app",
+    displayName: "HTTP Managed App"
+  });
+  expect(upserted.displayName).toBe("HTTP Managed App");
+
+  const managedDefinition = await client.getDefinition("http.managed.app");
+  expect(managedDefinition.displayName).toBe("HTTP Managed App");
+  expect(managedDefinition.capabilities).toEqual({
+    rpc: true
+  });
+
+  await client.deleteDefinition("http.managed.app");
+  await expect(client.getDefinition("http.managed.app")).rejects.toMatchObject({
+    code: DevHubRpcErrorCode.AppDefinitionNotFound
+  });
+
   const registered = await client.registerInstance({
     instanceId: "http-flow-inst-1",
     appId: "http.flow.app",
@@ -57,7 +87,7 @@ it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
     meta: {
       source: "integration"
     }
-  });
+  }, INSTANCE_PASSWORD);
 
   expect(registered.instanceId).toBe("http-flow-inst-1");
 
@@ -69,7 +99,7 @@ it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
   const lastSeenUtc = await client.heartbeat("http-flow-inst-1");
   expect(lastSeenUtc.getTime()).toBeGreaterThan(0);
 
-  await client.unregisterInstance("http-flow-inst-1");
+  await client.unregisterInstance("http-flow-inst-1", INSTANCE_PASSWORD);
   const instancesAfter = await client.listInstances({
     appId: "http.flow.app"
   });
@@ -81,7 +111,7 @@ it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
 it("M5_E2E_002 launch 应覆盖 started / starting / already_running", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-launch-client",
-    dataDir: host.dataDirectory
+    dataDir: getHost().dataDirectory
   });
 
   const started = await client.launch({
@@ -110,7 +140,7 @@ it("M5_E2E_002 launch 应覆盖 started / starting / already_running", async () 
       poll: true,
       respond: true
     }
-  });
+  }, INSTANCE_PASSWORD);
 
   const alreadyRunning = await client.launch({
     appId: "http.launch.running.app"
@@ -120,7 +150,7 @@ it("M5_E2E_002 launch 应覆盖 started / starting / already_running", async () 
   expect(alreadyRunning.pid).toBe(registered.pid);
   expect(alreadyRunning.launchId).toMatch(/^launch-/);
 
-  await client.unregisterInstance("http-launch-running-inst-1");
+  await client.unregisterInstance("http-launch-running-inst-1", INSTANCE_PASSWORD);
   await client.dispose();
 });
 
@@ -137,4 +167,12 @@ function createLaunchDefinition(appId: string): Record<string, unknown> {
 
 function quoteCommandArgument(value: string): string {
   return value.includes(" ") ? `"${value}"` : value;
+}
+
+function getHost(): DevHubHostFixture {
+  if (!host) {
+    throw new Error("Host fixture not started.");
+  }
+
+  return host;
 }

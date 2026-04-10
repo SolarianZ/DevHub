@@ -100,6 +100,15 @@ public sealed class PublicExtensionPointTests
         Assert.Throws<ArgumentException>(() => DevHubEventType.Parse("unknown.type"));
     }
 
+    [Fact]
+    public void Impl_DevHubEventType_All_ShouldIncludeDefinitionLifecycleEvents()
+    {
+        Assert.Contains(DevHubEventTypes.AppDefinitionUpserted, DevHubEventTypes.All);
+        Assert.Contains(DevHubEventTypes.AppDefinitionDeleted, DevHubEventTypes.All);
+        Assert.Equal(DevHubEventTypes.AppDefinitionUpserted, DevHubEventType.Parse("app.definition.upserted"));
+        Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, DevHubEventType.Parse("app.definition.deleted"));
+    }
+
     private static DevHubRuntimeConnectionInfo CreateConnectionInfo()
     {
         var runtime = new HubRuntime

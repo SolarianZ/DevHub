@@ -2,6 +2,8 @@ export { DevHubClient } from "./client.js";
 export { JsonRpcHttpTransport } from "./http-transport.js";
 export {
   ALL_EVENT_TYPES,
+  APP_DEFINITION_DELETED,
+  APP_DEFINITION_UPSERTED,
   APP_INSTANCE_REGISTERED,
   APP_INSTANCE_UNREGISTERED,
   DevHubEventsClient,

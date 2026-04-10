@@ -88,6 +88,54 @@ public sealed class LaunchConfiguration
 }
 
 /// <summary>
+/// 定义校验问题。
+/// </summary>
+public sealed class ValidationIssue
+{
+    /// <summary>
+    /// 出错字段路径。
+    /// </summary>
+    [JsonPropertyName("path")]
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 机器可读错误码。
+    /// </summary>
+    [JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 人类可读错误消息。
+    /// </summary>
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 定义校验结果。
+/// </summary>
+public sealed class DefinitionValidationResult
+{
+    /// <summary>
+    /// 是否成功执行校验请求。
+    /// </summary>
+    [JsonPropertyName("ok")]
+    public bool Ok { get; set; }
+
+    /// <summary>
+    /// 定义是否有效。
+    /// </summary>
+    [JsonPropertyName("valid")]
+    public bool Valid { get; set; }
+
+    /// <summary>
+    /// 字段级校验问题。
+    /// </summary>
+    [JsonPropertyName("errors")]
+    public List<ValidationIssue> Errors { get; set; } = [];
+}
+
+/// <summary>
 /// 应用实例。
 /// </summary>
 public sealed class AppInstance

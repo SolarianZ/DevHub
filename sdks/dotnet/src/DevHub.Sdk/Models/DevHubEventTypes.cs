@@ -6,6 +6,16 @@ namespace DevHub.Sdk.Models;
 public static class DevHubEventTypes
 {
     /// <summary>
+    /// 应用定义已新增或更新。
+    /// </summary>
+    public static DevHubEventType AppDefinitionUpserted => DevHubEventType.AppDefinitionUpserted;
+
+    /// <summary>
+    /// 应用定义已删除。
+    /// </summary>
+    public static DevHubEventType AppDefinitionDeleted => DevHubEventType.AppDefinitionDeleted;
+
+    /// <summary>
     /// 应用实例已注册。
     /// </summary>
     public static DevHubEventType AppInstanceRegistered => DevHubEventType.AppInstanceRegistered;

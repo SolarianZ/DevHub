@@ -1,6 +1,7 @@
 import type {
   AppDefinition,
   AppInstance,
+  DefinitionValidationResult,
   DevHubEvent,
   Invocation,
   JsonObject,
@@ -9,9 +10,14 @@ import type {
   NotifyResult,
   PingResult,
   PollResult,
-  RequestResult
+  RequestResult,
+  ValidationIssue
 } from "./models.js";
-import { ensureSupportedEventType } from "./event-types.js";
+import {
+  APP_DEFINITION_DELETED,
+  APP_DEFINITION_UPSERTED,
+  ensureSupportedEventType
+} from "./event-types.js";
 import {
   ensureJsonObject,
   ensureJsonValue,
@@ -54,12 +60,33 @@ export function parseDefinitionsResult(payload: unknown): AppDefinition[] {
 }
 
 export function parseDefinitionResult(payload: unknown): AppDefinition {
-  const record = ensureRecord(payload, "hub.apps.getDefinition.result");
-  ensureOk(record, "hub.apps.getDefinition.result");
-  return parseAppDefinition(
-    readObject(record, "hub.apps.getDefinition.result", "definition"),
-    "hub.apps.getDefinition.result.definition"
-  );
+  return parseDefinitionEnvelope(payload, "hub.apps.getDefinition.result");
+}
+
+export function parseDefinitionValidationResult(payload: unknown): DefinitionValidationResult {
+  const record = ensureRecord(payload, "hub.apps.validateDefinition.result");
+  ensureOk(record, "hub.apps.validateDefinition.result");
+  const valid = readBoolean(record, "hub.apps.validateDefinition.result", "valid");
+  const errors = readArray(record, "hub.apps.validateDefinition.result", "errors")
+    .map((item, index) => parseValidationIssue(item, `hub.apps.validateDefinition.result.errors[${index}]`));
+
+  if (valid && errors.length > 0) {
+    throw new Error("hub.apps.validateDefinition.result.errors must be empty when valid is true.");
+  }
+
+  if (!valid && errors.length === 0) {
+    throw new Error("hub.apps.validateDefinition.result.errors must contain at least one item when valid is false.");
+  }
+
+  return {
+    ok: true,
+    valid,
+    errors
+  };
+}
+
+export function parseUpsertDefinitionResult(payload: unknown): AppDefinition {
+  return parseDefinitionEnvelope(payload, "hub.apps.upsertDefinition.result");
 }
 
 export function parseRegisterInstanceResult(payload: unknown): AppInstance {
@@ -68,6 +95,15 @@ export function parseRegisterInstanceResult(payload: unknown): AppInstance {
   return parseAppInstance(
     readObject(record, "hub.apps.registerInstance.result", "instance"),
     "hub.apps.registerInstance.result.instance"
+  );
+}
+
+function parseDefinitionEnvelope(payload: unknown, location: string): AppDefinition {
+  const record = ensureRecord(payload, location);
+  ensureOk(record, location);
+  return parseAppDefinition(
+    readObject(record, location, "definition"),
+    `${location}.definition`
   );
 }
 
@@ -298,12 +334,15 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
 
 export function parseEvent(payload: unknown, location: string): DevHubEvent {
   const record = ensureRecord(payload, location);
+  const type = ensureSupportedEventType(readString(record, location, "type"), `${location}.type`);
+  const eventPayload = readOptionalJsonObject(record, location, "payload");
+  validateEventPayload(type, eventPayload, `${location}.payload`);
 
   return {
     subscriptionId: readString(record, location, "subscriptionId"),
-    type: ensureSupportedEventType(readString(record, location, "type"), `${location}.type`),
+    type,
     timeUtc: readDate(record, location, "timeUtc"),
-    payload: readOptionalJsonObject(record, location, "payload")
+    payload: eventPayload
   };
 }
 
@@ -324,6 +363,37 @@ function readOptionalJsonValue(
   }
 
   return ensureJsonValue(payload[key], `${location}.${key}`);
+}
+
+function parseValidationIssue(payload: unknown, location: string): ValidationIssue {
+  const record = ensureRecord(payload, location);
+  return {
+    path: readStringValue(record, location, "path"),
+    code: readStringValue(record, location, "code"),
+    message: readStringValue(record, location, "message")
+  };
+}
+
+function validateEventPayload(type: string, payload: JsonObject | undefined, location: string): void {
+  if (type === APP_DEFINITION_UPSERTED || type === APP_DEFINITION_DELETED) {
+    if (payload === undefined) {
+      throw new Error(`${location} is required.`);
+    }
+  }
+
+  if (payload === undefined) {
+    return;
+  }
+
+  if (type === APP_DEFINITION_UPSERTED) {
+    readAppId(payload, location, "appId");
+    parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
+    return;
+  }
+
+  if (type === APP_DEFINITION_DELETED) {
+    readAppId(payload, location, "appId");
+  }
 }
 
 function readOptionalJsonObject(

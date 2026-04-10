@@ -20,6 +20,7 @@ from .models import (
     AppCapabilities,
     AppDefinition,
     AppInstance,
+    DefinitionValidationResult,
     DevHubCalleeError,
     DevHubEvent,
     HubRuntime,
@@ -37,6 +38,7 @@ from .models import (
     PingResult,
     PollResult,
     RequestResult,
+    ValidationIssue,
 )
 
 _LAUNCH_STATUS_VALUES = {"started", "starting", "already_running"}
@@ -134,6 +136,29 @@ def parse_definition_result(value: Any, *, path: str) -> AppDefinition:
     return parse_app_definition(root.get("definition"), path=f"{path}.definition")
 
 
+def parse_definition_validation_result(value: Any, *, path: str) -> DefinitionValidationResult:
+    """解析定义校验结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    valid = require_bool(root, "valid", path)
+    errors_value = root.get("errors")
+    if not isinstance(errors_value, list):
+        raise RuntimeError(f"{path}.errors 必须为数组。")
+
+    errors = [
+        parse_validation_issue(item, path=f"{path}.errors[{index}]")
+        for index, item in enumerate(errors_value)
+    ]
+    if valid and errors:
+        raise RuntimeError(f"{path}.errors 必须为空数组。")
+    if not valid and not errors:
+        raise RuntimeError(f"{path}.errors 至少包含一项。")
+    return DefinitionValidationResult(ok=ok, valid=valid, errors=errors)
+
+
 def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
@@ -163,6 +188,17 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
+    )
+
+
+def parse_validation_issue(value: Any, *, path: str) -> ValidationIssue:
+    """解析定义校验问题。"""
+
+    root = require_mapping(value, path)
+    return ValidationIssue(
+        path=require_string(root, "path", path),
+        code=require_string(root, "code", path),
+        message=require_string(root, "message", path),
     )
 
 

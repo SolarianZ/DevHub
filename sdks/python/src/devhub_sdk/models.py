@@ -78,6 +78,24 @@ class AppDefinition:
 
 
 @dataclass(slots=True)
+class ValidationIssue:
+    """定义校验问题。"""
+
+    path: str
+    code: str
+    message: str
+
+
+@dataclass(slots=True)
+class DefinitionValidationResult:
+    """定义校验结果。"""
+
+    ok: bool
+    valid: bool
+    errors: list[ValidationIssue]
+
+
+@dataclass(slots=True)
 class InvokeCapability:
     """实例调用能力。"""
 

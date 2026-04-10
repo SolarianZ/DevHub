@@ -10,6 +10,8 @@ namespace DevHub.Sdk.IntegrationTests.Http;
 /// </summary>
 public sealed class HttpFlowTests
 {
+    private const string InstancePassword = "sdk-http-flow-password";
+
     [Fact]
     public async Task M5_E2E_001_And_002_PingAndAppsFlow_ShouldSucceed()
     {
@@ -44,7 +46,7 @@ public sealed class HttpFlowTests
                 Respond = true
             },
             Meta = new { source = "integration" }
-        });
+        }, InstancePassword);
 
         Assert.Equal("http-flow-inst-1", registered.InstanceId);
 
@@ -57,12 +59,107 @@ public sealed class HttpFlowTests
         var lastSeenUtc = await client.HeartbeatAsync("http-flow-inst-1");
         Assert.NotEqual(default, lastSeenUtc);
 
-        await client.UnregisterInstanceAsync("http-flow-inst-1");
+        await client.UnregisterInstanceAsync("http-flow-inst-1", InstancePassword);
         var instancesAfterUnregister = await client.ListInstancesAsync(new ListInstancesRequest
         {
             AppId = "http.flow.app"
         });
         Assert.Empty(instancesAfterUnregister);
+    }
+
+    [Fact]
+    public async Task Impl_DefinitionManagement_ShouldValidateUpsertDeleteAndMapErrors()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var client = await host.CreateClientAsync("definition-management-client");
+
+        var invalid = await client.ValidateDefinitionAsync(new AppDefinition
+        {
+            AppId = "Invalid App Id",
+            DisplayName = "Broken Definition"
+        });
+
+        Assert.True(invalid.Ok);
+        Assert.False(invalid.Valid);
+        Assert.NotEmpty(invalid.Errors);
+        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.appId");
+
+        var validDefinition = new AppDefinition
+        {
+            AppId = "definition.http.app",
+            DisplayName = "Definition HTTP App",
+            Description = "definition integration test"
+        };
+
+        var valid = await client.ValidateDefinitionAsync(validDefinition);
+        Assert.True(valid.Valid);
+        Assert.Empty(valid.Errors);
+
+        var upserted = await client.UpsertDefinitionAsync(validDefinition);
+        Assert.Equal(validDefinition.AppId, upserted.AppId);
+
+        var fetched = await client.GetDefinitionAsync(validDefinition.AppId);
+        Assert.Equal(validDefinition.DisplayName, fetched.DisplayName);
+
+        var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
+        {
+            AppId = "Invalid App Id",
+            DisplayName = "Broken Definition"
+        }));
+        Assert.Equal(-32602, invalidException.Code);
+        Assert.Equal("definition_invalid", invalidException.Reason);
+        Assert.True(invalidException.TryGetDataProperty("errors", out var errorsElement));
+        Assert.Equal(JsonValueKind.Array, errorsElement.ValueKind);
+
+        await client.DeleteDefinitionAsync(validDefinition.AppId);
+
+        var notFoundException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetDefinitionAsync(validDefinition.AppId));
+        Assert.Equal(-32014, notFoundException.Code);
+        Assert.Equal("app_definition_not_found", notFoundException.Message);
+    }
+
+    [Fact]
+    public async Task Impl_RegisterUnregister_WithPasswordMismatch_ShouldMapForbidden()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "password.flow.app",
+            DisplayName = "Password Flow App"
+        });
+
+        await using var client = await host.CreateClientAsync("password-flow-client");
+        var registration = new AppInstanceRegistration
+        {
+            InstanceId = "password-flow-inst-1",
+            AppId = "password.flow.app",
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        };
+
+        _ = await client.RegisterInstanceAsync(registration, InstancePassword);
+
+        var registerException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RegisterInstanceAsync(
+            new AppInstanceRegistration
+            {
+                InstanceId = registration.InstanceId,
+                AppId = registration.AppId,
+                Pid = registration.Pid + 1,
+                Invoke = registration.Invoke
+            },
+            "wrong-password"));
+        Assert.Equal(-32002, registerException.Code);
+        Assert.Equal("instance_password_mismatch", registerException.Reason);
+
+        var unregisterException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UnregisterInstanceAsync(registration.InstanceId, "wrong-password"));
+        Assert.Equal(-32002, unregisterException.Code);
+        Assert.Equal("instance_password_mismatch", unregisterException.Reason);
+
+        await client.UnregisterInstanceAsync(registration.InstanceId, InstancePassword);
     }
 
     [Fact]

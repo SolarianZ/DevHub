@@ -115,6 +115,72 @@ internal static class ResponsePayloadReader
         {
             EnsureElementKind(metaElement, $"{location}.meta", JsonValueKind.Object);
         }
+
+        if (element.TryGetProperty("password", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：不得包含 password。");
+        }
+    }
+
+    internal static void ValidateValidationIssuesElement(JsonElement element, string location)
+    {
+        EnsureElementKind(element, location, JsonValueKind.Array);
+
+        var index = 0;
+        foreach (var issueElement in element.EnumerateArray())
+        {
+            ValidateValidationIssueElement(issueElement, $"{location}[{index}]");
+            index++;
+        }
+    }
+
+    internal static void ValidateEventPayload(DevHubEvent evt, string location)
+    {
+        switch (evt.Type.Value)
+        {
+            case "app.definition.upserted":
+            case "app.definition.deleted":
+            case "app.instance.registered":
+            case "app.instance.unregistered":
+                if (evt.Payload is not { } requiredPayload)
+                {
+                    throw new InvalidOperationException($"{location}.payload 非法：不能为空。");
+                }
+
+                ValidateKnownEventPayload(requiredPayload, evt.Type.Value, location);
+                break;
+            default:
+                return;
+        }
+    }
+
+    private static void ValidateKnownEventPayload(JsonElement payload, string eventType, string location)
+    {
+        switch (eventType)
+        {
+            case "app.definition.upserted":
+                EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                ValidateAppDefinitionElement(
+                    EnsurePropertyExists(payload, $"{location}.payload", "definition", JsonValueKind.Object),
+                    $"{location}.payload.definition");
+                break;
+            case "app.definition.deleted":
+                EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                break;
+            case "app.instance.registered":
+            case "app.instance.unregistered":
+                EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureStringProperty(payload, $"{location}.payload", "instanceId");
+                if (payload.TryGetProperty("password", out _))
+                {
+                    throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");
+                }
+
+                break;
+        }
     }
 
     internal static void ValidateInvocationElement(JsonElement element, string location)
@@ -248,5 +314,13 @@ internal static class ResponsePayloadReader
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 {minimumValue}。");
         }
+    }
+
+    private static void ValidateValidationIssueElement(JsonElement element, string location)
+    {
+        EnsureElementKind(element, location, JsonValueKind.Object);
+        EnsureStringProperty(element, location, "path");
+        EnsureStringProperty(element, location, "code");
+        EnsureStringProperty(element, location, "message");
     }
 }

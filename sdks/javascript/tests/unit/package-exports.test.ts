@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import * as sdk from "../../src/index.js";
-import { APP_INSTANCE_REGISTERED, SUPPORTED_EVENT_TYPES } from "../../src/events.js";
+import {
+  APP_DEFINITION_UPSERTED,
+  APP_INSTANCE_REGISTERED,
+  SUPPORTED_EVENT_TYPES
+} from "../../src/events.js";
 import { JsonRpcHttpTransport } from "../../src/http-transport.js";
 import { FileSystemRuntimeResolver } from "../../src/runtime.js";
 import { JsonRpcWsSession } from "../../src/ws-session.js";
@@ -11,4 +15,5 @@ it("M5_TS_UT_007 顶层入口应导出高级扩展点", () => {
   expect(sdk.FileSystemRuntimeResolver).toBe(FileSystemRuntimeResolver);
   expect(sdk.SUPPORTED_EVENT_TYPES).toBe(SUPPORTED_EVENT_TYPES);
   expect(sdk.APP_INSTANCE_REGISTERED).toBe(APP_INSTANCE_REGISTERED);
+  expect(sdk.APP_DEFINITION_UPSERTED).toBe(APP_DEFINITION_UPSERTED);
 });

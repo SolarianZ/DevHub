@@ -11,12 +11,15 @@ from typing import Any, Callable
 import pytest
 
 from devhub_sdk import (
+    AppDefinition,
+    AppInstanceRegistration,
     DevHubClient,
     DevHubClientDependencies,
     DevHubClientOptions,
     DevHubRpcException,
     HubRuntime,
     HubRuntimeTuning,
+    InvokeCapability,
     InvokeRequest,
     LaunchRequest,
     RuntimeConnectionInfo,
@@ -328,6 +331,131 @@ def test_M5_PY_UT_003_http_client_when_request_result_missing_value_should_raise
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+def test_M6_PY_UT_003_http_client_validate_definition_should_send_params_and_parse_result() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "valid": False,
+            "errors": [
+                {
+                    "path": "definition.appId",
+                    "code": "invalid_app_id",
+                    "message": "invalid",
+                }
+            ],
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    result = client.validate_definition(AppDefinition(app_id="test.app", display_name="Test App"))
+
+    assert result.valid is False
+    assert result.errors[0].code == "invalid_app_id"
+    assert transport.calls[0] == {
+        "method": "hub.apps.validateDefinition",
+        "params": {
+            "definition": {
+                "appId": "test.app",
+                "displayName": "Test App",
+            }
+        },
+    }
+
+
+def test_M6_PY_UT_003_http_client_upsert_definition_should_send_request_and_parse_definition() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "definition": {
+                "appId": "test.app",
+                "displayName": "Test App",
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    definition = client.upsert_definition(AppDefinition(app_id="test.app", display_name="Test App"))
+
+    assert definition.app_id == "test.app"
+    assert transport.calls[0]["method"] == "hub.apps.upsertDefinition"
+
+
+def test_M6_PY_UT_003_http_client_delete_definition_should_send_request() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    client.delete_definition("test.app")
+
+    assert transport.calls[0] == {
+        "method": "hub.apps.deleteDefinition",
+        "params": {"appId": "test.app"},
+    }
+
+
+def test_M6_PY_UT_003_http_client_register_and_unregister_should_send_password_at_top_level() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instance": {
+                "instanceId": "inst-1",
+                "appId": "test.app",
+                "scope": None,
+                "pid": 1234,
+                "registeredAtUtc": "2026-03-09T00:00:00Z",
+                "lastSeenUtc": "2026-03-09T00:00:01Z",
+                "invoke": {"poll": True, "respond": True},
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    client.register_instance(
+        AppInstanceRegistration(
+            instance_id="inst-1",
+            app_id="test.app",
+            pid=1234,
+            invoke=InvokeCapability(poll=True, respond=True),
+        ),
+        "secret-1",
+    )
+    transport.response = {"ok": True}
+    client.unregister_instance("inst-1", "secret-1")
+
+    assert transport.calls[0]["params"]["password"] == "secret-1"
+    assert "password" not in transport.calls[0]["params"]["instance"]
+    assert transport.calls[1] == {
+        "method": "hub.apps.unregisterInstance",
+        "params": {
+            "instanceId": "inst-1",
+            "password": "secret-1",
+        },
+    }
 
 
 def test_M5_PY_UT_003_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:

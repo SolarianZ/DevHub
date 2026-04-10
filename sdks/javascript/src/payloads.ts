@@ -1,4 +1,5 @@
 import type {
+  AppDefinition,
   AppInstanceRegistration,
   InvokeRequest,
   LaunchRequest,
@@ -19,7 +20,8 @@ import {
   ensureOptionalInputRecord,
   ensureOptionalInputString,
   ensureOptionalInputStringOrNull,
-  ensureRequiredInputString
+  ensureRequiredInputString,
+  ensureRequiredInputStringValue
 } from "./validation.js";
 
 export function buildGetDefinitionParams(appId: string): Record<string, unknown> {
@@ -28,7 +30,28 @@ export function buildGetDefinitionParams(appId: string): Record<string, unknown>
   };
 }
 
-export function buildRegisterInstanceParams(instance: AppInstanceRegistration): Record<string, unknown> {
+export function buildValidateDefinitionParams(definition: AppDefinition): Record<string, unknown> {
+  return {
+    definition: buildDefinitionPayload(definition)
+  };
+}
+
+export function buildUpsertDefinitionParams(definition: AppDefinition): Record<string, unknown> {
+  return {
+    definition: buildDefinitionPayload(definition)
+  };
+}
+
+export function buildDeleteDefinitionParams(appId: string): Record<string, unknown> {
+  return {
+    appId: ensureAppId(appId, "appId")
+  };
+}
+
+export function buildRegisterInstanceParams(
+  instance: AppInstanceRegistration,
+  password: string
+): Record<string, unknown> {
   if (!instance) {
     throw new Error("instance cannot be empty.");
   }
@@ -36,6 +59,7 @@ export function buildRegisterInstanceParams(instance: AppInstanceRegistration): 
   const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
   const appId = ensureAppId(instance.appId, "appId");
   const scope = ensureOptionalInputStringOrNull(instance.scope, "scope");
+  const normalizedPassword = ensureRequiredInputString(password, "password");
 
   if (!instance.invoke) {
     throw new Error("invoke cannot be empty.");
@@ -49,6 +73,7 @@ export function buildRegisterInstanceParams(instance: AppInstanceRegistration): 
   }
 
   const payload: Record<string, unknown> = {
+    password: normalizedPassword,
     instance: {
       instanceId,
       appId,
@@ -77,9 +102,10 @@ export function buildHeartbeatParams(instanceId: string): Record<string, unknown
   };
 }
 
-export function buildUnregisterParams(instanceId: string): Record<string, unknown> {
+export function buildUnregisterParams(instanceId: string, password: string): Record<string, unknown> {
   return {
-    instanceId: ensureInstanceId(instanceId, "instanceId")
+    instanceId: ensureInstanceId(instanceId, "instanceId"),
+    password: ensureRequiredInputString(password, "password")
   };
 }
 
@@ -293,6 +319,69 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
     }
 
     payload.error = errorPayload;
+  }
+
+  return payload;
+}
+
+function buildDefinitionPayload(definition: AppDefinition): Record<string, unknown> {
+  if (!definition || typeof definition !== "object" || Array.isArray(definition)) {
+    throw new Error("definition cannot be empty.");
+  }
+
+  const payload: Record<string, unknown> = {
+    appId: ensureAppId(definition.appId, "definition.appId"),
+    displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
+  };
+
+  if (definition.description !== undefined) {
+    payload.description = ensureRequiredInputStringValue(definition.description, "definition.description");
+  }
+
+  if (definition.capabilities !== undefined) {
+    if (!definition.capabilities || typeof definition.capabilities !== "object" || Array.isArray(definition.capabilities)) {
+      throw new Error("definition.capabilities must be an object.");
+    }
+
+    const capabilitiesPayload: Record<string, unknown> = {};
+    if (definition.capabilities.rpc !== undefined) {
+      capabilitiesPayload.rpc = ensureInputBoolean(definition.capabilities.rpc, "definition.capabilities.rpc");
+    }
+    if (definition.capabilities.events !== undefined) {
+      capabilitiesPayload.events = ensureInputBoolean(definition.capabilities.events, "definition.capabilities.events");
+    }
+    payload.capabilities = capabilitiesPayload;
+  }
+
+  if (definition.launch !== undefined) {
+    if (!definition.launch || typeof definition.launch !== "object" || Array.isArray(definition.launch)) {
+      throw new Error("definition.launch must be an object.");
+    }
+
+    const launchPayload: Record<string, unknown> = {
+      exePath: ensureRequiredInputStringValue(definition.launch.exePath, "definition.launch.exePath")
+    };
+
+    if (definition.launch.argsTemplate !== undefined) {
+      launchPayload.argsTemplate = ensureRequiredInputStringValue(
+        definition.launch.argsTemplate,
+        "definition.launch.argsTemplate"
+      );
+    }
+    if (definition.launch.workingDirectory !== undefined) {
+      launchPayload.workingDirectory = ensureRequiredInputStringValue(
+        definition.launch.workingDirectory,
+        "definition.launch.workingDirectory"
+      );
+    }
+    if (definition.launch.dedupeKeyTemplate !== undefined) {
+      launchPayload.dedupeKeyTemplate = ensureRequiredInputStringValue(
+        definition.launch.dedupeKeyTemplate,
+        "definition.launch.dedupeKeyTemplate"
+      );
+    }
+
+    payload.launch = launchPayload;
   }
 
   return payload;

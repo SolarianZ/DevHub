@@ -195,6 +195,53 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void Impl_DefinitionBuilders_ShouldUseTopLevelDefinitionPayload()
+    {
+        var definition = new AppDefinition
+        {
+            AppId = string.Empty,
+            DisplayName = string.Empty
+        };
+
+        var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
+        var upsertPayload = RequestPayloadFactory.BuildUpsertDefinitionParams(definition);
+
+        using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload));
+        using var upsertDocument = JsonDocument.Parse(JsonSerializer.Serialize(upsertPayload));
+
+        Assert.True(validateDocument.RootElement.TryGetProperty("definition", out var validateDefinition));
+        Assert.Equal(JsonValueKind.Object, validateDefinition.ValueKind);
+        Assert.True(upsertDocument.RootElement.TryGetProperty("definition", out var upsertDefinition));
+        Assert.Equal(JsonValueKind.Object, upsertDefinition.ValueKind);
+    }
+
+    [Fact]
+    public void Impl_InstanceBuilders_ShouldPlacePasswordAtTopLevel()
+    {
+        var registerPayload = RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
+            {
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            "secret-1");
+        var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "secret-1");
+
+        using var registerDocument = JsonDocument.Parse(JsonSerializer.Serialize(registerPayload));
+        using var unregisterDocument = JsonDocument.Parse(JsonSerializer.Serialize(unregisterPayload));
+
+        Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
+        Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
+        Assert.Equal("secret-1", unregisterDocument.RootElement.GetProperty("password").GetString());
+    }
+
+    [Fact]
     public void M5_DN_UT_006_RespondBuilder_WhenValueExplicitlyNull_ShouldWriteJsonNull()
     {
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
@@ -212,18 +259,20 @@ public sealed class InvocationRequestBuilderTests
     [Fact]
     public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
-        {
-            InstanceId = "inst-1",
-            AppId = "test.app",
-            Pid = Environment.ProcessId,
-            Invoke = new InvokeCapability
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
             {
-                Poll = true,
-                Respond = true
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                },
+                Meta = new[] { 1, 2, 3 }
             },
-            Meta = new[] { 1, 2, 3 }
-        }));
+            "secret-1"));
     }
 
     [Fact]

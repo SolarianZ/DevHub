@@ -14,9 +14,37 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance)
+    internal static object BuildValidateDefinitionParams(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return new Dictionary<string, object?>
+        {
+            ["definition"] = definition
+        };
+    }
+
+    internal static object BuildUpsertDefinitionParams(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return new Dictionary<string, object?>
+        {
+            ["definition"] = definition
+        };
+    }
+
+    internal static object BuildDeleteDefinitionParams(string appId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        return new Dictionary<string, object?>
+        {
+            ["appId"] = appId
+        };
+    }
+
+    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
         ArgumentNullException.ThrowIfNull(instance.Invoke);
@@ -55,6 +83,7 @@ internal static class RequestPayloadFactory
 
         return new Dictionary<string, object?>
         {
+            ["password"] = password,
             ["instance"] = instancePayload
         };
     }
@@ -68,12 +97,14 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildUnregisterParams(string instanceId)
+    internal static object BuildUnregisterParams(string instanceId, string password)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = instanceId
+            ["instanceId"] = instanceId,
+            ["password"] = password
         };
     }
 

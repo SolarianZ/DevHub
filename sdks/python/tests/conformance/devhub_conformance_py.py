@@ -22,6 +22,8 @@ if str(PYTHON_SDK_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_SDK_ROOT))
 
 from devhub_sdk import (  # type: ignore  # noqa: E402
+    AppCapabilities,
+    AppDefinition,
     AppInstanceRegistration,
     DevHubClient,
     DevHubClientOptions,
@@ -31,6 +33,7 @@ from devhub_sdk import (  # type: ignore  # noqa: E402
     InvocationTarget,
     InvokeCapability,
     InvokeRequest,
+    LaunchConfiguration,
     discover_runtime,
 )
 
@@ -217,7 +220,7 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
     event_iterators: dict[str, Any] = {}
     http_clients: dict[str, DevHubClient] = {}
     captures: dict[str, Any] = {}
-    registered_instances: list[tuple[str, str]] = []
+    registered_instances: dict[str, tuple[str, str]] = {}
 
     try:
         for index, raw_step in enumerate(steps):
@@ -266,14 +269,58 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 instance_payload = require_mapping(step.get("instance"), f"request.steps[{index}].instance")
                 instance = build_app_instance_registration(instance_payload)
-                require_http_client(http_clients, client_name, index).register_instance(instance)
-                registered_instances.append((client_name, instance.instance_id))
+                password = resolve_password(
+                    step,
+                    captures,
+                    index,
+                    default=_default_instance_password(instance.instance_id),
+                )
+                require_http_client(http_clients, client_name, index).register_instance(instance, password)
+                registered_instances[instance.instance_id] = (client_name, password)
                 continue
 
             if action == "unregister_instance":
                 client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 instance_id = resolve_capture_value(step, captures, index, "instanceId")
-                require_http_client(http_clients, client_name, index).unregister_instance(str(instance_id))
+                registered_password = registered_instances.get(str(instance_id), (client_name, _default_instance_password(str(instance_id))))[1]
+                password = resolve_password(step, captures, index, default=registered_password)
+                require_http_client(http_clients, client_name, index).unregister_instance(str(instance_id), password)
+                registered_instances.pop(str(instance_id), None)
+                continue
+
+            if action == "validate_definition":
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
+                result = require_http_client(http_clients, client_name, index).validate_definition(
+                    build_app_definition(definition_payload)
+                )
+                capture_as = step.get("captureAs")
+                if capture_as is not None:
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = (
+                        normalize_definition_validation_result(result)
+                    )
+                continue
+
+            if action == "upsert_definition":
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
+                definition = require_http_client(http_clients, client_name, index).upsert_definition(
+                    build_app_definition(definition_payload)
+                )
+                capture_as = step.get("captureAs")
+                if capture_as is not None:
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = normalize_app_definition(
+                        definition
+                    )
+                continue
+
+            if action == "delete_definition":
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                app_id = resolve_capture_value(step, captures, index, "appId")
+                require_http_client(http_clients, client_name, index).delete_definition(str(app_id))
+                capture_as = step.get("captureAs")
+                if capture_as is not None:
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = {"ok": True}
                 continue
 
             if action == "read_event":
@@ -337,9 +384,9 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
             "error": None,
         }
     finally:
-        for client_name, instance_id in reversed(registered_instances):
+        for instance_id, (client_name, password) in reversed(list(registered_instances.items())):
             try:
-                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id)
+                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id, password)
             except Exception:
                 pass
         for client in http_clients.values():
@@ -465,6 +512,36 @@ def build_app_instance_registration(payload: dict[str, Any]) -> AppInstanceRegis
     )
 
 
+def build_app_definition(payload: dict[str, Any]) -> AppDefinition:
+    capabilities_payload = payload.get("capabilities")
+    capabilities = None
+    if capabilities_payload is not None:
+        capabilities_root = require_mapping(capabilities_payload, "definition.capabilities")
+        capabilities = AppCapabilities(
+            rpc=capabilities_root.get("rpc"),
+            events=capabilities_root.get("events"),
+        )
+
+    launch_payload = payload.get("launch")
+    launch = None
+    if launch_payload is not None:
+        launch_root = require_mapping(launch_payload, "definition.launch")
+        launch = LaunchConfiguration(
+            exe_path=launch_root.get("exePath"),
+            args_template=launch_root.get("argsTemplate"),
+            working_directory=launch_root.get("workingDirectory"),
+            dedupe_key_template=launch_root.get("dedupeKeyTemplate"),
+        )
+
+    return AppDefinition(
+        app_id=require_string(payload.get("appId"), "definition.appId"),
+        display_name=require_string(payload.get("displayName"), "definition.displayName"),
+        description=payload.get("description"),
+        capabilities=capabilities,
+        launch=launch,
+    )
+
+
 def normalize_invocation_error(exc: DevHubRpcException) -> dict[str, Any]:
     actual: dict[str, Any] = {
         "code": exc.code,
@@ -493,6 +570,47 @@ def normalize_discovery_error(explicit_data_dir: str | None, exc: Exception) -> 
         "reason": reason,
         "message": str(exc),
     }
+
+
+def normalize_definition_validation_result(result) -> dict[str, Any]:
+    return {
+        "ok": result.ok,
+        "valid": result.valid,
+        "errors": [
+            {
+                "path": issue.path,
+                "code": issue.code,
+                "message": issue.message,
+            }
+            for issue in result.errors
+        ],
+    }
+
+
+def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
+    actual: dict[str, Any] = {
+        "appId": definition.app_id,
+        "displayName": definition.display_name,
+    }
+    if definition.description is not None:
+        actual["description"] = definition.description
+    if definition.capabilities is not None:
+        capabilities: dict[str, Any] = {}
+        if definition.capabilities.rpc is not None:
+            capabilities["rpc"] = definition.capabilities.rpc
+        if definition.capabilities.events is not None:
+            capabilities["events"] = definition.capabilities.events
+        actual["capabilities"] = capabilities
+    if definition.launch is not None:
+        launch: dict[str, Any] = {"exePath": definition.launch.exe_path}
+        if definition.launch.args_template is not None:
+            launch["argsTemplate"] = definition.launch.args_template
+        if definition.launch.working_directory is not None:
+            launch["workingDirectory"] = definition.launch.working_directory
+        if definition.launch.dedupe_key_template is not None:
+            launch["dedupeKeyTemplate"] = definition.launch.dedupe_key_template
+        actual["launch"] = launch
+    return actual
 
 
 def normalize_event(event: Any) -> dict[str, Any]:
@@ -528,6 +646,23 @@ def resolve_capture_value(step: dict[str, Any], captures: dict[str, Any], index:
             raise ValueError(f"request.steps[{index}].{reference_field} 引用不存在：{capture_key}")
         return captures[capture_key]
     return step.get(field_name)
+
+
+def resolve_password(
+    step: dict[str, Any],
+    captures: dict[str, Any],
+    index: int,
+    *,
+    default: str,
+) -> str:
+    value = resolve_capture_value(step, captures, index, "password")
+    if value is None:
+        return default
+    return require_string(value, f"request.steps[{index}].password")
+
+
+def _default_instance_password(instance_id: str) -> str:
+    return f"conformance-{instance_id}"
 
 
 def read_timeout_ms(step: dict[str, Any], index: int) -> int:

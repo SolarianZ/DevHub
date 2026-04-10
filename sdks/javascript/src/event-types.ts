@@ -1,3 +1,5 @@
+export const APP_DEFINITION_UPSERTED = "app.definition.upserted";
+export const APP_DEFINITION_DELETED = "app.definition.deleted";
 export const APP_INSTANCE_REGISTERED = "app.instance.registered";
 export const APP_INSTANCE_UNREGISTERED = "app.instance.unregistered";
 export const INVOCATION_QUEUED = "invocation.queued";
@@ -6,6 +8,8 @@ export const INVOCATION_COMPLETED = "invocation.completed";
 export const INVOCATION_FAILED = "invocation.failed";
 
 export const SUPPORTED_EVENT_TYPES = [
+  APP_DEFINITION_UPSERTED,
+  APP_DEFINITION_DELETED,
   APP_INSTANCE_REGISTERED,
   APP_INSTANCE_UNREGISTERED,
   INVOCATION_QUEUED,

@@ -8,6 +8,7 @@ from devhub_sdk._parsing import (
     parse_app_instance,
     parse_callee_error,
     parse_datetime,
+    parse_definition_validation_result,
     parse_event,
     parse_invocation,
     parse_launch_result,
@@ -85,6 +86,46 @@ def test_M5_PY_UT_005_parse_app_definition_when_launch_exe_path_empty_should_all
 
     assert definition.launch is not None
     assert definition.launch.exe_path == ""
+
+
+def test_M6_PY_UT_005_parse_definition_validation_result_should_round_trip_issues() -> None:
+    result = parse_definition_validation_result(
+        {
+            "ok": True,
+            "valid": False,
+            "errors": [
+                {
+                    "path": "definition.appId",
+                    "code": "invalid_app_id",
+                    "message": "appId must match ^[a-z0-9][a-z0-9.-]*$",
+                }
+            ],
+        },
+        path="hub.apps.validateDefinition.result",
+    )
+
+    assert result.ok is True
+    assert result.valid is False
+    assert result.errors[0].path == "definition.appId"
+    assert result.errors[0].code == "invalid_app_id"
+
+
+def test_M6_PY_UT_005_parse_definition_validation_result_when_valid_contains_errors_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"errors"):
+        parse_definition_validation_result(
+            {
+                "ok": True,
+                "valid": True,
+                "errors": [
+                    {
+                        "path": "definition.appId",
+                        "code": "invalid_app_id",
+                        "message": "invalid",
+                    }
+                ],
+            },
+            path="hub.apps.validateDefinition.result",
+        )
 
 
 @pytest.mark.parametrize(
@@ -290,6 +331,26 @@ def test_M5_PY_UT_005_parse_event_should_return_supported_event_type() -> None:
     )
 
     assert event.type is DevHubEventType.INVOCATION_COMPLETED
+
+
+def test_M6_PY_UT_005_parse_event_should_accept_definition_lifecycle_type() -> None:
+    event = parse_event(
+        {
+            "subscriptionId": "sub-1",
+            "type": "app.definition.upserted",
+            "timeUtc": "2026-03-09T00:00:00Z",
+            "payload": {
+                "appId": "test.app",
+                "definition": {
+                    "appId": "test.app",
+                    "displayName": "Test App",
+                },
+            },
+        },
+        path="hub.event.params",
+    )
+
+    assert event.type is DevHubEventType.APP_DEFINITION_UPSERTED
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,7 @@ from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from ._parsing import (
     parse_app_instance,
     parse_datetime,
+    parse_definition_validation_result,
     parse_definition_result,
     parse_definitions_result,
     parse_instances_result,
@@ -21,6 +22,7 @@ from ._parsing import (
     require_mapping,
 )
 from ._payloads import (
+    build_delete_definition_params,
     build_get_definition_params,
     build_heartbeat_params,
     build_launch_params,
@@ -30,13 +32,16 @@ from ._payloads import (
     build_register_instance_params,
     build_request_params,
     build_respond_params,
+    build_upsert_definition_params,
     build_unregister_params,
+    build_validate_definition_params,
 )
 from ._validation import ensure_json_value
 from .models import (
     AppDefinition,
     AppInstance,
     AppInstanceRegistration,
+    DefinitionValidationResult,
     DevHubClientOptions,
     HubRuntime,
     InvokeRequest,
@@ -143,10 +148,30 @@ class DevHubClient:
         result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id))
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
 
-    def register_instance(self, instance: AppInstanceRegistration) -> AppInstance:
+    def validate_definition(self, definition: AppDefinition) -> DefinitionValidationResult:
+        """调用 `hub.apps.validateDefinition`。"""
+
+        result = self._send("hub.apps.validateDefinition", build_validate_definition_params(definition))
+        return parse_definition_validation_result(result, path="hub.apps.validateDefinition.result")
+
+    def upsert_definition(self, definition: AppDefinition) -> AppDefinition:
+        """调用 `hub.apps.upsertDefinition`。"""
+
+        result = self._send("hub.apps.upsertDefinition", build_upsert_definition_params(definition))
+        return parse_definition_result(result, path="hub.apps.upsertDefinition.result")
+
+    def delete_definition(self, app_id: str) -> None:
+        """调用 `hub.apps.deleteDefinition`。"""
+
+        result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id))
+        root = require_mapping(result, "hub.apps.deleteDefinition.result")
+        if not require_bool(root, "ok", "hub.apps.deleteDefinition.result"):
+            raise RuntimeError("hub.apps.deleteDefinition.result 返回结果非法。")
+
+    def register_instance(self, instance: AppInstanceRegistration, password: str) -> AppInstance:
         """调用 `hub.apps.registerInstance`。"""
 
-        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance))
+        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password))
         root = require_mapping(result, "hub.apps.registerInstance.result")
         if not require_bool(root, "ok", "hub.apps.registerInstance.result"):
             raise RuntimeError("hub.apps.registerInstance.result 返回结果非法。")
@@ -164,10 +189,10 @@ class DevHubClient:
             raise RuntimeError("hub.apps.heartbeat.result.lastSeenUtc 类型非法。")
         return parse_datetime(last_seen, "hub.apps.heartbeat.result.lastSeenUtc")
 
-    def unregister_instance(self, instance_id: str) -> None:
+    def unregister_instance(self, instance_id: str, password: str) -> None:
         """调用 `hub.apps.unregisterInstance`。"""
 
-        result = self._send("hub.apps.unregisterInstance", build_unregister_params(instance_id))
+        result = self._send("hub.apps.unregisterInstance", build_unregister_params(instance_id, password))
         root = require_mapping(result, "hub.apps.unregisterInstance.result")
         if not require_bool(root, "ok", "hub.apps.unregisterInstance.result"):
             raise RuntimeError("hub.apps.unregisterInstance.result 返回结果非法。")

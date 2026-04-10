@@ -48,6 +48,18 @@ export interface AppDefinition {
   launch?: LaunchConfiguration;
 }
 
+export interface ValidationIssue {
+  path: string;
+  code: string;
+  message: string;
+}
+
+export interface DefinitionValidationResult {
+  ok: true;
+  valid: boolean;
+  errors: ValidationIssue[];
+}
+
 export interface InvokeCapability {
   poll: boolean;
   respond: boolean;

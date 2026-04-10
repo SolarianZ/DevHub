@@ -283,6 +283,14 @@ export function ensureRequiredInputString(value: unknown, propertyName: string):
   return value;
 }
 
+export function ensureRequiredInputStringValue(value: unknown, propertyName: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${propertyName} 必须为字符串。`);
+  }
+
+  return value;
+}
+
 export function ensureAppId(value: unknown, propertyName: string): string {
   const parsed = ensureRequiredInputString(value, propertyName);
   if (!APP_ID_REGEX.test(parsed)) {

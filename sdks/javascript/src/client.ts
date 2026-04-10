@@ -7,6 +7,7 @@ import type {
   AppDefinition,
   AppInstance,
   AppInstanceRegistration,
+  DefinitionValidationResult,
   DevHubClientOptions,
   InvokeRequest,
   JsonValue,
@@ -23,6 +24,7 @@ import type {
 } from "./models.js";
 import {
   parseDefinitionResult,
+  parseDefinitionValidationResult,
   parseDefinitionsResult,
   parseHeartbeatResult,
   parseInstancesResult,
@@ -32,9 +34,11 @@ import {
   parsePollResult,
   parseRegisterInstanceResult,
   parseRequestResult,
+  parseUpsertDefinitionResult,
   parseVoidOkResult
 } from "./parsers.js";
 import {
+  buildDeleteDefinitionParams,
   buildGetDefinitionParams,
   buildHeartbeatParams,
   buildInvokeParams,
@@ -43,7 +47,9 @@ import {
   buildPollParams,
   buildRegisterInstanceParams,
   buildRespondParams,
-  buildUnregisterParams
+  buildUpsertDefinitionParams,
+  buildUnregisterParams,
+  buildValidateDefinitionParams
 } from "./payloads.js";
 import { FileSystemRuntimeResolver } from "./runtime.js";
 import { ensureJsonValue } from "./validation.js";
@@ -116,10 +122,32 @@ export class DevHubClient {
     return parseDefinitionResult(await this.transport.send("hub.apps.getDefinition", buildGetDefinitionParams(appId)));
   }
 
-  async registerInstance(instance: AppInstanceRegistration): Promise<AppInstance> {
+  async validateDefinition(definition: AppDefinition): Promise<DefinitionValidationResult> {
+    this.throwIfDisposed();
+    return parseDefinitionValidationResult(
+      await this.transport.send("hub.apps.validateDefinition", buildValidateDefinitionParams(definition))
+    );
+  }
+
+  async upsertDefinition(definition: AppDefinition): Promise<AppDefinition> {
+    this.throwIfDisposed();
+    return parseUpsertDefinitionResult(
+      await this.transport.send("hub.apps.upsertDefinition", buildUpsertDefinitionParams(definition))
+    );
+  }
+
+  async deleteDefinition(appId: string): Promise<void> {
+    this.throwIfDisposed();
+    parseVoidOkResult(
+      await this.transport.send("hub.apps.deleteDefinition", buildDeleteDefinitionParams(appId)),
+      "hub.apps.deleteDefinition.result"
+    );
+  }
+
+  async registerInstance(instance: AppInstanceRegistration, password: string): Promise<AppInstance> {
     this.throwIfDisposed();
     return parseRegisterInstanceResult(
-      await this.transport.send("hub.apps.registerInstance", buildRegisterInstanceParams(instance))
+      await this.transport.send("hub.apps.registerInstance", buildRegisterInstanceParams(instance, password))
     );
   }
 
@@ -128,10 +156,10 @@ export class DevHubClient {
     return parseHeartbeatResult(await this.transport.send("hub.apps.heartbeat", buildHeartbeatParams(instanceId)));
   }
 
-  async unregisterInstance(instanceId: string): Promise<void> {
+  async unregisterInstance(instanceId: string, password: string): Promise<void> {
     this.throwIfDisposed();
     parseVoidOkResult(
-      await this.transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId)),
+      await this.transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId, password)),
       "hub.apps.unregisterInstance.result"
     );
   }
