@@ -24,18 +24,21 @@ public sealed class AppDefinition
     /// 应用描述。
     /// </summary>
     [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
 
     /// <summary>
     /// 能力声明。
     /// </summary>
     [JsonPropertyName("capabilities")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public AppCapabilities? Capabilities { get; set; }
 
     /// <summary>
     /// 启动配置。
     /// </summary>
     [JsonPropertyName("launch")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public LaunchConfiguration? Launch { get; set; }
 }
 
@@ -48,12 +51,14 @@ public sealed class AppCapabilities
     /// 是否允许 RPC。
     /// </summary>
     [JsonPropertyName("rpc")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Rpc { get; set; }
 
     /// <summary>
     /// 是否声明事件能力。
     /// </summary>
     [JsonPropertyName("events")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Events { get; set; }
 }
 
@@ -66,24 +71,28 @@ public sealed class LaunchConfiguration
     /// 可执行文件路径。
     /// </summary>
     [JsonPropertyName("exePath")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ExePath { get; set; }
 
     /// <summary>
     /// 参数模板。
     /// </summary>
     [JsonPropertyName("argsTemplate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ArgsTemplate { get; set; }
 
     /// <summary>
     /// 工作目录。
     /// </summary>
     [JsonPropertyName("workingDirectory")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? WorkingDirectory { get; set; }
 
     /// <summary>
     /// 去重键模板。
     /// </summary>
     [JsonPropertyName("dedupeKeyTemplate")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DedupeKeyTemplate { get; set; }
 }
 

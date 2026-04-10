@@ -211,8 +211,14 @@ public sealed class InvocationRequestBuilderTests
 
         Assert.True(validateDocument.RootElement.TryGetProperty("definition", out var validateDefinition));
         Assert.Equal(JsonValueKind.Object, validateDefinition.ValueKind);
+        Assert.False(validateDefinition.TryGetProperty("description", out _));
+        Assert.False(validateDefinition.TryGetProperty("capabilities", out _));
+        Assert.False(validateDefinition.TryGetProperty("launch", out _));
         Assert.True(upsertDocument.RootElement.TryGetProperty("definition", out var upsertDefinition));
         Assert.Equal(JsonValueKind.Object, upsertDefinition.ValueKind);
+        Assert.False(upsertDefinition.TryGetProperty("description", out _));
+        Assert.False(upsertDefinition.TryGetProperty("capabilities", out _));
+        Assert.False(upsertDefinition.TryGetProperty("launch", out _));
     }
 
     [Fact]
