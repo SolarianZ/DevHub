@@ -57,6 +57,17 @@ npm --prefix sdks/javascript run build
 python -m pip install -e "./sdks/python[test]" requests
 ```
 
+如果同机还要并行跑三套 SDK 集成测试，或者希望官方适配器统一复用同一份 Host 构建产物，请先串行准备固定的 Host 程序，并把三套 SDK 的预构建环境变量都指向同一个 `DevHub.Host.dll`：
+
+```bash
+dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+export DEVHUB_DOTNET_SDK_HOST_ASSEMBLY="$PWD/host/src/DevHub.Host/bin/Release/net10.0/DevHub.Host.dll"
+export DEVHUB_JS_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
+export DEVHUB_PYTHON_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
+```
+
+这样 `.NET`、`JS/TS`、`Python` 三套官方适配器都会复用同一份 Host 可执行产物，避免多个测试进程同时触发 `host/src/DevHub.Host` 的构建竞争。
+
 如需先验证 runner 自身的 manifest / 过滤 / 失败输出逻辑，可执行：
 
 ```bash

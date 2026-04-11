@@ -199,7 +199,8 @@ Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`w
 - `hub.ping`
 - `hub.ws.authenticate` (WS only)
 - `hub.apps.listDefinitions` / `getDefinition`
-- `hub.apps.registerInstance` / `unregisterInstance` / `heartbeat` / `listInstances`
+- `hub.apps.validateDefinition` / `upsertDefinition` / `deleteDefinition` (HTTP only)
+- `hub.apps.registerInstance(password)` / `unregisterInstance(password)` / `heartbeat` / `listInstances`
 
 ### 8.2 启动与调用
 - `hub.apps.launch`
@@ -235,6 +236,7 @@ Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路�
 
 - **订阅**：`hub.events.subscribe` / `unsubscribe`。
 - **推送**：`hub.event` 通知。
+- **事件闭集**：包含 `app.instance.*`、`invocation.*`、`app.definition.upserted`、`app.definition.deleted` 等公开类型。
 - **生命周期**：Subscription 绑定 WS 连接，断开自动清理。
 
 ---
@@ -276,7 +278,7 @@ Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
 - `invoke.respond`
 
 ### 13.4 文件写入原子性
-- `runtime\hub.json`、`apps\instances\*.json` 等建议使用：
+- `runtime\hub.json`、`apps\definitions\*.json`、`apps\instances\*.json` 等建议使用：
   - 写临时文件 + 原子 rename/replace。
 - 避免半写入导致 discovery/诊断读取失败。
 

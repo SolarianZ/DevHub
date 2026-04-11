@@ -74,12 +74,31 @@ HTTP 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对
 - [`ping.request.json`](../spec/protocol-examples/v1.0.1/http/ping.request.json)
 - [`ping.success.json`](../spec/protocol-examples/v1.0.1/http/ping.success.json)
 
-如果要接入实例注册与调用链路，可继续参考：
+如果要接入定义管理、实例注册与调用链路，可继续参考：
 
+- [`get-definition.request.json`](../spec/protocol-examples/v1.0.1/http/get-definition.request.json)
+- [`get-definition.success.json`](../spec/protocol-examples/v1.0.1/http/get-definition.success.json)
+- [`validate-definition.valid.request.json`](../spec/protocol-examples/v1.0.1/http/validate-definition.valid.request.json)
+- [`validate-definition.valid.success.json`](../spec/protocol-examples/v1.0.1/http/validate-definition.valid.success.json)
+- [`validate-definition.invalid.request.json`](../spec/protocol-examples/v1.0.1/http/validate-definition.invalid.request.json)
+- [`validate-definition.invalid.success.json`](../spec/protocol-examples/v1.0.1/http/validate-definition.invalid.success.json)
+- [`upsert-definition.request.json`](../spec/protocol-examples/v1.0.1/http/upsert-definition.request.json)
+- [`upsert-definition.success.json`](../spec/protocol-examples/v1.0.1/http/upsert-definition.success.json)
+- [`upsert-definition.definition-invalid.error.json`](../spec/protocol-examples/v1.0.1/http/upsert-definition.definition-invalid.error.json)
+- [`delete-definition.request.json`](../spec/protocol-examples/v1.0.1/http/delete-definition.request.json)
+- [`delete-definition.success.json`](../spec/protocol-examples/v1.0.1/http/delete-definition.success.json)
 - [`register-instance.request.json`](../spec/protocol-examples/v1.0.1/http/register-instance.request.json)
 - [`register-instance.success.json`](../spec/protocol-examples/v1.0.1/http/register-instance.success.json)
+- [`unregister-instance.request.json`](../spec/protocol-examples/v1.0.1/http/unregister-instance.request.json)
+- [`unregister-instance.success.json`](../spec/protocol-examples/v1.0.1/http/unregister-instance.success.json)
 - [`invoke-request.request.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.request.json)
 - [`invoke-request.success.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.success.json)
+
+其中：
+
+- `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
+- `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
+- `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中。
 
 ## 4. WebSocket 鉴权与事件订阅
 
@@ -98,6 +117,8 @@ WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。
 - [`subscribe.request.json`](../spec/protocol-examples/v1.0.1/ws/subscribe.request.json)
 - [`subscribe.success.json`](../spec/protocol-examples/v1.0.1/ws/subscribe.success.json)
 - [`event.notification.json`](../spec/protocol-examples/v1.0.1/ws/event.notification.json)
+- [`event.notification.definition-upserted.json`](../spec/protocol-examples/v1.0.1/ws/event.notification.definition-upserted.json)
+- [`event.notification.definition-deleted.json`](../spec/protocol-examples/v1.0.1/ws/event.notification.definition-deleted.json)
 - [`unsubscribe.request.json`](../spec/protocol-examples/v1.0.1/ws/unsubscribe.request.json)
 - [`unsubscribe.success.json`](../spec/protocol-examples/v1.0.1/ws/unsubscribe.success.json)
 
@@ -119,6 +140,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 - `-32001 unauthorized`
 - `-32002 forbidden`
+- `-32014 app_definition_not_found`
 - `-32010 instance_not_found`
 - `-32011 invocation_expired`
 - `-32012 invocation_timeout`
@@ -137,6 +159,12 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 可直接参考原始错误示例：
 
 - [`invoke-request.invocation-failed.error.json`](../spec/protocol-examples/v1.0.1/http/invoke-request.invocation-failed.error.json)
+
+定义管理与实例密码场景还需要额外处理以下分支：
+
+- `hub.apps.upsertDefinition` 的业务校验失败走 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下携带 `errors: ValidationIssue[]`。
+- `hub.apps.unregisterInstance` 或同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
+- `hub.apps.deleteDefinition` 删除未知定义时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 中回传请求目标。
 
 ### 5.3 客户端兼容建议
 

@@ -12,8 +12,8 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行�
 
 - 已提供工程骨架。
 - 已提供基础模型、运行时发现与统一错误模型。
-- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等）。
-- 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流）。
+- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等），其中应用定义管理已覆盖 `list/get/validate/upsert/delete`，实例注册/注销已对齐顶层 `password` 参数。
+- 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流），并收敛到包含 `app.definition.upserted` / `app.definition.deleted` 在内的闭集事件类型。
 - 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 会按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构按 Spec 要求整数 `code` 与对象型 `data`。
 - 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
@@ -26,8 +26,8 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行�
 ## 能力范围
 
 - 运行时发现：读取 `hub.json` 与 `token.txt`。
-- HTTP JSON-RPC：`ping`、`apps`、`launch`、`invoke`、`poll`、`respond` 等。
-- WebSocket 事件：鉴权、订阅、取消订阅、事件流读取。
+- HTTP JSON-RPC：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`invoke`、`poll`、`respond`。
+- WebSocket 事件：鉴权、订阅、取消订阅、事件流读取，以及定义生命周期事件解析。
 - 统一错误模型：`DevHubRpcError`、`reason` / `invocationId` / `calleeError` 辅助属性。
 - 本地参数校验：在请求发出前校验关键字段与默认值约束。
 
@@ -51,12 +51,14 @@ npm test
 ## 已验证能力
 
 - Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `dataDir` / `DEVHUB_DATA_DIR` 覆盖，并固定使用 `<dataDir>/runtime/hub.json`。
+- AppDefinition 管理：`get` / `validate` / `upsert` / `delete`、`definition_invalid` 结构化错误、`app_definition_not_found` 删除失败分支。
+- AppInstance 密码语义：`registerInstance` / `unregisterInstance` 的顶层 `password` 参数、密码不匹配拒绝分支，以及公开模型 / 事件不泄漏密码。
 - HTTP flows：`ping`、应用定义查询、实例注册/心跳/注销、`launch`、`notify`、`request`、`poll`、`respond`。
 - Launch semantics：`started`、`starting`、`already_running` 状态与去重/在线实例分支。
 - Invocation semantics：默认选项、`delivery_conflict`、`invocation_timeout`、`invocation_expired`、`invocation_failed`。
 - Capability gates：`rpc_disabled`、`poll_not_enabled`、`respond_not_enabled` 错误映射。
 - Scope routing：默认 Global、显式空字符串 scope、字面量 `global` 与命名 scope。
-- Events flows：WS 鉴权、订阅/取消订阅、仅接受响应或 `hub.event` 入站消息、断线后重新认证并重新订阅。
+- Events flows：WS 鉴权、订阅/取消订阅、`app.definition.upserted` / `app.definition.deleted` 等事件解析、仅接受响应或 `hub.event` 入站消息、断线后重新认证并重新订阅。
 
 ## 快速示例
 
@@ -83,6 +85,36 @@ const client = await DevHubClient.fromRuntime({
   clientId: "demo",
   dataDir: "/path/to/DevHub"
 });
+```
+
+## 应用定义与安全实例管理
+
+定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+
+```ts
+const definition = {
+  appId: "sample.app",
+  displayName: "Sample App",
+  launch: {
+    exePath: "python3",
+    argsTemplate: "app.py"
+  }
+};
+
+const validation = await client.validateDefinition(definition);
+if (validation.valid) {
+  await client.upsertDefinition(definition);
+}
+
+const instance = await client.registerInstance({
+  instanceId: "sample-inst-1",
+  appId: "sample.app",
+  pid: process.pid,
+  invoke: { poll: true, respond: true }
+}, "sample-instance-secret");
+
+await client.unregisterInstance(instance.instanceId, "sample-instance-secret");
+await client.deleteDefinition(definition.appId);
 ```
 
 ## 高级扩展

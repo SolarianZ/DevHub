@@ -11,8 +11,8 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 ## 能力范围
 
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局（`<dataDir>/runtime/hub.json`）
-- HTTP 客户端：`ping`、应用定义、实例管理、`launch`、`notify`、`request`、`poll`、`respond`
-- WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取
+- HTTP 客户端：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`notify`、`request`、`poll`、`respond`
+- WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取，以及定义生命周期事件解析
 - 调用参数语义：可区分“省略 `args`”与“显式传入 `None`（序列化为 `null`）”
 - 本地 JSON 校验：在发送前严格校验 `echo`、`meta`、`args`、`value`、`error.data`，拒绝 `NaN`、回调、循环引用等非法 JSON 结构
 - 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
@@ -39,6 +39,49 @@ from devhub_sdk import DevHubClient, DevHubClientOptions
 client = DevHubClient.from_runtime(DevHubClientOptions(client_id="example-client"))
 ping = client.ping({"hello": "world"})
 print(ping.server_time_utc, ping.echo)
+```
+
+## 应用定义与安全实例管理
+
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+
+```python
+from devhub_sdk import (
+    AppDefinition,
+    AppInstanceRegistration,
+    DevHubClient,
+    DevHubClientOptions,
+    InvokeCapability,
+    LaunchConfiguration,
+)
+
+client = DevHubClient.from_runtime(DevHubClientOptions(client_id="admin-client"))
+
+definition = AppDefinition(
+    app_id="sample.app",
+    display_name="Sample App",
+    launch=LaunchConfiguration(
+        exe_path="python3",
+        args_template="app.py",
+    ),
+)
+
+validation = client.validate_definition(definition)
+if validation.valid:
+    client.upsert_definition(definition)
+
+instance = client.register_instance(
+    AppInstanceRegistration(
+        instance_id="sample-inst-1",
+        app_id="sample.app",
+        pid=12345,
+        invoke=InvokeCapability(poll=True, respond=True),
+    ),
+    password="sample-instance-secret",
+)
+
+client.unregister_instance(instance.instance_id, "sample-instance-secret")
+client.delete_definition(definition.app_id)
 ```
 
 ## 高级扩展

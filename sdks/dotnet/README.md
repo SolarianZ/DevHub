@@ -18,10 +18,10 @@
 当前 `.NET SDK` 已覆盖 `docs/spec/Spec.md` 中当前已实现的公开协议能力：
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
-- HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
+- HTTP JSON-RPC：`hub.ping`、`hub.apps.*`（含 `validateDefinition` / `upsertDefinition` / `deleteDefinition` 与带顶层 `password` 的实例注册 / 注销）、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
 - 公开扩展点：`runtime resolver`、`HTTP transport`、`WS session`
-- 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
+- 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`（含 `AppDefinitionUpserted` / `AppDefinitionDeleted`）
 - 统一错误模型：`DevHubRpcException`（协议要求 `error.data` 为对象；非对象响应会被视为非法 JSON-RPC 包）
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
 - 依赖注入工厂：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
@@ -199,7 +199,46 @@ var instances = await client.ListInstancesAsync(new ListInstancesRequest
 });
 ```
 
+### 校验与写入定义
+
+```csharp
+using DevHub.Sdk;
+using DevHub.Sdk.Models;
+
+await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+{
+    ClientId = "DefinitionAdmin"
+});
+
+var definition = new AppDefinition
+{
+    AppId = "sample.app",
+    DisplayName = "Sample App",
+    Launch = new LaunchConfiguration
+    {
+        ExePath = "python3",
+        ArgsTemplate = "app.py"
+    }
+};
+
+var validation = await client.ValidateDefinitionAsync(definition);
+if (!validation.Valid)
+{
+    foreach (var issue in validation.Errors)
+    {
+        Console.WriteLine($"{issue.Path} {issue.Code}: {issue.Message}");
+    }
+}
+else
+{
+    var upserted = await client.UpsertDefinitionAsync(definition);
+    await client.DeleteDefinitionAsync(upserted.AppId);
+}
+```
+
 ### 注册实例并维持心跳
+
+实例密码作为独立参数传入，不属于 `AppInstanceRegistration`，也不会出现在 `AppInstance` 或事件载荷中。
 
 ```csharp
 using DevHub.Sdk;
@@ -209,6 +248,8 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 {
     ClientId = "WorkerClient"
 });
+
+const string instancePassword = "sample-instance-secret";
 
 var instance = await client.RegisterInstanceAsync(new AppInstanceRegistration
 {
@@ -221,11 +262,11 @@ var instance = await client.RegisterInstanceAsync(new AppInstanceRegistration
         Respond = true
     },
     Meta = new { role = "worker" }
-});
+}, instancePassword);
 
 var lastSeenUtc = await client.HeartbeatAsync(instance.InstanceId);
 
-await client.UnregisterInstanceAsync(instance.InstanceId);
+await client.UnregisterInstanceAsync(instance.InstanceId, instancePassword);
 ```
 
 ### 发起通知与请求
