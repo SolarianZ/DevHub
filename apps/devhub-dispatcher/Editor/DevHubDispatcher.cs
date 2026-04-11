@@ -14,6 +14,8 @@ namespace DevHub.Editor
     [InitializeOnLoad]
     public static class DevHubDispatcher
     {
+        const string AppIdArgName = "devhubAppId";
+        
         static DevHubDispatcher()
         {
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
@@ -22,6 +24,8 @@ namespace DevHub.Editor
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
             
             // 需要向host注册app示例（Unity自身）
+            // 如果有环境参数 AppIdArgName ，就使用环境参数指定的 appId
+            // 否则从记录中读取 appId ，如果没有有效的记录，就生成新的 appId
         }
 
         // Unity工程会频繁触发DomainReload，要保证appId等关键数据不会因此改变，可以用 EditorUserSettings 存储和恢复
