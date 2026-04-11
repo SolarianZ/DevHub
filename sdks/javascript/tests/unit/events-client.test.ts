@@ -197,6 +197,126 @@ it("M5_TS_UT_005 事件流应拒绝注入 session 返回的非法 payload JSON",
   }
 });
 
+it("M6_TS_UT_005 定义事件应拒绝缺失结构化 payload 的通知", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-definition-payload-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-invalid-definition",
+              type: "app.definition.upserted",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app"
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-invalid-definition"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["app.definition.upserted"]))
+      .rejects
+      .toThrow(/definition/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("M6_TS_UT_005 实例事件应拒绝包含 password 的 payload", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-password-leak-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-instance-password",
+              type: "app.instance.registered",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                instanceId: "inst-1",
+                password: "secret-1"
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-instance-password"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["app.instance.registered"]))
+      .rejects
+      .toThrow(/password/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("M5_TS_UT_005 断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;

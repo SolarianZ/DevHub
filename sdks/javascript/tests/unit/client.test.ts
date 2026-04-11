@@ -567,6 +567,50 @@ it("M6_TS_UT_003 registerInstance / unregisterInstance 应在顶层携带 passwo
   expect(fetchSpy).toHaveBeenCalledTimes(2);
 });
 
+it("M6_TS_UT_003 registerInstance 应拒绝返回包含 password 的实例结果", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-instance-password-leak-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          instance: {
+            instanceId: "inst-1",
+            appId: "test.app",
+            scope: null,
+            pid: 12345,
+            registeredAtUtc: "2026-03-09T00:00:00Z",
+            lastSeenUtc: "2026-03-09T00:00:01Z",
+            invoke: {
+              poll: true,
+              respond: true
+            },
+            password: "secret-1"
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "secret-1")).rejects.toThrow(/password/i);
+});
+
 it("M5_TS_UT_004 RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {

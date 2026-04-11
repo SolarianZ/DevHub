@@ -208,6 +208,14 @@ def test_M5_PY_UT_005_parse_app_instance_when_meta_contains_unsupported_json_sho
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
+def test_M6_PY_UT_005_parse_app_instance_when_password_present_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["password"] = "secret-1"
+
+    with pytest.raises(RuntimeError, match=r"password"):
+        parse_app_instance(payload, path="hub.apps.registerInstance.result.instance")
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -351,6 +359,38 @@ def test_M6_PY_UT_005_parse_event_should_accept_definition_lifecycle_type() -> N
     )
 
     assert event.type is DevHubEventType.APP_DEFINITION_UPSERTED
+
+
+def test_M6_PY_UT_005_parse_event_when_definition_payload_missing_required_shape_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"definition"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.definition.upserted",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                },
+            },
+            path="hub.event.params",
+        )
+
+
+def test_M6_PY_UT_005_parse_event_when_instance_payload_contains_password_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"password"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.registered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                    "password": "secret-1",
+                },
+            },
+            path="hub.event.params",
+        )
 
 
 @pytest.mark.parametrize(

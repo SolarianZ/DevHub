@@ -16,6 +16,8 @@ import type {
 import {
   APP_DEFINITION_DELETED,
   APP_DEFINITION_UPSERTED,
+  APP_INSTANCE_REGISTERED,
+  APP_INSTANCE_UNREGISTERED,
   ensureSupportedEventType
 } from "./event-types.js";
 import {
@@ -254,6 +256,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
 export function parseAppInstance(payload: unknown, location: string): AppInstance {
   const record = ensureRecord(payload, location);
+  ensureNoPasswordField(record, location);
   const invokePayload = readObject(record, location, "invoke");
 
   return {
@@ -375,7 +378,12 @@ function parseValidationIssue(payload: unknown, location: string): ValidationIss
 }
 
 function validateEventPayload(type: string, payload: JsonObject | undefined, location: string): void {
-  if (type === APP_DEFINITION_UPSERTED || type === APP_DEFINITION_DELETED) {
+  if (
+    type === APP_DEFINITION_UPSERTED
+    || type === APP_DEFINITION_DELETED
+    || type === APP_INSTANCE_REGISTERED
+    || type === APP_INSTANCE_UNREGISTERED
+  ) {
     if (payload === undefined) {
       throw new Error(`${location} is required.`);
     }
@@ -393,6 +401,19 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
 
   if (type === APP_DEFINITION_DELETED) {
     readAppId(payload, location, "appId");
+    return;
+  }
+
+  if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
+    readAppId(payload, location, "appId");
+    readInstanceId(payload, location, "instanceId");
+    ensureNoPasswordField(payload, location);
+  }
+}
+
+function ensureNoPasswordField(payload: Record<string, unknown>, location: string): void {
+  if ("password" in payload) {
+    throw new Error(`${location}.password must not be present.`);
   }
 }
 
