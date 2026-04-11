@@ -1,6 +1,6 @@
 # DevHub JS/TS SDK
 
-DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行时为 Node.js。
+DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk` 根入口面向 `Node.js 20+` 与浏览器/WebView 双运行时，`@devhub/sdk/runtime` 子路径面向 Node.js 文件系统运行时发现能力。
 
 ## 接入导航
 
@@ -8,25 +8,31 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议，目标运行�
 - [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
 - [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
 
+## 入口分工
+
+- `@devhub/sdk`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、`JsonRpcHttpTransport`、`JsonRpcWsSession`、错误类型、模型类型，以及 `RuntimeResolver` / `RuntimeConnectionInfo` 等运行时契约类型。
+- `@devhub/sdk/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
+- 浏览器/WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`。
+- Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk/runtime` 导入文件系统发现辅助。
+
 ## 当前状态
 
 - 已提供工程骨架。
-- 已提供基础模型、运行时发现与统一错误模型。
+- 已提供基础模型、统一错误模型，以及通过 `@devhub/sdk/runtime` 暴露的 Node.js 文件系统运行时发现能力。
 - 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等），其中应用定义管理已覆盖 `list/get/validate/upsert/delete`，实例注册/注销已对齐顶层 `password` 参数。
 - 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流），并收敛到包含 `app.definition.upserted` / `app.definition.deleted` 在内的闭集事件类型。
 - 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 会按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构按 Spec 要求整数 `code` 与对象型 `data`。
 - 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
 - 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
-- 运行时发现采用数据根目录语义：按 `options.dataDir`、`DEVHUB_DATA_DIR`、平台默认数据目录的顺序解析数据根，并固定读取 `<dataDir>/runtime/hub.json`。
-- 已公开运行时解析器、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
+- 已公开运行时解析器契约类型、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
 
-> SDK 已内置 `ws` 回退实现，因此在 Node.js 18/19 等未提供全局 `WebSocket` 的环境中也可直接使用事件客户端。
+> 根入口优先使用当前运行时提供的标准 Web API；Node.js 路径仅在缺少原生 `WebSocket` 时按需动态加载 `ws` 回退实现。
 
 ## 能力范围
 
-- 运行时发现：读取 `hub.json` 与 `token.txt`。
-- HTTP JSON-RPC：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`invoke`、`poll`、`respond`。
+- Node.js 文件系统运行时发现：读取 `hub.json` 与 `token.txt`。
+- HTTP JSON-RPC：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`notify`、`request`、`poll`、`respond`。
 - WebSocket 事件：鉴权、订阅、取消订阅、事件流读取，以及定义生命周期事件解析。
 - 统一错误模型：`DevHubRpcError`、`reason` / `invocationId` / `calleeError` 辅助属性。
 - 本地参数校验：在请求发出前校验关键字段与默认值约束。
@@ -62,6 +68,8 @@ npm test
 
 ## 快速示例
 
+Node.js 20+ 默认文件系统发现：
+
 ```ts
 import { DevHubClient, DevHubEventsClient } from "@devhub/sdk";
 
@@ -78,13 +86,76 @@ for await (const evt of eventsClient.readEvents()) {
 }
 ```
 
-如需显式指定数据根目录，可传入 `dataDir`：
+浏览器 / WebView 自定义 `runtimeResolver`：
 
 ```ts
-const client = await DevHubClient.fromRuntime({
-  clientId: "demo",
-  dataDir: "/path/to/DevHub"
-});
+import {
+  DevHubClient,
+  type RuntimeConnectionInfo,
+  type RuntimeResolver
+} from "@devhub/sdk";
+
+declare global {
+  interface Window {
+    __DEVHUB_RUNTIME__?: RuntimeConnectionInfo;
+  }
+}
+
+const runtimeResolver: RuntimeResolver = {
+  async resolve() {
+    const connection = window.__DEVHUB_RUNTIME__;
+    if (!connection) {
+      throw new Error("DevHub runtime bridge is unavailable.");
+    }
+
+    return connection;
+  }
+};
+
+const client = await DevHubClient.fromRuntime(
+  { clientId: "webview-demo" },
+  { runtimeResolver }
+);
+```
+
+Node.js 显式使用 `@devhub/sdk/runtime`：
+
+```ts
+import { DevHubClient } from "@devhub/sdk";
+import {
+  FileSystemRuntimeResolver,
+  discoverRuntime,
+  resolveDataDirectory
+} from "@devhub/sdk/runtime";
+
+const dataDir = resolveDataDirectory(process.env.DEVHUB_DATA_DIR);
+const connection = await discoverRuntime(dataDir);
+console.log(connection.rpcEndpoint, connection.websocketEndpoint);
+
+const client = await DevHubClient.fromRuntime(
+  { clientId: "node-runtime-demo", dataDir },
+  { runtimeResolver: new FileSystemRuntimeResolver() }
+);
+```
+
+## 从旧根入口迁移 runtime 值导入
+
+根入口继续保留运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk/runtime` 获取：
+
+```ts
+// 迁移前
+import {
+  FileSystemRuntimeResolver,
+  discoverRuntime,
+  resolveDataDirectory
+} from "@devhub/sdk";
+
+// 当前入口
+import {
+  FileSystemRuntimeResolver,
+  discoverRuntime,
+  resolveDataDirectory
+} from "@devhub/sdk/runtime";
 ```
 
 ## 应用定义与安全实例管理
@@ -121,14 +192,14 @@ await client.deleteDefinition(definition.appId);
 
 默认情况下，推荐继续使用 `DevHubClient.fromRuntime(...)` 与 `DevHubEventsClient.fromRuntime(...)`。
 
-如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，可以通过顶层公开导出的扩展点注入：
+如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，可以通过公开导出的扩展点注入：
 
 ```ts
 import {
   DevHubClient,
-  FileSystemRuntimeResolver,
   JsonRpcHttpTransport
 } from "@devhub/sdk";
+import { FileSystemRuntimeResolver } from "@devhub/sdk/runtime";
 
 const client = await DevHubClient.fromRuntime(
   { clientId: "example-client" },
@@ -142,9 +213,9 @@ const client = await DevHubClient.fromRuntime(
 ```ts
 import {
   DevHubEventsClient,
-  FileSystemRuntimeResolver,
   JsonRpcWsSession
 } from "@devhub/sdk";
+import { FileSystemRuntimeResolver } from "@devhub/sdk/runtime";
 
 const eventsClient = await DevHubEventsClient.fromRuntime(
   { clientId: "example-events-client" },
@@ -155,4 +226,4 @@ const eventsClient = await DevHubEventsClient.fromRuntime(
 );
 ```
 
-如需自定义运行时发现策略，可自行实现 `RuntimeResolver`；`resolve(options)` 会收到归一化后的客户端选项，默认实现仍只按 Spec 使用 `options.dataDir`、`DEVHUB_DATA_DIR` 和平台默认数据目录。
+如需自定义运行时发现策略，可自行实现 `RuntimeResolver`；`resolve(options)` 会收到归一化后的客户端选项，默认 Node.js 实现仍只按 Spec 使用 `options.dataDir`、`DEVHUB_DATA_DIR` 和平台默认数据目录。

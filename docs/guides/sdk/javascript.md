@@ -1,11 +1,12 @@
 # DevHub JS/TS SDK 接入指南
 
-本文面向准备通过官方 `JS/TS SDK` 连接 DevHub Host 的调用方，覆盖环境准备、连接 Host、最小示例和验证方式。
+本文面向准备通过官方 `JS/TS SDK` 连接 DevHub Host 的调用方，覆盖双运行时入口选择、连接 Host 的最小示例与验证方式。
 
 ## 1. 前置条件
 
 - 已按 [`../getting-started/host-quickstart.md`](../getting-started/host-quickstart.md) 启动 Host，并确认 `hub.json` 与 `tokenFile` 可读。
-- 本地具备 `Node.js 18+` 和 `npm`。
+- Node.js 调用方需具备 `Node.js 20+` 与 `npm`。
+- 浏览器 / WebView 调用方需由宿主应用提供可用的运行时连接信息，并通过自定义 `runtimeResolver` 交给 SDK。
 - 首个正式 GitHub Release 发布前，公开安装入口统一使用显式 TODO 占位：
 
 ```text
@@ -29,15 +30,16 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 
 然后在消费项目中安装生成的 `.tgz` 文件。正式发布后的 tarball 命名会与 [`../../operations/publishing/release-asset-layout.md`](../../operations/publishing/release-asset-layout.md) 保持一致。
 
-## 3. 连接 Host
+## 3. 选择入口
 
-`JS/TS SDK` 会按以下顺序定位数据根目录：
+- `@devhub/sdk`：双运行时根入口，可在 `Node.js 20+` 与浏览器 / WebView 中导入，提供客户端、事件客户端、传输抽象、错误类型、模型类型和运行时契约类型。
+- `@devhub/sdk/runtime`：Node.js 专用子路径，提供 `discoverRuntime`、`resolveDataDirectory` 与 `FileSystemRuntimeResolver` 等文件系统运行时发现辅助。
+- 浏览器 / WebView：连接 Host 时必须传入自定义 `runtimeResolver`，避免依赖 Node.js 文件系统发现。
+- Node.js：可直接使用 `DevHubClient.fromRuntime(...)` 的默认文件系统发现，也可在需要显式控制数据目录或运行时发现时导入 `@devhub/sdk/runtime`。
 
-1. `options.dataDir`
-2. 环境变量 `DEVHUB_DATA_DIR`
-3. 平台默认数据目录
+## 4. 连接 Host
 
-最小示例：
+Node.js 20+ 最小示例：
 
 ```ts
 import { DevHubClient } from "@devhub/sdk";
@@ -50,7 +52,60 @@ const ping = await client.ping({ hello: "world" });
 console.log(ping.ok, ping.serverTimeUtc);
 ```
 
-## 4. 最小验证方式
+浏览器 / WebView 最小示例：
+
+```ts
+import {
+  DevHubClient,
+  type RuntimeConnectionInfo,
+  type RuntimeResolver
+} from "@devhub/sdk";
+
+declare global {
+  interface Window {
+    __DEVHUB_RUNTIME__?: RuntimeConnectionInfo;
+  }
+}
+
+const runtimeResolver: RuntimeResolver = {
+  async resolve() {
+    const connection = window.__DEVHUB_RUNTIME__;
+    if (!connection) {
+      throw new Error("DevHub runtime bridge is unavailable.");
+    }
+
+    return connection;
+  }
+};
+
+const client = await DevHubClient.fromRuntime(
+  { clientId: "quickstart-webview" },
+  { runtimeResolver }
+);
+```
+
+Node.js 文件系统发现辅助：
+
+```ts
+import { DevHubClient } from "@devhub/sdk";
+import {
+  FileSystemRuntimeResolver,
+  resolveDataDirectory
+} from "@devhub/sdk/runtime";
+
+const dataDir = resolveDataDirectory(process.env.DEVHUB_DATA_DIR);
+const client = await DevHubClient.fromRuntime(
+  {
+    clientId: "quickstart-node-runtime",
+    dataDir
+  },
+  {
+    runtimeResolver: new FileSystemRuntimeResolver()
+  }
+);
+```
+
+## 5. 最小验证方式
 
 - 直接运行上面的 `client.ping()` 示例，确认返回 `ok=true`。
 - 若要验证 `JS/TS SDK` 工作区自身的测试基线，可执行：
@@ -65,8 +120,8 @@ npm --prefix sdks/javascript test
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 ```
 
-## 5. 后续路径
+## 6. 后续路径
 
-- 需要完整 API、事件流和扩展点说明时，请阅读 [`../../../sdks/javascript/README.md`](../../../sdks/javascript/README.md)。
+- 需要完整 API、事件流、迁移说明或扩展点示例时，请阅读 [`../../../sdks/javascript/README.md`](../../../sdks/javascript/README.md)。
 - 需要对照其他语言 SDK，请回到 [`README.md`](./README.md)。
 - 如果你计划直接基于原始协议接入，请切换到 [`../无SDK接入指南.md`](../无SDK接入指南.md)。

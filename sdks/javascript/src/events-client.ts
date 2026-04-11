@@ -31,7 +31,7 @@ import {
   buildGetDefinitionParams,
   buildListInstancesParams
 } from "./payloads.js";
-import { FileSystemRuntimeResolver } from "./runtime.js";
+import { getRuntimeResolver } from "./default-runtime-resolver.js";
 import { ensureJsonValue } from "./validation.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
@@ -49,8 +49,6 @@ export interface DevHubEventsClientDependencies {
   runtimeResolver?: RuntimeResolver;
   sessionFactory?: JsonRpcEventSessionFactory;
 }
-
-const DEFAULT_RUNTIME_RESOLVER = new FileSystemRuntimeResolver();
 
 export class DevHubEventsClient {
   readonly options: NormalizedDevHubClientOptions;
@@ -82,7 +80,7 @@ export class DevHubEventsClient {
   ): Promise<DevHubEventsClient> {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
-    const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
+    const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
     let client: DevHubEventsClient | undefined;
     const sessionOptions: JsonRpcWsSessionOptions = {

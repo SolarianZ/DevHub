@@ -14,6 +14,7 @@
 - 所有公开行为、字段命名、状态转换、错误语义和序列化契约必须与 `docs/spec/Spec.md` 保持一致。
 - 修改代码后，按 GitHub CI 相关范围执行本地验证；至少覆盖受影响的构建、测试和必要的 smoke 或打包自检。
 - 文档导航、README 和维护说明应与仓库当前状态保持一致。
+- 修改 `JS/TS SDK` 时，保持 `@devhub/sdk` 根入口可在 `Node.js 20+` 与浏览器 / WebView 中导入；Node.js 文件系统运行时辅助统一通过 `@devhub/sdk/runtime` 暴露。
 - 当前阶段的发布准备相关改动，优先通过 `python scripts/release/package_release.py --release-id local-dry-run --channel local` 进行本地闭环验证。
 - 仓库发布版本统一以 `eng/Version.props` 为源；调整版本号后，同步执行 `python3 scripts/release/sync_versions.py` 更新 JS / Python 包元数据。
 

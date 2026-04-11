@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { DevHubCalleeError } from "./errors.js";
 import type { DevHubEventType } from "./event-types.js";
+import { createRandomUuid } from "./web-crypto.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -198,7 +198,7 @@ export function normalizeClientOptions(options: DevHubClientOptions): Normalized
   }
 
   const clientId = options.clientId ?? "";
-  const clientSessionId = options.clientSessionId ?? randomUUID();
+  const clientSessionId = options.clientSessionId ?? createRandomUuid();
   const protocolVersion = options.protocolVersion ?? 1;
 
   return {

@@ -51,7 +51,7 @@ import {
   buildUnregisterParams,
   buildValidateDefinitionParams
 } from "./payloads.js";
-import { FileSystemRuntimeResolver } from "./runtime.js";
+import { getRuntimeResolver } from "./default-runtime-resolver.js";
 import { ensureJsonValue } from "./validation.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 
@@ -69,8 +69,6 @@ export interface DevHubClientDependencies {
   runtimeResolver?: RuntimeResolver;
   transportFactory?: JsonRpcTransportFactory;
 }
-
-const DEFAULT_RUNTIME_RESOLVER = new FileSystemRuntimeResolver();
 
 export class DevHubClient {
   readonly options: NormalizedDevHubClientOptions;
@@ -99,7 +97,7 @@ export class DevHubClient {
   ): Promise<DevHubClient> {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
-    const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
+    const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
     const transport = dependencies.transportFactory?.(normalized, connection)
       ?? new JsonRpcHttpTransport(normalized, connection);

@@ -5,9 +5,9 @@ import process from "node:process";
 import {
   DevHubClient,
   DevHubEventsClient,
-  DevHubRpcError,
-  discoverRuntime
+  DevHubRpcError
 } from "../../dist/index.js";
+import { discoverRuntime } from "../../dist/runtime.js";
 
 const WebSocketCtor = globalThis.WebSocket;
 

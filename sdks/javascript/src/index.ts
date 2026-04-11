@@ -16,7 +16,6 @@ export {
 export { JsonRpcWsSession } from "./ws-session.js";
 export * from "./errors.js";
 export * from "./models.js";
-export * from "./runtime.js";
 export type { DevHubEventType } from "./event-types.js";
 export type { DevHubClientDependencies, JsonRpcTransport, JsonRpcTransportFactory } from "./client.js";
 export type {
@@ -24,4 +23,10 @@ export type {
   JsonRpcEventSession,
   JsonRpcEventSessionFactory
 } from "./events-client.js";
+export type {
+  HubRuntime,
+  HubRuntimeTuning,
+  RuntimeConnectionInfo,
+  RuntimeResolver
+} from "./runtime.js";
 export type { JsonRpcWsSessionOptions } from "./ws-session.js";

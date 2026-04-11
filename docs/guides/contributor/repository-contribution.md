@@ -21,6 +21,13 @@
 3. 修改完成后，执行与 GitHub CI 一致的最小相关验证。
 4. 提交前同步更新 README、导航文档和必要的维护说明。
 
+`JS/TS SDK` 的额外开发约束：
+
+- `@devhub/sdk` 根入口必须保持可在 `Node.js 20+` 与浏览器 / WebView 中直接导入；根入口可达模块不得重新引入顶层 `node:*`、`ws` 或其他 Node.js 专有依赖。
+- `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 等 Node.js 文件系统相关能力统一通过 `@devhub/sdk/runtime` 子路径暴露，不得重新挂回根入口。
+- 浏览器 / WebView 场景的示例、测试与接入代码必须显式注入自定义 `runtimeResolver`；Node.js 文件系统发现示例必须使用 `@devhub/sdk/runtime`。
+- 修改 `JS/TS SDK` 的公开面、包导出或运行时装载逻辑时，同步检查 `sdks/javascript/package.json`、`sdks/javascript/README.md`、`docs/guides/sdk/javascript.md` 和相关测试资产是否一致。
+
 ### 2.2 版本维护约定
 
 - 仓库发布版本统一以 `eng/Version.props` 为唯一来源。
