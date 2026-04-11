@@ -1,0 +1,12 @@
+{
+  "name": "devhub.dispatcher",
+  "version": "0.6.0",
+  "displayName": "DevHub Dispatcher",
+  "description": "DevHub dispatcher.",
+  "unity": "2019.4",
+  "type": "tool",
+  "hideInEditor": false,
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
+}
