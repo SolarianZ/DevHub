@@ -9,6 +9,7 @@ import type {
   LogReadResult,
   MonitorRuntimeConnectionInfo,
   ReadLogRequest,
+  MonitorSettings,
   SettingsSnapshot,
 } from "./models";
 
@@ -58,6 +59,10 @@ export function getBootstrapState(): Promise<BootstrapSnapshot> {
 
 export function getSettingsSnapshot(): Promise<SettingsSnapshot> {
   return invoke("monitor_get_settings_snapshot");
+}
+
+export function saveSettings(settings: MonitorSettings): Promise<SettingsSnapshot> {
+  return invoke("monitor_save_settings", { settings });
 }
 
 export function requestHostLaunch(): Promise<LaunchHostResult> {
