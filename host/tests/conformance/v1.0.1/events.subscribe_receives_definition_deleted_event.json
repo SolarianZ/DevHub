@@ -1,0 +1,69 @@
+{
+  "id": "events.subscribe_receives_definition_deleted_event",
+  "caseId": "CONF-007",
+  "description": "通过 SDK EventsClient 订阅 app.definition.deleted 后，成功 deleteDefinition 必须收到 hub.event。",
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceDefinitionDeletedEvent",
+    "steps": [
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "upsert_definition",
+        "client": "http",
+        "definition": {
+          "appId": "events.definition.deleted",
+          "displayName": "Events Definition Deleted"
+        }
+      },
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.definition.deleted"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "delete_definition",
+        "client": "http",
+        "appId": "events.definition.deleted"
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "event"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "event": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.definition.deleted",
+        "payload": {
+          "appId": "events.definition.deleted"
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk"
+  ]
+}

@@ -298,41 +298,57 @@ public sealed class InvocationRequestBuilderTests
     [Fact]
     public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
-        {
-            InstanceId = "inst-1",
-            AppId = "test.app",
-            Pid = Environment.ProcessId,
-            Invoke = new InvokeCapability
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
             {
-                Poll = true,
-                Respond = true
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                },
+                Meta = new[] { 1, 2, 3 }
             },
-            Meta = new[] { 1, 2, 3 }
-        }));
+            "secret-1"));
     }
 
     [Fact]
     public void M5_DN_UT_006_RegisterInstanceBuilder_ShouldSerializeJsonElementMetaAsObject()
     {
         using var metaDocument = JsonDocument.Parse("""{"FooBar":true,"Nested":{"InnerKey":"value"}}""");
-        var payload = RequestPayloadFactory.BuildRegisterInstanceParams(new AppInstanceRegistration
-        {
-            InstanceId = "inst-1",
-            AppId = "test.app",
-            Pid = Environment.ProcessId,
-            Invoke = new InvokeCapability
+        var payload = RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
             {
-                Poll = true,
-                Respond = true
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                },
+                Meta = metaDocument.RootElement.Clone()
             },
-            Meta = metaDocument.RootElement.Clone()
-        });
+            "secret-1");
 
         var document = ToJObject(payload);
+        Assert.Equal("secret-1", (string?)document["password"]!);
+        Assert.Null(document["instance"]!["password"]);
         Assert.True((bool)document["instance"]!["meta"]!["FooBar"]!);
         Assert.Equal("value", (string?)document["instance"]!["meta"]!["Nested"]!["InnerKey"]!);
         Assert.Null(document["instance"]!["meta"]!["valueKind"]);
+    }
+
+    [Fact]
+    public void Impl_UnregisterBuilder_ShouldPlacePasswordAtTopLevel()
+    {
+        var payload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "secret-1");
+
+        var document = ToJObject(payload);
+        Assert.Equal("inst-1", (string?)document["instanceId"]!);
+        Assert.Equal("secret-1", (string?)document["password"]!);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { DevHubRpcError } from "./errors.js";
 import { ensureRecord, isRecord } from "./validation.js";
+import { createRandomUuid } from "./web-crypto.js";
 
 export interface ResponseEnvelope {
   requestId: string;
@@ -16,11 +16,11 @@ export interface PendingRequest {
 }
 
 export function createHttpRequestId(): string {
-  return `req-${randomUUID().replace(/-/g, "")}`;
+  return `req-${createRandomUuid().replace(/-/g, "")}`;
 }
 
 export function createWebSocketRequestId(): string {
-  return `ws-${randomUUID().replace(/-/g, "")}`;
+  return `ws-${createRandomUuid().replace(/-/g, "")}`;
 }
 
 export function startTimeout(controller: AbortController, timeoutMs?: number): NodeJS.Timeout | undefined {

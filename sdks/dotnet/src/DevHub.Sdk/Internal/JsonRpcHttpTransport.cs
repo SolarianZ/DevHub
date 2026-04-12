@@ -41,10 +41,30 @@ public interface IDevHubHttpTransportFactory
 /// </summary>
 public sealed class JsonRpcHttpTransportFactory : IDevHubHttpTransportFactory
 {
+    private readonly IDevHubHttpClientProvider _httpClientProvider;
+
+    /// <summary>
+    /// 初始化默认 HTTP transport 工厂。
+    /// </summary>
+    public JsonRpcHttpTransportFactory()
+        : this(new DefaultDevHubHttpClientProvider())
+    {
+    }
+
+    /// <summary>
+    /// 使用指定的 HTTP 客户端提供器初始化 transport 工厂。
+    /// </summary>
+    /// <param name="httpClientProvider">HTTP 客户端提供器。</param>
+    public JsonRpcHttpTransportFactory(IDevHubHttpClientProvider httpClientProvider)
+    {
+        _httpClientProvider = httpClientProvider ?? throw new ArgumentNullException(nameof(httpClientProvider));
+    }
+
     /// <inheritdoc />
     public IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
     {
-        return JsonRpcHttpTransport.Create(options, connectionInfo);
+        var httpClient = _httpClientProvider.CreateClient(options, connectionInfo);
+        return new JsonRpcHttpTransport(httpClient, options, connectionInfo, ownsHttpClient: true);
     }
 }
 

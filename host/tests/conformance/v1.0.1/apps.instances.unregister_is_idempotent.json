@@ -17,7 +17,8 @@
     "id": "apps-instances-unregister-missing",
     "method": "hub.apps.unregisterInstance",
     "params": {
-      "instanceId": "apps-instance-unregister-missing"
+      "instanceId": "apps-instance-unregister-missing",
+      "password": "conformance-password"
     }
   },
   "expectedResponse": {

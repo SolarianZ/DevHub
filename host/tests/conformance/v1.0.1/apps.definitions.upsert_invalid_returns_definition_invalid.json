@@ -1,0 +1,50 @@
+{
+  "id": "apps.definitions.upsert_invalid_returns_definition_invalid",
+  "caseId": "CONF-003",
+  "description": "写入非法 AppDefinition 时，hub.apps.upsertDefinition 必须返回 definition_invalid 与结构化错误列表。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000036"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-upsert-invalid",
+    "method": "hub.apps.upsertDefinition",
+    "params": {
+      "definition": {
+        "appId": "Invalid App",
+        "displayName": "Broken Definition"
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-upsert-invalid",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params",
+      "data": {
+        "reason": "definition_invalid",
+        "errors": [
+          {
+            "path": "definition.appId",
+            "code": "invalid_app_id",
+            "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+          }
+        ]
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "error"
+  ]
+}

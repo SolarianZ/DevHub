@@ -3,6 +3,7 @@
   "id": "apps-instances-register",
   "method": "hub.apps.registerInstance",
   "params": {
+    "password": "sample-password-1",
     "instance": {
       "instanceId": "sample-instance-1",
       "appId": "sample.app",

@@ -3,11 +3,13 @@
 DevHub 仓库级黑盒测试运行器（default/smoke/fast/full）
 """
 
-import os
-import sys
 import logging
+import os
+import shutil
+import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 HOST_ROOT = Path(__file__).resolve().parents[2]
@@ -15,11 +17,17 @@ if str(HOST_ROOT) not in sys.path:
     sys.path.insert(0, str(HOST_ROOT))
 
 from tests.blackbox.test_base import (
+    TEST_BUILD_HOST_ENV_VAR,
     TEST_HUB_COMMAND_ENV_VAR,
     TEST_HUB_CWD_ENV_VAR,
     TEST_HUB_ENV_JSON_ENV_VAR,
+    DiscoveryService,
+    RpcClient,
     TestReport,
     create_temp_directory,
+    describe_test_hub_command,
+    start_isolated_hub_process,
+    temporary_env_var,
 )
 from tests.blackbox.test_launch_discovery import TestLaunchDiscovery
 from tests.blackbox.test_auth_protocol import TestAuthProtocol
@@ -36,6 +44,10 @@ from tests.blackbox.test_launch_invocation import TestLaunchInvocation
 from tests.blackbox.test_launch_spec_edges import TestLaunchSpecEdges
 from tests.blackbox.test_invalid_params import TestInvalidParams
 from tests.blackbox.test_internal_errors import TestInternalErrors
+
+
+DATA_DIR_ENV_VAR = "DEVHUB_DATA_DIR"
+USE_EXISTING_HOST_ENV_VAR = "DEVHUB_TEST_USE_EXISTING_HOST"
 
 
 def setup_logging(log_file):
@@ -138,12 +150,95 @@ def emit_failure_summary(text_report_path, json_report_path, failed_results):
     sys.stdout.flush()
 
 
-def run_all_tests(full=False, fast=False, smoke=False):
-    """运行所有测试"""
-    # 创建 temp 目录
-    temp_dir = create_temp_directory()
-    log_file = os.path.join(temp_dir, "test_log.txt")
-    logger = setup_logging(log_file)
+def _read_boolean_env(name, default):
+    """读取布尔环境变量。"""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    candidate = raw_value.strip().lower()
+    if candidate in ("", "1", "true", "yes", "on"):
+        return True
+    if candidate in ("0", "false", "no", "off"):
+        return False
+
+    raise ValueError(f"{name} 必须是布尔值（true/false/1/0）")
+
+
+def _read_log_tail(log_path, max_chars=4000):
+    """读取 Host 日志尾部，便于拼接错误信息。"""
+    try:
+        content = Path(log_path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
+    content = content.strip()
+    if len(content) > max_chars:
+        return content[-max_chars:]
+    return content
+
+
+def _wait_for_suite_host_ready(data_dir, process, log_path):
+    """等待 runner 自启的隔离 Host 可用。"""
+    deadline = time.time() + 45
+    last_error = "unknown"
+
+    while time.time() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"隔离 Host 提前退出，日志片段：{_read_log_tail(log_path)}")
+
+        with temporary_env_var(DATA_DIR_ENV_VAR, data_dir):
+            try:
+                base_url, token = DiscoveryService.get_hub_info()
+                response = RpcClient(base_url, token).call("hub.ping")
+                if response.get("result", {}).get("ok") is True:
+                    return
+                last_error = str(response)
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+
+        time.sleep(0.25)
+
+    raise RuntimeError(f"等待隔离 Host 就绪超时：{last_error}；日志片段：{_read_log_tail(log_path)}")
+
+
+@contextmanager
+def managed_suite_host(logger, temp_dir):
+    """按需启动整个黑盒 runner 复用的隔离 Host。"""
+    if _read_boolean_env(USE_EXISTING_HOST_ENV_VAR, default=False):
+        logger.info("使用外部已启动 Host，数据根目录: %s", os.environ.get(DATA_DIR_ENV_VAR, "<平台默认目录>"))
+        yield None
+        return
+
+    suite_root = Path(temp_dir) / "suite-host"
+    data_dir = suite_root / "data"
+    log_path = suite_root / "host.log"
+
+    shutil.rmtree(suite_root, ignore_errors=True)
+    suite_root.mkdir(parents=True, exist_ok=True)
+
+    logger.info("启动 runner 级隔离 Host，命令: %s", describe_test_hub_command())
+    with open(log_path, "w+", encoding="utf-8") as log_file:
+        process = start_isolated_hub_process(str(data_dir), log_file)
+        try:
+            _wait_for_suite_host_ready(str(data_dir), process, str(log_path))
+            logger.info("runner 级隔离 Host 已就绪，数据根目录: %s", data_dir)
+            with temporary_env_var(DATA_DIR_ENV_VAR, str(data_dir)):
+                yield {"data_dir": str(data_dir), "log_path": str(log_path)}
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except Exception:  # noqa: BLE001
+                    process.kill()
+                    process.wait(timeout=10)
+
+
+def execute_all_tests(temp_dir, logger, full=False, fast=False, smoke=False):
+    """执行黑盒测试主体。"""
 
     if smoke:
         mode = "smoke"
@@ -296,6 +391,16 @@ def run_all_tests(full=False, fast=False, smoke=False):
     return 0
 
 
+def run_all_tests(full=False, fast=False, smoke=False):
+    """运行所有测试"""
+    temp_dir = create_temp_directory()
+    log_file = os.path.join(temp_dir, "test_log.txt")
+    logger = setup_logging(log_file)
+
+    with managed_suite_host(logger, temp_dir):
+        return execute_all_tests(temp_dir, logger, full=full, fast=fast, smoke=smoke)
+
+
 def print_usage():
     """打印使用说明"""
     print("Usage: python host/tests/blackbox/test_runner.py [options]")
@@ -306,6 +411,8 @@ def print_usage():
     print("  --smoke       Run minimal cross-platform smoke suite")
     print("  --fast        Run fast suite (skip timeout/offline long tests)")
     print("  --full        Run full suite including timeout/offline long tests")
+    print("  --use-existing-host   Reuse an already running Host instead of auto-starting an isolated Host")
+    print("  --no-build-host       Skip the default pre-build step before auto-starting an isolated Host")
     print("  --isolated-hub-command   Override the launcher used by isolated hub tests")
     print("  --isolated-hub-cwd       Override the working directory used by isolated hub tests")
     print("  --isolated-hub-env-json  Extra JSON env overrides for isolated hub tests")
@@ -322,6 +429,8 @@ def main():
     mode_group.add_argument("--smoke", action="store_true", help="Run minimal cross-platform smoke suite")
     mode_group.add_argument("--fast", action="store_true", help="Run fast suite (skip timeout/offline long tests)")
     mode_group.add_argument("--full", action="store_true", help="Run full suite including timeout/offline long tests")
+    parser.add_argument("--use-existing-host", action="store_true", help="Reuse an already running Host")
+    parser.add_argument("--no-build-host", action="store_true", help="Skip the default Host pre-build step")
     parser.add_argument("--isolated-hub-command", help="Override the launcher used by isolated hub tests")
     parser.add_argument("--isolated-hub-cwd", help="Override the working directory used by isolated hub tests")
     parser.add_argument("--isolated-hub-env-json", help="Extra JSON env overrides for isolated hub tests")
@@ -334,6 +443,10 @@ def main():
         os.environ[TEST_HUB_CWD_ENV_VAR] = args.isolated_hub_cwd
     if args.isolated_hub_env_json:
         os.environ[TEST_HUB_ENV_JSON_ENV_VAR] = args.isolated_hub_env_json
+    if args.use_existing_host:
+        os.environ[USE_EXISTING_HOST_ENV_VAR] = "1"
+    if args.no_build_host:
+        os.environ[TEST_BUILD_HOST_ENV_VAR] = "0"
 
     if not args.no_header:
         print("=" * 60)

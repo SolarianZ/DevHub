@@ -1,0 +1,73 @@
+{
+  "id": "events.subscribe_receives_definition_upserted_event",
+  "caseId": "CONF-007",
+  "description": "通过 SDK EventsClient 订阅 app.definition.upserted 后，成功 upsertDefinition 必须收到 hub.event。",
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceDefinitionUpsertedEvent",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.definition.upserted"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "upsert_definition",
+        "client": "http",
+        "definition": {
+          "appId": "events.definition.upserted",
+          "displayName": "Events Definition Upserted"
+        }
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "event"
+      },
+      {
+        "action": "delete_definition",
+        "client": "http",
+        "appId": "events.definition.upserted"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "event": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.definition.upserted",
+        "payload": {
+          "appId": "events.definition.upserted",
+          "definition": {
+            "appId": "events.definition.upserted",
+            "displayName": "Events Definition Upserted"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk"
+  ]
+}

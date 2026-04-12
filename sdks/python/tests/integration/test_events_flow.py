@@ -5,7 +5,10 @@ import asyncio
 import pytest
 
 from devhub_sdk import (
+    APP_DEFINITION_DELETED,
+    APP_DEFINITION_UPSERTED,
     APP_INSTANCE_REGISTERED,
+    AppDefinition,
     AppInstanceRegistration,
     InvokeCapability,
 )
@@ -31,7 +34,8 @@ async def test_M5_E2E_004_ws_authenticate_subscribe_unsubscribe_should_control_d
                     app_id="events.flow.app",
                     pid=99999,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("events-inst-1"),
             )
 
             event = await asyncio.wait_for(event_task, timeout=3)
@@ -45,7 +49,8 @@ async def test_M5_E2E_004_ws_authenticate_subscribe_unsubscribe_should_control_d
                     app_id="events.flow.app",
                     pid=99998,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("events-inst-2"),
             )
 
             with pytest.raises(asyncio.TimeoutError):
@@ -90,7 +95,8 @@ async def test_M5_E2E_010_ws_disconnect_cleanup_should_require_resubscribe_after
                     app_id="events.reconnect.app",
                     pid=99997,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("events-reconnect-inst-1"),
             )
 
             await second_client.subscribe([APP_INSTANCE_REGISTERED])
@@ -101,7 +107,8 @@ async def test_M5_E2E_010_ws_disconnect_cleanup_should_require_resubscribe_after
                     app_id="events.reconnect.app",
                     pid=99996,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("events-reconnect-inst-2"),
             )
 
             event = await asyncio.wait_for(anext(second_client.read_events()), timeout=2)
@@ -124,7 +131,8 @@ async def test_M5_E2E_004_ws_readable_methods_should_match_published_surface() -
                 app_id="events.ws.read.app",
                 pid=99995,
                 invoke=InvokeCapability(poll=True, respond=True),
-            )
+            ),
+            _instance_password("events-ws-read-inst-1"),
         )
 
         events_client = await host.create_events_client("events-client")
@@ -141,6 +149,37 @@ async def test_M5_E2E_004_ws_readable_methods_should_match_published_surface() -
     assert any(item.app_id == "events.ws.read.app" for item in definitions)
     assert definition.app_id == "events.ws.read.app"
     assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)
+
+
+@pytest.mark.asyncio
+async def test_M6_E2E_004_ws_should_receive_definition_lifecycle_events() -> None:
+    with DevHubHostFixture.start() as host:
+        events_client = await host.create_events_client("events-definition-client")
+        try:
+            await events_client.authenticate()
+            subscription_id = await events_client.subscribe([APP_DEFINITION_UPSERTED, APP_DEFINITION_DELETED])
+
+            http_client = host.create_client("events-definition-http-client")
+            http_client.upsert_definition(
+                AppDefinition(
+                    app_id="events.definition.app",
+                    display_name="Events Definition App",
+                )
+            )
+            upserted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
+
+            http_client.delete_definition("events.definition.app")
+            deleted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
+        finally:
+            await events_client.close()
+
+    assert upserted.subscription_id == subscription_id
+    assert upserted.type == APP_DEFINITION_UPSERTED
+    assert upserted.payload["appId"] == "events.definition.app"
+    assert upserted.payload["definition"]["displayName"] == "Events Definition App"
+    assert deleted.subscription_id == subscription_id
+    assert deleted.type == APP_DEFINITION_DELETED
+    assert deleted.payload["appId"] == "events.definition.app"
 
 
 @pytest.mark.asyncio
@@ -167,7 +206,8 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                     app_id="parallel.events.app",
                     pid=99994,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("parallel-events-inst-a"),
             )
 
             event_a = await asyncio.wait_for(anext(events_client_a.read_events()), timeout=3)
@@ -181,7 +221,8 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                     app_id="parallel.events.app",
                     pid=99993,
                     invoke=InvokeCapability(poll=True, respond=True),
-                )
+                ),
+                _instance_password("parallel-events-inst-b"),
             )
 
             event_b = await asyncio.wait_for(anext(events_client_b.read_events()), timeout=3)
@@ -193,3 +234,7 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
     assert event_a.payload["instanceId"] == "parallel-events-inst-a"
     assert event_b.subscription_id == subscription_id_b
     assert event_b.payload["instanceId"] == "parallel-events-inst-b"
+
+
+def _instance_password(instance_id: str) -> str:
+    return f"python-sdk-{instance_id}"

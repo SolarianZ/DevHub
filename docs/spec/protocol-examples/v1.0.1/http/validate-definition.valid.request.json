@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-validate-valid",
+  "method": "hub.apps.validateDefinition",
+  "params": {
+    "definition": {
+      "appId": "sample.app",
+      "displayName": "Sample App"
+    }
+  }
+}

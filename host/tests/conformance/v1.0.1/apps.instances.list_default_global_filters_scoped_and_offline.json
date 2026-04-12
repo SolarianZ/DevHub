@@ -8,6 +8,7 @@
       {
         "state": "offline",
         "waitSeconds": 3,
+        "password": "conformance-password",
         "instance": {
           "instanceId": "apps-instance-default-offline",
           "appId": "apps.instance.list.default.app",
@@ -21,6 +22,7 @@
       },
       {
         "state": "registered",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "apps-instance-default-online",
           "appId": "apps.instance.list.default.app",
@@ -34,6 +36,7 @@
       },
       {
         "state": "registered",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "apps-instance-default-scoped",
           "appId": "apps.instance.list.default.app",

@@ -21,6 +21,15 @@ internal sealed class GetDefinitionContract
     public AppDefinition Definition { get; set; } = new();
 }
 
+internal sealed class DefinitionValidationContract
+{
+    public bool Ok { get; set; }
+
+    public bool Valid { get; set; }
+
+    public List<ValidationIssue> Errors { get; set; } = [];
+}
+
 internal sealed class RegisterInstanceContract
 {
     public bool Ok { get; set; }

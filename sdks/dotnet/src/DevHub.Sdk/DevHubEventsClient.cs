@@ -388,6 +388,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         {
             throw new InvalidOperationException("hub.event.params.timeUtc 非法。");
         }
+
+        ResponsePayloadReader.ValidateEventPayload(evt, "hub.event.params");
     }
 
     private void EnsureAuthenticated()

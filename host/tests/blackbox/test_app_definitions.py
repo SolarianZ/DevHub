@@ -250,6 +250,166 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
+    def test_validate_definition(self):
+        """测试 validateDefinition 返回结构化校验结果"""
+        result = TestResult("测试 validateDefinition 返回结构化校验结果")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            valid_app_id = self._new_app_id("validate-app")
+            valid_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": valid_app_id,
+                    "displayName": "Validate App",
+                    "launch": {
+                        "exePath": "echo",
+                        "argsTemplate": "hello"
+                    }
+                }
+            })
+            if not RpcAssertions.expect_success(result, valid_response, ["valid", "errors"]):
+                return result
+
+            if valid_response["result"].get("valid") is not True or valid_response["result"].get("errors") != []:
+                result.mark_failure(f"❌ 合法定义校验结果不正确: {valid_response}")
+                return result
+
+            invalid_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": "Invalid App"
+                }
+            })
+            if not RpcAssertions.expect_success(result, invalid_response, ["valid", "errors"]):
+                return result
+
+            if invalid_response["result"].get("valid") is not False:
+                result.mark_failure(f"❌ 非法定义应返回 valid=false: {invalid_response}")
+                return result
+
+            errors = invalid_response["result"].get("errors", [])
+            if not any(issue.get("path") == "definition.appId" for issue in errors):
+                result.mark_failure(f"❌ 非法定义缺少 appId 校验问题: {invalid_response}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_upsert_definition_and_delete_definition(self):
+        """测试 upsertDefinition / getDefinition / deleteDefinition 完整生命周期"""
+        result = TestResult("测试 upsertDefinition / getDefinition / deleteDefinition 完整生命周期")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = self._new_app_id("managed-app")
+
+            upsert_response = client.call("hub.apps.upsertDefinition", {
+                "definition": {
+                    "appId": app_id,
+                    "displayName": "Managed App",
+                    "description": "Managed from blackbox test",
+                    "launch": {
+                        "exePath": "echo",
+                        "argsTemplate": "managed"
+                    }
+                }
+            })
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
+
+            definition = upsert_response["result"]["definition"]
+            if definition.get("appId") != app_id:
+                result.mark_failure(f"❌ upsert 返回定义 appId 不匹配: {definition}")
+                return result
+
+            get_response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            if not RpcAssertions.expect_success(result, get_response, ["definition"]):
+                return result
+
+            if get_response["result"]["definition"].get("description") != "Managed from blackbox test":
+                result.mark_failure(f"❌ getDefinition 未返回最新定义: {get_response}")
+                return result
+
+            delete_response = client.call("hub.apps.deleteDefinition", {"appId": app_id})
+            if not RpcAssertions.expect_success(result, delete_response):
+                return result
+
+            get_missing_response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            if not RpcAssertions.expect_error(result, get_missing_response, -32014, "app_definition_not_found"):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", {"appId": app_id})
+            except Exception:
+                pass
+
+        return result
+
+    def test_upsert_invalid_definition(self):
+        """测试 upsertDefinition 对非法定义返回 definition_invalid"""
+        result = TestResult("测试 upsertDefinition 对非法定义返回 definition_invalid")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call("hub.apps.upsertDefinition", {
+                "definition": {
+                    "appId": "Invalid App",
+                    "displayName": ""
+                }
+            })
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "definition_invalid"}):
+                return result
+
+            errors = response.get("error", {}).get("data", {}).get("errors", [])
+            if not any(issue.get("path") == "definition.appId" for issue in errors):
+                result.mark_failure(f"❌ definition_invalid 缺少 appId 错误项: {response}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_delete_nonexistent_definition(self):
+        """测试 deleteDefinition 删除不存在定义时返回 app_definition_not_found"""
+        result = TestResult("测试 deleteDefinition 删除不存在定义时返回 app_definition_not_found")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = self._new_app_id("missing-delete-app")
+
+            response = client.call("hub.apps.deleteDefinition", {"appId": app_id})
+            if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id}):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有 AppDefinition 测试"""
         return [
@@ -258,7 +418,11 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_get_nonexistent_definition(),
             self.test_invalid_app_definition(),
             self.test_app_definition_appid_format_validation(),
-            self.test_definition_filename_must_match_appid()
+            self.test_definition_filename_must_match_appid(),
+            self.test_validate_definition(),
+            self.test_upsert_definition_and_delete_definition(),
+            self.test_upsert_invalid_definition(),
+            self.test_delete_nonexistent_definition()
         ]
 
 

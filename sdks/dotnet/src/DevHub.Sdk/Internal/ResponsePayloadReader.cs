@@ -113,6 +113,43 @@ internal static class ResponsePayloadReader
         {
             EnsureElementKind(metaToken, $"{location}.meta", JTokenType.Object);
         }
+
+        if (TryGetProperty(element, "password", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：不得包含 password。");
+        }
+    }
+
+    internal static void ValidateValidationIssuesElement(JToken element, string location)
+    {
+        EnsureElementKind(element, location, JTokenType.Array);
+
+        var index = 0;
+        foreach (var issueElement in element.Children())
+        {
+            ValidateValidationIssueElement(issueElement, $"{location}[{index}]");
+            index++;
+        }
+    }
+
+    internal static void ValidateEventPayload(DevHubEvent evt, string location)
+    {
+        switch (evt.Type.Value)
+        {
+            case "app.definition.upserted":
+            case "app.definition.deleted":
+            case "app.instance.registered":
+            case "app.instance.unregistered":
+                if (evt.Payload is not { } requiredPayload)
+                {
+                    throw new InvalidOperationException($"{location}.payload 非法：不能为空。");
+                }
+
+                ValidateKnownEventPayload(requiredPayload, evt.Type.Value, location);
+                break;
+            default:
+                return;
+        }
     }
 
     internal static void ValidateInvocationElement(JToken element, string location)
@@ -244,6 +281,43 @@ internal static class ResponsePayloadReader
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须大于等于 {minimumValue}。");
         }
+    }
+
+    private static void ValidateKnownEventPayload(JToken payload, string eventType, string location)
+    {
+        switch (eventType)
+        {
+            case "app.definition.upserted":
+                EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                ValidateAppDefinitionElement(
+                    EnsurePropertyExists(payload, $"{location}.payload", "definition", JTokenType.Object),
+                    $"{location}.payload.definition");
+                break;
+            case "app.definition.deleted":
+                EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                break;
+            case "app.instance.registered":
+            case "app.instance.unregistered":
+                EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
+                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureStringProperty(payload, $"{location}.payload", "instanceId");
+                if (TryGetProperty(payload, "password", out _))
+                {
+                    throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");
+                }
+
+                break;
+        }
+    }
+
+    private static void ValidateValidationIssueElement(JToken element, string location)
+    {
+        EnsureElementKind(element, location, JTokenType.Object);
+        EnsureStringProperty(element, location, "path");
+        EnsureStringProperty(element, location, "code");
+        EnsureStringProperty(element, location, "message");
     }
 
     private static bool TryGetProperty(JToken element, string propertyName, out JToken propertyValue)

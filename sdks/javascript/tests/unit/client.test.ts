@@ -150,10 +150,55 @@ it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 transportFactor
   const result = await client.ping({ source: "fake-transport" });
 
   expect(result.echo).toEqual({ source: "fake-transport" });
-  expect(client.connection).toBe(connection);
+  expect(client.runtime).toEqual({
+    protocolVersion: 1,
+    pid: 12345,
+    startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+    hubVersion: "0.6.0-test"
+  });
+  expect((client.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+  expect((client.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+  expect((client.runtime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
+  expect((client as unknown as Record<string, unknown>).connection).toBeUndefined();
   expect(runtimeResolver.resolve).toHaveBeenCalledTimes(1);
   expect(transportFactory).toHaveBeenCalledTimes(1);
   expect(transport.send).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_008 runtime 应返回脱敏快照", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-runtime-view-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z"
+        })
+      })
+    }
+  );
+
+  const firstRuntime = client.runtime;
+  firstRuntime.startedAtUtc.setUTCFullYear(2000);
+
+  const secondRuntime = client.runtime;
+  expect(secondRuntime).toEqual({
+    protocolVersion: 1,
+    pid: 12345,
+    startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+    hubVersion: "0.6.0-test"
+  });
+  expect((secondRuntime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+  expect((secondRuntime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+  expect((secondRuntime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
 });
 
 it("M5_TS_UT_004 ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
@@ -356,6 +401,261 @@ it("M5_TS_UT_004 getDefinition 应将缺省 capabilities.rpc 归一化为 true",
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("M6_TS_UT_003 validateDefinition 应发送校验请求并返回结构化结果", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.validateDefinition");
+    expect(body.params).toEqual({
+      definition: {
+        appId: "test.validate.app",
+        displayName: ""
+      }
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      valid: false,
+      errors: [
+        {
+          path: "definition.displayName",
+          code: "missing_display_name",
+          message: "displayName is required"
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-validate-definition-client",
+    dataDir: runtimeDir
+  });
+
+  const result = await client.validateDefinition({
+    appId: "test.validate.app",
+    displayName: ""
+  });
+
+  expect(result).toEqual({
+    ok: true,
+    valid: false,
+    errors: [
+      {
+        path: "definition.displayName",
+        code: "missing_display_name",
+        message: "displayName is required"
+      }
+    ]
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_003 upsertDefinition 应发送写请求并解析返回定义", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.upsertDefinition");
+    expect(body.params).toEqual({
+      definition: {
+        appId: "test.upsert.app",
+        displayName: "Upsert App",
+        capabilities: {
+          rpc: true,
+          events: false
+        },
+        launch: {
+          exePath: process.execPath
+        }
+      }
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.upsert.app",
+        displayName: "Upsert App",
+        capabilities: {
+          rpc: true,
+          events: false
+        },
+        launch: {
+          exePath: process.execPath
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-upsert-definition-client",
+    dataDir: runtimeDir
+  });
+
+  const result = await client.upsertDefinition({
+    appId: "test.upsert.app",
+    displayName: "Upsert App",
+    capabilities: {
+      rpc: true,
+      events: false
+    },
+    launch: {
+      exePath: process.execPath
+    }
+  });
+
+  expect(result).toEqual({
+    appId: "test.upsert.app",
+    displayName: "Upsert App",
+    description: undefined,
+    capabilities: {
+      rpc: true,
+      events: false
+    },
+    launch: {
+      exePath: process.execPath,
+      argsTemplate: undefined,
+      workingDirectory: undefined,
+      dedupeKeyTemplate: undefined
+    }
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_003 deleteDefinition 应发送删除请求", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.deleteDefinition");
+    expect(body.params).toEqual({
+      appId: "test.delete.app"
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-delete-definition-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.deleteDefinition("test.delete.app")).resolves.toBeUndefined();
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_003 registerInstance / unregisterInstance 应在顶层携带 password 参数", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+
+    if (body.method === "hub.apps.registerInstance") {
+      expect(body.params).toEqual({
+        password: "secret-1",
+        instance: {
+          instanceId: "inst-1",
+          appId: "test.app",
+          pid: 12345,
+          invoke: {
+            poll: true,
+            respond: true
+          }
+        }
+      });
+
+      return createJsonResponse(body.id, {
+        ok: true,
+        instance: {
+          instanceId: "inst-1",
+          appId: "test.app",
+          pid: 12345,
+          registeredAtUtc: "2026-03-09T00:00:00Z",
+          lastSeenUtc: "2026-03-09T00:00:00Z",
+          invoke: {
+            poll: true,
+            respond: true
+          }
+        }
+      });
+    }
+
+    expect(body.method).toBe("hub.apps.unregisterInstance");
+    expect(body.params).toEqual({
+      instanceId: "inst-1",
+      password: "secret-1"
+    });
+    return createJsonResponse(body.id, {
+      ok: true
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-instance-password-client",
+    dataDir: runtimeDir
+  });
+
+  const instance = await client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "secret-1");
+
+  expect((instance as unknown as Record<string, unknown>).password).toBeUndefined();
+  await expect(client.unregisterInstance("inst-1", "secret-1")).resolves.toBeUndefined();
+  expect(fetchSpy).toHaveBeenCalledTimes(2);
+});
+
+it("M6_TS_UT_003 registerInstance 应拒绝返回包含 password 的实例结果", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-instance-password-leak-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          instance: {
+            instanceId: "inst-1",
+            appId: "test.app",
+            scope: null,
+            pid: 12345,
+            registeredAtUtc: "2026-03-09T00:00:00Z",
+            lastSeenUtc: "2026-03-09T00:00:01Z",
+            invoke: {
+              poll: true,
+              respond: true
+            },
+            password: "secret-1"
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "secret-1")).rejects.toThrow(/password/i);
+});
+
 it("M5_TS_UT_004 RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -480,7 +780,30 @@ it("M5_TS_UT_003 registerInstance 应在本地校验 invoke 布尔字段", async
       poll: "true" as unknown as boolean,
       respond: true
     }
-  })).rejects.toThrow("invoke.poll 必须为布尔值。");
+  }, "secret-1")).rejects.toThrow("invoke.poll 必须为布尔值。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("M6_TS_UT_003 registerInstance 应在本地拒绝空 password", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-register-password-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "")).rejects.toThrow("password 不能为空。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -518,7 +841,7 @@ it("M5_TS_UT_003 registerInstance should reject an invalid instanceId before sen
       poll: true,
       respond: true
     }
-  })).rejects.toThrow(/instanceId/);
+  }, "secret-1")).rejects.toThrow(/instanceId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -709,7 +1032,7 @@ it("M5_TS_UT_003 registerInstance 应在本地拒绝会被静默丢弃的 meta �
     meta: {
       callback: (() => "ignored") as any
     } as any
-  })).rejects.toThrow("meta.callback 包含不支持的 JSON 类型。");
+  }, "secret-1")).rejects.toThrow("meta.callback 包含不支持的 JSON 类型。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1314,6 +1637,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+      hubVersion: "0.6.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,

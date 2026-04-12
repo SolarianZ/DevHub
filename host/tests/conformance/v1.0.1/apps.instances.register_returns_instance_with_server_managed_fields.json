@@ -17,6 +17,7 @@
     "id": "apps-instances-register",
     "method": "hub.apps.registerInstance",
     "params": {
+      "password": "conformance-password",
       "instance": {
         "instanceId": "apps-instance-register-1",
         "appId": "apps.instance.registered.app",

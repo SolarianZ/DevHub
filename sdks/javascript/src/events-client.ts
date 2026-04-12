@@ -31,8 +31,12 @@ import {
   buildGetDefinitionParams,
   buildListInstancesParams
 } from "./payloads.js";
-import { FileSystemRuntimeResolver } from "./runtime.js";
+import { getRuntimeResolver } from "./default-runtime-resolver.js";
 import { ensureJsonValue } from "./validation.js";
+import {
+  createRuntimeView,
+  type DevHubRuntimeView
+} from "./runtime-view.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
 
@@ -50,17 +54,14 @@ export interface DevHubEventsClientDependencies {
   sessionFactory?: JsonRpcEventSessionFactory;
 }
 
-const DEFAULT_RUNTIME_RESOLVER = new FileSystemRuntimeResolver();
-
 export class DevHubEventsClient {
   readonly options: NormalizedDevHubClientOptions;
-  readonly connection: RuntimeConnectionInfo;
-
-  private eventQueue = new AsyncQueue<DevHubEvent>();
-  private readonly session: JsonRpcEventSession;
-  private authenticated = false;
-  private eventStreamAvailable = false;
-  private disposed = false;
+  #eventQueue = new AsyncQueue<DevHubEvent>();
+  readonly #connection: RuntimeConnectionInfo;
+  readonly #session: JsonRpcEventSession;
+  #authenticated = false;
+  #eventStreamAvailable = false;
+  #disposed = false;
 
   private constructor(
     options: NormalizedDevHubClientOptions,
@@ -68,12 +69,12 @@ export class DevHubEventsClient {
     session: JsonRpcEventSession
   ) {
     this.options = options;
-    this.connection = connection;
-    this.session = session;
+    this.#connection = connection;
+    this.#session = session;
   }
 
-  get runtime() {
-    return this.connection.runtime;
+  get runtime(): DevHubRuntimeView {
+    return createRuntimeView(this.#connection.runtime);
   }
 
   static async fromRuntime(
@@ -82,14 +83,16 @@ export class DevHubEventsClient {
   ): Promise<DevHubEventsClient> {
     const normalized = normalizeClientOptions(options);
     validateClientOptions(normalized);
-    const runtimeResolver = dependencies.runtimeResolver ?? DEFAULT_RUNTIME_RESOLVER;
+    const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
     let client: DevHubEventsClient | undefined;
     const sessionOptions: JsonRpcWsSessionOptions = {
       websocketEndpoint: connection.websocketEndpoint,
       requestTimeoutMs: normalized.requestTimeoutMs,
       onEvent: (params) => {
-        client?.eventQueue.push(parseEvent(params, "hub.event.params"));
+        if (client) {
+          client.#eventQueue.push(parseEvent(params, "hub.event.params"));
+        }
       },
       onTerminate: (error) => {
         client?.handleTermination(error);
@@ -102,57 +105,57 @@ export class DevHubEventsClient {
 
   async authenticate(): Promise<void> {
     this.throwIfDisposed();
-    if (this.authenticated) {
+    if (this.#authenticated) {
       throw new Error("The events client is already authenticated.");
     }
 
-    await this.session.ensureConnected();
+    await this.#session.ensureConnected();
 
     try {
-      const result = await this.session.sendRequest("hub.ws.authenticate", {
-        token: this.connection.token,
+      const result = await this.#session.sendRequest("hub.ws.authenticate", {
+        token: this.#connection.token,
         protocolVersion: this.options.protocolVersion,
         clientId: this.options.clientId,
         clientSessionId: this.options.clientSessionId
       });
 
       parseAuthenticateResult(result);
-      this.eventQueue = new AsyncQueue<DevHubEvent>();
-      this.authenticated = true;
-      this.eventStreamAvailable = true;
+      this.#eventQueue = new AsyncQueue<DevHubEvent>();
+      this.#authenticated = true;
+      this.#eventStreamAvailable = true;
     } catch (error) {
-      await this.session.disconnect("authenticate_failed");
+      await this.#session.disconnect("authenticate_failed");
       throw error;
     }
   }
 
   async subscribe(types?: readonly DevHubEventType[]): Promise<string> {
     this.ensureAuthenticated();
-    return parseSubscriptionResult(await this.session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
+    return parseSubscriptionResult(await this.#session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {
     this.ensureAuthenticated();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
-    return parsePingResult(await this.session.sendRequest("hub.ping", params));
+    return parsePingResult(await this.#session.sendRequest("hub.ping", params));
   }
 
   async listDefinitions(): Promise<AppDefinition[]> {
     this.ensureAuthenticated();
-    return parseDefinitionsResult(await this.session.sendRequest("hub.apps.listDefinitions"));
+    return parseDefinitionsResult(await this.#session.sendRequest("hub.apps.listDefinitions"));
   }
 
   async getDefinition(appId: string): Promise<AppDefinition> {
     this.ensureAuthenticated();
     return parseDefinitionResult(
-      await this.session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(appId))
+      await this.#session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(appId))
     );
   }
 
   async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
     this.ensureAuthenticated();
     return parseInstancesResult(
-      await this.session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
+      await this.#session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
     );
   }
 
@@ -162,52 +165,52 @@ export class DevHubEventsClient {
       throw new Error("subscriptionId cannot be empty.");
     }
 
-    parseUnsubscribeResult(await this.session.sendRequest("hub.events.unsubscribe", { subscriptionId }));
+    parseUnsubscribeResult(await this.#session.sendRequest("hub.events.unsubscribe", { subscriptionId }));
   }
 
   readEvents(): AsyncIterable<DevHubEvent> {
     this.ensureEventStreamAvailable();
-    return this.eventQueue;
+    return this.#eventQueue;
   }
 
   async dispose(): Promise<void> {
-    if (this.disposed) {
+    if (this.#disposed) {
       return;
     }
 
-    this.disposed = true;
-    this.authenticated = false;
-    this.eventStreamAvailable = false;
-    this.eventQueue.close();
+    this.#disposed = true;
+    this.#authenticated = false;
+    this.#eventStreamAvailable = false;
+    this.#eventQueue.close();
 
-    await this.session.dispose("client_dispose");
+    await this.#session.dispose("client_dispose");
   }
 
   private handleTermination(error?: Error): void {
-    if (this.disposed) {
+    if (this.#disposed) {
       return;
     }
 
-    this.authenticated = false;
-    this.eventQueue.close(error);
+    this.#authenticated = false;
+    this.#eventQueue.close(error);
   }
 
   private ensureAuthenticated(): void {
     this.throwIfDisposed();
-    if (!this.authenticated) {
+    if (!this.#authenticated) {
       throw new Error("The events client is not authenticated.");
     }
   }
 
   private ensureEventStreamAvailable(): void {
     this.throwIfDisposed();
-    if (!this.eventStreamAvailable) {
+    if (!this.#eventStreamAvailable) {
       this.ensureAuthenticated();
     }
   }
 
   private throwIfDisposed(): void {
-    if (this.disposed) {
+    if (this.#disposed) {
       throw new Error("The events client has been disposed.");
     }
   }

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-upsert",
+  "result": {
+    "ok": true,
+    "definition": {
+      "appId": "sample.app",
+      "displayName": "Sample App"
+    }
+  }
+}

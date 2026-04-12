@@ -18,6 +18,7 @@
     "beforeCaller": [
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "request-empty-global-inst",
           "appId": "invoke.request.empty-scope",
@@ -31,6 +32,7 @@
       },
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "request-empty-scope-a-inst",
           "appId": "invoke.request.empty-scope",

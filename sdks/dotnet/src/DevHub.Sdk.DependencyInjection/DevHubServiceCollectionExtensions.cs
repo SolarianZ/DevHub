@@ -36,6 +36,11 @@ public interface IDevHubEventsClientFactory
 public static class DevHubServiceCollectionExtensions
 {
     /// <summary>
+    /// `AddDevHubSdk()` 默认使用的命名 <see cref="HttpClient" />。
+    /// </summary>
+    public const string DefaultHttpClientName = "DevHub.Sdk";
+
+    /// <summary>
     /// 注册 DevHub SDK 所需的选项、公开 seam 与工厂服务。
     /// </summary>
     /// <param name="services">服务集合。</param>
@@ -48,8 +53,14 @@ public static class DevHubServiceCollectionExtensions
         }
 
         services.AddOptions<DevHubClientOptions>();
+        services.AddHttpClient(DefaultHttpClientName, static client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.TryAddSingleton<IDevHubRuntimeResolver, FileSystemDevHubRuntimeResolver>();
-        services.TryAddSingleton<IDevHubHttpTransportFactory, JsonRpcHttpTransportFactory>();
+        services.TryAddSingleton<IDevHubHttpClientProvider>(static serviceProvider =>
+            new NamedDevHubHttpClientProvider(
+                serviceProvider.GetRequiredService<IHttpClientFactory>(),
+                DefaultHttpClientName));
+        services.TryAddSingleton<IDevHubHttpTransportFactory>(static serviceProvider =>
+            new JsonRpcHttpTransportFactory(serviceProvider.GetRequiredService<IDevHubHttpClientProvider>()));
         services.TryAddSingleton<IDevHubWebSocketSessionFactory, JsonRpcWebSocketSessionFactory>();
         services.TryAddSingleton<IDevHubClientFactory, DefaultDevHubClientFactory>();
         services.TryAddSingleton<IDevHubEventsClientFactory, DefaultDevHubEventsClientFactory>();
@@ -115,6 +126,19 @@ public static class DevHubServiceCollectionExtensions
                     SessionFactory = _sessionFactory
                 },
                 cancellationToken);
+        }
+    }
+
+    private sealed class NamedDevHubHttpClientProvider(IHttpClientFactory httpClientFactory, string clientName) : IDevHubHttpClientProvider
+    {
+        private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
+        private readonly string _clientName = clientName;
+
+        public HttpClient CreateClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
+        {
+            _ = options ?? throw new ArgumentNullException(nameof(options));
+            _ = connectionInfo ?? throw new ArgumentNullException(nameof(connectionInfo));
+            return _httpClientFactory.CreateClient(_clientName);
         }
     }
 }

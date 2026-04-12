@@ -176,7 +176,7 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
     var eventEnumerators = new Dictionary<string, IAsyncEnumerator<DevHubEvent>>(StringComparer.Ordinal);
     var httpClients = new Dictionary<string, DevHubClient>(StringComparer.Ordinal);
     var captures = new Dictionary<string, object?>(StringComparer.Ordinal);
-    var registeredInstances = new List<(string ClientName, string InstanceId)>();
+    var registeredInstances = new List<(string ClientName, string InstanceId, string Password)>();
 
     try
     {
@@ -243,8 +243,10 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var clientName = ReadString(step, "client");
                     var client = RequireValue(httpClients, clientName, index, "http client");
                     var instance = BuildAppInstanceRegistration(step.GetProperty("instance"));
-                    await client.RegisterInstanceAsync(instance);
-                    registeredInstances.Add((clientName, instance.InstanceId));
+                    var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
+                    await client.RegisterInstanceAsync(instance, password);
+                    registeredInstances.Add((clientName, instance.InstanceId, password));
                     break;
                 }
                 case "unregister_instance":
@@ -252,7 +254,59 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
                     var instanceId = Convert.ToString(ResolveCaptureValue(step, captures, index, "instanceId"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].instanceId 不能为空。");
-                    await client.UnregisterInstanceAsync(instanceId);
+                    var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
+                    await client.UnregisterInstanceAsync(instanceId, password);
+                    break;
+                }
+                case "validate_definition":
+                {
+                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var validation = await client.ValidateDefinitionAsync(BuildAppDefinition(step.GetProperty("definition")));
+                    if (step.TryGetProperty("captureAs", out var captureElement))
+                    {
+                        captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] =
+                            NormalizeDefinitionValidationResult(validation);
+                    }
+                    break;
+                }
+                case "upsert_definition":
+                {
+                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var definition = await client.UpsertDefinitionAsync(BuildAppDefinition(step.GetProperty("definition")));
+                    if (step.TryGetProperty("captureAs", out var captureElement))
+                    {
+                        captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] =
+                            NormalizeDefinition(definition);
+                    }
+                    break;
+                }
+                case "delete_definition":
+                {
+                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var appId = Convert.ToString(ResolveCaptureValue(step, captures, index, "appId"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].appId 不能为空。");
+                    await client.DeleteDefinitionAsync(appId);
+                    if (step.TryGetProperty("captureAs", out var captureElement))
+                    {
+                        captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] = new { ok = true };
+                    }
+                    break;
+                }
+                case "get_definition":
+                {
+                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var appId = Convert.ToString(ResolveCaptureValue(step, captures, index, "appId"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].appId 不能为空。");
+                    var definition = await client.GetDefinitionAsync(appId);
+                    captures[ReadString(step, "captureAs")] = NormalizeDefinition(definition);
+                    break;
+                }
+                case "list_definitions":
+                {
+                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var definitions = await client.ListDefinitionsAsync();
+                    captures[ReadString(step, "captureAs")] = definitions.Select(NormalizeDefinition).ToArray();
                     break;
                 }
                 case "read_event":
@@ -328,7 +382,7 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
 
             try
             {
-                await client.UnregisterInstanceAsync(registered.InstanceId);
+                await client.UnregisterInstanceAsync(registered.InstanceId, registered.Password);
             }
             catch
             {
@@ -542,6 +596,17 @@ InvokeRequest BuildInvokeRequest(JsonElement payload)
     return request;
 }
 
+AppDefinition BuildAppDefinition(JsonElement payload)
+{
+    if (payload.ValueKind != JsonValueKind.Object)
+    {
+        throw new InvalidOperationException("definition 必须为对象。");
+    }
+
+    return JsonSerializer.Deserialize<AppDefinition>(payload.GetRawText(), jsonOptions)
+           ?? throw new InvalidOperationException("definition 无法解析为 AppDefinition。");
+}
+
 AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
 {
     if (payload.ValueKind != JsonValueKind.Object)
@@ -570,6 +635,18 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
             ? DeserializeToObject(metaElement)
             : null
     };
+}
+
+object NormalizeDefinition(AppDefinition definition)
+{
+    return JsonSerializer.Deserialize<object>(JsonSerializer.Serialize(definition, jsonOptions), jsonOptions)
+           ?? new Dictionary<string, object?>();
+}
+
+object NormalizeDefinitionValidationResult(DefinitionValidationResult result)
+{
+    return JsonSerializer.Deserialize<object>(JsonSerializer.Serialize(result, jsonOptions), jsonOptions)
+           ?? new Dictionary<string, object?>();
 }
 
 IAsyncEnumerator<DevHubEvent> GetOrCreateEventEnumerator(

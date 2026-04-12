@@ -18,6 +18,7 @@ from uuid import uuid4
 from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubEventsClient
 
 PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_PYTHON_SDK_HOST_ASSEMBLY"
+SHARED_PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_SDK_HOST_ASSEMBLY"
 HOST_BUILD_CONFIGURATION = "Release"
 HOST_TARGET_FRAMEWORK = "net10.0"
 
@@ -212,9 +213,15 @@ def _resolve_host_assembly_path(repo_root: Path) -> Path:
         if _shared_host_assembly_path is not None and _shared_host_assembly_path.is_file():
             return _shared_host_assembly_path
 
+        configured_host_assembly_path = _resolve_configured_host_assembly_path_from_environment(repo_root)
+        if configured_host_assembly_path is not None:
+            _shared_host_build_root = None
+            _shared_host_assembly_path = configured_host_assembly_path
+            return configured_host_assembly_path
+
         build_root = Path(tempfile.mkdtemp(prefix="devhub-python-sdk-host-build-"))
         try:
-            host_assembly_path = _prepare_isolated_host_assembly(repo_root, build_root)
+            host_assembly_path = _build_isolated_host_assembly(repo_root, build_root)
         except Exception:
             shutil.rmtree(build_root, ignore_errors=True)
             raise
@@ -224,7 +231,7 @@ def _resolve_host_assembly_path(repo_root: Path) -> Path:
         return host_assembly_path
 
 
-def _resolve_configured_host_assembly_path(repo_root: Path, configured_path: str) -> Path:
+def _resolve_configured_host_assembly_path(repo_root: Path, configured_path: str, environment_variable_name: str) -> Path:
     resolved_path = Path(configured_path)
     if not resolved_path.is_absolute():
         resolved_path = (repo_root / resolved_path).resolve()
@@ -233,47 +240,36 @@ def _resolve_configured_host_assembly_path(repo_root: Path, configured_path: str
         return resolved_path
 
     raise RuntimeError(
-        f"环境变量 {PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE} 指定的 Host 程序不存在：{resolved_path}"
+        f"环境变量 {environment_variable_name} 指定的 Host 程序不存在：{resolved_path}"
     )
 
 
-def _resolve_built_host_assembly_path(repo_root: Path) -> Path:
-    host_assembly_path = (
-        repo_root / "host" / "src" / "DevHub.Host" / "bin" / HOST_BUILD_CONFIGURATION / HOST_TARGET_FRAMEWORK / "DevHub.Host.dll"
-    )
+def _resolve_configured_host_assembly_path_from_environment(repo_root: Path) -> Path | None:
+    for environment_variable_name in (
+        PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE,
+        SHARED_PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE,
+    ):
+        configured_path = os.environ.get(environment_variable_name, "").strip()
+        if configured_path:
+            return _resolve_configured_host_assembly_path(repo_root, configured_path, environment_variable_name)
+
+    return None
+
+
+def _resolve_built_host_assembly_path(build_root: Path) -> Path:
+    host_assembly_path = build_root / "bin" / HOST_BUILD_CONFIGURATION / HOST_TARGET_FRAMEWORK / "DevHub.Host.dll"
     if host_assembly_path.is_file():
         return host_assembly_path
 
-    raise RuntimeError(f"未找到已构建的 Host 程序：{host_assembly_path}")
+    raise RuntimeError(f"未找到构建后的 Host 程序：{host_assembly_path}")
 
 
-def _prepare_isolated_host_assembly(repo_root: Path, build_root: Path) -> Path:
-    configured_path = os.environ.get(PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE, "").strip()
-    if configured_path:
-        source_host_assembly_path = _resolve_configured_host_assembly_path(repo_root, configured_path)
-    else:
-        source_host_assembly_path = _ensure_built_host_assembly(repo_root)
-
-    runtime_directory = build_root / "runtime"
-    runtime_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source_host_assembly_path.parent, runtime_directory, dirs_exist_ok=True)
-
-    host_assembly_path = runtime_directory / "DevHub.Host.dll"
-    if host_assembly_path.is_file():
-        return host_assembly_path
-
-    raise RuntimeError(f"未找到隔离复制后的 Host 程序：{host_assembly_path}")
+def _build_isolated_host_assembly(repo_root: Path, build_root: Path) -> Path:
+    _build_host_assembly(repo_root, build_root)
+    return _resolve_built_host_assembly_path(build_root)
 
 
-def _ensure_built_host_assembly(repo_root: Path) -> Path:
-    try:
-        return _resolve_built_host_assembly_path(repo_root)
-    except RuntimeError:
-        _build_host_assembly(repo_root)
-        return _resolve_built_host_assembly_path(repo_root)
-
-
-def _build_host_assembly(repo_root: Path) -> None:
+def _build_host_assembly(repo_root: Path, build_root: Path) -> None:
     host_project_path = repo_root / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
     if not host_project_path.is_file():
         raise RuntimeError(f"未找到 Host 工程：{host_project_path}")
@@ -286,6 +282,7 @@ def _build_host_assembly(repo_root: Path) -> None:
             "-c",
             HOST_BUILD_CONFIGURATION,
             "--nologo",
+            f"-p:BaseOutputPath={_ensure_trailing_separator(build_root / 'bin')}",
         ],
         cwd=repo_root,
         stdin=subprocess.DEVNULL,
@@ -301,6 +298,11 @@ def _build_host_assembly(repo_root: Path) -> None:
         raise RuntimeError(
             f"构建 Host 失败。stdout={completed.stdout or ''} stderr={completed.stderr or ''}"
         )
+
+
+def _ensure_trailing_separator(path_value: Path) -> str:
+    value = str(path_value)
+    return value if value.endswith(os.sep) else f"{value}{os.sep}"
 
 
 def _create_isolated_process_kwargs() -> dict[str, Any]:

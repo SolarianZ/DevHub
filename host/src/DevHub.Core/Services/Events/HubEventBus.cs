@@ -7,13 +7,15 @@ namespace DevHub.Core.Services.Events;
 /// <summary>
 /// Hub 事件总线（连接级订阅 + 投递队列）。
 /// </summary>
-public sealed class HubEventBus
+public sealed class HubEventBus : IHubEventPublisher
 {
     internal const int MaxPendingDeliveriesPerConnection = 1024;
     internal const int MaxPendingDeliveriesTotal = 16384;
 
     private static readonly string[] SupportedEventTypes =
     [
+        HubEventTypes.AppDefinitionUpserted,
+        HubEventTypes.AppDefinitionDeleted,
         HubEventTypes.AppInstanceRegistered,
         HubEventTypes.AppInstanceUnregistered,
         HubEventTypes.InvocationQueued,

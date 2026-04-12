@@ -11,6 +11,8 @@ namespace DevHub.Sdk.IntegrationTests.Events;
 /// </summary>
 public sealed class EventsFlowTests
 {
+    private const string InstancePassword = "sdk-events-flow-password";
+
     [Fact]
     public async Task M5_E2E_004_WsAuthenticateSubscribeUnsubscribe_ShouldControlDelivery()
     {
@@ -26,20 +28,55 @@ public sealed class EventsFlowTests
         var subscriptionId = await eventsClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
 
         await using var client = await host.CreateClientAsync("events-http-client");
-        await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-1"));
+        await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-1"), InstancePassword);
 
         var registeredEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(subscriptionId, registeredEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppInstanceRegistered, registeredEvent.Type);
         Assert.Equal("events-inst-1", (string?)registeredEvent.Payload!["instanceId"]!);
+        Assert.Null(registeredEvent.Payload!["password"]);
 
-        await client.UnregisterInstanceAsync("events-inst-1");
+        await client.UnregisterInstanceAsync("events-inst-1", InstancePassword);
         await AssertNoEventWithinAsync(eventsClient, TimeSpan.FromMilliseconds(600));
 
         await eventsClient.UnsubscribeAsync(subscriptionId);
-        await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-2"));
+        await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-2"), InstancePassword);
 
         await AssertNoEventWithinAsync(eventsClient, TimeSpan.FromMilliseconds(600));
+    }
+
+    [Fact]
+    public async Task Impl_DefinitionLifecycleEvents_ShouldPublishUpsertedAndDeleted()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var eventsClient = await host.CreateEventsClientAsync("definition-events-client");
+        await using var httpClient = await host.CreateClientAsync("definition-events-http-client");
+
+        await eventsClient.AuthenticateAsync();
+        var subscriptionId = await eventsClient.SubscribeAsync(new[]
+        {
+            DevHubEventTypes.AppDefinitionUpserted,
+            DevHubEventTypes.AppDefinitionDeleted
+        });
+
+        var definition = new AppDefinition
+        {
+            AppId = "events.definition.app",
+            DisplayName = "Events Definition App"
+        };
+
+        _ = await httpClient.UpsertDefinitionAsync(definition);
+        var upsertedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
+        Assert.Equal(subscriptionId, upsertedEvent.SubscriptionId);
+        Assert.Equal(DevHubEventTypes.AppDefinitionUpserted, upsertedEvent.Type);
+        Assert.Equal(definition.AppId, (string?)upsertedEvent.Payload!["appId"]!);
+        Assert.Equal(definition.AppId, (string?)upsertedEvent.Payload!["definition"]!["appId"]!);
+
+        await httpClient.DeleteDefinitionAsync(definition.AppId);
+        var deletedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
+        Assert.Equal(subscriptionId, deletedEvent.SubscriptionId);
+        Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, deletedEvent.Type);
+        Assert.Equal(definition.AppId, (string?)deletedEvent.Payload!["appId"]!);
     }
 
     [Fact]
@@ -67,7 +104,7 @@ public sealed class EventsFlowTests
 
         await using (var initialEnumerator = eventsClient.ReadEventsAsync().GetAsyncEnumerator())
         {
-            await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-1"));
+            await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-1"), InstancePassword);
 
             Assert.True(await initialEnumerator.MoveNextAsync());
             Assert.Equal(initialSubscriptionId, initialEnumerator.Current.SubscriptionId);
@@ -81,11 +118,11 @@ public sealed class EventsFlowTests
 
         await eventsClient.AuthenticateAsync();
 
-        await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-2"));
+        await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-2"), InstancePassword);
         await AssertNoEventWithinAsync(eventsClient, TimeSpan.FromMilliseconds(600));
 
         var resubscribedId = await eventsClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
-        await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-3"));
+        await httpClient.RegisterInstanceAsync(CreateInstance("events.reconnect.app", "events-reconnect-inst-3"), InstancePassword);
 
         var reconnectedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(resubscribedId, reconnectedEvent.SubscriptionId);
@@ -104,7 +141,7 @@ public sealed class EventsFlowTests
         });
 
         await using var httpClient = await host.CreateClientAsync("events-http-client");
-        await httpClient.RegisterInstanceAsync(CreateInstance("events.ws.read.app", "events-ws-read-inst-1"));
+        await httpClient.RegisterInstanceAsync(CreateInstance("events.ws.read.app", "events-ws-read-inst-1"), InstancePassword);
 
         await using var eventsClient = await host.CreateEventsClientAsync("events-client");
         await eventsClient.AuthenticateAsync();

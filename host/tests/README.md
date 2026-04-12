@@ -50,17 +50,25 @@ host/tests/
 
 ## 运行方式
 
-### 1) 启动 DevHub Host
+### 1) 运行黑盒测试
 
-```bash
-dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
-```
+`host/tests/blackbox/test_runner.py` 默认会先构建一次仓库内 `DevHub.Host`，再启动一个 runner 级隔离 Host，并把整个黑盒测试过程固定到该隔离 `DEVHUB_DATA_DIR`；测试完成后会自动结束这个临时 Host。
 
-### 2) 运行黑盒测试
+如需关闭默认预构建，可使用：
+
+- `--no-build-host`
+- `DEVHUB_TEST_BUILD_HOST=0`
+
+如需改为复用外部已启动的 Host，可使用：
+
+- `--use-existing-host`
+- `DEVHUB_TEST_USE_EXISTING_HOST=1`
+
+此时 runner 不再自启 Host，而是直接连接当前 `DEVHUB_DATA_DIR` 或平台默认数据目录对应的运行时。
 
 #### 可选：为隔离 Hub 用例配置启动夹具
 
-`host/tests/blackbox/test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动隔离 Hub 进程。默认情况下，夹具会回退到仓库内的 Host 启动命令；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
+`host/tests/blackbox/test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动额外的隔离 Hub 进程。默认情况下，夹具会沿用仓库内 Host 的默认启动方式；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
 
 - `--isolated-hub-command` / `DEVHUB_TEST_HUB_COMMAND`：隔离 Hub 启动命令，支持 shell 字符串或 JSON 数组。
 - `--isolated-hub-cwd` / `DEVHUB_TEST_HUB_CWD`：隔离 Hub 启动命令的工作目录。
@@ -78,6 +86,13 @@ python3 host/tests/blackbox/test_runner.py
 
 ```bash
 python3 host/tests/blackbox/test_runner.py --isolated-hub-command "dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
+```
+
+复用外部 Host：
+
+```bash
+dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile
+python3 host/tests/blackbox/test_runner.py --use-existing-host --no-build-host
 ```
 
 #### Fast
@@ -98,7 +113,7 @@ python3 host/tests/blackbox/test_runner.py --full
 python3 host/tests/blackbox/test_runner.py --smoke
 ```
 
-### 3) 运行 conformance
+### 2) 运行 conformance
 
 仓库级符合性向量：
 
@@ -112,12 +127,20 @@ conformance runner 自测：
 python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
 ```
 
-### 4) 覆盖率配置与校验
+### 3) 覆盖率配置与校验
 
 ```bash
-dotnet test host/DevHub.slnx -c Release --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings
+find host -type d -name TestResults -prune -exec rm -rf {} +
+dotnet test host/DevHub.slnx -c Release --no-build --collect:"XPlat Code Coverage" --settings host/tests/tools/coverage.runsettings --logger "trx;LogFileName=unit-tests.trx" --verbosity normal
 python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80
 ```
+
+补充说明：
+
+- Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/spec/Spec.md`](../../docs/spec/Spec.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
+- `find host -type d -name TestResults -prune -exec rm -rf {} +` 与 GitHub CI 保持一致，用于清理历史 `TestResults`，避免旧的 coverage 报告混入当前校验。
+- 启用 `trx` logger 时，Coverlet 会同时生成 `TestResults/_*/In/**/coverage.cobertura.xml` 附件副本和 GUID 目录下的镜像副本。
+- `host/tests/tools/verify_coverage.py` 会优先使用 `trx` 附件副本参与阈值计算，并忽略同一测试工程下内容完全相同的 GUID 镜像副本；这样既保留 `trx`/诊断附件所需文件，又避免重复报告干扰 coverage 口径。
 
 ## 报告输出
 

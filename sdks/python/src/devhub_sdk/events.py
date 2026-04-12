@@ -1,20 +1,28 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from ._parsing import (
     parse_definition_result,
     parse_definitions_result,
+    parse_event,
     parse_instances_result,
     parse_ping_result,
     require_bool,
     require_mapping,
     require_str,
 )
-from .constants import DevHubEventType, ensure_supported_event_type
-from ._validation import ensure_json_value, require_non_empty_string
+from ._payloads import (
+    build_get_definition_params,
+    build_list_instances_params,
+    build_ping_params,
+    build_subscribe_params,
+    build_unsubscribe_params,
+    build_ws_authenticate_params,
+)
+from .constants import DevHubEventType
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
     AppDefinition,
@@ -107,12 +115,7 @@ class DevHubEventsClient:
         try:
             result = await self._send_request(
                 "hub.ws.authenticate",
-                {
-                    "token": self._connection_info.token,
-                    "protocolVersion": self._options.protocol_version,
-                    "clientId": self._options.client_id,
-                    "clientSessionId": self._options.client_session_id,
-                },
+                build_ws_authenticate_params(self._options, self._connection_info),
                 require_authenticated=False,
             )
             root = require_mapping(result, "hub.ws.authenticate.result")
@@ -137,7 +140,7 @@ class DevHubEventsClient:
         """通过 WebSocket 调用 `hub.ping`。"""
 
         self._ensure_authenticated()
-        params = None if echo is _ECHO_UNSET else {"echo": ensure_json_value(echo, "echo")}
+        params = build_ping_params() if echo is _ECHO_UNSET else build_ping_params(echo)
         result = await self._send_request("hub.ping", params, require_authenticated=True)
         return parse_ping_result(result, path="hub.ping.result")
 
@@ -152,10 +155,9 @@ class DevHubEventsClient:
         """通过 WebSocket 调用 `hub.apps.getDefinition`。"""
 
         self._ensure_authenticated()
-        normalized_app_id = require_non_empty_string(app_id, "app_id")
         result = await self._send_request(
             "hub.apps.getDefinition",
-            {"appId": normalized_app_id},
+            build_get_definition_params(app_id),
             require_authenticated=True,
         )
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
@@ -164,43 +166,22 @@ class DevHubEventsClient:
         """通过 WebSocket 调用 `hub.apps.listInstances`。"""
 
         self._ensure_authenticated()
-        params: dict[str, Any] | None = None
-        if request is not None:
-            params = {}
-            if request.app_id is not None:
-                params["appId"] = require_non_empty_string(request.app_id, "request.app_id")
-            if request.scope is not None:
-                if not isinstance(request.scope, str):
-                    raise ValueError("request.scope 类型非法。")
-                params["scope"] = request.scope
-            if request.include_all_scopes:
-                params["includeAllScopes"] = True
-            if request.include_offline:
-                params["includeOffline"] = True
-            if not params:
-                params = None
-
-        result = await self._send_request("hub.apps.listInstances", params, require_authenticated=True)
+        result = await self._send_request(
+            "hub.apps.listInstances",
+            build_list_instances_params(request),
+            require_authenticated=True,
+        )
         return parse_instances_result(result, path="hub.apps.listInstances.result")
 
     async def subscribe(self, types: Iterable[DevHubEventType] | None = None) -> str:
         """订阅事件。"""
 
         self._ensure_authenticated()
-        params: dict[str, Any] | None = None
-        if types is not None:
-            if isinstance(types, str | bytes | bytearray):
-                raise ValueError("types 必须为事件类型序列。")
-            if isinstance(types, Mapping):
-                raise ValueError("types 必须为事件类型序列。")
-            types_list = list(types)
-            normalized_types = [
-                ensure_supported_event_type(item, f"types[{index}]")
-                for index, item in enumerate(types_list)
-            ]
-            if types_list:
-                params = {"types": normalized_types}
-        result = await self._send_request("hub.events.subscribe", params, require_authenticated=True)
+        result = await self._send_request(
+            "hub.events.subscribe",
+            build_subscribe_params(types),
+            require_authenticated=True,
+        )
         root = require_mapping(result, "hub.events.subscribe.result")
         if not require_bool(root, "ok", "hub.events.subscribe.result"):
             raise RuntimeError("hub.events.subscribe 返回结果非法。")
@@ -210,10 +191,9 @@ class DevHubEventsClient:
         """取消订阅。"""
 
         self._ensure_authenticated()
-        normalized_subscription_id = require_non_empty_string(subscription_id, "subscription_id")
         result = await self._send_request(
             "hub.events.unsubscribe",
-            {"subscriptionId": normalized_subscription_id},
+            build_unsubscribe_params(subscription_id),
             require_authenticated=True,
         )
         root = require_mapping(result, "hub.events.unsubscribe.result")
@@ -226,8 +206,8 @@ class DevHubEventsClient:
         self._ensure_event_stream_available()
         iterator = self._session.read_events()
         try:
-            async for event in iterator:
-                yield event
+            async for raw_params in iterator:
+                yield parse_event(raw_params, path="hub.event.params")
         finally:
             aclose = getattr(iterator, "aclose", None)
             if aclose is not None:

@@ -8,14 +8,9 @@ namespace DevHub.Core.Services.Invocation;
 /// </summary>
 public class InvocationTimeoutWorker : IDisposable
 {
-    private static readonly TimeSpan DefaultInterval = TimeSpan.FromMilliseconds(200);
-
     private readonly InvocationStore _store;
     private readonly InvocationRequestWaiter _requestWaiter;
-    private readonly IClock _clock;
     private readonly ILogger<InvocationTimeoutWorker> _logger;
-    private readonly Timer _timer;
-    private bool _disposed;
 
     /// <summary>
     /// 初始化扫描器。
@@ -28,9 +23,7 @@ public class InvocationTimeoutWorker : IDisposable
     {
         _store = store;
         _requestWaiter = requestWaiter;
-        _clock = clock;
         _logger = logger;
-        _timer = new Timer(OnTimer, null, DefaultInterval, DefaultInterval);
     }
 
     /// <summary>
@@ -62,29 +55,10 @@ public class InvocationTimeoutWorker : IDisposable
         }
     }
 
-    private void OnTimer(object? state)
-    {
-        try
-        {
-            SweepOnce(_clock.UtcNow);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "InvocationTimeoutWorker 周期扫描失败");
-        }
-    }
-
     /// <summary>
     /// 释放资源。
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _timer.Dispose();
-        _disposed = true;
     }
 }

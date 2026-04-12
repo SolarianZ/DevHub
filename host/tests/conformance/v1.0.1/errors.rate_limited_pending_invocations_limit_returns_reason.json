@@ -404,6 +404,7 @@
     "afterCaller": [
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "errors-rate-limit-drain-inst",
           "appId": "errors.rate-limited.pending",

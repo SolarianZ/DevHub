@@ -16,6 +16,7 @@ using Moq;
 [Trait("Category", "Spec")]
 public class M1CoreRpcSpecTests : IDisposable
 {
+    private const string InstancePassword = "m1-core-rpc-password";
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _instancesLogger = new();
@@ -158,21 +159,18 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.5-register",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId = "spec-6.3.5-instance",
+                appId = "spec-6.3.5.app",
+                scope = (string?)null,
+                pid = 6101,
+                invoke = new
                 {
-                    instanceId = "spec-6.3.5-instance",
-                    appId = "spec-6.3.5.app",
-                    scope = (string?)null,
-                    pid = 6101,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -200,21 +198,18 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.5-register-refresh-first",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId = "spec-6.3.5-refresh-instance",
+                appId = "spec-6.3.5.refresh.app",
+                scope = (string?)null,
+                pid = 6103,
+                invoke = new
                 {
-                    instanceId = "spec-6.3.5-refresh-instance",
-                    appId = "spec-6.3.5.refresh.app",
-                    scope = (string?)null,
-                    pid = 6103,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         Assert.Null(firstResponse.Error);
@@ -230,21 +225,18 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.5-register-refresh-second",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId = "spec-6.3.5-refresh-instance",
+                appId = "spec-6.3.5.refresh.app",
+                scope = (string?)null,
+                pid = 6103,
+                invoke = new
                 {
-                    instanceId = "spec-6.3.5-refresh-instance",
-                    appId = "spec-6.3.5.refresh.app",
-                    scope = (string?)null,
-                    pid = 6103,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         Assert.Null(secondResponse.Error);
@@ -268,21 +260,18 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.5-invalid-scope",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId = "spec-6.3.5-invalid-scope",
+                appId = "spec-6.3.5.app",
+                scope = 1,
+                pid = 6102,
+                invoke = new
                 {
-                    instanceId = "spec-6.3.5-invalid-scope",
-                    appId = "spec-6.3.5.app",
-                    scope = 1,
-                    pid = 6102,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
@@ -303,41 +292,32 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.7-register",
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId = "spec-6.3.7-instance",
+                appId = "spec-6.3.7.app",
+                scope = (string?)null,
+                pid = 6201,
+                invoke = new
                 {
-                    instanceId = "spec-6.3.7-instance",
-                    appId = "spec-6.3.7.app",
-                    scope = (string?)null,
-                    pid = 6201,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         var firstResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.7-unregister-first",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "spec-6.3.7-instance"
-            })
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance"))
         }, CancellationToken.None);
 
         var secondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.7-unregister-second",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "spec-6.3.7-instance"
-            })
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance"))
         }, CancellationToken.None);
 
         Assert.Null(firstResponse.Error);
@@ -461,21 +441,18 @@ public class M1CoreRpcSpecTests : IDisposable
         {
             Id = "register-" + instanceId,
             Method = "hub.apps.registerInstance",
-            Params = JsonSerializer.SerializeToElement(new
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
             {
-                instance = new
+                instanceId,
+                appId,
+                scope,
+                pid,
+                invoke = new
                 {
-                    instanceId,
-                    appId,
-                    scope,
-                    pid,
-                    invoke = new
-                    {
-                        poll = true,
-                        respond = true
-                    }
+                    poll = true,
+                    respond = true
                 }
-            })
+            }))
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -494,6 +471,24 @@ public class M1CoreRpcSpecTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
+    }
+
+    private static object CreateRegisterParams(object instance)
+    {
+        return new
+        {
+            password = InstancePassword,
+            instance
+        };
+    }
+
+    private static object CreateUnregisterParams(string instanceId)
+    {
+        return new
+        {
+            instanceId,
+            password = InstancePassword
+        };
     }
 
     private sealed class MutableClock : IClock

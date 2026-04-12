@@ -9,6 +9,7 @@ on:
     paths:
       - "eng/**"
       - "host/**"
+      - "apps/**"
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
@@ -17,6 +18,7 @@ on:
     paths:
       - "eng/**"
       - "host/**"
+      - "apps/**"
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
@@ -159,7 +161,7 @@ jobs:
             false
           fi
 
-          python3 host/tests/blackbox/test_runner.py --fast --no-header 2>&1 | tee "$runner_log"
+          python3 host/tests/blackbox/test_runner.py --fast --no-header --use-existing-host --no-build-host 2>&1 | tee "$runner_log"
 
       - name: Upload build-and-test diagnostics
         if: failure()
@@ -176,7 +178,7 @@ jobs:
             host/**/TestResults/**
           if-no-files-found: warn
 
-  sdk-dotnet-tests:
+  sdk-host-artifact:
     runs-on: ubuntu-latest
 
     steps:
@@ -188,8 +190,47 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Build shared Host artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          host_output_root="$RUNNER_TEMP/devhub-sdk-host"
+          dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release --nologo \
+            -p:BaseOutputPath="${host_output_root}/bin/"
+          test -f "${host_output_root}/bin/Release/net10.0/DevHub.Host.dll"
+
+      - name: Upload shared Host artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sdk-host-release
+          path: ${{ runner.temp }}/devhub-sdk-host/bin/Release/net10.0
+          if-no-files-found: error
+
+  sdk-dotnet-tests:
+    needs: sdk-host-artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download shared Host artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: sdk-host-release
+          path: ${{ runner.temp }}/sdk-host-release
+
       - name: Run .NET SDK tests
-        run: dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+        env:
+          DEVHUB_SDK_HOST_ASSEMBLY: ${{ runner.temp }}/sdk-host-release/DevHub.Host.dll
+        run: |
+          dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+          dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release --no-build
 
       - name: Verify .NET SDK Release outputs
         shell: bash
@@ -207,6 +248,7 @@ jobs:
           test -f host/src/DevHub.Host/bin/Debug/net10.0/DevHub.Host.dll
 
   sdk-ts-tests:
+    needs: sdk-host-artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -231,15 +273,70 @@ jobs:
       - name: Build JavaScript SDK
         run: npm --prefix sdks/javascript run build
 
-      - name: Build Host for JavaScript SDK tests
-        run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+      - name: Download shared Host artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: sdk-host-release
+          path: ${{ runner.temp }}/sdk-host-release
 
       - name: Run JavaScript SDK tests
         env:
-          DEVHUB_JS_SDK_HOST_ASSEMBLY: ${{ github.workspace }}/host/src/DevHub.Host/bin/Release/net10.0/DevHub.Host.dll
+          DEVHUB_SDK_HOST_ASSEMBLY: ${{ runner.temp }}/sdk-host-release/DevHub.Host.dll
         run: npm --prefix sdks/javascript test
 
+  monitor-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            apps/monitor/package-lock.json
+            sdks/javascript/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install JavaScript SDK dependencies
+        run: npm --prefix sdks/javascript ci
+
+      - name: Install Monitor dependencies
+        run: npm --prefix apps/monitor ci
+
+      - name: Build Monitor frontend
+        run: npm --prefix apps/monitor run build:web
+
+      - name: Run Monitor frontend tests
+        run: npm --prefix apps/monitor test
+
+      - name: Run Monitor native tests
+        run: npm --prefix apps/monitor run test:native
+
+      - name: Run Monitor native checks
+        run: npm --prefix apps/monitor run tauri:check
+
   sdk-python-tests:
+    needs: sdk-host-artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -261,13 +358,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e './sdks/python[test]' requests
 
-      - name: Build Host for Python SDK integration tests
-        run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+      - name: Download shared Host artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: sdk-host-release
+          path: ${{ runner.temp }}/sdk-host-release
 
       - name: Run Python SDK tests
+        env:
+          DEVHUB_SDK_HOST_ASSEMBLY: ${{ runner.temp }}/sdk-host-release/DevHub.Host.dll
         run: python -m pytest sdks/python/tests
 
   sdk-conformance:
+    needs: sdk-host-artifact
     runs-on: ubuntu-latest
 
     steps:
@@ -302,8 +405,11 @@ jobs:
       - name: Build JavaScript SDK
         run: npm --prefix sdks/javascript run build
 
-      - name: Build Host for conformance
-        run: dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
+      - name: Download shared Host artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: sdk-host-release
+          path: ${{ runner.temp }}/sdk-host-release
 
       - name: Run conformance runner self-tests
         run: python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
@@ -313,6 +419,9 @@ jobs:
 
       - name: Run conformance vectors
         shell: bash
+        env:
+          DEVHUB_SDK_HOST_ASSEMBLY: ${{ runner.temp }}/sdk-host-release/DevHub.Host.dll
+          DEVHUB_TEST_BUILD_HOST: "0"
         run: |
           set -euo pipefail
           python host/tests/conformance/vector_runner.py 2>&1 | tee "$RUNNER_TEMP/devhub-ci-conformance.log"
@@ -449,7 +558,7 @@ jobs:
             false
           fi
 
-          python3 host/tests/blackbox/test_runner.py --full --no-header 2>&1 | tee "$runner_log"
+          python3 host/tests/blackbox/test_runner.py --full --no-header --use-existing-host --no-build-host 2>&1 | tee "$runner_log"
 
       - name: Upload integration-full diagnostics
         if: failure()
@@ -596,7 +705,7 @@ jobs:
               throw "Host bootstrap failed in smoke job."
             }
 
-            python host/tests/blackbox/test_runner.py --smoke --no-header 2>&1 | Tee-Object -FilePath $runnerLog
+            python host/tests/blackbox/test_runner.py --smoke --no-header --use-existing-host --no-build-host 2>&1 | Tee-Object -FilePath $runnerLog
             $testExitCode = $LASTEXITCODE
             if ($testExitCode -ne 0) {
               Show-Diagnostics $testExitCode

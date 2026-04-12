@@ -10,6 +10,8 @@ public readonly struct DevHubEventType : IEquatable<DevHubEventType>
 {
     private static readonly IReadOnlyDictionary<string, DevHubEventType> KnownTypes = new Dictionary<string, DevHubEventType>(StringComparer.Ordinal)
     {
+        ["app.definition.upserted"] = new("app.definition.upserted"),
+        ["app.definition.deleted"] = new("app.definition.deleted"),
         ["app.instance.registered"] = new("app.instance.registered"),
         ["app.instance.unregistered"] = new("app.instance.unregistered"),
         ["invocation.queued"] = new("invocation.queued"),
@@ -24,6 +26,16 @@ public readonly struct DevHubEventType : IEquatable<DevHubEventType>
     {
         _value = value;
     }
+
+    /// <summary>
+    /// 应用定义已新增或更新。
+    /// </summary>
+    public static DevHubEventType AppDefinitionUpserted => KnownTypes["app.definition.upserted"];
+
+    /// <summary>
+    /// 应用定义已删除。
+    /// </summary>
+    public static DevHubEventType AppDefinitionDeleted => KnownTypes["app.definition.deleted"];
 
     /// <summary>
     /// 应用实例已注册。
@@ -60,6 +72,8 @@ public readonly struct DevHubEventType : IEquatable<DevHubEventType>
     /// </summary>
     public static IReadOnlyList<DevHubEventType> All { get; } =
     [
+        AppDefinitionUpserted,
+        AppDefinitionDeleted,
         AppInstanceRegistered,
         AppInstanceUnregistered,
         InvocationQueued,

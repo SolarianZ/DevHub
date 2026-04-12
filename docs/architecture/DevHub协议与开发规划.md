@@ -1,360 +1,167 @@
-# DevHub协议与开发规划
+# DevHub 协议与架构说明
 
-> 状态：持续维护中（截至 2026-03-29，M0~M6 已完成；本文档用于维护架构说明、里程碑记录与后续演进规划）
-> 目标：在 **本机 per-user** 场景下，为多个开发工具/插件/服务提供统一的：
-> - 实例注册（AppInstance）与发现
-> - 应用启动（auto-launch / dedupe）
-> - 方法调用编排（Invocation orchestration）
-> - 事件订阅与推送（Events）
->
-> v1 核心原则：**能稳定跑通闭环**，**避免过度设计**。
-> v1 明确不做：跨机器、强一致持久队列、分布式锁、复杂权限系统。
->
-> M6 治理口径：在首次正式对外发布前，`Spec.md` 是当前仓库实现、测试与文档收敛的权威基线，而不是永久冻结承诺；若某兼容承诺或发布策略约束阻碍对核心目标的纠偏，允许先修正规范，再同步实现、测试、SDK 与版本化资产。
-> 文档分类与导航见 [docs/README.md](../README.md)。
->
-> **注意：本文档侧重于架构设计、工程实现建议与开发规划。详细的协议规范（JSON结构、错误码、时序强制要求等）请严格遵循 [Spec.md](../spec/Spec.md)。**
+本文档只说明 DevHub 的模块边界、设计取舍与长期演进原则。
 
----
+- 协议字段、错误语义、状态转换、序列化契约与测试断言请查阅 [Spec.md](../spec/Spec.md)。
+- 当前里程碑任务、状态与验收边界请查阅 [DevHub_M6任务文档.md](../milestones/DevHub_M6任务文档.md)。
+- 文档导航与权威入口划分请查阅 [docs/README.md](../README.md)。
 
-## 目录
+## 1. 架构目标
 
-1. [背景与目标](#1-背景与目标)
-2. [术语](#2-术语)
-3. [总体架构](#3-总体架构)
-4. [本机部署与发现](#4-本机部署与发现)
-5. [安全模型](#5-安全模型)
-6. [传输与消息格式](#6-传输与消息格式)
-7. [数据模型](#7-数据模型)
-8. [方法定义](#8-方法定义)
-9. [路由规则](#9-路由规则)
-10. [离线、排队与 autoLaunch 行为矩阵](#10-离线排队与-autolaunch-行为矩阵)
-11. [事件系统](#11-事件系统)
-12. [错误码规范](#12-错误码规范)
-13. [实现建议（v1 必要工程细节）](#13-实现建议v1-必要工程细节)
-14. [开发里程碑（更新版）](#14-开发里程碑更新版)
-15. [v1 已知限制与 v2 展望](#15-v1-已知限制与-v2-展望)
-16. [附录：示例](#16-附录示例)
+DevHub 面向本机单用户场景，为多个工具、插件和桌面入口提供统一的：
 
----
+- 运行时发现与鉴权
+- 应用定义与实例管理
+- 应用启动与调用编排
+- WebSocket 事件订阅与通知
 
-## 1. 背景与目标
+架构目标不是覆盖所有可能场景，而是在本机闭环内维持清晰边界、稳定契约和可验证行为。跨机器协调、强一致持久队列、复杂权限系统与分布式锁不属于当前架构范围。
 
-### 1.1 背景
-在一个开发者的本机环境中，常见形态包括：
-- 游戏引擎（Unity / Unreal）
-- 扩展工具（任务编辑器、配置编辑器）
-- CLI 工具（git hooks、资源处理器、编译/打包助手）
-- UI（WPF/Avalonia/Electron/Web）
+## 2. 权威边界
 
-它们需要相互调用、互相发现、互相启动，并能隔离不同 workspace/分支/工程上下文（scope）。
+| 主题 | 权威入口 | 说明 |
+| --- | --- | --- |
+| 协议契约 | [Spec.md](../spec/Spec.md) | 定义公开字段、状态机、错误码、方法语义与版本化资产 |
+| 里程碑执行 | [DevHub_M6任务文档.md](../milestones/DevHub_M6任务文档.md) | 定义当前阶段的任务拆解、状态与验收标准 |
+| 架构边界 | 本文档 | 说明模块分工、设计取舍与长期演进原则 |
+| 稳定使用方式 | `docs/guides/` | 面向接入方、开发者与协作者的当前有效做法 |
+| 运维与发布 | `docs/operations/` | 面向部署、排障、发布与回滚场景的操作入口 |
 
-### 1.2 v1 目标（必须实现）
-- **Hub 本机常驻**（per-user），提供统一 RPC 入口（HTTP + WebSocket）。
-- **AppDefinition**（静态定义）与 **AppInstance**（运行时注册）的基本闭环。
-- **Invocation** 调用编排：调用方发起 -> Hub 路由 -> 被调方 poll 拉取 -> 被调方回传结果 -> Hub 转发给调用方。
-- **scope 隔离**：不同 scope 不互相 fallback（避免串 workspace）。
-- **Events**：订阅与推送（用于 UI/监控/调试）。
-
-### 1.3 v1 非目标（明确不做）
-- 跨机器通信 / 多机集群
-- 强一致持久化队列（Hub 重启后不保证保留 pending/invocation）
-- 复杂授权（RBAC、多用户共享）
-- exactly-once 投递保证（v1 为 at-least-once + 幂等建议）
-
----
-
-## 2. 术语
-
-| 名称          | 含义                                                                    |
-| ------------- | ----------------------------------------------------------------------- |
-| Hub           | DevHub 服务进程，本机路由中枢                                           |
-| Client        | 任意调用方（IDE 插件、CLI、UI）                                         |
-| Callee        | 被调用方应用实例（AppInstance）                                         |
-| AppDefinition | 某类应用的静态定义（如何启动、支持什么能力等）                          |
-| AppInstance   | 某个已运行进程/服务的运行时实例信息                                     |
-| Invocation    | 一次调用（请求/通知），可排队、可等待结果                               |
-| scope         | 工作空间隔离标识（例如 `p4ws://...`、`git://...`），global 表示无 scope |
-| global scope  | “不带 scope / scope 为 null”的默认范围                                  |
-
-> 详细定义请参考 **[Spec.md §5](../spec/Spec.md)**。
-
----
-
-## 3. 总体架构
+## 3. 系统上下文
 
 ```mermaid
 flowchart LR
-    subgraph ClientSide[调用侧]
-        C1[IDE Plugin]
-        C2[CLI]
-        C3[UI]
+    subgraph Clients[调用侧]
+        IDE[IDE / Plugin]
+        CLI[CLI / Automation]
+        UI[Monitor / UI]
     end
 
-    subgraph HubSide["DevHub（本机 per-user）"]
-        H["Hub HTTP/WS JSON-RPC"]
-        REG[("App Registry<br/>in-memory + files")]
-        INV[("Invocation Queue<br/>in-memory")]
+    subgraph Host["DevHub Host（本机 per-user）"]
+        Adapter["HTTP / WS 适配层"]
+        Core["Core 应用服务与领域规则"]
+        Runtime["运行时上下文与后台服务"]
+        Storage["发现文件、定义文件、实例镜像、日志"]
     end
 
-    subgraph AppSide[被调侧]
-        A1[AppInstance A]
-        A2[AppInstance B]
+    subgraph Apps[被调侧]
+        AppA[App Instance A]
+        AppB[App Instance B]
     end
 
-    C1 -->|"HTTP JSON-RPC"| H
-    C2 -->|"HTTP JSON-RPC"| H
-    C3 -->|"WS JSON-RPC"| H
+    IDE -->|"HTTP JSON-RPC"| Adapter
+    CLI -->|"HTTP JSON-RPC"| Adapter
+    UI -->|"WS JSON-RPC"| Adapter
 
-    H <--> REG
-    H <--> INV
+    Adapter <--> Core
+    Runtime <--> Core
+    Runtime <--> Storage
 
-    A1 -->|"poll (HTTP)"| H
-    A2 -->|"poll (HTTP)"| H
-    A1 -->|"respond (HTTP)"| H
-    A2 -->|"respond (HTTP)"| H
-
-    H -->|"hub.event (WS notify)"| C3
+    AppA -->|"poll/respond"| Adapter
+    AppB -->|"poll/respond"| Adapter
+    Adapter -->|"hub.event"| UI
 ```
 
-说明：
-- v1 的核心投递采用 **Callee 轮询（poll）**，减少 Hub push 的连接状态复杂度。
-- WS 主要用于 UI/调试/监控等需要推送的事件流。
+整体结构围绕两条主线组织：
 
----
+- `Core` 负责传输无关的应用服务、领域结果、领域事件和业务规则。
+- `Host` 负责 HTTP / WebSocket 协议适配、运行时资源管理和后台生命周期。
 
-## 4. 本机部署与发现
+## 4. Host 架构分层
 
-### 4.1 per-user 安装与运行原则
-- Hub **同一 OS 用户 + 同一数据根目录 1 个**（single instance）。
-- 仅监听 `127.0.0.1` / `localhost`。
-- 不支持跨用户访问（默认以文件 ACL + token 保证）。
-- 不同数据根目录可并行运行多个 Host，前提是彼此完全隔离。
+### 4.1 Core 应用服务层
 
-### 4.2 数据目录（Windows 参考）
-> 规范定义见 **[Spec.md §4.1.1](../spec/Spec.md)**。
+`host/src/DevHub.Core/` 负责：
 
-- Root：`%LOCALAPPDATA%\DevHub\`
-  - `runtime\hub.json`：Hub 运行信息
-  - `runtime\token.txt`：访问 token
-  - `apps\definitions\*.json`：AppDefinition 文件
-  - `apps\instances\*.json`：AppInstance 注册镜像（便于调试/诊断；v1 以 in-memory 为主）
-  - `logs\*.log`
+- typed command / query / result 模型
+- 应用定义、实例、调用与事件相关的领域规则
+- 传输无关的领域事件发布接口
+- 可被白盒测试直接验证的业务失败语义
 
-### 4.3 Hub 发现（Discovery）
-> 规范定义见 **[Spec.md §4.1.2 (hub.json)](../spec/Spec.md)**。
+这层不负责：
 
-Client 必须通过读取 `<dataDir>/runtime/hub.json` 获取 `httpBaseUrl`、`wsUrl` 和 `protocolVersion`。
+- 解析 `JsonElement`
+- 构造 JSON-RPC 响应
+- 保存 WebSocket 连接状态
+- 管理后台 `Timer` 或回读 `hub.json`
 
----
+这样做的原因是把“业务规则是否正确”与“协议入口如何承载”拆成两个独立演进面，降低跨层耦合和测试复杂度。
 
-## 5. 安全模型
+### 4.2 Host 适配层
 
-> 规范定义见 **[Spec.md §4.2](../spec/Spec.md)** 及 **[Spec.md §4.3](../spec/Spec.md)**。
+`host/src/DevHub.Host/` 中的适配层负责：
 
-### 5.1 核心机制
-- **Token**：Hub 启动时生成随机 token 写入文件，仅当前 OS 用户可读（文件 ACL）。
-- **Client Identity**：通过 Header 传递 `clientId` 和 `clientSessionId`。
-- **HTTP 鉴权**：必须携带 `Authorization: Bearer {token}` 及相关 Headers。
-- **WebSocket 鉴权**：连接建立后，**第一条消息必须是 `hub.ws.authenticate`**。
+- JSON-RPC 方法分发、参数读取与输入校验
+- 领域结果到线协议错误码 / 响应载荷的映射
+- HTTP 鉴权、WebSocket 鉴权和请求上下文装配
+- `hub.event` 通知组装与事件订阅桥接
 
----
+适配层直接面向公开协议，因此必须严格对齐 `Spec.md`。任何协议层错误处理、参数默认值、错误码映射和序列化契约都应在这一层显式实现，而不是下沉到 `DevHub.Core`。
 
-## 6. 传输与消息格式
+### 4.3 Host 生命周期层
 
-> 规范定义见 **[Spec.md §3](../spec/Spec.md)**。
+Host 生命周期层负责把运行时资源纳入 ASP.NET Core 的托管模型：
 
-- **协议**：JSON-RPC 2.0。
-- **HTTP**：POST `{httpBaseUrl}/rpc`，始终返回 200 OK。
-- **WebSocket**：`{wsUrl}`，需先认证。
-- **Batch**：v1 **不支持** Batch 请求。
+- `IHostedService` / `BackgroundService` 管理实例清理、超时扫描和其他周期任务
+- 运行时上下文提供当前绑定地址、数据根目录和发现文件输出位置
+- 启动编排直接消费 Host 内部运行时上下文，而不是把 `runtime/hub.json` 当成自身输入源
 
----
+这里的核心取舍是：对外暴露的发现文件是客户端入口，不应反向变成 Host 内部编排的依赖。
 
-## 7. 数据模型
+### 4.4 事件交付模型
 
-> 规范定义与 Schema 见 **[Spec.md §5](../spec/Spec.md)**。
+事件链路采用“Core 发布领域事件，Host 维护连接级投递状态”的分工：
 
-### 7.1 核心模型
-- **AppDefinition**：静态定义（`appId`, `launch` 配置与能力开关）。
-- **AppInstance**：运行时实例（`instanceId`, `pid`, `invoke` 能力开关）。
-- **Invocation**：调用对象（`invocationId`, `target`, `method`, `options`, `delivery`）。
+- `DevHub.Core` 只生成传输无关的事件内容
+- `DevHub.Host` 维护认证状态、订阅集合、待投递队列与交付等待信号
+- `hub.event` 只在 Host 会话服务中生成与发送
 
-### 7.2 Scope 策略
-> 规则详见 **[Spec.md §5.5](../spec/Spec.md)**。
+这一设计避免把连接生命周期、订阅授权和队列状态泄漏到领域层，也让 WebSocket 回归测试可以聚焦在 Host 适配层完成。
 
-- **App 生效作用域**：`hub.apps.registerInstance` 与 `hub.apps.launch` 的 `scope` 省略、`null` 或 `""` 时生效为 Global；为非空字符串时按该字面量作用域处理，包括 `"global"`。
-- **调用默认作用域**：`hub.invoke.notify` 与 `hub.invoke.request` 的 `target.scope` 省略、`null` 或 `""` 时，仅允许命中 Global 实例。
-- **调用显式作用域**：`target.scope` 为非空字符串时，仅允许命中该作用域，且找不到时禁止 fallback 到 Global。
-- **非法值原则**：`scope` 或 `target.scope` 若存在且类型不是 `string|null`，必须按 `invalid_params (-32602)` 处理。
-- **匹配规则**：非空字符串作用域按区分大小写的精确匹配处理。
+## 5. SDK 边界策略
 
----
+三套 SDK 不追求完全一致的内部结构，但统一遵循三条原则：
 
-## 8. 方法定义
+1. 稳定公共面默认面向能力入口，而不是面向 transport / session 实现。
+2. 共享会话身份、参数构造和本地防御式校验在同语言的 HTTP / WS 路径之间保持一致。
+3. 鉴权材料、运行时发现细节与原始连接状态停留在内部协作层，不直接暴露为顶层客户端可读状态。
 
-> 完整 API 定义、参数与返回值见 **[Spec.md §6](../spec/Spec.md)**。
+各语言的具体落点：
 
-### 8.1 基础与管理
-- `hub.ping`
-- `hub.ws.authenticate` (WS only)
-- `hub.apps.listDefinitions` / `getDefinition`
-- `hub.apps.registerInstance` / `unregisterInstance` / `heartbeat` / `listInstances`
+- `.NET SDK`：默认通过标准 `HttpClient` 管道接入 HTTP，公开面集中在 `DevHubClient`、`DevHubEventsClient` 和必要的窄扩展 seam。
+- `JS/TS SDK`：根入口保持浏览器安全，Node.js 文件系统发现通过 `@devhub/sdk/runtime` 子路径暴露；顶层运行时视图默认脱敏。
+- `Python SDK`：WebSocket session 只负责连接与消息收发，`DevHubEvent` 解析与共享 payload builder 位于更高层的协议适配逻辑。
 
-### 8.2 启动与调用
-- `hub.apps.launch`
-- `hub.invoke.notify` (Fire-and-forget)
-- `hub.invoke.request` (Request-Response)
-- `hub.invoke.poll` (Callee 拉取)
-- `hub.invoke.respond` (Callee 回复)
+## 6. 测试架构
 
----
+测试分层围绕公开边界组织：
 
-## 9. 路由规则
+- `host/tests/whitebox/`：验证 Core 与 Host 内部边界、业务规则和适配映射
+- `host/tests/blackbox/`：以真实 Host 进程和数据目录验证对外协议闭环
+- `host/tests/conformance/`：以版本化向量锁定公开契约
+- `sdks/*/tests/`：验证各语言 SDK 的公开面、共享契约和与 Host 的协作行为
+- `apps/monitor`：独立验证桌面入口的前端、原生后端与 Host 连接链路
 
-> 规范定义见 **[Spec.md §7.1](../spec/Spec.md)**。
+测试边界的核心原则是：协议与客户端可观察行为由黑盒 / conformance 锁定，白盒测试用于验证难以从协议表面直接定位的模块内职责。
 
-Hub 依据 `appId`、`target.scope` 和 `target.instanceId` 将 Invocation 路由至在线实例或进入 Pending 队列。
+## 7. 文档治理原则
 
----
+文档分工与架构边界保持一致：
 
-## 10. 离线、排队与 autoLaunch 行为矩阵
+- `spec/` 负责协议事实
+- `milestones/` 负责当前执行范围和验收
+- `architecture/` 负责结构与取舍
+- `guides/` 负责当前有效做法
+- `operations/` 负责部署、排障、发布与回滚
 
-> 规范定义见 **[Spec.md §7.1](../spec/Spec.md)** 及 **[Spec.md §7.2](../spec/Spec.md)**。
+这样做的目的不是增加文档数量，而是避免多个文档同时维护同一主题的并行副本。
 
-行为由 `options.queueIfOffline` 和 `options.autoLaunch` 控制。
-- 若无在线实例且 `queueIfOffline=true`：进入 Pending 队列。
-- 若同时 `autoLaunch=true` 且存在 AppDefinition：触发启动流程。
-- 若无 AppDefinition：**不得进入 Pending 队列**，必须返回 `instance_not_found`（详见 Spec）。
+## 8. 长期演进原则
 
----
-
-## 11. 事件系统
-
-> 规范定义见 **[Spec.md §6.3.14+](../spec/Spec.md)**。
-
-- **订阅**：`hub.events.subscribe` / `unsubscribe`。
-- **推送**：`hub.event` 通知。
-- **生命周期**：Subscription 绑定 WS 连接，断开自动清理。
-
----
-
-## 12. 错误码规范
-
-> 规范定义见 **[Spec.md §8](../spec/Spec.md)**。
-
-- 标准 JSON-RPC 错误（-326xx, -32700）。
-- DevHub 自定义错误（-320xx），如 `unauthorized`, `forbidden`, `instance_not_found`, `invocation_timeout` 等。
-
----
-
-## 13. 实现建议（v1 必要工程细节）
-
-> 本节是“必须考虑的工程落点”，用于指导 Hub 的具体实现，需确保数值与逻辑符合 **[Spec.md §7.3](../spec/Spec.md)**。
-
-### 13.1 并发与取消
-- `invoke.request` 内部等待建议用 `TaskCompletionSource` + `CancellationToken`。
-- 当 HTTP 请求被客户端取消（连接断开）：
-  - 必须取消等待并清理 waiter（避免内存泄露）。
-- 建议限制：
-  - `maxWaitingRequestsPerClient`（例如 200）。
-  - `maxPendingInvocationsTotal`（例如 5000）。
-  - 超限返回 `internal_error` 或专用 `rate_limited`。
-
-### 13.2 poll 的长轮询实现
-- `hub.invoke.poll` 的 `waitMs` 在服务端用异步等待（不要阻塞线程）。
-- wait 到期返回空数组。
-- poll 也是心跳的一部分（见 lastSeen）。
-
-### 13.3 lastSeen 更新时间规则
-> 判定阈值遵循 **Spec.md §7.3**（30s）。
-
-Hub 在以下任一事件发生时更新 `AppInstance.lastSeenUtc`：
-- `registerInstance`
-- `heartbeat`
-- `invoke.poll`（只要 poll 成功到达 Hub，就算空列表也更新）
-- `invoke.respond`
-
-### 13.4 文件写入原子性
-- `runtime\hub.json`、`apps\instances\*.json` 等建议使用：
-  - 写临时文件 + 原子 rename/replace。
-- 避免半写入导致 discovery/诊断读取失败。
-
-### 13.5 单实例（single instance）
-- Windows 建议使用 Mutex：`Global\DevHub_{UserSid}_{DataDirHash}` 或 `Local\DevHub_{UserSid}_{DataDirHash}`。
-- 若已有实例运行：
-  - 同一数据根目录下的新进程退出或转为“客户端模式”提示如何连接（可选）。
-- 不同 `dataDir` 的 Host 应允许并行运行，且不得共享 discovery、实例镜像或日志目录。
-
-### 13.6 Invocation Lease 与重投递
-> Lease 时长遵循 **Spec.md §7.3**（30s）。
-
-- Hub 在 `invoke.poll` 返回时为每条 invocation 生成 lease。
-- lease 期间仅分配给该 instance；到期仍未 `respond` 且未过期时，放回队列并 `attempt++`。
-- `invoke.request` 达到 `waitTimeoutMs`：Hub 返回 `invocation_timeout` 并终止该 invocation。
-- 若 invocation 已完成：后续 `respond` 返回 `delivery_conflict`。
-
-### 13.7 launch 去重生命周期
-> Dedupe window 遵循 **Spec.md §7.3**（30s）。
-
-- Hub 对 `dedupeKey` 维护 launching 记录。
-- launching 期间重复 `launch`：返回 `already_running`（复用同一 `launchId`）。
-- 若在窗口内观察到匹配实例注册：状态转为 running。
-- 窗口到期仍未注册：清理 dedupe 记录，允许再次启动。
-
----
-
-## 14. 开发里程碑
-
-### 14.1 里程碑概览
-
-| Milestone | 目标                               | 交付物                                                                                        | 备注                               |
-| --------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------- |
-| M0        | 文档基线 + Spec v0                 | 本规划文档 + **Spec.md**                                                                      | 本文档即为 M0 产物                 |
-| M1        | Hub（HTTP）基础能力 + Spec v1 基线确立 | `/rpc`、token、client headers、apps definitions/instances、TTL/lastSeen + Spec v1（当前公开基线） | WS 可先不做                        |
-| M2        | Invocation 闭环（HTTP）            | invoke.notify/request/poll/respond、离线矩阵、autoLaunch、launch dedupe                       | v1 核心                            |
-| M3        | Scope 路由一致性与隔离完善         | 默认 Global 路由、显式 Scope 不回退、非法 scope 校验、测试用例                                |                                    |
-| M4        | WebSocket（认证 + events）         | `/ws`、hub.ws.authenticate、subscribe/unsubscribe、hub.event 推送                             | UI/监控可接入                      |
-| M5        | SDK（.NET + JS/TS + Python）       | .NET SDK、JS/TS SDK、Python SDK、签名测试向量、契约测试                                       | Spec 已前置                        |
-| M6        | 仓库整理、架构收敛与测试治理       | 目录重组、Host/SDK 架构审查与重构、测试分层治理、文档整理                                     | 发布前最后一轮，可做必要破坏性调整 |
-
-**M6 已完成，仓库进入发布前冻结准备阶段**
-- M6 已完成仓库目录、工程边界、架构设计、测试分层与文档体系的系统性审查和必要调整，当前状态以“发布前冻结准备”为默认基线。
-- 产品仍未正式对外发布；若后续发布前调整需要触及公开约束，仍应先区分“核心契约”和“发布前可调整约束”，避免回退到历史上的边界混杂状态。
-- M6 收尾与任务记录见 [DevHub_M6任务文档.md](../milestones/DevHub_M6任务文档.md)。
-
----
-
-## 15. v1 已知限制与 v2 展望
-
-### 15.1 v1 限制
-- Hub 重启会丢失：
-  - pending invocations
-  - request 等待中的 TCS 状态
-- 投递语义为 **at-least-once**：
-  - 若 callee 取到 invocation 后崩溃，可能被重新投递（取决于 lease/实现）
-- Events 不支持重放：断线期间事件丢失
-
-### 15.2 v2 可能增强
-- pending/invocation 持久化（轻量本地 KV）
-- delivery ack + 更明确 lease 机制
-- events replay（按 subscription 游标）
-- 更细粒度的权限模型（若出现多用户共享需求）
-
----
-
-## 16. 附录：示例
-
-### 16.1 HTTP 调用示例（curl）
-```bash
-curl -X POST "http://127.0.0.1:47231/rpc" ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer <token>" ^
-  -H "X-DevHub-Protocol: 1" ^
-  -H "X-DevHub-ClientId: CLI" ^
-  -H "X-DevHub-ClientSessionId: 2f7d..." ^
-  -d "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"hub.apps.listDefinitions\",\"params\":{}}"
-```
+- 保持 `Spec.md` 单一权威，避免用实现细节反推协议。
+- 优先解决跨层耦合和职责混杂的根因，不用临时补丁掩盖结构问题。
+- 在未正式发布的稳定公共面上允许做必要收敛，但必须同步更新测试和文档。
+- 若后续需要新的阶段任务或治理议题，应通过新的里程碑文档表达，不把阶段状态长期保留在架构文档中。
 
 ### 16.2 WS 认证 + 订阅示例（伪代码）
 ```js

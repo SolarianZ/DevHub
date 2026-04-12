@@ -17,6 +17,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private const string DataDirEnvironmentVariable = "DEVHUB_DATA_DIR";
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
     private const string PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_DOTNET_SDK_HOST_ASSEMBLY";
+    private const string SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
     private const string HostAssemblyFileName = "DevHub.Host.dll";
     private const string HostTargetFramework = "net10.0";
     private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> SharedHostAssemblyBuilds = new(StringComparer.OrdinalIgnoreCase);
@@ -210,6 +211,20 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     internal static async Task<string> ResolveHostAssemblyPathAsync(string repoRoot, string? preferredConfiguration)
     {
+        return await ResolveHostAssemblyPathAsync(repoRoot, preferredConfiguration, environmentVariables: null);
+    }
+
+    internal static async Task<string> ResolveHostAssemblyPathAsync(
+        string repoRoot,
+        string? preferredConfiguration,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        var configuredHostAssemblyPath = ResolveConfiguredHostAssemblyPathFromEnvironment(repoRoot, environmentVariables);
+        if (configuredHostAssemblyPath is not null)
+        {
+            return configuredHostAssemblyPath;
+        }
+
         var effectiveConfiguration = string.IsNullOrWhiteSpace(preferredConfiguration)
             ? "Release"
             : preferredConfiguration.Trim();
@@ -217,7 +232,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         var lazyBuild = SharedHostAssemblyBuilds.GetOrAdd(
             cacheKey,
             _ => new Lazy<Task<string>>(
-                () => PrepareIsolatedHostAssemblyAsync(repoRoot, effectiveConfiguration),
+                () => BuildIsolatedHostAssemblyAsync(repoRoot, effectiveConfiguration),
                 LazyThreadSafetyMode.ExecutionAndPublication));
 
         try
@@ -231,7 +246,30 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
     }
 
-    internal static string ResolveConfiguredHostAssemblyPath(string repoRoot, string configuredPath)
+    internal static string? ResolveConfiguredHostAssemblyPathFromEnvironment(
+        string repoRoot,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        foreach (var environmentVariableName in new[]
+                 {
+                     PrebuiltHostAssemblyEnvironmentVariable,
+                     SharedPrebuiltHostAssemblyEnvironmentVariable
+                 })
+        {
+            var configuredPath = ReadEnvironmentVariable(environmentVariableName, environmentVariables);
+            if (!string.IsNullOrWhiteSpace(configuredPath))
+            {
+                return ResolveConfiguredHostAssemblyPath(repoRoot, configuredPath, environmentVariableName);
+            }
+        }
+
+        return null;
+    }
+
+    internal static string ResolveConfiguredHostAssemblyPath(
+        string repoRoot,
+        string configuredPath,
+        string environmentVariableName)
     {
         var resolvedPath = Path.IsPathRooted(configuredPath)
             ? configuredPath
@@ -243,124 +281,42 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
 
         throw new InvalidOperationException(
-            $"环境变量 {PrebuiltHostAssemblyEnvironmentVariable} 指定的 Host 程序不存在：{resolvedPath}");
+            $"环境变量 {environmentVariableName} 指定的 Host 程序不存在：{resolvedPath}");
     }
 
-    internal static string ResolveBuiltHostAssemblyPath(string repoRoot, string? preferredConfiguration)
+    internal static string ResolveBuiltHostAssemblyPath(string buildRoot, string configuration)
     {
-        var hostBinDirectory = Path.Combine(repoRoot, "host", "src", "DevHub.Host", "bin");
-        var checkedPaths = new List<string>();
-        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string? preferredPath = null;
-
-        AddConfiguredCandidate(preferredConfiguration, isPreferred: true);
-        AddConfiguredCandidate("Release", isPreferred: false);
-        AddConfiguredCandidate("Debug", isPreferred: false);
-
-        if (Directory.Exists(hostBinDirectory))
+        var hostAssemblyPath = Path.Combine(buildRoot, "bin", configuration, HostTargetFramework, HostAssemblyFileName);
+        if (File.Exists(hostAssemblyPath))
         {
-            foreach (var candidatePath in Directory.EnumerateFiles(hostBinDirectory, HostAssemblyFileName, SearchOption.AllDirectories))
-            {
-                AddCandidate(candidatePath);
-            }
+            return hostAssemblyPath;
         }
 
-        string? newestCandidate = null;
-        var newestWriteTimeUtc = DateTime.MinValue;
-
-        foreach (var candidatePath in checkedPaths)
-        {
-            if (!File.Exists(candidatePath))
-            {
-                continue;
-            }
-
-            var writeTimeUtc = File.GetLastWriteTimeUtc(candidatePath);
-            if (newestCandidate is null ||
-                writeTimeUtc > newestWriteTimeUtc ||
-                (writeTimeUtc == newestWriteTimeUtc &&
-                 string.Equals(candidatePath, preferredPath, StringComparison.OrdinalIgnoreCase)))
-            {
-                newestCandidate = candidatePath;
-                newestWriteTimeUtc = writeTimeUtc;
-            }
-        }
-
-        if (newestCandidate is not null)
-        {
-            return newestCandidate;
-        }
-
-        throw new InvalidOperationException($"未找到 Host 程序。已检查：{string.Join(", ", checkedPaths)}");
-
-        void AddConfiguredCandidate(string? configuration, bool isPreferred)
-        {
-            if (string.IsNullOrWhiteSpace(configuration))
-            {
-                return;
-            }
-
-            var candidatePath = Path.Combine(hostBinDirectory, configuration, HostTargetFramework, HostAssemblyFileName);
-            AddCandidate(candidatePath);
-            if (isPreferred)
-            {
-                preferredPath = candidatePath;
-            }
-        }
-
-        void AddCandidate(string candidatePath)
-        {
-            if (seenPaths.Add(candidatePath))
-            {
-                checkedPaths.Add(candidatePath);
-            }
-        }
+        throw new InvalidOperationException($"未找到构建后的 Host 程序：{hostAssemblyPath}");
     }
 
-    private static async Task<string> PrepareIsolatedHostAssemblyAsync(string repoRoot, string configuration)
+    private static async Task<string> BuildIsolatedHostAssemblyAsync(string repoRoot, string configuration)
     {
-        var sourceHostAssemblyPath = await ResolveSourceHostAssemblyPathAsync(repoRoot, configuration);
-        var sourceDirectory = Path.GetDirectoryName(sourceHostAssemblyPath)
-            ?? throw new InvalidOperationException($"无法解析 Host 输出目录：{sourceHostAssemblyPath}");
-
         var buildRoot = Path.Combine(
             Path.GetTempPath(),
-            "DevHubDotNetSdkHostRuntime",
+            "DevHubDotNetSdkHostBuild",
             $"{configuration.ToLowerInvariant()}-{Guid.NewGuid():N}");
-        var runtimeDirectory = Path.Combine(buildRoot, "runtime");
-        Directory.CreateDirectory(runtimeDirectory);
-        CopyDirectory(sourceDirectory, runtimeDirectory);
-        RegisterBuildRootForCleanup(buildRoot);
-
-        var isolatedAssemblyPath = Path.Combine(runtimeDirectory, HostAssemblyFileName);
-        if (File.Exists(isolatedAssemblyPath))
-        {
-            return isolatedAssemblyPath;
-        }
-
-        throw new InvalidOperationException($"未找到隔离复制后的 Host 程序：{isolatedAssemblyPath}");
-    }
-
-    private static async Task<string> ResolveSourceHostAssemblyPathAsync(string repoRoot, string configuration)
-    {
-        var configuredHostAssemblyPath = Environment.GetEnvironmentVariable(PrebuiltHostAssemblyEnvironmentVariable)?.Trim();
-        if (!string.IsNullOrWhiteSpace(configuredHostAssemblyPath))
-        {
-            return ResolveConfiguredHostAssemblyPath(repoRoot, configuredHostAssemblyPath);
-        }
+        Directory.CreateDirectory(buildRoot);
 
         try
         {
-            return ResolveBuiltHostAssemblyPath(repoRoot, configuration);
+            await BuildHostAssemblyAsync(repoRoot, configuration, buildRoot);
+            RegisterBuildRootForCleanup(buildRoot);
+            return ResolveBuiltHostAssemblyPath(buildRoot, configuration);
         }
-        catch (InvalidOperationException)
+        catch
         {
-            await BuildHostAssemblyAsync(repoRoot, configuration);
-            return ResolveBuiltHostAssemblyPath(repoRoot, configuration);
+            TryDeleteDirectory(buildRoot);
+            throw;
         }
     }
 
-    private static async Task BuildHostAssemblyAsync(string repoRoot, string configuration)
+    private static async Task BuildHostAssemblyAsync(string repoRoot, string configuration, string buildRoot)
     {
         var hostProjectPath = Path.Combine(repoRoot, "host", "src", "DevHub.Host", "DevHub.Host.csproj");
         if (!File.Exists(hostProjectPath))
@@ -384,6 +340,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(configuration);
         startInfo.ArgumentList.Add("--nologo");
+        startInfo.ArgumentList.Add($"-p:BaseOutputPath={EnsureTrailingDirectorySeparator(Path.Combine(buildRoot, "bin"))}");
 
         using var process = new Process
         {
@@ -421,21 +378,18 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
     }
 
-    private static void CopyDirectory(string sourceDirectory, string targetDirectory)
+    private static string? ReadEnvironmentVariable(
+        string environmentVariableName,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
     {
-        Directory.CreateDirectory(targetDirectory);
-
-        foreach (var filePath in Directory.EnumerateFiles(sourceDirectory))
+        if (environmentVariables is not null)
         {
-            var fileName = Path.GetFileName(filePath);
-            File.Copy(filePath, Path.Combine(targetDirectory, fileName), overwrite: true);
+            return environmentVariables.TryGetValue(environmentVariableName, out var value)
+                ? value?.Trim()
+                : null;
         }
 
-        foreach (var directoryPath in Directory.EnumerateDirectories(sourceDirectory))
-        {
-            var directoryName = Path.GetFileName(directoryPath);
-            CopyDirectory(directoryPath, Path.Combine(targetDirectory, directoryName));
-        }
+        return Environment.GetEnvironmentVariable(environmentVariableName)?.Trim();
     }
 
     private static void RegisterBuildRootForCleanup(string buildRoot)
@@ -448,18 +402,30 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
             {
                 foreach (var root in SharedHostBuildRoots)
                 {
-                    try
-                    {
-                        if (Directory.Exists(root))
-                        {
-                            Directory.Delete(root, recursive: true);
-                        }
-                    }
-                    catch
-                    {
-                    }
+                    TryDeleteDirectory(root);
                 }
             };
+        }
+    }
+
+    private static string EnsureTrailingDirectorySeparator(string path)
+    {
+        return path.EndsWith(Path.DirectorySeparatorChar)
+            ? path
+            : $"{path}{Path.DirectorySeparatorChar}";
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
         }
     }
 

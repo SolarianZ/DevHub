@@ -14,6 +14,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public class AppInstanceEventTests
 {
+    private const string InstancePassword = "app-instance-events-password";
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _handlerLogger = new();
     private readonly Mock<ILogger<HubEventBus>> _eventBusLogger = new();
@@ -35,6 +36,7 @@ public class AppInstanceEventTests
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-event-001",
@@ -54,11 +56,14 @@ public class AppInstanceEventTests
             Method = "hub.apps.unregisterInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId = "inst-event-001"
+                instanceId = "inst-event-001",
+                password = InstancePassword
             })
         }, CancellationToken.None);
 
         Assert.Null(unregisterResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.False(registerResult.GetProperty("instance").TryGetProperty("password", out _));
 
         var deliveries = eventBus.DrainDeliveries("conn-instance-events", maxCount: 10);
         Assert.Equal(2, deliveries.Count);
@@ -69,6 +74,10 @@ public class AppInstanceEventTests
         Assert.Equal("event.app", registerPayload.GetProperty("appId").GetString());
         Assert.Equal("inst-event-001", registerPayload.GetProperty("instanceId").GetString());
         Assert.Equal("workspace-A", registerPayload.GetProperty("scope").GetString());
+        Assert.False(registerPayload.TryGetProperty("password", out _));
+
+        var unregisterPayload = JsonSerializer.SerializeToElement(deliveries.First(d => d.Type == "app.instance.unregistered").Payload);
+        Assert.False(unregisterPayload.TryGetProperty("password", out _));
     }
 
     [Fact]
@@ -88,7 +97,8 @@ public class AppInstanceEventTests
             Method = "hub.apps.unregisterInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId = "inst-not-found"
+                instanceId = "inst-not-found",
+                password = InstancePassword
             })
         }, CancellationToken.None);
 
@@ -98,6 +108,4 @@ public class AppInstanceEventTests
         Assert.Empty(deliveries);
     }
 }
-
-
 

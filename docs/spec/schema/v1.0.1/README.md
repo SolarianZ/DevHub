@@ -3,17 +3,19 @@
 本目录提供 DevHub Hub v1.0.1 在当前仓库中维护的版本化 JSON Schema 资产，供第三方开发者在不阅读 SDK 源码的前提下完成：
 
 - `hub.json` 发现文件校验
-- AppDefinition / AppInstance / Invocation 数据结构校验
+- AppDefinition / AppInstance / AppInstanceRegistration / Invocation / ValidationIssue 数据结构校验
 - JSON-RPC 请求、成功响应与错误响应的信封校验
 
 ## 1. 规范来源
 
 - `app-definition.json`
 - `app-instance.json`
+- `app-instance-registration.json`
 - `invocation.json`
 - `hub-runtime.json`
+- `validation-issue.json`
 
-以上 4 个文件直接整理自 [`Spec.md`](../../Spec.md) §5。
+以上 6 个文件直接整理自 [`Spec.md`](../../Spec.md) §5。
 
 - `rpc-request.json`
 - `rpc-response.json`
@@ -33,8 +35,10 @@
 
 - [`app-definition.json`](./app-definition.json)
 - [`app-instance.json`](./app-instance.json)
+- [`app-instance-registration.json`](./app-instance-registration.json)
 - [`invocation.json`](./invocation.json)
 - [`hub-runtime.json`](./hub-runtime.json)
+- [`validation-issue.json`](./validation-issue.json)
 - [`rpc-request.json`](./rpc-request.json)
 - [`rpc-response.json`](./rpc-response.json)
 - [`error-response.json`](./error-response.json)
@@ -46,7 +50,9 @@
 - 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验。
 - 读取或生成应用定义时，用 `app-definition.json` 校验。
 - 读取实例镜像或注册返回值时，用 `app-instance.json` 校验。
+- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验。
 - 处理轮询项或调用上下文时，用 `invocation.json` 校验。
+- 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
 - 发送或接收原始 JSON-RPC 报文时，用 `rpc-request.json`、`rpc-response.json`、`error-response.json` 校验信封。
 
 如果需要请求/响应示例，请同时参考：

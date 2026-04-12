@@ -19,7 +19,8 @@ public sealed class DevHubHostFixtureTests
 
             var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPath(
                 repoRoot,
-                Path.Combine("artifacts", "DevHub.Host.dll"));
+                Path.Combine("artifacts", "DevHub.Host.dll"),
+                "DEVHUB_TEST_HOST_ASSEMBLY");
 
             Assert.Equal(hostAssemblyPath, resolvedPath);
         }
@@ -37,7 +38,10 @@ public sealed class DevHubHostFixtureTests
         {
             var hostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("absolute", "DevHub.Host.dll"));
 
-            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPath(repoRoot, hostAssemblyPath);
+            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPath(
+                repoRoot,
+                hostAssemblyPath,
+                "DEVHUB_TEST_HOST_ASSEMBLY");
 
             Assert.Equal(hostAssemblyPath, resolvedPath);
         }
@@ -56,12 +60,119 @@ public sealed class DevHubHostFixtureTests
             var exception = Assert.Throws<InvalidOperationException>(
                 () => DevHubHostFixture.ResolveConfiguredHostAssemblyPath(
                     repoRoot,
-                    Path.Combine("missing", "DevHub.Host.dll")));
-            Assert.Contains("DEVHUB_DOTNET_SDK_HOST_ASSEMBLY", exception.Message);
+                    Path.Combine("missing", "DevHub.Host.dll"),
+                    "DEVHUB_TEST_HOST_ASSEMBLY"));
+            Assert.Contains("DEVHUB_TEST_HOST_ASSEMBLY", exception.Message);
         }
         finally
         {
             DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_ResolveConfiguredHostAssemblyPathFromEnvironment_WhenSharedOverrideProvided_ShouldUseSharedVariable()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            var hostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("shared", "DevHub.Host.dll"));
+            var environmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["DEVHUB_SDK_HOST_ASSEMBLY"] = Path.Combine("shared", "DevHub.Host.dll")
+            };
+
+            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPathFromEnvironment(repoRoot, environmentVariables);
+
+            Assert.Equal(hostAssemblyPath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_ResolveConfiguredHostAssemblyPathFromEnvironment_WhenBothOverridesProvided_ShouldPreferDotNetSpecificVariable()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            var sharedHostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("shared", "DevHub.Host.dll"));
+            var dotNetHostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("dotnet", "DevHub.Host.dll"));
+            var environmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["DEVHUB_SDK_HOST_ASSEMBLY"] = sharedHostAssemblyPath,
+                ["DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"] = dotNetHostAssemblyPath
+            };
+
+            var resolvedPath = DevHubHostFixture.ResolveConfiguredHostAssemblyPathFromEnvironment(repoRoot, environmentVariables);
+
+            Assert.Equal(dotNetHostAssemblyPath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Impl_ResolveHostAssemblyPathAsync_WhenPrebuiltHostProvided_ShouldSkipLocalBuild()
+    {
+        var repoRoot = CreateFakeRepositoryRoot();
+        try
+        {
+            var prebuiltHostAssemblyPath = CreateConfiguredHostAssembly(repoRoot, Path.Combine("prebuilt", "DevHub.Host.dll"));
+            var environmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["DEVHUB_SDK_HOST_ASSEMBLY"] = prebuiltHostAssemblyPath
+            };
+
+            var resolvedPath = await DevHubHostFixture.ResolveHostAssemblyPathAsync(
+                repoRoot,
+                preferredConfiguration: "Release",
+                environmentVariables: environmentVariables);
+
+            Assert.Equal(prebuiltHostAssemblyPath, resolvedPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(repoRoot);
+        }
+    }
+
+    [Fact]
+    public async Task Impl_ResolveHostAssemblyPathAsync_WithoutPrebuiltHost_ShouldBuildIntoIsolatedOutputDirectory()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var resolvedPath = await DevHubHostFixture.ResolveHostAssemblyPathAsync(
+            repoRoot,
+            preferredConfiguration: "Release",
+            environmentVariables: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.True(File.Exists(resolvedPath));
+        Assert.StartsWith(Path.GetTempPath(), resolvedPath, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            Path.Combine("host", "src", "DevHub.Host", "bin"),
+            resolvedPath,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Impl_ResolveBuiltHostAssemblyPath_WhenAssemblyMissing_ShouldThrow()
+    {
+        var buildRoot = Path.Combine(Path.GetTempPath(), "DevHubHostFixtureTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(buildRoot);
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => DevHubHostFixture.ResolveBuiltHostAssemblyPath(buildRoot, "Release"));
+            Assert.Contains("DevHub.Host.dll", exception.Message);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(buildRoot);
         }
     }
 
@@ -236,5 +347,22 @@ public sealed class DevHubHostFixtureTests
         {
             Directory.Delete(path, recursive: true);
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "AGENTS.md")) &&
+                File.Exists(Path.Combine(current.FullName, "host", "src", "DevHub.Host", "DevHub.Host.csproj")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException("无法定位仓库根目录。");
     }
 }

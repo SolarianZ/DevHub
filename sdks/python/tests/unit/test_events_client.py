@@ -12,13 +12,13 @@ import websockets
 
 from devhub_sdk import (
     DevHubClientOptions,
-    DevHubEvent,
     DevHubEventsClient,
     DevHubEventsClientDependencies,
     DevHubRpcException,
     HubRuntime,
     HubRuntimeTuning,
     INVOCATION_COMPLETED,
+    ListInstancesRequest,
     RuntimeConnectionInfo,
 )
 
@@ -40,7 +40,7 @@ class FakeWsSession:
     """用于验证依赖注入的 WebSocket 会话。"""
 
     responses: dict[str, dict[str, Any] | BaseException]
-    events: list[DevHubEvent]
+    events: list[dict[str, Any]]
     requests: list[dict[str, Any]] = field(default_factory=list)
     disconnect_reasons: list[str] = field(default_factory=list)
     closed: bool = False
@@ -55,7 +55,7 @@ class FakeWsSession:
     async def disconnect(self, reason: str) -> None:
         self.disconnect_reasons.append(reason)
 
-    async def read_events(self) -> AsyncIterator[DevHubEvent]:
+    async def read_events(self) -> AsyncIterator[dict[str, Any]]:
         for event in self.events:
             yield event
 
@@ -94,12 +94,12 @@ async def test_M5_PY_UT_007_events_client_with_injected_resolver_and_session_sho
             "hub.events.subscribe": {"ok": True, "subscriptionId": "sub-fake"},
         },
         events=[
-            DevHubEvent(
-                subscription_id="sub-fake",
-                type=INVOCATION_COMPLETED,
-                time_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
-                payload={"invocationId": "invk-fake"},
-            )
+            {
+                "subscriptionId": "sub-fake",
+                "type": INVOCATION_COMPLETED,
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {"invocationId": "invk-fake"},
+            }
         ],
     )
     session_factory = FakeWsSessionFactory(session)
@@ -186,6 +186,64 @@ async def test_M5_PY_UT_006_events_client_with_injected_session_should_support_w
         "hub.apps.getDefinition",
         "hub.apps.listInstances",
     ]
+
+
+@pytest.mark.asyncio
+async def test_M6_PY_UT_006_events_client_get_definition_should_reuse_shared_payload_builder_validation() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+        },
+        events=[],
+    )
+    session_factory = FakeWsSessionFactory(session)
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(ValueError, match="appId 格式要求"):
+            await client.get_definition("Test.App")
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
+
+
+@pytest.mark.asyncio
+async def test_M6_PY_UT_006_events_client_list_instances_should_reuse_shared_payload_builder_validation() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+        },
+        events=[],
+    )
+    session_factory = FakeWsSessionFactory(session)
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(ValueError, match="appId 格式要求"):
+            await client.list_instances(ListInstancesRequest(app_id="Test.App"))
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
 
 
 @pytest.mark.asyncio

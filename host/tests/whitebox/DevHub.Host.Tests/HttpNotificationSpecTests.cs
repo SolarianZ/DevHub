@@ -167,6 +167,7 @@ public class HttpNotificationSpecTests : IDisposable
               "id": "http-register-instance",
               "method": "hub.apps.registerInstance",
               "params": {
+                "password": "http-notification-password",
                 "instance": {
                   "instanceId": "http-null-omit-inst",
                   "appId": "http-null-omit.app",

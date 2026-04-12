@@ -3,6 +3,8 @@ import { DevHubClient } from "../../src/client.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
 import { DevHubHostFixture } from "./host.js";
 
+const INSTANCE_PASSWORD = "invoke-flow-password";
+
 let host: DevHubHostFixture | undefined;
 
 beforeAll(async () => {
@@ -318,7 +320,7 @@ it("M5_E2E_006_And_011 scope 路由规则应命中正确实例", async () => {
 async function createClient(clientId: string): Promise<DevHubClient> {
   return await DevHubClient.fromRuntime({
     clientId,
-    dataDir: host.dataDirectory
+    dataDir: getHost().dataDirectory
   });
 }
 
@@ -338,7 +340,7 @@ async function registerInstance(
     scope,
     pid: process.pid,
     invoke
-  });
+  }, INSTANCE_PASSWORD);
 }
 
 async function waitForSingleInvocation(client: DevHubClient, instanceId: string) {
@@ -370,4 +372,12 @@ async function expectRpcError<T>(
   expect(rpcError.code).toBe(code);
   expect(rpcError.reason).toBe(reason);
   return rpcError;
+}
+
+function getHost(): DevHubHostFixture {
+  if (!host) {
+    throw new Error("Host fixture not started.");
+  }
+
+  return host;
 }

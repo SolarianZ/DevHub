@@ -1,6 +1,6 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
-using DevHub.Core.Services.Events;
+using DevHub.Host.Events;
 
 namespace DevHub.Host.Transport;
 
@@ -56,7 +56,7 @@ internal static class EventSubscriptionRequestParser
             }
 
             var eventType = typeElement.GetString()!;
-            if (!HubEventBus.IsSupportedEventType(eventType))
+            if (!HubEventSessionManager.IsSupportedEventType(eventType))
             {
                 errorResponse = TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", request.Id, new { reason = "unsupported_event_type", type = eventType });
                 return false;

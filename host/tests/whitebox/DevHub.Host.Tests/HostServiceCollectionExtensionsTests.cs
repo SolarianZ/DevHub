@@ -5,10 +5,13 @@ using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Handlers;
+using DevHub.Host.BackgroundServices;
+using DevHub.Host.Events;
 using DevHub.Host.Extensions;
+using DevHub.Host.Rpc.Handlers;
 using DevHub.Host.Runtime;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 /// <summary>
 /// Host ServiceCollectionExtensions 注册行为测试。
@@ -43,29 +46,41 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<RuntimeTuningOptions>());
         Assert.IsType<SystemClock>(provider.GetRequiredService<IClock>());
         Assert.IsType<ProcessLauncher>(provider.GetRequiredService<IProcessLauncher>());
+        Assert.NotNull(provider.GetRequiredService<AppDefinitionValidator>());
         Assert.NotNull(provider.GetRequiredService<AppRegistry>());
         Assert.NotNull(provider.GetRequiredService<DefinitionLoader>());
         Assert.NotNull(provider.GetRequiredService<IDefinitionProvider>());
-        Assert.NotNull(provider.GetRequiredService<HubEventBus>());
+        Assert.NotNull(provider.GetRequiredService<IDefinitionManager>());
+        Assert.NotNull(provider.GetRequiredService<HostRuntimeContext>());
+        Assert.IsType<HostRuntimeHttpBaseUrlProvider>(provider.GetRequiredService<IRuntimeHttpBaseUrlProvider>());
+        Assert.NotNull(provider.GetRequiredService<HubEventSessionManager>());
+        Assert.Same(
+            provider.GetRequiredService<HubEventSessionManager>(),
+            provider.GetRequiredService<IHubEventPublisher>());
         Assert.NotNull(provider.GetRequiredService<InvocationRoutingService>());
         Assert.NotNull(provider.GetRequiredService<InvocationStore>());
         Assert.NotNull(provider.GetRequiredService<InvocationRequestWaiter>());
         Assert.NotNull(provider.GetRequiredService<InvocationTimeoutWorker>());
-        Assert.NotNull(provider.GetRequiredService<IRuntimeHttpBaseUrlProvider>());
         Assert.NotNull(provider.GetRequiredService<LaunchCoordinator>());
         Assert.NotNull(provider.GetRequiredService<RpcRouter>());
         Assert.NotNull(provider.GetRequiredService<HostDataDirectoryInitializer>());
         Assert.NotNull(provider.GetRequiredService<HostRuntimeArtifactManager>());
         Assert.NotNull(provider.GetRequiredService<HostBootstrapper>());
+        Assert.NotNull(provider.GetRequiredService<AppRegistryCleanupBackgroundService>());
+        Assert.NotNull(provider.GetRequiredService<InvocationTimeoutBackgroundService>());
         Assert.NotNull(provider.GetRequiredService<RpcHttpEndpointHandler>());
         Assert.NotNull(provider.GetRequiredService<WebSocketSessionHandler>());
 
         var handlers = provider.GetServices<IRpcHandler>().ToList();
-        Assert.Contains(handlers, handler => handler is HubPingHandler);
-        Assert.Contains(handlers, handler => handler is AppDefinitionsHandler);
-        Assert.Contains(handlers, handler => handler is AppInstancesHandler);
-        Assert.Contains(handlers, handler => handler is InvocationHandler);
-        Assert.Contains(handlers, handler => handler is LaunchHandler);
+        Assert.Contains(handlers, handler => handler is HubPingRpcHandler);
+        Assert.Contains(handlers, handler => handler is AppDefinitionsRpcHandler);
+        Assert.Contains(handlers, handler => handler is AppInstancesRpcHandler);
+        Assert.Contains(handlers, handler => handler is InvocationRpcHandler);
+        Assert.Contains(handlers, handler => handler is LaunchRpcHandler);
+
+        var hostedServices = provider.GetServices<IHostedService>().ToList();
+        Assert.Contains(hostedServices, service => service is AppRegistryCleanupBackgroundService);
+        Assert.Contains(hostedServices, service => service is InvocationTimeoutBackgroundService);
     }
 
     /// <inheritdoc />

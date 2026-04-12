@@ -1,23 +1,34 @@
 # DevHub 文档导航
 
-本文档定义 `docs/` 目录的稳定分类和对外入口，帮助外部用户、SDK 接入方与仓库维护者快速定位合适的文档路径。
+本文档说明 `docs/` 目录的权威入口、分类规则与常用查找路径，帮助接入方、仓库维护者和发布人员快速定位正确文档。
 
-## 1. 权威来源
+## 1. 权威来源图
 
-- 公开行为、字段命名、状态转换、错误语义、序列化契约与测试断言，统一以 [`spec/Spec.md`](./spec/Spec.md) 为唯一权威标准。
-- `host/tests/README.md` 与 `host/tests/conformance/README.md` 分别是仓库级测试治理与 conformance 的稳定入口，不迁入 `docs/`。
+| 主题 | 权威入口 | 说明 |
+| --- | --- | --- |
+| 协议契约 | [`spec/Spec.md`](./spec/Spec.md) | 公开行为、字段命名、状态转换、错误语义、序列化契约与测试断言 |
+| 里程碑执行 | [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md) | 当前分支的任务拆解、状态、验收标准与遗留项 |
+| 架构边界 | [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md) | 模块职责、设计取舍与长期演进原则 |
+| 稳定使用方式 | [`guides/`](./guides/) | Host 上手、SDK 接入、无 SDK 接入、开发与贡献指南 |
+| 运维与发布 | [`operations/`](./operations/) | 部署、排障、发布流程、资产命名与检查清单 |
+| 文档资源 | [`assets/`](./assets/) | 文档静态资源 |
 
-## 2. 受众入口
+补充入口：
+
+- [`host/tests/README.md`](../host/tests/README.md)：仓库级测试分层、验证入口与执行说明。
+- [`host/tests/conformance/README.md`](../host/tests/conformance/README.md)：conformance 资产、adapter manifest 与向量运行说明。
+
+## 2. 按场景查找
 
 ### Host 上手
 
-- [`guides/getting-started/README.md`](./guides/getting-started/README.md)：首次启动 Host、运行时发现和最小验证入口。
-- [`guides/getting-started/host-quickstart.md`](./guides/getting-started/host-quickstart.md)：前置条件、启动方式、`hub.json` / `tokenFile` 发现与最小 `hub.ping` 验证。
-- [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：当前可直接参考的部署、启动和数据根目录说明。
+- [`guides/getting-started/README.md`](./guides/getting-started/README.md)：Host 上手路径总入口。
+- [`guides/getting-started/host-quickstart.md`](./guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` / `tokenFile` 与最小 `hub.ping` 验证。
+- [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：部署、启动、数据根目录与上线后检查。
 
 ### SDK 接入
 
-- [`guides/sdk/README.md`](./guides/sdk/README.md)：官方 SDK 接入路径导航。
+- [`guides/sdk/README.md`](./guides/sdk/README.md)：官方 SDK 接入总入口。
 - [`guides/sdk/dotnet.md`](./guides/sdk/dotnet.md)
 - [`guides/sdk/javascript.md`](./guides/sdk/javascript.md)
 - [`guides/sdk/python.md`](./guides/sdk/python.md)
@@ -27,59 +38,51 @@
 
 ### 无 SDK 接入
 
-- [`guides/无SDK接入指南.md`](./guides/无SDK接入指南.md)：直接对接原始协议与自测入口。
+- [`guides/无SDK接入指南.md`](./guides/无SDK接入指南.md)：直接基于公开协议、Schema、示例和 conformance 接入。
 
-### 仓库改造与贡献
+### 仓库维护与贡献
 
-- [`guides/contributor/README.md`](./guides/contributor/README.md)：仓库开发、贡献与治理入口。
-- [`guides/contributor/repository-contribution.md`](./guides/contributor/repository-contribution.md)
-- [`guides/开发指南.md`](./guides/开发指南.md)：当前开发环境、构建、运行与验证流程。
-- [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md)
-- [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md)
-- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
-- [`../CHANGELOG.md`](../CHANGELOG.md)
-- [`../SECURITY.md`](../SECURITY.md)
+- [`guides/contributor/README.md`](./guides/contributor/README.md)：仓库协作与治理入口。
+- [`guides/contributor/repository-contribution.md`](./guides/contributor/repository-contribution.md)：代码、文档、发布准备与本地打包流程。
+- [`guides/开发指南.md`](./guides/开发指南.md)：开发环境、常用命令、联调与最小验证要求。
+- [`../apps/monitor/README.md`](../apps/monitor/README.md)：Monitor 工作区说明与验证入口。
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)、[`../CHANGELOG.md`](../CHANGELOG.md)、[`../SECURITY.md`](../SECURITY.md)：仓库级治理入口。
 
-### 发布与维护
+### 运行、排障与发布
 
-- [`operations/publishing/README.md`](./operations/publishing/README.md)：发布路径、资产约定与 TODO 占位规范入口。
+- [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：部署、运行与回滚关注点。
+- [`operations/运维排障手册.md`](./operations/运维排障手册.md)：运行期诊断与恢复动作。
+- [`operations/publishing/README.md`](./operations/publishing/README.md)：发布流程入口、资产命名与占位规范。
 - [`operations/publishing/release-process.md`](./operations/publishing/release-process.md)
 - [`operations/publishing/release-asset-layout.md`](./operations/publishing/release-asset-layout.md)
 - [`operations/publishing/release-checklist.md`](./operations/publishing/release-checklist.md)
-- [`operations/运维排障手册.md`](./operations/运维排障手册.md)：运行与排障说明。
 
-## 3. 分类与落点
+## 3. 分类规则
 
-- [`spec/`](./spec/)：规范与版本化协议资产。
-- [`architecture/`](./architecture/)：架构规划与专题评估。
-- [`milestones/`](./milestones/)：当前阶段任务文档。
-- [`guides/getting-started/`](./guides/getting-started/)：面向 Host 新用户的上手入口。
-- [`guides/sdk/`](./guides/sdk/)：面向官方 SDK 使用者的接入入口。
-- [`guides/contributor/`](./guides/contributor/)：面向仓库维护者与贡献者的入口。
-- [`guides/开发指南.md`](./guides/开发指南.md)：仓库开发流程。
-- [`guides/无SDK接入指南.md`](./guides/无SDK接入指南.md)：原始协议接入路径。
-- [`operations/publishing/`](./operations/publishing/)：发布准备、发布流程与发布维护入口。
-- [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：部署、启动与运行时数据说明。
-- [`operations/运维排障手册.md`](./operations/运维排障手册.md)：排障与恢复说明。
-- [`assets/`](./assets/)：文档静态资源。
-- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)、[`../CHANGELOG.md`](../CHANGELOG.md)、[`../SECURITY.md`](../SECURITY.md)：仓库级治理入口。
+- [`spec/`](./spec/)：规范正文、Schema 与协议示例。涉及公开契约时先回到这里。
+- [`milestones/`](./milestones/)：当前分支的阶段任务、状态与验收边界。需要说明“这轮要做什么”时回到这里。
+- [`architecture/`](./architecture/)：架构分层、设计取舍与专题评估。不要在这里维护协议副本或阶段状态。
+- [`guides/`](./guides/)：当前有效做法。面向不同角色提供稳定入口，不维护分支标签或阶段性治理口径。
+- [`operations/`](./operations/)：部署、排障、发布、回滚与发布资产管理说明。
+- [`assets/`](./assets/)：文档静态资源，不承载执行口径。
 
-## 4. 正式发布前 TODO 占位规范
+## 4. 发布资产占位规范
 
-当正式 GitHub Release 资产、下载链接或安装命令尚未存在时，相关文档统一使用以下写法：
+当文档需要引用尚未生成的正式发布资产、下载链接或安装命令时，统一使用以下占位写法：
 
 ```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 <资产名称 / 版本号 / 下载链接 / 安装命令>；当前阶段不要填写未发布的版本号、下载地址或仓库外安装命令。
+TODO(devhub-release): 正式发布资产可用后，在此补充 <资产名称 / 版本号 / 下载链接 / 安装命令>；当前不要填写未生成的版本号、下载地址或仓库外安装命令。
 ```
 
 使用规则：
 
-- 需要同时说明未来将由哪个发布资产或版本信息替换当前占位。
-- 可以保留已经成立的仓库内开发命令、本地验证命令或项目引用方式，但必须明确它们不是正式发布安装入口。
-- 详细说明与示例见 [`operations/publishing/README.md`](./operations/publishing/README.md)。
+- 必须说明未来会由哪个发布资产或版本信息替换当前占位。
+- 可以保留仓库内开发命令、本地验证命令或项目引用方式，但要明确它们不是正式安装入口。
+- 详细示例与发布资产命名规则见 [`operations/publishing/README.md`](./operations/publishing/README.md)。
 
 ## 5. 维护规则
 
-- 新增文档时，优先放入现有分类目录，不在 `docs/` 根目录平铺新增 Markdown。
+- 新增文档时优先放入现有分类目录，不在 `docs/` 根目录平铺新增 Markdown。
+- 若新增的是当前分支执行范围、状态或验收说明，应放入 `milestones/`，而不是散落在 `architecture/`、`guides/` 或 `operations/`。
+- 若文档陈述协议事实、错误语义或字段定义，应回指 [`spec/Spec.md`](./spec/Spec.md)，避免维护并行副本。
 - 外部导航发生变化时，同步更新仓库根 [`README.md`](../README.md) 与相关工作区 README。
-- 若文档涉及治理口径、兼容冻结、conformance 门禁或版本化资产发布方式，先回到 [`spec/Spec.md`](./spec/Spec.md) 判断其是否属于协议核心契约。

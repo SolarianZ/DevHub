@@ -323,6 +323,43 @@ sequenceDiagram
   - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - `capabilities.events` 保留供未来使用；在 v1 中，Hub **必须**忽略它。
 
+#### 5.1.2 ValidationIssue（规范性）
+Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertDefinition` 因定义校验失败返回的 `error.data.errors` 中使用的 `ValidationIssue` **必须**符合以下结构：
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/validation-issue.json",
+  "type": "object",
+  "required": ["path", "code", "message"],
+  "properties": {
+    "path": { "type": "string" },
+    "code": { "type": "string" },
+    "message": { "type": "string" }
+  }
+}
+```
+
+规范性语义：
+- `path` **必须**指向候选 `AppDefinition` 中的出错字段或逻辑位置，路径起点为 `definition` 根对象。
+- `code` **必须**是稳定的机器可读错误标识。
+- `message` **必须**是可直接展示给开发者或 GUI 用户的诊断文本。
+
+#### 5.1.3 AppDefinitionValidationResult（规范性）
+`hub.apps.validateDefinition` 成功结果中的校验部分 **必须**符合以下结构：
+
+```json
+{
+  "ok": true,
+  "valid": true,
+  "errors": []
+}
+```
+
+规范性语义：
+- 当 `valid=true` 时，`errors` **必须**为空数组。
+- 当 `valid=false` 时，`errors` **必须**至少包含一项 `ValidationIssue`。
+
 ---
 
 ### 5.2 AppInstance
@@ -386,6 +423,10 @@ sequenceDiagram
   }
 }
 ```
+
+规范性语义：
+- `AppInstanceRegistration` 只描述 `params.instance`；`hub.apps.registerInstance` 的顶层 `password` **不属于** `AppInstanceRegistration`。
+- `password` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.registerInstance` 的成功结果、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
 
 ---
 
@@ -511,6 +552,9 @@ sequenceDiagram
 | `hub.ws.authenticate`         | ✗    | ✓ (仅限首条消息) | ✓         | 将客户端身份绑定到 WS             |
 | `hub.apps.listDefinitions`    | ✓    | ✓                | ✓         | 无                                |
 | `hub.apps.getDefinition`      | ✓    | ✓                | ✓         | 无                                |
+| `hub.apps.validateDefinition` | ✓    | ✗                | ✓         | 无                                |
+| `hub.apps.upsertDefinition`   | ✓    | ✗                | ✓         | 原子创建/更新定义；刷新快照       |
+| `hub.apps.deleteDefinition`   | ✓    | ✗                | ✗         | 删除定义；刷新快照                |
 | `hub.apps.registerInstance`   | ✓    | ✗                | ✗         | 更新/插入实例；更新 `lastSeenUtc` |
 | `hub.apps.heartbeat`          | ✓    | ✗                | ✓         | 更新 `lastSeenUtc`                |
 | `hub.apps.unregisterInstance` | ✓    | ✗                | ✓         | 移除实例                          |
@@ -571,12 +615,89 @@ sequenceDiagram
 ```
 **错误**：`-32014 app_definition_not_found`
 
-#### 6.3.5 `hub.apps.registerInstance` (仅限 HTTP)
+#### 6.3.5 `hub.apps.validateDefinition` (仅限 HTTP)
+**参数**：
+```json
+{
+  "definition": {
+    "appId": "test.app",
+    "displayName": "Test App"
+  }
+}
+```
+
+**结果**：
+```json
+{
+  "ok": true,
+  "valid": false,
+  "errors": [
+    {
+      "path": "definition.appId",
+      "code": "invalid_app_id",
+      "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+    }
+  ]
+}
+```
+
+规范性行为：
+- Hub **必须**复用与 `hub.apps.upsertDefinition` 相同的定义校验规则。
+- `validateDefinition` **不得**创建、修改或删除任何定义文件，也**不得**刷新内存快照。
+- 当候选定义有效时，Hub **必须**返回 `{ "ok": true, "valid": true, "errors": [] }`。
+- 当候选定义无效时，Hub **必须**返回 `{ "ok": true, "valid": false, "errors": [ /* ValidationIssue[] */ ] }`。
+
+#### 6.3.6 `hub.apps.upsertDefinition` (仅限 HTTP)
+**参数**：
+```json
+{
+  "definition": {
+    "appId": "test.app",
+    "displayName": "Test App"
+  }
+}
+```
+
+**结果**：
+```json
+{ "ok": true, "definition": { /* AppDefinition */ } }
+```
+
+规范性行为：
+- Hub **必须**先执行与 `hub.apps.validateDefinition` 完全一致的定义校验。
+- 当定义校验通过时，Hub **必须**原子写入 `${dataDir}/apps/definitions/{appId}.json`，并在成功后刷新可读取快照。
+- 成功的 `upsertDefinition` **必须**发布 `app.definition.upserted` 事件。
+- 成功结果中的 `definition` **必须**等于最新生效的 `AppDefinition`。
+
+**错误**：
+- `-32602 invalid_params`：当 `params.definition` 未通过定义校验时，Hub **必须**返回该错误，并在 `error.data.reason="definition_invalid"` 下附带 `errors: ValidationIssue[]`。
+
+#### 6.3.7 `hub.apps.deleteDefinition` (仅限 HTTP)
+**参数**：
+```json
+{ "appId": "test.app" }
+```
+
+**结果**：
+```json
+{ "ok": true }
+```
+
+规范性行为：
+- Hub **必须**删除 `${dataDir}/apps/definitions/{appId}.json` 对应的定义文件，并在成功后刷新可读取快照。
+- 成功的 `deleteDefinition` **必须**发布 `app.definition.deleted` 事件。
+- 删除成功后，后续对同一 `appId` 的 `hub.apps.getDefinition` **必须**返回 `-32014 app_definition_not_found`。
+
+**错误**：
+- `-32014 app_definition_not_found`：目标定义不存在；`error.data.appId` **必须**等于请求中的 `appId`。
+
+#### 6.3.8 `hub.apps.registerInstance` (仅限 HTTP)
 客户端**必须**生成的 `instanceId` 在进程生命周期内唯一（**应该**在进程重启时更改）。
 
 **参数**：
 ```json
 {
+  "password": "sample-password-1",
   "instance": {
     "appId": "test.app",
     "instanceId": "inst-123",
@@ -589,17 +710,21 @@ sequenceDiagram
 ```
 
 规范性要求：
+- `params.password` **必须**是非空字符串。
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
 - Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
 - Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 类型非法（非 `string|null`），**必须**返回 `-32602 invalid_params`。
+- 当某个 `instanceId` 首次成功注册时，Hub **必须**把该次请求中的 `password` 与该 `instanceId` 绑定。
+- 当某个 `instanceId` 已存在时，Hub **必须**只在 `password` 匹配时允许更新该实例；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
+- Hub **不得**在成功结果或任何 `app.instance.*` 事件载荷中回传 `password`。
 
 **结果**：
 ```json
 { "ok": true, "instance": { /* AppInstance */ } }
 ```
 
-#### 6.3.6 `hub.apps.heartbeat` (仅限 HTTP)
+#### 6.3.9 `hub.apps.heartbeat` (仅限 HTTP)
 **参数**：
 ```json
 { "instanceId": "inst-123" }
@@ -610,10 +735,13 @@ sequenceDiagram
 ```
 **错误**：`-32010 instance_not_found`
 
-#### 6.3.7 `hub.apps.unregisterInstance` (仅限 HTTP)
+#### 6.3.10 `hub.apps.unregisterInstance` (仅限 HTTP)
 **参数**：
 ```json
-{ "instanceId": "inst-123" }
+{
+  "instanceId": "inst-123",
+  "password": "sample-password-1"
+}
 ```
 **结果**：
 ```json
@@ -621,7 +749,12 @@ sequenceDiagram
 ```
 幂等性：如果实例不存在，Hub 仍**必须**返回 `{ "ok": true }`。
 
-#### 6.3.8 `hub.apps.listInstances`
+规范性行为：
+- `params.password` **必须**是非空字符串。
+- 当 `instanceId` 存在时，Hub **必须**只在 `password` 匹配时允许注销；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
+- 当 `instanceId` 不存在且请求结构合法时，Hub **必须**继续返回 `{ "ok": true }`。
+
+#### 6.3.11 `hub.apps.listInstances`
 **参数（可选）**：
 ```json
 {
@@ -640,7 +773,7 @@ sequenceDiagram
 - 如果 `includeAllScopes` 为 `false`（或省略），Hub **必须**按 `scope` 过滤（省略时默认为全局）。
 - `includeOffline` 默认为 `false`。
 
-#### 6.3.9 `hub.apps.launch` (仅限 HTTP)
+#### 6.3.12 `hub.apps.launch` (仅限 HTTP)
 **参数**：
 ```json
 {
@@ -677,7 +810,7 @@ sequenceDiagram
 - 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空，Hub **必须**返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。
 - Hub **必须**读取 `AppDefinition.launch.exePath`。若定义缺失：返回 `-32014`。若进程创建失败：返回 `-32020`。
 
-#### 6.3.10 `hub.invoke.notify` (仅限 HTTP)
+#### 6.3.13 `hub.invoke.notify` (仅限 HTTP)
 **参数**：
 ```json
 {
@@ -706,7 +839,7 @@ sequenceDiagram
 - 如果 `target.scope` 省略、为 `null` 或为 `""`，Hub **必须**仅在 Global 作用域中路由该调用。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
-#### 6.3.11 `hub.invoke.request` (仅限 HTTP)
+#### 6.3.14 `hub.invoke.request` (仅限 HTTP)
 **参数**：结构与 `hub.invoke.notify` 相同，外加：
 ```json
 "options": {
@@ -738,7 +871,7 @@ sequenceDiagram
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 
-#### 6.3.12 `hub.invoke.poll` (仅限 HTTP)
+#### 6.3.15 `hub.invoke.poll` (仅限 HTTP)
 **参数**：
 ```json
 {
@@ -777,7 +910,7 @@ sequenceDiagram
 - 成功的 `poll` **必须**更新实例的 `lastSeenUtc`。
 - 租约时长在每个条目的 `delivery.leaseSeconds` 中返回。
 
-#### 6.3.13 `hub.invoke.respond` (仅限 HTTP)
+#### 6.3.16 `hub.invoke.respond` (仅限 HTTP)
 **参数**（`value` 或 `error` **必须**且只能存在其中之一）：
 ```json
 {
@@ -811,7 +944,7 @@ sequenceDiagram
 - `-32011 invocation_expired`：如果调用已过期/被取消/超时。
 - `-32602 invalid_params`：负载格式错误。
 
-#### 6.3.14 `hub.events.subscribe` (仅限 WS)
+#### 6.3.17 `hub.events.subscribe` (仅限 WS)
 **参数**：
 ```json
 { "types": ["app.instance.registered", "invocation.completed"] }
@@ -824,6 +957,8 @@ sequenceDiagram
 ```
 
 **支持的事件类型**：
+- `app.definition.upserted`
+- `app.definition.deleted`
 - `app.instance.registered`
 - `app.instance.unregistered`
 - `invocation.queued`
@@ -831,7 +966,7 @@ sequenceDiagram
 - `invocation.completed`
 - `invocation.failed`
 
-#### 6.3.15 `hub.events.unsubscribe` (仅限 WS)
+#### 6.3.18 `hub.events.unsubscribe` (仅限 WS)
 **参数**：
 ```json
 { "subscriptionId": "sub-..." }
@@ -842,7 +977,7 @@ sequenceDiagram
 ```
 幂等性：取消订阅未知的 `subscriptionId` 仍**必须**返回 `{ "ok": true }`。
 
-#### 6.3.16 服务端 → 客户端 事件交付 (仅限 WS)
+#### 6.3.19 服务端 → 客户端 事件交付 (仅限 WS)
 Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 
 ```json
@@ -863,6 +998,11 @@ Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 ```
 
 事件交付是尽力而为且非持久化的；Hub 在负载过高时**可以**丢弃事件。
+
+规范性事件载荷：
+- `app.definition.upserted` 的 `payload` **必须**至少包含 `appId` 与最新 `definition`。
+- `app.definition.deleted` 的 `payload` **必须**至少包含 `appId`。
+- `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 `appId` 与 `instanceId`，且**不得**包含 `password`。
 
 ---
 
@@ -947,12 +1087,15 @@ stateDiagram-v2
 | -32602 | `invalid_params`   | 缺失/无效的参数                 |
 | -32603 | `internal_error`   | 服务端内部错误                  |
 
+补充约束：
+- 当 `hub.apps.upsertDefinition` 因定义业务校验失败被拒绝时，Hub **必须**继续使用 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下附带 `errors: ValidationIssue[]`。
+
 ### 8.2 DevHub 特定错误
 
 | 代码   | 名称                       | 何时返回                            | `error.data` (对象)                                                                                                   |
 | ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
-| -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`; 包含上下文字段                          |
+| -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`; 包含上下文字段 |
 | -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                     |
 | -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用       | `invocationId?`: string; `elapsedMs?`: number                                                                         |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
@@ -1085,8 +1228,10 @@ M6 期间，conformance 与仓库级回归默认把“协议核心契约”作�
 本仓库当前未随附独立的 Schema ZIP 下载包；下列文件名为 v1.0.1 约定的 Schema 组成部分：
 - `app-definition.json`
 - `app-instance.json`
+- `app-instance-registration.json`
 - `invocation.json`
 - `hub-runtime.json`
+- `validation-issue.json`
 - `rpc-request.json`
 - `rpc-response.json`
 - `error-response.json`

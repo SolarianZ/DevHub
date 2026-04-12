@@ -24,19 +24,19 @@ public sealed class AppDefinition
     /// <summary>
     /// 应用描述。
     /// </summary>
-    [JsonProperty("description")]
+    [JsonProperty("description", NullValueHandling = NullValueHandling.Ignore)]
     public string? Description { get; set; }
 
     /// <summary>
     /// 能力声明。
     /// </summary>
-    [JsonProperty("capabilities")]
+    [JsonProperty("capabilities", NullValueHandling = NullValueHandling.Ignore)]
     public AppCapabilities? Capabilities { get; set; }
 
     /// <summary>
     /// 启动配置。
     /// </summary>
-    [JsonProperty("launch")]
+    [JsonProperty("launch", NullValueHandling = NullValueHandling.Ignore)]
     public LaunchConfiguration? Launch { get; set; }
 }
 
@@ -48,13 +48,13 @@ public sealed class AppCapabilities
     /// <summary>
     /// 是否允许 RPC。
     /// </summary>
-    [JsonProperty("rpc")]
+    [JsonProperty("rpc", NullValueHandling = NullValueHandling.Ignore)]
     public bool? Rpc { get; set; }
 
     /// <summary>
     /// 是否声明事件能力。
     /// </summary>
-    [JsonProperty("events")]
+    [JsonProperty("events", NullValueHandling = NullValueHandling.Ignore)]
     public bool? Events { get; set; }
 }
 
@@ -66,26 +66,74 @@ public sealed class LaunchConfiguration
     /// <summary>
     /// 可执行文件路径。
     /// </summary>
-    [JsonProperty("exePath")]
+    [JsonProperty("exePath", NullValueHandling = NullValueHandling.Ignore)]
     public string? ExePath { get; set; }
 
     /// <summary>
     /// 参数模板。
     /// </summary>
-    [JsonProperty("argsTemplate")]
+    [JsonProperty("argsTemplate", NullValueHandling = NullValueHandling.Ignore)]
     public string? ArgsTemplate { get; set; }
 
     /// <summary>
     /// 工作目录。
     /// </summary>
-    [JsonProperty("workingDirectory")]
+    [JsonProperty("workingDirectory", NullValueHandling = NullValueHandling.Ignore)]
     public string? WorkingDirectory { get; set; }
 
     /// <summary>
     /// 去重键模板。
     /// </summary>
-    [JsonProperty("dedupeKeyTemplate")]
+    [JsonProperty("dedupeKeyTemplate", NullValueHandling = NullValueHandling.Ignore)]
     public string? DedupeKeyTemplate { get; set; }
+}
+
+/// <summary>
+/// 定义校验问题。
+/// </summary>
+public sealed class ValidationIssue
+{
+    /// <summary>
+    /// 出错字段路径。
+    /// </summary>
+    [JsonProperty("path")]
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 机器可读错误码。
+    /// </summary>
+    [JsonProperty("code")]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 人类可读错误消息。
+    /// </summary>
+    [JsonProperty("message")]
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 定义校验结果。
+/// </summary>
+public sealed class DefinitionValidationResult
+{
+    /// <summary>
+    /// 是否成功执行校验请求。
+    /// </summary>
+    [JsonProperty("ok")]
+    public bool Ok { get; set; }
+
+    /// <summary>
+    /// 定义是否有效。
+    /// </summary>
+    [JsonProperty("valid")]
+    public bool Valid { get; set; }
+
+    /// <summary>
+    /// 字段级校验问题。
+    /// </summary>
+    [JsonProperty("errors")]
+    public List<ValidationIssue> Errors { get; set; } = [];
 }
 
 /// <summary>

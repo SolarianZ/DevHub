@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-validate-valid",
+  "result": {
+    "ok": true,
+    "valid": true,
+    "errors": []
+  }
+}

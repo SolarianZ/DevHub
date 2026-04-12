@@ -20,10 +20,13 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 TEST_HUB_COMMAND_ENV_VAR = "DEVHUB_TEST_HUB_COMMAND"
 TEST_HUB_CWD_ENV_VAR = "DEVHUB_TEST_HUB_CWD"
 TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
+TEST_BUILD_HOST_ENV_VAR = "DEVHUB_TEST_BUILD_HOST"
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
 _UNSET = object()
+DEFAULT_INSTANCE_PASSWORD = "test-instance-password"
+_DEFAULT_TEST_HOST_BUILD_COMPLETED = False
 
 
 @contextmanager
@@ -179,8 +182,69 @@ def _parse_command_string(raw_command: str) -> List[str]:
     return parsed
 
 
+def _read_boolean_env(name: str, default: bool) -> bool:
+    """读取布尔环境变量，兼容常见 true/false 与 1/0 写法。"""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    candidate = raw_value.strip().lower()
+    if candidate in ("", "1", "true", "yes", "on"):
+        return True
+    if candidate in ("0", "false", "no", "off"):
+        return False
+
+    raise ValueError(f"{name} 必须是布尔值（true/false/1/0）")
+
+
+def should_build_default_test_host() -> bool:
+    """判断默认测试夹具是否需要预构建 Host。"""
+    return _read_boolean_env(TEST_BUILD_HOST_ENV_VAR, default=True)
+
+
+def ensure_default_test_host_built() -> None:
+    """按默认约定构建一次仓库内 Host。"""
+    global _DEFAULT_TEST_HOST_BUILD_COMPLETED
+
+    if _DEFAULT_TEST_HOST_BUILD_COMPLETED:
+        return
+
+    host_project = os.path.join(get_test_project_root(), "host", "src", "DevHub.Host", "DevHub.Host.csproj")
+    if not os.path.exists(host_project):
+        raise FileNotFoundError(f"未找到 DevHub.Host.csproj: {host_project}")
+
+    completed = subprocess.run(
+        [
+            "dotnet",
+            "build",
+            host_project,
+            "-c",
+            "Release",
+            "--nologo",
+        ],
+        cwd=get_test_project_root(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"构建默认测试 Host 失败。stdout={completed.stdout or ''} stderr={completed.stderr or ''}"
+        )
+
+    _DEFAULT_TEST_HOST_BUILD_COMPLETED = True
+
+
 def get_default_test_hub_command() -> List[str]:
     """获取隔离 Hub 测试使用的默认启动命令。"""
+    if should_build_default_test_host():
+        ensure_default_test_host_built()
+
     host_executable = os.path.join(
         get_test_project_root(),
         "host",
@@ -210,6 +274,12 @@ def get_default_test_hub_command() -> List[str]:
     host_project = os.path.join(get_test_project_root(), "host", "src", "DevHub.Host", "DevHub.Host.csproj")
     if not os.path.exists(host_project):
         raise FileNotFoundError(f"未找到 DevHub.Host.csproj: {host_project}")
+
+    if should_build_default_test_host():
+        raise FileNotFoundError(
+            "默认测试 Host 已完成构建，但未找到可执行输出："
+            f"{os.path.join(get_test_project_root(), 'host', 'src', 'DevHub.Host', 'bin', 'Release', 'net10.0')}"
+        )
 
     return [
         "dotnet",
@@ -432,17 +502,27 @@ def new_instance_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
 
 
-def unregister_instances(instance_ids: Iterable[Optional[str]]):
+def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]):
     """按实例 ID 列表执行幂等注销（用于测试清理）。"""
-    ids = [instance_id for instance_id in instance_ids if instance_id]
-    if not ids:
+    registrations = []
+    for item in instance_ids:
+        if not item:
+            continue
+        if isinstance(item, tuple):
+            if not item[0]:
+                continue
+            registrations.append(item)
+        else:
+            registrations.append((item, DEFAULT_INSTANCE_PASSWORD))
+
+    if not registrations:
         return
 
     try:
         base_url, token = DiscoveryService.get_hub_info()
         client = RpcClient(base_url, token)
-        for instance_id in ids:
-            client.unregister_instance(instance_id)
+        for instance_id, password in registrations:
+            client.unregister_instance(instance_id, password=password)
     except Exception:
         pass
 
@@ -519,6 +599,9 @@ class RpcClient:
         :param request_id: 请求 ID
         :return: 响应字典
         """
+        if isinstance(params, dict):
+            params = self._with_default_instance_password(method, params)
+
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -528,6 +611,20 @@ class RpcClient:
 
         _, response = self.post_json(payload, headers=self.headers, timeout=30)
         return response
+
+    @staticmethod
+    def _with_default_instance_password(method, params):
+        if method == "hub.apps.registerInstance" and "password" not in params and isinstance(params.get("instance"), dict):
+            enriched = dict(params)
+            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
+            return enriched
+
+        if method == "hub.apps.unregisterInstance" and "password" not in params and "instanceId" in params:
+            enriched = dict(params)
+            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
+            return enriched
+
+        return params
 
     def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
         """
@@ -565,9 +662,20 @@ class RpcClient:
         _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
         return response
 
-    def register_instance(self, instance_id, app_id, scope=None, poll=True, respond=True, pid=12345):
+    def register_instance(
+        self,
+        instance_id,
+        app_id,
+        scope=None,
+        poll=True,
+        respond=True,
+        pid=12345,
+        password=DEFAULT_INSTANCE_PASSWORD,
+        meta=None,
+    ):
         """注册实例。"""
-        return self.call("hub.apps.registerInstance", {
+        params = {
+            "password": password,
             "instance": {
                 "instanceId": instance_id,
                 "appId": app_id,
@@ -578,15 +686,18 @@ class RpcClient:
                     "respond": respond
                 }
             }
-        })
+        }
+        if meta is not None:
+            params["instance"]["meta"] = meta
+        return self.call("hub.apps.registerInstance", params)
 
     def heartbeat_instance(self, instance_id):
         """发送实例心跳。"""
         return self.call("hub.apps.heartbeat", {"instanceId": instance_id})
 
-    def unregister_instance(self, instance_id):
+    def unregister_instance(self, instance_id, password=DEFAULT_INSTANCE_PASSWORD):
         """注销实例。"""
-        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": password})
 
     def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None):
         """执行一次 poll。"""

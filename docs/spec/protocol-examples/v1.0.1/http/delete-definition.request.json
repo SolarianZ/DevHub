@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-delete",
+  "method": "hub.apps.deleteDefinition",
+  "params": {
+    "appId": "sample.app"
+  }
+}

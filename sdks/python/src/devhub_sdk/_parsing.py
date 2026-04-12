@@ -20,6 +20,7 @@ from .models import (
     AppCapabilities,
     AppDefinition,
     AppInstance,
+    DefinitionValidationResult,
     DevHubCalleeError,
     DevHubEvent,
     HubRuntime,
@@ -37,6 +38,7 @@ from .models import (
     PingResult,
     PollResult,
     RequestResult,
+    ValidationIssue,
 )
 
 _LAUNCH_STATUS_VALUES = {"started", "starting", "already_running"}
@@ -134,6 +136,29 @@ def parse_definition_result(value: Any, *, path: str) -> AppDefinition:
     return parse_app_definition(root.get("definition"), path=f"{path}.definition")
 
 
+def parse_definition_validation_result(value: Any, *, path: str) -> DefinitionValidationResult:
+    """解析定义校验结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    valid = require_bool(root, "valid", path)
+    errors_value = root.get("errors")
+    if not isinstance(errors_value, list):
+        raise RuntimeError(f"{path}.errors 必须为数组。")
+
+    errors = [
+        parse_validation_issue(item, path=f"{path}.errors[{index}]")
+        for index, item in enumerate(errors_value)
+    ]
+    if valid and errors:
+        raise RuntimeError(f"{path}.errors 必须为空数组。")
+    if not valid and not errors:
+        raise RuntimeError(f"{path}.errors 至少包含一项。")
+    return DefinitionValidationResult(ok=ok, valid=valid, errors=errors)
+
+
 def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
@@ -166,10 +191,23 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     )
 
 
+def parse_validation_issue(value: Any, *, path: str) -> ValidationIssue:
+    """解析定义校验问题。"""
+
+    root = require_mapping(value, path)
+    return ValidationIssue(
+        path=require_string(root, "path", path),
+        code=require_string(root, "code", path),
+        message=require_string(root, "message", path),
+    )
+
+
 def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     """解析应用实例。"""
 
     root = require_mapping(value, path)
+    if "password" in root:
+        raise RuntimeError(f"{path}.password 不得出现。")
     invoke_root = require_mapping(root.get("invoke"), f"{path}.invoke")
     meta = None
     if "meta" in root:
@@ -344,11 +382,13 @@ def parse_event(value: Any, *, path: str) -> DevHubEvent:
         event_type = ensure_supported_event_type(require_str(root, "type", path), f"{path}.type")
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
+    payload = _require_json_value(root["payload"], f"{path}.payload") if "payload" in root else None
+    _validate_known_event_payload(event_type, payload, path=f"{path}.payload")
     return DevHubEvent(
         subscription_id=require_str(root, "subscriptionId", path),
         type=event_type,
         time_utc=require_datetime(root, "timeUtc", path),
-        payload=_require_json_value(root["payload"], f"{path}.payload") if "payload" in root else None,
+        payload=payload,
     )
 
 
@@ -396,6 +436,32 @@ def _validate_string(
         return validator(value, path)
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
+
+
+def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -> None:
+    if event_type in {
+        "app.definition.upserted",
+        "app.definition.deleted",
+        "app.instance.registered",
+        "app.instance.unregistered",
+    }:
+        if payload is None:
+            raise RuntimeError(f"{path} 必须存在。")
+
+        payload_root = require_mapping(payload, path)
+        if event_type == "app.definition.upserted":
+            require_validated_string(payload_root, "appId", path, validate_app_id)
+            parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
+            return
+
+        if event_type == "app.definition.deleted":
+            require_validated_string(payload_root, "appId", path, validate_app_id)
+            return
+
+        require_validated_string(payload_root, "appId", path, validate_app_id)
+        require_validated_string(payload_root, "instanceId", path, validate_instance_id)
+        if "password" in payload_root:
+            raise RuntimeError(f"{path}.password 不得出现。")
 
 
 def optional_property_string(root: Mapping[str, Any], name: str, path: str) -> str | None:

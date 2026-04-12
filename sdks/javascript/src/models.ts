@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { DevHubCalleeError } from "./errors.js";
 import type { DevHubEventType } from "./event-types.js";
+import { createRandomUuid } from "./web-crypto.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -46,6 +46,18 @@ export interface AppDefinition {
   description?: string;
   capabilities?: AppCapabilities;
   launch?: LaunchConfiguration;
+}
+
+export interface ValidationIssue {
+  path: string;
+  code: string;
+  message: string;
+}
+
+export interface DefinitionValidationResult {
+  ok: true;
+  valid: boolean;
+  errors: ValidationIssue[];
 }
 
 export interface InvokeCapability {
@@ -178,6 +190,7 @@ export interface DevHubEvent {
   payload?: JsonObject;
 }
 
+const DEFAULT_CLIENT_SESSION_ID_KEY = Symbol.for("@devhub/sdk/defaultClientSessionId");
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function normalizeClientOptions(options: DevHubClientOptions): NormalizedDevHubClientOptions {
@@ -186,7 +199,7 @@ export function normalizeClientOptions(options: DevHubClientOptions): Normalized
   }
 
   const clientId = options.clientId ?? "";
-  const clientSessionId = options.clientSessionId ?? randomUUID();
+  const clientSessionId = options.clientSessionId ?? getDefaultClientSessionId();
   const protocolVersion = options.protocolVersion ?? 1;
 
   return {
@@ -221,4 +234,13 @@ export function validateClientOptions(options: NormalizedDevHubClientOptions): v
   ) {
     throw new Error("requestTimeoutMs 必须为大于 0 的整数。");
   }
+}
+
+function getDefaultClientSessionId(): string {
+  const state = globalThis as typeof globalThis & {
+    [DEFAULT_CLIENT_SESSION_ID_KEY]?: string;
+  };
+
+  state[DEFAULT_CLIENT_SESSION_ID_KEY] ??= createRandomUuid();
+  return state[DEFAULT_CLIENT_SESSION_ID_KEY];
 }

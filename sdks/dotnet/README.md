@@ -18,7 +18,9 @@
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
-- 公开扩展点：`runtime resolver`、`HTTP transport`、`WS session`
+- 定义管理：`hub.apps.validateDefinition`、`hub.apps.upsertDefinition`、`hub.apps.deleteDefinition`
+- 定义生命周期事件：`app.definition.upserted`、`app.definition.deleted`
+- 公开扩展点：`runtime resolver`、`HTTP client provider`、`HTTP transport`、`WS session`
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
 - 统一错误模型：`DevHubRpcException`（协议要求 `error.data` 为对象；非对象响应会被视为非法 JSON-RPC 包）
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
@@ -93,6 +95,7 @@ SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 
 - `DevHub.Sdk 1.0.0`
 - `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2`
+- `Microsoft.Extensions.Http 10.0.2`
 - `Microsoft.Extensions.Options 10.0.2`
 
 当前 `DevHub.Sdk` 主包发布产物不包含以下依赖：
@@ -178,6 +181,8 @@ services.AddDevHubSdk(options =>
     options.ClientId = "ExampleClient";
     options.DataDir = dataDir;
 });
+services.AddHttpClient(DevHubServiceCollectionExtensions.DefaultHttpClientName)
+    .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan);
 
 using var serviceProvider = services.BuildServiceProvider();
 var clientFactory = serviceProvider.GetRequiredService<IDevHubClientFactory>();
@@ -186,6 +191,8 @@ var eventsClientFactory = serviceProvider.GetRequiredService<IDevHubEventsClient
 await using var client = await clientFactory.CreateAsync();
 await using var eventsClient = await eventsClientFactory.CreateAsync();
 ```
+
+`AddDevHubSdk()` 会注册命名 `HttpClient` `DevHubServiceCollectionExtensions.DefaultHttpClientName`，并通过 `IDevHubHttpClientProvider -> IDevHubHttpTransportFactory -> IDevHubClientFactory` 的链路创建 HTTP 客户端；若需要接入企业代理、统一 header 或自定义 handler pipeline，优先覆盖这个命名 `HttpClient`。
 
 ### 4. 使用公开扩展点
 
@@ -262,11 +269,42 @@ var instance = await client.RegisterInstanceAsync(new AppInstanceRegistration
         Respond = true
     },
     Meta = new { role = "worker" }
-});
+}, password: "sample-password");
 
 var lastSeenUtc = await client.HeartbeatAsync(instance.InstanceId);
 
-await client.UnregisterInstanceAsync(instance.InstanceId);
+await client.UnregisterInstanceAsync(instance.InstanceId, password: "sample-password");
+```
+
+### 管理应用定义
+
+```csharp
+using DevHub.Sdk;
+using DevHub.Sdk.Models;
+
+await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+{
+    ClientId = "DefinitionClient"
+});
+
+var definition = new AppDefinition
+{
+    AppId = "sample.app",
+    DisplayName = "Sample App",
+    Description = "用于定义管理示例。"
+};
+
+var validation = await client.ValidateDefinitionAsync(definition);
+if (!validation.Valid)
+{
+    foreach (var issue in validation.Errors)
+    {
+        Console.WriteLine($"{issue.Path}: {issue.Code} - {issue.Message}");
+    }
+}
+
+var upserted = await client.UpsertDefinitionAsync(definition);
+await client.DeleteDefinitionAsync(upserted.AppId);
 ```
 
 ### 发起通知与请求
@@ -345,6 +383,7 @@ await using var eventsClient = await DevHubEventsClient.FromRuntimeAsync(new Dev
 await eventsClient.AuthenticateAsync();
 var subscriptionId = await eventsClient.SubscribeAsync(new[]
 {
+    DevHubEventTypes.AppDefinitionUpserted,
     DevHubEventTypes.AppInstanceRegistered,
     DevHubEventTypes.InvocationCompleted
 });
@@ -393,6 +432,7 @@ catch (DevHubRpcException ex)
 - `DevHubEventsClient`
 - `DevHubClientDependencies` / `DevHubEventsClientDependencies`
 - `IDevHubRuntimeResolver`
+- `IDevHubHttpClientProvider`
 - `IDevHubHttpTransport` / `IDevHubHttpTransportFactory`
 - `IDevHubWebSocketSession` / `IDevHubWebSocketSessionFactory`
 - `DevHubRpcException`
@@ -420,8 +460,10 @@ catch (DevHubRpcException ex)
 ## 常用命令
 
 ```powershell
+dotnet build host/DevHub.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Debug --no-restore
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
@@ -450,6 +492,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 - `DevHub.Sdk 1.0.0`
 - `Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2`
+- `Microsoft.Extensions.Http 10.0.2`
 - `Microsoft.Extensions.Options 10.0.2`
 
 `DevHub.Sdk` 主包依赖图不包含以下项目：

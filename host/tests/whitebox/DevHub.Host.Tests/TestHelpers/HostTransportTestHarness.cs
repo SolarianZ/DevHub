@@ -1,7 +1,7 @@
 namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
-using DevHub.Core.Services.Events;
+using DevHub.Host.Events;
 using DevHub.Host.Extensions;
 using DevHub.Host.Runtime;
 using DevHub.Host;
@@ -24,7 +24,7 @@ internal sealed class HostTransportTestHarness : IDisposable
         _serviceProvider = BuildServiceProvider(rootDirectory);
         _dataDirectoryInitializer = _serviceProvider.GetRequiredService<HostDataDirectoryInitializer>();
         RuntimeArtifactManager = _serviceProvider.GetRequiredService<HostRuntimeArtifactManager>();
-        EventBus = _serviceProvider.GetRequiredService<HubEventBus>();
+        EventBus = _serviceProvider.GetRequiredService<HubEventSessionManager>();
         HttpHandler = _serviceProvider.GetRequiredService<RpcHttpEndpointHandler>();
         WebSocketHandler = _serviceProvider.GetRequiredService<WebSocketSessionHandler>();
 
@@ -46,7 +46,7 @@ internal sealed class HostTransportTestHarness : IDisposable
     /// <summary>
     /// 事件总线。
     /// </summary>
-    internal HubEventBus EventBus { get; }
+    internal HubEventSessionManager EventBus { get; }
 
     /// HTTP 处理器。
     /// </summary>

@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,11 @@ import { fileURLToPath } from "node:url";
 
 const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
+const SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
+const SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 let sharedHostAssemblyPromise: Promise<string> | undefined;
+let sharedHostBuildRoot: string | undefined;
+let sharedHostCleanupRegistered = false;
 
 export class DevHubHostFixture {
   readonly repoRoot: string;
@@ -60,6 +65,8 @@ export class DevHubHostFixture {
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
     await fsPromises.mkdir(definitionsDirectory, { recursive: true });
+    await fsPromises.mkdir(instancesDirectory, { recursive: true });
+    await fsPromises.mkdir(logsDirectory, { recursive: true });
     const hostAssemblyPath = await resolveHostAssemblyPath(repoRoot);
 
     const fixture = new DevHubHostFixture(
@@ -103,7 +110,8 @@ export class DevHubHostFixture {
 
     const env = {
       ...process.env,
-      DEVHUB_DATA_DIR: this.dataDirectory
+      DEVHUB_DATA_DIR: this.dataDirectory,
+      [SingleInstanceSlotEnvironmentVariable]: randomUUID()
     };
 
     this.process = spawn("dotnet", [this.hostAssemblyPath], {
@@ -167,28 +175,60 @@ function resolveRepoRoot(): string {
   throw new Error("无法定位仓库根目录。");
 }
 
-function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
-  const configuredHostAssemblyPath = process.env[PrebuiltHostAssemblyEnvironmentVariable]?.trim();
-  if (configuredHostAssemblyPath) {
-    return resolveConfiguredHostAssemblyPath(repoRoot, configuredHostAssemblyPath);
+export function resolveHostAssemblyPath(
+  repoRoot: string,
+  environment: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const configuredHostAssembly = resolveConfiguredHostAssemblyFromEnvironment(repoRoot, environment);
+  if (configuredHostAssembly) {
+    return configuredHostAssembly;
   }
 
   sharedHostAssemblyPromise ??= (async () => {
     const hostBuildRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-host-build-"));
-    return await buildHostAssembly(repoRoot, hostBuildRoot);
+    sharedHostBuildRoot = hostBuildRoot;
+    registerSharedHostCleanup();
+
+    try {
+      return await buildHostAssembly(repoRoot, hostBuildRoot);
+    } catch (error) {
+      cleanupSharedHostBuildRoot();
+      throw error;
+    }
   })();
 
   return sharedHostAssemblyPromise;
 }
 
-async function resolveConfiguredHostAssemblyPath(repoRoot: string, configuredPath: string): Promise<string> {
+export function resolveConfiguredHostAssemblyFromEnvironment(
+  repoRoot: string,
+  environment: NodeJS.ProcessEnv = process.env
+): Promise<string> | undefined {
+  for (const environmentVariableName of [
+    PrebuiltHostAssemblyEnvironmentVariable,
+    SharedPrebuiltHostAssemblyEnvironmentVariable
+  ]) {
+    const configuredPath = environment[environmentVariableName]?.trim();
+    if (configuredPath) {
+      return resolveConfiguredHostAssemblyPath(repoRoot, configuredPath, environmentVariableName);
+    }
+  }
+
+  return undefined;
+}
+
+async function resolveConfiguredHostAssemblyPath(
+  repoRoot: string,
+  configuredPath: string,
+  environmentVariableName: string
+): Promise<string> {
   const resolvedPath = path.isAbsolute(configuredPath)
     ? configuredPath
     : path.resolve(repoRoot, configuredPath);
 
   if (!(await fileExists(resolvedPath))) {
     throw new Error(
-      `环境变量 ${PrebuiltHostAssemblyEnvironmentVariable} 指定的 Host 程序不存在：${resolvedPath}`
+      `环境变量 ${environmentVariableName} 指定的 Host 程序不存在：${resolvedPath}`
     );
   }
 
@@ -254,6 +294,31 @@ function ensureTrailingSeparator(value: string): string {
   return value.endsWith(path.sep)
     ? value
     : `${value}${path.sep}`;
+}
+
+function registerSharedHostCleanup(): void {
+  if (sharedHostCleanupRegistered) {
+    return;
+  }
+
+  sharedHostCleanupRegistered = true;
+  process.once("exit", cleanupSharedHostBuildRoot);
+}
+
+function cleanupSharedHostBuildRoot(): void {
+  sharedHostAssemblyPromise = undefined;
+
+  const buildRoot = sharedHostBuildRoot;
+  sharedHostBuildRoot = undefined;
+  if (!buildRoot) {
+    return;
+  }
+
+  try {
+    rmSync(buildRoot, { recursive: true, force: true });
+  } catch {
+    // 说明：进程退出时这里只做尽力回收，避免把测试失败原因污染为清理异常。
+  }
 }
 
 function pushOutput(buffer: string[], chunk: string): void {

@@ -8,6 +8,8 @@ namespace DevHub.Sdk.IntegrationTests.Http;
 /// </summary>
 public sealed class LaunchFlowTests
 {
+    private const string InstancePassword = "sdk-launch-password";
+
     [Fact]
     public async Task M5_E2E_002_Launch_ShouldCoverStartedStartingAndAlreadyRunning()
     {
@@ -45,7 +47,7 @@ public sealed class LaunchFlowTests
                 Poll = true,
                 Respond = true
             }
-        });
+        }, InstancePassword);
 
         var alreadyRunning = await client.LaunchAsync(new LaunchRequest
         {

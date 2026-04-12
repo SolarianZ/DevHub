@@ -2,7 +2,7 @@
 
 DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon），为各类工具提供实例注册、发现、调用编排与事件订阅能力。
 
-本仓库包含协议规范、.NET 核心实现、宿主程序以及白盒/黑盒测试套件。所有公开行为、字段命名、状态转换、错误语义与序列化契约均以 [`docs/spec/Spec.md`](docs/spec/Spec.md) 为唯一权威标准。
+本仓库包含协议规范、`.NET` 核心实现、宿主程序、多语言 SDK、官方桌面 `DevHub Monitor` 以及白盒/黑盒测试套件。所有公开行为、字段命名、状态转换、错误语义与序列化契约均以 [`docs/spec/Spec.md`](docs/spec/Spec.md) 为唯一权威标准。
 
 完整文档导航见 [`docs/README.md`](docs/README.md)。
 
@@ -13,6 +13,12 @@ DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon）�
 - [`docs/guides/getting-started/README.md`](docs/guides/getting-started/README.md)：面向首次使用 DevHub Host 的入口导航。
 - [`docs/guides/getting-started/host-quickstart.md`](docs/guides/getting-started/host-quickstart.md)：前置条件、启动方式、`hub.json` / `tokenFile` 发现与最小 `hub.ping` 验证。
 - [`docs/operations/部署与运行指南.md`](docs/operations/部署与运行指南.md)：当前可直接参考的启动、数据根目录与运行说明。
+
+### 桌面 Monitor
+
+- [`apps/monitor/README.md`](apps/monitor/README.md)：官方桌面 Monitor 的工作区结构、本地运行命令、验证入口与日志位置说明。
+- [`docs/operations/部署与运行指南.md`](docs/operations/部署与运行指南.md)：Host 与 Monitor 的本地启动、数据目录与日志落点说明。
+- [`docs/operations/运维排障手册.md`](docs/operations/运维排障手册.md)：Host / Monitor 日志定位与排障入口。
 
 ### SDK 接入
 

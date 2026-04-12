@@ -6,7 +6,6 @@ using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
-using DevHub.Core.Services.Rpc.Handlers;
 
 namespace DevHub.Core.Extensions;
 
@@ -52,6 +51,7 @@ public static class ServiceCollectionExtensions
             RpcTestFaultInjectionPolicy.Resolve(sp.GetRequiredService<ILogger<RpcTestFaultInjectionPolicy>>()));
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IProcessLauncher, ProcessLauncher>();
+        services.AddSingleton<AppDefinitionValidator>();
 
         // 注册核心服务
         services.AddSingleton<AppRegistry>(sp =>
@@ -62,16 +62,24 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DefinitionLoader>(sp =>
             new DefinitionLoader(
                 sp.GetRequiredService<RuntimePathOptions>().DefinitionsPath,
-                sp.GetRequiredService<ILogger<DefinitionLoader>>()));
+                sp.GetRequiredService<ILogger<DefinitionLoader>>(),
+                sp.GetRequiredService<AppDefinitionValidator>()));
         services.AddSingleton<IDefinitionProvider, DefinitionProvider>();
-        services.AddSingleton<HubEventBus>();
+        services.AddSingleton<IDefinitionManager>(sp =>
+            new DefinitionManager(
+                sp.GetRequiredService<RuntimePathOptions>(),
+                sp.GetRequiredService<IDefinitionProvider>(),
+                sp.GetRequiredService<AppDefinitionValidator>(),
+                sp.GetRequiredService<IClock>(),
+                sp.GetRequiredService<ILogger<DefinitionManager>>(),
+                sp.GetService<IHubEventPublisher>()));
         services.AddSingleton<InvocationRoutingService>();
         services.AddSingleton<InvocationStore>(sp =>
             new InvocationStore(
                 sp.GetRequiredService<ILogger<InvocationStore>>(),
                 sp.GetRequiredService<InvocationRoutingService>(),
                 sp.GetRequiredService<IClock>(),
-                sp.GetService<HubEventBus>()));
+                sp.GetService<IHubEventPublisher>()));
         services.AddSingleton<InvocationRequestWaiter>();
         services.AddSingleton<InvocationTimeoutWorker>(sp =>
             new InvocationTimeoutWorker(
@@ -92,35 +100,6 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IClock>(),
                 sp.GetRequiredService<RuntimeTuningOptions>(),
                 sp.GetRequiredService<ILogger<LaunchCoordinator>>()));
-
-        // 注册 RPC 处理器
-        services.AddSingleton<IRpcHandler, HubPingHandler>();
-        services.AddSingleton<IRpcHandler>(sp =>
-            new AppDefinitionsHandler(
-                sp.GetRequiredService<IDefinitionProvider>(),
-                sp.GetRequiredService<ILogger<AppDefinitionsHandler>>()));
-        services.AddSingleton<IRpcHandler>(sp =>
-            new AppInstancesHandler(
-                sp.GetRequiredService<AppRegistry>(),
-                sp.GetRequiredService<IClock>(),
-                sp.GetRequiredService<ILogger<AppInstancesHandler>>(),
-                sp.GetService<HubEventBus>()));
-        services.AddSingleton<IRpcHandler>(sp =>
-            new InvocationHandler(
-                sp.GetRequiredService<AppRegistry>(),
-                sp.GetRequiredService<IDefinitionProvider>(),
-                sp.GetRequiredService<InvocationRoutingService>(),
-                sp.GetRequiredService<InvocationStore>(),
-                sp.GetRequiredService<InvocationRequestWaiter>(),
-                sp.GetRequiredService<LaunchCoordinator>(),
-                sp.GetRequiredService<IClock>(),
-                sp.GetRequiredService<ILogger<InvocationHandler>>(),
-                sp.GetRequiredService<RuntimeTuningOptions>(),
-                sp.GetService<HubEventBus>()));
-        services.AddSingleton<IRpcHandler, LaunchHandler>();
-
-        // 注册 RPC 路由器
-        services.AddSingleton<RpcRouter>();
 
         return services;
     }

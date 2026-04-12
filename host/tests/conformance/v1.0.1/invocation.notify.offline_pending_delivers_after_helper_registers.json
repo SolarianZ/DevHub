@@ -18,6 +18,7 @@
     "duringCaller": [
       {
         "action": "register_instance",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "notify-pending-inst",
           "appId": "invoke.notify.pending",

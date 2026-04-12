@@ -15,9 +15,37 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance)
+    internal static object BuildValidateDefinitionParams(AppDefinition definition)
+    {
+        CompatibilityGuards.ThrowIfNull(definition, nameof(definition));
+        return new Dictionary<string, object?>
+        {
+            ["definition"] = definition
+        };
+    }
+
+    internal static object BuildUpsertDefinitionParams(AppDefinition definition)
+    {
+        CompatibilityGuards.ThrowIfNull(definition, nameof(definition));
+        return new Dictionary<string, object?>
+        {
+            ["definition"] = definition
+        };
+    }
+
+    internal static object BuildDeleteDefinitionParams(string appId)
+    {
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(appId, nameof(appId));
+        return new Dictionary<string, object?>
+        {
+            ["appId"] = appId
+        };
+    }
+
+    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password)
     {
         CompatibilityGuards.ThrowIfNull(instance, nameof(instance));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(password, nameof(password));
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(instance.InstanceId, nameof(instance.InstanceId));
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(instance.AppId, nameof(instance.AppId));
         CompatibilityGuards.ThrowIfNull(instance.Invoke, nameof(instance.Invoke));
@@ -56,6 +84,7 @@ internal static class RequestPayloadFactory
 
         return new Dictionary<string, object?>
         {
+            ["password"] = password,
             ["instance"] = instancePayload
         };
     }
@@ -69,12 +98,14 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildUnregisterParams(string instanceId)
+    internal static object BuildUnregisterParams(string instanceId, string password)
     {
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(instanceId, nameof(instanceId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(password, nameof(password));
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = instanceId
+            ["instanceId"] = instanceId,
+            ["password"] = password
         };
     }
 

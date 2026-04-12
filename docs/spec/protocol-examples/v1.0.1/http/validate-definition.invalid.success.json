@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-validate-invalid",
+  "result": {
+    "ok": true,
+    "valid": false,
+    "errors": [
+      {
+        "path": "definition.appId",
+        "code": "invalid_app_id",
+        "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+      }
+    ]
+  }
+}

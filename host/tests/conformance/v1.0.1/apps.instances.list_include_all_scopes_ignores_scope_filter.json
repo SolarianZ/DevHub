@@ -7,6 +7,7 @@
     "instances": [
       {
         "state": "registered",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "apps-instance-all-scopes",
           "appId": "apps.instance.list.all-scopes.app",

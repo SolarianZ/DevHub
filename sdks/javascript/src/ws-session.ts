@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import { Mutex } from "./async-utils.js";
 import {
   buildRpcError,
@@ -10,8 +9,6 @@ import {
   validateIncomingEnvelope
 } from "./jsonrpc.js";
 import { ensureRecord, isRecord } from "./validation.js";
-
-const require = createRequire(import.meta.url);
 
 export interface JsonRpcWsSessionOptions {
   websocketEndpoint: string;
@@ -36,7 +33,7 @@ export class JsonRpcWsSession {
       return;
     }
 
-    const ctor = resolveWebSocketConstructor();
+    const ctor = await resolveWebSocketConstructor();
     const socket = new ctor(this.options.websocketEndpoint);
     this.socket = socket;
     this.attachSocketHandlers(socket);
@@ -237,15 +234,22 @@ interface WebSocketLike {
 }
 
 type WebSocketConstructor = new (url: string) => WebSocketLike;
+const TEXT_DECODER = new TextDecoder();
+let webSocketConstructorPromise: Promise<WebSocketConstructor> | undefined;
 
-function resolveWebSocketConstructor(): WebSocketConstructor {
+async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
   const globalCandidate = (globalThis as { WebSocket?: unknown }).WebSocket;
   if (typeof globalCandidate === "function") {
     return globalCandidate as WebSocketConstructor;
   }
 
+  webSocketConstructorPromise ??= loadWebSocketConstructor();
+  return webSocketConstructorPromise;
+}
+
+async function loadWebSocketConstructor(): Promise<WebSocketConstructor> {
   try {
-    const wsModule = require("ws") as Record<string, unknown>;
+    const wsModule = await import("ws");
     const ctor = (wsModule.WebSocket ?? wsModule.default ?? wsModule) as unknown;
     if (typeof ctor !== "function") {
       throw new Error("ws module did not export a WebSocket constructor.");
@@ -253,7 +257,7 @@ function resolveWebSocketConstructor(): WebSocketConstructor {
 
     return ctor as WebSocketConstructor;
   } catch (error) {
-    throw new Error("WebSocket is unavailable. Install ws or use Node.js 20+.", { cause: error });
+    throw new Error("WebSocket 不可用。请安装 ws，或提供全局 WebSocket 实现。", { cause: error });
   }
 }
 
@@ -322,20 +326,12 @@ function readMessageText(event: unknown, args: readonly unknown[] = []): string 
     return event;
   }
 
-  if (Buffer.isBuffer(event)) {
-    if (binaryHint !== false) {
-      throw new Error("WebSocket JSON-RPC message must be a text frame.");
-    }
-
-    return event.toString("utf-8");
-  }
-
   if (event instanceof ArrayBuffer) {
     if (binaryHint !== false) {
       throw new Error("WebSocket JSON-RPC message must be a text frame.");
     }
 
-    return Buffer.from(event).toString("utf-8");
+    return TEXT_DECODER.decode(event);
   }
 
   if (ArrayBuffer.isView(event)) {
@@ -343,7 +339,7 @@ function readMessageText(event: unknown, args: readonly unknown[] = []): string 
       throw new Error("WebSocket JSON-RPC message must be a text frame.");
     }
 
-    return Buffer.from(event.buffer, event.byteOffset, event.byteLength).toString("utf-8");
+    return TEXT_DECODER.decode(event);
   }
 
   if (isRecord(event) && "data" in event) {

@@ -1,7 +1,6 @@
 using DevHub.Core.Models;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace DevHub.Core.Services;
 
@@ -10,11 +9,9 @@ namespace DevHub.Core.Services;
 /// </summary>
 public class DefinitionLoader
 {
-    private static readonly Regex AppIdPattern = new("^[a-z0-9][a-z0-9.-]*$", RegexOptions.Compiled);
-
     private readonly string _definitionsPath;
     private readonly ILogger<DefinitionLoader> _logger;
-    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly AppDefinitionValidator _validator;
 
     private List<AppDefinition> _definitions = new();
 
@@ -23,15 +20,11 @@ public class DefinitionLoader
     /// </summary>
     /// <param name="definitionsPath">应用定义目录路径。</param>
     /// <param name="logger">日志记录器。</param>
-    public DefinitionLoader(string definitionsPath, ILogger<DefinitionLoader> logger)
+    public DefinitionLoader(string definitionsPath, ILogger<DefinitionLoader> logger, AppDefinitionValidator? validator = null)
     {
         _definitionsPath = definitionsPath;
         _logger = logger;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = true
-        };
+        _validator = validator ?? new AppDefinitionValidator();
     }
 
     /// <summary>
@@ -60,23 +53,23 @@ public class DefinitionLoader
                 {
                     _logger.LogDebug("开始加载应用程序定义文件: {File}", file);
                     var content = File.ReadAllText(file);
-                    var definition = JsonSerializer.Deserialize<AppDefinition>(content, _jsonOptions);
-
-                    if (definition == null)
+                    using var document = JsonDocument.Parse(content);
+                    if (!_validator.TryParseAndValidate(
+                            document.RootElement,
+                            out var definition,
+                            out var validationResult,
+                            Path.GetFileName(file)))
                     {
-                        _logger.LogWarning("应用程序定义文件反序列化为空: {File}", file);
-                        continue;
-                    }
-
-                    if (!IsValidDefinition(definition, file, out var invalidReason))
-                    {
+                        var invalidReason = validationResult.Errors.Count == 0
+                            ? "定义校验失败"
+                            : string.Join("; ", validationResult.Errors.Select(issue => $"{issue.Path}: {issue.Message}"));
                         _logger.LogWarning("应用程序定义无效，已忽略: {File}, 原因: {Reason}", file, invalidReason);
                         continue;
                     }
 
-                    definitions.Add(definition);
+                    definitions.Add(definition!);
                     _logger.LogDebug("成功加载应用程序定义: {AppId} (文件: {File}, 详细信息: {DefinitionDetails})",
-                        definition.AppId, file, JsonSerializer.Serialize(definition));
+                        definition!.AppId, file, JsonSerializer.Serialize(definition));
                 }
                 catch (JsonException ex)
                 {
@@ -125,46 +118,5 @@ public class DefinitionLoader
         }
 
         return definition;
-    }
-
-    /// <summary>
-    /// 校验 AppDefinition 是否符合 Spec 约束
-    /// </summary>
-    private static bool IsValidDefinition(AppDefinition definition, string filePath, out string reason)
-    {
-        if (string.IsNullOrWhiteSpace(definition.AppId))
-        {
-            reason = "缺少 appId";
-            return false;
-        }
-
-        if (!AppIdPattern.IsMatch(definition.AppId))
-        {
-            reason = "appId 不符合格式要求";
-            return false;
-        }
-
-        var expectedFileName = $"{definition.AppId}.json";
-        var actualFileName = Path.GetFileName(filePath);
-        if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
-        {
-            reason = "文件名与 appId 不匹配";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(definition.DisplayName))
-        {
-            reason = "缺少 displayName";
-            return false;
-        }
-
-        if (definition.Launch is not null && string.IsNullOrWhiteSpace(definition.Launch.ExePath))
-        {
-            reason = "launch.exePath 缺失或为空";
-            return false;
-        }
-
-        reason = string.Empty;
-        return true;
     }
 }

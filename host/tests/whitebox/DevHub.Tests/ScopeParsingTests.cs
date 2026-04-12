@@ -15,6 +15,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public class ScopeParsingTests : IDisposable
 {
+    private const string InstancePassword = "scope-tests-password";
     private readonly string _tempDirectory;
 
     /// <summary>
@@ -38,6 +39,7 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-scope-global",
@@ -55,6 +57,7 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-scope-null",
@@ -128,6 +131,7 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-empty-scope-global",
@@ -173,6 +177,7 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-scope-omitted",
@@ -189,6 +194,7 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
+                password = InstancePassword,
                 instance = new
                 {
                     instanceId = "inst-scope-null",
@@ -415,7 +421,6 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
-
 
 
 

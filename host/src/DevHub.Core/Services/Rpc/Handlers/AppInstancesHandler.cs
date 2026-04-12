@@ -69,6 +69,12 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "password", out var password))
+            {
+                _logger.LogWarning("hub.apps.registerInstance参数无效: 缺少 password 或类型错误, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+            }
+
             if (!paramsElement.TryGetProperty("instance", out var instanceElement) || instanceElement.ValueKind != JsonValueKind.Object)
             {
                 _logger.LogWarning("hub.apps.registerInstance参数无效: 缺少 instance 对象, RequestId: {RequestId}", request.Id);
@@ -83,7 +89,20 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
-            var registeredInstance = _appRegistry.RegisterInstance(instance);
+            if (!_appRegistry.TryRegisterInstance(instance, password, out var registeredInstance, out var passwordMismatch))
+            {
+                if (passwordMismatch)
+                {
+                    _logger.LogWarning("注册应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instance.InstanceId, request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_password_mismatch",
+                        instanceId = instance.InstanceId
+                    }));
+                }
+
+                return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
+            }
 
             PublishInstanceEvent(HubEventTypes.AppInstanceRegistered, registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
 
@@ -194,25 +213,37 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!paramsElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
             {
                 _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            var instanceId = instanceIdProperty.GetString();
-            if (string.IsNullOrWhiteSpace(instanceId))
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "password", out var password))
             {
-                _logger.LogWarning("hub.apps.unregisterInstance参数无效: instanceId 为空, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 password 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            var existingInstance = _appRegistry.GetInstance(instanceId);
             _logger.LogDebug("尝试注销应用程序实例，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            var removed = _appRegistry.UnregisterInstance(instanceId);
-            if (removed && existingInstance is not null)
+            if (!_appRegistry.TryUnregisterInstance(instanceId, password, out var removedInstance, out var passwordMismatch))
             {
-                PublishInstanceEvent(HubEventTypes.AppInstanceUnregistered, existingInstance.AppId, existingInstance.InstanceId, existingInstance.Scope);
+                if (passwordMismatch)
+                {
+                    _logger.LogWarning("注销应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_password_mismatch",
+                        instanceId
+                    }));
+                }
+
+                return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
+            }
+
+            if (removedInstance is not null)
+            {
+                PublishInstanceEvent(HubEventTypes.AppInstanceUnregistered, removedInstance.AppId, removedInstance.InstanceId, removedInstance.Scope);
             }
 
             _logger.LogInformation("注销应用程序实例完成（幂等），InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);

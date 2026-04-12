@@ -47,6 +47,7 @@
       {
         "action": "register_instance",
         "client": "http",
+        "password": "conformance-password",
         "instance": {
           "instanceId": "events-unsubscribe-existing-inst-1",
           "appId": "events.unsubscribe.existing",

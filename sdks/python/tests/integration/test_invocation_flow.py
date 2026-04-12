@@ -25,7 +25,7 @@ def test_M5_E2E_003_notify_and_poll_should_round_trip() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.notify.app", "displayName": "invoke.notify.app"})
         client = host.create_client("invoke-notify-client")
-        client.register_instance(_create_instance("invoke.notify.app", "notify-inst-1", None))
+        _register_instance(client, "invoke.notify.app", "notify-inst-1", None)
 
         notify_result = client.notify(
             InvokeRequest(app_id="invoke.notify.app", method="test.notify", args={"message": "hello"})
@@ -42,7 +42,7 @@ def test_M5_E2E_003_And_008_request_respond_value_should_return_result_and_secon
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.request.app", "displayName": "invoke.request.app"})
         client = host.create_client("invoke-request-client")
-        client.register_instance(_create_instance("invoke.request.app", "request-inst-1", None))
+        _register_instance(client, "invoke.request.app", "request-inst-1", None)
 
         request_future = _call_request(client)
         invocation = _wait_for_single_invocation(client, "request-inst-1")
@@ -74,7 +74,7 @@ def test_M5_E2E_008_request_respond_error_should_map_invocation_failed() -> None
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.error.app", "displayName": "invoke.error.app"})
         client = host.create_client("invoke-error-client")
-        client.register_instance(_create_instance("invoke.error.app", "error-inst-1", None))
+        _register_instance(client, "invoke.error.app", "error-inst-1", None)
 
         def send_request():
             return client.request(
@@ -121,7 +121,7 @@ def test_M5_E2E_007_request_timeout_and_expired_should_map_expected_error_codes(
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.timeout.app", "displayName": "invoke.timeout.app"})
         client = host.create_client("invoke-timeout-client")
-        client.register_instance(_create_instance("invoke.timeout.app", "timeout-inst-1", None))
+        _register_instance(client, "invoke.timeout.app", "timeout-inst-1", None)
 
         with pytest.raises(DevHubRpcException) as timeout_exc_info:
             client.request(
@@ -148,9 +148,9 @@ def test_M5_E2E_006_And_011_scope_routing_should_hit_expected_instance() -> None
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.scope.app", "displayName": "invoke.scope.app"})
         client = host.create_client("invoke-scope-client")
-        client.register_instance(_create_instance("invoke.scope.app", "scope-global-inst", None))
-        client.register_instance(_create_instance("invoke.scope.app", "scope-a-inst", "scope-a"))
-        client.register_instance(_create_instance("invoke.scope.app", "scope-literal-global-inst", "global"))
+        _register_instance(client, "invoke.scope.app", "scope-global-inst", None)
+        _register_instance(client, "invoke.scope.app", "scope-a-inst", "scope-a")
+        _register_instance(client, "invoke.scope.app", "scope-literal-global-inst", "global")
 
         client.notify(InvokeRequest(app_id="invoke.scope.app", method="test.default-global"))
         assert _wait_for_single_invocation(client, "scope-global-inst").method == "test.default-global"
@@ -192,6 +192,14 @@ def _create_instance(app_id: str, instance_id: str, scope: str | None) -> AppIns
         pid=99999,
         invoke=InvokeCapability(poll=True, respond=True),
     )
+
+
+def _register_instance(client, app_id: str, instance_id: str, scope: str | None) -> None:
+    client.register_instance(_create_instance(app_id, instance_id, scope), _instance_password(instance_id))
+
+
+def _instance_password(instance_id: str) -> str:
+    return f"python-sdk-{instance_id}"
 
 
 def _call_request(client):

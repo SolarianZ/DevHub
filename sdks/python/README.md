@@ -11,8 +11,9 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 ## 能力范围
 
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局（`<dataDir>/runtime/hub.json`）
-- HTTP 客户端：`ping`、应用定义、实例管理、`launch`、`notify`、`request`、`poll`、`respond`
-- WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取
+- HTTP 客户端：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`notify`、`request`、`poll`、`respond`
+- WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取，以及定义生命周期事件解析
+- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`list_instances` 复用同一套本地参数构造与防御式校验规则
 - 调用参数语义：可区分“省略 `args`”与“显式传入 `None`（序列化为 `null`）”
 - 本地 JSON 校验：在发送前严格校验 `echo`、`meta`、`args`、`value`、`error.data`，拒绝 `NaN`、回调、循环引用等非法 JSON 结构
 - 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
@@ -25,10 +26,10 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 python3 -m pip install -e '.[test]'
 ```
 
-正式 GitHub Release 资产尚未固定前，公开安装说明统一使用以下占位写法：
+当正式安装资产尚未生成时，公开安装说明统一使用以下占位写法：
 
 ```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
+TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前不要填写未生成的版本号、下载链接或仓库外安装命令。
 ```
 
 ## 快速示例
@@ -39,6 +40,49 @@ from devhub_sdk import DevHubClient, DevHubClientOptions
 client = DevHubClient.from_runtime(DevHubClientOptions(client_id="example-client"))
 ping = client.ping({"hello": "world"})
 print(ping.server_time_utc, ping.echo)
+```
+
+## 应用定义与安全实例管理
+
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+
+```python
+from devhub_sdk import (
+    AppDefinition,
+    AppInstanceRegistration,
+    DevHubClient,
+    DevHubClientOptions,
+    InvokeCapability,
+    LaunchConfiguration,
+)
+
+client = DevHubClient.from_runtime(DevHubClientOptions(client_id="admin-client"))
+
+definition = AppDefinition(
+    app_id="sample.app",
+    display_name="Sample App",
+    launch=LaunchConfiguration(
+        exe_path="python3",
+        args_template="app.py",
+    ),
+)
+
+validation = client.validate_definition(definition)
+if validation.valid:
+    client.upsert_definition(definition)
+
+instance = client.register_instance(
+    AppInstanceRegistration(
+        instance_id="sample-inst-1",
+        app_id="sample.app",
+        pid=12345,
+        invoke=InvokeCapability(poll=True, respond=True),
+    ),
+    password="sample-instance-secret",
+)
+
+client.unregister_instance(instance.instance_id, "sample-instance-secret")
+client.delete_definition(definition.app_id)
 ```
 
 ## 高级扩展
@@ -85,7 +129,8 @@ events_client = await DevHubEventsClient.from_runtime(
 
 - `runtime_resolver` 负责把 `DevHubClientOptions` 解析成 `RuntimeConnectionInfo`
 - `transport_factory` 负责基于 `options + connection_info` 创建 HTTP transport
-- `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session
+- `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session；该 session 只负责连接建立、请求发送、响应关联与原始 `hub.event.params` 读取
+- `DevHubEventsClient` 负责把原始 `hub.event.params` 解析为 `DevHubEvent`，并复用与 HTTP 客户端相同的参数 builder
 
 公开事件类型模型使用 `DevHubEventType` 闭集，并同步导出 `SUPPORTED_EVENT_TYPES`、`ALL_EVENT_TYPES` 与 `ensure_supported_event_type(...)`，便于在调用侧提前完成订阅入参校验。
 
@@ -96,9 +141,9 @@ events_client = await DevHubEventsClient.from_runtime(
 这意味着：
 
 - SDK 集成测试不会连接开发机默认数据根目录下的常驻 Hub。
-- SDK 集成测试会把可用的 Host 程序复制到自己的临时目录后再启动；但在当前机器尚无可用 Host 输出时，仍可能先触发一次对 `host/src/DevHub.Host` 的构建。
-- 因此，“临时 Host + 独立数据根目录”只说明运行时状态彼此隔离，并不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行；若多个测试进程同时触发 Host 构建，仍可能出现文件锁冲突。
-- 如果需要并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发 Host 构建。
+- SDK 集成测试在未指定预构建 Host 程序时，会把 Host 构建到自己的临时输出目录，再从该隔离产物启动 Host。
+- 因此，“临时 Host + 独立数据根目录”说明运行时状态与默认构建产物都尽量彼此隔离，但仍不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行。
+- 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 Python SDK，也可以改用 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
 
 ## 验证命令
@@ -117,10 +162,18 @@ python3 -m pytest tests/integration
 python3 host/tests/blackbox/test_runner.py --smoke --no-header
 ```
 
-请先在另一个终端启动本地 Hub：
+这条命令会默认先构建一次仓库内 `DevHub.Host`，再自启一个隔离临时 Host，并在测试完成后自动清理。
+
+如果需要改为连接外部已启动的 Host，可在另一个终端启动本地 Hub：
 
 ```bash
 dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
-原因：仓库级 `smoke` 默认针对“已启动的本地 Hub”执行；这和上面的 SDK 集成测试模式不同。若本地 Hub 未启动，测试可能会读取到默认数据根目录中的历史残留 `hub.json`，从而出现 `Connection refused`。
+然后执行：
+
+```bash
+python3 host/tests/blackbox/test_runner.py --smoke --no-header --use-existing-host --no-build-host
+```
+
+这种仓库级 blackbox smoke 运行方式与上面的 SDK 集成测试模式不同：SDK 集成测试始终自管临时 Host，而仓库级 blackbox smoke 既支持自启隔离 Host，也支持显式复用外部 Hub。

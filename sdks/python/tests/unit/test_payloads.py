@@ -2,15 +2,30 @@ from __future__ import annotations
 
 import pytest
 
-from devhub_sdk import DevHubCalleeError, InvokeCapability, InvocationOptions, InvocationTarget
+from devhub_sdk import (
+    AppCapabilities,
+    AppDefinition,
+    DevHubCalleeError,
+    InvokeCapability,
+    InvocationOptions,
+    InvocationTarget,
+    LaunchConfiguration,
+)
 from devhub_sdk._payloads import (
+    build_get_definition_params,
+    build_list_instances_params,
+    build_ping_params,
+    build_delete_definition_params,
     build_notify_params,
     build_poll_params,
     build_register_instance_params,
     build_request_params,
     build_respond_params,
+    build_unregister_params,
+    build_upsert_definition_params,
+    build_validate_definition_params,
 )
-from devhub_sdk.models import AppInstanceRegistration, InvokeRequest, PollRequest, RespondRequest
+from devhub_sdk.models import AppInstanceRegistration, InvokeRequest, ListInstancesRequest, PollRequest, RespondRequest
 
 
 def test_M5_PY_UT_004_notify_builder_should_apply_default_options() -> None:
@@ -21,6 +36,16 @@ def test_M5_PY_UT_004_notify_builder_should_apply_default_options() -> None:
     assert payload["options"]["autoLaunch"] is True
     assert "args" not in payload
     assert "target" not in payload
+
+
+def test_M6_PY_UT_004_ping_builder_should_preserve_explicit_null_and_omit_unset() -> None:
+    assert build_ping_params() is None
+    assert build_ping_params(None) == {"echo": None}
+
+
+def test_M6_PY_UT_004_ping_builder_when_echo_contains_non_finite_number_should_raise() -> None:
+    with pytest.raises(ValueError, match="echo.value 必须为有限数字"):
+        build_ping_params({"value": float("nan")})
 
 
 def test_M5_PY_UT_004_request_builder_should_apply_default_options() -> None:
@@ -109,6 +134,86 @@ def test_M5_PY_UT_004_poll_builder_should_apply_defaults() -> None:
     assert payload["waitMs"] == 25000
 
 
+def test_M6_PY_UT_004_definition_builder_should_preserve_supported_fields() -> None:
+    payload = build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            description="用于测试。",
+            capabilities=AppCapabilities(rpc=False, events=True),
+            launch=LaunchConfiguration(
+                exe_path="python",
+                args_template="-m app",
+                working_directory="/tmp",
+                dedupe_key_template="test.app",
+            ),
+        )
+    )
+
+    assert payload == {
+        "definition": {
+            "appId": "test.app",
+            "displayName": "Test App",
+            "description": "用于测试。",
+            "capabilities": {
+                "rpc": False,
+                "events": True,
+            },
+            "launch": {
+                "exePath": "python",
+                "argsTemplate": "-m app",
+                "workingDirectory": "/tmp",
+                "dedupeKeyTemplate": "test.app",
+            },
+        }
+    }
+
+
+def test_M6_PY_UT_004_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_validate_definition_params(AppDefinition(app_id="Test.App", display_name="Broken"))
+
+
+def test_M6_PY_UT_004_delete_definition_builder_should_validate_app_id() -> None:
+    assert build_delete_definition_params("test.app") == {"appId": "test.app"}
+
+    with pytest.raises(ValueError):
+        build_delete_definition_params("Test.App")
+
+
+def test_M6_PY_UT_004_get_definition_builder_should_validate_app_id() -> None:
+    assert build_get_definition_params("test.app") == {"appId": "test.app"}
+
+    with pytest.raises(ValueError):
+        build_get_definition_params("Test.App")
+
+
+def test_M6_PY_UT_004_list_instances_builder_should_share_filter_validation_rules() -> None:
+    assert build_list_instances_params(ListInstancesRequest(app_id="test.app", include_offline=True)) == {
+        "appId": "test.app",
+        "includeOffline": True,
+    }
+
+    with pytest.raises(ValueError):
+        build_list_instances_params(ListInstancesRequest(app_id="Test.App"))
+
+
+def test_M6_PY_UT_004_register_instance_builder_should_place_password_at_top_level() -> None:
+    payload = build_register_instance_params(
+        AppInstanceRegistration(
+            instance_id="inst-1",
+            app_id="test.app",
+            pid=1234,
+            invoke=InvokeCapability(poll=True, respond=True),
+        ),
+        "secret-1",
+    )
+
+    assert payload["password"] == "secret-1"
+    assert payload["instance"]["instanceId"] == "inst-1"
+    assert "password" not in payload["instance"]
+
+
 def test_M5_PY_UT_004_register_instance_builder_when_meta_is_not_object_should_raise() -> None:
     with pytest.raises(ValueError):
         build_register_instance_params(
@@ -118,7 +223,8 @@ def test_M5_PY_UT_004_register_instance_builder_when_meta_is_not_object_should_r
                 pid=1234,
                 invoke=InvokeCapability(poll=True, respond=True),
                 meta=[1, 2, 3],
-            )
+            ),
+            "secret-1",
         )
 
 
@@ -131,7 +237,8 @@ def test_M5_PY_UT_004_register_instance_builder_when_meta_contains_non_finite_nu
                 pid=1234,
                 invoke=InvokeCapability(poll=True, respond=True),
                 meta={"value": float("nan")},
-            )
+            ),
+            "secret-1",
         )
 
 
@@ -143,7 +250,8 @@ def test_M5_PY_UT_004_register_instance_builder_when_invoke_poll_is_not_bool_sho
                 app_id="test.app",
                 pid=1234,
                 invoke=InvokeCapability(poll="true", respond=True),  # type: ignore[arg-type]
-            )
+            ),
+            "secret-1",
         )
 
 
@@ -155,8 +263,14 @@ def test_M5_PY_UT_004_register_instance_builder_when_instance_id_violates_spec_s
                 app_id="test.app",
                 pid=1234,
                 invoke=InvokeCapability(poll=True, respond=True),
-            )
+            ),
+            "secret-1",
         )
+
+
+def test_M6_PY_UT_004_unregister_builder_when_password_missing_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_unregister_params("inst-1", "  ")
 
 
 def test_M5_PY_UT_004_respond_builder_when_error_message_missing_should_raise() -> None:

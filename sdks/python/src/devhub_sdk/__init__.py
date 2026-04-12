@@ -2,6 +2,8 @@ from .client import DevHubClient, DevHubClientDependencies
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from .constants import (
     ALL_EVENT_TYPES,
+    APP_DEFINITION_DELETED,
+    APP_DEFINITION_UPSERTED,
     APP_INSTANCE_REGISTERED,
     APP_INSTANCE_UNREGISTERED,
     DevHubEventType,
@@ -20,6 +22,7 @@ from .models import (
     AppDefinition,
     AppInstance,
     AppInstanceRegistration,
+    DefinitionValidationResult,
     DevHubCalleeError,
     DevHubClientOptions,
     DevHubEvent,
@@ -44,6 +47,7 @@ from .models import (
     RequestResult,
     RespondRequest,
     RuntimeConnectionInfo,
+    ValidationIssue,
 )
 from .runtime import (
     FileSystemRuntimeResolver,
@@ -54,12 +58,15 @@ from .runtime import (
 
 __all__ = [
     "ALL_EVENT_TYPES",
+    "APP_DEFINITION_DELETED",
+    "APP_DEFINITION_UPSERTED",
     "APP_INSTANCE_REGISTERED",
     "APP_INSTANCE_UNREGISTERED",
     "AppCapabilities",
     "AppDefinition",
     "AppInstance",
     "AppInstanceRegistration",
+    "DefinitionValidationResult",
     "DevHubCalleeError",
     "DevHubClient",
     "DevHubClientDependencies",
@@ -101,6 +108,7 @@ __all__ = [
     "RuntimeConnectionInfo",
     "SUPPORTED_EVENT_TYPES",
     "UrllibJsonRpcHttpTransport",
+    "ValidationIssue",
     "WebSocketJsonRpcSession",
     "discover_runtime",
     "ensure_supported_event_type",

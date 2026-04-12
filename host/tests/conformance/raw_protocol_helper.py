@@ -17,6 +17,7 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
     register_instance,
     require_mapping,
     require_optional_list,
+    require_optional_string,
     require_string,
 )
 
@@ -105,10 +106,12 @@ class RawProtocolHelper:
     def _run_step(self, phase: str, index: int, action: str, step: dict[str, Any]) -> None:
         if action == "register_instance":
             instance = require_mapping(step.get("instance"), f"orchestration.{phase}[{index}].instance")
+            password = require_optional_string(step.get("password"), f"orchestration.{phase}[{index}].password")
             register_instance(
                 self._host_context,
                 self._cleanup_ledger,
                 instance,
+                password=password,
                 request_id=f"{self._vector_id}-{phase}-{index}",
                 error_path=f"orchestration.{phase}[{index}]",
             )

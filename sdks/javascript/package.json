@@ -1,7 +1,7 @@
 {
   "name": "@devhub/sdk",
   "version": "0.6.0",
-  "description": "DevHub 协议 JavaScript/TypeScript SDK",
+  "description": "DevHub 协议 JavaScript/TypeScript SDK（Node.js 20+ 与浏览器/WebView）",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
     }
   },
   "files": [
@@ -30,7 +34,7 @@
     "vitest": "^2.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "ws": "^8.19.0"

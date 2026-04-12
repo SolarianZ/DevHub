@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
+    DEFAULT_INSTANCE_PASSWORD,
     TEST_HUB_ENV_JSON_ENV_VAR,
     RpcClient,
     start_isolated_hub_process,
@@ -63,14 +64,14 @@ class CleanupLedger:
 
     vector_temp_dir: Path
     definition_paths: list[Path] = field(default_factory=list)
-    registered_instance_ids: list[str] = field(default_factory=list)
+    registered_instances: list[tuple[str, str]] = field(default_factory=list)
 
     def cleanup(self, host_context: HostRuntimeContext) -> None:
         client = host_context.create_rpc_client()
 
-        for instance_id in reversed(self.registered_instance_ids):
+        for instance_id, password in reversed(self.registered_instances):
             try:
-                client.unregister_instance(instance_id)
+                client.unregister_instance(instance_id, password=password)
             except Exception:
                 pass
 
@@ -387,11 +388,19 @@ def apply_instances_setup(
         instance_setup = require_mapping(item, f"setup.instances[{index}]")
         state = require_string(instance_setup.get("state"), f"setup.instances[{index}].state")
         instance = require_mapping(instance_setup.get("instance"), f"setup.instances[{index}].instance")
+        password = require_optional_string(instance_setup.get("password"), f"setup.instances[{index}].password")
 
         if state not in {"registered", "offline"}:
             raise ValueError(f"setup.instances[{index}].state 不支持：{state}")
 
-        register_instance(host_context, ledger, instance, request_id=f"setup-instance-{index}", error_path=f"setup.instances[{index}]")
+        register_instance(
+            host_context,
+            ledger,
+            instance,
+            password=password,
+            request_id=f"setup-instance-{index}",
+            error_path=f"setup.instances[{index}]",
+        )
         if state == "offline":
             wait_seconds = require_positive_number(instance_setup.get("waitSeconds"), f"setup.instances[{index}].waitSeconds")
             time.sleep(wait_seconds)
@@ -402,16 +411,21 @@ def register_instance(
     ledger: CleanupLedger,
     instance: dict[str, Any],
     *,
+    password: str | None = None,
     request_id: str,
     error_path: str,
 ) -> None:
     """注册实例并记录到清理账本。"""
 
     instance_id = require_string(instance.get("instanceId"), f"{error_path}.instance.instanceId")
+    resolved_password = password or DEFAULT_INSTANCE_PASSWORD
     client = host_context.create_rpc_client()
     response = client.call(
         "hub.apps.registerInstance",
-        {"instance": instance},
+        {
+            "password": resolved_password,
+            "instance": instance,
+        },
         request_id=request_id,
     )
     error = response.get("error")
@@ -424,7 +438,7 @@ def register_instance(
     if not isinstance(result, dict) or result.get("ok") is not True:
         raise RuntimeError(f"{error_path} 预置失败：响应缺少 result.ok=true。")
 
-    ledger.registered_instance_ids.append(instance_id)
+    ledger.registered_instances.append((instance_id, resolved_password))
 
 
 def build_file_content(
@@ -497,6 +511,14 @@ def require_string(value: Any, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{path} 必须为非空字符串。")
     return value
+
+
+def require_optional_string(value: Any, path: str) -> str | None:
+    """断言值为可选非空字符串。"""
+
+    if value is None:
+        return None
+    return require_string(value, path)
 
 
 def require_positive_number(value: Any, path: str) -> float:

@@ -5,11 +5,13 @@
 说明：
 - 通过 line/condition 级别 key 做去重合并，避免不同测试项目重复统计同一行。
 - 条件分支优先读取 <condition> 明细；若缺失则回退 condition-coverage 汇总值。
+- 当 `trx` 附件目录与 GUID 目录下存在内容完全相同的 Cobertura 报告时，优先保留附件副本作为校验输入，并忽略冗余镜像副本。
 """
 
 import argparse
 from collections import defaultdict
 import glob
+import hashlib
 import os
 import re
 import sys
@@ -21,7 +23,54 @@ CONDITION_COVERAGE_PATTERN = re.compile(r".*\((\d+)/(\d+)\)")
 
 def discover_coverage_files(root_dir):
     pattern = os.path.join(root_dir, "host", "**", "TestResults", "**", "coverage.cobertura.xml")
-    return sorted(set(glob.glob(pattern, recursive=True)))
+    raw_files = sorted(set(glob.glob(pattern, recursive=True)))
+    groups = defaultdict(list)
+
+    for file_path in raw_files:
+        group_key = (get_test_results_root(file_path), hash_file(file_path))
+        groups[group_key].append(file_path)
+
+    selected_files = []
+    ignored_files = []
+
+    for group_paths in groups.values():
+        preferred_file = choose_preferred_coverage_file(group_paths)
+        selected_files.append(preferred_file)
+        ignored_files.extend(sorted(path for path in group_paths if path != preferred_file))
+
+    return sorted(selected_files), sorted(ignored_files)
+
+
+def get_test_results_root(file_path):
+    normalized_path = os.path.normpath(file_path)
+    marker = f"{os.sep}TestResults{os.sep}"
+    if marker not in normalized_path:
+        return os.path.dirname(normalized_path)
+
+    prefix, _ = normalized_path.split(marker, 1)
+    return f"{prefix}{os.sep}TestResults"
+
+
+def hash_file(file_path):
+    hasher = hashlib.sha1()
+    with open(file_path, "rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def choose_preferred_coverage_file(group_paths):
+    in_paths = [path for path in group_paths if is_trx_attachment_copy(path)]
+    preferred_pool = in_paths or group_paths
+    return sorted(preferred_pool)[0]
+
+
+def is_trx_attachment_copy(file_path):
+    normalized_path = file_path.replace("\\", "/")
+    return "/In/" in normalized_path
 
 
 def parse_percent(text):
@@ -191,7 +240,7 @@ def main():
     parser.add_argument("--branch-threshold", type=float, required=True, help="分支覆盖率阈值（0~1）")
     args = parser.parse_args()
 
-    coverage_files = discover_coverage_files(args.root)
+    coverage_files, ignored_files = discover_coverage_files(args.root)
     if not coverage_files:
         print("ERROR: coverage.cobertura.xml files not found.")
         return 1
@@ -199,6 +248,10 @@ def main():
     print("Discovered coverage files:")
     for file_path in coverage_files:
         print(f"- {file_path}")
+    if ignored_files:
+        print("Ignored redundant duplicate coverage files:")
+        for file_path in ignored_files:
+            print(f"- {file_path}")
 
     merged_line_total = set()
     merged_line_covered = set()

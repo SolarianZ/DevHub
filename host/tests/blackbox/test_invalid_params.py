@@ -111,6 +111,40 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_register_instance_missing_password(self):
+        """测试 hub.apps.registerInstance 缺少顶层 password 参数"""
+        result = TestResult("测试 hub.apps.registerInstance 缺少顶层 password 参数")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            _, response = client.post_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "missing-password-register",
+                    "method": "hub.apps.registerInstance",
+                    "params": {
+                        "instance": {
+                            "instanceId": "missing-password-register-instance",
+                            "appId": "missing.password.register.app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True},
+                        }
+                    },
+                },
+                headers=client.headers,
+                timeout=30,
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="missing-password-register"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_apps_register_instance_missing_required_fields(self):
         """测试 hub.apps.registerInstance instance 缺少必填字段"""
         result = TestResult("测试 hub.apps.registerInstance instance 缺少必填字段")
@@ -529,6 +563,35 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_unregister_instance_missing_password(self):
+        """测试 hub.apps.unregisterInstance 缺少顶层 password 参数"""
+        result = TestResult("测试 hub.apps.unregisterInstance 缺少顶层 password 参数")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            _, response = client.post_json(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "missing-password-unregister",
+                    "method": "hub.apps.unregisterInstance",
+                    "params": {
+                        "instanceId": "missing-password-unregister-instance",
+                    },
+                },
+                headers=client.headers,
+                timeout=30,
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="missing-password-unregister"):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_apps_list_instances_invalid_params(self):
         """测试 hub.apps.listInstances 关键参数类型校验"""
         result = TestResult("测试 hub.apps.listInstances 关键参数类型校验")
@@ -564,6 +627,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_get_definition_missing_appid(),
             self.test_hub_apps_get_definition_empty_appid(),
             self.test_hub_apps_register_instance_missing_instance(),
+            self.test_hub_apps_register_instance_missing_password(),
             self.test_hub_apps_register_instance_missing_required_fields(),
             self.test_hub_apps_register_instance_invalid_pid(),
             self.test_hub_apps_register_instance_invalid_instanceid(),
@@ -573,6 +637,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_register_instance_invalid_invoke(),
             self.test_hub_apps_heartbeat_invalid_instanceid(),
             self.test_hub_apps_unregister_instance_invalid_instanceid(),
+            self.test_hub_apps_unregister_instance_missing_password(),
             self.test_hub_apps_list_instances_invalid_params()
         ]
 
