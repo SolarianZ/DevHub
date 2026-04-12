@@ -1,6 +1,7 @@
 ﻿using System;
 using UnityEditor;
 
+// 必须兼容Unity 2019！
 namespace DevHub.Editor
 {
     // 仅作为示例，根据实际需求调整
