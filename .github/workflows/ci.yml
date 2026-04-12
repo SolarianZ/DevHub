@@ -9,6 +9,7 @@ on:
     paths:
       - "eng/**"
       - "host/**"
+      - "apps/**"
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
@@ -17,6 +18,7 @@ on:
     paths:
       - "eng/**"
       - "host/**"
+      - "apps/**"
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
@@ -238,6 +240,57 @@ jobs:
         env:
           DEVHUB_JS_SDK_HOST_ASSEMBLY: ${{ github.workspace }}/host/src/DevHub.Host/bin/Release/net10.0/DevHub.Host.dll
         run: npm --prefix sdks/javascript test
+
+  monitor-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            apps/monitor/package-lock.json
+            sdks/javascript/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install JavaScript SDK dependencies
+        run: npm --prefix sdks/javascript ci
+
+      - name: Install Monitor dependencies
+        run: npm --prefix apps/monitor ci
+
+      - name: Build Monitor frontend
+        run: npm --prefix apps/monitor run build:web
+
+      - name: Run Monitor frontend tests
+        run: npm --prefix apps/monitor test
+
+      - name: Run Monitor native tests
+        run: npm --prefix apps/monitor run test:native
+
+      - name: Run Monitor native checks
+        run: npm --prefix apps/monitor run tauri:check
 
   sdk-python-tests:
     runs-on: ubuntu-latest

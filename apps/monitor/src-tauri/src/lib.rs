@@ -37,6 +37,13 @@ impl CommandError {
 
 type CommandResult<T> = std::result::Result<T, CommandError>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayMenuAction {
+    ShowMainWindow,
+    Quit,
+    Ignore,
+}
+
 #[tauri::command]
 async fn monitor_get_bootstrap_state(
     state: State<'_, MonitorCore>,
@@ -136,7 +143,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.app_handle().state::<MonitorCore>();
-                if state.should_exit() {
+                if !should_hide_window_on_close(state.should_exit()) {
                     return;
                 }
 
@@ -181,17 +188,19 @@ fn create_tray(app: &mut tauri::App) -> Result<()> {
     TrayIconBuilder::with_id("devhub-monitor-tray")
         .icon(icon)
         .menu(&menu)
-        .on_menu_event(|app_handle, event| match event.id().as_ref() {
-            "show_main_window" => {
-                let _ = show_main_window(app_handle);
-            }
-            "quit_monitor" => {
-                let state = app_handle.state::<MonitorCore>();
-                state.request_exit();
-                app_handle.exit(0);
-            }
-            _ => {}
-        })
+        .on_menu_event(
+            |app_handle, event| match tray_menu_action_from_id(event.id().as_ref()) {
+                TrayMenuAction::ShowMainWindow => {
+                    let _ = show_main_window(app_handle);
+                }
+                TrayMenuAction::Quit => {
+                    let state = app_handle.state::<MonitorCore>();
+                    state.request_exit();
+                    app_handle.exit(0);
+                }
+                TrayMenuAction::Ignore => {}
+            },
+        )
         .build(app)
         .context("无法创建系统托盘。")?;
 
@@ -206,6 +215,18 @@ fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
     }
 
     Ok(())
+}
+
+fn should_hide_window_on_close(exit_requested: bool) -> bool {
+    !exit_requested
+}
+
+fn tray_menu_action_from_id(id: &str) -> TrayMenuAction {
+    match id {
+        "show_main_window" => TrayMenuAction::ShowMainWindow,
+        "quit_monitor" => TrayMenuAction::Quit,
+        _ => TrayMenuAction::Ignore,
+    }
 }
 
 fn validate_required_text(value: &str, field: &str, max_length: usize) -> CommandResult<()> {
@@ -241,4 +262,28 @@ fn validate_optional_text(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{should_hide_window_on_close, tray_menu_action_from_id, TrayMenuAction};
+
+    #[test]
+    fn should_hide_window_when_close_requested_without_exit_flag() {
+        assert!(should_hide_window_on_close(false));
+        assert!(!should_hide_window_on_close(true));
+    }
+
+    #[test]
+    fn tray_menu_ids_map_to_expected_actions() {
+        assert_eq!(
+            tray_menu_action_from_id("show_main_window"),
+            TrayMenuAction::ShowMainWindow
+        );
+        assert_eq!(
+            tray_menu_action_from_id("quit_monitor"),
+            TrayMenuAction::Quit
+        );
+        assert_eq!(tray_menu_action_from_id("unknown"), TrayMenuAction::Ignore);
+    }
 }

@@ -191,3 +191,87 @@ fn user_home_directory() -> Option<PathBuf> {
         .filter(|value| !value.trim().is_empty())
         .map(PathBuf::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_effective_data_dir, SettingsStore};
+    use crate::models::{DataDirSource, MonitorSettings, DEVHUB_DATA_DIR_ENV};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn create_temp_directory(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("devhub-monitor-{name}-{suffix}"));
+        fs::create_dir_all(&directory).expect("failed to create temp directory");
+        directory
+    }
+
+    #[test]
+    fn resolve_effective_data_dir_prefers_settings_override_over_environment() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        unsafe {
+            std::env::set_var(DEVHUB_DATA_DIR_ENV, "/tmp/from-env");
+        }
+
+        let resolved = resolve_effective_data_dir(&MonitorSettings {
+            data_dir_override: Some("./override".to_string()),
+            host_executable_path: None,
+        });
+
+        assert!(matches!(resolved.source, DataDirSource::SettingsOverride));
+        assert!(resolved.path.ends_with("/override"));
+
+        unsafe {
+            std::env::remove_var(DEVHUB_DATA_DIR_ENV);
+        }
+    }
+
+    #[test]
+    fn settings_store_save_normalizes_paths_and_updates_snapshot() {
+        let temp_directory = create_temp_directory("settings");
+        let settings_file = temp_directory.join("settings.json");
+        let log_directory = temp_directory.join("monitor-logs");
+        fs::create_dir_all(&log_directory).expect("failed to create log directory");
+
+        let store = SettingsStore::load(settings_file.clone()).expect("failed to load store");
+        let saved = store
+            .save(MonitorSettings {
+                data_dir_override: Some("./runtime-data".to_string()),
+                host_executable_path: Some("./host/bin/DevHub.Host".to_string()),
+            })
+            .expect("failed to save settings");
+
+        assert!(saved
+            .data_dir_override
+            .expect("missing data dir override")
+            .ends_with("/runtime-data"));
+        assert!(saved
+            .host_executable_path
+            .expect("missing host executable path")
+            .ends_with("/host/bin/DevHub.Host"));
+
+        let snapshot = store.snapshot(&super::MonitorPaths {
+            settings_file: settings_file.clone(),
+            monitor_log_directory: log_directory.clone(),
+        });
+
+        assert_eq!(
+            snapshot.settings_file_path,
+            settings_file.display().to_string()
+        );
+        assert_eq!(
+            snapshot.monitor_log_directory,
+            log_directory.display().to_string()
+        );
+        assert!(snapshot.effective_data_dir.ends_with("/runtime-data"));
+
+        fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
+    }
+}

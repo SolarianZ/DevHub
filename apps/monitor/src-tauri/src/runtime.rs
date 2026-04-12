@@ -208,3 +208,72 @@ fn validate_runtime_url(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{discover_runtime, port_from_runtime};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_temp_directory(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("devhub-monitor-{name}-{suffix}"));
+        fs::create_dir_all(&directory).expect("failed to create temp directory");
+        directory
+    }
+
+    #[test]
+    fn discover_runtime_reads_valid_runtime_layout() {
+        let data_directory = create_temp_directory("runtime-valid");
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        let token_path = runtime_directory.join("token.txt");
+        fs::write(&token_path, "secret-token\n").expect("failed to write token");
+        fs::write(
+            runtime_directory.join("hub.json"),
+            format!(
+                r#"{{
+  "protocolVersion": 1,
+  "pid": 4321,
+  "httpBaseUrl": "http://127.0.0.1:4123",
+  "wsUrl": "ws://127.0.0.1:4123/ws",
+  "tokenFile": "{}",
+  "startedAtUtc": "2026-04-12T00:00:00Z",
+  "runtimeTuning": {{
+    "leaseSeconds": 30,
+    "onlineThresholdSeconds": 15,
+    "launchDedupeWindowSeconds": 5
+  }},
+  "hubVersion": "0.6.0"
+}}"#,
+                token_path.display()
+            ),
+        )
+        .expect("failed to write hub.json");
+
+        let connection = discover_runtime(&data_directory).expect("expected runtime discovery");
+
+        assert_eq!(connection.token, "secret-token");
+        assert_eq!(connection.rpc_endpoint, "http://127.0.0.1:4123/rpc");
+        assert_eq!(port_from_runtime(&connection), Some(4123));
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn discover_runtime_rejects_legacy_runtime_root_layout() {
+        let data_directory = create_temp_directory("runtime-legacy");
+        fs::write(data_directory.join("hub.json"), "{}").expect("failed to write legacy hub.json");
+
+        let error = discover_runtime(&data_directory).expect_err("expected legacy layout error");
+        assert!(error
+            .to_string()
+            .contains("DEVHUB_DATA_DIR 必须指向数据根目录"));
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+}

@@ -164,3 +164,81 @@ fn resolve_log_path(base_directory: &Path, file_name: &str) -> Result<PathBuf> {
 
     Ok(resolved)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{list_log_files, read_log_file, LogKind, MonitorLogService, MAX_LOG_READ_BYTES};
+    use crate::models::{MonitorLogLevel, MonitorStructuredLogRecord};
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_temp_directory(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("devhub-monitor-{name}-{suffix}"));
+        fs::create_dir_all(&directory).expect("failed to create temp directory");
+        directory
+    }
+
+    #[test]
+    fn log_service_writes_and_lists_monitor_logs() {
+        let log_directory = create_temp_directory("logs");
+        let service = MonitorLogService::new(log_directory.clone())
+            .expect("failed to initialize log service");
+
+        service
+            .record(MonitorStructuredLogRecord {
+                timestamp_utc: "2026-04-12T00:00:00Z".to_string(),
+                level: MonitorLogLevel::Info,
+                category: "test".to_string(),
+                action: "record".to_string(),
+                result: "ok".to_string(),
+                message: Some("Monitor log entry".to_string()),
+                data_dir: Some("/tmp/devhub".to_string()),
+                host_pid: Some(1234),
+                port: Some(4123),
+                app_id: Some("demo.app".to_string()),
+                instance_id: Some("instance-1".to_string()),
+                error_code: None,
+                context: Some(
+                    [("reason".to_string(), json!("unit-test"))]
+                        .into_iter()
+                        .collect(),
+                ),
+            })
+            .expect("failed to record log");
+
+        let files = list_log_files(&log_directory, LogKind::Monitor).expect("failed to list logs");
+        assert_eq!(files.len(), 1);
+        let contents = read_log_file(&log_directory, LogKind::Monitor, &files[0].name)
+            .expect("failed to read log");
+
+        assert!(!contents.truncated);
+        assert!(contents.contents.contains("\"category\":\"test\""));
+
+        fs::remove_dir_all(log_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn read_log_file_truncates_large_payloads_and_rejects_path_escape() {
+        let log_directory = create_temp_directory("large-log");
+        let file_name = "host-large.log";
+        let payload = "a".repeat(MAX_LOG_READ_BYTES as usize + 128);
+        fs::write(log_directory.join(file_name), payload).expect("failed to write log payload");
+
+        let read_result =
+            read_log_file(&log_directory, LogKind::Host, file_name).expect("failed to read log");
+        assert!(read_result.truncated);
+        assert_eq!(read_result.contents.len(), MAX_LOG_READ_BYTES as usize);
+
+        let error =
+            read_log_file(&log_directory, LogKind::Host, "../escape.log").expect_err("expected");
+        assert!(error.to_string().contains("日志文件名非法"));
+
+        fs::remove_dir_all(log_directory).expect("failed to clean temp directory");
+    }
+}

@@ -6,6 +6,7 @@
 
 - [`host-quickstart.md`](./host-quickstart.md)：Host 快速上手、运行时发现、最小 `hub.ping` 验证与后续路径导航。
 - [`../../operations/部署与运行指南.md`](../../operations/部署与运行指南.md)：部署、发布、运行时数据目录和上线后检查项。
+- [`../../../apps/monitor/README.md`](../../../apps/monitor/README.md)：桌面 GUI 方式查看 Host 状态、定义、实例与日志。
 - [`../../spec/Spec.md`](../../spec/Spec.md)：`hub.json`、`tokenFile` 与公开协议行为的权威来源。
 - [`../sdk/README.md`](../sdk/README.md)：官方 SDK 接入入口。
 - [`../无SDK接入指南.md`](../无SDK接入指南.md)：不依赖官方 SDK 的原始协议接入路径。

@@ -347,15 +347,14 @@ impl MonitorCore {
                 Err(error) => error.to_string(),
             };
 
-            if !announced_launch_action && started_at.elapsed() >= LAUNCH_ACTION_DELAY {
+            if should_transition_to_launch_available(started_at.elapsed(), announced_launch_action)
+            {
                 announced_launch_action = true;
-                let snapshot = build_snapshot(
+                let snapshot = build_launch_available_snapshot(
                     generation,
-                    BootstrapPhase::LaunchAvailable,
                     settings,
                     resolved.clone(),
-                    None,
-                    Some(problem("host_unavailable", last_failure.clone())),
+                    last_failure.clone(),
                 );
                 self.publish_snapshot(&app, snapshot);
                 self.record_backend_log(
@@ -467,6 +466,26 @@ fn build_snapshot(
     }
 }
 
+fn should_transition_to_launch_available(elapsed: Duration, announced_launch_action: bool) -> bool {
+    !announced_launch_action && elapsed >= LAUNCH_ACTION_DELAY
+}
+
+fn build_launch_available_snapshot(
+    generation: u64,
+    settings: MonitorSettings,
+    resolved: crate::models::ResolvedDataDir,
+    last_failure: String,
+) -> BootstrapSnapshot {
+    build_snapshot(
+        generation,
+        BootstrapPhase::LaunchAvailable,
+        settings,
+        resolved,
+        None,
+        Some(problem("host_unavailable", last_failure)),
+    )
+}
+
 fn problem(code: impl Into<String>, message: impl Into<String>) -> MonitorProblem {
     MonitorProblem {
         code: code.into(),
@@ -479,4 +498,52 @@ fn json_map(entries: Vec<(&str, Value)>) -> Map<String, Value> {
         .into_iter()
         .map(|(key, value)| (key.to_string(), value))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_launch_available_snapshot, should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
+    };
+    use crate::models::{BootstrapPhase, DataDirSource, MonitorSettings, ResolvedDataDir};
+    use std::time::Duration;
+
+    #[test]
+    fn launch_action_becomes_available_after_delay() {
+        assert!(!should_transition_to_launch_available(
+            LAUNCH_ACTION_DELAY.saturating_sub(Duration::from_millis(1)),
+            false
+        ));
+        assert!(should_transition_to_launch_available(
+            LAUNCH_ACTION_DELAY,
+            false
+        ));
+        assert!(!should_transition_to_launch_available(
+            LAUNCH_ACTION_DELAY + Duration::from_secs(1),
+            true
+        ));
+    }
+
+    #[test]
+    fn launch_available_snapshot_carries_failure_context() {
+        let snapshot = build_launch_available_snapshot(
+            7,
+            MonitorSettings {
+                data_dir_override: Some("/tmp/devhub".to_string()),
+                host_executable_path: None,
+            },
+            ResolvedDataDir {
+                path: "/tmp/devhub".to_string(),
+                source: DataDirSource::SettingsOverride,
+            },
+            "hub.ping failed".to_string(),
+        );
+
+        assert!(matches!(snapshot.phase, BootstrapPhase::LaunchAvailable));
+        assert_eq!(snapshot.generation, 7);
+        assert_eq!(snapshot.effective_data_dir, "/tmp/devhub");
+        let problem = snapshot.last_problem.expect("expected last problem");
+        assert_eq!(problem.code, "host_unavailable");
+        assert_eq!(problem.message, "hub.ping failed");
+    }
 }

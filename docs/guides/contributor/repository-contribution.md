@@ -21,6 +21,12 @@
 3. 修改完成后，执行与 GitHub CI 一致的最小相关验证。
 4. 提交前同步更新 README、导航文档和必要的维护说明。
 
+`DevHub Monitor` 的额外开发约束：
+
+- 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
+- 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/guides/开发指南.md` 与运维文档是否一致。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信入口固定通过 `@devhub/sdk`。
+
 `JS/TS SDK` 的额外开发约束：
 
 - `@devhub/sdk` 根入口必须保持可在 `Node.js 20+` 与浏览器 / WebView 中直接导入；根入口可达模块不得重新引入顶层 `node:*`、`ws` 或其他 Node.js 专有依赖。
@@ -50,6 +56,12 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - Host 多平台发布包、三套 SDK 包、manifest 与发布说明生成
 - 资产完整性检查
 
+若改动涉及 `apps/monitor/`，在运行该打包入口前额外执行：
+
+```bash
+npm --prefix apps/monitor run verify
+```
+
 ## 3. 根目录治理入口
 
 - [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：贡献方式、PR 要求和提交前检查。
@@ -62,3 +74,4 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - 官方 SDK 接入：[`../sdk/README.md`](../sdk/README.md)
 - 无 SDK 接入：[`../无SDK接入指南.md`](../无SDK接入指南.md)
 - 发布流程与资产：[`../../operations/publishing/README.md`](../../operations/publishing/README.md)
+- 桌面 Monitor 工作区：[`../../../apps/monitor/README.md`](../../../apps/monitor/README.md)

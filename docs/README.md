@@ -15,6 +15,12 @@
 - [`guides/getting-started/host-quickstart.md`](./guides/getting-started/host-quickstart.md)：前置条件、启动方式、`hub.json` / `tokenFile` 发现与最小 `hub.ping` 验证。
 - [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：当前可直接参考的部署、启动和数据根目录说明。
 
+### 桌面 Monitor
+
+- [`../apps/monitor/README.md`](../apps/monitor/README.md)：官方桌面 Monitor 工作区、本地运行方式、验证命令与能力边界。
+- [`operations/部署与运行指南.md`](./operations/部署与运行指南.md)：Host 与 Monitor 的本地启动、日志位置与运行数据说明。
+- [`operations/运维排障手册.md`](./operations/运维排障手册.md)：Host / Monitor 双日志视图与常见排障入口。
+
 ### SDK 接入
 
 - [`guides/sdk/README.md`](./guides/sdk/README.md)：官方 SDK 接入路径导航。
@@ -36,6 +42,7 @@
 - [`guides/开发指南.md`](./guides/开发指南.md)：当前开发环境、构建、运行与验证流程。
 - [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md)
 - [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md)
+- [`../apps/monitor/README.md`](../apps/monitor/README.md)
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
 - [`../CHANGELOG.md`](../CHANGELOG.md)
 - [`../SECURITY.md`](../SECURITY.md)
@@ -56,6 +63,7 @@
 - [`guides/getting-started/`](./guides/getting-started/)：面向 Host 新用户的上手入口。
 - [`guides/sdk/`](./guides/sdk/)：面向官方 SDK 使用者的接入入口。
 - [`guides/contributor/`](./guides/contributor/)：面向仓库维护者与贡献者的入口。
+- [`../apps/monitor/`](../apps/monitor/)：官方桌面 Monitor 工作区与其 README 入口。
 - [`guides/开发指南.md`](./guides/开发指南.md)：仓库开发流程。
 - [`guides/无SDK接入指南.md`](./guides/无SDK接入指南.md)：原始协议接入路径。
 - [`operations/publishing/`](./operations/publishing/)：发布准备、发布流程与发布维护入口。
