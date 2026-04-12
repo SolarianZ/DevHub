@@ -28,17 +28,17 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 
 ## 3. 选择入口
 
-- `@devhub/sdk`：双运行时根入口，可在 `Node.js 20+` 与浏览器 / WebView 中导入，提供客户端、事件客户端、传输抽象、错误类型、模型类型和运行时契约类型。
-- `@devhub/sdk/runtime`：Node.js 专用子路径，提供 `discoverRuntime`、`resolveDataDirectory` 与 `FileSystemRuntimeResolver` 等文件系统运行时发现辅助。
+- `@devhub/sdk-javascript`：双运行时根入口，可在 `Node.js 20+` 与浏览器 / WebView 中导入，提供客户端、事件客户端、传输抽象、错误类型、模型类型和运行时契约类型。
+- `@devhub/sdk-javascript/runtime`：Node.js 专用子路径，提供 `discoverRuntime`、`resolveDataDirectory` 与 `FileSystemRuntimeResolver` 等文件系统运行时发现辅助。
 - 浏览器 / WebView：连接 Host 时必须传入自定义 `runtimeResolver`，避免依赖 Node.js 文件系统发现。
-- Node.js：可直接使用 `DevHubClient.fromRuntime(...)` 的默认文件系统发现，也可在需要显式控制数据目录或运行时发现时导入 `@devhub/sdk/runtime`。
+- Node.js：可直接使用 `DevHubClient.fromRuntime(...)` 的默认文件系统发现，也可在需要显式控制数据目录或运行时发现时导入 `@devhub/sdk-javascript/runtime`。
 
 ## 4. 连接 Host
 
 Node.js 20+ 最小示例：
 
 ```ts
-import { DevHubClient } from "@devhub/sdk";
+import { DevHubClient } from "@devhub/sdk-javascript";
 
 const client = await DevHubClient.fromRuntime({
   clientId: "quickstart-js"
@@ -55,7 +55,7 @@ import {
   DevHubClient,
   type RuntimeConnectionInfo,
   type RuntimeResolver
-} from "@devhub/sdk";
+} from "@devhub/sdk-javascript";
 
 declare global {
   interface Window {
@@ -83,11 +83,11 @@ const client = await DevHubClient.fromRuntime(
 Node.js 文件系统发现辅助：
 
 ```ts
-import { DevHubClient } from "@devhub/sdk";
+import { DevHubClient } from "@devhub/sdk-javascript";
 import {
   FileSystemRuntimeResolver,
   resolveDataDirectory
-} from "@devhub/sdk/runtime";
+} from "@devhub/sdk-javascript/runtime";
 
 const dataDir = resolveDataDirectory(process.env.DEVHUB_DATA_DIR);
 const client = await DevHubClient.fromRuntime(

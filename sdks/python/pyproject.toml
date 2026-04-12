@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "devhub-sdk"
+name = "devhub-sdk-python"
 version = "0.6.0"
 description = "DevHub 协议 Python SDK"
 readme = "README.md"

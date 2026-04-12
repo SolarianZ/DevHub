@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>DevHub.Sdk</RootNamespace>
     <AssemblyName>DevHub.Sdk.DependencyInjection</AssemblyName>
-    <PackageId>DevHub.Sdk.DependencyInjection</PackageId>
+    <PackageId>DevHub.Sdk.DotNet.DependencyInjection</PackageId>
     <Description>DevHub .NET SDK 的可选依赖注入扩展包，提供 IServiceCollection 注册入口与工厂包装。</Description>
     <Authors>DevHub Contributors</Authors>
     <VersionPrefix>1.0.0</VersionPrefix>

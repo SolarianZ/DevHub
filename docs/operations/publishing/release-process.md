@@ -47,9 +47,9 @@
 每次发布都上传以下资产类型：
 
 - Host 多平台压缩包：`devhub-host-win-x64.zip`、`devhub-host-linux-x64.zip`、`devhub-host-osx-arm64.zip`
-- `.NET SDK`：`DevHub.Sdk.<version>.nupkg` 与 `DevHub.Sdk.<version>.snupkg`
-- `JS/TS SDK`：`devhub-sdk-<version>.tgz`
-- `Python SDK`：`devhub_sdk-<version>.tar.gz` 与 `devhub_sdk-<version>-py3-none-any.whl`
+- `.NET SDK`：`DevHub.Sdk.DotNet.<version>.nupkg` 与 `DevHub.Sdk.DotNet.<version>.snupkg`
+- `JS/TS SDK`：`devhub-sdk-javascript-<version>.tgz`
+- `Python SDK`：`devhub_sdk_python-<version>.tar.gz` 与 `devhub_sdk_python-<version>-py3-none-any.whl`
 - 资产清单：`release-manifest.json`
 - 发布说明：`release-notes.md`
 

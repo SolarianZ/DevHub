@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>DevHub.Sdk</RootNamespace>
     <AssemblyName>DevHub.Sdk</AssemblyName>
-    <PackageId>DevHub.Sdk</PackageId>
+    <PackageId>DevHub.Sdk.DotNet</PackageId>
     <Description>DevHub 协议的 .NET SDK，提供 runtime discovery、HTTP JSON-RPC 与 WebSocket events 客户端。</Description>
     <Authors>DevHub Contributors</Authors>
     <PackageReadmeFile>README.md</PackageReadmeFile>
