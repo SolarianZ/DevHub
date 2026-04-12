@@ -80,7 +80,6 @@ jobs:
           host_log="$RUNNER_TEMP/devhub-ci-host.log"
           repo_temp_dir="$GITHUB_WORKSPACE/temp"
           text_report_path="$repo_temp_dir/test_results.txt"
-          json_report_path="$repo_temp_dir/test_results.json"
           test_log_path="$repo_temp_dir/test_log.txt"
           runtime_dir="$DEVHUB_DATA_DIR/runtime"
           definitions_dir="$DEVHUB_DATA_DIR/apps/definitions"
@@ -149,7 +148,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          for i in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             if [ -f "$runtime_dir/hub.json" ]; then
               break
             fi
@@ -477,7 +476,6 @@ jobs:
           host_log="$RUNNER_TEMP/devhub-ci-host-full.log"
           repo_temp_dir="$GITHUB_WORKSPACE/temp"
           text_report_path="$repo_temp_dir/test_results.txt"
-          json_report_path="$repo_temp_dir/test_results.json"
           test_log_path="$repo_temp_dir/test_log.txt"
           runtime_dir="$DEVHUB_DATA_DIR/runtime"
           definitions_dir="$DEVHUB_DATA_DIR/apps/definitions"
@@ -546,7 +544,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          for i in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             if [ -f "$runtime_dir/hub.json" ]; then
               break
             fi
@@ -736,3 +734,28 @@ jobs:
             temp/test_results.json
             temp/test_log.txt
           if-no-files-found: warn
+
+  publish-release:
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/preview' ||
+       github.ref == 'refs/heads/main' ||
+       startsWith(github.ref, 'refs/tags/v'))
+    needs:
+      - build-and-test
+      - sdk-dotnet-tests
+      - sdk-ts-tests
+      - monitor-tests
+      - sdk-python-tests
+      - sdk-conformance
+      - integration-full-gate
+      - cross-platform-smoke
+    permissions:
+      actions: read
+      contents: write
+    uses: ./.github/workflows/release-reusable.yml
+    with:
+      target_ref: ${{ github.sha }}
+      release_ref: ${{ github.ref }}
+      verify_ci_success: false
+    secrets: inherit

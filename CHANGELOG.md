@@ -5,7 +5,7 @@
 ## 发布通道
 
 - `preview`：滚动更新的 preview release，固定 tag 为 `preview-latest`。
-- `main`：每次成功合并后的 GitHub prerelease，tag 形如 `main-<utc-date>-<sha7>`。
+- `main`：命中发布范围且通过 CI 门禁的 `main` push 会生成 GitHub prerelease，tag 形如 `main-YYYYMMDDTHHMMSSZ-<sha7>`。
 - 稳定版：使用语义化 `v*` tag 发布。
 
 ## Unreleased

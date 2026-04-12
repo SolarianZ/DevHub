@@ -32,8 +32,8 @@ artifacts/release/<release-id>/
 
 ## 2. `release-id` 规则
 
-- `preview` 通道：建议使用 `preview-latest`
-- `main` 快照预发布：使用 `main-<utc-date>-<sha7>`
+- `preview` 通道：使用 `preview-latest`
+- `main` 快照预发布：使用 `main-YYYYMMDDTHHMMSSZ-<sha7>`
 - 稳定版：使用稳定版 tag
 - 本地 dry-run：可使用 `local-dry-run` 或其他可读名称
 
@@ -60,9 +60,9 @@ artifacts/release/<release-id>/
 ```json
 {
   "schemaVersion": 1,
-  "releaseId": "main-20260406-abcdef0",
+  "releaseId": "main-20260406T080000Z-abcdef0",
   "channel": "main-snapshot",
-  "releaseTag": "main-20260406-abcdef0",
+  "releaseTag": "main-20260406T080000Z-abcdef0",
   "commit": "abcdef0123456789",
   "generatedAtUtc": "2026-04-06T08:00:00Z",
   "assets": [

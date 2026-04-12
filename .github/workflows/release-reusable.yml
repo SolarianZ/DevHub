@@ -1,0 +1,244 @@
+name: release-reusable
+
+on:
+  workflow_call:
+    inputs:
+      target_ref:
+        description: Git ref or commit SHA to package and publish.
+        required: true
+        type: string
+      release_ref:
+        description: Branch or tag ref that determines the release channel.
+        required: true
+        type: string
+      verify_ci_success:
+        description: Whether to require an existing successful ci push run for the target commit.
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  package-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+
+    env:
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+          REPOSITORY: ${{ github.repository }}
+          VERIFY_CI_SUCCESS: ${{ inputs.verify_ci_success }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit_sha="$(git rev-parse HEAD)"
+          short_sha="${commit_sha::7}"
+          commit_stamp="$(git show -s --date=format:%Y%m%dT%H%M%SZ --format=%cd "$commit_sha")"
+          channel=""
+          release_tag=""
+          release_id=""
+          release_name=""
+          prerelease="true"
+
+          case "${RELEASE_REF}" in
+            preview|refs/heads/preview)
+              channel="preview"
+              release_tag="preview-latest"
+              release_id="preview-latest"
+              release_name="DevHub Preview"
+              prerelease="true"
+              ;;
+            main|refs/heads/main)
+              channel="main-snapshot"
+              release_tag="main-${commit_stamp}-${short_sha}"
+              release_id="${release_tag}"
+              release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
+              prerelease="true"
+              ;;
+            v*)
+              channel="stable"
+              release_tag="${RELEASE_REF}"
+              release_id="${release_tag}"
+              release_name="DevHub ${release_tag}"
+              prerelease="false"
+              ;;
+            refs/tags/v*)
+              channel="stable"
+              release_tag="${RELEASE_REF#refs/tags/}"
+              release_id="${release_tag}"
+              release_name="DevHub ${release_tag}"
+              prerelease="false"
+              ;;
+            *)
+              mapfile -t version_tags < <(git tag --points-at "${commit_sha}" --list 'v*' | sort)
+              if [[ ${#version_tags[@]} -eq 1 ]]; then
+                channel="stable"
+                release_tag="${version_tags[0]}"
+                release_id="${release_tag}"
+                release_name="DevHub ${release_tag}"
+                prerelease="false"
+              else
+                echo "release_ref must resolve to preview, main, or a unique v* tag." >&2
+                exit 1
+              fi
+              ;;
+          esac
+
+          if [[ "${VERIFY_CI_SUCCESS}" == "true" ]]; then
+            ci_runs_json="$(
+              gh api "/repos/${REPOSITORY}/actions/workflows/ci.yml/runs" \
+                -f event=push \
+                -f status=completed \
+                -f per_page=100 \
+                -f head_sha="${commit_sha}"
+            )"
+
+            has_successful_ci="$(
+              printf '%s' "${ci_runs_json}" | python3 -c "import json, sys; data = json.load(sys.stdin); print('true' if any(run.get('conclusion') == 'success' for run in data.get('workflow_runs', [])) else 'false')"
+            )"
+
+            if [[ "${has_successful_ci}" != "true" ]]; then
+              echo "target commit has no successful ci push run: ${commit_sha}" >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "commit_sha=${commit_sha}"
+            echo "channel=${channel}"
+            echo "release_tag=${release_tag}"
+            echo "release_id=${release_id}"
+            echo "release_name=${release_name}"
+            echo "prerelease=${prerelease}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Decide publish eligibility
+        id: gate
+        env:
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          COMMIT_SHA: ${{ steps.meta.outputs.commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          should_publish="true"
+
+          if [[ "${CHANNEL}" == "preview" ]]; then
+            remote_sha="$(git ls-remote origin refs/heads/preview | awk 'NR==1 { print $1 }')"
+
+            if [[ -z "${remote_sha}" ]]; then
+              echo "Failed to resolve remote preview head." >&2
+              exit 1
+            fi
+
+            if [[ "${remote_sha}" != "${COMMIT_SHA}" ]]; then
+              should_publish="false"
+              echo "Preview branch advanced to ${remote_sha}; skip stale publish for ${COMMIT_SHA}."
+            fi
+          fi
+
+          echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
+
+      - name: Skip stale preview publish
+        if: steps.gate.outputs.should_publish != 'true'
+        shell: bash
+        run: echo "Skip release publish because the preview branch has advanced."
+
+      - name: Package release assets
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          python scripts/release/package_release.py \
+            --release-id "${{ steps.meta.outputs.release_id }}" \
+            --channel "${{ steps.meta.outputs.channel }}" \
+            --release-tag "${{ steps.meta.outputs.release_tag }}" \
+            --release-name "${{ steps.meta.outputs.release_name }}" \
+            --commit "${{ steps.meta.outputs.commit_sha }}"
+
+      - name: Publish GitHub Release
+        if: steps.gate.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_dir="artifacts/release/${{ steps.meta.outputs.release_id }}"
+          release_tag="${{ steps.meta.outputs.release_tag }}"
+          release_name="${{ steps.meta.outputs.release_name }}"
+          channel="${{ steps.meta.outputs.channel }}"
+
+          release_files=(
+            "$release_dir"/host/*.zip
+            "$release_dir"/sdk/dotnet/*
+            "$release_dir"/sdk/javascript/*.tgz
+            "$release_dir"/sdk/python/*
+            "$release_dir"/release-manifest.json
+            "$release_dir"/release-notes.md
+          )
+
+          if [[ "${channel}" == "preview" ]]; then
+            gh release delete "${release_tag}" --yes --cleanup-tag || true
+            gh release create "${release_tag}" "${release_files[@]}" \
+              --title "${release_name}" \
+              --notes-file "$release_dir/release-notes.md" \
+              --prerelease \
+              --target "${{ steps.meta.outputs.commit_sha }}"
+          elif [[ "${channel}" == "main-snapshot" ]]; then
+            gh release delete "${release_tag}" --yes --cleanup-tag || true
+            gh release create "${release_tag}" "${release_files[@]}" \
+              --title "${release_name}" \
+              --notes-file "$release_dir/release-notes.md" \
+              --prerelease \
+              --target "${{ steps.meta.outputs.commit_sha }}"
+          else
+            if gh release view "${release_tag}" >/dev/null 2>&1; then
+              gh release upload "${release_tag}" "${release_files[@]}" --clobber
+              gh release edit "${release_tag}" \
+                --title "${release_name}" \
+                --notes-file "$release_dir/release-notes.md"
+            else
+              gh release create "${release_tag}" "${release_files[@]}" \
+                --title "${release_name}" \
+                --notes-file "$release_dir/release-notes.md" \
+                --target "${{ steps.meta.outputs.commit_sha }}"
+            fi
+          fi
+
+      - name: Upload release diagnostics
+        if: failure() && steps.gate.outputs.should_publish == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
