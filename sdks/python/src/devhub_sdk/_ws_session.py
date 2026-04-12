@@ -11,8 +11,7 @@ import websockets
 
 from ._json import load_json_text
 from ._jsonrpc import validate_response_envelope
-from ._parsing import parse_event
-from .models import DevHubClientOptions, DevHubEvent, RuntimeConnectionInfo
+from .models import DevHubClientOptions, RuntimeConnectionInfo
 
 
 _SENTINEL = object()
@@ -28,8 +27,8 @@ class JsonRpcWsSession(ABC):
         """断开当前连接代次，但保留会话对象供后续重连使用。"""
 
     @abstractmethod
-    async def read_events(self) -> AsyncIterator[DevHubEvent]:
-        """读取事件流。"""
+    async def read_events(self) -> AsyncIterator[dict[str, Any]]:
+        """读取原始 `hub.event.params` 事件参数。"""
 
     @abstractmethod
     async def close(self) -> None:
@@ -46,7 +45,7 @@ class JsonRpcWsSession(ABC):
 
 @dataclass(slots=True)
 class _EventStreamState:
-    queue: asyncio.Queue[DevHubEvent | object] = field(default_factory=asyncio.Queue)
+    queue: asyncio.Queue[dict[str, Any] | object] = field(default_factory=asyncio.Queue)
     terminal_error: BaseException | None = None
     completed: bool = False
 
@@ -105,7 +104,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
 
         return validate_response_envelope(envelope, request_id)
 
-    async def read_events(self) -> AsyncIterator[DevHubEvent]:
+    async def read_events(self) -> AsyncIterator[dict[str, Any]]:
         stream = self._stream
         while True:
             item = await stream.queue.get()
@@ -176,8 +175,10 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
                 raise RuntimeError("hub.event 通知不允许包含 id。")
             if "result" in root or "error" in root:
                 raise RuntimeError("hub.event 通知禁止包含 result 或 error。")
-            event = parse_event(root.get("params"), path="hub.event.params")
-            await self._stream.queue.put(event)
+            params = root.get("params")
+            if not isinstance(params, dict):
+                raise RuntimeError("hub.event.params 必须为对象。")
+            await self._stream.queue.put(params)
             return
 
         request_id = root.get("id")

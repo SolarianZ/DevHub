@@ -13,6 +13,7 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局（`<dataDir>/runtime/hub.json`）
 - HTTP 客户端：`ping`、应用定义查询/校验/写入/删除、带顶层 `password` 的实例管理、`launch`、`notify`、`request`、`poll`、`respond`
 - WebSocket 事件客户端：鉴权、订阅、取消订阅、事件流读取，以及定义生命周期事件解析
+- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`list_instances` 复用同一套本地参数构造与防御式校验规则
 - 调用参数语义：可区分“省略 `args`”与“显式传入 `None`（序列化为 `null`）”
 - 本地 JSON 校验：在发送前严格校验 `echo`、`meta`、`args`、`value`、`error.data`，拒绝 `NaN`、回调、循环引用等非法 JSON 结构
 - 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
@@ -128,7 +129,8 @@ events_client = await DevHubEventsClient.from_runtime(
 
 - `runtime_resolver` 负责把 `DevHubClientOptions` 解析成 `RuntimeConnectionInfo`
 - `transport_factory` 负责基于 `options + connection_info` 创建 HTTP transport
-- `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session
+- `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session；该 session 只负责连接建立、请求发送、响应关联与原始 `hub.event.params` 读取
+- `DevHubEventsClient` 负责把原始 `hub.event.params` 解析为 `DevHubEvent`，并复用与 HTTP 客户端相同的参数 builder
 
 公开事件类型模型使用 `DevHubEventType` 闭集，并同步导出 `SUPPORTED_EVENT_TYPES`、`ALL_EVENT_TYPES` 与 `ensure_supported_event_type(...)`，便于在调用侧提前完成订阅入参校验。
 

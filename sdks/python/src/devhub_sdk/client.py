@@ -27,6 +27,7 @@ from ._payloads import (
     build_heartbeat_params,
     build_launch_params,
     build_list_instances_params,
+    build_ping_params,
     build_notify_params,
     build_poll_params,
     build_register_instance_params,
@@ -36,7 +37,6 @@ from ._payloads import (
     build_unregister_params,
     build_validate_definition_params,
 )
-from ._validation import ensure_json_value
 from .models import (
     AppDefinition,
     AppInstance,
@@ -132,7 +132,7 @@ class DevHubClient:
     def ping(self, echo: Any = _ECHO_UNSET) -> PingResult:
         """调用 `hub.ping`。"""
 
-        params = None if echo is _ECHO_UNSET else {"echo": ensure_json_value(echo, "echo")}
+        params = build_ping_params() if echo is _ECHO_UNSET else build_ping_params(echo)
         result = self._send("hub.ping", params)
         return parse_ping_result(result, path="hub.ping.result")
 

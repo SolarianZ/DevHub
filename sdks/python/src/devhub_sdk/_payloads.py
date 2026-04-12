@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import Any
 
+from .constants import DevHubEventType, ensure_supported_event_type
 from ._validation import (
     ensure_json_object,
     ensure_json_value,
@@ -16,11 +18,14 @@ from ._validation import (
     require_optional_int_in_range,
     require_optional_instance_id,
     require_optional_string,
+    require_protocol_version,
+    require_uuid_string,
 )
 from .models import (
     AppCapabilities,
     AppDefinition,
     AppInstanceRegistration,
+    DevHubClientOptions,
     DevHubCalleeError,
     InvokeRequest,
     InvocationTarget,
@@ -29,6 +34,7 @@ from .models import (
     ListInstancesRequest,
     PollRequest,
     RespondRequest,
+    RuntimeConnectionInfo,
 )
 
 
@@ -39,6 +45,12 @@ def build_get_definition_params(app_id: str) -> dict[str, Any]:
     """构造 `hub.apps.getDefinition` 参数。"""
 
     return {"appId": require_app_id(app_id, "app_id")}
+
+
+def build_ping_params(echo: Any = _MISSING) -> dict[str, Any] | None:
+    """构造 `hub.ping` 参数。"""
+
+    return None if echo is _MISSING else {"echo": ensure_json_value(echo, "echo")}
 
 
 def build_validate_definition_params(definition: AppDefinition) -> dict[str, Any]:
@@ -132,6 +144,53 @@ def build_list_instances_params(request: ListInstancesRequest | None) -> dict[st
     if include_offline:
         payload["includeOffline"] = True
     return payload or None
+
+
+def build_ws_authenticate_params(
+    options: DevHubClientOptions,
+    connection_info: RuntimeConnectionInfo,
+) -> dict[str, Any]:
+    """构造 `hub.ws.authenticate` 参数。"""
+
+    if options is None:
+        raise ValueError("options 不能为空。")
+    if connection_info is None:
+        raise ValueError("connection_info 不能为空。")
+
+    return {
+        "token": require_non_empty_string(connection_info.token, "connection_info.token"),
+        "protocolVersion": require_protocol_version(options.protocol_version),
+        "clientId": require_non_empty_string(options.client_id, "options.client_id"),
+        "clientSessionId": require_uuid_string(options.client_session_id, "options.client_session_id"),
+    }
+
+
+def build_subscribe_params(types: Iterable[DevHubEventType] | None = None) -> dict[str, Any] | None:
+    """构造 `hub.events.subscribe` 参数。"""
+
+    if types is None:
+        return None
+    if isinstance(types, str | bytes | bytearray):
+        raise ValueError("types 必须为事件类型序列。")
+    if isinstance(types, Mapping):
+        raise ValueError("types 必须为事件类型序列。")
+
+    types_list = list(types)
+    if not types_list:
+        return None
+
+    return {
+        "types": [
+            ensure_supported_event_type(item, f"types[{index}]")
+            for index, item in enumerate(types_list)
+        ]
+    }
+
+
+def build_unsubscribe_params(subscription_id: str) -> dict[str, Any]:
+    """构造 `hub.events.unsubscribe` 参数。"""
+
+    return {"subscriptionId": require_non_empty_string(subscription_id, "subscription_id")}
 
 
 def build_launch_params(request: LaunchRequest) -> dict[str, Any]:
