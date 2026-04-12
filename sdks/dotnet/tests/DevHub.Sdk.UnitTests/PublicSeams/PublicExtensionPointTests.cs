@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using DevHub.Sdk.Models;
 
@@ -8,11 +11,11 @@ public sealed class PublicExtensionPointTests
     private const string ExpectedHubVersion = "test-hub-version";
 
     [Fact]
-    public async Task M5_DN_UT_008_DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndTransportFactory_ShouldUsePublicSeams()
+    public async Task M6_DN_UT_002_DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndHttpClientProvider_ShouldUsePublicSeams()
     {
         var connectionInfo = CreateConnectionInfo();
         var runtimeResolver = new RecordingRuntimeResolver(connectionInfo);
-        var transportFactory = new RecordingHttpTransportFactory();
+        var httpClientProvider = new RecordingHttpClientProvider();
 
         await using var client = await DevHubClient.FromRuntimeAsync(
             new DevHubClientOptions
@@ -23,7 +26,7 @@ public sealed class PublicExtensionPointTests
             new DevHubClientDependencies
             {
                 RuntimeResolver = runtimeResolver,
-                TransportFactory = transportFactory
+                HttpClientProvider = httpClientProvider
             });
 
         var ping = await client.PingAsync(new { channel = "http" });
@@ -31,15 +34,19 @@ public sealed class PublicExtensionPointTests
         Assert.True(ping.Ok);
         Assert.Equal("public-http-client", runtimeResolver.LastOptions!.ClientId);
         Assert.Equal(@"D:\sdk-test\data", runtimeResolver.LastOptions.DataDir);
-        Assert.Equal(connectionInfo, transportFactory.LastConnectionInfo);
-        Assert.Collection(transportFactory.Transport.Methods, method => Assert.Equal("hub.ping", method));
+        Assert.Equal("public-http-client", httpClientProvider.LastOptions!.ClientId);
+        Assert.Equal(connectionInfo, httpClientProvider.LastConnectionInfo);
+        Assert.Equal("Bearer token-public", httpClientProvider.LastRequest!.Authorization);
+        Assert.Equal("1", httpClientProvider.LastRequest.Protocol);
+        Assert.Equal("public-http-client", httpClientProvider.LastRequest.ClientId);
+        Assert.Equal("hub.ping", httpClientProvider.LastRequest.Method);
     }
 
     [Fact]
     public async Task M6_DN_UT_001_DevHubClient_AfterDispose_ShouldRejectRpcWithoutInvokingTransport()
     {
         var connectionInfo = CreateConnectionInfo();
-        var transportFactory = new RecordingHttpTransportFactory();
+        var httpClientProvider = new RecordingHttpClientProvider();
 
         var client = await DevHubClient.FromRuntimeAsync(
             new DevHubClientOptions
@@ -50,23 +57,21 @@ public sealed class PublicExtensionPointTests
             new DevHubClientDependencies
             {
                 RuntimeResolver = new RecordingRuntimeResolver(connectionInfo),
-                TransportFactory = transportFactory
+                HttpClientProvider = httpClientProvider
             });
 
         await client.DisposeAsync();
         await client.DisposeAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.PingAsync());
-        Assert.Empty(transportFactory.Transport.Methods);
-        Assert.Equal(1, transportFactory.Transport.DisposeCallCount);
+        Assert.Null(httpClientProvider.LastRequest);
     }
 
     [Fact]
-    public async Task M5_DN_UT_008_DevHubEventsClient_FromRuntime_WithInjectedRuntimeResolverAndSessionFactory_ShouldUsePublicSeams()
+    public async Task M6_DN_UT_002_DevHubEventsClient_FromRuntime_WithInjectedRuntimeResolver_ShouldUsePublicSeams()
     {
         var connectionInfo = CreateConnectionInfo();
         var runtimeResolver = new RecordingRuntimeResolver(connectionInfo);
-        var sessionFactory = new RecordingWebSocketSessionFactory();
 
         await using var client = await DevHubEventsClient.FromRuntimeAsync(
             new DevHubClientOptions
@@ -76,22 +81,22 @@ public sealed class PublicExtensionPointTests
             },
             new DevHubEventsClientDependencies
             {
-                RuntimeResolver = runtimeResolver,
-                SessionFactory = sessionFactory
+                RuntimeResolver = runtimeResolver
             });
 
-        await client.AuthenticateAsync();
-        var subscriptionId = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
-        var first = await client.ReadEventsAsync().GetAsyncEnumerator().MoveNextAsync();
-
-        Assert.True(first);
         Assert.Equal("public-events-client", runtimeResolver.LastOptions!.ClientId);
-        Assert.Equal(connectionInfo.WebSocketEndpoint, sessionFactory.LastOptions!.WebSocketEndpoint);
-        Assert.Equal("sub-public", subscriptionId);
-        Assert.Collection(
-            sessionFactory.Session!.Methods,
-            method => Assert.Equal("hub.ws.authenticate", method),
-            method => Assert.Equal("hub.events.subscribe", method));
+        Assert.Equal(connectionInfo.Runtime.WsUrl, client.Runtime.WsUrl);
+    }
+
+    [Fact]
+    public void M6_DN_UT_002_PublicSurface_ShouldHideLowLevelTransportAndSessionTypes()
+    {
+        var exportedTypeNames = typeof(DevHubClient).Assembly.GetExportedTypes().Select(type => type.Name).ToArray();
+
+        Assert.DoesNotContain("IDevHubHttpTransport", exportedTypeNames);
+        Assert.DoesNotContain("JsonRpcHttpTransport", exportedTypeNames);
+        Assert.DoesNotContain("IDevHubWebSocketSession", exportedTypeNames);
+        Assert.DoesNotContain("JsonRpcWebSocketSession", exportedTypeNames);
     }
 
     [Fact]
@@ -152,123 +157,66 @@ public sealed class PublicExtensionPointTests
         }
     }
 
-    private sealed class RecordingHttpTransportFactory : IDevHubHttpTransportFactory
+    private sealed class RecordingHttpClientProvider : IDevHubHttpClientProvider
     {
-        public RecordingHttpTransport Transport { get; } = new();
+        private readonly RecordingHandler _handler = new();
 
         public DevHubRuntimeConnectionInfo? LastConnectionInfo { get; private set; }
 
-        public IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
+        public DevHubClientOptions? LastOptions { get; private set; }
+
+        public CapturedRequest? LastRequest => _handler.LastRequest;
+
+        public HttpClient CreateClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
         {
+            LastOptions = options.Clone();
             LastConnectionInfo = connectionInfo;
-            return Transport;
+            return new HttpClient(_handler)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
         }
     }
 
-    private sealed class RecordingHttpTransport : IDevHubHttpTransport
+    private sealed class RecordingHandler : HttpMessageHandler
     {
-        public List<string> Methods { get; } = [];
+        public CapturedRequest? LastRequest { get; private set; }
 
-        public int DisposeCallCount { get; private set; }
-
-        public Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Methods.Add(method);
+            var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(body);
+            var requestId = document.RootElement.GetProperty("id").GetString() ?? string.Empty;
+            var method = document.RootElement.GetProperty("method").GetString() ?? string.Empty;
 
-            var payload = JsonSerializer.SerializeToElement(new
+            LastRequest = new CapturedRequest
             {
-                ok = true,
-                serverTimeUtc = "2026-03-09T00:00:00Z",
-                echo = new
-                {
-                    channel = "http"
-                }
-            });
+                Authorization = request.Headers.Authorization?.ToString() ?? string.Empty,
+                Protocol = request.Headers.GetValues("X-DevHub-Protocol").Single(),
+                ClientId = request.Headers.GetValues("X-DevHub-ClientId").Single(),
+                RequestUri = request.RequestUri,
+                Method = method
+            };
 
-            return Task.FromResult(payload);
-        }
+            var payload = $"{{\"jsonrpc\":\"2.0\",\"id\":\"{requestId}\",\"result\":{{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"echo\":{{\"channel\":\"http\"}}}}}}";
 
-        public ValueTask DisposeAsync()
-        {
-            DisposeCallCount++;
-            return ValueTask.CompletedTask;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
         }
     }
 
-    private sealed class RecordingWebSocketSessionFactory : IDevHubWebSocketSessionFactory
+    private sealed class CapturedRequest
     {
-        public DevHubWebSocketSessionOptions? LastOptions { get; private set; }
+        public string Authorization { get; init; } = string.Empty;
 
-        public RecordingWebSocketSession? Session { get; private set; }
+        public string Protocol { get; init; } = string.Empty;
 
-        public IDevHubWebSocketSession Create(DevHubWebSocketSessionOptions options)
-        {
-            LastOptions = options;
-            Session = new RecordingWebSocketSession(options);
-            return Session;
-        }
-    }
+        public string ClientId { get; init; } = string.Empty;
 
-    private sealed class RecordingWebSocketSession : IDevHubWebSocketSession
-    {
-        private readonly DevHubWebSocketSessionOptions _options;
+        public Uri? RequestUri { get; init; }
 
-        public RecordingWebSocketSession(DevHubWebSocketSessionOptions options)
-        {
-            _options = options;
-        }
-
-        public List<string> Methods { get; } = [];
-
-        public Task EnsureConnectedAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task<JsonElement> SendRequestAsync(string method, object? parameters, CancellationToken cancellationToken = default)
-        {
-            Methods.Add(method);
-
-            if (string.Equals(method, "hub.ws.authenticate", StringComparison.Ordinal))
-            {
-                return Task.FromResult(JsonSerializer.SerializeToElement(new
-                {
-                    ok = true,
-                    protocolVersion = 1
-                }));
-            }
-
-            if (string.Equals(method, "hub.events.subscribe", StringComparison.Ordinal))
-            {
-                _options.OnEvent(JsonSerializer.SerializeToElement(new
-                {
-                    subscriptionId = "sub-public",
-                    type = "invocation.completed",
-                    timeUtc = "2026-03-09T00:00:00Z",
-                    payload = new
-                    {
-                        invocationId = "invk-public-1"
-                    }
-                }));
-
-                return Task.FromResult(JsonSerializer.SerializeToElement(new
-                {
-                    ok = true,
-                    subscriptionId = "sub-public"
-                }));
-            }
-
-            throw new InvalidOperationException($"unexpected method: {method}");
-        }
-
-        public Task DisconnectAsync(string reason, CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return ValueTask.CompletedTask;
-        }
+        public string Method { get; init; } = string.Empty;
     }
 }

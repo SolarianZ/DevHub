@@ -18,7 +18,7 @@ public sealed class InvocationRequestBuilderTests
             Method = "test.notify"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         var options = document.RootElement.GetProperty("options");
         Assert.Equal(60000, options.GetProperty("ttlMs").GetInt32());
         Assert.True(options.GetProperty("queueIfOffline").GetBoolean());
@@ -35,7 +35,7 @@ public sealed class InvocationRequestBuilderTests
             Method = "test.request"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         var options = document.RootElement.GetProperty("options");
         Assert.Equal(300000, options.GetProperty("ttlMs").GetInt32());
         Assert.Equal(120000, options.GetProperty("waitTimeoutMs").GetInt32());
@@ -73,7 +73,7 @@ public sealed class InvocationRequestBuilderTests
             }
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal(string.Empty, document.RootElement.GetProperty("target").GetProperty("scope").GetString());
     }
 
@@ -118,7 +118,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal(10, document.RootElement.GetProperty("maxCount").GetInt32());
         Assert.Equal(25000, document.RootElement.GetProperty("waitMs").GetInt32());
     }
@@ -131,7 +131,7 @@ public sealed class InvocationRequestBuilderTests
             AppId = "test.app"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
         Assert.False(document.RootElement.TryGetProperty("scope", out _));
         Assert.False(document.RootElement.TryGetProperty("dedupeKey", out _));
@@ -149,7 +149,7 @@ public sealed class InvocationRequestBuilderTests
             WaitForRegisterMs = 0
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
         Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
         Assert.Equal("launch-key", document.RootElement.GetProperty("dedupeKey").GetString());
@@ -206,8 +206,8 @@ public sealed class InvocationRequestBuilderTests
         var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
         var upsertPayload = RequestPayloadFactory.BuildUpsertDefinitionParams(definition);
 
-        using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload));
-        using var upsertDocument = JsonDocument.Parse(JsonSerializer.Serialize(upsertPayload));
+        using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload, DevHubJson.SerializerOptions));
+        using var upsertDocument = JsonDocument.Parse(JsonSerializer.Serialize(upsertPayload, DevHubJson.SerializerOptions));
 
         Assert.True(validateDocument.RootElement.TryGetProperty("definition", out var validateDefinition));
         Assert.Equal(JsonValueKind.Object, validateDefinition.ValueKind);
@@ -239,8 +239,8 @@ public sealed class InvocationRequestBuilderTests
             "secret-1");
         var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "secret-1");
 
-        using var registerDocument = JsonDocument.Parse(JsonSerializer.Serialize(registerPayload));
-        using var unregisterDocument = JsonDocument.Parse(JsonSerializer.Serialize(unregisterPayload));
+        using var registerDocument = JsonDocument.Parse(JsonSerializer.Serialize(registerPayload, DevHubJson.SerializerOptions));
+        using var unregisterDocument = JsonDocument.Parse(JsonSerializer.Serialize(unregisterPayload, DevHubJson.SerializerOptions));
 
         Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
@@ -257,7 +257,7 @@ public sealed class InvocationRequestBuilderTests
             Value = null
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
         Assert.False(document.RootElement.TryGetProperty("error", out _));
     }

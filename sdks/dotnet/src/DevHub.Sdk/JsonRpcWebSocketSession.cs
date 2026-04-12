@@ -9,7 +9,7 @@ namespace DevHub.Sdk;
 /// <summary>
 /// DevHub WebSocket session 选项。
 /// </summary>
-public sealed class DevHubWebSocketSessionOptions
+internal sealed class DevHubWebSocketSessionOptions
 {
     private Uri? _webSocketEndpoint;
     private Action<JsonElement>? _onEvent;
@@ -51,7 +51,7 @@ public sealed class DevHubWebSocketSessionOptions
 /// <summary>
 /// DevHub WebSocket session 抽象。
 /// </summary>
-public interface IDevHubWebSocketSession : IAsyncDisposable
+internal interface IDevHubWebSocketSession : IAsyncDisposable
 {
     /// <summary>
     /// 确保底层 WebSocket 已连接。
@@ -79,7 +79,7 @@ public interface IDevHubWebSocketSession : IAsyncDisposable
 /// <summary>
 /// DevHub WebSocket session 工厂。
 /// </summary>
-public interface IDevHubWebSocketSessionFactory
+internal interface IDevHubWebSocketSessionFactory
 {
     /// <summary>
     /// 创建 WebSocket session。
@@ -92,7 +92,7 @@ public interface IDevHubWebSocketSessionFactory
 /// <summary>
 /// 默认的 JSON-RPC WebSocket session 工厂。
 /// </summary>
-public sealed class JsonRpcWebSocketSessionFactory : IDevHubWebSocketSessionFactory
+internal sealed class JsonRpcWebSocketSessionFactory : IDevHubWebSocketSessionFactory
 {
     /// <inheritdoc />
     public IDevHubWebSocketSession Create(DevHubWebSocketSessionOptions options)
@@ -104,7 +104,7 @@ public sealed class JsonRpcWebSocketSessionFactory : IDevHubWebSocketSessionFact
 /// <summary>
 /// 默认的 JSON-RPC WebSocket session 实现。
 /// </summary>
-public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
+internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 {
     private static readonly TimeSpan AbandonedRequestRetention = TimeSpan.FromMinutes(5);
 
@@ -127,7 +127,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     /// 初始化 JSON-RPC WebSocket session。
     /// </summary>
     /// <param name="options">session 选项。</param>
-    public JsonRpcWebSocketSession(DevHubWebSocketSessionOptions options)
+    internal JsonRpcWebSocketSession(DevHubWebSocketSessionOptions options)
         : this(options, new ClientWebSocketConnectionFactory(), requestIdFactory: null)
     {
     }

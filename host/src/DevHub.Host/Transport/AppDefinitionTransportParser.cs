@@ -68,6 +68,12 @@ internal static class AppDefinitionTransportParser
             return null;
         }
 
+        if (launchElement.ValueKind == JsonValueKind.Null)
+        {
+            issues.Add(CreateIssue("definition.launch", "invalid_field_type", "launch must be an object"));
+            return null;
+        }
+
         if (launchElement.ValueKind != JsonValueKind.Object)
         {
             issues.Add(CreateIssue("definition.launch", "invalid_field_type", "launch must be an object"));
@@ -104,6 +110,12 @@ internal static class AppDefinitionTransportParser
     {
         if (!definitionElement.TryGetProperty("capabilities", out var capabilitiesElement))
         {
+            return null;
+        }
+
+        if (capabilitiesElement.ValueKind == JsonValueKind.Null)
+        {
+            issues.Add(CreateIssue("definition.capabilities", "invalid_field_type", "capabilities must be an object"));
             return null;
         }
 

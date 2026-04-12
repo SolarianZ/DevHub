@@ -9,10 +9,10 @@ namespace DevHub.Sdk;
 /// </summary>
 public sealed class DevHubClient : IAsyncDisposable
 {
-    private readonly IDevHubHttpTransport _transport;
+    private readonly JsonRpcHttpTransport _transport;
     private bool _disposed;
 
-    private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, IDevHubHttpTransport transport)
+    private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, JsonRpcHttpTransport transport)
     {
         Options = options;
         ConnectionInfo = connectionInfo;
@@ -59,7 +59,8 @@ public sealed class DevHubClient : IAsyncDisposable
 
         dependencies ??= new DevHubClientDependencies();
         var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
-        var transport = dependencies.TransportFactory.Create(clonedOptions, connectionInfo);
+        var httpClient = dependencies.HttpClientProvider.CreateClient(clonedOptions, connectionInfo);
+        var transport = new JsonRpcHttpTransport(httpClient, clonedOptions, connectionInfo, ownsHttpClient: true);
         return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
 
@@ -69,13 +70,13 @@ public sealed class DevHubClient : IAsyncDisposable
         Func<string>? requestIdFactory = null,
         CancellationToken cancellationToken = default)
     {
-        return await FromRuntimeAsync(
-            options,
-            new DevHubClientDependencies
-            {
-                TransportFactory = new TestHttpTransportFactory(handler, requestIdFactory)
-            },
-            cancellationToken);
+        var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
+        clonedOptions.Validate();
+
+        var connectionInfo = await new FileSystemDevHubRuntimeResolver().ResolveAsync(clonedOptions, cancellationToken);
+        var httpClient = JsonRpcHttpTransport.CreateHttpClient(handler);
+        var transport = new JsonRpcHttpTransport(httpClient, clonedOptions, connectionInfo, requestIdFactory, ownsHttpClient: true);
+        return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
 
     /// <summary>
@@ -432,22 +433,5 @@ public sealed class DevHubClient : IAsyncDisposable
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-    }
-
-    private sealed class TestHttpTransportFactory : IDevHubHttpTransportFactory
-    {
-        private readonly HttpMessageHandler _handler;
-        private readonly Func<string>? _requestIdFactory;
-
-        public TestHttpTransportFactory(HttpMessageHandler handler, Func<string>? requestIdFactory)
-        {
-            _handler = handler ?? throw new ArgumentNullException(nameof(handler));
-            _requestIdFactory = requestIdFactory;
-        }
-
-        public IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
-        {
-            return JsonRpcHttpTransport.Create(options, connectionInfo, _handler, _requestIdFactory);
-        }
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 
 namespace DevHub.Sdk;
@@ -36,6 +37,11 @@ public interface IDevHubEventsClientFactory
 public static class DevHubServiceCollectionExtensions
 {
     /// <summary>
+    /// `AddDevHubSdk()` 默认使用的命名 <see cref="HttpClient" />。
+    /// </summary>
+    public const string DefaultHttpClientName = "DevHub.Sdk";
+
+    /// <summary>
     /// 注册 DevHub SDK 所需的选项、公开 seam 与工厂服务。
     /// </summary>
     /// <param name="services">服务集合。</param>
@@ -45,9 +51,12 @@ public static class DevHubServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddOptions<DevHubClientOptions>();
+        services.AddHttpClient(DefaultHttpClientName, static client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.TryAddSingleton<IDevHubRuntimeResolver, FileSystemDevHubRuntimeResolver>();
-        services.TryAddSingleton<IDevHubHttpTransportFactory, JsonRpcHttpTransportFactory>();
-        services.TryAddSingleton<IDevHubWebSocketSessionFactory, JsonRpcWebSocketSessionFactory>();
+        services.TryAddSingleton<IDevHubHttpClientProvider>(static serviceProvider =>
+            new NamedDevHubHttpClientProvider(
+                serviceProvider.GetRequiredService<IHttpClientFactory>(),
+                DefaultHttpClientName));
         services.TryAddSingleton<IDevHubClientFactory, DefaultDevHubClientFactory>();
         services.TryAddSingleton<IDevHubEventsClientFactory, DefaultDevHubEventsClientFactory>();
         return services;
@@ -71,11 +80,11 @@ public static class DevHubServiceCollectionExtensions
     private sealed class DefaultDevHubClientFactory(
         IOptionsMonitor<DevHubClientOptions> optionsMonitor,
         IDevHubRuntimeResolver runtimeResolver,
-        IDevHubHttpTransportFactory transportFactory) : IDevHubClientFactory
+        IDevHubHttpClientProvider httpClientProvider) : IDevHubClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
         private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
-        private readonly IDevHubHttpTransportFactory _transportFactory = transportFactory;
+        private readonly IDevHubHttpClientProvider _httpClientProvider = httpClientProvider;
 
         public Task<DevHubClient> CreateAsync(CancellationToken cancellationToken = default)
         {
@@ -84,7 +93,7 @@ public static class DevHubServiceCollectionExtensions
                 new DevHubClientDependencies
                 {
                     RuntimeResolver = _runtimeResolver,
-                    TransportFactory = _transportFactory
+                    HttpClientProvider = _httpClientProvider
                 },
                 cancellationToken);
         }
@@ -92,12 +101,10 @@ public static class DevHubServiceCollectionExtensions
 
     private sealed class DefaultDevHubEventsClientFactory(
         IOptionsMonitor<DevHubClientOptions> optionsMonitor,
-        IDevHubRuntimeResolver runtimeResolver,
-        IDevHubWebSocketSessionFactory sessionFactory) : IDevHubEventsClientFactory
+        IDevHubRuntimeResolver runtimeResolver) : IDevHubEventsClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
         private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
-        private readonly IDevHubWebSocketSessionFactory _sessionFactory = sessionFactory;
 
         public Task<DevHubEventsClient> CreateAsync(CancellationToken cancellationToken = default)
         {
@@ -105,10 +112,22 @@ public static class DevHubServiceCollectionExtensions
                 _optionsMonitor.CurrentValue,
                 new DevHubEventsClientDependencies
                 {
-                    RuntimeResolver = _runtimeResolver,
-                    SessionFactory = _sessionFactory
+                    RuntimeResolver = _runtimeResolver
                 },
                 cancellationToken);
+        }
+    }
+
+    private sealed class NamedDevHubHttpClientProvider(IHttpClientFactory httpClientFactory, string clientName) : IDevHubHttpClientProvider
+    {
+        private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
+        private readonly string _clientName = clientName;
+
+        public HttpClient CreateClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
+        {
+            _ = options ?? throw new ArgumentNullException(nameof(options));
+            _ = connectionInfo ?? throw new ArgumentNullException(nameof(connectionInfo));
+            return _httpClientFactory.CreateClient(_clientName);
         }
     }
 }

@@ -66,7 +66,7 @@ public sealed class DefinitionManager : IDefinitionManager
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return Validate(JsonSerializer.SerializeToElement(definition));
+        return Validate(SerializeDefinitionToElement(definition));
     }
 
     /// <inheritdoc />
@@ -98,7 +98,7 @@ public sealed class DefinitionManager : IDefinitionManager
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return TryUpsert(JsonSerializer.SerializeToElement(definition), out storedDefinition, out validationResult);
+        return TryUpsert(SerializeDefinitionToElement(definition), out storedDefinition, out validationResult);
     }
 
     /// <inheritdoc />
@@ -155,6 +155,11 @@ public sealed class DefinitionManager : IDefinitionManager
                 _logger.LogDebug(ex, "清理定义临时文件失败: {TempPath}", tempPath);
             }
         }
+    }
+
+    private JsonElement SerializeDefinitionToElement(AppDefinition definition)
+    {
+        return JsonSerializer.SerializeToElement(definition, _jsonOptions);
     }
 
     private void PublishDefinitionUpserted(AppDefinition definition)

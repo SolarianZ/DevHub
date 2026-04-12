@@ -20,7 +20,7 @@
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`（含 `validateDefinition` / `upsertDefinition` / `deleteDefinition` 与带顶层 `password` 的实例注册 / 注销）、`hub.invoke.*`
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
-- 公开扩展点：`runtime resolver`、`HTTP transport`、`WS session`
+- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam、默认命名 `HttpClient` 管道
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`（含 `AppDefinitionUpserted` / `AppDefinitionDeleted`）
 - 统一错误模型：`DevHubRpcException`（协议要求 `error.data` 为对象；非对象响应会被视为非法 JSON-RPC 包）
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
@@ -137,6 +137,11 @@ services.AddDevHubSdk(options =>
     options.ClientId = "ExampleClient";
     options.DataDir = dataDir;
 });
+services.AddHttpClient(DevHubServiceCollectionExtensions.DefaultHttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+    });
 
 using var serviceProvider = services.BuildServiceProvider();
 var clientFactory = serviceProvider.GetRequiredService<IDevHubClientFactory>();
@@ -160,7 +165,7 @@ var client = await DevHubClient.FromRuntimeAsync(
     new DevHubClientDependencies
     {
         RuntimeResolver = runtimeResolver,
-        TransportFactory = transportFactory
+        HttpClientProvider = httpClientProvider
     });
 
 var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
@@ -171,10 +176,11 @@ var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
     },
     new DevHubEventsClientDependencies
     {
-        RuntimeResolver = runtimeResolver,
-        SessionFactory = sessionFactory
+        RuntimeResolver = runtimeResolver
     });
 ```
+
+`HttpClientProvider` 只负责为当前 `DevHubClient` 提供底层 `HttpClient`，JSON-RPC 请求封装、错误映射与响应校验继续由 SDK 内部负责。低层 `JsonRpcHttpTransport` / `JsonRpcWebSocketSession` 已收敛为内部实现，不再作为稳定公开契约。
 
 ## HTTP 用法示例
 
@@ -391,9 +397,9 @@ catch (DevHubRpcException ex)
 - `DevHubEventsClient`
 - `DevHubClientDependencies` / `DevHubEventsClientDependencies`
 - `IDevHubRuntimeResolver`
-- `IDevHubHttpTransport` / `IDevHubHttpTransportFactory`
-- `IDevHubWebSocketSession` / `IDevHubWebSocketSessionFactory`
+- `IDevHubHttpClientProvider`
 - `IDevHubClientFactory` / `IDevHubEventsClientFactory`
+- `DevHubServiceCollectionExtensions.DefaultHttpClientName`
 - `DevHubRpcException`
 - `DevHubRpcErrorCode`
 - `DevHubEventType` / `DevHubEventTypes`

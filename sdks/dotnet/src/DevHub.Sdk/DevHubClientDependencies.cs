@@ -6,7 +6,7 @@ namespace DevHub.Sdk;
 public sealed class DevHubClientDependencies
 {
     private IDevHubRuntimeResolver _runtimeResolver = new FileSystemDevHubRuntimeResolver();
-    private IDevHubHttpTransportFactory _transportFactory = new JsonRpcHttpTransportFactory();
+    private IDevHubHttpClientProvider _httpClientProvider = new DefaultDevHubHttpClientProvider();
 
     /// <summary>
     /// Runtime discovery 抽象。
@@ -18,11 +18,11 @@ public sealed class DevHubClientDependencies
     }
 
     /// <summary>
-    /// HTTP transport 工厂。
+    /// HTTP 客户端提供器。
     /// </summary>
-    public IDevHubHttpTransportFactory TransportFactory
+    public IDevHubHttpClientProvider HttpClientProvider
     {
-        get => _transportFactory;
-        init => _transportFactory = value ?? throw new ArgumentNullException(nameof(value));
+        get => _httpClientProvider;
+        init => _httpClientProvider = value ?? throw new ArgumentNullException(nameof(value));
     }
 }

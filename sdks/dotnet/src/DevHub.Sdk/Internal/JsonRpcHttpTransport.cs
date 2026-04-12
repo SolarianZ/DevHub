@@ -7,51 +7,7 @@ using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk;
 
-/// <summary>
-/// DevHub HTTP transport 抽象。
-/// </summary>
-public interface IDevHubHttpTransport : IAsyncDisposable
-{
-    /// <summary>
-    /// 发送 JSON-RPC 请求并返回结果对象。
-    /// </summary>
-    /// <param name="method">方法名。</param>
-    /// <param name="parameters">参数对象。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>响应中的 <c>result</c> 对象。</returns>
-    Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken);
-}
-
-/// <summary>
-/// DevHub HTTP transport 工厂。
-/// </summary>
-public interface IDevHubHttpTransportFactory
-{
-    /// <summary>
-    /// 创建 HTTP transport。
-    /// </summary>
-    /// <param name="options">客户端选项。</param>
-    /// <param name="connectionInfo">运行时连接信息。</param>
-    /// <returns>transport 实例。</returns>
-    IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo);
-}
-
-/// <summary>
-/// 默认的 JSON-RPC HTTP transport 工厂。
-/// </summary>
-public sealed class JsonRpcHttpTransportFactory : IDevHubHttpTransportFactory
-{
-    /// <inheritdoc />
-    public IDevHubHttpTransport Create(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo)
-    {
-        return JsonRpcHttpTransport.Create(options, connectionInfo);
-    }
-}
-
-/// <summary>
-/// 默认的 JSON-RPC HTTP transport 实现。
-/// </summary>
-public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
+internal sealed class JsonRpcHttpTransport : IAsyncDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly DevHubClientOptions _options;
@@ -67,7 +23,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
     /// <param name="connectionInfo">运行时连接信息。</param>
     /// <param name="requestIdFactory">请求标识工厂。</param>
     /// <param name="ownsHttpClient">当前 transport 是否负责释放 <paramref name="httpClient"/>。</param>
-    public JsonRpcHttpTransport(
+    internal JsonRpcHttpTransport(
         HttpClient httpClient,
         DevHubClientOptions options,
         DevHubRuntimeConnectionInfo connectionInfo,
@@ -81,18 +37,13 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         _ownsHttpClient = ownsHttpClient;
     }
 
-    internal static JsonRpcHttpTransport Create(
-        DevHubClientOptions options,
-        DevHubRuntimeConnectionInfo connectionInfo,
-        HttpMessageHandler? handler = null,
-        Func<string>? requestIdFactory = null)
+    internal static HttpClient CreateHttpClient(HttpMessageHandler? handler = null)
     {
         var httpClient = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         httpClient.Timeout = Timeout.InfiniteTimeSpan;
-        return new JsonRpcHttpTransport(httpClient, options, connectionInfo, requestIdFactory, ownsHttpClient: true);
+        return httpClient;
     }
 
-    /// <inheritdoc />
     public async Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
@@ -130,7 +81,6 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
     internal HttpClient HttpClient => _httpClient;
 
-    /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
         if (_ownsHttpClient)

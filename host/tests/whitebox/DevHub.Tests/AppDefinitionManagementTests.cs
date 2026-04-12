@@ -162,6 +162,71 @@ public sealed class AppDefinitionManagementTests : IDisposable
     }
 
     [Fact]
+    public void Impl_DefinitionManager_ObjectOverloads_ShouldOmitNullOptionalFieldsWhenRevalidatingAndPersisting()
+    {
+        using var context = CreateContext();
+        var definition = new DevHub.Core.Models.AppDefinition
+        {
+            AppId = "managed.nullable.app",
+            DisplayName = "Managed Nullable App"
+        };
+
+        var validationResult = context.DefinitionManager.Validate(definition);
+        Assert.True(validationResult.Valid);
+        Assert.Empty(validationResult.Errors);
+
+        var upserted = context.DefinitionManager.TryUpsert(definition, out var storedDefinition, out var upsertValidationResult);
+        Assert.True(upserted);
+        Assert.NotNull(storedDefinition);
+        Assert.True(upsertValidationResult.Valid);
+        Assert.Empty(upsertValidationResult.Errors);
+
+        var path = Path.Combine(context.RuntimePathOptions.DefinitionsPath, "managed.nullable.app.json");
+        Assert.True(File.Exists(path));
+
+        using var persisted = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal("managed.nullable.app", persisted.RootElement.GetProperty("appId").GetString());
+        Assert.False(persisted.RootElement.TryGetProperty("description", out _));
+        Assert.False(persisted.RootElement.TryGetProperty("launch", out _));
+        Assert.False(persisted.RootElement.TryGetProperty("capabilities", out _));
+    }
+
+    [Fact]
+    public async Task Impl_UpsertDefinition_WhenOptionalFieldsExplicitlyNull_ShouldReturnDefinitionInvalidErrors()
+    {
+        using var context = CreateContext();
+
+        var response = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "upsert-null-optional-fields",
+            Method = HubRpcMethods.HubAppsUpsertDefinition,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                definition = new
+                {
+                    appId = "managed.nullable.app",
+                    displayName = "Managed Nullable App",
+                    description = (string?)null,
+                    launch = (object?)null,
+                    capabilities = (object?)null
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error!.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+
+        var errorData = JsonSerializer.SerializeToElement(response.Error.Data);
+        Assert.Equal("definition_invalid", errorData.GetProperty("reason").GetString());
+
+        var errors = errorData.GetProperty("errors").EnumerateArray().ToList();
+        Assert.Contains(errors, issue => issue.GetProperty("path").GetString() == "definition.description");
+        Assert.Contains(errors, issue => issue.GetProperty("path").GetString() == "definition.launch");
+        Assert.Contains(errors, issue => issue.GetProperty("path").GetString() == "definition.capabilities");
+    }
+
+    [Fact]
     public async Task Impl_DeleteDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
     {
         using var context = CreateContext();
@@ -218,6 +283,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
             runtimePathOptions,
             definitionProvider,
             eventBus,
+            definitionManager,
             new AppDefinitionsHandler(definitionProvider, definitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>()));
     }
 
@@ -225,6 +291,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
         RuntimePathOptions RuntimePathOptions,
         IDefinitionProvider DefinitionProvider,
         HubEventBus EventBus,
+        DefinitionManager DefinitionManager,
         AppDefinitionsHandler Handler) : IDisposable
     {
         public void Dispose()

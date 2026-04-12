@@ -14,7 +14,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 {
     private readonly DevHubClientOptions _options;
     private readonly DevHubRuntimeConnectionInfo _connectionInfo;
-    private readonly IDevHubWebSocketSession _session;
+    private readonly JsonRpcWebSocketSession _session;
     private Channel<DevHubEvent> _eventChannel;
     private bool _authenticated;
     private bool _eventStreamAvailable;
@@ -23,7 +23,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     private DevHubEventsClient(
         DevHubClientOptions options,
         DevHubRuntimeConnectionInfo connectionInfo,
-        IDevHubWebSocketSession session)
+        JsonRpcWebSocketSession session)
     {
         _options = options;
         _connectionInfo = connectionInfo;
@@ -71,7 +71,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
 
         DevHubEventsClient? client = null;
-        var session = dependencies.SessionFactory.Create(new DevHubWebSocketSessionOptions
+        var session = new JsonRpcWebSocketSession(new DevHubWebSocketSessionOptions
         {
             WebSocketEndpoint = connectionInfo.WebSocketEndpoint,
             RequestTimeout = clonedOptions.RequestTimeout,
@@ -91,11 +91,39 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     {
         return await FromRuntimeAsync(
             options,
-            new DevHubEventsClientDependencies
-            {
-                SessionFactory = new TestWebSocketSessionFactory(connectionFactory, requestIdFactory)
-            },
+            new DevHubEventsClientDependencies(),
+            connectionFactory,
+            requestIdFactory,
             cancellationToken);
+    }
+
+    private static async Task<DevHubEventsClient> FromRuntimeAsync(
+        DevHubClientOptions options,
+        DevHubEventsClientDependencies dependencies,
+        IWebSocketConnectionFactory connectionFactory,
+        Func<string>? requestIdFactory,
+        CancellationToken cancellationToken)
+    {
+        var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
+        clonedOptions.Validate();
+
+        dependencies ??= new DevHubEventsClientDependencies();
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+
+        DevHubEventsClient? client = null;
+        var session = new JsonRpcWebSocketSession(
+            new DevHubWebSocketSessionOptions
+            {
+                WebSocketEndpoint = connectionInfo.WebSocketEndpoint,
+                RequestTimeout = clonedOptions.RequestTimeout,
+                OnEvent = paramsElement => client!.HandleEvent(paramsElement),
+                OnTerminated = error => client?.HandleTermination(error)
+            },
+            connectionFactory,
+            requestIdFactory);
+
+        client = new DevHubEventsClient(clonedOptions, connectionInfo, session);
+        return client;
     }
 
     /// <summary>
@@ -436,22 +464,5 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         public bool Ok { get; set; }
 
         public string SubscriptionId { get; set; } = string.Empty;
-    }
-
-    private sealed class TestWebSocketSessionFactory : IDevHubWebSocketSessionFactory
-    {
-        private readonly IWebSocketConnectionFactory _connectionFactory;
-        private readonly Func<string>? _requestIdFactory;
-
-        public TestWebSocketSessionFactory(IWebSocketConnectionFactory connectionFactory, Func<string>? requestIdFactory)
-        {
-            _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
-            _requestIdFactory = requestIdFactory;
-        }
-
-        public IDevHubWebSocketSession Create(DevHubWebSocketSessionOptions options)
-        {
-            return new JsonRpcWebSocketSession(options, _connectionFactory, _requestIdFactory);
-        }
     }
 }
