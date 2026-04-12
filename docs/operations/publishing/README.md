@@ -40,4 +40,4 @@ TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub .NET SDK
 
 - 已经成立的仓库内开发命令、本地打包命令和测试命令可以保留，但必须明确其适用范围是仓库内开发或本地验证。
 - 涉及版本、下载与安装的占位必须说明未来会被哪个 GitHub Release 资产或版本信息替换。
-- 本分组中的发布流程、资产布局和检查清单文档必须与 `scripts/release/package_release.py` 和 `.github/workflows/release.yml` 的实际行为保持一致。
+- 本分组中的发布流程、资产布局和检查清单文档必须与 `scripts/release/package_release.py`、`.github/workflows/ci.yml`、`.github/workflows/release.yml` 和 `.github/workflows/release-reusable.yml` 的实际行为保持一致。

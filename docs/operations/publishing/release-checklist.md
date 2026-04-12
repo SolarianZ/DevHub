@@ -39,8 +39,8 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 若通过 GitHub Actions 执行远端发布：
 
-- 自动发布只会在成功完成的 `ci` 之后由 `release.yml` 的 `workflow_run` 触发。
-- `workflow_dispatch` 只允许填写 `preview`、`main` 或 `v*` tag 作为 `target_ref`，且目标提交必须已有成功的 `ci`。
+- 自动发布由 `ci.yml` 的 `publish-release` job 触发；只有 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`monitor-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过后，才会调用可复用发布工作流。
+- `workflow_dispatch` 只允许填写 `preview`、`main` 或 `v*` tag 作为 `target_ref`，且目标提交必须已有成功的 `ci`；若要通过 GitHub UI / CLI 手动触发，`release.yml` 必须存在于仓库默认分支。
 
 ### 1.3 资产检查
 
@@ -61,7 +61,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 ### 2.2 Main 快照预发布
 
-- 确认 release id / tag 使用 `main-<utc-date>-<sha7>` 规则。
+- 确认 release id / tag 使用 `main-YYYYMMDDTHHMMSSZ-<sha7>` 规则。
 - 确认 release notes 中包含本次提交 SHA，便于回溯。
 - 确认 `main` 分支对应提交已经通过 `ci`。
 

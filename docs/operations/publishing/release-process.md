@@ -6,27 +6,27 @@
 
 ### 1.1 Preview release
 
-- 触发条件：向 `preview` 分支推送后先运行 `ci`；仅当该次 `ci` 成功完成时，`release.yml` 才会通过 `workflow_run` 自动发布。
+- 触发条件：向 `preview` 分支推送匹配发布范围的改动后，`ci.yml` 会先完成全部门禁，再在末尾调用可复用发布工作流自动发布。
 - GitHub Release：固定使用 `preview-latest` 这一条 preview release，并在每次成功发布时刷新到最新提交。
 - 用途：为外部试用、联调或预览验证提供“当前预览通道的最新资产”。
 - 资产性质：`prerelease = true`。
-- 受控重跑：如需手动重跑，只能通过 `workflow_dispatch` 以 `target_ref=preview` 触发，且目标提交必须已有成功的 `ci`。
+- 受控重跑：如需手动重跑，通过 `release.yml` 的 `workflow_dispatch` 以 `target_ref=preview` 触发，并在发布前校验目标提交已经有成功的 `ci`；GitHub 的手动运行入口要求该 workflow 文件存在于仓库默认分支。
 
 ### 1.2 Main 快照预发布
 
-- 触发条件：向 `main` 分支推送后先运行 `ci`；仅当该次 `ci` 成功完成时，`release.yml` 才会通过 `workflow_run` 自动发布。
-- GitHub Release：为当前提交创建唯一可追溯的 prerelease，tag 命名规则为 `main-<utc-date>-<sha7>`。
-- 用途：保留主线每次成功合并后的可回溯快照资产。
+- 触发条件：向 `main` 分支推送匹配发布范围的改动后，`ci.yml` 会先完成全部门禁，再在末尾调用可复用发布工作流自动发布。
+- GitHub Release：为当前提交创建唯一可追溯的 prerelease，tag 命名规则为 `main-YYYYMMDDTHHMMSSZ-<sha7>`。
+- 用途：保留主线每次命中发布范围且通过门禁的推送对应的可回溯快照资产。
 - 资产性质：`prerelease = true`。
-- 受控重跑：如需手动重跑，只能通过 `workflow_dispatch` 以 `target_ref=main` 触发，且目标提交必须已有成功的 `ci`。
+- 受控重跑：如需手动重跑，通过 `release.yml` 的 `workflow_dispatch` 以 `target_ref=main` 触发，并在发布前校验目标提交已经有成功的 `ci`；GitHub 的手动运行入口要求该 workflow 文件存在于仓库默认分支。
 
 ### 1.3 稳定版发布
 
-- 触发条件：推送语义化 `v*` tag 后先运行 `ci`；仅当该 tag 对应提交的 `ci` 成功完成时，`release.yml` 才会通过 `workflow_run` 自动发布。
+- 触发条件：推送语义化 `v*` tag 后，`ci.yml` 会先完成全部门禁，再在末尾调用可复用发布工作流自动发布。
 - GitHub Release：使用稳定版 tag 作为 release tag。
 - 用途：承载面向外部用户的稳定版分发资产。
 - 资产性质：`prerelease = false`。
-- 受控重跑：如需手动重跑，只能通过 `workflow_dispatch` 以 `target_ref=<v*>` 触发，且目标提交必须已有成功的 `ci`。
+- 受控重跑：如需手动重跑，通过 `release.yml` 的 `workflow_dispatch` 以 `target_ref=<v*>` 触发，并在发布前校验目标提交已经有成功的 `ci`；GitHub 的手动运行入口要求该 workflow 文件存在于仓库默认分支。
 
 ## 2. 发布关键验证
 
@@ -60,8 +60,9 @@
 - 仓库发布版本统一以 `eng/Version.props` 为唯一来源；Host 与 `.NET SDK` 直接消费该文件，`JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与之保持同步。
 - `scripts/release/package_release.py` 会在打包开始前执行版本一致性校验，发现 `package.json`、`package-lock.json` 或 `pyproject.toml` 与 `eng/Version.props` 漂移时直接失败。
 - 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产。
-- `.github/workflows/release.yml` 的自动入口只响应成功完成的 `ci` `workflow_run`，然后基于该次 `ci` 的 `head_sha` 计算发布通道、调用同一脚本并把输出上传到 GitHub Release。
-- `.github/workflows/release.yml` 的 `workflow_dispatch` 仅用于重跑 `preview`、`main` 或 `v*` tag 对应的发布，并会在发布前校验目标提交已经通过 `ci`。
+- `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`monitor-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
+- `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动重跑入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经通过 `ci`。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
+- `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、资产打包与 GitHub Release 发布，避免自动发布与手动重跑重复维护两套脚本。
 - 当前阶段不会把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，也不会把 `Python SDK` 发布到 PyPI。
 
 ## 5. 发布说明与 TODO 占位
