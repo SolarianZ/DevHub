@@ -17,7 +17,7 @@ public sealed class DefinitionManager : IDefinitionManager
     private readonly AppDefinitionValidator _validator;
     private readonly IClock _clock;
     private readonly ILogger<DefinitionManager> _logger;
-    private readonly HubEventBus? _eventBus;
+    private readonly IHubEventPublisher? _eventPublisher;
     private readonly JsonSerializerOptions _jsonOptions;
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class DefinitionManager : IDefinitionManager
         AppDefinitionValidator validator,
         IClock clock,
         ILogger<DefinitionManager> logger,
-        HubEventBus? eventBus = null)
+        IHubEventPublisher? eventPublisher = null)
     {
         ArgumentNullException.ThrowIfNull(runtimePathOptions);
         ArgumentNullException.ThrowIfNull(definitionProvider);
@@ -46,7 +46,7 @@ public sealed class DefinitionManager : IDefinitionManager
         _validator = validator;
         _clock = clock;
         _logger = logger;
-        _eventBus = eventBus;
+        _eventPublisher = eventPublisher;
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -59,6 +59,14 @@ public sealed class DefinitionManager : IDefinitionManager
     {
         _validator.TryParseAndValidate(definitionElement, out _, out var validationResult);
         return validationResult;
+    }
+
+    /// <inheritdoc />
+    public AppDefinitionValidationResult Validate(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return Validate(JsonSerializer.SerializeToElement(definition));
     }
 
     /// <inheritdoc />
@@ -80,6 +88,17 @@ public sealed class DefinitionManager : IDefinitionManager
             Errors = Array.Empty<ValidationIssue>()
         };
         return true;
+    }
+
+    /// <inheritdoc />
+    public bool TryUpsert(
+        AppDefinition definition,
+        out AppDefinition? storedDefinition,
+        out AppDefinitionValidationResult validationResult)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return TryUpsert(JsonSerializer.SerializeToElement(definition), out storedDefinition, out validationResult);
     }
 
     /// <inheritdoc />
@@ -140,7 +159,7 @@ public sealed class DefinitionManager : IDefinitionManager
 
     private void PublishDefinitionUpserted(AppDefinition definition)
     {
-        _eventBus?.Publish(new HubEventMessage
+        _eventPublisher?.Publish(new HubEventMessage
         {
             Type = HubEventTypes.AppDefinitionUpserted,
             TimeUtc = _clock.UtcNow,
@@ -154,7 +173,7 @@ public sealed class DefinitionManager : IDefinitionManager
 
     private void PublishDefinitionDeleted(string appId)
     {
-        _eventBus?.Publish(new HubEventMessage
+        _eventPublisher?.Publish(new HubEventMessage
         {
             Type = HubEventTypes.AppDefinitionDeleted,
             TimeUtc = _clock.UtcNow,

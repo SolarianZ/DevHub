@@ -3,7 +3,6 @@ namespace DevHub.Host.Tests;
 using System.Text.Json;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
-using DevHub.Core.Services.Invocation;
 using DevHub.Host.Runtime;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -78,6 +77,8 @@ public sealed class HostBootstrapperTests : IDisposable
         using var document = JsonDocument.Parse(File.ReadAllText(hubJsonPath));
         Assert.Equal(ExpectedHubVersion, document.RootElement.GetProperty("hubVersion").GetString());
         Assert.Equal("http://127.0.0.1:7102", document.RootElement.GetProperty("httpBaseUrl").GetString());
+        Assert.Equal("http://127.0.0.1:7102", context.RuntimeContext.GetHttpBaseUrl());
+        Assert.Equal("ws://127.0.0.1:7102/ws", context.RuntimeContext.GetWsUrl());
     }
 
     [Fact]
@@ -125,6 +126,8 @@ public sealed class HostBootstrapperTests : IDisposable
         Assert.False(File.Exists(hubJsonPath));
         Assert.True(File.Exists(previousHubJsonPath));
         Assert.Equal(currentContent, File.ReadAllText(previousHubJsonPath));
+        Assert.Equal(string.Empty, context.RuntimeContext.GetHttpBaseUrl());
+        Assert.Equal(string.Empty, context.RuntimeContext.GetWsUrl());
     }
 
     /// <inheritdoc />
@@ -153,24 +156,21 @@ public sealed class HostBootstrapperTests : IDisposable
             runtimePathOptions,
             RuntimeTuningOptions.Default,
             ExpectedHubVersion);
+        var runtimeContext = new HostRuntimeContext();
 
         var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
 
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var routingService = new InvocationRoutingService(appRegistry, Mock.Of<ILogger<InvocationRoutingService>>());
-        var invocationStore = new InvocationStore(Mock.Of<ILogger<InvocationStore>>(), routingService, new SystemClock());
-        var requestWaiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
-        var timeoutWorker = new InvocationTimeoutWorker(invocationStore, requestWaiter, new SystemClock(), Mock.Of<ILogger<InvocationTimeoutWorker>>());
 
         var bootstrapper = new HostBootstrapper(
             dataDirectoryInitializer,
             runtimeArtifactManager,
+            runtimeContext,
             definitionProvider,
-            timeoutWorker,
             Mock.Of<ILogger<HostBootstrapper>>());
 
-        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, timeoutWorker, runtimeArtifactManager);
+        return new BootstrapperContext(bootstrapper, definitionProvider, appRegistry, runtimeArtifactManager, runtimeContext);
     }
 
     private RuntimePathOptions CreateRuntimePathOptions()
@@ -201,28 +201,28 @@ public sealed class HostBootstrapperTests : IDisposable
             HostBootstrapper bootstrapper,
             DefinitionProvider definitionProvider,
             AppRegistry appRegistry,
-            InvocationTimeoutWorker timeoutWorker,
-            HostRuntimeArtifactManager runtimeArtifactManager)
+            HostRuntimeArtifactManager runtimeArtifactManager,
+            HostRuntimeContext runtimeContext)
         {
             Bootstrapper = bootstrapper;
             DefinitionProvider = definitionProvider;
             _appRegistry = appRegistry;
-            _timeoutWorker = timeoutWorker;
             _runtimeArtifactManager = runtimeArtifactManager;
+            RuntimeContext = runtimeContext;
         }
 
         private readonly AppRegistry _appRegistry;
         private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
-        private readonly InvocationTimeoutWorker _timeoutWorker;
 
         public HostBootstrapper Bootstrapper { get; }
 
         public DefinitionProvider DefinitionProvider { get; }
 
+        public HostRuntimeContext RuntimeContext { get; }
+
         public void Dispose()
         {
             _runtimeArtifactManager.Dispose();
-            _timeoutWorker.Dispose();
             _appRegistry.Dispose();
         }
     }

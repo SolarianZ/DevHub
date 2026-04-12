@@ -19,7 +19,6 @@ public class AppRegistry : IDisposable
     private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
     private readonly IClock _clock;
     private readonly ILogger<AppRegistry> _logger;
-    private readonly Timer _cleanupTimer;
     private readonly object _syncRoot = new();
     private bool _disposed = false;
 
@@ -44,25 +43,15 @@ public class AppRegistry : IDisposable
         _clock = clock;
         _logger = logger;
         _onlineThreshold = TimeSpan.FromSeconds(runtimeTuningOptions.OnlineThresholdSeconds);
-        // 每60秒执行一次清理
-        _cleanupTimer = new Timer(OnCleanupTimer, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
-    }
-
-    /// <summary>
-    /// 清理过期实例的定时器回调
-    /// </summary>
-    /// <param name="state">状态参数</param>
-    private void OnCleanupTimer(object? state)
-    {
-        _logger.LogDebug("开始执行过期实例清理任务");
-        CleanupExpiredInstances();
     }
 
     /// <summary>
     /// 清理过期实例（lastSeenUtc 超过 1 小时）
     /// </summary>
-    private void CleanupExpiredInstances()
+    public void CleanupExpiredInstances()
     {
+        _logger.LogDebug("开始执行过期实例清理任务");
+
         lock (_syncRoot)
         {
             var now = _clock.UtcNow;
@@ -329,7 +318,6 @@ public class AppRegistry : IDisposable
         if (disposing)
         {
             _logger.LogDebug("开始释放 AppRegistry 资源");
-            _cleanupTimer.Dispose();
             _logger.LogInformation("AppRegistry 资源释放完成");
         }
 

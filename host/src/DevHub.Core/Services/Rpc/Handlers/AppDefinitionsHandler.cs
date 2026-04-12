@@ -304,7 +304,17 @@ public class AppDefinitionsHandler : IRpcHandler
             throw new NotSupportedException("Definition management is not available in this handler instance.");
         }
 
+        public Models.AppDefinitionValidationResult Validate(Models.AppDefinition definition)
+        {
+            throw new NotSupportedException("Definition management is not available in this handler instance.");
+        }
+
         public bool TryUpsert(JsonElement definitionElement, out Models.AppDefinition? definition, out Models.AppDefinitionValidationResult validationResult)
+        {
+            throw new NotSupportedException("Definition management is not available in this handler instance.");
+        }
+
+        public bool TryUpsert(Models.AppDefinition definition, out Models.AppDefinition? storedDefinition, out Models.AppDefinitionValidationResult validationResult)
         {
             throw new NotSupportedException("Definition management is not available in this handler instance.");
         }

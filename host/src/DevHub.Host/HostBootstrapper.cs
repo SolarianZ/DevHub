@@ -1,5 +1,4 @@
 using DevHub.Core.Services;
-using DevHub.Core.Services.Invocation;
 using DevHub.Host.Runtime;
 
 namespace DevHub.Host;
@@ -8,14 +7,14 @@ namespace DevHub.Host;
 /// Host 启动编排器。
 /// </summary>
 /// <remarks>
-/// 负责运行时目录初始化、定义快照刷新、超时工作器激活与启动后发现文件写入。
+/// 负责运行时目录初始化、定义快照刷新与启动后发现文件写入。
 /// </remarks>
 public class HostBootstrapper
 {
     private readonly HostDataDirectoryInitializer _dataDirectoryInitializer;
     private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
+    private readonly HostRuntimeContext _runtimeContext;
     private readonly IDefinitionProvider _definitionProvider;
-    private readonly InvocationTimeoutWorker _invocationTimeoutWorker;
     private readonly ILogger<HostBootstrapper> _logger;
 
     /// <summary>
@@ -29,14 +28,14 @@ public class HostBootstrapper
     public HostBootstrapper(
         HostDataDirectoryInitializer dataDirectoryInitializer,
         HostRuntimeArtifactManager runtimeArtifactManager,
+        HostRuntimeContext runtimeContext,
         IDefinitionProvider definitionProvider,
-        InvocationTimeoutWorker invocationTimeoutWorker,
         ILogger<HostBootstrapper> logger)
     {
         _dataDirectoryInitializer = dataDirectoryInitializer;
         _runtimeArtifactManager = runtimeArtifactManager;
+        _runtimeContext = runtimeContext;
         _definitionProvider = definitionProvider;
-        _invocationTimeoutWorker = invocationTimeoutWorker;
         _logger = logger;
     }
 
@@ -56,9 +55,6 @@ public class HostBootstrapper
         _logger.LogDebug("刷新应用程序定义快照...");
         _definitionProvider.Refresh();
         _logger.LogInformation("应用程序定义加载完成");
-
-        _ = _invocationTimeoutWorker;
-        _logger.LogInformation("InvocationTimeoutWorker 已启动");
     }
 
     /// <summary>
@@ -80,6 +76,9 @@ public class HostBootstrapper
             }
 
             port = parsedPort;
+            _runtimeContext.SetUrls(
+                $"http://127.0.0.1:{parsedPort}",
+                $"ws://127.0.0.1:{parsedPort}/ws");
             _logger.LogInformation("服务器成功启动，监听地址: {Address}", address);
             _logger.LogDebug("写入 hub.json 文件...");
             _runtimeArtifactManager.WriteHubJson(parsedPort);
@@ -100,6 +99,7 @@ public class HostBootstrapper
     /// </summary>
     public void Cleanup()
     {
+        _runtimeContext.Clear();
         _runtimeArtifactManager.Cleanup();
     }
 

@@ -18,18 +18,18 @@ public class InvocationStore
     private readonly ConcurrentDictionary<string, InvocationModel> _all = new();
     private readonly ILogger<InvocationStore> _logger;
     private readonly InvocationRoutingService _routingService;
-    private readonly HubEventBus? _eventBus;
+    private readonly IHubEventPublisher? _eventPublisher;
     private readonly IClock _clock;
 
     /// <summary>
     /// 初始化存储。
     /// </summary>
-    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, IClock clock, HubEventBus? eventBus = null)
+    public InvocationStore(ILogger<InvocationStore> logger, InvocationRoutingService routingService, IClock clock, IHubEventPublisher? eventPublisher = null)
     {
         _logger = logger;
         _routingService = routingService;
         _clock = clock;
-        _eventBus = eventBus;
+        _eventPublisher = eventPublisher;
     }
 
     /// <summary>
@@ -317,14 +317,14 @@ public class InvocationStore
 
     private void PublishDeliveredEvents(IReadOnlyList<InvocationModel> leased, AppInstance instance, DateTime deliveredAtUtc)
     {
-        if (_eventBus is null || leased.Count == 0)
+        if (_eventPublisher is null || leased.Count == 0)
         {
             return;
         }
 
         foreach (var invocation in leased)
         {
-            _eventBus.Publish(new HubEventMessage
+            _eventPublisher.Publish(new HubEventMessage
             {
                 Type = HubEventTypes.InvocationDelivered,
                 TimeUtc = deliveredAtUtc,

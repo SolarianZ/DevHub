@@ -1,5 +1,11 @@
 using DevHub.Core.Extensions;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Events;
+using DevHub.Core.Services.Invocation;
+using DevHub.Core.Services.Rpc;
+using DevHub.Host.BackgroundServices;
+using DevHub.Host.Events;
+using DevHub.Host.Rpc.Handlers;
 using DevHub.Host.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,6 +32,10 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(runtimePathOptions);
 
         services.AddDevHubCore(runtimePathOptions);
+        services.AddSingleton<HostRuntimeContext>();
+        services.AddSingleton<IRuntimeHttpBaseUrlProvider, HostRuntimeHttpBaseUrlProvider>();
+        services.AddSingleton<HubEventSessionManager>();
+        services.AddSingleton<IHubEventPublisher>(sp => sp.GetRequiredService<HubEventSessionManager>());
         services.AddSingleton<HostDataDirectoryInitializer>();
         services.AddSingleton<HostRuntimeArtifactManager>(sp =>
             new HostRuntimeArtifactManager(
@@ -34,6 +44,16 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<RuntimeTuningOptions>(),
                 hubVersion));
         services.AddSingleton<HostBootstrapper>();
+        services.AddSingleton<AppRegistryCleanupBackgroundService>();
+        services.AddHostedService(sp => sp.GetRequiredService<AppRegistryCleanupBackgroundService>());
+        services.AddSingleton<InvocationTimeoutBackgroundService>();
+        services.AddHostedService(sp => sp.GetRequiredService<InvocationTimeoutBackgroundService>());
+        services.AddSingleton<IRpcHandler, HubPingRpcHandler>();
+        services.AddSingleton<IRpcHandler, AppDefinitionsRpcHandler>();
+        services.AddSingleton<IRpcHandler, AppInstancesRpcHandler>();
+        services.AddSingleton<IRpcHandler, InvocationRpcHandler>();
+        services.AddSingleton<IRpcHandler, LaunchRpcHandler>();
+        services.AddSingleton<RpcRouter>();
         services.AddSingleton<RpcHttpEndpointHandler>();
         services.AddSingleton<WebSocketSessionHandler>();
 

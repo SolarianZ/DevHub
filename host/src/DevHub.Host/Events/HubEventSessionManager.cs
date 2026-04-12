@@ -1,13 +1,13 @@
 using System.Collections.Concurrent;
 using DevHub.Core.Services;
-using Microsoft.Extensions.Logging;
+using DevHub.Core.Services.Events;
 
-namespace DevHub.Core.Services.Events;
+namespace DevHub.Host.Events;
 
 /// <summary>
-/// Hub 事件总线（连接级订阅 + 投递队列）。
+/// Host WebSocket 会话事件投递管理器。
 /// </summary>
-public sealed class HubEventBus : IHubEventPublisher
+public sealed class HubEventSessionManager : IHubEventPublisher
 {
     internal const int MaxPendingDeliveriesPerConnection = 1024;
     internal const int MaxPendingDeliveriesTotal = 16384;
@@ -25,13 +25,13 @@ public sealed class HubEventBus : IHubEventPublisher
     ];
 
     private readonly ConcurrentDictionary<string, ConnectionState> _connections = new();
-    private readonly ILogger<HubEventBus> _logger;
+    private readonly ILogger<HubEventSessionManager> _logger;
 
     /// <summary>
-    /// 初始化事件总线。
+    /// 初始化会话事件投递管理器。
     /// </summary>
     /// <param name="logger">日志记录器。</param>
-    public HubEventBus(ILogger<HubEventBus> logger)
+    public HubEventSessionManager(ILogger<HubEventSessionManager> logger)
     {
         _logger = logger;
     }
@@ -39,34 +39,42 @@ public sealed class HubEventBus : IHubEventPublisher
     /// <summary>
     /// 注册连接。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
+    /// <param name="connectionId">连接标识。</param>
     public void RegisterConnection(string connectionId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
         _connections[connectionId] = new ConnectionState();
-        _logger.LogDebug("事件总线已注册连接: {ConnectionId}", connectionId);
+        _logger.LogDebug("事件会话管理器已注册连接: {ConnectionId}", connectionId);
     }
 
     /// <summary>
     /// 移除连接及其订阅。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
+    /// <param name="connectionId">连接标识。</param>
     public void RemoveConnection(string connectionId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
         if (_connections.TryRemove(connectionId, out _))
         {
-            _logger.LogDebug("事件总线已移除连接: {ConnectionId}", connectionId);
+            _logger.LogDebug("事件会话管理器已移除连接: {ConnectionId}", connectionId);
         }
     }
 
     /// <summary>
     /// 标记连接认证成功。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
-    /// <param name="clientId">客户端 ID。</param>
-    /// <param name="clientSessionId">客户端会话 ID。</param>
-    /// <returns>连接存在时返回 true，否则返回 false。</returns>
+    /// <param name="connectionId">连接标识。</param>
+    /// <param name="clientId">客户端标识。</param>
+    /// <param name="clientSessionId">客户端会话标识。</param>
+    /// <returns>连接存在时返回 <c>true</c>。</returns>
     public bool TryMarkAuthenticated(string connectionId, string clientId, string clientSessionId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientSessionId);
+
         if (!_connections.TryGetValue(connectionId, out var state))
         {
             return false;
@@ -81,24 +89,16 @@ public sealed class HubEventBus : IHubEventPublisher
     }
 
     /// <summary>
-    /// 判断连接是否已认证。
+    /// 创建订阅。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
-    /// <returns>已认证返回 true。</returns>
-    public bool IsAuthenticated(string connectionId)
-    {
-        return _connections.TryGetValue(connectionId, out var state) && state.IsAuthenticated;
-    }
-
-    /// <summary>
-    /// 新增订阅。
-    /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
-    /// <param name="types">事件类型集合；null 或空表示订阅全部事件。</param>
-    /// <param name="subscriptionId">生成的订阅 ID。</param>
-    /// <returns>连接存在且已认证返回 true。</returns>
+    /// <param name="connectionId">连接标识。</param>
+    /// <param name="types">订阅类型列表；为空表示全部事件。</param>
+    /// <param name="subscriptionId">生成的订阅标识。</param>
+    /// <returns>连接存在且已认证时返回 <c>true</c>。</returns>
     public bool TrySubscribe(string connectionId, IReadOnlyCollection<string>? types, out string subscriptionId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
         subscriptionId = string.Empty;
 
         if (!_connections.TryGetValue(connectionId, out var state) || !state.IsAuthenticated)
@@ -133,22 +133,25 @@ public sealed class HubEventBus : IHubEventPublisher
     /// <summary>
     /// 取消订阅（幂等）。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
-    /// <param name="subscriptionId">订阅 ID。</param>
+    /// <param name="connectionId">连接标识。</param>
+    /// <param name="subscriptionId">订阅标识。</param>
     public void Unsubscribe(string connectionId, string subscriptionId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
+
         if (_connections.TryGetValue(connectionId, out var state))
         {
             _ = state.Subscriptions.TryRemove(subscriptionId, out _);
         }
     }
 
-    /// <summary>
-    /// 发布事件。
-    /// </summary>
-    /// <param name="message">事件消息。</param>
+    /// <inheritdoc />
     public void Publish(HubEventMessage message)
     {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message.Type);
+
         var totalPendingEstimate = GetTotalPendingDeliveriesEstimate();
 
         foreach (var (connectionId, state) in _connections)
@@ -202,11 +205,13 @@ public sealed class HubEventBus : IHubEventPublisher
     /// <summary>
     /// 提取连接待发送事件。
     /// </summary>
-    /// <param name="connectionId">连接 ID。</param>
+    /// <param name="connectionId">连接标识。</param>
     /// <param name="maxCount">最大提取条数。</param>
     /// <returns>待发送事件列表。</returns>
     public IReadOnlyList<HubEventDelivery> DrainDeliveries(string connectionId, int maxCount = 32)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
         if (maxCount <= 0)
         {
             return [];
@@ -234,8 +239,13 @@ public sealed class HubEventBus : IHubEventPublisher
     /// <summary>
     /// 等待连接出现新的待发送事件。
     /// </summary>
+    /// <param name="connectionId">连接标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>检测到待投递事件时返回 <c>true</c>。</returns>
     public ValueTask<bool> WaitForDeliveryAsync(string connectionId, CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
         if (!_connections.TryGetValue(connectionId, out var state))
         {
             return ValueTask.FromResult(false);
@@ -253,7 +263,7 @@ public sealed class HubEventBus : IHubEventPublisher
     /// 判断是否为支持的事件类型。
     /// </summary>
     /// <param name="eventType">事件类型。</param>
-    /// <returns>支持返回 true。</returns>
+    /// <returns>支持时返回 <c>true</c>。</returns>
     public static bool IsSupportedEventType(string eventType)
     {
         return SupportedEventTypes.Contains(eventType, StringComparer.Ordinal);
