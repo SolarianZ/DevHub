@@ -411,9 +411,9 @@ catch (DevHubRpcException ex)
 
 这些测试不会复用开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的 Host、回收 Host 进程树，并清理对应临时目录。
 
-默认情况下，测试会优先复用已存在的 `host/src/DevHub.Host/bin/...` 构建输出并复制到临时目录；若当前机器尚无可用输出，则仍可能先触发一次对 `host/src/DevHub.Host` 的构建。因此，“临时 Host + 独立数据根目录”只说明运行时状态彼此隔离，并不等同于默认无条件支持 `.NET / Python / JS` 三套 SDK 集成测试并行执行。
+未提供预构建 Host 程序时，测试夹具会把 Host 构建到自己的隔离输出目录，再从该隔离产物启动临时 Host；默认行为不把源码树下 `host/src/DevHub.Host/bin/...` 视为运行时输入。
 
-如果需要在同一台机器上并行跑多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_DOTNET_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发对源码树下 Host 构建产物的竞争。
+如果需要关闭这一步默认构建，或希望与 `JavaScript / Python SDK` 集成测试统一复用同一份 Host 产物，请优先设置共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的 `DevHub.Host.dll`。如需只覆盖 `.NET SDK`，也可以改用 `DEVHUB_DOTNET_SDK_HOST_ASSEMBLY`；当两者同时存在时，`.NET` 专用变量优先。
 
 仓库级 smoke、手工联调或示例运行可以连接本机已启动的 Hub，但那属于另一种运行方式，不等同于 SDK 集成测试模式。
 

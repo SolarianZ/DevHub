@@ -57,17 +57,20 @@ npm --prefix sdks/javascript run build
 python -m pip install -e "./sdks/python[test]" requests
 ```
 
-如果同机还要并行跑三套 SDK 集成测试，或者希望官方适配器统一复用同一份 Host 构建产物，请先串行准备固定的 Host 程序，并把三套 SDK 的预构建环境变量都指向同一个 `DevHub.Host.dll`：
+如果同机还要并行跑三套 SDK 集成测试，或者希望官方适配器统一复用同一份 Host 构建产物，请先把 Host 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向该目录下的 `DevHub.Host.dll`；如需只覆盖单语言调试，再额外设置对应语言特定变量：
 
 ```bash
-dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
-export DEVHUB_DOTNET_SDK_HOST_ASSEMBLY="$PWD/host/src/DevHub.Host/bin/Release/net10.0/DevHub.Host.dll"
-export DEVHUB_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
+HOST_OUTPUT_ROOT="$PWD/temp/sdk-shared-host"
+dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release --nologo \
+  -p:BaseOutputPath="$HOST_OUTPUT_ROOT/bin/"
+export DEVHUB_SDK_HOST_ASSEMBLY="$HOST_OUTPUT_ROOT/bin/Release/net10.0/DevHub.Host.dll"
+# 可选：仅在需要单语言覆盖时再设置
+export DEVHUB_DOTNET_SDK_HOST_ASSEMBLY="$DEVHUB_SDK_HOST_ASSEMBLY"
 export DEVHUB_JS_SDK_HOST_ASSEMBLY="$DEVHUB_SDK_HOST_ASSEMBLY"
 export DEVHUB_PYTHON_SDK_HOST_ASSEMBLY="$DEVHUB_SDK_HOST_ASSEMBLY"
 ```
 
-这样 `.NET`、`JS/TS`、`Python` 三套官方适配器都会复用同一份 Host 可执行产物，避免多个测试进程同时触发 `host/src/DevHub.Host` 的构建竞争。
+这样 `.NET`、`JS/TS`、`Python` 三套官方适配器都会复用同一份 Host 输出产物，但仍各自启动并清理自己的临时 Host，不会共享运行中的 Host 进程。
 
 如需先验证 runner 自身的 manifest / 过滤 / 失败输出逻辑，可执行：
 

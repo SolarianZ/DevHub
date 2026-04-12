@@ -1,11 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { promises as fsPromises } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { DevHubClient } from "../../src/client.js";
-import { DevHubHostFixture } from "./host.js";
+import {
+  DevHubHostFixture,
+  resolveConfiguredHostAssemblyFromEnvironment,
+  resolveHostAssemblyPath
+} from "./host.js";
 
 const longRunningLaunchScriptPath = fileURLToPath(new URL("../assets/launch_wait_forever.mjs", import.meta.url));
 
@@ -64,6 +69,49 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   }
 }, 120_000);
 
+it("共享预构建 Host 路径应可直接复用而不触发本地构建", async () => {
+  const repoRoot = await createFakeRepositoryRoot();
+
+  try {
+    const configuredHostAssemblyPath = await createConfiguredHostAssembly(
+      repoRoot,
+      path.join("shared", "DevHub.Host.dll")
+    );
+
+    const resolvedPath = await resolveHostAssemblyPath(repoRoot, {
+      DEVHUB_SDK_HOST_ASSEMBLY: path.join("shared", "DevHub.Host.dll")
+    });
+
+    expect(resolvedPath).toBe(configuredHostAssemblyPath);
+  } finally {
+    await fsPromises.rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+it("JS 专用 Host 覆盖变量应优先于共享变量", async () => {
+  const repoRoot = await createFakeRepositoryRoot();
+
+  try {
+    const sharedHostAssemblyPath = await createConfiguredHostAssembly(
+      repoRoot,
+      path.join("shared", "DevHub.Host.dll")
+    );
+    const jsHostAssemblyPath = await createConfiguredHostAssembly(
+      repoRoot,
+      path.join("js", "DevHub.Host.dll")
+    );
+
+    const resolvedPath = await resolveConfiguredHostAssemblyFromEnvironment(repoRoot, {
+      DEVHUB_SDK_HOST_ASSEMBLY: sharedHostAssemblyPath,
+      DEVHUB_JS_SDK_HOST_ASSEMBLY: jsHostAssemblyPath
+    });
+
+    expect(resolvedPath).toBe(jsHostAssemblyPath);
+  } finally {
+    await fsPromises.rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
 async function waitForProcessState(pid: number, expectedRunning: boolean): Promise<void> {
   const deadline = Date.now() + 15_000;
 
@@ -113,4 +161,15 @@ async function pathExists(target: string): Promise<boolean> {
 
 function quoteCommandArgument(value: string): string {
   return value.includes(" ") ? `"${value}"` : value;
+}
+
+async function createFakeRepositoryRoot(): Promise<string> {
+  return await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-host-fixture-"));
+}
+
+async function createConfiguredHostAssembly(repoRoot: string, relativePath: string): Promise<string> {
+  const hostAssemblyPath = path.join(repoRoot, relativePath);
+  await fsPromises.mkdir(path.dirname(hostAssemblyPath), { recursive: true });
+  await fsPromises.writeFile(hostAssemblyPath, "", "utf-8");
+  return hostAssemblyPath;
 }
