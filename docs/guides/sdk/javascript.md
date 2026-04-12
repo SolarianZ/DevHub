@@ -7,11 +7,7 @@
 - 已按 [`../getting-started/host-quickstart.md`](../getting-started/host-quickstart.md) 启动 Host，并确认 `hub.json` 与 `tokenFile` 可读。
 - Node.js 调用方需具备 `Node.js 20+` 与 `npm`。
 - 浏览器 / WebView 调用方需由宿主应用提供可用的运行时连接信息，并通过自定义 `runtimeResolver` 交给 SDK。
-- 首个正式 GitHub Release 发布前，公开安装入口统一使用显式 TODO 占位：
-
-```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub JS/TS SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
-```
+- 若当前分发渠道尚未提供正式安装资产，请按 [`../../operations/publishing/README.md`](../../operations/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 ## 2. 获取 SDK
 

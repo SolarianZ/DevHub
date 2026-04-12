@@ -8,7 +8,7 @@
 - [`../开发指南.md`](../开发指南.md)：本地开发环境、构建、运行与验证流程。
 - [`../../operations/publishing/release-process.md`](../../operations/publishing/release-process.md)：preview / main / stable 发布流程与 GitHub Release 约定。
 - [`../../operations/publishing/release-checklist.md`](../../operations/publishing/release-checklist.md)：发布前检查和发布后核验清单。
-- [`../../architecture/DevHub协议与开发规划.md`](../../architecture/DevHub协议与开发规划.md)：架构背景、模块边界与里程碑规划。
+- [`../../architecture/DevHub协议与开发规划.md`](../../architecture/DevHub协议与开发规划.md)：架构背景、模块边界与设计取舍。
 - [`../../milestones/DevHub_M6任务文档.md`](../../milestones/DevHub_M6任务文档.md)：当前阶段任务与验收边界。
 - [`../../spec/Spec.md`](../../spec/Spec.md)：公开行为与协议契约的唯一权威标准。
 - [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：仓库根目录贡献入口。

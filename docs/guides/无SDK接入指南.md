@@ -10,10 +10,10 @@
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Spec.md`](../spec/Spec.md)。
-- 文档分类与治理口径见 [`docs/README.md`](../README.md)；M6 期间“核心目标必需约束 / 发布前可调整约束”的区分以 [`Spec.md` §1.4](../spec/Spec.md#14-m6-期间的规范治理口径) 为准。
+- 文档分类与导航规则见 [`docs/README.md`](../README.md)；当前分支的执行范围与验收边界见 [`docs/milestones/DevHub_M6任务文档.md`](../milestones/DevHub_M6任务文档.md)。
 - 本文只整理“不依赖 SDK 源码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
-- 当前文档、Schema 与协议示例描述的是仓库内的**当前公开基线**；在首次正式对外发布前，若为对齐核心目标而修正规范，本指南与配套资产会同步更新。
+- 本文、Schema 与协议示例描述的是仓库当前维护的公开基线；若 `Spec.md` 修订相应协议条款，配套资产会同步更新。
 
 如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需要组合下列公开资料即可完成接入：
 
@@ -242,12 +242,12 @@ python host/tests/conformance/vector_runner.py \
 
 本仓库当前采用“协议版本”和“包版本”分离的兼容策略：
 
-- 在 M6 期间，以下口径描述的是当前公开基线；若 [`Spec.md`](../spec/Spec.md) 为对齐核心目标而修订，本指南、Schema、示例、SDK 与 conformance 资产会同步调整。
 - 当前公开基线是 `protocolVersion=1` 与当前仓库维护的 Hub v1.x 协议资料。
+- 若 [`Spec.md`](../spec/Spec.md) 调整相应条款，本指南、Schema、示例、SDK 与 conformance 资产会保持同步。
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
-- 首次正式对外发布后，只要客户端严格遵循 [`Spec.md`](../spec/Spec.md) §9 的兼容规则，就可以与 Hub v1.x 正常协作。
+- 兼容边界以 [`Spec.md`](../spec/Spec.md) §9 为准；第三方接入应直接遵循该节。
 
-首次正式对外发布后的 v1.x 内允许的兼容扩展：
+`Spec.md` §9 中允许的兼容扩展包括：
 
 - 向响应增加可选字段
 - 增加新错误码
@@ -259,10 +259,10 @@ python host/tests/conformance/vector_runner.py \
 - 泛化处理未知错误码
 - 允许忽略自己暂不支持的新方法
 
-首次正式对外发布后，以下变更属于破坏性变更，必须进入 v2，而不是继续声称兼容 v1.x：
+以下变更属于破坏性变更，必须进入 v2，而不是继续声称兼容 v1.x：
 
 - 更改既有字段类型或语义
 - 移除公开字段
 - 收紧验证并拒绝此前合法的输入
 
-本轮文档只定义当前公开基线与未来正式发布后的兼容口径，不调整 `sdks/dotnet`、`sdks/javascript`、`sdks/python` 的现有包版本号。
+本文只定义当前公开基线与 `Spec.md` 中的兼容口径，不调整 `sdks/dotnet`、`sdks/javascript`、`sdks/python` 的现有包版本号。

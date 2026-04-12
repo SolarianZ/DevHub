@@ -13,15 +13,11 @@
 - [`Host 快速上手`](../getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和最小验证入口。
 - [`无 SDK 接入指南`](../无SDK接入指南.md)：不依赖仓库内 SDK 时的协议接入路径。
 
-## 正式发布前占位
+## 发布资产占位
 
-当正式 GitHub Release 中的 SDK 发布资产尚未确定时，语言相关安装说明统一使用显式 TODO 占位：
+当语言相关安装资产尚未在当前分发渠道提供时，请统一沿用 [`../../operations/publishing/README.md`](../../operations/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范。
 
-```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 <SDK 名称> 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
-```
-
-当前各语言 README 中保留的仓库内命令仅用于本地开发、测试或本地打包验证，不代表正式发布安装入口。
+各语言 README 中保留的仓库内命令仅用于本地开发、测试或本地打包验证，不代表正式发布安装入口。
 
 ## 接入闭环
 

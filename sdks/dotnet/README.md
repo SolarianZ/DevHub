@@ -52,16 +52,16 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 然后在消费项目中引用生成的本地包。若用于本地打包验证，请以实际生成的 `.nupkg` 文件名为准，不要从文档复制固定版本号：
 
 ```xml
-<!-- TODO(devhub-release): 首个正式 GitHub Release 发布后，用正式发布资产中的 SDK 版本替换 TODO-FIRST-RELEASE-VERSION。当前阶段不要填写未发布版本号。 -->
+<!-- TODO(devhub-release): 正式发布资产可用后，用该资产中的 SDK 版本替换 TODO-FIRST-RELEASE-VERSION。当前不要填写未生成的版本号。 -->
 <PackageReference Include="DevHub.Sdk" Version="TODO-FIRST-RELEASE-VERSION" />
 ```
 
-## 正式发布包占位
+## 发布资产占位
 
-正式 GitHub Release 资产尚未固定前，`.NET SDK` 的公开安装说明统一使用以下占位写法：
+当 `.NET SDK` 的正式安装资产尚未生成时，公开安装说明统一使用以下占位写法：
 
 ```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub .NET SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
+TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub .NET SDK 的发布资产名称、版本号与安装命令；当前不要填写未生成的版本号、下载链接或仓库外安装命令。
 ```
 
 ## Runtime Discovery

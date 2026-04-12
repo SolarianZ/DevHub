@@ -26,10 +26,10 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 python3 -m pip install -e '.[test]'
 ```
 
-正式 GitHub Release 资产尚未固定前，公开安装说明统一使用以下占位写法：
+当正式安装资产尚未生成时，公开安装说明统一使用以下占位写法：
 
 ```text
-TODO(devhub-release): 首个正式 GitHub Release 发布后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前阶段不要填写未发布的版本号、下载链接或仓库外安装命令。
+TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前不要填写未生成的版本号、下载链接或仓库外安装命令。
 ```
 
 ## 快速示例
