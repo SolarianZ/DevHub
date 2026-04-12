@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
+import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
 import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
@@ -69,6 +70,79 @@ it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 sessionFactory"
   }
 
   expect(session?.disposedReason).toBe("client_dispose");
+});
+
+it("M6_TS_UT_009 HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接上下文", async () => {
+  const connection = createConnectionInfo();
+  const resolvedOptions: Readonly<NormalizedDevHubClientOptions>[] = [];
+  const runtimeResolver = {
+    resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
+      resolvedOptions.push(options);
+      return connection;
+    })
+  };
+  const transport = {
+    send: vi.fn(async () => ({
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z"
+    })),
+    dispose: vi.fn(async () => {})
+  };
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-shared-http-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver,
+      transportFactory: () => transport
+    }
+  );
+
+  const eventsClient = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-shared-events-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver,
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.ping();
+    await eventsClient.authenticate();
+  } finally {
+    await client.dispose();
+    await eventsClient.dispose();
+  }
+
+  expect(resolvedOptions).toHaveLength(2);
+  expect(resolvedOptions[0]?.clientSessionId).toBe(resolvedOptions[1]?.clientSessionId);
+  expect(resolvedOptions[0]?.clientSessionId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  );
+  expect(client.options.clientSessionId).toBe(eventsClient.options.clientSessionId);
+  expect(session?.requests[0]?.params).toMatchObject({
+    clientSessionId: client.options.clientSessionId
+  });
+  expect(eventsClient.runtime).toEqual({
+    protocolVersion: 1,
+    pid: 12345,
+    startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+    hubVersion: "0.6.0-test"
+  });
+  expect((eventsClient.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+  expect((eventsClient.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+  expect((eventsClient.runtime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
+  expect((client as unknown as Record<string, unknown>).connection).toBeUndefined();
+  expect((eventsClient as unknown as Record<string, unknown>).connection).toBeUndefined();
 });
 
 it("M5_TS_UT_005 authenticate should support WS ping and apps queries", async () => {
@@ -779,6 +853,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+      hubVersion: "0.6.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,

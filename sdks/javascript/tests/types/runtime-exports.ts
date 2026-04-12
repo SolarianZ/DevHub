@@ -1,4 +1,5 @@
 import type {
+  DevHubRuntimeView,
   HubRuntime,
   RuntimeConnectionInfo,
   RuntimeResolver
@@ -34,6 +35,12 @@ const connection: RuntimeConnectionInfo = {
   rpcEndpoint: `${runtime.httpBaseUrl}/rpc`,
   websocketEndpoint: runtime.wsUrl
 };
+const runtimeView: DevHubRuntimeView = {
+  protocolVersion: 1,
+  pid: 12345,
+  startedAtUtc: new Date("2026-03-15T00:00:00Z"),
+  hubVersion: "0.6.0-test"
+};
 const resolver: RuntimeResolver = new FileSystemRuntimeResolver();
 
 type _RuntimeResolverContract = Assert<Implements<FileSystemRuntimeResolver, RuntimeResolver>>;
@@ -42,4 +49,5 @@ void DATA_DIR_ENV;
 void discoverRuntime;
 void resolveDataDirectory;
 void connection;
+void runtimeView;
 void resolver;

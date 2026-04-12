@@ -100,7 +100,15 @@ it("M6_E2E_004 定义变更事件应可订阅并携带最新载荷", async () =>
 
     await httpClient.upsertDefinition({
       appId: "events.managed.app",
-      displayName: "Events Managed App"
+      displayName: "Events Managed App",
+      description: "用于事件定义变更集成测试。",
+      capabilities: {
+        rpc: true,
+        events: false
+      },
+      launch: {
+        exePath: process.execPath
+      }
     });
 
     const upserted = await nextWithTimeout(iterator, 5_000);

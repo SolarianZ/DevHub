@@ -10,7 +10,7 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk` 
 
 ## 入口分工
 
-- `@devhub/sdk`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、`JsonRpcHttpTransport`、`JsonRpcWsSession`、错误类型、模型类型，以及 `RuntimeResolver` / `RuntimeConnectionInfo` 等运行时契约类型。
+- `@devhub/sdk`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、错误类型、模型类型、脱敏 `DevHubRuntimeView`，以及供高级接入使用的扩展 seam 类型。
 - `@devhub/sdk/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
 - 浏览器/WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk/runtime` 导入文件系统发现辅助。
@@ -26,6 +26,8 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk` 
 - 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
 - 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
 - 已公开运行时解析器契约类型、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
+- 顶层客户端实例只公开脱敏 `runtime` 视图；bearer token 与原始连接上下文保留在运行时发现和 transport / session 的内部协作链路中。
+- 当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
 
 > 根入口优先使用当前运行时提供的标准 Web API；Node.js 路径仅在缺少原生 `WebSocket` 时按需动态加载 `ws` 回退实现。
 
@@ -79,6 +81,7 @@ console.log(ping.serverTimeUtc, ping.echo);
 
 const eventsClient = await DevHubEventsClient.fromRuntime({ clientId: "demo-events" });
 await eventsClient.authenticate();
+console.log(client.runtime.pid, client.options.clientSessionId === eventsClient.options.clientSessionId);
 const subscriptionId = await eventsClient.subscribe();
 
 for await (const evt of eventsClient.readEvents()) {
@@ -140,7 +143,7 @@ const client = await DevHubClient.fromRuntime(
 
 ## 从旧根入口迁移 runtime 值导入
 
-根入口继续保留运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk/runtime` 获取：
+根入口继续保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
 
 ```ts
 // 迁移前

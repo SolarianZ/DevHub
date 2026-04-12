@@ -61,14 +61,23 @@ it("M5_E2E_001_And_002 HTTP 链路应可完成基础流程", async () => {
 
   const upserted = await client.upsertDefinition({
     appId: "http.managed.app",
-    displayName: "HTTP Managed App"
+    displayName: "HTTP Managed App",
+    description: "用于 HTTP upsert 集成测试。",
+    capabilities: {
+      rpc: true,
+      events: false
+    },
+    launch: {
+      exePath: process.execPath
+    }
   });
   expect(upserted.displayName).toBe("HTTP Managed App");
 
   const managedDefinition = await client.getDefinition("http.managed.app");
   expect(managedDefinition.displayName).toBe("HTTP Managed App");
   expect(managedDefinition.capabilities).toEqual({
-    rpc: true
+    rpc: true,
+    events: false
   });
 
   await client.deleteDefinition("http.managed.app");

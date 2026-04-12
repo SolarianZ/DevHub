@@ -18,6 +18,7 @@ export * from "./errors.js";
 export * from "./models.js";
 export type { DevHubEventType } from "./event-types.js";
 export type { DevHubClientDependencies, JsonRpcTransport, JsonRpcTransportFactory } from "./client.js";
+export type { DevHubRuntimeView } from "./runtime-view.js";
 export type {
   DevHubEventsClientDependencies,
   JsonRpcEventSession,

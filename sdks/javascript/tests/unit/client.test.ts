@@ -150,10 +150,55 @@ it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 transportFactor
   const result = await client.ping({ source: "fake-transport" });
 
   expect(result.echo).toEqual({ source: "fake-transport" });
-  expect(client.connection).toBe(connection);
+  expect(client.runtime).toEqual({
+    protocolVersion: 1,
+    pid: 12345,
+    startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+    hubVersion: "0.6.0-test"
+  });
+  expect((client.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+  expect((client.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+  expect((client.runtime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
+  expect((client as unknown as Record<string, unknown>).connection).toBeUndefined();
   expect(runtimeResolver.resolve).toHaveBeenCalledTimes(1);
   expect(transportFactory).toHaveBeenCalledTimes(1);
   expect(transport.send).toHaveBeenCalledTimes(1);
+});
+
+it("M6_TS_UT_008 runtime 应返回脱敏快照", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-runtime-view-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          serverTimeUtc: "2026-03-09T00:00:00Z"
+        })
+      })
+    }
+  );
+
+  const firstRuntime = client.runtime;
+  firstRuntime.startedAtUtc.setUTCFullYear(2000);
+
+  const secondRuntime = client.runtime;
+  expect(secondRuntime).toEqual({
+    protocolVersion: 1,
+    pid: 12345,
+    startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+    hubVersion: "0.6.0-test"
+  });
+  expect((secondRuntime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+  expect((secondRuntime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+  expect((secondRuntime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
 });
 
 it("M5_TS_UT_004 ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
@@ -1592,6 +1637,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
+      hubVersion: "0.6.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,

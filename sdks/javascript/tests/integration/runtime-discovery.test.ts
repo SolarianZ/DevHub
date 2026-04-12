@@ -52,7 +52,7 @@ it("集成 Host 应写入独立目录树", async () => {
   expect(logFiles.some((file) => file.endsWith(".log"))).toBe(true);
 });
 
-it("fromRuntime 应构造客户端连接", async () => {
+it("fromRuntime 应构造客户端并仅公开脱敏 runtime 视图", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "integration-client",
     dataDir: getHost().dataDirectory
@@ -64,10 +64,21 @@ it("fromRuntime 应构造客户端连接", async () => {
   });
 
   try {
-    expect(client.connection.runtimeDirectory).toBe(getHost().runtimeDirectory);
-    expect(eventsClient.connection.runtimeDirectory).toBe(getHost().runtimeDirectory);
-    expect(client.connection.token.length).toBeGreaterThan(0);
-    expect(eventsClient.connection.token.length).toBeGreaterThan(0);
+    expect(client.runtime.protocolVersion).toBe(1);
+    expect(eventsClient.runtime.protocolVersion).toBe(1);
+    expect(client.runtime.pid).toBeGreaterThan(0);
+    expect(eventsClient.runtime.pid).toBeGreaterThan(0);
+    expect(client.runtime.startedAtUtc).toBeInstanceOf(Date);
+    expect(eventsClient.runtime.startedAtUtc).toBeInstanceOf(Date);
+    expect(client.options.clientSessionId).toBe(eventsClient.options.clientSessionId);
+    expect((client.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+    expect((client.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+    expect((client.runtime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
+    expect((eventsClient.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
+    expect((eventsClient.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
+    expect((eventsClient.runtime as unknown as Record<string, unknown>).tokenFile).toBeUndefined();
+    expect((client as unknown as Record<string, unknown>).connection).toBeUndefined();
+    expect((eventsClient as unknown as Record<string, unknown>).connection).toBeUndefined();
   } finally {
     await client.dispose();
     await eventsClient.dispose();

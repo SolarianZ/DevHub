@@ -190,6 +190,7 @@ export interface DevHubEvent {
   payload?: JsonObject;
 }
 
+const DEFAULT_CLIENT_SESSION_ID_KEY = Symbol.for("@devhub/sdk/defaultClientSessionId");
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function normalizeClientOptions(options: DevHubClientOptions): NormalizedDevHubClientOptions {
@@ -198,7 +199,7 @@ export function normalizeClientOptions(options: DevHubClientOptions): Normalized
   }
 
   const clientId = options.clientId ?? "";
-  const clientSessionId = options.clientSessionId ?? createRandomUuid();
+  const clientSessionId = options.clientSessionId ?? getDefaultClientSessionId();
   const protocolVersion = options.protocolVersion ?? 1;
 
   return {
@@ -233,4 +234,13 @@ export function validateClientOptions(options: NormalizedDevHubClientOptions): v
   ) {
     throw new Error("requestTimeoutMs 必须为大于 0 的整数。");
   }
+}
+
+function getDefaultClientSessionId(): string {
+  const state = globalThis as typeof globalThis & {
+    [DEFAULT_CLIENT_SESSION_ID_KEY]?: string;
+  };
+
+  state[DEFAULT_CLIENT_SESSION_ID_KEY] ??= createRandomUuid();
+  return state[DEFAULT_CLIENT_SESSION_ID_KEY];
 }
