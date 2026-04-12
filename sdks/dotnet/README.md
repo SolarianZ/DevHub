@@ -53,7 +53,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 
 ```xml
 <!-- TODO(devhub-release): 正式发布资产可用后，用该资产中的 SDK 版本替换 TODO-FIRST-RELEASE-VERSION。当前不要填写未生成的版本号。 -->
-<PackageReference Include="DevHub.Sdk" Version="TODO-FIRST-RELEASE-VERSION" />
+<PackageReference Include="DevHub.Sdk.DotNet" Version="TODO-FIRST-RELEASE-VERSION" />
 ```
 
 ## 发布资产占位

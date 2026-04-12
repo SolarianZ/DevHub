@@ -130,7 +130,10 @@ it("M5_E2E_008 request/respond 错误应映射为 invocation_failed", async () =
       ttlMs: 5_000,
       waitTimeoutMs: 3_000
     }
-  });
+  }).then(
+    (value) => ({ ok: true as const, value }),
+    (error) => ({ ok: false as const, error })
+  );
 
   const invocation = await waitForSingleInvocation(client, "error-inst-1");
 
@@ -146,12 +149,12 @@ it("M5_E2E_008 request/respond 错误应映射为 invocation_failed", async () =
     }
   });
 
-  let capturedError: unknown;
-  try {
-    await requestTask;
-  } catch (error) {
-    capturedError = error;
+  const requestOutcome = await requestTask;
+  expect(requestOutcome.ok).toBe(false);
+  if (requestOutcome.ok) {
+    throw new Error("request should fail when respond returns error.");
   }
+  const capturedError = requestOutcome.error;
 
   expect(capturedError).toBeInstanceOf(DevHubRpcError);
   const rpcError = capturedError as DevHubRpcError;

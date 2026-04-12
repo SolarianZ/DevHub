@@ -24,6 +24,6 @@
 推荐按以下顺序完成接入：
 
 1. 先按 [`../getting-started/host-quickstart.md`](../getting-started/host-quickstart.md) 启动 Host 并确认 `hub.ping` 成功。
-2. 再按对应语言文档准备环境、创建客户端并读取 `<dataDir>/runtime/hub.json`；其中 `JS/TS SDK` 根入口面向双运行时，Node.js 文件系统发现辅助位于 `@devhub/sdk/runtime`。
+2. 再按对应语言文档准备环境、创建客户端并读取 `<dataDir>/runtime/hub.json`；其中 `JS/TS SDK` 根入口面向双运行时，Node.js 文件系统发现辅助位于 `@devhub/sdk-javascript/runtime`。
 3. 需要深入了解 API、测试命令或扩展点时，再进入对应工作区 README。
 4. 如果最终决定不依赖官方 SDK，可切换到 [`../无SDK接入指南.md`](../无SDK接入指南.md)。

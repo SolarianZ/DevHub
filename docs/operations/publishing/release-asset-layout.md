@@ -14,13 +14,13 @@ artifacts/release/<release-id>/
 │   └── devhub-host-osx-arm64.zip
 ├── sdk/
 │   ├── dotnet/
-│   │   ├── DevHub.Sdk.<version>.nupkg
-│   │   └── DevHub.Sdk.<version>.snupkg
+│   │   ├── DevHub.Sdk.DotNet.<version>.nupkg
+│   │   └── DevHub.Sdk.DotNet.<version>.snupkg
 │   ├── javascript/
-│   │   └── devhub-sdk-<version>.tgz
+│   │   └── devhub-sdk-javascript-<version>.tgz
 │   └── python/
-│       ├── devhub_sdk-<version>.tar.gz
-│       └── devhub_sdk-<version>-py3-none-any.whl
+│       ├── devhub_sdk_python-<version>.tar.gz
+│       └── devhub_sdk_python-<version>-py3-none-any.whl
 ├── checks/
 │   ├── validation-summary.json
 │   ├── smoke-host.stdout.log

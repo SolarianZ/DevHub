@@ -23,7 +23,7 @@ python -m pip install build
 python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 ```
 
-正式发布后的 wheel、sdist 与 manifest 命名会与 [`../../operations/publishing/release-asset-layout.md`](../../operations/publishing/release-asset-layout.md) 保持一致。
+正式发布后的 distribution name 为 `devhub-sdk-python`，wheel、sdist 与 manifest 命名会与 [`../../operations/publishing/release-asset-layout.md`](../../operations/publishing/release-asset-layout.md) 保持一致；导入模块仍保持 `devhub_sdk`。
 
 ## 3. 连接 Host
 

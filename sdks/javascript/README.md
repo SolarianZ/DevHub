@@ -1,6 +1,6 @@
 # DevHub JS/TS SDK
 
-DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk` 根入口面向 `Node.js 20+` 与浏览器/WebView 双运行时，`@devhub/sdk/runtime` 子路径面向 Node.js 文件系统运行时发现能力。
+DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk-javascript` 根入口面向 `Node.js 20+` 与浏览器/WebView 双运行时，`@devhub/sdk-javascript/runtime` 子路径面向 Node.js 文件系统运行时发现能力。
 
 ## 接入导航
 
@@ -10,15 +10,15 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk` 
 
 ## 入口分工
 
-- `@devhub/sdk`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、错误类型、模型类型、脱敏 `DevHubRuntimeView`，以及供高级接入使用的扩展 seam 类型。
-- `@devhub/sdk/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
+- `@devhub/sdk-javascript`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、错误类型、模型类型、脱敏 `DevHubRuntimeView`，以及供高级接入使用的扩展 seam 类型。
+- `@devhub/sdk-javascript/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
 - 浏览器/WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`。
-- Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk/runtime` 导入文件系统发现辅助。
+- Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
 
 ## 当前状态
 
 - 已提供工程骨架。
-- 已提供基础模型、统一错误模型，以及通过 `@devhub/sdk/runtime` 暴露的 Node.js 文件系统运行时发现能力。
+- 已提供基础模型、统一错误模型，以及通过 `@devhub/sdk-javascript/runtime` 暴露的 Node.js 文件系统运行时发现能力。
 - 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等），其中应用定义管理已覆盖 `list/get/validate/upsert/delete`，实例注册/注销已对齐顶层 `password` 参数。
 - 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流），并收敛到包含 `app.definition.upserted` / `app.definition.deleted` 在内的闭集事件类型。
 - 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 会按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构按 Spec 要求整数 `code` 与对象型 `data`。
@@ -73,7 +73,7 @@ npm test
 Node.js 20+ 默认文件系统发现：
 
 ```ts
-import { DevHubClient, DevHubEventsClient } from "@devhub/sdk";
+import { DevHubClient, DevHubEventsClient } from "@devhub/sdk-javascript";
 
 const client = await DevHubClient.fromRuntime({ clientId: "demo" });
 const ping = await client.ping({ value: 1 });
@@ -96,7 +96,7 @@ import {
   DevHubClient,
   type RuntimeConnectionInfo,
   type RuntimeResolver
-} from "@devhub/sdk";
+} from "@devhub/sdk-javascript";
 
 declare global {
   interface Window {
@@ -121,15 +121,15 @@ const client = await DevHubClient.fromRuntime(
 );
 ```
 
-Node.js 显式使用 `@devhub/sdk/runtime`：
+Node.js 显式使用 `@devhub/sdk-javascript/runtime`：
 
 ```ts
-import { DevHubClient } from "@devhub/sdk";
+import { DevHubClient } from "@devhub/sdk-javascript";
 import {
   FileSystemRuntimeResolver,
   discoverRuntime,
   resolveDataDirectory
-} from "@devhub/sdk/runtime";
+} from "@devhub/sdk-javascript/runtime";
 
 const dataDir = resolveDataDirectory(process.env.DEVHUB_DATA_DIR);
 const connection = await discoverRuntime(dataDir);
@@ -143,7 +143,7 @@ const client = await DevHubClient.fromRuntime(
 
 ## 从旧根入口迁移 runtime 值导入
 
-根入口继续保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
+根入口继续保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk-javascript/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
 
 ```ts
 // 迁移前
@@ -151,14 +151,14 @@ import {
   FileSystemRuntimeResolver,
   discoverRuntime,
   resolveDataDirectory
-} from "@devhub/sdk";
+} from "@devhub/sdk-javascript";
 
 // 当前入口
 import {
   FileSystemRuntimeResolver,
   discoverRuntime,
   resolveDataDirectory
-} from "@devhub/sdk/runtime";
+} from "@devhub/sdk-javascript/runtime";
 ```
 
 ## 应用定义与安全实例管理
@@ -201,8 +201,8 @@ await client.deleteDefinition(definition.appId);
 import {
   DevHubClient,
   JsonRpcHttpTransport
-} from "@devhub/sdk";
-import { FileSystemRuntimeResolver } from "@devhub/sdk/runtime";
+} from "@devhub/sdk-javascript";
+import { FileSystemRuntimeResolver } from "@devhub/sdk-javascript/runtime";
 
 const client = await DevHubClient.fromRuntime(
   { clientId: "example-client" },
@@ -217,8 +217,8 @@ const client = await DevHubClient.fromRuntime(
 import {
   DevHubEventsClient,
   JsonRpcWsSession
-} from "@devhub/sdk";
-import { FileSystemRuntimeResolver } from "@devhub/sdk/runtime";
+} from "@devhub/sdk-javascript";
+import { FileSystemRuntimeResolver } from "@devhub/sdk-javascript/runtime";
 
 const eventsClient = await DevHubEventsClient.fromRuntime(
   { clientId: "example-events-client" },

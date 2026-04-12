@@ -129,7 +129,7 @@ Host 生命周期层负责把运行时资源纳入 ASP.NET Core 的托管模型�
 各语言的具体落点：
 
 - `.NET SDK`：默认通过标准 `HttpClient` 管道接入 HTTP，公开面集中在 `DevHubClient`、`DevHubEventsClient` 和必要的窄扩展 seam。
-- `JS/TS SDK`：根入口保持浏览器安全，Node.js 文件系统发现通过 `@devhub/sdk/runtime` 子路径暴露；顶层运行时视图默认脱敏。
+- `JS/TS SDK`：根入口保持浏览器安全，Node.js 文件系统发现通过 `@devhub/sdk-javascript/runtime` 子路径暴露；顶层运行时视图默认脱敏。
 - `Python SDK`：WebSocket session 只负责连接与消息收发，`DevHubEvent` 解析与共享 payload builder 位于更高层的协议适配逻辑。
 
 ## 6. 测试架构
