@@ -62,8 +62,9 @@ python -m pip install -e "./sdks/python[test]" requests
 ```bash
 dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 export DEVHUB_DOTNET_SDK_HOST_ASSEMBLY="$PWD/host/src/DevHub.Host/bin/Release/net10.0/DevHub.Host.dll"
-export DEVHUB_JS_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
-export DEVHUB_PYTHON_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
+export DEVHUB_SDK_HOST_ASSEMBLY="$DEVHUB_DOTNET_SDK_HOST_ASSEMBLY"
+export DEVHUB_JS_SDK_HOST_ASSEMBLY="$DEVHUB_SDK_HOST_ASSEMBLY"
+export DEVHUB_PYTHON_SDK_HOST_ASSEMBLY="$DEVHUB_SDK_HOST_ASSEMBLY"
 ```
 
 这样 `.NET`、`JS/TS`、`Python` 三套官方适配器都会复用同一份 Host 可执行产物，避免多个测试进程同时触发 `host/src/DevHub.Host` 的构建竞争。

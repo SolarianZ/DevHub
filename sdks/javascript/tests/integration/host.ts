@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { promises as fsPromises } from "node:fs";
@@ -9,6 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
+const SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
+const SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 let sharedHostAssemblyPromise: Promise<string> | undefined;
 
 export class DevHubHostFixture {
@@ -60,6 +63,8 @@ export class DevHubHostFixture {
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
     await fsPromises.mkdir(definitionsDirectory, { recursive: true });
+    await fsPromises.mkdir(instancesDirectory, { recursive: true });
+    await fsPromises.mkdir(logsDirectory, { recursive: true });
     const hostAssemblyPath = await resolveHostAssemblyPath(repoRoot);
 
     const fixture = new DevHubHostFixture(
@@ -103,7 +108,8 @@ export class DevHubHostFixture {
 
     const env = {
       ...process.env,
-      DEVHUB_DATA_DIR: this.dataDirectory
+      DEVHUB_DATA_DIR: this.dataDirectory,
+      [SingleInstanceSlotEnvironmentVariable]: randomUUID()
     };
 
     this.process = spawn("dotnet", [this.hostAssemblyPath], {
@@ -168,9 +174,9 @@ function resolveRepoRoot(): string {
 }
 
 function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
-  const configuredHostAssemblyPath = process.env[PrebuiltHostAssemblyEnvironmentVariable]?.trim();
-  if (configuredHostAssemblyPath) {
-    return resolveConfiguredHostAssemblyPath(repoRoot, configuredHostAssemblyPath);
+  const configuredHostAssembly = resolveConfiguredHostAssemblyFromEnvironment(repoRoot);
+  if (configuredHostAssembly) {
+    return configuredHostAssembly;
   }
 
   sharedHostAssemblyPromise ??= (async () => {
@@ -181,14 +187,32 @@ function resolveHostAssemblyPath(repoRoot: string): Promise<string> {
   return sharedHostAssemblyPromise;
 }
 
-async function resolveConfiguredHostAssemblyPath(repoRoot: string, configuredPath: string): Promise<string> {
+function resolveConfiguredHostAssemblyFromEnvironment(repoRoot: string): Promise<string> | undefined {
+  for (const environmentVariableName of [
+    PrebuiltHostAssemblyEnvironmentVariable,
+    SharedPrebuiltHostAssemblyEnvironmentVariable
+  ]) {
+    const configuredPath = process.env[environmentVariableName]?.trim();
+    if (configuredPath) {
+      return resolveConfiguredHostAssemblyPath(repoRoot, configuredPath, environmentVariableName);
+    }
+  }
+
+  return undefined;
+}
+
+async function resolveConfiguredHostAssemblyPath(
+  repoRoot: string,
+  configuredPath: string,
+  environmentVariableName: string
+): Promise<string> {
   const resolvedPath = path.isAbsolute(configuredPath)
     ? configuredPath
     : path.resolve(repoRoot, configuredPath);
 
   if (!(await fileExists(resolvedPath))) {
     throw new Error(
-      `环境变量 ${PrebuiltHostAssemblyEnvironmentVariable} 指定的 Host 程序不存在：${resolvedPath}`
+      `环境变量 ${environmentVariableName} 指定的 Host 程序不存在：${resolvedPath}`
     );
   }
 

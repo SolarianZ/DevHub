@@ -50,17 +50,25 @@ host/tests/
 
 ## 运行方式
 
-### 1) 启动 DevHub Host
+### 1) 运行黑盒测试
 
-```bash
-dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
-```
+`host/tests/blackbox/test_runner.py` 默认会先构建一次仓库内 `DevHub.Host`，再启动一个 runner 级隔离 Host，并把整个黑盒测试过程固定到该隔离 `DEVHUB_DATA_DIR`；测试完成后会自动结束这个临时 Host。
 
-### 2) 运行黑盒测试
+如需关闭默认预构建，可使用：
+
+- `--no-build-host`
+- `DEVHUB_TEST_BUILD_HOST=0`
+
+如需改为复用外部已启动的 Host，可使用：
+
+- `--use-existing-host`
+- `DEVHUB_TEST_USE_EXISTING_HOST=1`
+
+此时 runner 不再自启 Host，而是直接连接当前 `DEVHUB_DATA_DIR` 或平台默认数据目录对应的运行时。
 
 #### 可选：为隔离 Hub 用例配置启动夹具
 
-`host/tests/blackbox/test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动隔离 Hub 进程。默认情况下，夹具会回退到仓库内的 Host 启动命令；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
+`host/tests/blackbox/test_launch_discovery.py` 中涉及原子写入与自定义数据根目录的用例，会通过统一测试夹具启动额外的隔离 Hub 进程。默认情况下，夹具会沿用仓库内 Host 的默认启动方式；如需改由外部 harness 或自定义包装脚本负责拉起进程，可通过下列参数或同名环境变量注入：
 
 - `--isolated-hub-command` / `DEVHUB_TEST_HUB_COMMAND`：隔离 Hub 启动命令，支持 shell 字符串或 JSON 数组。
 - `--isolated-hub-cwd` / `DEVHUB_TEST_HUB_CWD`：隔离 Hub 启动命令的工作目录。
@@ -78,6 +86,13 @@ python3 host/tests/blackbox/test_runner.py
 
 ```bash
 python3 host/tests/blackbox/test_runner.py --isolated-hub-command "dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile"
+```
+
+复用外部 Host：
+
+```bash
+dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release --no-build --no-launch-profile
+python3 host/tests/blackbox/test_runner.py --use-existing-host --no-build-host
 ```
 
 #### Fast
@@ -98,7 +113,7 @@ python3 host/tests/blackbox/test_runner.py --full
 python3 host/tests/blackbox/test_runner.py --smoke
 ```
 
-### 3) 运行 conformance
+### 2) 运行 conformance
 
 仓库级符合性向量：
 
@@ -112,7 +127,7 @@ conformance runner 自测：
 python -m unittest discover -s host/tests/conformance -p "test_conformance_runner.py"
 ```
 
-### 4) 覆盖率配置与校验
+### 3) 覆盖率配置与校验
 
 ```bash
 find host -type d -name TestResults -prune -exec rm -rf {} +

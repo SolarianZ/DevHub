@@ -52,8 +52,8 @@ npm test
 
 - `npm test` 中的集成测试会自行构建并启动临时 DevHub Host，为当前测试文件分配独立临时 `dataDir`，固定通过 `<dataDir>/runtime/hub.json` 发现连接信息。
 - 集成测试不会连接开发机默认数据目录下的常驻 Hub；测试结束后会关闭自己启动的临时 Host，回收 Host 进程树，并删除对应临时目录。
-- 这一模式的目标是隔离运行时状态，而不是承诺默认无条件支持同机并行。当前 JS 集成测试默认会在临时输出目录构建 Host，但该构建过程仍会触发 `host/src/DevHub.Host` 的源码树构建并使用共享中间产物；若与其他 `.NET build/test` 或其他 SDK 集成测试同时进行，仍可能出现文件锁冲突。
-- 如果需要并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_JS_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发 Host 构建。
+- 默认情况下，JS 集成测试会把 Host 构建到自己的临时输出目录，再从该隔离产物启动 Host；这一模式的目标是隔离运行时状态，并避免直接复用源码树下的 Host 可执行输出。
+- 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 JS SDK，也可以改用 `DEVHUB_JS_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 仓库级 smoke 验证或手工联调仍可连接本机 Hub，此时请显式传入 `dataDir` 或设置 `DEVHUB_DATA_DIR`，不要把这种运行方式与 SDK 集成测试混用。
 
 ## 已验证能力

@@ -141,9 +141,9 @@ events_client = await DevHubEventsClient.from_runtime(
 这意味着：
 
 - SDK 集成测试不会连接开发机默认数据根目录下的常驻 Hub。
-- SDK 集成测试会把可用的 Host 程序复制到自己的临时目录后再启动；但在当前机器尚无可用 Host 输出时，仍可能先触发一次对 `host/src/DevHub.Host` 的构建。
-- 因此，“临时 Host + 独立数据根目录”只说明运行时状态彼此隔离，并不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行；若多个测试进程同时触发 Host 构建，仍可能出现文件锁冲突。
-- 如果需要并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过环境变量 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`，避免多个测试进程同时触发 Host 构建。
+- SDK 集成测试在未指定预构建 Host 程序时，会把 Host 构建到自己的临时输出目录，再从该隔离产物启动 Host。
+- 因此，“临时 Host + 独立数据根目录”说明运行时状态与默认构建产物都尽量彼此隔离，但仍不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行。
+- 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 Python SDK，也可以改用 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
 
 ## 验证命令
@@ -162,10 +162,18 @@ python3 -m pytest tests/integration
 python3 host/tests/blackbox/test_runner.py --smoke --no-header
 ```
 
-请先在另一个终端启动本地 Hub：
+这条命令会默认先构建一次仓库内 `DevHub.Host`，再自启一个隔离临时 Host，并在测试完成后自动清理。
+
+如果需要改为连接外部已启动的 Host，可在另一个终端启动本地 Hub：
 
 ```bash
 dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
-原因：仓库级 `smoke` 默认针对“已启动的本地 Hub”执行；这和上面的 SDK 集成测试模式不同。若本地 Hub 未启动，测试可能会读取到默认数据根目录中的历史残留 `hub.json`，从而出现 `Connection refused`。
+然后执行：
+
+```bash
+python3 host/tests/blackbox/test_runner.py --smoke --no-header --use-existing-host --no-build-host
+```
+
+这种仓库级 blackbox smoke 运行方式与上面的 SDK 集成测试模式不同：SDK 集成测试始终自管临时 Host，而仓库级 blackbox smoke 既支持自启隔离 Host，也支持显式复用外部 Hub。
