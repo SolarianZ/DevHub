@@ -39,8 +39,7 @@ DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon）�
 - [`docs/guides/contributor/README.md`](docs/guides/contributor/README.md)：仓库改造、贡献与治理入口。
 - [`docs/guides/contributor/repository-contribution.md`](docs/guides/contributor/repository-contribution.md)：贡献流程、本地打包与发布准备入口。
 - [`docs/guides/开发指南.md`](docs/guides/开发指南.md)：本地开发环境、构建、运行与验证流程。
-- [`docs/architecture/DevHub协议与开发规划.md`](docs/architecture/DevHub协议与开发规划.md)：架构背景、里程碑与开发规划。
-- [`docs/milestones/DevHub_M6任务文档.md`](docs/milestones/DevHub_M6任务文档.md)：当前阶段任务与验收边界。
+- [`docs/architecture/DevHub协议与开发规划.md`](docs/architecture/DevHub协议与开发规划.md)：架构背景、模块边界与开发规划。
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)：贡献与 PR 入口。
 - [`CHANGELOG.md`](CHANGELOG.md)：变更跟踪入口。
 - [`SECURITY.md`](SECURITY.md)：安全与支持入口。

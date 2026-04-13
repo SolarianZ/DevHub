@@ -10,7 +10,7 @@
 
 ## 2. 获取 SDK
 
-当前阶段，最直接的仓库内方式是安装源码工作区：
+仓库内最直接的获取方式是安装源码工作区：
 
 ```bash
 python -m pip install -e "./sdks/python[test]"

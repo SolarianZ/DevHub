@@ -1,6 +1,6 @@
 # 仓库改造与贡献入口
 
-本分组用于承载仓库改造、贡献协作和维护治理相关的文档入口，面向需要了解项目结构、开发流程与阶段任务的维护者和外部协作者。
+本分组用于承载仓库改造、贡献协作和维护治理相关的文档入口，面向需要了解项目结构、开发流程与协作规则的维护者和外部协作者。
 
 ## 当前入口
 
@@ -9,7 +9,6 @@
 - [`../../operations/publishing/release-process.md`](../../operations/publishing/release-process.md)：preview / main / stable 发布流程与 GitHub Release 约定。
 - [`../../operations/publishing/release-checklist.md`](../../operations/publishing/release-checklist.md)：发布前检查和发布后核验清单。
 - [`../../architecture/DevHub协议与开发规划.md`](../../architecture/DevHub协议与开发规划.md)：架构背景、模块边界与设计取舍。
-- [`../../milestones/DevHub_M6任务文档.md`](../../milestones/DevHub_M6任务文档.md)：当前阶段任务与验收边界。
 - [`../../spec/Spec.md`](../../spec/Spec.md)：公开行为与协议契约的唯一权威标准。
 - [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：仓库根目录贡献入口。
 - [`../../../CHANGELOG.md`](../../../CHANGELOG.md)：变更跟踪入口。

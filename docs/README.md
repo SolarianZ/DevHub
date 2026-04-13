@@ -7,7 +7,6 @@
 | 主题 | 权威入口 | 说明 |
 | --- | --- | --- |
 | 协议契约 | [`spec/Spec.md`](./spec/Spec.md) | 公开行为、字段命名、状态转换、错误语义、序列化契约与测试断言 |
-| 里程碑执行 | [`milestones/DevHub_M6任务文档.md`](./milestones/DevHub_M6任务文档.md) | 当前分支的任务拆解、状态、验收标准与遗留项 |
 | 架构边界 | [`architecture/DevHub协议与开发规划.md`](./architecture/DevHub协议与开发规划.md) | 模块职责、设计取舍与长期演进原则 |
 | 稳定使用方式 | [`guides/`](./guides/) | Host 上手、SDK 接入、无 SDK 接入、开发与贡献指南 |
 | 运维与发布 | [`operations/`](./operations/) | 部署、排障、发布流程、资产命名与检查清单 |
@@ -60,9 +59,8 @@
 ## 3. 分类规则
 
 - [`spec/`](./spec/)：规范正文、Schema 与协议示例。涉及公开契约时先回到这里。
-- [`milestones/`](./milestones/)：当前分支的阶段任务、状态与验收边界。需要说明“这轮要做什么”时回到这里。
-- [`architecture/`](./architecture/)：架构分层、设计取舍与专题评估。不要在这里维护协议副本或阶段状态。
-- [`guides/`](./guides/)：当前有效做法。面向不同角色提供稳定入口，不维护分支标签或阶段性治理口径。
+- [`architecture/`](./architecture/)：架构分层、设计取舍、开发规划与专题评估。不要在这里维护协议副本。
+- [`guides/`](./guides/)：面向不同角色的稳定入口，描述当前仓库的开发、接入与维护方式。
 - [`operations/`](./operations/)：部署、排障、发布、回滚与发布资产管理说明。
 - [`assets/`](./assets/)：文档静态资源，不承载执行口径。
 
@@ -83,6 +81,6 @@ TODO(devhub-release): 正式发布资产可用后，在此补充 <资产名称 /
 ## 5. 维护规则
 
 - 新增文档时优先放入现有分类目录，不在 `docs/` 根目录平铺新增 Markdown。
-- 若新增的是当前分支执行范围、状态或验收说明，应放入 `milestones/`，而不是散落在 `architecture/`、`guides/` 或 `operations/`。
+- 若新增的是架构规划或专题评估，应放入 `architecture/`；若新增的是开发、接入、运维或发布说明，应放入对应的 `guides/` 或 `operations/`。
 - 若文档陈述协议事实、错误语义或字段定义，应回指 [`spec/Spec.md`](./spec/Spec.md)，避免维护并行副本。
 - 外部导航发生变化时，同步更新仓库根 [`README.md`](../README.md) 与相关工作区 README。

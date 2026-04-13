@@ -5,7 +5,6 @@
 ## 1. 开始之前
 
 - 公开协议行为、字段命名、状态转换和错误语义以 [`../../spec/Spec.md`](../../spec/Spec.md) 为唯一权威标准。
-- 当前阶段任务、边界和阶段性验收要求以 [`../../milestones/DevHub_M6任务文档.md`](../../milestones/DevHub_M6任务文档.md) 为准。
 - 本地开发环境、构建和测试方式以 [`../开发指南.md`](../开发指南.md) 为准。
 - 发布资产布局、发布流程和检查清单分别见：
   - [`../../operations/publishing/release-asset-layout.md`](../../operations/publishing/release-asset-layout.md)

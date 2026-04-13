@@ -13,7 +13,6 @@ DevHub/
 │   │   ├── schema/                          # 版本化 Schema 资产
 │   │   └── protocol-examples/               # 版本化原始协议示例
 │   ├── architecture/                        # 架构演进与专题评估
-│   ├── milestones/                          # 当前阶段任务文档
 │   ├── guides/                              # 开发与接入指南
 │   ├── operations/                          # 部署与排障文档
 │   └── assets/                              # 文档静态资源

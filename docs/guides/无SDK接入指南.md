@@ -10,7 +10,7 @@
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Spec.md`](../spec/Spec.md)。
-- 文档分类与导航规则见 [`docs/README.md`](../README.md)；当前分支的执行范围与验收边界见 [`docs/milestones/DevHub_M6任务文档.md`](../milestones/DevHub_M6任务文档.md)。
+- 文档分类与导航规则见 [`docs/README.md`](../README.md)。
 - 本文只整理“不依赖 SDK 源码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
 - 本文、Schema 与协议示例描述的是仓库当前维护的公开基线；若 `Spec.md` 修订相应协议条款，配套资产会同步更新。
