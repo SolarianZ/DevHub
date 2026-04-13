@@ -5,7 +5,8 @@
 ## 前置条件
 
 - Unity 版本基线为 2019.4。
-- 使用方需要把 `DevHub.Sdk` 及其运行所需 DLL 放到 Unity 工程的 `Assets/Plugins/Editor` 目录。
+- 使用方需要把 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成的 `DevHub.Sdk` 运行所需 DLL 放到 Unity 工程的 `Assets/Plugins/Editor` 目录。
+- 若 Unity 工程已经通过 `com.unity.nuget.newtonsoft-json` 提供 `Newtonsoft.Json`，导入 publish 目录时不要再复制其中的 `Newtonsoft.Json.dll`，避免重复程序集来源。
 - 本包不内置 `DevHub.Sdk`、`Newtonsoft.Json`、`Microsoft.Bcl.AsyncInterfaces`、`System.Threading.Channels` 或其他 DLL，也不在 `package.json` 中声明运行依赖。
 
 ## Tool 注册

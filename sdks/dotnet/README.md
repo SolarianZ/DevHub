@@ -73,6 +73,23 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DotNet.DependencyInjection` 会直接依赖 `DevHub.Sdk.DotNet`。
 
+### Unity 本地发布
+
+```powershell
+python3 scripts/sdk/publish_unity_dotnet_sdk.py
+```
+
+该脚本会执行本地 `dotnet publish`，并在 publish 输出目录中仅后处理 `DevHub.Sdk.dll` 对 `Newtonsoft.Json` 的程序集引用，移除强签名 `PublicKeyToken`，用于匹配 Unity 常见的 `com.unity.nuget.newtonsoft-json` 未签名程序集。
+脚本每次执行前都会重建输出目录，避免残留上一次 publish 的陈旧 DLL。
+
+可选参数：
+
+```powershell
+python3 scripts/sdk/publish_unity_dotnet_sdk.py --output temp/sdk-unity-publish --configuration Release
+```
+
+`dotnet pack` 仍用于生成 NuGet 主包；Unity 手工导入的 DLL 目录使用上述本地 publish 脚本生成。
+
 ## Unity 2019.4 适配说明
 
 当前分支发布的 `DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 均仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线。
@@ -464,6 +481,7 @@ dotnet build host/DevHub.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Debug --no-restore
+python3 scripts/sdk/publish_unity_dotnet_sdk.py --output temp/sdk-unity-publish
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
@@ -508,4 +526,5 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - `System.Threading.Channels` 与 `Microsoft.Bcl.AsyncInterfaces` 继续保留，用于事件流 API 的异步缓冲、`IAsyncEnumerable<T>` 与 `IAsyncDisposable`
 - `DevHub.Sdk.DotNet.DependencyInjection` 单独承载 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
 - SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不进入 NuGet 发布产物
+- Unity 本地 publish 脚本只后处理 `DevHub.Sdk.dll`，不改 `dotnet pack` 生成的 NuGet 主包依赖元数据
 - `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前分支按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准

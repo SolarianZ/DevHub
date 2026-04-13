@@ -3,6 +3,9 @@
     <Project Path="src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj" />
     <Project Path="src/DevHub.Sdk/DevHub.Sdk.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/DevHub.Sdk.UnityPublish/DevHub.Sdk.UnityPublish.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DevHub.Sdk.ConformanceAdapter/DevHub.Sdk.ConformanceAdapter.csproj" />
     <Project Path="tests/DevHub.Sdk.IntegrationTests/DevHub.Sdk.IntegrationTests.csproj" />
