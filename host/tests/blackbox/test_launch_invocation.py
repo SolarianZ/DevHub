@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2 Launch + Invocation 冒烟测试
+DevHub 启动与调用冒烟测试
 """
 
 import os
@@ -56,13 +56,13 @@ class TestLaunchInvocation(unittest.TestCase):
         return new_instance_id(prefix)
 
     def test_notify_autolaunch_then_register_poll_success(self):
-        """M2-LAUNCH-001: autoLaunch 成功触发后，注册实例可拉取 invocation"""
-        result = TestResult("M2-LAUNCH-001 autoLaunch 触发后投递")
+        """LAUNCH-001: autoLaunch 成功触发后，注册实例可拉取 invocation"""
+        result = TestResult("LAUNCH-001 autoLaunch 触发后投递")
         definition_path = None
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-launch-notify-app")
+            app_id = self._new_app_id("launch-notify-app")
             definition_path = self._create_definition(app_id, include_launch=True)
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -74,7 +74,7 @@ class TestLaunchInvocation(unittest.TestCase):
                 args={"from": "auto-launch"},
                 queue_if_offline=True,
                 auto_launch=True,
-                request_id="m2-launch-notify",
+                request_id="launch-notify",
             )
             if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
                 return result
@@ -120,9 +120,9 @@ class TestLaunchInvocation(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             response = client.launch_app(
-                app_id="m2-launch-invalid",
+                app_id="launch-invalid",
                 wait_for_register_ms=-1,
-                request_id="m2-launch-invalid-wait",
+                request_id="launch-invalid-wait",
             )
 
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
@@ -140,7 +140,7 @@ class TestLaunchInvocation(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = self._new_app_id("m2-launch-missing-config")
+            app_id = self._new_app_id("launch-missing-config")
             definition_path = self._create_definition(app_id, include_launch=False)
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -149,7 +149,7 @@ class TestLaunchInvocation(unittest.TestCase):
             response = client.launch_app(
                 app_id=app_id,
                 wait_for_register_ms=0,
-                request_id="m2-launch-missing-config",
+                request_id="launch-missing-config",
             )
 
             if not RpcAssertions.expect_error(result, response, -32020, "launch_failed"):
@@ -174,11 +174,11 @@ class TestLaunchInvocation(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            missing_app_id = f"m2-launch-missing-def-{uuid.uuid4().hex[:8]}"
+            missing_app_id = f"launch-missing-def-{uuid.uuid4().hex[:8]}"
             response = client.launch_app(
                 app_id=missing_app_id,
                 wait_for_register_ms=0,
-                request_id="m2-launch-missing-definition",
+                request_id="launch-missing-definition",
             )
 
             if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
@@ -200,7 +200,7 @@ class TestLaunchInvocation(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = f"m2-launch-dedupe-app-{request_count}"
+            app_id = f"launch-dedupe-app-{request_count}"
             definition_path = self._create_definition(
                 app_id,
                 include_launch=True,
@@ -214,7 +214,7 @@ class TestLaunchInvocation(unittest.TestCase):
                 return client.launch_app(
                     app_id=app_id,
                     wait_for_register_ms=0,
-                    request_id=f"m2-launch-dedupe-{request_count}-{index}",
+                    request_id=f"launch-dedupe-{request_count}-{index}",
                 )
 
             with ThreadPoolExecutor(max_workers=request_count) as executor:
@@ -263,26 +263,26 @@ class TestLaunchInvocation(unittest.TestCase):
         return result
 
     def test_launch_dedupe_concurrent_should_return_already_running_lightweight(self):
-        """M2-LAUNCH-002-LITE: default 轻量并发 dedupe"""
+        """LAUNCH-002-LITE: default 轻量并发 dedupe"""
         return self._run_launch_dedupe_concurrent_case(
             request_count=3,
-            case_name="M2-LAUNCH-002-LITE dedupe 并发去重（default 轻量）",
+            case_name="LAUNCH-002-LITE dedupe 并发去重（default 轻量）",
         )
 
     def test_launch_dedupe_concurrent_should_return_already_running(self):
-        """M2-LAUNCH-002: dedupe 窗口并发去重（full）"""
+        """LAUNCH-002: dedupe 窗口并发去重（full）"""
         return self._run_launch_dedupe_concurrent_case(
             request_count=8,
-            case_name="M2-LAUNCH-002 dedupe 窗口并发去重（full）",
+            case_name="LAUNCH-002 dedupe 窗口并发去重（full）",
         )
 
-    def test_m3_scope_011_launch_dedupe_should_isolate_by_scope(self):
-        """M3-SCOPE-011: launch dedupe 在不同 scope 间隔离"""
-        result = TestResult("M3-SCOPE-011 launch dedupe scope 隔离")
+    def test_scope_011_launch_dedupe_should_isolate_by_scope(self):
+        """SCOPE-011: launch dedupe 在不同 scope 间隔离"""
+        result = TestResult("SCOPE-011 launch dedupe scope 隔离")
         definition_path = None
 
         try:
-            app_id = f"m3-launch-scope-dedupe-{uuid.uuid4().hex[:8]}"
+            app_id = f"launch-scope-dedupe-{uuid.uuid4().hex[:8]}"
             definition_path = self._create_definition(
                 app_id,
                 include_launch=True,
@@ -302,8 +302,8 @@ class TestLaunchInvocation(unittest.TestCase):
                 )
 
             with ThreadPoolExecutor(max_workers=2) as executor:
-                scope_a_future = executor.submit(launch_with_scope, "workspace-A", "m3-scope-011-launch-a")
-                scope_b_future = executor.submit(launch_with_scope, "workspace-B", "m3-scope-011-launch-b")
+                scope_a_future = executor.submit(launch_with_scope, "workspace-A", "scope-011-launch-a")
+                scope_b_future = executor.submit(launch_with_scope, "workspace-B", "scope-011-launch-b")
                 scope_a_response = scope_a_future.result()
                 scope_b_response = scope_b_future.result()
 
@@ -332,7 +332,7 @@ class TestLaunchInvocation(unittest.TestCase):
                 app_id=app_id,
                 scope="workspace-A",
                 wait_for_register_ms=0,
-                request_id="m3-scope-011-launch-a-second",
+                request_id="scope-011-launch-a-second",
             )
             if not RpcAssertions.expect_success(result, same_scope_second, ["status", "launchId"]):
                 return result
@@ -362,7 +362,7 @@ class TestLaunchInvocation(unittest.TestCase):
             self.test_launch_invalid_wait_for_register_should_fail(),
             self.test_launch_missing_config_should_fail(),
             self.test_launch_missing_definition_should_return_app_definition_not_found(),
-            self.test_m3_scope_011_launch_dedupe_should_isolate_by_scope(),
+            self.test_scope_011_launch_dedupe_should_isolate_by_scope(),
         ]
 
         if full:

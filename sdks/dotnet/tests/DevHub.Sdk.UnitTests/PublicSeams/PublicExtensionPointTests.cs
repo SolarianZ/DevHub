@@ -11,7 +11,7 @@ public sealed class PublicExtensionPointTests
     private const string ExpectedHubVersion = "test-hub-version";
 
     [Fact]
-    public async Task M6_DN_UT_002_DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndHttpClientProvider_ShouldUsePublicSeams()
+    public async Task DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndHttpClientProvider_ShouldUsePublicSeams()
     {
         var connectionInfo = CreateConnectionInfo();
         var runtimeResolver = new RecordingRuntimeResolver(connectionInfo);
@@ -43,7 +43,7 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
-    public async Task M6_DN_UT_001_DevHubClient_AfterDispose_ShouldRejectRpcWithoutInvokingTransport()
+    public async Task DevHubClient_AfterDispose_ShouldRejectRpcWithoutInvokingTransport()
     {
         var connectionInfo = CreateConnectionInfo();
         var httpClientProvider = new RecordingHttpClientProvider();
@@ -68,7 +68,7 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
-    public async Task M6_DN_UT_002_DevHubEventsClient_FromRuntime_WithInjectedRuntimeResolver_ShouldUsePublicSeams()
+    public async Task DevHubEventsClient_FromRuntime_WithInjectedRuntimeResolver_ShouldUsePublicSeams()
     {
         var connectionInfo = CreateConnectionInfo();
         var runtimeResolver = new RecordingRuntimeResolver(connectionInfo);
@@ -89,7 +89,7 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
-    public void M6_DN_UT_002_PublicSurface_ShouldHideLowLevelTransportAndSessionTypes()
+    public void PublicSurface_ShouldHideLowLevelTransportAndSessionTypes()
     {
         var exportedTypeNames = typeof(DevHubClient).Assembly.GetExportedTypes().Select(type => type.Name).ToArray();
 
@@ -100,7 +100,7 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
-    public void M5_DN_UT_008_DevHubEventType_Parse_WhenUnknownValueProvided_ShouldThrowArgumentException()
+    public void DevHubEventType_Parse_WhenUnknownValueProvided_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => DevHubEventType.Parse("unknown.type"));
     }

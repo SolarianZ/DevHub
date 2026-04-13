@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 启动与发现测试
+DevHub 启动与发现测试
 """
 
 import os

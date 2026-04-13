@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M4 WS 传输矩阵补充测试
+DevHub WebSocket 传输矩阵补充测试
 """
 
 import os
@@ -31,11 +31,11 @@ class TestWsTransportMatrix(unittest.TestCase):
 
     @staticmethod
     def _new_app_id(suffix):
-        return f"m4-ws-transport-{suffix}-{uuid.uuid4().hex[:6]}"
+        return f"ws-transport-{suffix}-{uuid.uuid4().hex[:6]}"
 
     @staticmethod
     def _new_instance_id(suffix):
-        return new_instance_id(f"m4-ws-transport-{suffix}")
+        return new_instance_id(f"ws-transport-{suffix}")
 
     def _create_definition(self, app_id):
         return write_app_definition(app_id, rpc=True, events=False)
@@ -82,9 +82,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return True
 
-    def test_m4_ws_matrix_001_ping_should_work_after_auth(self):
-        """M4-WS-MATRIX-001: 鉴权后 hub.ping 可在 WS 调用。"""
-        result = TestResult("M4-WS-MATRIX-001 鉴权后 WS hub.ping")
+    def test_ws_matrix_001_ping_should_work_after_auth(self):
+        """WS-MATRIX-001: 鉴权后 hub.ping 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-001 鉴权后 WS hub.ping")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -103,9 +103,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_002_list_definitions_should_work_after_auth(self):
-        """M4-WS-MATRIX-002: 鉴权后 hub.apps.listDefinitions 可在 WS 调用。"""
-        result = TestResult("M4-WS-MATRIX-002 鉴权后 WS hub.apps.listDefinitions")
+    def test_ws_matrix_002_list_definitions_should_work_after_auth(self):
+        """WS-MATRIX-002: 鉴权后 hub.apps.listDefinitions 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-002 鉴权后 WS hub.apps.listDefinitions")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -129,9 +129,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_003_get_definition_should_work_after_auth(self):
-        """M4-WS-MATRIX-003: 鉴权后 hub.apps.getDefinition 可在 WS 调用。"""
-        result = TestResult("M4-WS-MATRIX-003 鉴权后 WS hub.apps.getDefinition")
+    def test_ws_matrix_003_get_definition_should_work_after_auth(self):
+        """WS-MATRIX-003: 鉴权后 hub.apps.getDefinition 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-003 鉴权后 WS hub.apps.getDefinition")
         definition_path = None
 
         try:
@@ -161,9 +161,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_004_list_instances_should_work_after_auth(self):
-        """M4-WS-MATRIX-004: 鉴权后 hub.apps.listInstances 可在 WS 调用。"""
-        result = TestResult("M4-WS-MATRIX-004 鉴权后 WS hub.apps.listInstances")
+    def test_ws_matrix_004_list_instances_should_work_after_auth(self):
+        """WS-MATRIX-004: 鉴权后 hub.apps.listInstances 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-004 鉴权后 WS hub.apps.listInstances")
         instance_id = None
 
         try:
@@ -215,9 +215,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_005_invalid_params_should_be_enforced_after_auth(self):
-        """M4-WS-MATRIX-005: 鉴权后方法参数仍必须遵循 Spec 参数校验。"""
-        result = TestResult("M4-WS-MATRIX-005 鉴权后 WS 参数校验")
+    def test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(self):
+        """WS-MATRIX-005: 鉴权后方法参数仍必须遵循 Spec 参数校验。"""
+        result = TestResult("WS-MATRIX-005 鉴权后 WS 参数校验")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -252,9 +252,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(self):
-        """M4-WS-MATRIX-006: HTTP-only 方法在 WS 下必须被拒绝。"""
-        result = TestResult("M4-WS-MATRIX-006 WS 调用 HTTP-only 方法应拒绝")
+    def test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(self):
+        """WS-MATRIX-006: HTTP-only 方法在 WS 下必须被拒绝。"""
+        result = TestResult("WS-MATRIX-006 WS 调用 HTTP-only 方法应拒绝")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -385,9 +385,9 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
-    def test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(self):
-        """M4-WS-MATRIX-007: WS-only 方法在 HTTP 下必须被拒绝。"""
-        result = TestResult("M4-WS-MATRIX-007 HTTP 调用 WS-only 方法应拒绝")
+    def test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(self):
+        """WS-MATRIX-007: WS-only 方法在 HTTP 下必须被拒绝。"""
+        result = TestResult("WS-MATRIX-007 HTTP 调用 WS-only 方法应拒绝")
 
         try:
             http_base_url, _, token = self._runtime_hub_info()
@@ -430,13 +430,13 @@ class TestWsTransportMatrix(unittest.TestCase):
 
     def run_all_tests(self, full=False):
         return [
-            self.test_m4_ws_matrix_001_ping_should_work_after_auth(),
-            self.test_m4_ws_matrix_002_list_definitions_should_work_after_auth(),
-            self.test_m4_ws_matrix_003_get_definition_should_work_after_auth(),
-            self.test_m4_ws_matrix_004_list_instances_should_work_after_auth(),
-            self.test_m4_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
-            self.test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
-            self.test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
+            self.test_ws_matrix_001_ping_should_work_after_auth(),
+            self.test_ws_matrix_002_list_definitions_should_work_after_auth(),
+            self.test_ws_matrix_003_get_definition_should_work_after_auth(),
+            self.test_ws_matrix_004_list_instances_should_work_after_auth(),
+            self.test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
+            self.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
+            self.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ]
 
 

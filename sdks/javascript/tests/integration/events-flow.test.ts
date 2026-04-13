@@ -29,7 +29,7 @@ afterAll(async () => {
   await host?.close();
 });
 
-it("M5_E2E_004 WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
+it("WS 认证 + 订阅/取消订阅应控制事件交付", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client",
     dataDir: getHost().dataDirectory
@@ -78,7 +78,7 @@ it("M5_E2E_004 WS 认证 + 订阅/取消订阅应控制事件交付", async () =
   await eventsClient.dispose();
 });
 
-it("M6_E2E_004 定义变更事件应可订阅并携带最新载荷", async () => {
+it("定义变更事件应可订阅并携带最新载荷", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "definition-events-client",
     dataDir: getHost().dataDirectory
@@ -131,7 +131,7 @@ it("M6_E2E_004 定义变更事件应可订阅并携带最新载荷", async () =>
   }
 });
 
-it("M5_E2E_004 authenticated WS should support ping and apps queries", async () => {
+it("authenticated WS should support ping and apps queries", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-query-client",
     dataDir: getHost().dataDirectory
@@ -181,7 +181,7 @@ it("M5_E2E_004 authenticated WS should support ping and apps queries", async () 
   }
 });
 
-it("M5_E2E_005 订阅未知事件类型应在客户端本地被拒绝", async () => {
+it("订阅未知事件类型应在客户端本地被拒绝", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-invalid-client",
     dataDir: getHost().dataDirectory
@@ -202,7 +202,7 @@ it("M5_E2E_005 订阅未知事件类型应在客户端本地被拒绝", async ()
   await eventsClient.dispose();
 });
 
-it("M5_E2E_010 断开后重连应需要重新订阅", async () => {
+it("断开后重连应需要重新订阅", async () => {
   const firstClient = await DevHubEventsClient.fromRuntime({
     clientId: "events-client-1",
     dataDir: getHost().dataDirectory

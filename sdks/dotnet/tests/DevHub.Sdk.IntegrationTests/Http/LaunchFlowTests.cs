@@ -11,7 +11,7 @@ public sealed class LaunchFlowTests
     private const string InstancePassword = "sdk-launch-password";
 
     [Fact]
-    public async Task M5_E2E_002_Launch_ShouldCoverStartedStartingAndAlreadyRunning()
+    public async Task Launch_ShouldCoverStartedStartingAndAlreadyRunning()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(CreateLaunchDefinition("launch.started.app"));

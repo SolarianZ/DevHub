@@ -13,7 +13,7 @@ import {
   ensureSupportedEventType
 } from "../../src/event-types.js";
 
-it("M5_TS_UT_005 应按规范公开受支持事件类型列表", () => {
+it("应按规范公开受支持事件类型列表", () => {
   expect(SUPPORTED_EVENT_TYPES).toEqual([
     APP_DEFINITION_UPSERTED,
     APP_DEFINITION_DELETED,
@@ -27,7 +27,7 @@ it("M5_TS_UT_005 应按规范公开受支持事件类型列表", () => {
   expect([...ALL_EVENT_TYPES]).toEqual([...SUPPORTED_EVENT_TYPES]);
 });
 
-it("M5_TS_UT_005 ensureSupportedEventType 应返回规范事件类型并拒绝未知值", () => {
+it("ensureSupportedEventType 应返回规范事件类型并拒绝未知值", () => {
   expect(ensureSupportedEventType(APP_INSTANCE_REGISTERED, "type")).toBe(APP_INSTANCE_REGISTERED);
   expect(() => ensureSupportedEventType("unknown.type", "type")).toThrow(/supported DevHub event type/i);
 });

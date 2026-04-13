@@ -16,7 +16,7 @@ public sealed class ServiceCollectionExtensionsTests
     private const string ExpectedHubVersion = "test-hub-version";
 
     [Fact]
-    public async Task M6_DN_UT_002_AddDevHubSdk_WithNamedHttpClientCustomization_ShouldCreateClientsThroughHttpClientPipeline()
+    public async Task AddDevHubSdk_WithNamedHttpClientCustomization_ShouldCreateClientsThroughHttpClientPipeline()
     {
         var runtimeResolver = new RecordingRuntimeResolver(CreateConnectionInfo());
         var handler = new RecordingHandler();
@@ -51,7 +51,7 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public async Task M5_DN_UT_007_AddDevHubSdk_WithoutDelegate_ShouldHonorExternalOptionsConfiguration()
+    public async Task AddDevHubSdk_WithoutDelegate_ShouldHonorExternalOptionsConfiguration()
     {
         var services = new ServiceCollection();
         services.AddDevHubSdk();

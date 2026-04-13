@@ -13,7 +13,7 @@ public sealed class HttpFlowTests
     private const string InstancePassword = "sdk-http-flow-password";
 
     [Fact]
-    public async Task M5_E2E_001_And_002_PingAndAppsFlow_ShouldSucceed()
+    public async Task PingAndAppsFlow_ShouldSucceed()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -163,7 +163,7 @@ public sealed class HttpFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_009_Ping_WhenClientIdHeaderMissing_ShouldMapInvalidRequest()
+    public async Task Ping_WhenClientIdHeaderMissing_ShouldMapInvalidRequest()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await using var client = await host.CreateClientAsync("header-tamper-client", new HeaderTamperingHandler(request =>
@@ -214,7 +214,7 @@ public sealed class HttpFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_001_RuntimeDiscovery_WhenEnvironmentOverrideSet_ShouldCreateClientWithoutExplicitDataDir()
+    public async Task RuntimeDiscovery_WhenEnvironmentOverrideSet_ShouldCreateClientWithoutExplicitDataDir()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         using var scope = new EnvironmentVariableScope("DEVHUB_DATA_DIR", host.DataDirectory);

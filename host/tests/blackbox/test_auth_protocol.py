@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 鉴权与协议版本测试
+DevHub 鉴权与协议版本测试
 """
 
 import os

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2/M3 Invocation poll/respond 规范边界补充测试
+DevHub Invocation/Scope Invocation poll/respond 规范边界补充测试
 """
 
 import os
@@ -30,15 +30,15 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
     @staticmethod
     def _new_app_id(suffix):
-        return f"m2-invoke-edge-{suffix}-{uuid.uuid4().hex[:6]}"
+        return f"invoke-edge-{suffix}-{uuid.uuid4().hex[:6]}"
 
     @staticmethod
     def _new_instance_id(suffix):
-        return new_instance_id(f"m2-invoke-edge-{suffix}")
+        return new_instance_id(f"invoke-edge-{suffix}")
 
     def test_invoke_edge_001_poll_long_wait_semantics_and_server_time(self):
-        """M2-INVOKE-EDGE-001: poll 无可用项时应长轮询并返回 serverTimeUtc。"""
-        result = TestResult("M2-INVOKE-EDGE-001 poll 长轮询与 serverTimeUtc")
+        """INVOKE-EDGE-001: poll 无可用项时应长轮询并返回 serverTimeUtc。"""
+        result = TestResult("INVOKE-EDGE-001 poll 长轮询与 serverTimeUtc")
         definition_path = None
         instance_id = None
 
@@ -88,8 +88,8 @@ class TestInvokePollRespondEdges(unittest.TestCase):
         return result
 
     def test_invoke_edge_002_respond_success_should_refresh_last_seen(self):
-        """M2-INVOKE-EDGE-002: respond 成功后应更新实例 lastSeenUtc。"""
-        result = TestResult("M2-INVOKE-EDGE-002 respond 刷新 lastSeenUtc")
+        """INVOKE-EDGE-002: respond 成功后应更新实例 lastSeenUtc。"""
+        result = TestResult("INVOKE-EDGE-002 respond 刷新 lastSeenUtc")
         definition_path = None
         instance_id = None
 
@@ -179,8 +179,8 @@ class TestInvokePollRespondEdges(unittest.TestCase):
         return result
 
     def test_invoke_edge_003_respond_after_unregister_should_instance_not_found(self):
-        """M2-INVOKE-EDGE-003: unregister 后 respond 必须 instance_not_found。"""
-        result = TestResult("M2-INVOKE-EDGE-003 unregister 后 respond instance_not_found")
+        """INVOKE-EDGE-003: unregister 后 respond 必须 instance_not_found。"""
+        result = TestResult("INVOKE-EDGE-003 unregister 后 respond instance_not_found")
         definition_path = None
         instance_id = None
         respond_instance_id = None
@@ -253,8 +253,8 @@ class TestInvokePollRespondEdges(unittest.TestCase):
         return result
 
     def test_invoke_edge_004_poll_success_should_refresh_last_seen(self):
-        """M2-INVOKE-EDGE-004: poll 成功后应更新实例 lastSeenUtc。"""
-        result = TestResult("M2-INVOKE-EDGE-004 poll 刷新 lastSeenUtc")
+        """INVOKE-EDGE-004: poll 成功后应更新实例 lastSeenUtc。"""
+        result = TestResult("INVOKE-EDGE-004 poll 刷新 lastSeenUtc")
         definition_path = None
         instance_id = None
 

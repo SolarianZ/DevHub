@@ -8,7 +8,7 @@ namespace DevHub.Sdk.UnitTests.Models;
 public sealed class DevHubCalleeErrorTests
 {
     [Fact]
-    public void M5_DN_UT_008_CalleeErrorCreate_ShouldUseSdkJsonNamingPolicy()
+    public void CalleeErrorCreate_ShouldUseSdkJsonNamingPolicy()
     {
         var error = DevHubCalleeError.Create(1001, "app_error", new SampleErrorData
         {
@@ -26,7 +26,7 @@ public sealed class DevHubCalleeErrorTests
     }
 
     [Fact]
-    public void M5_DN_UT_008_CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
+    public void CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
     }

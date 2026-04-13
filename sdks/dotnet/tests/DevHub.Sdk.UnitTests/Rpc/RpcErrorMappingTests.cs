@@ -17,7 +17,7 @@ public sealed class RpcErrorMappingTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_RpcErrorResponse_ShouldMapToDevHubRpcException()
+    public async Task RpcErrorResponse_ShouldMapToDevHubRpcException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -61,7 +61,7 @@ public sealed class RpcErrorMappingTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_RpcErrorResponse_ShouldExposeReasonHelper()
+    public async Task RpcErrorResponse_ShouldExposeReasonHelper()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)

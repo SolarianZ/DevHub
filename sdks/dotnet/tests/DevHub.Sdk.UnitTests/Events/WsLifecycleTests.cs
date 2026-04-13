@@ -43,7 +43,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_BeforeAuthenticate_ShouldRejectSubscribeAndRead()
+    public async Task EventsClient_BeforeAuthenticate_ShouldRejectSubscribeAndRead()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
@@ -61,7 +61,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldSubscribeAndReadEvents()
+    public async Task EventsClient_AfterAuthenticate_ShouldSubscribeAndReadEvents()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -112,7 +112,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldUnsubscribe()
+    public async Task EventsClient_AfterAuthenticate_ShouldUnsubscribe()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -160,7 +160,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_AfterAuthenticate_ShouldSupportWsReadableMethods()
+    public async Task EventsClient_AfterAuthenticate_ShouldSupportWsReadableMethods()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -243,7 +243,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenConnectionClosesAfterQueuedEvent_ShouldStillReadBufferedEvents()
+    public async Task EventsClient_WhenConnectionClosesAfterQueuedEvent_ShouldStillReadBufferedEvents()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -292,7 +292,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenConnectionTerminates_ShouldAllowAuthenticateAgainAndRequireResubscribe()
+    public async Task EventsClient_WhenConnectionTerminates_ShouldAllowAuthenticateAgainAndRequireResubscribe()
     {
         var dataDir = await CreateDataDirectoryAsync();
 
@@ -385,7 +385,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateFails_ShouldThrowDevHubRpcException()
+    public async Task EventsClient_WhenAuthenticateFails_ShouldThrowDevHubRpcException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -412,7 +412,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateTimesOut_ShouldThrowOperationCanceledException()
+    public async Task EventsClient_WhenAuthenticateTimesOut_ShouldThrowOperationCanceledException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
@@ -430,7 +430,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateReturnsInvalidSuccessPayload_ShouldThrowInvalidOperationException()
+    public async Task EventsClient_WhenAuthenticateReturnsInvalidSuccessPayload_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -456,7 +456,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
+    public async Task EventsClient_WhenAuthenticateResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -482,7 +482,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenAuthenticateResponseMissingResultAndError_ShouldThrowInvalidOperationException()
+    public async Task EventsClient_WhenAuthenticateResponseMissingResultAndError_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -509,7 +509,7 @@ public sealed class WsLifecycleTests : IDisposable
 
     [Theory]
     [MemberData(nameof(InvalidEventNotifications))]
-    public async Task M5_DN_UT_005_EventsClient_WhenEventPayloadViolatesSpec_ShouldFaultEventStream(
+    public async Task EventsClient_WhenEventPayloadViolatesSpec_ShouldFaultEventStream(
         string notificationJson,
         string expectedMessage)
     {
@@ -562,7 +562,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenEventNotificationContainsId_ShouldFaultEventStream()
+    public async Task EventsClient_WhenEventNotificationContainsId_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -612,7 +612,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenServerSendsBinaryFrame_ShouldFaultEventStream()
+    public async Task EventsClient_WhenServerSendsBinaryFrame_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -662,7 +662,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenServerSendsBlankTextFrame_ShouldFaultEventStream()
+    public async Task EventsClient_WhenServerSendsBlankTextFrame_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -712,7 +712,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_005_EventsClient_WhenServerSendsUnsupportedNotification_ShouldFaultEventStream()
+    public async Task EventsClient_WhenServerSendsUnsupportedNotification_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();

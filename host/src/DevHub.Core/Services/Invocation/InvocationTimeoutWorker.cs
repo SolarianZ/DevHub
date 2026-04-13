@@ -4,7 +4,7 @@ using DevHub.Core.Services.Abstractions;
 namespace DevHub.Core.Services.Invocation;
 
 /// <summary>
-/// Invocation 超时扫描器（M2 内存态）。
+/// Invocation 超时扫描器（内存态）。
 /// </summary>
 public class InvocationTimeoutWorker : IDisposable
 {

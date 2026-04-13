@@ -20,19 +20,19 @@ afterEach(() => {
   }));
 });
 
-it("M5_TS_UT_001 优先使用显式 dataDir override", () => {
+it("优先使用显式 dataDir override", () => {
   process.env[DATA_DIR_ENV] = path.join("temp", "data-env");
   const override = path.join("temp", "data-override");
   expect(resolveDataDirectory(override)).toBe(path.resolve(override));
 });
 
-it("M5_TS_UT_001 其次使用 DEVHUB_DATA_DIR", () => {
+it("其次使用 DEVHUB_DATA_DIR", () => {
   const envValue = path.join("temp", "data-env");
   process.env[DATA_DIR_ENV] = envValue;
   expect(resolveDataDirectory()).toBe(path.resolve(envValue));
 });
 
-it("M5_TS_UT_001 默认数据目录应指向规范 data dir", () => {
+it("默认数据目录应指向规范 data dir", () => {
   delete process.env[DATA_DIR_ENV];
 
   const dataDir = resolveDataDirectory();
@@ -41,7 +41,7 @@ it("M5_TS_UT_001 默认数据目录应指向规范 data dir", () => {
   expect(path.basename(dataDir).toLowerCase()).not.toBe("runtime");
 });
 
-it("M5_TS_UT_001 discoverRuntime 应支持标准 dataDir 布局", async () => {
+it("discoverRuntime 应支持标准 dataDir 布局", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-std  \r\n", "utf-8");
@@ -68,7 +68,7 @@ it("M5_TS_UT_001 discoverRuntime 应支持标准 dataDir 布局", async () => {
   expect(result.runtime.startedAtUtc.toISOString()).toBe("2026-03-09T00:00:00.000Z");
 });
 
-it("M5_TS_UT_001 discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir", async () => {
+it("discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-env", "utf-8");
@@ -93,7 +93,7 @@ it("M5_TS_UT_001 discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir"
   expect(result.token).toBe("token-env");
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝 dataDir 根目录直放 hub.json/token.txt 的旧布局", async () => {
+it("discoverRuntime 应拒绝 dataDir 根目录直放 hub.json/token.txt 的旧布局", async () => {
   const dataDir = await createTempRoot("devhub-js-sdk-runtime-legacy-root-unit-");
   const tokenFile = path.join(dataDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-legacy", "utf-8");
@@ -114,19 +114,19 @@ it("M5_TS_UT_002 discoverRuntime 应拒绝 dataDir 根目录直放 hub.json/toke
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝仅在 dataDir 根目录直放 token.txt 的旧布局", async () => {
+it("discoverRuntime 应拒绝仅在 dataDir 根目录直放 token.txt 的旧布局", async () => {
   const dataDir = await createTempRoot("devhub-js-sdk-runtime-legacy-token-root-unit-");
   await fsPromises.writeFile(path.join(dataDir, "token.txt"), "token-legacy", "utf-8");
 
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝直接传入 runtime 子目录", async () => {
+it("discoverRuntime 应拒绝直接传入 runtime 子目录", async () => {
   const { runtimeDir } = await createPopulatedDataDirectory();
   await expect(discoverRuntime(runtimeDir)).rejects.toThrow(/dataDir 必须指向数据根目录/);
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝非法 runtimeTuning", async () => {
+it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -147,7 +147,7 @@ it("M5_TS_UT_002 discoverRuntime 应拒绝非法 runtimeTuning", async () => {
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/runtimeTuning/);
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝非整数 pid", async () => {
+it("discoverRuntime 应拒绝非整数 pid", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -168,7 +168,7 @@ it("M5_TS_UT_002 discoverRuntime 应拒绝非整数 pid", async () => {
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/pid/);
 });
 
-it("M5_TS_UT_002 discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
+it("discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -189,7 +189,7 @@ it("M5_TS_UT_002 discoverRuntime 应拒绝非整数 runtimeTuning", async () => 
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/runtimeTuning/);
 });
 
-it("M5_TS_UT_002 discoverRuntime should reject a startedAtUtc value without an explicit timezone", async () => {
+it("discoverRuntime should reject a startedAtUtc value without an explicit timezone", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
@@ -210,7 +210,7 @@ it("M5_TS_UT_002 discoverRuntime should reject a startedAtUtc value without an e
   await expect(discoverRuntime(dataDir)).rejects.toThrow(/startedAtUtc/);
 });
 
-it("M5_TS_UT_001 discoverRuntime 应接受 IPv6 回环端点", async () => {
+it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-ipv6", "utf-8");
@@ -234,7 +234,7 @@ it("M5_TS_UT_001 discoverRuntime 应接受 IPv6 回环端点", async () => {
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
-it("M5_TS_UT_002 discoverRuntime should reject a non-string hubVersion when present", async () => {
+it("discoverRuntime should reject a non-string hubVersion when present", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   const hubJsonPath = path.join(runtimeDir, "hub.json");
@@ -257,7 +257,7 @@ it("M5_TS_UT_002 discoverRuntime should reject a non-string hubVersion when pres
   await expect(discoverRuntime(dataDir)).rejects.toThrow(`hub.json.hubVersion 非法：${hubJsonPath}`);
 });
 
-it("M5_TS_UT_001 discoverRuntime should preserve a spec-valid empty hubVersion string", async () => {
+it("discoverRuntime should preserve a spec-valid empty hubVersion string", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-1", "utf-8");

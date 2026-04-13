@@ -18,7 +18,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_ShouldAssembleRequiredHeaders()
+    public async Task HttpTransport_ShouldAssembleRequiredHeaders()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -45,7 +45,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_WhenClientIdMissing_ShouldThrowArgumentException()
+    public async Task HttpTransport_WhenClientIdMissing_ShouldThrowArgumentException()
     {
         var dataDir = await CreateDataDirectoryAsync();
 
@@ -57,7 +57,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_WhenProtocolVersionMismatch_ShouldThrowArgumentOutOfRangeException()
+    public async Task HttpTransport_WhenProtocolVersionMismatch_ShouldThrowArgumentOutOfRangeException()
     {
         var dataDir = await CreateDataDirectoryAsync();
 
@@ -70,7 +70,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_WhenClientSessionIdEmpty_ShouldThrowArgumentException()
+    public async Task HttpTransport_WhenClientSessionIdEmpty_ShouldThrowArgumentException()
     {
         var dataDir = await CreateDataDirectoryAsync();
 
@@ -83,7 +83,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_WhenRequestTimeoutExceeded_ShouldThrowOperationCanceledException()
+    public async Task HttpTransport_WhenRequestTimeoutExceeded_ShouldThrowOperationCanceledException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new BlockingHandler();
@@ -99,7 +99,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_003_HttpTransport_WhenCallerCancellationRequested_ShouldThrowOperationCanceledException()
+    public async Task HttpTransport_WhenCallerCancellationRequested_ShouldThrowOperationCanceledException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new BlockingHandler();
@@ -115,7 +115,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenSuccessPayloadOkFalse_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenSuccessPayloadOkFalse_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -134,7 +134,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -156,7 +156,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -175,7 +175,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenResponseIdMismatched_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenResponseIdMismatched_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -197,7 +197,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenResponseContainsResultAndError_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenResponseContainsResultAndError_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -219,7 +219,7 @@ public sealed class HttpTransportTests : IDisposable
     [InlineData("\"bad_data\"")]
     [InlineData("null")]
     [InlineData("[1,2,3]")]
-    public async Task M5_DN_UT_004_HttpTransport_WhenErrorDataIsNotObject_ShouldThrowInvalidOperationException(string errorDataLiteral)
+    public async Task HttpTransport_WhenErrorDataIsNotObject_ShouldThrowInvalidOperationException(string errorDataLiteral)
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -241,7 +241,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -263,7 +263,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -329,7 +329,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenRequestResultMissingValue_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenRequestResultMissingValue_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -356,7 +356,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenPollResultItemMissingCallerSessionId_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenPollResultItemMissingCallerSessionId_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -382,7 +382,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenGetDefinitionCapabilitiesTypeInvalid_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenGetDefinitionCapabilitiesTypeInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -405,7 +405,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenListInstancesResultMetaTypeInvalid_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenListInstancesResultMetaTypeInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -427,7 +427,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_004_HttpTransport_WhenPollResultOptionsTypeInvalid_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenPollResultOptionsTypeInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)

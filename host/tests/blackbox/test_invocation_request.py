@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2 Invocation Request 冒烟测试
+DevHub 调用请求冒烟测试
 """
 
 import os
@@ -38,13 +38,13 @@ class TestInvocationRequest(unittest.TestCase):
         return new_instance_id(prefix)
 
     def test_request_roundtrip_success(self):
-        """M2-REQ-001: request 成功往返"""
-        result = TestResult("M2-REQ-001 request 成功往返")
+        """REQ-001: request 成功往返"""
+        result = TestResult("REQ-001 request 成功往返")
         definition_path = None
         callee_instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-request-success-app")
+            app_id = self._new_app_id("request-success-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -91,7 +91,7 @@ class TestInvocationRequest(unittest.TestCase):
                     "queueIfOffline": True,
                     "autoLaunch": False,
                 },
-                request_id="m2-request-success",
+                request_id="request-success",
             )
 
             worker.join(timeout=3)
@@ -122,13 +122,13 @@ class TestInvocationRequest(unittest.TestCase):
         return result
 
     def test_request_timeout_then_late_respond_expired(self):
-        """M2-REQ-002/003: request 超时 + 迟到 respond 过期"""
-        result = TestResult("M2-REQ-002/003 request 超时与迟到响应")
+        """REQ-002/003: request 超时 + 迟到 respond 过期"""
+        result = TestResult("REQ-002/003 request 超时与迟到响应")
         definition_path = None
         callee_instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-request-timeout-app")
+            app_id = self._new_app_id("request-timeout-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -170,7 +170,7 @@ class TestInvocationRequest(unittest.TestCase):
                     "queueIfOffline": True,
                     "autoLaunch": False,
                 },
-                request_id="m2-request-timeout",
+                request_id="request-timeout",
             )
 
             worker.join(timeout=3)
@@ -203,12 +203,12 @@ class TestInvocationRequest(unittest.TestCase):
         return result
 
     def test_request_ttl_expired_should_return_invocation_expired(self):
-        """M2-REQ-007: TTL 到期时 caller 应收到 invocation_expired"""
-        result = TestResult("M2-REQ-007 request TTL 到期返回 invocation_expired")
+        """REQ-007: TTL 到期时 caller 应收到 invocation_expired"""
+        result = TestResult("REQ-007 request TTL 到期返回 invocation_expired")
         definition_path = None
 
         try:
-            app_id = self._new_app_id("m2-request-ttl-expired-app")
+            app_id = self._new_app_id("request-ttl-expired-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -223,7 +223,7 @@ class TestInvocationRequest(unittest.TestCase):
                     "queueIfOffline": True,
                     "autoLaunch": False,
                 },
-                request_id="m2-request-ttl-expired",
+                request_id="request-ttl-expired",
             )
 
             if not RpcAssertions.expect_error(result, response, -32011, "invocation_expired"):
@@ -249,13 +249,13 @@ class TestInvocationRequest(unittest.TestCase):
         return result
 
     def test_request_client_cancel_then_late_respond_expired(self):
-        """M2-REQ-004: caller 中断后 request 收口且迟到 respond 被拒绝"""
-        result = TestResult("M2-REQ-004 caller 中断后 request 收口")
+        """REQ-004: caller 中断后 request 收口且迟到 respond 被拒绝"""
+        result = TestResult("REQ-004 caller 中断后 request 收口")
         definition_path = None
         callee_instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-request-cancel-app")
+            app_id = self._new_app_id("request-cancel-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -274,7 +274,7 @@ class TestInvocationRequest(unittest.TestCase):
 
             request_payload = {
                 "jsonrpc": "2.0",
-                "id": "m2-request-cancel",
+                "id": "request-cancel",
                 "method": "hub.invoke.request",
                 "params": {
                     "appId": app_id,
@@ -428,7 +428,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = self._new_app_id("m2-request-offline-app")
+            app_id = self._new_app_id("request-offline-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -466,7 +466,7 @@ class TestInvocationRequest(unittest.TestCase):
         definition_path = None
 
         try:
-            app_id = self._new_app_id("m2-request-target-missing-app")
+            app_id = self._new_app_id("request-target-missing-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -500,13 +500,13 @@ class TestInvocationRequest(unittest.TestCase):
         return result
 
     def test_request_callee_error_should_return_invocation_failed(self):
-        """M2-REQ-005: callee respond_error 时 caller 返回 invocation_failed。"""
-        result = TestResult("M2-REQ-005 request callee error 返回 invocation_failed")
+        """REQ-005: callee respond_error 时 caller 返回 invocation_failed。"""
+        result = TestResult("REQ-005 request callee error 返回 invocation_failed")
         definition_path = None
         callee_instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-request-failed-app")
+            app_id = self._new_app_id("request-failed-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -554,7 +554,7 @@ class TestInvocationRequest(unittest.TestCase):
                     "queueIfOffline": True,
                     "autoLaunch": False,
                 },
-                request_id="m2-request-failed",
+                request_id="request-failed",
             )
 
             worker.join(timeout=3)
@@ -590,12 +590,12 @@ class TestInvocationRequest(unittest.TestCase):
         return result
 
     def test_request_rpc_disabled_should_forbidden(self):
-        """M2-REQ-006: capabilities.rpc=false 时 request 返回 forbidden/rpc_disabled。"""
-        result = TestResult("M2-REQ-006 request rpc_disabled 门禁")
+        """REQ-006: capabilities.rpc=false 时 request 返回 forbidden/rpc_disabled。"""
+        result = TestResult("REQ-006 request rpc_disabled 门禁")
         definition_path = None
 
         try:
-            app_id = self._new_app_id("m2-request-rpc-disabled-app")
+            app_id = self._new_app_id("request-rpc-disabled-app")
             definition_path = self._create_definition(app_id, rpc=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -634,7 +634,7 @@ class TestInvocationRequest(unittest.TestCase):
         callee_instance_id = None
 
         try:
-            app_id = f"m2-request-defaults-app-{uuid.uuid4().hex[:8]}"
+            app_id = f"request-defaults-app-{uuid.uuid4().hex[:8]}"
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)

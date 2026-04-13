@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 AppInstance 测试
+DevHub 实例管理测试
 """
 
 import os
@@ -158,7 +158,7 @@ class TestAppInstances(unittest.TestCase):
             register_response = client.call("hub.apps.registerInstance", {
                 "instance": {
                     "instanceId": instance_id,
-                    "appId": "test-app-m1-core",
+                    "appId": "test-app-core",
                     "scope": None,
                     "pid": 12345,
                     "invoke": {"poll": True, "respond": True}
@@ -192,7 +192,7 @@ class TestAppInstances(unittest.TestCase):
         return result
 
     def test_register_unknown_appid_is_allowed(self):
-        """测试未知 appId 允许注册（M1 要求）"""
+        """测试未知 appId 允许注册（符合当前规范）"""
         result = TestResult("测试未知 appId 允许注册")
 
         try:

@@ -89,7 +89,7 @@ class FakeHttpTransportFactory:
         return self.transport
 
 
-def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
+def test_http_client_with_injected_resolver_and_transport_should_use_abstractions() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -122,7 +122,7 @@ def test_M5_PY_UT_007_http_client_with_injected_resolver_and_transport_should_us
     assert transport_factory.calls[0]["options"].client_id == "http-client"
 
 
-def test_M6_PY_UT_001_http_client_close_should_forward_to_transport_once() -> None:
+def test_http_client_close_should_forward_to_transport_once() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -147,7 +147,7 @@ def test_M6_PY_UT_001_http_client_close_should_forward_to_transport_once() -> No
     assert transport.close_calls == 1
 
 
-def test_M6_PY_UT_001_http_client_context_manager_should_close_transport_on_exit() -> None:
+def test_http_client_context_manager_should_close_transport_on_exit() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -170,7 +170,7 @@ def test_M6_PY_UT_001_http_client_context_manager_should_close_transport_on_exit
     assert transport.close_calls == 1
 
 
-def test_M6_PY_UT_001_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:
+def test_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -197,7 +197,7 @@ def test_M6_PY_UT_001_http_client_after_close_should_reject_rpc_without_calling_
     assert transport.calls == []
 
 
-def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
+def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -216,7 +216,7 @@ def test_M5_PY_UT_003_http_client_ping_should_send_headers_and_parse_result(tmp_
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
+def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_success_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -233,7 +233,7 @@ def test_M5_PY_UT_003_http_client_ping_when_echo_is_none_should_send_null(tmp_pa
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
+def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -258,7 +258,7 @@ def test_M5_PY_UT_003_http_client_ping_when_echo_contains_unsupported_json_shoul
     assert transport.calls == []
 
 
-def test_M5_PY_UT_003_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
+def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_unauthorized_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -275,7 +275,7 @@ def test_M5_PY_UT_003_http_client_when_server_returns_error_should_raise_devhub_
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
+def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_invalid_error_data_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -289,7 +289,7 @@ def test_M5_PY_UT_003_http_client_when_error_data_is_not_object_should_raise_run
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
+def test_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_ping_response_with_non_standard_json_constant)
     server, thread = _start_http_server(scenario)
     try:
@@ -303,7 +303,7 @@ def test_M5_PY_UT_003_http_client_when_response_contains_non_standard_json_const
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
+def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_list_definitions_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -319,7 +319,7 @@ def test_M5_PY_UT_003_http_client_when_params_none_should_omit_params(tmp_path: 
         thread.join(timeout=5)
 
 
-def test_M5_PY_UT_003_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
+def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_request_missing_value_response)
     server, thread = _start_http_server(scenario)
     try:
@@ -333,7 +333,7 @@ def test_M5_PY_UT_003_http_client_when_request_result_missing_value_should_raise
         thread.join(timeout=5)
 
 
-def test_M6_PY_UT_003_http_client_validate_definition_should_send_params_and_parse_result() -> None:
+def test_http_client_validate_definition_should_send_params_and_parse_result() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -370,7 +370,7 @@ def test_M6_PY_UT_003_http_client_validate_definition_should_send_params_and_par
     }
 
 
-def test_M6_PY_UT_003_http_client_upsert_definition_should_send_request_and_parse_definition() -> None:
+def test_http_client_upsert_definition_should_send_request_and_parse_definition() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -394,7 +394,7 @@ def test_M6_PY_UT_003_http_client_upsert_definition_should_send_request_and_pars
     assert transport.calls[0]["method"] == "hub.apps.upsertDefinition"
 
 
-def test_M6_PY_UT_003_http_client_delete_definition_should_send_request() -> None:
+def test_http_client_delete_definition_should_send_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport({"ok": True})
@@ -412,7 +412,7 @@ def test_M6_PY_UT_003_http_client_delete_definition_should_send_request() -> Non
     }
 
 
-def test_M6_PY_UT_003_http_client_register_and_unregister_should_send_password_at_top_level() -> None:
+def test_http_client_register_and_unregister_should_send_password_at_top_level() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -458,7 +458,7 @@ def test_M6_PY_UT_003_http_client_register_and_unregister_should_send_password_a
     }
 
 
-def test_M5_PY_UT_003_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
+def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_launch_invalid_status_response)
     server, thread = _start_http_server(scenario)
     try:

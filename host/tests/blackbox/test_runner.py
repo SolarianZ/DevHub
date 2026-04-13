@@ -273,16 +273,16 @@ def execute_all_tests(temp_dir, logger, full=False, fast=False, smoke=False):
         logger.info("=== 运行 WebSocket 事件 smoke 测试 ===")
         ws_events_tests = TestWsEvents()
         report.results.extend([
-            ws_events_tests.test_m4_ws_001_first_message_must_authenticate(),
-            ws_events_tests.test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(),
+            ws_events_tests.test_ws_001_first_message_must_authenticate(),
+            ws_events_tests.test_ws_005_subscribe_unsubscribe_should_work_after_auth(),
         ])
 
         logger.info("=== 运行 WebSocket 传输矩阵 smoke 测试 ===")
         ws_transport_matrix_tests = TestWsTransportMatrix()
         report.results.extend([
-            ws_transport_matrix_tests.test_m4_ws_matrix_001_ping_should_work_after_auth(),
-            ws_transport_matrix_tests.test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
-            ws_transport_matrix_tests.test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
+            ws_transport_matrix_tests.test_ws_matrix_001_ping_should_work_after_auth(),
+            ws_transport_matrix_tests.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
+            ws_transport_matrix_tests.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ])
 
         logger.info("=== 运行 Invocation Request smoke 测试 ===")

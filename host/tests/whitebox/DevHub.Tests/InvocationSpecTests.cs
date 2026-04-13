@@ -12,16 +12,16 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// M2 invocation 规范白盒测试。
+/// Invocation 规范白盒测试。
 /// </summary>
 [Trait("Category", "Spec")]
-public class M2InvocationSpecTests : IDisposable
+public class InvocationSpecTests : IDisposable
 {
     private readonly string _tempDirectory;
 
-    public M2InvocationSpecTests()
+    public InvocationSpecTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubM2InvocationSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubInvocationSpecTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

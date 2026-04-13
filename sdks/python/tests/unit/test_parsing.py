@@ -18,7 +18,7 @@ from devhub_sdk._parsing import (
 )
 
 
-def test_M5_PY_UT_005_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
+def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_app_definition(
             {
@@ -30,7 +30,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_launch_missing_exe_path_should_r
         )
 
 
-def test_M5_PY_UT_005_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
+def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_app_definition(
             {
@@ -41,7 +41,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_app_id_violates_spec_should_rais
         )
 
 
-def test_M5_PY_UT_005_parse_app_definition_when_capabilities_missing_should_apply_rpc_default() -> None:
+def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default() -> None:
     definition = parse_app_definition(
         {
             "appId": "test.app",
@@ -55,7 +55,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_capabilities_missing_should_appl
     assert definition.capabilities.events is None
 
 
-def test_M5_PY_UT_005_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_default() -> None:
+def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_default() -> None:
     definition = parse_app_definition(
         {
             "appId": "test.app",
@@ -72,7 +72,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_capabilities_rpc_missing_should_
     assert definition.capabilities.events is False
 
 
-def test_M5_PY_UT_005_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value() -> None:
+def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value() -> None:
     definition = parse_app_definition(
         {
             "appId": "test.app",
@@ -88,7 +88,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_launch_exe_path_empty_should_all
     assert definition.launch.exe_path == ""
 
 
-def test_M6_PY_UT_005_parse_definition_validation_result_should_round_trip_issues() -> None:
+def test_parse_definition_validation_result_should_round_trip_issues() -> None:
     result = parse_definition_validation_result(
         {
             "ok": True,
@@ -110,7 +110,7 @@ def test_M6_PY_UT_005_parse_definition_validation_result_should_round_trip_issue
     assert result.errors[0].code == "invalid_app_id"
 
 
-def test_M6_PY_UT_005_parse_definition_validation_result_when_valid_contains_errors_should_raise() -> None:
+def test_parse_definition_validation_result_when_valid_contains_errors_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"errors"):
         parse_definition_validation_result(
             {
@@ -139,7 +139,7 @@ def test_M6_PY_UT_005_parse_definition_validation_result_when_valid_contains_err
         (lambda payload: payload["launch"].__setitem__("argsTemplate", None),),
     ],
 )
-def test_M5_PY_UT_005_parse_app_definition_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
+def test_parse_app_definition_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
     payload = {
         "appId": "test.app",
         "displayName": "Test App",
@@ -158,7 +158,7 @@ def test_M5_PY_UT_005_parse_app_definition_when_optional_non_nullable_field_is_n
         parse_app_definition(payload, path="app.definition")
 
 
-def test_M5_PY_UT_005_parse_launch_result_when_pid_is_bool_should_raise() -> None:
+def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_launch_result(
             {
@@ -171,7 +171,7 @@ def test_M5_PY_UT_005_parse_launch_result_when_pid_is_bool_should_raise() -> Non
         )
 
 
-def test_M5_PY_UT_005_parse_launch_result_when_pid_is_not_positive_should_raise() -> None:
+def test_parse_launch_result_when_pid_is_not_positive_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_launch_result(
             {
@@ -184,7 +184,7 @@ def test_M5_PY_UT_005_parse_launch_result_when_pid_is_not_positive_should_raise(
         )
 
 
-def test_M5_PY_UT_005_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
+def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
     payload = _app_instance_payload()
     payload["pid"] = 0
 
@@ -192,7 +192,7 @@ def test_M5_PY_UT_005_parse_app_instance_when_pid_is_not_positive_should_raise()
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
-def test_M5_PY_UT_005_parse_app_instance_when_meta_is_null_should_raise() -> None:
+def test_parse_app_instance_when_meta_is_null_should_raise() -> None:
     payload = _app_instance_payload()
     payload["meta"] = None
 
@@ -200,7 +200,7 @@ def test_M5_PY_UT_005_parse_app_instance_when_meta_is_null_should_raise() -> Non
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
-def test_M5_PY_UT_005_parse_app_instance_when_meta_contains_unsupported_json_should_raise() -> None:
+def test_parse_app_instance_when_meta_contains_unsupported_json_should_raise() -> None:
     payload = _app_instance_payload()
     payload["meta"] = {"callback": lambda: "ignored"}
 
@@ -208,7 +208,7 @@ def test_M5_PY_UT_005_parse_app_instance_when_meta_contains_unsupported_json_sho
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
-def test_M6_PY_UT_005_parse_app_instance_when_password_present_should_raise() -> None:
+def test_parse_app_instance_when_password_present_should_raise() -> None:
     payload = _app_instance_payload()
     payload["password"] = "secret-1"
 
@@ -223,7 +223,7 @@ def test_M6_PY_UT_005_parse_app_instance_when_password_present_should_raise() ->
         "2026-03-09T08:00:00+08:00",
     ],
 )
-def test_M5_PY_UT_005_parse_datetime_when_value_is_not_rfc3339_utc_should_raise(value: str) -> None:
+def test_parse_datetime_when_value_is_not_rfc3339_utc_should_raise(value: str) -> None:
     with pytest.raises(RuntimeError):
         parse_datetime(value, "timeUtc")
 
@@ -235,7 +235,7 @@ def test_M5_PY_UT_005_parse_datetime_when_value_is_not_rfc3339_utc_should_raise(
         ("waitTimeoutMs", 0),
     ],
 )
-def test_M5_PY_UT_005_parse_invocation_when_option_is_out_of_range_should_raise(field_name: str, value: int) -> None:
+def test_parse_invocation_when_option_is_out_of_range_should_raise(field_name: str, value: int) -> None:
     payload = _invocation_payload()
     payload["options"][field_name] = value
 
@@ -243,7 +243,7 @@ def test_M5_PY_UT_005_parse_invocation_when_option_is_out_of_range_should_raise(
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
-def test_M5_PY_UT_005_parse_invocation_when_wait_timeout_exceeds_ttl_should_raise() -> None:
+def test_parse_invocation_when_wait_timeout_exceeds_ttl_should_raise() -> None:
     payload = _invocation_payload()
     payload["options"]["ttlMs"] = 1000
     payload["options"]["waitTimeoutMs"] = 1001
@@ -259,7 +259,7 @@ def test_M5_PY_UT_005_parse_invocation_when_wait_timeout_exceeds_ttl_should_rais
         ("attempt", 0),
     ],
 )
-def test_M5_PY_UT_005_parse_invocation_when_delivery_is_not_positive_should_raise(field_name: str, value: int) -> None:
+def test_parse_invocation_when_delivery_is_not_positive_should_raise(field_name: str, value: int) -> None:
     payload = _invocation_payload()
     payload["delivery"][field_name] = value
 
@@ -267,7 +267,7 @@ def test_M5_PY_UT_005_parse_invocation_when_delivery_is_not_positive_should_rais
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
-def test_M5_PY_UT_005_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> None:
+def test_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_notify_result(
             {
@@ -278,7 +278,7 @@ def test_M5_PY_UT_005_parse_notify_result_when_invocation_id_violates_spec_shoul
         )
 
 
-def test_M5_PY_UT_005_parse_ping_result_when_echo_contains_unsupported_json_should_raise() -> None:
+def test_parse_ping_result_when_echo_contains_unsupported_json_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"echo\.callback 包含不支持的 JSON 类型。"):
         parse_ping_result(
             {
@@ -290,7 +290,7 @@ def test_M5_PY_UT_005_parse_ping_result_when_echo_contains_unsupported_json_shou
         )
 
 
-def test_M5_PY_UT_005_parse_request_result_when_value_contains_unsupported_json_should_raise() -> None:
+def test_parse_request_result_when_value_contains_unsupported_json_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"value\.callback 包含不支持的 JSON 类型。"):
         parse_request_result(
             {
@@ -302,7 +302,7 @@ def test_M5_PY_UT_005_parse_request_result_when_value_contains_unsupported_json_
         )
 
 
-def test_M5_PY_UT_005_parse_event_when_type_is_not_supported_should_raise() -> None:
+def test_parse_event_when_type_is_not_supported_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_event(
             {
@@ -314,7 +314,7 @@ def test_M5_PY_UT_005_parse_event_when_type_is_not_supported_should_raise() -> N
         )
 
 
-def test_M5_PY_UT_005_parse_event_when_payload_contains_unsupported_json_should_raise() -> None:
+def test_parse_event_when_payload_contains_unsupported_json_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"payload\.callback 包含不支持的 JSON 类型。"):
         parse_event(
             {
@@ -327,7 +327,7 @@ def test_M5_PY_UT_005_parse_event_when_payload_contains_unsupported_json_should_
         )
 
 
-def test_M5_PY_UT_005_parse_event_should_return_supported_event_type() -> None:
+def test_parse_event_should_return_supported_event_type() -> None:
     event = parse_event(
         {
             "subscriptionId": "sub-1",
@@ -341,7 +341,7 @@ def test_M5_PY_UT_005_parse_event_should_return_supported_event_type() -> None:
     assert event.type is DevHubEventType.INVOCATION_COMPLETED
 
 
-def test_M6_PY_UT_005_parse_event_should_accept_definition_lifecycle_type() -> None:
+def test_parse_event_should_accept_definition_lifecycle_type() -> None:
     event = parse_event(
         {
             "subscriptionId": "sub-1",
@@ -361,7 +361,7 @@ def test_M6_PY_UT_005_parse_event_should_accept_definition_lifecycle_type() -> N
     assert event.type is DevHubEventType.APP_DEFINITION_UPSERTED
 
 
-def test_M6_PY_UT_005_parse_event_when_definition_payload_missing_required_shape_should_raise() -> None:
+def test_parse_event_when_definition_payload_missing_required_shape_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"definition"):
         parse_event(
             {
@@ -376,7 +376,7 @@ def test_M6_PY_UT_005_parse_event_when_definition_payload_missing_required_shape
         )
 
 
-def test_M6_PY_UT_005_parse_event_when_instance_payload_contains_password_should_raise() -> None:
+def test_parse_event_when_instance_payload_contains_password_should_raise() -> None:
     with pytest.raises(RuntimeError, match=r"password"):
         parse_event(
             {
@@ -401,7 +401,7 @@ def test_M6_PY_UT_005_parse_event_when_instance_payload_contains_password_should
         (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
     ],
 )
-def test_M5_PY_UT_005_parse_invocation_when_identifier_violates_spec_should_raise(mutator) -> None:
+def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) -> None:
     payload = _invocation_payload()
     mutator(payload)
 
@@ -418,7 +418,7 @@ def test_M5_PY_UT_005_parse_invocation_when_identifier_violates_spec_should_rais
         (lambda payload: payload.__setitem__("delivery", None),),
     ],
 )
-def test_M5_PY_UT_005_parse_invocation_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
+def test_parse_invocation_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
     payload = _invocation_payload()
     mutator(payload)
 
@@ -426,7 +426,7 @@ def test_M5_PY_UT_005_parse_invocation_when_optional_non_nullable_field_is_null_
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
-def test_M5_PY_UT_005_parse_invocation_when_args_contains_unsupported_json_should_raise() -> None:
+def test_parse_invocation_when_args_contains_unsupported_json_should_raise() -> None:
     payload = _invocation_payload()
     payload["args"] = {"callback": lambda: "ignored"}
 
@@ -435,7 +435,7 @@ def test_M5_PY_UT_005_parse_invocation_when_args_contains_unsupported_json_shoul
 
 
 @pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
-def test_M5_PY_UT_005_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data) -> None:
+def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data) -> None:
     with pytest.raises(RuntimeError):
         parse_callee_error(
             {

@@ -11,20 +11,20 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// M1 核心 RPC 规范白盒测试。
+/// 核心 RPC 规范白盒测试。
 /// </summary>
 [Trait("Category", "Spec")]
-public class M1CoreRpcSpecTests : IDisposable
+public class CoreRpcSpecTests : IDisposable
 {
-    private const string InstancePassword = "m1-core-rpc-password";
+    private const string InstancePassword = "core-rpc-password";
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _instancesLogger = new();
     private readonly string _tempDirectory;
 
-    public M1CoreRpcSpecTests()
+    public CoreRpcSpecTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubM1CoreRpcSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubCoreRpcSpecTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

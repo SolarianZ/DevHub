@@ -10,7 +10,7 @@ namespace DevHub.Sdk.UnitTests.Rpc;
 public sealed class InvocationRequestBuilderTests
 {
     [Fact]
-    public void M5_DN_UT_006_NotifyBuilder_ShouldApplyDefaultOptions()
+    public void NotifyBuilder_ShouldApplyDefaultOptions()
     {
         var payload = RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
@@ -27,7 +27,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RequestBuilder_ShouldApplyDefaultOptions()
+    public void RequestBuilder_ShouldApplyDefaultOptions()
     {
         var payload = RequestPayloadFactory.BuildRequestParams(new InvokeRequest
         {
@@ -44,7 +44,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_NotifyBuilder_WhenWaitTimeoutSpecified_ShouldThrowArgumentException()
+    public void NotifyBuilder_WhenWaitTimeoutSpecified_ShouldThrowArgumentException()
     {
         var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
@@ -60,7 +60,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RequestBuilder_ShouldPreserveExplicitEmptyScope()
+    public void RequestBuilder_ShouldPreserveExplicitEmptyScope()
     {
         var payload = RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
@@ -78,7 +78,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RequestBuilder_WhenAutoLaunchEnabledWithInstanceId_ShouldThrowArgumentException()
+    public void RequestBuilder_WhenAutoLaunchEnabledWithInstanceId_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
@@ -96,7 +96,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RequestBuilder_WhenAutoLaunchRequiresQueueIfOfflineTrue_ShouldThrowArgumentException()
+    public void RequestBuilder_WhenAutoLaunchRequiresQueueIfOfflineTrue_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
@@ -111,7 +111,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_PollBuilder_ShouldApplyDefaults()
+    public void PollBuilder_ShouldApplyDefaults()
     {
         var payload = RequestPayloadFactory.BuildPollParams(new PollRequest
         {
@@ -124,7 +124,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_LaunchBuilder_ShouldOmitOptionalFieldsByDefault()
+    public void LaunchBuilder_ShouldOmitOptionalFieldsByDefault()
     {
         var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
@@ -139,7 +139,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_LaunchBuilder_ShouldPreserveOptionalFields()
+    public void LaunchBuilder_ShouldPreserveOptionalFields()
     {
         var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
@@ -157,7 +157,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_LaunchBuilder_WhenWaitForRegisterNegative_ShouldThrowArgumentOutOfRangeException()
+    public void LaunchBuilder_WhenWaitForRegisterNegative_ShouldThrowArgumentOutOfRangeException()
     {
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
@@ -169,7 +169,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_ListInstancesBuilder_WhenNoFilterSpecified_ShouldReturnNull()
+    public void ListInstancesBuilder_WhenNoFilterSpecified_ShouldReturnNull()
     {
         var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest());
 
@@ -177,7 +177,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_ListInstancesBuilder_ShouldOnlyIncludeExplicitFilters()
+    public void ListInstancesBuilder_ShouldOnlyIncludeExplicitFilters()
     {
         var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest
         {
@@ -248,7 +248,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RespondBuilder_WhenValueExplicitlyNull_ShouldWriteJsonNull()
+    public void RespondBuilder_WhenValueExplicitlyNull_ShouldWriteJsonNull()
     {
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
@@ -263,7 +263,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
+    public void RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
             new AppInstanceRegistration
@@ -282,7 +282,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RespondBuilder_WhenErrorMessageMissing_ShouldThrowArgumentException()
+    public void RespondBuilder_WhenErrorMessageMissing_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
@@ -297,7 +297,7 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_RespondBuilder_WhenErrorDataIsNotObject_ShouldThrowArgumentException()
+    public void RespondBuilder_WhenErrorDataIsNotObject_ShouldThrowArgumentException()
     {
         var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {

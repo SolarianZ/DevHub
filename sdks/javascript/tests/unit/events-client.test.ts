@@ -20,7 +20,7 @@ afterEach(async () => {
   }));
 });
 
-it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () => {
+it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () => {
   const connection = createConnectionInfo();
   const runtimeResolver = {
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
@@ -72,7 +72,7 @@ it("M5_TS_UT_007 fromRuntime 应支持注入 runtimeResolver 与 sessionFactory"
   expect(session?.disposedReason).toBe("client_dispose");
 });
 
-it("M6_TS_UT_009 HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接上下文", async () => {
+it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接上下文", async () => {
   const connection = createConnectionInfo();
   const resolvedOptions: Readonly<NormalizedDevHubClientOptions>[] = [];
   const runtimeResolver = {
@@ -145,7 +145,7 @@ it("M6_TS_UT_009 HTTP/Events 客户端应复用默认 clientSessionId 并隐藏�
   expect((eventsClient as unknown as Record<string, unknown>).connection).toBeUndefined();
 });
 
-it("M5_TS_UT_005 authenticate should support WS ping and apps queries", async () => {
+it("authenticate should support WS ping and apps queries", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
 
@@ -212,7 +212,7 @@ it("M5_TS_UT_005 authenticate should support WS ping and apps queries", async ()
   }
 });
 
-it("M5_TS_UT_005 事件流应拒绝注入 session 返回的非法 payload JSON", async () => {
+it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubEventsClient.fromRuntime(
@@ -271,7 +271,7 @@ it("M5_TS_UT_005 事件流应拒绝注入 session 返回的非法 payload JSON",
   }
 });
 
-it("M6_TS_UT_005 定义事件应拒绝缺失结构化 payload 的通知", async () => {
+it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubEventsClient.fromRuntime(
@@ -330,7 +330,7 @@ it("M6_TS_UT_005 定义事件应拒绝缺失结构化 payload 的通知", async 
   }
 });
 
-it("M6_TS_UT_005 实例事件应拒绝包含 password 的 payload", async () => {
+it("实例事件应拒绝包含 password 的 payload", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubEventsClient.fromRuntime(
@@ -391,7 +391,7 @@ it("M6_TS_UT_005 实例事件应拒绝包含 password 的 payload", async () => 
   }
 });
 
-it("M5_TS_UT_005 断线后重新认证应重建事件流并要求重新订阅", async () => {
+it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
 
@@ -434,7 +434,7 @@ it("M5_TS_UT_005 断线后重新认证应重建事件流并要求重新订阅", 
   }
 });
 
-it("M5_TS_UT_005 应在认证前拒绝 subscribe 和 readEvents", async () => {
+it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   const runtimeDir = await createRuntime();
   const client = await DevHubEventsClient.fromRuntime({
     clientId: "unit-events-unauthenticated-client",
@@ -449,7 +449,7 @@ it("M5_TS_UT_005 应在认证前拒绝 subscribe 和 readEvents", async () => {
   expect(() => client.readEvents()).toThrow();
 });
 
-it("M5_TS_UT_005 subscribe 应在发送请求前拒绝未知事件类型", async () => {
+it("subscribe 应在发送请求前拒绝未知事件类型", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
 
@@ -479,7 +479,7 @@ it("M5_TS_UT_005 subscribe 应在发送请求前拒绝未知事件类型", async
   expect(session?.requests.map((item) => item.method)).toEqual(["hub.ws.authenticate"]);
 });
 
-it("M5_TS_UT_005 连接关闭后仍应允许读取已缓冲事件", async () => {
+it("连接关闭后仍应允许读取已缓冲事件", async () => {
   const runtimeDir = await createRuntime();
   const sockets: FakeWebSocket[] = [];
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
@@ -511,7 +511,7 @@ it("M5_TS_UT_005 连接关闭后仍应允许读取已缓冲事件", async () => 
   expect(second.done).toBe(true);
 });
 
-it("M5_TS_UT_005 事件通知携带 id 时应使事件流报错", async () => {
+it("事件通知携带 id 时应使事件流报错", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -531,7 +531,7 @@ it("M5_TS_UT_005 事件通知携带 id 时应使事件流报错", async () => {
   await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
 });
 
-it("M5_TS_UT_005 收到空白文本消息时应使事件流报错", async () => {
+it("收到空白文本消息时应使事件流报错", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -551,7 +551,7 @@ it("M5_TS_UT_005 收到空白文本消息时应使事件流报错", async () => 
   await expect(iterator.next()).rejects.toThrow(/blank/i);
 });
 
-it("M5_TS_UT_005 响应 id 未匹配挂起请求时应中断 authenticate", async () => {
+it("响应 id 未匹配挂起请求时应中断 authenticate", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -568,7 +568,7 @@ it("M5_TS_UT_005 响应 id 未匹配挂起请求时应中断 authenticate", asyn
   await expect(client.authenticate()).rejects.toThrow(/pending request/i);
 });
 
-it("M5_TS_UT_005 收到未知 WS 通知方法时应使事件流报错", async () => {
+it("收到未知 WS 通知方法时应使事件流报错", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -588,7 +588,7 @@ it("M5_TS_UT_005 收到未知 WS 通知方法时应使事件流报错", async ()
   await expect(iterator.next()).rejects.toThrow(/supported response or hub\.event/i);
 });
 
-it("M5_TS_UT_005 收到未知事件类型时应使事件流报错", async () => {
+it("收到未知事件类型时应使事件流报错", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -608,7 +608,7 @@ it("M5_TS_UT_005 收到未知事件类型时应使事件流报错", async () => 
   await expect(iterator.next()).rejects.toThrow(/supported DevHub event type/i);
 });
 
-it("M5_TS_UT_005 缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async () => {
+it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async () => {
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
 
   const server = new WebSocketServer({
@@ -679,7 +679,7 @@ it("M5_TS_UT_005 缺少全局 WebSocket 时收到 binary frame 应使事件流�
   }
 });
 
-it("M5_TS_UT_005 authenticate 应映射 DevHub RPC 错误", async () => {
+it("authenticate 应映射 DevHub RPC 错误", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -705,7 +705,7 @@ it("M5_TS_UT_005 authenticate 应映射 DevHub RPC 错误", async () => {
   expect(rpcError.reason).toBe("invalid_token");
 });
 
-it("M5_TS_UT_005 authenticate 应拒绝非法 JSON-RPC 版本", async () => {
+it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {
@@ -721,7 +721,7 @@ it("M5_TS_UT_005 authenticate 应拒绝非法 JSON-RPC 版本", async () => {
   await expect(client.authenticate()).rejects.toThrow(/jsonrpc/i);
 });
 
-it("M5_TS_UT_007 缺少全局 WebSocket 时应回退到 ws 模块", async () => {
+it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
 
   const server = new WebSocketServer({
@@ -783,13 +783,13 @@ it("M5_TS_UT_007 缺少全局 WebSocket 时应回退到 ws 模块", async () => 
   }
 });
 
-it("M5_TS_UT_005 fromRuntime 应拒绝空 options", async () => {
+it("fromRuntime 应拒绝空 options", async () => {
   await expect(
     DevHubEventsClient.fromRuntime(null as unknown as Parameters<typeof DevHubEventsClient.fromRuntime>[0])
   ).rejects.toThrow(/options/i);
 });
 
-it("M5_TS_UT_005 event notifications should reject a null payload object", async () => {
+it("event notifications should reject a null payload object", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
     constructor(url: string) {

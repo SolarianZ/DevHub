@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2 Invocation Poll/Respond 冒烟测试
+DevHub 调用轮询与响应冒烟测试
 """
 
 import os
@@ -36,8 +36,8 @@ class TestInvocationPollRespond(unittest.TestCase):
         return new_instance_id(prefix)
 
     def test_poll_unregistered_instance(self):
-        """M2-POLL-001: 未注册实例 poll 返回 instance_not_found"""
-        result = TestResult("M2-POLL-001 未注册实例 poll")
+        """POLL-001: 未注册实例 poll 返回 instance_not_found"""
+        result = TestResult("POLL-001 未注册实例 poll")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -82,7 +82,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-poll-disabled-app")
+            app_id = self._new_app_id("poll-disabled-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -122,7 +122,7 @@ class TestInvocationPollRespond(unittest.TestCase):
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-respond-disabled-app")
+            app_id = self._new_app_id("respond-disabled-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -156,13 +156,13 @@ class TestInvocationPollRespond(unittest.TestCase):
         return result
 
     def test_respond_duplicate_should_conflict(self):
-        """M2-RESP-001: 同一 invocation 重复 respond 返回冲突"""
-        result = TestResult("M2-RESP-001 重复 respond 返回冲突")
+        """RESP-001: 同一 invocation 重复 respond 返回冲突"""
+        result = TestResult("RESP-001 重复 respond 返回冲突")
         definition_path = None
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-poll-respond-app")
+            app_id = self._new_app_id("poll-respond-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -219,14 +219,14 @@ class TestInvocationPollRespond(unittest.TestCase):
         return result
 
     def test_respond_by_non_lease_holder_should_conflict(self):
-        """M2-RESP-001: 非 lease holder respond 返回冲突"""
-        result = TestResult("M2-RESP-001 越权 respond 返回冲突")
+        """RESP-001: 非 lease holder respond 返回冲突"""
+        result = TestResult("RESP-001 越权 respond 返回冲突")
         definition_path = None
         instance_a = None
         instance_b = None
 
         try:
-            app_id = self._new_app_id("m2-poll-respond-non-holder-app")
+            app_id = self._new_app_id("poll-respond-non-holder-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -290,13 +290,13 @@ class TestInvocationPollRespond(unittest.TestCase):
         return result
 
     def test_respond_value_error_xor_validation_should_invalid_params(self):
-        """M2-RESP-002: respond 的 value/error 必须二选一。"""
-        result = TestResult("M2-RESP-002 respond value/error XOR 校验")
+        """RESP-002: respond 的 value/error 必须二选一。"""
+        result = TestResult("RESP-002 respond value/error XOR 校验")
         definition_path = None
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-respond-xor-app")
+            app_id = self._new_app_id("respond-xor-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -381,13 +381,13 @@ class TestInvocationPollRespond(unittest.TestCase):
         return result
 
     def test_lease_expired_should_redeliver_with_attempt_incremented_lightweight(self):
-        """M2-LEASE-001-LITE: default 轻量 lease 到期重投递"""
-        result = TestResult("M2-LEASE-001-LITE lease 到期重投递（default 轻量）")
+        """LEASE-001-LITE: default 轻量 lease 到期重投递"""
+        result = TestResult("LEASE-001-LITE lease 到期重投递（default 轻量）")
         definition_path = None
         instance_id = None
 
         try:
-            app_id = self._new_app_id("m2-lease-redelivery-lite-app")
+            app_id = self._new_app_id("lease-redelivery-lite-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -461,14 +461,14 @@ class TestInvocationPollRespond(unittest.TestCase):
         return result
 
     def test_lease_expired_should_redeliver_with_attempt_incremented(self):
-        """M2-LEASE-001: lease 到期后重投递且 attempt 递增（full）"""
-        result = TestResult("M2-LEASE-001 lease 到期重投递 attempt 递增（full）")
+        """LEASE-001: lease 到期后重投递且 attempt 递增（full）"""
+        result = TestResult("LEASE-001 lease 到期重投递 attempt 递增（full）")
         definition_path = None
         instance_a = None
         instance_b = None
 
         try:
-            app_id = self._new_app_id("m2-lease-redelivery-app")
+            app_id = self._new_app_id("lease-redelivery-app")
             definition_path = self._create_definition(app_id)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)

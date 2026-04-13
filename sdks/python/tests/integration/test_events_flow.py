@@ -17,7 +17,7 @@ from ._host import DevHubHostFixture
 
 
 @pytest.mark.asyncio
-async def test_M5_E2E_004_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -> None:
+async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "events.flow.app", "displayName": "events.flow.app"})
 
@@ -60,7 +60,7 @@ async def test_M5_E2E_004_ws_authenticate_subscribe_unsubscribe_should_control_d
 
 
 @pytest.mark.asyncio
-async def test_M5_E2E_005_ws_subscribe_unknown_type_should_raise_value_error_before_request() -> None:
+async def test_ws_subscribe_unknown_type_should_raise_value_error_before_request() -> None:
     with DevHubHostFixture.start() as host:
         events_client = await host.create_events_client("events-invalid-client")
         try:
@@ -73,7 +73,7 @@ async def test_M5_E2E_005_ws_subscribe_unknown_type_should_raise_value_error_bef
 
 
 @pytest.mark.asyncio
-async def test_M5_E2E_010_ws_disconnect_cleanup_should_require_resubscribe_after_reconnect() -> None:
+async def test_ws_disconnect_cleanup_should_require_resubscribe_after_reconnect() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "events.reconnect.app", "displayName": "events.reconnect.app"})
 
@@ -120,7 +120,7 @@ async def test_M5_E2E_010_ws_disconnect_cleanup_should_require_resubscribe_after
 
 
 @pytest.mark.asyncio
-async def test_M5_E2E_004_ws_readable_methods_should_match_published_surface() -> None:
+async def test_ws_readable_methods_should_match_published_surface() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "events.ws.read.app", "displayName": "events.ws.read.app"})
 
@@ -152,7 +152,7 @@ async def test_M5_E2E_004_ws_readable_methods_should_match_published_surface() -
 
 
 @pytest.mark.asyncio
-async def test_M6_E2E_004_ws_should_receive_definition_lifecycle_events() -> None:
+async def test_ws_should_receive_definition_lifecycle_events() -> None:
     with DevHubHostFixture.start() as host:
         events_client = await host.create_events_client("events-definition-client")
         try:
