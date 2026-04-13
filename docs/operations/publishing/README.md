@@ -2,12 +2,12 @@
 
 本分组用于承载发布准备、发布流程、资产命名、发布前检查和发布后核验相关文档，面向需要维护 DevHub 对外分发流程的仓库维护者。
 
-## 当前入口
+## 入口导航
 
 - [`release-process.md`](./release-process.md)：`preview`、`main` 和稳定版的发布流程、触发方式与 GitHub Release 约定。
 - [`release-asset-layout.md`](./release-asset-layout.md)：统一发布资产布局、命名规则和 manifest 结构。
 - [`release-checklist.md`](./release-checklist.md)：发布前检查项、发布后核验步骤和 dry-run 入口。
-- [`../部署与运行指南.md`](../部署与运行指南.md)：当前运行、部署与数据根目录说明。
+- [`../部署与运行指南.md`](../部署与运行指南.md)：运行、部署与数据根目录说明。
 - [`../运维排障手册.md`](../运维排障手册.md)：运行期排障与恢复说明。
 - [`../../README.md`](../../README.md)：文档总入口。
 

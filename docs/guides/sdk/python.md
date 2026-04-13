@@ -62,7 +62,7 @@ python -m pip install build
 python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 ```
 
-## 5. 后续路径
+## 5. 相关文档
 
 - 需要完整 API、错误模型和扩展点说明时，请阅读 [`../../../sdks/python/README.md`](../../../sdks/python/README.md)。
 - 需要对照其他语言 SDK，请回到 [`README.md`](./README.md)。

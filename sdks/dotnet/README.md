@@ -1,6 +1,6 @@
 # DevHub .NET SDK
 
-当前目录用于维护独立于主工程的 DevHub .NET SDK 工作区。
+本目录用于维护独立于主工程的 DevHub .NET SDK 工作区。
 
 ## 接入导航
 
@@ -13,9 +13,9 @@
 - 单元测试项目：`tests/DevHub.Sdk.UnitTests/`
 - 集成测试项目：`tests/DevHub.Sdk.IntegrationTests/`
 
-## 当前能力范围
+## 能力范围
 
-当前 `.NET SDK` 已覆盖 `docs/spec/Spec.md` 中当前已实现的公开协议能力：
+`.NET SDK` 对外提供以下协议能力：
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`（含 `validateDefinition` / `upsertDefinition` / `deleteDefinition` 与带顶层 `password` 的实例注册 / 注销）、`hub.invoke.*`
@@ -33,7 +33,7 @@
 
 仓库级 `host/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
 
-## 当前仓库内使用方式
+## 仓库内使用方式
 
 本节命令仅用于仓库内开发或本地打包验证，不代表正式发布后的安装入口。
 

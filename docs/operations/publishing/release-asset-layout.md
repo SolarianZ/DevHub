@@ -94,6 +94,6 @@ artifacts/release/<release-id>/
 - 发布通道、release id、release tag、提交 SHA
 - 资产摘要
 - 验证摘要
-- 面向用户的后续入口链接
+- 面向用户的相关入口链接
 
 GitHub Release 正文直接复用该文件，避免 workflow 中再维护另一套手写说明。

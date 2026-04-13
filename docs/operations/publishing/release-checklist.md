@@ -69,7 +69,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 - 确认稳定版 tag 已准备好，例如 `v1.0.1`。
 - 确认该 tag 对应提交已经通过 `ci`，再进入发布或重跑发布。
-- 确认本次发布不再保留面向外部用户的 TODO 安装占位，或明确哪些占位仍待后续收口。
+- 确认本次发布不再保留面向外部用户的 TODO 安装占位，或明确仍保留的占位项及对应发布资产。
 
 ## 3. 发布后核验
 

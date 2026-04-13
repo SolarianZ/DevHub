@@ -116,7 +116,7 @@ npm --prefix sdks/javascript test
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 ```
 
-## 6. 后续路径
+## 6. 相关文档
 
 - 需要完整 API、事件流、迁移说明或扩展点示例时，请阅读 [`../../../sdks/javascript/README.md`](../../../sdks/javascript/README.md)。
 - 需要对照其他语言 SDK，请回到 [`README.md`](./README.md)。

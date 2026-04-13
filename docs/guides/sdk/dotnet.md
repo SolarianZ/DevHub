@@ -67,7 +67,7 @@ dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 ```
 
-## 5. 后续路径
+## 5. 相关文档
 
 - 需要完整 API、扩展点和错误模型时，请阅读 [`../../../sdks/dotnet/README.md`](../../../sdks/dotnet/README.md)。
 - 需要与其他语言 SDK 对照时，请回到 [`README.md`](./README.md)。

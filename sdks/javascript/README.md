@@ -15,17 +15,16 @@ DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk-j
 - 浏览器/WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
 
-## 当前状态
+## 能力概览
 
-- 已提供工程骨架。
-- 已提供基础模型、统一错误模型，以及通过 `@devhub/sdk-javascript/runtime` 暴露的 Node.js 文件系统运行时发现能力。
-- 已实现 HTTP JSON-RPC 客户端封装（`ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等），其中应用定义管理已覆盖 `list/get/validate/upsert/delete`，实例注册/注销已对齐顶层 `password` 参数。
-- 已实现 WebSocket 事件客户端封装（`authenticate` / `subscribe` / `unsubscribe` / 事件流），并收敛到包含 `app.definition.upserted` / `app.definition.deleted` 在内的闭集事件类型。
-- 已补齐本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 会按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构按 Spec 要求整数 `code` 与对象型 `data`。
-- 已公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
-- 已补齐 JS SDK 单元测试与 Host 级集成测试，覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
-- 已补齐 Host 级能力门禁错误集成测试，覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
-- 已公开运行时解析器契约类型、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
+- SDK 提供工程骨架、基础模型、统一错误模型，以及通过 `@devhub/sdk-javascript/runtime` 暴露的 Node.js 文件系统运行时发现能力。
+- HTTP JSON-RPC 客户端覆盖 `ping` / `apps` / `launch` / `invoke` / `poll` / `respond` 等能力；应用定义管理覆盖 `list/get/validate/upsert/delete`，实例注册/注销对齐顶层 `password` 参数。
+- WebSocket 事件客户端提供 `authenticate` / `subscribe` / `unsubscribe` / 事件流能力，并收敛到包含 `app.definition.upserted` / `app.definition.deleted` 在内的闭集事件类型。
+- SDK 提供本地参数校验、成功载荷结构校验与 `invocation_failed` 错误映射辅助，并对 `echo` / `args` / `meta` / `error.data` 等 JSON 载荷执行严格校验，避免静默丢字段或重写值；`hub.invoke.notify` 按 Spec 拒绝不受支持的 `waitTimeoutMs`；`respond.error` 与 JSON-RPC `error` 结构按 Spec 要求整数 `code` 与对象型 `data`。
+- SDK 公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供规范事件类型的编译期约束。
+- JS SDK 单元测试与 Host 级集成测试覆盖 `launch`、`invoke` 往返、超时/过期、scope 路由与事件重连场景。
+- Host 级能力门禁错误集成测试覆盖 `rpc_disabled`、`poll_not_enabled` 与 `respond_not_enabled` 的错误映射。
+- SDK 公开运行时解析器契约类型、HTTP 传输与 WebSocket 会话扩展点；其中 `runtimeResolver.resolve(options)` 会收到完整归一化客户端选项，便于 fake transport、录制回放或自定义连接策略测试。
 - 顶层客户端实例只公开脱敏 `runtime` 视图；bearer token 与原始连接上下文保留在运行时发现和 transport / session 的内部协作链路中。
 - 当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
 
@@ -56,7 +55,7 @@ npm test
 - 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 JS SDK，也可以改用 `DEVHUB_JS_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 仓库级 smoke 验证或手工联调仍可连接本机 Hub，此时请显式传入 `dataDir` 或设置 `DEVHUB_DATA_DIR`，不要把这种运行方式与 SDK 集成测试混用。
 
-## 已验证能力
+## 测试覆盖要点
 
 - Runtime discovery：读取 `hub.json`、解析 `tokenFile`、应用 `dataDir` / `DEVHUB_DATA_DIR` 覆盖，并固定使用 `<dataDir>/runtime/hub.json`。
 - AppDefinition 管理：`get` / `validate` / `upsert` / `delete`、`definition_invalid` 结构化错误、`app_definition_not_found` 删除失败分支。
@@ -153,7 +152,7 @@ import {
   resolveDataDirectory
 } from "@devhub/sdk-javascript";
 
-// 当前入口
+// 根入口
 import {
   FileSystemRuntimeResolver,
   discoverRuntime,

@@ -4,7 +4,7 @@
 
 ## 1. 前置条件
 
-- 当前仓库内最直接的上手路径依赖 `.NET 10 SDK`，用于从源码运行或发布 Host。
+- 仓库内最直接的上手路径依赖 `.NET 10 SDK`，用于从源码运行或发布 Host。
 - 如果你准备把 Host 放到独立数据目录运行，请先决定 `DEVHUB_DATA_DIR` 的值，并确保当前用户对该目录有读写权限。
 - 若当前分发渠道尚未提供正式下载资产，请沿用 [`../../operations/publishing/README.md`](../../operations/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
