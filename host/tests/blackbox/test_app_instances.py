@@ -16,6 +16,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
+    sleep_with_long_wait_status,
 )
 
 
@@ -24,17 +25,8 @@ class TestAppInstances(unittest.TestCase):
 
     @staticmethod
     def _wait_with_progress(total_seconds, label):
-        """等待并输出终端进度条。"""
-        # 避免终端长时间无反应，测试人员误以为卡死
-        bar_width = 30
-        for elapsed in range(total_seconds):
-            completed = elapsed + 1
-            ratio = completed / total_seconds
-            filled = int(bar_width * ratio)
-            bar = "=" * filled + "-" * (bar_width - filled)
-            print(f"\r{label} [{bar}] {completed}/{total_seconds}s", end="", flush=True)
-            time.sleep(1)
-        print()
+        """等待并输出统一长等待状态。"""
+        sleep_with_long_wait_status(total_seconds, label)
 
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""

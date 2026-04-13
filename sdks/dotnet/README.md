@@ -417,6 +417,8 @@ catch (DevHubRpcException ex)
 
 仓库级 smoke、手工联调或示例运行可以连接本机已启动的 Hub，但那属于另一种运行方式，不等同于 SDK 集成测试模式。
 
+如需观察 Host fixture 启动阶段的实时等待状态，可设置 `DEVHUB_TEST_LIVE_STATUS=true`；默认不设置时，仅在实际等待跨过 8 秒后输出 1 行普通状态日志。该变量接受 `1/0`、`true/false`、`yes/no`、`on/off`，其他取值会直接报错。
+
 ## 常用命令
 
 ```powershell

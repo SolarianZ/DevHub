@@ -10,6 +10,7 @@ import unittest
 
 
 from tests.blackbox.test_base import (
+    call_with_long_wait_status,
     DiscoveryService,
     RpcClient,
     RpcAssertions,
@@ -437,7 +438,11 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             second_wait_ms = lease_seconds * 1000 + 1500
-            second_poll = client.poll_once(instance_id, max_count=1, wait_ms=second_wait_ms)
+            second_poll = call_with_long_wait_status(
+                "等待 lease 到期后重投递到同一实例",
+                second_wait_ms / 1000,
+                lambda: client.poll_once(instance_id, max_count=1, wait_ms=second_wait_ms),
+            )
             if not RpcAssertions.expect_success(result, second_poll, ["items"]):
                 return result
 
@@ -535,7 +540,11 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             second_wait_ms = lease_seconds * 1000 + 1500
-            second_poll = client.poll_once(instance_b, max_count=10, wait_ms=second_wait_ms)
+            second_poll = call_with_long_wait_status(
+                "等待 lease 到期后重投递到第二实例",
+                second_wait_ms / 1000,
+                lambda: client.poll_once(instance_b, max_count=10, wait_ms=second_wait_ms),
+            )
             if not RpcAssertions.expect_success(result, second_poll, ["items"]):
                 return result
 

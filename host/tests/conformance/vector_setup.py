@@ -17,8 +17,10 @@ from typing import Any
 
 from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
     DEFAULT_INSTANCE_PASSWORD,
+    PENDING_WAIT_STATUS,
     TEST_HUB_ENV_JSON_ENV_VAR,
     RpcClient,
+    poll_until_deadline_with_long_wait_status,
     start_isolated_hub_process,
     temporary_env_var,
 )
@@ -130,14 +132,23 @@ def wait_for_host_runtime(
 
     runtime_dir = host_data_dir / "runtime"
     hub_json_path = runtime_dir / "hub.json"
-    deadline = time.time() + 45
-    while time.time() < deadline:
+
+    def wait_for_hub_json():
         if process.poll() is not None:
             raise RuntimeError(f"隔离 Hub 提前退出，日志片段：{read_log_tail(log_file)}")
         if hub_json_path.is_file():
-            break
-        time.sleep(0.2)
-    else:
+            return None
+
+        return PENDING_WAIT_STATUS
+
+    hub_json_ready = poll_until_deadline_with_long_wait_status(
+        label="等待 conformance 隔离 Host 生成 hub.json",
+        timeout_seconds=45,
+        poll_interval_seconds=0.2,
+        poll_once=wait_for_hub_json,
+        on_timeout=lambda: PENDING_WAIT_STATUS,
+    )
+    if hub_json_ready is PENDING_WAIT_STATUS:
         raise RuntimeError(f"等待隔离 Hub 生成 hub.json 超时，日志片段：{read_log_tail(log_file)}")
 
     hub_info = json.loads(hub_json_path.read_text(encoding="utf-8"))
@@ -147,9 +158,11 @@ def wait_for_host_runtime(
 
     token = token_file.read_text(encoding="utf-8").strip()
     client = RpcClient(str(hub_info["httpBaseUrl"]), token)
-    ping_deadline = time.time() + 20
     last_error = "unknown"
-    while time.time() < ping_deadline:
+
+    def wait_for_ping():
+        nonlocal last_error
+
         if process.poll() is not None:
             raise RuntimeError(f"隔离 Hub 在 ping 前退出，日志片段：{read_log_tail(log_file)}")
         try:
@@ -166,9 +179,20 @@ def wait_for_host_runtime(
             last_error = json.dumps(response, ensure_ascii=False)
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)
-        time.sleep(0.3)
 
-    raise RuntimeError(f"隔离 Hub 在超时时间内不可达：{last_error}；日志片段：{read_log_tail(log_file)}")
+        return PENDING_WAIT_STATUS
+
+    host_context = poll_until_deadline_with_long_wait_status(
+        label="等待 conformance 隔离 Host 的 hub.ping 可达",
+        timeout_seconds=20,
+        poll_interval_seconds=0.3,
+        poll_once=wait_for_ping,
+        on_timeout=lambda: PENDING_WAIT_STATUS,
+    )
+    if host_context is PENDING_WAIT_STATUS:
+        raise RuntimeError(f"隔离 Hub 在超时时间内不可达：{last_error}；日志片段：{read_log_tail(log_file)}")
+
+    return host_context
 
 
 def read_log_tail(log_file, max_chars: int = 4000) -> str:

@@ -20,6 +20,7 @@ from tests.blackbox.test_base import (
     get_test_python_executable,
     new_instance_id,
     safe_remove,
+    sleep_with_long_wait_status,
     write_app_definition,
 )
 
@@ -1342,7 +1343,7 @@ class TestScopeRouting(unittest.TestCase):
                 result.mark_failure(f"❌ 首次 delivery.leaseSeconds 非法: {first_delivery}")
                 return result
 
-            time.sleep(lease_seconds + 1.0)
+            sleep_with_long_wait_status(lease_seconds + 1.0, "等待 scoped invocation lease 到期后重投递")
 
             global_poll, global_ids = self._poll_invocation_ids(client, global_instance, wait_ms=500)
             if not RpcAssertions.expect_success(result, global_poll, ["items"]):

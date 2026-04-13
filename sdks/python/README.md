@@ -147,6 +147,7 @@ events_client = await DevHubEventsClient.from_runtime(
 - 因此，“临时 Host + 独立数据根目录”说明运行时状态与默认构建产物都尽量彼此隔离，但仍不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行。
 - 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 Python SDK，也可以改用 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
+- 如需观察 Host fixture 启动阶段的实时等待状态，可设置 `DEVHUB_TEST_LIVE_STATUS=true`；默认不设置时，仅在实际等待跨过 8 秒后输出 1 行普通状态日志。该变量接受 `1/0`、`true/false`、`yes/no`、`on/off`，其他取值会直接报错。
 
 ## 验证命令
 

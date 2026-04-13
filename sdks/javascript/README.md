@@ -54,6 +54,7 @@ npm test
 - 默认情况下，JS 集成测试会把 Host 构建到自己的临时输出目录，再从该隔离产物启动 Host；这一模式的目标是隔离运行时状态，并避免直接复用源码树下的 Host 可执行输出。
 - 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 JS SDK，也可以改用 `DEVHUB_JS_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 仓库级 smoke 验证或手工联调仍可连接本机 Hub，此时请显式传入 `dataDir` 或设置 `DEVHUB_DATA_DIR`，不要把这种运行方式与 SDK 集成测试混用。
+- 如需观察 Host fixture 启动阶段的实时等待状态，可设置 `DEVHUB_TEST_LIVE_STATUS=true`；默认不设置时，仅在实际等待跨过 8 秒后输出 1 行普通状态日志。该变量接受 `1/0`、`true/false`、`yes/no`、`on/off`，其他取值会直接报错。
 
 ## 测试覆盖要点
 

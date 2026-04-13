@@ -14,9 +14,12 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    PENDING_WAIT_STATUS,
     RpcClient,
     TestResult,
+    call_with_long_wait_status,
     describe_test_hub_command,
+    poll_until_deadline_with_long_wait_status,
     paths_refer_to_same_location,
     start_isolated_hub_process,
     temporary_env_var,
@@ -64,22 +67,31 @@ class TestLaunchDiscovery(unittest.TestCase):
     def _wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds):
         """等待 Hub 在目标运行时目录写出发现文件。"""
         hub_json_path = os.path.join(runtime_dir, "hub.json")
-        deadline = time.time() + timeout_seconds
-        while time.time() < deadline:
+
+        def poll_once():
             if process.poll() is not None:
                 return False
             if os.path.exists(hub_json_path):
                 return True
-            time.sleep(0.2)
-        return False
+            return PENDING_WAIT_STATUS
+
+        return poll_until_deadline_with_long_wait_status(
+            label="等待隔离 Host 生成 hub.json",
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=0.2,
+            poll_once=poll_once,
+            on_timeout=lambda: False,
+        )
 
     @staticmethod
     def _wait_for_hub_ping(process, base_url, token, timeout_seconds):
         """等待 Hub 对 hub.ping 可达。"""
-        deadline = time.time() + timeout_seconds
         last_error = "unknown"
         client = RpcClient(base_url, token)
-        while time.time() < deadline:
+
+        def poll_once():
+            nonlocal last_error
+
             if process.poll() is not None:
                 return False, "Hub 进程已退出"
 
@@ -91,9 +103,15 @@ class TestLaunchDiscovery(unittest.TestCase):
             except Exception as e:
                 last_error = str(e)
 
-            time.sleep(0.3)
+            return PENDING_WAIT_STATUS
 
-        return False, last_error
+        return poll_until_deadline_with_long_wait_status(
+            label="等待隔离 Host 的 hub.ping 可达",
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=0.3,
+            poll_once=poll_once,
+            on_timeout=lambda: (False, last_error),
+        )
 
     def test_discovery_files_exist(self):
         """测试 hub.json 与 tokenFile 发现链路是否符合 Spec"""
@@ -440,7 +458,11 @@ class TestLaunchDiscovery(unittest.TestCase):
                 reader_thread.start()
                 writer_thread.start()
 
-                writer_thread.join(timeout=240)
+                call_with_long_wait_status(
+                    "等待 hub.json 原子写入阶段完成",
+                    240,
+                    lambda: writer_thread.join(timeout=240),
+                )
                 stop_event.set()
                 reader_thread.join(timeout=10)
 
