@@ -33,7 +33,7 @@ python3 -m pip install pywin32
 
 ```text
 DevHub/
-├── apps/                          # 官方终端应用工作区
+├── apps/                          # DevHub生态应用工作区
 │   └── monitor/                   # Tauri 2 桌面 Monitor（前端 + src-tauri 原生后端）
 ├── docs/                          # 文档系统
 │   ├── user/                      # 面向使用者与集成方的文档
@@ -72,6 +72,7 @@ npm --prefix apps/monitor run tauri:check
 npm --prefix apps/monitor run verify
 python3 host/tests/conformance/vector_runner.py
 python3 scripts/sdk/run_integration_full.py
+python3 scripts/docs/check_markdown_links.py
 python3 host/tests/blackbox/test_runner.py --smoke --no-header
 python3 host/tests/blackbox/test_runner.py --full --no-header
 python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80
@@ -88,6 +89,7 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。
 - `python3 scripts/sdk/run_integration_full.py` 是仓库级 SDK 集成测试的 build-once / run-many 本地入口：脚本会先把 `DevHub.Host` 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 依次运行 `.NET`、`JS/TS`、`Python` SDK 测试。执行前请先准备好 JS / Python 依赖。
+- `python3 scripts/docs/check_markdown_links.py` 会扫描仓库内所有未被 `.gitignore` 忽略的 `.md` 文件，提取 `[text](path)` 形式的本地路径超链接并校验目标是否存在；发现失效路径时，会按文件分组输出原始超链接并返回非零退出码。
 - `python3 host/tests/blackbox/test_runner.py --smoke --no-header` 与 `python3 host/tests/blackbox/test_runner.py --full --no-header` 默认会构建并启动隔离 Host；如需复用外部已启动的 Host 或自定义启动方式，请参考 [`host/tests/README.md`](../../../host/tests/README.md)。
 - `find host -type d -name TestResults -prune -exec rm -rf {} +` 用于在重新跑 Host coverage 前清理历史产物，保持本地与 GitHub CI 的 `TestResults` 口径一致。
 - `python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80` 用于校验 Host 白盒测试覆盖率门槛；覆盖率 settings 位于 `host/tests/tools/coverage.runsettings`，脚本会优先使用 `trx` 附件中的 `coverage.cobertura.xml`，并忽略同工程下内容重复的 GUID 镜像副本。

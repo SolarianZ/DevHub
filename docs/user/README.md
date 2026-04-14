@@ -8,7 +8,7 @@
 - [`host/quickstart.md`](./host/quickstart.md)：启动 Host、读取 `hub.json` / `tokenFile` 与最小 `hub.ping` 验证。
 - [`sdk/README.md`](./sdk/README.md)：官方 `.NET`、`JS/TS`、`Python` SDK 接入入口。
 - [`protocol/README.md`](./protocol/README.md)：不依赖官方 SDK、直接基于公开协议接入的路径。
-- [`../../apps/monitor/README.md`](../../apps/monitor/README.md)：官方桌面 Monitor 的工作区说明与本地运行入口。
+- [`../../apps/monitor/README.md`](../../apps/monitor/README.md)：官方桌面 Monitor 的工作区与本地运行入口。
 
 ## 推荐阅读顺序
 

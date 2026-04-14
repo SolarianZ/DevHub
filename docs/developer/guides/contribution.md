@@ -6,7 +6,7 @@
 
 - 公开协议行为、字段命名、状态转换和错误语义以 [`../../specification/protocol/Specification.md`](../../specification/protocol/Specification.md) 为唯一权威标准。
 - 本地开发环境、构建和测试方式以 [`./development.md`](./development.md) 为准。
-- 发布资产布局、发布流程和检查清单分别见：
+- 发布资产布局、发布流程和检查清单见：
   - [`../publishing/release-asset-layout.md`](../publishing/release-asset-layout.md)
   - [`../publishing/release-process.md`](../publishing/release-process.md)
   - [`../publishing/release-checklist.md`](../publishing/release-checklist.md)
@@ -24,7 +24,7 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信入口固定通过 `@devhub/sdk-javascript`。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖映射到 `sdks/javascript/` 工作区。
 
 `JS/TS SDK` 的额外开发约束：
 

@@ -141,9 +141,9 @@ const client = await DevHubClient.fromRuntime(
 );
 ```
 
-## 从旧根入口迁移 runtime 值导入
+## 从旧根入口迁移运行时值导入
 
-根入口保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk-javascript/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
+根入口仍保留高级运行时契约类型导出，但 Node.js 文件系统相关的运行时值需要从 `@devhub/sdk-javascript/runtime` 获取；客户端实例上的 `runtime` 只提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
 
 ```ts
 // 迁移前
