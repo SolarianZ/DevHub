@@ -61,13 +61,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 npm --prefix apps/monitor run verify
 ```
 
-## 3. 根目录治理入口
-
-- [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：贡献方式、PR 要求和提交前检查。
-- [`../../../CHANGELOG.md`](../../../CHANGELOG.md)：变更记录和发布通道说明。
-- [`../../../SECURITY.md`](../../../SECURITY.md)：安全问题和支持入口。
-
-## 4. 外部协作者常用入口
+## 3. 外部协作者常用入口
 
 - 首次启动 Host：[`../../user/host/quickstart.md`](../../user/host/quickstart.md)
 - 官方 SDK 接入：[`../../user/sdk/README.md`](../../user/sdk/README.md)

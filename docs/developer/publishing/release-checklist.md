@@ -8,7 +8,6 @@
 
 - `README.md`、`docs/README.md`、Host 上手、SDK 接入和无 SDK 接入文档导航可用。
 - 所有尚未正式发布的版本号、下载链接和安装命令均使用 `TODO(devhub-release)` 占位，没有伪造的发布信息。
-- `CONTRIBUTING.md`、`CHANGELOG.md`、`SECURITY.md` 可从仓库首页或文档入口发现。
 
 ### 1.2 代码与验证
 

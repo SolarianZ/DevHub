@@ -10,8 +10,5 @@
 - [`../publishing/README.md`](../publishing/README.md)：发布流程入口、资产命名与 TODO 占位规范。
 - [`../README.md`](../README.md)：开发与维护文档总入口。
 - [`../../specification/protocol/Specification.md`](../../specification/protocol/Specification.md)：公开行为与协议契约的唯一权威标准。
-- [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md)：仓库根目录贡献入口。
-- [`../../../CHANGELOG.md`](../../../CHANGELOG.md)：变更跟踪入口。
-- [`../../../SECURITY.md`](../../../SECURITY.md)：安全与支持入口。
 
 部署、运行与排障请继续阅读 [`../operations/deployment.md`](../operations/deployment.md) 和 [`../operations/troubleshooting.md`](../operations/troubleshooting.md)。
