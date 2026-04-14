@@ -1088,7 +1088,7 @@ stateDiagram-v2
 | -32603 | `internal_error`   | 服务端内部错误                  |
 
 补充约束：
-- 当 `hub.apps.upsertDefinition` 因定义业务校验失败被拒绝时，Hub **必须**继续使用 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下附带 `errors: ValidationIssue[]`。
+- 当 `hub.apps.upsertDefinition` 因定义业务校验失败被拒绝时，Hub **必须**使用 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下附带 `errors: ValidationIssue[]`。
 
 ### 8.2 DevHub 特定错误
 
@@ -1121,7 +1121,7 @@ stateDiagram-v2
 
 ### 9.2 向后兼容性规则
 
-本节定义当前仓库维护的 v1.x 兼容承诺。若某条兼容承诺与纠正核心协议基线发生冲突，**必须**同步更新实现、测试、SDK、Schema、示例与接入文档，并以收敛后的规范文本为唯一依据。
+本节定义 v1.x 兼容承诺。若某条兼容承诺与纠正核心协议基线发生冲突，**必须**同步更新实现、测试、SDK、Schema、示例与接入文档，并以收敛后的规范文本为唯一依据。
 
 | 变更类型                       | v1.x 允许吗? | 对客户端的影响                     |
 | ------------------------------ | ------------ | ---------------------------------- |

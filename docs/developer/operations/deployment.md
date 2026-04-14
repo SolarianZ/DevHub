@@ -138,7 +138,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
   -d '{"jsonrpc":"2.0","id":"ops-ping-1","method":"hub.ping","params":{}}'
 ```
 
-如需先从数据根目录定位并读取 `<dataDir>/runtime/hub.json` 与 token，请直接使用 [`运维排障手册`](./运维排障手册.md) 中“3.1 读取 `hub.json` 与 token”一节的最小诊断脚本。
+如需先从数据根目录定位并读取 `<dataDir>/runtime/hub.json` 与 token，请直接使用 [`排障文档`](./troubleshooting.md) 中“3.1 读取 `hub.json` 与 token”一节的最小诊断脚本。
 
 ### 5.3 WebSocket 校验
 
@@ -156,7 +156,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 
 - 发布后若发生重启、替换或回滚，客户端都应重新读取最新的 `hub.json` 与 `token.txt`。
 - 若需并行运行多个 Host，请为每个实例指定不同的 `DEVHUB_DATA_DIR`，避免落入同一单实例槽位。
-- 若出现鉴权、协议版本、实例发现或调用超时问题，请优先参考 [`运维排障手册`](./运维排障手册.md)。
+- 若出现鉴权、协议版本、实例发现或调用超时问题，请优先参考 [`排障文档`](./troubleshooting.md)。
 - 若需要使用桌面 GUI 观察当前 Host、实例、定义或日志，请参考 [`../../../apps/monitor/README.md`](../../../apps/monitor/README.md)。
 - 若需要执行部署后的最小回归验证，可运行：
 

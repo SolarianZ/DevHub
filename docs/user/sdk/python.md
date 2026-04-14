@@ -1,6 +1,6 @@
 # DevHub Python SDK 接入指南
 
-本文面向准备通过官方 `Python SDK` 连接 DevHub Host 的调用方，覆盖环境准备、连接 Host、最小示例和验证方式。
+本文面向准备通过官方 `Python SDK` 连接 DevHub Host 的调用方，覆盖环境准备、连接 Host、最小示例与验证方式。
 
 ## 1. 前置条件
 

@@ -13,7 +13,7 @@
 ## 推荐阅读顺序
 
 1. 先从 [`host/quickstart.md`](./host/quickstart.md) 启动 Host，并确认 `hub.ping` 成功。
-2. 需要官方 SDK 时，继续进入 [`sdk/README.md`](./sdk/README.md) 选择语言。
+2. 需要官方 SDK 时，进入 [`sdk/README.md`](./sdk/README.md) 选择语言。
 3. 需要自研客户端或对照原始报文时，进入 [`protocol/README.md`](./protocol/README.md)。
 4. 需要权威协议、Schema 或原始示例时，回到 [`../specification/README.md`](../specification/README.md)。
 

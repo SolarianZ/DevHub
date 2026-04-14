@@ -35,7 +35,7 @@ host/tests/conformance/
 - `v1.0.1/*.json`：签名向量文件
 - `vector_runner.py`：统一运行器
 - `raw_protocol_helper.py`：中立原始协议编排 helper
-- 官方适配器实现位于各 SDK 工作区测试目录：
+- 官方适配器实现：
 - `.NET`：`sdks/dotnet/tests/DevHub.Sdk.ConformanceAdapter/`
 - `JS/TS`：`sdks/javascript/tests/conformance/devhub_conformance_js.mjs`
 - `Python`：`sdks/python/tests/conformance/devhub_conformance_py.py`

@@ -91,7 +91,7 @@ SDK 会按以下优先级解析数据根目录：
 - macOS：`~/Library/Application Support/DevHub/`
 - Linux：`$XDG_DATA_HOME/DevHub/`，若未设置则回退到 `~/.local/share/DevHub/`
 
-SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，并继续通过 `hub.json.tokenFile` 读取令牌。
+SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，再通过 `hub.json.tokenFile` 读取令牌。
 若误传 `runtime` 子目录，SDK 会直接拒绝该路径并要求传入数据根目录。
 SDK 始终以 `hub.json` 为权威端点来源，不会硬编码端口、HTTP 地址或 WebSocket URL。
 
@@ -180,7 +180,7 @@ var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
     });
 ```
 
-`HttpClientProvider` 只负责为当前 `DevHubClient` 提供底层 `HttpClient`，JSON-RPC 请求封装、错误映射与响应校验继续由 SDK 内部负责。低层 `JsonRpcHttpTransport` / `JsonRpcWebSocketSession` 已收敛为内部实现，不再作为稳定公开契约。
+`HttpClientProvider` 只负责为当前 `DevHubClient` 提供底层 `HttpClient`，JSON-RPC 请求封装、错误映射与响应校验仍由 SDK 内部负责。低层 `JsonRpcHttpTransport` / `JsonRpcWebSocketSession` 已收敛为内部实现，不再作为稳定公开契约。
 
 ## HTTP 用法示例
 

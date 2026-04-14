@@ -38,7 +38,7 @@
 
 ### 1.3 Monitor 日志
 
-- Host 日志继续位于 `<DEVHUB_DATA_DIR>/logs/`。
+- Host 日志位于 `<DEVHUB_DATA_DIR>/logs/`。
 - `DevHub Monitor` 会把自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`。
 - 当前 Monitor 日志目录会显示在桌面应用设置页的“Monitor 日志目录”字段中；日志页提供 Host / Monitor 双视图。
 - Monitor 关键日志至少覆盖扫描状态切换、Host 启动尝试、连接/断连、设置保存和定义管理。

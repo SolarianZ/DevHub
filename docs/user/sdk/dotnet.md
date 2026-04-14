@@ -1,6 +1,6 @@
 # DevHub .NET SDK 接入指南
 
-本文面向准备通过官方 `.NET SDK` 连接 DevHub Host 的调用方，覆盖环境准备、连接 Host、最小示例和验证方式。
+本文面向准备通过官方 `.NET SDK` 连接 DevHub Host 的调用方，覆盖环境准备、连接 Host、最小示例与验证方式。
 
 ## 1. 前置条件
 
@@ -36,7 +36,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 2. 环境变量 `DEVHUB_DATA_DIR`
 3. 平台默认数据根目录
 
-SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，并继续通过 `hub.json.tokenFile` 读取令牌。
+SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，再通过 `hub.json.tokenFile` 读取令牌。
 
 最小示例：
 

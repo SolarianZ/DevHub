@@ -1,7 +1,7 @@
 # DevHub 仓库级测试说明
 
 - 仓库级测试以 `docs/specification/protocol/Specification.md` 为最高优先级规范。
-- 这部分资产覆盖当前仓库维护的公开契约与验证入口，不预先固化仓库中尚未落地的额外能力。
+- 这部分资产覆盖仓库当前公开的契约与验证入口，不预先固化尚未落地的额外能力。
 
 ## 目录分层
 
@@ -38,7 +38,7 @@ host/tests/
 - `blackbox/` 只承载面向公开行为的仓库级黑盒测试；具体用例不应再依赖 `host/tests/` 顶层旧布局。
 - `conformance/` 负责跨语言协议符合性，不替代白盒测试或黑盒业务回归。
 - 官方 conformance 适配器按语言归属放在各自 SDK 的 `tests/` 目录下，`host/tests/conformance` 只保留仓库级向量、runner 与自测。
-- `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免继续与 `host/src/` 生产工程混放。
+- `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免与 `host/src/` 生产工程混放。
 - `tools/` 只放验证入口和辅助脚本，不混入黑盒或 conformance 用例。
 
 ## 前置要求

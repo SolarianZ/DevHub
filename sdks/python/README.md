@@ -32,7 +32,7 @@ python3 -m pip install -e '.[test]'
 TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前不要填写未生成的版本号、下载链接或仓库外安装命令。
 ```
 
-正式发布后，Python distribution name 固定为 `devhub-sdk-python`，导入模块继续使用 `devhub_sdk`。
+正式发布后，Python distribution name 固定为 `devhub-sdk-python`，导入模块使用 `devhub_sdk`。
 
 ## 快速示例
 
@@ -89,7 +89,7 @@ client.delete_definition(definition.app_id)
 
 ## 高级扩展
 
-默认情况下，推荐继续使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
+默认情况下，推荐使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
 
 `data_dir` 参数与环境变量 `DEVHUB_DATA_DIR` 只接受数据根目录，SDK 固定从以下位置发现运行时信息：
 

@@ -1,6 +1,6 @@
 # DevHub Host 快速上手
 
-本文面向首次使用 DevHub Host 的外部用户，覆盖环境准备、启动方式、`hub.json` / `tokenFile` 发现、最小 `hub.ping` 验证，以及继续接入官方 SDK 或原始协议的入口。
+本文面向首次使用 DevHub Host 的用户，覆盖环境准备、启动方式、`hub.json` / `tokenFile` 发现、最小 `hub.ping` 验证，并提供后续官方 SDK 或原始协议接入入口。
 
 ## 1. 前置条件
 
@@ -143,6 +143,6 @@ Invoke-RestMethod -Method Post -Uri "$($hub.httpBaseUrl)/rpc" -Headers $headers 
 
 ## 5. 下一步
 
-- 如果你准备使用官方 SDK，请继续阅读 [`../sdk/README.md`](../sdk/README.md) 并选择对应语言的接入文档。
+- 如果你准备使用官方 SDK，请阅读 [`../sdk/README.md`](../sdk/README.md) 并选择对应语言的接入文档。
 - 如果你计划直接对接协议，请阅读 [`../protocol/README.md`](../protocol/README.md)。
 - 如果你需要排查启动失败、运行时文件缺失或 `hub.ping` 返回错误，请阅读 [`../../developer/operations/troubleshooting.md`](../../developer/operations/troubleshooting.md)。

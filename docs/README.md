@@ -1,7 +1,5 @@
 # DevHub 文档导航
 
-`docs/` 只保留三类稳定文档分类和一个静态资源目录：
-
 - [`user/`](./user/README.md)：面向使用者和集成方的使用文档
 - [`developer/`](./developer/README.md)：面向仓库开发者与维护者的开发、运维、发布文档
 - [`specification/`](./specification/README.md)：权威规范、Schema 与原始协议示例
@@ -50,9 +48,9 @@
 
 ## 3. 分类规则
 
-- `docs/user/`：只放“如何使用 DevHub”的文档，继续按 `host/`、`sdk/`、`protocol/` 分组。
-- `docs/developer/`：只放“如何开发、维护、发布 DevHub”的文档，继续按 `architecture/`、`guides/`、`operations/`、`publishing/` 分组。
-- `docs/specification/`：只放权威协议资产，继续按 `protocol/`、`schema/`、`protocol-examples/` 分组。
+- `docs/user/`：只放“如何使用 DevHub”的文档，按 `host/`、`sdk/`、`protocol/` 分组。
+- `docs/developer/`：只放“如何开发、维护、发布 DevHub”的文档，按 `architecture/`、`guides/`、`operations/`、`publishing/` 分组。
+- `docs/specification/`：只放权威协议资产，按 `protocol/`、`schema/`、`protocol-examples/` 分组。
 - `docs/assets/`：保留静态资源，不作为规范、使用或运维口径来源。
 - 除本文件外，不在 `docs/` 根目录新增 Markdown。
 - 涉及公开协议事实、字段定义、错误语义或 Schema 契约时，必须回指 [`specification/protocol/Specification.md`](./specification/protocol/Specification.md)，避免维护并行副本。

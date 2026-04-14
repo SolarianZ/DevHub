@@ -12,4 +12,4 @@
 
 - 接入方从 [`../user/README.md`](../user/README.md) 进入使用路径，需要核对协议细节时再回到本分类。
 - 仓库开发者从 [`../developer/README.md`](../developer/README.md) 进入开发路径，涉及公开契约时以本分类内容为准。
-- `docs/assets/` 继续作为静态资源目录保留，不参与规范资产分层。
+- `docs/assets/` 为静态资源目录，不参与规范资产分层。

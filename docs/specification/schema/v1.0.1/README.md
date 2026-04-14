@@ -1,6 +1,6 @@
 # DevHub Schema 包（v1.0.1）
 
-本目录提供 DevHub Hub v1.0.1 在当前仓库中维护的版本化 JSON Schema 资产，供第三方开发者在不阅读 SDK 源码的前提下完成：
+本目录提供 DevHub Hub v1.0.1 的版本化 JSON Schema 资产，供第三方开发者在不阅读 SDK 源码的前提下完成：
 
 - `hub.json` 发现文件校验
 - AppDefinition / AppInstance / AppInstanceRegistration / Invocation / ValidationIssue 数据结构校验
@@ -27,7 +27,7 @@
 
 - Schema 标准：Draft-07
 - 发布目录版本：`v1.0.1`
-- `$id` 继续沿用 Spec 约定的 `/v1/` URI，不改写为 `/v1.0.1/`
+- `$id` 沿用 Spec 约定的 `/v1/` URI，不改写为 `/v1.0.1/`
 
 这意味着仓库目录版本用于发布与引用管理，`$id` 用于表达协议大版本稳定标识，两者不冲突。
 
@@ -45,7 +45,7 @@
 
 ## 4. 使用方式
 
-建议把本目录视为 DevHub v1.0.1 当前公开基线下的版本化协议资产。首次正式对外发布前，若 `Specification.md` 为对齐核心目标而修订，目录内容与配套文档会同步更新：
+本目录可作为 DevHub v1.0.1 的版本化协议资产：
 
 - 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验。
 - 读取或生成应用定义时，用 `app-definition.json` 校验。

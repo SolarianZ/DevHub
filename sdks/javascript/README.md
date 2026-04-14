@@ -143,7 +143,7 @@ const client = await DevHubClient.fromRuntime(
 
 ## 从旧根入口迁移 runtime 值导入
 
-根入口继续保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk-javascript/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
+根入口保留高级运行时契约类型导出，Node.js 文件系统运行时值从 `@devhub/sdk-javascript/runtime` 获取；客户端实例上的 `runtime` 仅提供脱敏诊断视图，不再公开 bearer token、端点或 `tokenFile`：
 
 ```ts
 // 迁移前
@@ -153,7 +153,7 @@ import {
   resolveDataDirectory
 } from "@devhub/sdk-javascript";
 
-// 根入口
+// 迁移后
 import {
   FileSystemRuntimeResolver,
   discoverRuntime,
@@ -193,7 +193,7 @@ await client.deleteDefinition(definition.appId);
 
 ## 高级扩展
 
-默认情况下，推荐继续使用 `DevHubClient.fromRuntime(...)` 与 `DevHubEventsClient.fromRuntime(...)`。
+默认情况下，推荐使用 `DevHubClient.fromRuntime(...)` 与 `DevHubEventsClient.fromRuntime(...)`。
 
 如果需要接入自定义运行时发现、fake transport、录制/回放测试或自定义 WebSocket 会话，可以通过公开导出的扩展点注入：
 

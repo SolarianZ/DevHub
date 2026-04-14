@@ -10,13 +10,10 @@
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Specification.md`](../../specification/protocol/Specification.md)。
-- 文档分类与导航规则见 [`docs/README.md`](../../README.md)。
-- 使用文档总入口见 [`../README.md`](../README.md)。
 - 本文只整理“不依赖 SDK 源码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
-- 本文、Schema 与协议示例描述的是仓库当前维护的公开基线；若 `Specification.md` 修订相应协议条款，配套资产会同步更新。
 
-如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需要组合下列公开资料即可完成接入：
+如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需组合下列公开资料即可完成接入：
 
 - [`Specification.md`](../../specification/protocol/Specification.md)
 - [`docs/specification/schema/v1.0.1/README.md`](../../specification/schema/v1.0.1/README.md)
@@ -108,7 +105,7 @@ WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。
 连接建立后：
 
 1. 第一条消息必须是带 `id` 的 `hub.ws.authenticate` 请求。
-2. 只有鉴权成功后，才能继续发送 `hub.events.subscribe` / `hub.events.unsubscribe`。
+2. 只有鉴权成功后，才能发送 `hub.events.subscribe` / `hub.events.unsubscribe`。
 3. Hub 下发事件时，服务端会通过 `hub.event` JSON-RPC 通知推送。
 
 原始 JSON 示例见：
@@ -243,8 +240,7 @@ python host/tests/conformance/vector_runner.py \
 
 本仓库当前采用“协议版本”和“包版本”分离的兼容策略：
 
-- 当前公开基线是 `protocolVersion=1` 与当前仓库维护的 Hub v1.x 协议资料。
-- 若 [`Specification.md`](../../specification/protocol/Specification.md) 调整相应条款，本指南、Schema、示例、SDK 与 conformance 资产会保持同步。
+- 当前公开基线是 `protocolVersion=1`，适用于 Hub v1.x。
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
 
