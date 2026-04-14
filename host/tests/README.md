@@ -1,6 +1,6 @@
 # DevHub 仓库级测试说明
 
-- 仓库级测试以 `docs/spec/Spec.md` 为最高优先级规范。
+- 仓库级测试以 `docs/specification/protocol/Specification.md` 为最高优先级规范。
 - 这部分资产覆盖当前仓库维护的公开契约与验证入口，不预先固化仓库中尚未落地的额外能力。
 
 ## 目录分层
@@ -145,7 +145,7 @@ python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bran
 
 补充说明：
 
-- Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/spec/Spec.md`](../../docs/spec/Spec.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
+- Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/specification/protocol/Specification.md`](../../docs/specification/protocol/Specification.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
 - `find host -type d -name TestResults -prune -exec rm -rf {} +` 与 GitHub CI 保持一致，用于清理历史 `TestResults`，避免旧的 coverage 报告混入当前校验。
 - 启用 `trx` logger 时，Coverlet 会同时生成 `TestResults/_*/In/**/coverage.cobertura.xml` 附件副本和 GUID 目录下的镜像副本。
 - `host/tests/tools/verify_coverage.py` 会优先使用 `trx` 附件副本参与阈值计算，并忽略同一测试工程下内容完全相同的 GUID 镜像副本；这样既保留 `trx`/诊断附件所需文件，又避免重复报告干扰 coverage 口径。

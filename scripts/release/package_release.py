@@ -394,9 +394,9 @@ def build_manifest(
             "summaryPath": "checks/validation-summary.json",
         },
         "entryPoints": {
-            "hostQuickstart": "docs/guides/getting-started/host-quickstart.md",
-            "sdkGuide": "docs/guides/sdk/README.md",
-            "releaseProcess": "docs/operations/publishing/release-process.md",
+            "hostQuickstart": "docs/user/host/quickstart.md",
+            "sdkGuide": "docs/user/sdk/README.md",
+            "releaseProcess": "docs/developer/publishing/release-process.md",
         },
     }
 
@@ -432,10 +432,10 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
             "",
             "## Next Steps",
             "",
-            "- Host onboarding: `docs/guides/getting-started/host-quickstart.md`",
-            "- SDK onboarding: `docs/guides/sdk/README.md`",
-            "- Release process: `docs/operations/publishing/release-process.md`",
-            "- Release checklist: `docs/operations/publishing/release-checklist.md`",
+            "- Host onboarding: `docs/user/host/quickstart.md`",
+            "- SDK onboarding: `docs/user/sdk/README.md`",
+            "- Release process: `docs/developer/publishing/release-process.md`",
+            "- Release checklist: `docs/developer/publishing/release-checklist.md`",
             "",
         ]
     )

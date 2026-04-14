@@ -14,6 +14,6 @@ TODO(devhub-release): 首个正式 GitHub Release 发布前，在此补充稳定
 
 ## 一般支持
 
-- 使用与接入问题：先阅读 [`docs/README.md`](docs/README.md) 中的 Host 上手、SDK 接入和无 SDK 接入文档。
-- 仓库开发与贡献：阅读 [`CONTRIBUTING.md`](./CONTRIBUTING.md) 与 [`docs/guides/contributor/README.md`](docs/guides/contributor/README.md)。
-- 运行与排障：阅读 [`docs/operations/运维排障手册.md`](docs/operations/运维排障手册.md)。
+- 使用与接入问题：先阅读 [`docs/user/README.md`](docs/user/README.md) 中的 Host 上手、SDK 接入和原始协议接入文档。
+- 仓库开发与贡献：阅读 [`CONTRIBUTING.md`](./CONTRIBUTING.md) 与 [`docs/developer/README.md`](docs/developer/README.md)。
+- 运行与排障：阅读 [`docs/developer/operations/troubleshooting.md`](docs/developer/operations/troubleshooting.md)。

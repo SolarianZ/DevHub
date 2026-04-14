@@ -14,7 +14,7 @@ conformance 的目标不是替代单元测试，而是从“第三方消费者�
 - WebSocket events
 - 标准 JSON-RPC 错误与 DevHub 自定义错误
 
-这些向量与 [`docs/spec/Spec.md`](../../../docs/spec/Spec.md) §10.1 / §10.2 对齐，是当前仓库公开发布的最小符合性基线。
+这些向量与 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md) §10.1 / §10.2 对齐，是当前仓库公开发布的最小符合性基线。
 
 ## 2. 目录结构
 
@@ -226,7 +226,7 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 
 如果你的目标是“无需阅读仓库内 SDK 源码，完成接入与自测”，最小步骤是：
 
-1. 阅读 [`docs/spec/Spec.md`](../../../docs/spec/Spec.md)、[`docs/spec/schema/v1.0.1/README.md`](../../../docs/spec/schema/v1.0.1/README.md) 与 [`docs/spec/protocol-examples/v1.0.1/README.md`](../../../docs/spec/protocol-examples/v1.0.1/README.md)。
+1. 阅读 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md)、[`docs/specification/schema/v1.0.1/README.md`](../../../docs/specification/schema/v1.0.1/README.md) 与 [`docs/specification/protocol-examples/v1.0.1/README.md`](../../../docs/specification/protocol-examples/v1.0.1/README.md)。
 2. 用自己的技术栈实现一个 adapter，读取 `execution-context.json` 并执行对应向量。
 3. 编写 adapter manifest。
 4. 运行 `python host/tests/conformance/vector_runner.py --adapter-manifest <manifest>`，必要时再用 `--case-id CONF-001` 或 `--vector-id ...` 缩小范围。

@@ -1,12 +1,12 @@
 # DevHub JS/TS SDK
 
-DevHub JS/TS SDK 基于 `docs/spec/Spec.md` 的 Hub v1.x 协议。`@devhub/sdk-javascript` 根入口面向 `Node.js 20+` 与浏览器/WebView 双运行时，`@devhub/sdk-javascript/runtime` 子路径面向 Node.js 文件系统运行时发现能力。
+DevHub JS/TS SDK 基于 `docs/specification/protocol/Specification.md` 的 Hub v1.x 协议。`@devhub/sdk-javascript` 根入口面向 `Node.js 20+` 与浏览器/WebView 双运行时，`@devhub/sdk-javascript/runtime` 子路径面向 Node.js 文件系统运行时发现能力。
 
 ## 接入导航
 
-- [`../../docs/guides/sdk/javascript.md`](../../docs/guides/sdk/javascript.md)：面向外部调用方的 `JS/TS SDK` 接入指南。
-- [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
-- [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
+- [`../../docs/user/sdk/javascript.md`](../../docs/user/sdk/javascript.md)：面向外部调用方的 `JS/TS SDK` 接入指南。
+- [`../../docs/user/host/quickstart.md`](../../docs/user/host/quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/user/protocol/README.md`](../../docs/user/protocol/README.md)：不依赖官方 SDK 的原始协议路径。
 
 ## 入口分工
 

@@ -4,14 +4,14 @@
 
 ## 贡献入口
 
-- 仓库改造与维护导航：[`docs/guides/contributor/README.md`](docs/guides/contributor/README.md)
-- 本地开发环境与验证：[`docs/guides/开发指南.md`](docs/guides/开发指南.md)
-- 发布流程与检查清单：[`docs/operations/publishing/README.md`](docs/operations/publishing/README.md)
-- 权威协议规范：[`docs/spec/Spec.md`](docs/spec/Spec.md)
+- 仓库改造与维护导航：[`docs/developer/README.md`](docs/developer/README.md)
+- 本地开发环境与验证：[`docs/developer/guides/development.md`](docs/developer/guides/development.md)
+- 发布流程与检查清单：[`docs/developer/publishing/README.md`](docs/developer/publishing/README.md)
+- 权威协议规范：[`docs/specification/protocol/Specification.md`](docs/specification/protocol/Specification.md)
 
 ## 基本要求
 
-- 所有公开行为、字段命名、状态转换、错误语义和序列化契约必须与 `docs/spec/Spec.md` 保持一致。
+- 所有公开行为、字段命名、状态转换、错误语义和序列化契约必须与 `docs/specification/protocol/Specification.md` 保持一致。
 - 修改代码后，按 GitHub CI 相关范围执行本地验证；至少覆盖受影响的构建、测试和必要的 smoke 或打包自检。
 - 文档导航、README 和维护说明应与仓库当前状态保持一致。
 - 修改 `JS/TS SDK` 时，保持 `@devhub/sdk` 根入口可在 `Node.js 20+` 与浏览器 / WebView 中导入；Node.js 文件系统运行时辅助统一通过 `@devhub/sdk/runtime` 暴露。

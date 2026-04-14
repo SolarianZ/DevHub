@@ -4,9 +4,9 @@
 
 ## 接入导航
 
-- [`../../docs/guides/sdk/dotnet.md`](../../docs/guides/sdk/dotnet.md)：面向外部调用方的 `.NET SDK` 接入指南。
-- [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
-- [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
+- [`../../docs/user/sdk/dotnet.md`](../../docs/user/sdk/dotnet.md)：面向外部调用方的 `.NET SDK` 接入指南。
+- [`../../docs/user/host/quickstart.md`](../../docs/user/host/quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/user/protocol/README.md`](../../docs/user/protocol/README.md)：不依赖官方 SDK 的原始协议路径。
 
 - 解决方案：`DevHub.DotNetSdk.slnx`
 - SDK 项目：`src/DevHub.Sdk/`
