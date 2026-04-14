@@ -11,7 +11,7 @@ SDK_PROJECT = REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk
 UNITY_PUBLISH_TOOL_PROJECT = (
     REPO_ROOT / "sdks" / "dotnet" / "tools" / "DevHub.Sdk.UnityPublish" / "DevHub.Sdk.UnityPublish.csproj"
 )
-DEFAULT_OUTPUT = REPO_ROOT / "temp" / "sdk-unity-publish"
+DEFAULT_OUTPUT = REPO_ROOT / "artifacts" / "sdk" / "dotnet-for-unity"
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,7 +56,6 @@ def main() -> int:
             str(UNITY_PUBLISH_TOOL_PROJECT),
             "-c",
             configuration,
-            "--no-restore",
             "--",
             str(assembly_path),
         ]

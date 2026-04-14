@@ -70,11 +70,16 @@ public static class UnityPublishAssemblyRewriter
     {
         if (!hasPortablePdb)
         {
-            return new ReaderParameters();
+            return new ReaderParameters
+            {
+                InMemory = true
+            };
         }
 
         return new ReaderParameters
         {
+            // 以内存模式读取，避免延迟读取继续持有原 DLL/PDB 句柄，导致 Windows 覆盖写回失败。
+            InMemory = true,
             ReadSymbols = true,
             SymbolReaderProvider = new PortablePdbReaderProvider(),
             ThrowIfSymbolsAreNotMatching = true

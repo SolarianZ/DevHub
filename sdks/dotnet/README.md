@@ -81,11 +81,12 @@ python3 scripts/sdk/publish_unity_dotnet_sdk.py
 
 该脚本会执行本地 `dotnet publish`，并在 publish 输出目录中仅后处理 `DevHub.Sdk.dll` 对 `Newtonsoft.Json` 的程序集引用，移除强签名 `PublicKeyToken`，用于匹配 Unity 常见的 `com.unity.nuget.newtonsoft-json` 未签名程序集。
 脚本每次执行前都会重建输出目录，避免残留上一次 publish 的陈旧 DLL。
+默认输出目录为 `artifacts/sdk/dotnet-for-unity`。
 
 可选参数：
 
 ```powershell
-python3 scripts/sdk/publish_unity_dotnet_sdk.py --output temp/sdk-unity-publish --configuration Release
+python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-for-unity --configuration Release
 ```
 
 `dotnet pack` 仍用于生成 NuGet 主包；Unity 手工导入的 DLL 目录使用上述本地 publish 脚本生成。
@@ -481,7 +482,7 @@ dotnet build host/DevHub.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Debug --no-restore
-python3 scripts/sdk/publish_unity_dotnet_sdk.py --output temp/sdk-unity-publish
+python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-for-unity
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
