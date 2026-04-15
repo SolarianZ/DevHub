@@ -40,13 +40,9 @@
 
 ## 仓库内使用方式
 
-按消费方式选择引用边界：
+按消费方式选择安装形态：
 
-### 核心 SDK：直接创建客户端
-
-```xml
-<ProjectReference Include="..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
-```
+### 常规 .NET 消费方：核心 SDK 包引用
 
 ```xml
 <PackageReference Include="DevHub.Sdk.DotNet" Version="1.0.0" />
@@ -55,12 +51,6 @@
 ### 可选 DI companion package：`IServiceCollection` 集成
 
 若消费方需要 `AddDevHubSdk()`、`IDevHubClientFactory` 或 `IDevHubEventsClientFactory`，请引用 `DevHub.Sdk.DotNet.DependencyInjection`。
-
-项目引用方式：
-
-```xml
-<ProjectReference Include="..\..\sdks\dotnet\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" />
-```
 
 NuGet 引用方式：
 
@@ -75,7 +65,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
 
-生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DotNet.DependencyInjection` 会直接依赖 `DevHub.Sdk.DotNet`。
+生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DotNet.DependencyInjection` 会直接依赖 `DevHub.Sdk.DotNet`。仓库内联调也按包边界消费。
 
 ### 正式发布占位
 
@@ -90,6 +80,8 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 python3 scripts/sdk/publish_unity_dotnet_sdk.py
 ```
 
+Unity 版本只能通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成引用目录，并在 Unity 工程中引用该脚本输出目录内的 DLL；不要直接引用 SDK `.csproj`，也不要把 `dotnet pack` 生成的 `.nupkg` 作为 Unity 接入入口。
+
 该脚本会执行本地 `dotnet publish`，并在 publish 输出目录中仅后处理 `DevHub.Sdk.dll` 对 `Newtonsoft.Json` 的程序集引用，移除强签名 `PublicKeyToken`，用于匹配 Unity 常见的 `com.unity.nuget.newtonsoft-json` 未签名程序集。
 脚本每次执行前都会重建输出目录，避免残留上一次 publish 的陈旧 DLL。
 默认输出目录为 `artifacts/sdk/dotnet-for-unity`。
@@ -100,11 +92,13 @@ python3 scripts/sdk/publish_unity_dotnet_sdk.py
 python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-for-unity --configuration Release
 ```
 
-`dotnet pack` 仍用于生成 NuGet 主包；Unity 手工导入的 DLL 目录使用上述本地 publish 脚本生成。
+`dotnet pack` 仍用于生成 NuGet 主包；Unity 引用的 DLL 目录只通过上述本地 publish 脚本生成。
 
 ## Unity 2019.4 适配说明
 
 当前交付的 `DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 均仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线。
+
+Unity 接入边界固定为 `publish_unity_dotnet_sdk.py` 产出的 DLL 目录；`DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 的包资产用于常规 .NET 消费，不作为 Unity 工程的直接引用入口。
 
 SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 

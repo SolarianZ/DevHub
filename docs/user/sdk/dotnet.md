@@ -10,15 +10,7 @@
 
 ## 2. 获取 SDK
 
-### 2.1 项目引用
-
-仓库内联调时，可以直接引用 SDK 项目：
-
-```xml
-<ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
-```
-
-### 2.2 使用本地打包产物
+### 2.1 使用本地打包产物
 
 如果你希望更贴近“发布包消费”的形式，可先执行：
 
@@ -27,6 +19,10 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-
 ```
 
 再在消费项目中引用输出目录里的 `.nupkg`。正式发布后的主包 `PackageId` 为 `DevHub.Sdk.DotNet`，生成的资产文件名会与 [`../../developer/publishing/release-asset-layout.md`](../../developer/publishing/release-asset-layout.md) 保持一致。
+
+### 2.2 Unity 场景
+
+Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成 DLL，并引用脚本输出目录中的 DLL；不要直接引用 SDK `.csproj`，也不要把 `dotnet pack` 生成的 `.nupkg` 作为 Unity 接入入口。脚本参数与输出说明见 [`../../../sdks/dotnet/README.md`](../../../sdks/dotnet/README.md)。
 
 ## 3. 连接 Host
 
