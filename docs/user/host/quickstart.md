@@ -36,7 +36,15 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
 ### 2.2 使用发布输出启动
 
-如果你需要固定产物目录，可先发布再运行：
+如果你需要按仓库统一发布流程生成完整发布候选资产，优先执行：
+
+```bash
+python scripts/release/package_release.py --release-id local-dry-run --channel local
+```
+
+该命令会在 `artifacts/release/local-dry-run/` 下生成 Host 压缩包、SDK 包、manifest 和 release notes。
+
+如果你只需要一个当前机器可直接启动的 Host 固定产物目录，也可以单独发布 Host 再运行：
 
 ```bash
 dotnet publish host/src/DevHub.Host/DevHub.Host.csproj -c Release -o ./artifacts/devhub

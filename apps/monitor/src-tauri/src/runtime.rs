@@ -233,25 +233,24 @@ mod tests {
         fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
         let token_path = runtime_directory.join("token.txt");
         fs::write(&token_path, "secret-token\n").expect("failed to write token");
+        let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+            "protocolVersion": 1,
+            "pid": 4321,
+            "httpBaseUrl": "http://127.0.0.1:4123",
+            "wsUrl": "ws://127.0.0.1:4123/ws",
+            "tokenFile": token_path.display().to_string(),
+            "startedAtUtc": "2026-04-12T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 15,
+                "launchDedupeWindowSeconds": 5
+            },
+            "hubVersion": "0.6.0"
+        }))
+        .expect("failed to serialize hub.json");
         fs::write(
             runtime_directory.join("hub.json"),
-            format!(
-                r#"{{
-  "protocolVersion": 1,
-  "pid": 4321,
-  "httpBaseUrl": "http://127.0.0.1:4123",
-  "wsUrl": "ws://127.0.0.1:4123/ws",
-  "tokenFile": "{}",
-  "startedAtUtc": "2026-04-12T00:00:00Z",
-  "runtimeTuning": {{
-    "leaseSeconds": 30,
-    "onlineThresholdSeconds": 15,
-    "launchDedupeWindowSeconds": 5
-  }},
-  "hubVersion": "0.6.0"
-}}"#,
-                token_path.display()
-            ),
+            hub_json,
         )
         .expect("failed to write hub.json");
 

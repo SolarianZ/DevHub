@@ -11,6 +11,7 @@
 - `npm run test:native`
 - `npm run tauri:check`
 - `npm run verify`
+- `python ../../scripts/release/package_monitor.py --release-id local-dry-run`
 
 ## 验证入口
 
@@ -37,7 +38,12 @@
 
 - 开发态桌面运行：`npm run tauri:dev`
 - 前端单独调试：`npm run dev`
-- 生产构建入口：`npm run tauri:build`
+- 生产发布优先入口：`python ../../scripts/release/package_monitor.py --release-id <release-id>`
+- 底层 Tauri 构建命令：`npm run tauri:build`
+
+`package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml` 的版本一致性，再串联 `npm ci`、`npm run verify`、`npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。
+
+当前 Monitor 的一键发布脚本只负责本地打包，不接入仓库现有的 GitHub Release / CI 自动发布流程。
 
 Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，只有在真实 `hub.ping` 校验成功后才切到状态页。若未配置 Host 可执行文件路径，启动请求会跳转到设置页而不是直接拉起进程。
 

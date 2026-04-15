@@ -61,6 +61,14 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 npm --prefix apps/monitor run verify
 ```
 
+如需单独生成 Monitor 本地发布产物，请使用独立脚本：
+
+```bash
+python scripts/release/package_monitor.py --release-id local-dry-run
+```
+
+该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程。
+
 ## 3. 外部协作者常用入口
 
 - 首次启动 Host：[`../../user/host/quickstart.md`](../../user/host/quickstart.md)

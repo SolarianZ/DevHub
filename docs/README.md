@@ -3,7 +3,6 @@
 - [`user/`](./user/README.md)：面向使用者和集成方的使用文档
 - [`developer/`](./developer/README.md)：面向仓库开发者与维护者的开发、运维、发布文档
 - [`specification/`](./specification/README.md)：权威规范、Schema 与原始协议示例
-- [`assets/`](./assets/)：文档静态资源
 
 ## 1. 顶层分类
 
@@ -12,7 +11,6 @@
 | [`user/`](./user/README.md) | 接入方、调用方、首次使用者 | [`user/host/quickstart.md`](./user/host/quickstart.md) | Host 上手、官方 SDK 接入、原始协议接入 |
 | [`developer/`](./developer/README.md) | 仓库开发者、维护者、发布负责人 | [`developer/guides/development.md`](./developer/guides/development.md) | 架构、开发协作、部署排障、发布维护 |
 | [`specification/`](./specification/README.md) | 需要核对公开契约的所有读者 | [`specification/protocol/Specification.md`](./specification/protocol/Specification.md) | 唯一权威规范、版本化 Schema 与原始协议示例 |
-| [`assets/`](./assets/) | 文档维护者 | - | 静态资源，不承载执行口径 |
 
 补充入口：
 

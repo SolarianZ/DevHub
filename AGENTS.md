@@ -7,14 +7,14 @@
 ```text
 DevHub/
 ├── apps/                                     # 基于 DevHub 生态的上层 App
+├── assets/                                   # 静态资源
 ├── docs/                                     # 项目文档
 │   ├── README.md                             # 文档导航与分类规则
 │   ├── user/                                 # 面向使用者与集成方的文档
 │   ├── developer/                            # 面向开发与维护的文档
-│   ├── specification/                        # 权威规范与版本化协议资产
-│   └── assets/                               # 文档静态资源
-├── host/                                     # Host 源代码、测试代码和相关工具
+│   └── specification/                        # 权威规范与版本化协议资产
 ├── eng/                                      # 工程配置
+├── host/                                     # Host 源代码、测试代码和相关工具
 ├── scripts/                                  # 项目常用工具脚本
 └── sdks/                                     # 多语言 SDK 源代码和测试代码
     ├── dotnet/                               # .NET SDK
