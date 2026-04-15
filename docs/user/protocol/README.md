@@ -10,7 +10,7 @@
 ## 1. 适用范围
 
 - 权威协议来源始终是 [`Specification.md`](../../specification/protocol/Specification.md)。
-- 本文只整理“不依赖 SDK 源码”的最小接入路径，不扩展或重写任何协议语义。
+- 本文只整理“不依赖 SDK 源代码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
 
 如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需组合下列公开资料即可完成接入：
@@ -205,7 +205,7 @@ dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 python host/tests/conformance/vector_runner.py --adapter-manifest path/to/devhub.adapter.json
 ```
 
-manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源码或参考官方适配器实现细节。
+manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源代码或参考官方适配器实现细节。
 
 如果你只想聚焦某条向量，可运行：
 

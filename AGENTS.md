@@ -1,57 +1,25 @@
 # DevHub 开发指导文档
 
-本仓库包含 DevHub 协议规范、核心实现及测试套件。`docs/specification/protocol/Specification.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/specification/protocol/Specification.md` 迁就实现。
+本仓库包含 DevHub 协议规范、核心实现、SDK、上层App及测试套件。`docs/specification/protocol/Specification.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/specification/protocol/Specification.md` 迁就实现。
 
-## 项目结构
+## 项目主要结构
 
 ```text
 DevHub/
-├── docs/                                     # 文档系统
+├── apps/                                     # 基于 DevHub 生态的上层 App
+├── docs/                                     # 项目文档
 │   ├── README.md                             # 文档导航与分类规则
 │   ├── user/                                 # 面向使用者与集成方的文档
 │   ├── developer/                            # 面向开发与维护的文档
 │   ├── specification/                        # 权威规范与版本化协议资产
-│   │   ├── protocol/                         # 协议规范正文
-│   │   ├── schema/                           # 版本化 Schema 资产
-│   │   └── protocol-examples/                # 版本化原始协议示例
 │   └── assets/                               # 文档静态资源
-├── host/                                     # Host相关代码
-│   ├── DevHub.slnx                           # Host 工作区解决方案文件
-│   ├── src/                                  # Host生产代码（.NET）
-│   │   ├── DevHub.Core/                      # 核心领域模型与基础服务
-│   │   └── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
-│   └── tests/                                # Host测试与验证资产
-│       ├── whitebox/                         # .NET 白盒测试工程
-│       │   ├── DevHub.Tests/                 # Core / 领域规则测试
-│       │   └── DevHub.Host.Tests/            # Host 级白盒测试
-│       ├── README.md                         # 测试分层与执行说明
-│       ├── blackbox/                         # Python 黑盒测试与 runner
-│       ├── conformance/                      # 符合性向量、runner 与自测
-│       └── tools/                            # 覆盖率配置与辅助脚本
-├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
-│   ├── dotnet/                               # .NET SDK 工作区
-│   │   ├── src/                              # .NET SDK 源码
-│   │   │   └── DevHub.Sdk/                   # .NET SDK 核心库
-│   │   ├── tests/                            # .NET SDK 测试项目
-│   │   │   ├── DevHub.Sdk.UnitTests/         # .NET SDK 单元测试
-│   │   │   └── DevHub.Sdk.IntegrationTests/  # .NET SDK 集成测试
-│   │   ├── DevHub.DotNetSdk.slnx             # .NET SDK 解决方案文件
-│   │   ├── Directory.Build.props             # .NET SDK 工作区公共构建配置
-│   │   ├── Directory.Packages.props          # .NET SDK 工作区统一依赖版本管理
-│   │   └── README.md                         # .NET SDK 使用与开发说明
-│   ├── javascript/                           # JavaScript / TypeScript SDK 工作区
-│   │   ├── src/                              # JS/TS SDK 源码
-│   │   ├── tests/                            # JS/TS SDK 单元测试与集成测试
-│   │   ├── package.json                      # JS/TS SDK 包定义
-│   │   └── README.md                         # JS/TS SDK 使用与开发说明
-│   └── python/                               # Python SDK 工作区
-│       ├── src/                              # Python SDK 源码
-│       │   └── devhub_sdk/                   # Python SDK 核心包
-│       ├── tests/                            # Python SDK 单元测试与集成测试
-│       ├── pyproject.toml                    # Python SDK 构建配置
-│       └── README.md                         # Python SDK 使用与开发说明
-├── temp/                                     # 生成的测试报告与临时产物
-└── LICENSE                                   # 许可证文件
+├── host/                                     # Host 源代码、测试代码和相关工具
+├── eng/                                      # 工程配置
+├── scripts/                                  # 项目常用工具脚本
+└── sdks/                                     # 多语言 SDK 源代码和测试代码
+    ├── dotnet/                               # .NET SDK
+    ├── javascript/                           # JavaScript / TypeScript SDK
+    └── python/                               # Python SDK
 ```
 
 ## 运行时数据规约
@@ -99,8 +67,10 @@ DevHub/
 
 ### 代码与设计
 
-- 实现前先确认模块职责边界，再落地代码。新增能力必须放入正确层次，禁止把协议处理、业务规则、宿主编排和基础设施访问混杂在同一处。
-- 修改代码时必须优先解决根因，禁止通过临时补丁、堆叠特判、绕过现有设计等方式掩盖问题。
+- 实现前先确认模块职责边界，再落地代码，充分考虑代码变更对既有功能的影响。
+- 新增能力必须放入正确层次，禁止把协议处理、业务规则、宿主编排和基础设施访问混杂在同一处。
+- 保持架构简洁，必要时可以重构相关代码（甚至询问是否允许做破坏性变更），禁止为了简便堆砌代码破坏架构。
+- 修复问题时要处理问题根源，禁止通过临时补丁、堆叠特判、绕过现有设计等方式掩盖问题。
 - 若改动暴露出抽象失衡，应同步整理相关结构，而不是继续在失衡结构上堆叠实现。
 - 对真正重复的业务规则、转换逻辑、校验流程和错误处理进行提炼复用；禁止为了“看起来统一”而强行合并语义不同的逻辑。
 - 代码必须优先服务于可维护性。应使用清晰命名、稳定边界和可组合服务，避免隐式耦合、跨层访问和难以验证的副作用扩散。
@@ -136,7 +106,7 @@ DevHub/
 ### 注释与日志规范
 
 - 统一使用中文注释。
-- 所有公开接口必须完备编写 XML Documentation。
+- 所有公开接口必须完备编写文档注释。
 - 复杂算法或涉及框架底层机制的逻辑，应补充足够清晰的解释性注释。
 - 严格遵守日志分级，保证格式统一，并记录关键操作与异常状态以支持全链路追踪。
 - 功能交付前必须清理临时调试日志。
@@ -147,7 +117,7 @@ DevHub/
 
 ## 提交与协作要求
 
-- 提交信息应保持简短、祈使式，并沿用现有前缀风格，如 `fix:`、`test:`、`ci:`。
+- 提交信息应保持简短、祈使式，并沿用现有前缀风格，如 `fix:`、`test:`、`ci:`。把详细的变更说明放到 description 部分。
 - 每次提交只处理一个明确关注点，避免将协议变更、重构、测试补充和杂项修复混在一起。
 - PR 说明应明确关联的 `Specification.md` 章节或本次变更涉及的能力范围，并列出已执行的验证命令。
 - 若改动涉及运行时路径、鉴权令牌、协议契约、序列化字段或公开接口行为，必须在评审说明中明确指出。
