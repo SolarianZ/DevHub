@@ -1,8 +1,11 @@
+mod discovery;
+mod launch;
 mod logging;
 mod models;
 mod monitor;
 mod runtime;
 mod settings;
+mod snapshot;
 
 use crate::models::{
     BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogFileInfo, LogKind, LogReadResult,
@@ -11,6 +14,7 @@ use crate::models::{
 use crate::monitor::MonitorCore;
 use anyhow::{Context, Result};
 use serde::Serialize;
+use std::path::Path;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State, WindowEvent};
@@ -73,6 +77,11 @@ async fn monitor_save_settings(
         settings.host_executable_path.as_deref(),
         "hostExecutablePath",
         4096,
+    )?;
+    validate_optional_absolute_path(settings.data_dir_override.as_deref(), "dataDirOverride")?;
+    validate_optional_absolute_path(
+        settings.host_executable_path.as_deref(),
+        "hostExecutablePath",
     )?;
 
     state
@@ -257,6 +266,19 @@ fn validate_optional_text(
             return Err(CommandError::new(
                 "invalid_argument",
                 format!("{field} 长度不能超过 {max_length}。"),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_optional_absolute_path(value: Option<&str>, field: &str) -> CommandResult<()> {
+    if let Some(value) = value {
+        if !Path::new(value.trim()).is_absolute() {
+            return Err(CommandError::new(
+                "invalid_argument",
+                format!("{field} 必须为绝对路径。"),
             ));
         }
     }

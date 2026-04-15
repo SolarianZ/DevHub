@@ -356,6 +356,131 @@ describe("Monitor App", () => {
     expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
   });
 
+  it("refreshes logs only once when switching the active log kind", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+    listLogsMock.mockImplementation(async (kind) => [
+      {
+        kind,
+        name: `${kind}-latest.log`,
+        filePath: `/tmp/${kind}-latest.log`,
+        sizeBytes: 32,
+        modifiedAtUtc: "2026-04-12T02:03:04Z",
+      },
+    ]);
+    readLogMock.mockImplementation(async ({ kind, fileName }) => ({
+      kind,
+      fileName,
+      filePath: `/tmp/${fileName}`,
+      sizeBytes: 32,
+      truncated: false,
+      contents: `${kind}:${fileName}`,
+    }));
+
+    render(<App />);
+
+    await screen.findByText("扫描与启动流程");
+    await waitFor(() => {
+      expect(listLogsMock).toHaveBeenCalledTimes(2);
+    });
+
+    listLogsMock.mockClear();
+    readLogMock.mockClear();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "日志" }));
+
+    await waitFor(() => {
+      expect(listLogsMock).toHaveBeenCalledTimes(1);
+      expect(listLogsMock).toHaveBeenCalledWith("monitor");
+      expect(readLogMock).toHaveBeenCalledTimes(1);
+      expect(readLogMock).toHaveBeenCalledWith({
+        kind: "monitor",
+        fileName: "monitor-latest.log",
+      });
+    });
+
+    listLogsMock.mockClear();
+    readLogMock.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Host 日志" }));
+
+    await waitFor(() => {
+      expect(listLogsMock).toHaveBeenCalledTimes(1);
+      expect(listLogsMock).toHaveBeenCalledWith("host");
+      expect(readLogMock).toHaveBeenCalledTimes(1);
+      expect(readLogMock).toHaveBeenCalledWith({
+        kind: "host",
+        fileName: "host-latest.log",
+      });
+    });
+  });
+
+  it("rejects relative settings paths before saving", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByText("扫描与启动流程");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await user.clear(screen.getByLabelText("DEVHUB_DATA_DIR 覆盖值"));
+    await user.type(screen.getByLabelText("DEVHUB_DATA_DIR 覆盖值"), "./relative-data");
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await screen.findByText("数据目录必须填写绝对路径。");
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps delete failures inside the definition workflow", async () => {
+    const definition = createDefinition();
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([definition]),
+      listInstances: vi.fn().mockResolvedValue([]),
+      getDefinition: vi.fn().mockResolvedValue(definition),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn().mockRejectedValue(new Error("delete failed")),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App />);
+
+    await screen.findByText("定义列表");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "编辑" }));
+    await screen.findByText("编辑 App Definition");
+    await user.click(screen.getByRole("button", { name: "删除定义" }));
+
+    await screen.findAllByText("delete failed");
+    expect(resumeDiscoveryMock).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
   it("keeps missing definitions in read-only mode when an instance link is stale", async () => {
     const hostClient = {
       listDefinitions: vi.fn().mockResolvedValue([]),

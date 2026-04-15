@@ -25,7 +25,7 @@
 - [`user/host/README.md`](./user/host/README.md)：Host 上手导航。
 - [`user/sdk/README.md`](./user/sdk/README.md)：官方 SDK 接入入口。
 - [`user/protocol/README.md`](./user/protocol/README.md)：原始协议接入路径。
-- [`../apps/monitor/README.md`](../apps/monitor/README.md)：官方桌面 Monitor 的工作区与本地运行入口。
+- [`../apps/monitor/README.md`](../apps/monitor/README.md)：官方桌面 Monitor 的工作区、本地运行入口、前后端分层和验证方式。
 
 ### 我想开发或维护仓库
 

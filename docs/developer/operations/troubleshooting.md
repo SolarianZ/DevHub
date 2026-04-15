@@ -42,6 +42,7 @@
 - `DevHub Monitor` 会把自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`。
 - 当前 Monitor 日志目录会显示在桌面应用设置页的“Monitor 日志目录”字段中；日志页提供 Host / Monitor 双视图。
 - Monitor 关键日志至少覆盖扫描状态切换、Host 启动尝试、连接/断连、设置保存和定义管理。
+- Monitor 设置页中的 `DEVHUB_DATA_DIR` 覆盖值与 Host 可执行文件路径必须为绝对路径；排障时若发现保存失败，应先排查是否填入了相对路径。
 
 ## 2. 故障分诊流程
 
@@ -131,7 +132,7 @@ npm --prefix apps/monitor run verify
 该命令会串联：
 
 - 前端构建与类型检查
-- 前端状态机 / 连接层 / 定义编辑流程测试
+- 前端控制器 / 日志 / 定义工作流测试，以及真实 Host 驱动的前端回归
 - 原生后端单元测试
 - `tauri:check` 非平台特定编译校验
 
