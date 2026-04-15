@@ -14,7 +14,7 @@ public sealed class EventsFlowTests
     private const string InstancePassword = "sdk-events-flow-password";
 
     [Fact]
-    public async Task M5_E2E_004_WsAuthenticateSubscribeUnsubscribe_ShouldControlDelivery()
+    public async Task WsAuthenticateSubscribeUnsubscribe_ShouldControlDelivery()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -80,7 +80,7 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_010_DisconnectCleanup_ShouldRequireResubscribeAfterReconnect()
+    public async Task DisconnectCleanup_ShouldRequireResubscribeAfterReconnect()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -131,7 +131,7 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_011_WsReadableMethods_ShouldMatchPublishedSurface()
+    public async Task WsReadableMethods_ShouldMatchPublishedSurface()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition

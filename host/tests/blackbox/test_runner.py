@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import sys
-import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -22,10 +21,13 @@ from tests.blackbox.test_base import (
     TEST_HUB_CWD_ENV_VAR,
     TEST_HUB_ENV_JSON_ENV_VAR,
     DiscoveryService,
+    LongWaitStatus,
+    PENDING_WAIT_STATUS,
     RpcClient,
     TestReport,
     create_temp_directory,
     describe_test_hub_command,
+    poll_until_deadline_with_long_wait_status,
     start_isolated_hub_process,
     temporary_env_var,
 )
@@ -75,54 +77,40 @@ def setup_logging(log_file):
 
 
 class StageSpinner:
-    """命令行原地旋转进度指示器。"""
+    """测试阶段状态输出。"""
 
-    def __init__(self, stage_name, interval_seconds=0.2, stream=None):
-        self.stage_name = stage_name
-        self.interval_seconds = interval_seconds
-        self.stream = stream or sys.stdout
-        self._stop_event = threading.Event()
-        self._thread = None
-        self._start_monotonic = 0.0
-        self._last_render_length = 0
+    def __init__(self, stage_name, logger, stream=None):
+        self._status = LongWaitStatus(
+            stage_name,
+            emit_plain=lambda message: logger.info("%s", message),
+            stream=stream or sys.stdout,
+            enter_immediately=True,
+            plain_message_factory=lambda: f"[状态] {stage_name} 开始",
+            live_message_factory=self._build_live_message(stage_name),
+        )
 
     def start(self):
-        """启动 spinner 线程。"""
-        self._stop_event.clear()
-        self._start_monotonic = time.monotonic()
-        self._thread = threading.Thread(target=self._render_loop, name="devhub-test-spinner", daemon=True)
-        self._thread.start()
+        """启动阶段状态输出。"""
+        self._status.start()
 
     def stop(self):
-        """停止 spinner 并清理当前行。"""
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-            self._thread = None
+        """停止阶段状态输出。"""
+        self._status.finish()
 
-        if self._last_render_length > 0:
-            clear_width = max(self._last_render_length, 120)
-            self.stream.write("\r" + (" " * clear_width) + "\r")
-            self.stream.flush()
-            self._last_render_length = 0
-
-    def _render_loop(self):
+    @staticmethod
+    def _build_live_message(stage_name):
         frames = ("|", "/", "-", "\\")
-        frame_index = 0
-        while not self._stop_event.is_set():
-            elapsed_seconds = int(time.monotonic() - self._start_monotonic)
-            content = f"{frames[frame_index]} {self.stage_name} 进行中... {elapsed_seconds}s"
-            self._last_render_length = max(self._last_render_length, len(content))
-            self.stream.write("\r" + content)
-            self.stream.flush()
-            frame_index = (frame_index + 1) % len(frames)
-            self._stop_event.wait(self.interval_seconds)
+
+        def render(elapsed_seconds):
+            frame = frames[elapsed_seconds % len(frames)]
+            return f"{frame} {stage_name} 进行中... {elapsed_seconds}s"
+
+        return render
 
 
 def run_suite_with_spinner(logger, stage_name, runner):
     """在执行长耗时测试套件时显示活动状态。"""
-    logger.info("=== %s ===", stage_name)
-    spinner = StageSpinner(stage_name)
+    spinner = StageSpinner(stage_name, logger)
     started_at = time.monotonic()
     spinner.start()
     try:
@@ -182,10 +170,11 @@ def _read_log_tail(log_path, max_chars=4000):
 
 def _wait_for_suite_host_ready(data_dir, process, log_path):
     """等待 runner 自启的隔离 Host 可用。"""
-    deadline = time.time() + 45
     last_error = "unknown"
 
-    while time.time() < deadline:
+    def poll_once():
+        nonlocal last_error
+
         if process.poll() is not None:
             raise RuntimeError(f"隔离 Host 提前退出，日志片段：{_read_log_tail(log_path)}")
 
@@ -194,12 +183,33 @@ def _wait_for_suite_host_ready(data_dir, process, log_path):
                 base_url, token = DiscoveryService.get_hub_info()
                 response = RpcClient(base_url, token).call("hub.ping")
                 if response.get("result", {}).get("ok") is True:
-                    return
+                    return None
                 last_error = str(response)
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
 
-        time.sleep(0.25)
+        return PENDING_WAIT_STATUS
+
+    poll_until_deadline_with_long_wait_status(
+        label="等待 runner 级隔离 Host 就绪",
+        timeout_seconds=45,
+        poll_interval_seconds=0.25,
+        poll_once=poll_once,
+        on_timeout=lambda: PENDING_WAIT_STATUS,
+    )
+
+    if process.poll() is not None:
+        raise RuntimeError(f"隔离 Host 提前退出，日志片段：{_read_log_tail(log_path)}")
+
+    with temporary_env_var(DATA_DIR_ENV_VAR, data_dir):
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            response = RpcClient(base_url, token).call("hub.ping")
+            if response.get("result", {}).get("ok") is True:
+                return
+            last_error = str(response)
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
 
     raise RuntimeError(f"等待隔离 Host 就绪超时：{last_error}；日志片段：{_read_log_tail(log_path)}")
 
@@ -273,16 +283,16 @@ def execute_all_tests(temp_dir, logger, full=False, fast=False, smoke=False):
         logger.info("=== 运行 WebSocket 事件 smoke 测试 ===")
         ws_events_tests = TestWsEvents()
         report.results.extend([
-            ws_events_tests.test_m4_ws_001_first_message_must_authenticate(),
-            ws_events_tests.test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(),
+            ws_events_tests.test_ws_001_first_message_must_authenticate(),
+            ws_events_tests.test_ws_005_subscribe_unsubscribe_should_work_after_auth(),
         ])
 
         logger.info("=== 运行 WebSocket 传输矩阵 smoke 测试 ===")
         ws_transport_matrix_tests = TestWsTransportMatrix()
         report.results.extend([
-            ws_transport_matrix_tests.test_m4_ws_matrix_001_ping_should_work_after_auth(),
-            ws_transport_matrix_tests.test_m4_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
-            ws_transport_matrix_tests.test_m4_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
+            ws_transport_matrix_tests.test_ws_matrix_001_ping_should_work_after_auth(),
+            ws_transport_matrix_tests.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
+            ws_transport_matrix_tests.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ])
 
         logger.info("=== 运行 Invocation Request smoke 测试 ===")

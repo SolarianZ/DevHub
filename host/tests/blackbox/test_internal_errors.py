@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 internal_error / parse_error / invalid_request 测试
+DevHub internal_error / parse_error / invalid_request 测试
 """
 
 import os

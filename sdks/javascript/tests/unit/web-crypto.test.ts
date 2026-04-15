@@ -7,7 +7,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("M6_TS_UT_006 默认标识符应通过 Web Crypto 生成", () => {
+it("默认标识符应通过 Web Crypto 生成", () => {
   const uuid = "11111111-1111-4111-8111-111111111111";
   const randomUUID = vi.fn(() => uuid);
   vi.stubGlobal("crypto", { randomUUID });

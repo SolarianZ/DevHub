@@ -11,7 +11,7 @@ public sealed class InvocationFlowTests
     private const string InstancePassword = "sdk-invocation-password";
 
     [Fact]
-    public async Task M5_E2E_003_NotifyAndPoll_ShouldRoundTrip()
+    public async Task NotifyAndPoll_ShouldRoundTrip()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -38,7 +38,7 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_003_And_008_RequestRespondValue_ShouldReturnResult_AndSecondRespondShouldConflict()
+    public async Task RequestRespondValue_ShouldReturnResult_AndSecondRespondShouldConflict()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -85,7 +85,7 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_003_RequestRespondNullValue_ShouldReturnJsonNull()
+    public async Task RequestRespondNullValue_ShouldReturnJsonNull()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -123,7 +123,7 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_008_RequestRespondError_ShouldMapInvocationFailed()
+    public async Task RequestRespondError_ShouldMapInvocationFailed()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -165,7 +165,7 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_007_RequestTimeoutAndExpired_ShouldMapExpectedErrors()
+    public async Task RequestTimeoutAndExpired_ShouldMapExpectedErrors()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -203,7 +203,7 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
-    public async Task M5_E2E_006_And_011_ScopeRules_ShouldRouteToExpectedInstance()
+    public async Task ScopeRules_ShouldRouteToExpectedInstance()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 -32602 invalid_params 参数验证测试
+DevHub -32602 invalid_params 参数验证测试
 """
 
 import os

@@ -50,7 +50,7 @@ afterAll(async () => {
   await host?.close();
 });
 
-it("M5_E2E_003 notify + poll 应完成调用往返", async () => {
+it("notify + poll 应完成调用往返", async () => {
   const client = await createClient("invoke-notify-client");
   await registerInstance(client, "invoke.notify.app", "notify-inst-1");
 
@@ -72,7 +72,7 @@ it("M5_E2E_003 notify + poll 应完成调用往返", async () => {
   await client.dispose();
 });
 
-it("M5_E2E_003_And_008 request/respond 成功后再次 respond 应返回 delivery_conflict", async () => {
+it("request/respond 成功后再次 respond 应返回 delivery_conflict", async () => {
   const client = await createClient("invoke-request-client");
   await registerInstance(client, "invoke.request.app", "request-inst-1");
 
@@ -119,7 +119,7 @@ it("M5_E2E_003_And_008 request/respond 成功后再次 respond 应返回 deliver
   await client.dispose();
 });
 
-it("M5_E2E_008 request/respond 错误应映射为 invocation_failed", async () => {
+it("request/respond 错误应映射为 invocation_failed", async () => {
   const client = await createClient("invoke-error-client");
   await registerInstance(client, "invoke.error.app", "error-inst-1");
 
@@ -171,7 +171,7 @@ it("M5_E2E_008 request/respond 错误应映射为 invocation_failed", async () =
   await client.dispose();
 });
 
-it("M5_E2E_007 request 超时与过期应映射为预期错误", async () => {
+it("request 超时与过期应映射为预期错误", async () => {
   const client = await createClient("invoke-timeout-client");
   await registerInstance(client, "invoke.timeout.app", "timeout-inst-1");
 
@@ -277,7 +277,7 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
   await client.dispose();
 });
 
-it("M5_E2E_006_And_011 scope 路由规则应命中正确实例", async () => {
+it("scope 路由规则应命中正确实例", async () => {
   const client = await createClient("invoke-scope-client");
   await registerInstance(client, "invoke.scope.app", "scope-global-inst", null);
   await registerInstance(client, "invoke.scope.app", "scope-a-inst", "scope-a");

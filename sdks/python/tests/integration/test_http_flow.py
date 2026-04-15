@@ -21,7 +21,7 @@ from devhub_sdk.models import LaunchRequest
 from ._host import DevHubHostFixture
 
 
-def test_M5_E2E_001_And_002_ping_and_apps_flow_should_succeed() -> None:
+def test_ping_and_apps_flow_should_succeed() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition(
             {
@@ -66,7 +66,7 @@ def test_M5_E2E_001_And_002_ping_and_apps_flow_should_succeed() -> None:
         assert instances_after_unregister == []
 
 
-def test_M6_E2E_001_definition_management_should_round_trip_and_surface_host_validation() -> None:
+def test_definition_management_should_round_trip_and_surface_host_validation() -> None:
     with DevHubHostFixture.start() as host:
         client = host.create_client("http-definition-client")
 
@@ -102,7 +102,7 @@ def test_M6_E2E_001_definition_management_should_round_trip_and_surface_host_val
         assert deleted_error.value.code == DevHubRpcErrorCode.APP_DEFINITION_NOT_FOUND
 
 
-def test_M5_E2E_002_launch_should_round_trip_and_apply_dedupe_window() -> None:
+def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition(
             {

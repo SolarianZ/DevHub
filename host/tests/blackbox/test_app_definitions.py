@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 AppDefinition 测试
+DevHub 应用定义测试
 """
 
 import os

@@ -10,7 +10,7 @@ from devhub_sdk import DevHubClientOptions, discover_runtime
 import devhub_sdk.runtime as runtime_module
 
 
-def test_M5_PY_UT_001_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: Path) -> None:
+def test_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1  \r\n", encoding="utf-8")
     _write_hub_json(runtime_dir, token_file=token_file)
@@ -24,7 +24,7 @@ def test_M5_PY_UT_001_runtime_discovery_with_valid_hub_json_should_read_token_fi
     assert connection_info.runtime.token_file == str(token_file)
 
 
-def test_M5_PY_UT_001_runtime_discovery_when_environment_override_provided_should_use_environment_data_dir(
+def test_runtime_discovery_when_environment_override_provided_should_use_environment_data_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -39,7 +39,7 @@ def test_M5_PY_UT_001_runtime_discovery_when_environment_override_provided_shoul
     assert connection_info.token == "token-env"
 
 
-def test_M5_PY_UT_001_resolve_data_directory_when_override_and_environment_both_present_should_prefer_override(
+def test_resolve_data_directory_when_override_and_environment_both_present_should_prefer_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DEVHUB_DATA_DIR", "C:/data-from-env")
@@ -49,7 +49,7 @@ def test_M5_PY_UT_001_resolve_data_directory_when_override_and_environment_both_
     assert resolved == Path("C:/data-from-argument").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_on_windows_should_use_local_app_data(
+def test_resolve_data_directory_on_windows_should_use_local_app_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
@@ -61,7 +61,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_windows_should_use_local_app_dat
     assert resolved == Path("C:/Users/tester/AppData/Local/DevHub").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_on_darwin_should_use_application_support(
+def test_resolve_data_directory_on_darwin_should_use_application_support(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
@@ -74,7 +74,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_darwin_should_use_application_su
     assert resolved == Path("C:/Users/tester/Library/Application Support/DevHub").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_use_xdg_data_home_when_present(
+def test_resolve_data_directory_on_linux_should_use_xdg_data_home_when_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
@@ -86,7 +86,7 @@ def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_use_xdg_data_home_w
     assert resolved == Path("C:/xdg-data/DevHub").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_fallback_to_home_local_share(
+def test_resolve_data_directory_on_linux_should_fallback_to_home_local_share(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DEVHUB_DATA_DIR", raising=False)
@@ -99,19 +99,19 @@ def test_M5_PY_UT_001_resolve_data_directory_on_linux_should_fallback_to_home_lo
     assert resolved == Path("C:/Users/tester/.local/share/DevHub").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_should_preserve_lexical_absolute_path() -> None:
+def test_resolve_data_directory_should_preserve_lexical_absolute_path() -> None:
     resolved = runtime_module.resolve_data_directory("/var/tmp/devhub-data")
 
     assert resolved == Path("/var/tmp/devhub-data").absolute()
 
 
-def test_M5_PY_UT_001_resolve_data_directory_should_collapse_dot_segments_without_resolving_symlinks() -> None:
+def test_resolve_data_directory_should_collapse_dot_segments_without_resolving_symlinks() -> None:
     resolved = runtime_module.resolve_data_directory("./a/../b")
 
     assert resolved == Path(os.path.abspath("./a/../b"))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_data_dir_points_to_runtime_subdirectory_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_data_dir_points_to_runtime_subdirectory_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     _write_hub_json(runtime_dir, token_file=token_file)
@@ -120,7 +120,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_data_dir_points_to_runtime_subdirec
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(runtime_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_data_dir_contains_direct_hub_json_layout_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_data_dir_contains_direct_hub_json_layout_should_raise(tmp_path: Path) -> None:
     data_dir = tmp_path / "devhub-data"
     data_dir.mkdir()
     token_file = data_dir / "token.txt"
@@ -132,7 +132,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_data_dir_contains_direct_hub_json_l
 
 
 @pytest.mark.parametrize("missing_property", ["httpBaseUrl", "wsUrl", "tokenFile", "startedAtUtc"])
-def test_M5_PY_UT_002_runtime_discovery_when_hub_json_missing_required_field_should_raise(tmp_path: Path, missing_property: str) -> None:
+def test_runtime_discovery_when_hub_json_missing_required_field_should_raise(tmp_path: Path, missing_property: str) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     payload = _hub_payload(token_file)
@@ -143,7 +143,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_hub_json_missing_required_field_sho
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_hub_json_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_hub_json_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     (runtime_dir / "hub.json").write_text(
@@ -172,7 +172,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_hub_json_contains_non_standard_json
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_started_at_utc_missing_timezone_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_started_at_utc_missing_timezone_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     payload = _hub_payload(token_file)
@@ -183,7 +183,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_started_at_utc_missing_timezone_sho
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_started_at_utc_is_not_utc_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_started_at_utc_is_not_utc_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     payload = _hub_payload(token_file)
@@ -194,7 +194,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_started_at_utc_is_not_utc_should_ra
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_optional_hub_version_is_null_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_optional_hub_version_is_null_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     payload = _hub_payload(token_file)
@@ -214,7 +214,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_optional_hub_version_is_null_should
         ("wsUrl", "ws://example.com:47231/ws"),
     ],
 )
-def test_M5_PY_UT_002_runtime_discovery_when_runtime_url_violates_spec_should_raise(
+def test_runtime_discovery_when_runtime_url_violates_spec_should_raise(
     tmp_path: Path,
     property_name: str,
     value: str,
@@ -229,7 +229,7 @@ def test_M5_PY_UT_002_runtime_discovery_when_runtime_url_violates_spec_should_ra
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
-def test_M5_PY_UT_002_runtime_discovery_when_token_file_is_not_absolute_should_raise(tmp_path: Path) -> None:
+def test_runtime_discovery_when_token_file_is_not_absolute_should_raise(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-1", encoding="utf-8")
     payload = _hub_payload(token_file)
@@ -241,22 +241,22 @@ def test_M5_PY_UT_002_runtime_discovery_when_token_file_is_not_absolute_should_r
 
 
 @pytest.mark.parametrize("client_session_id", ["not-a-uuid", "11111111111111111111111111111111"])
-def test_M5_PY_UT_002_client_options_when_client_session_id_invalid_should_raise(client_session_id: str) -> None:
+def test_client_options_when_client_session_id_invalid_should_raise(client_session_id: str) -> None:
     with pytest.raises(ValueError):
         DevHubClientOptions(client_id="unit-test-client", client_session_id=client_session_id).validate()
 
 
-def test_M5_PY_UT_002_client_options_when_data_dir_type_invalid_should_raise() -> None:
+def test_client_options_when_data_dir_type_invalid_should_raise() -> None:
     with pytest.raises(ValueError):
         DevHubClientOptions(client_id="unit-test-client", data_dir=123).validate()  # type: ignore[arg-type]
 
 
-def test_M5_PY_UT_002_client_options_when_request_timeout_is_not_number_should_raise() -> None:
+def test_client_options_when_request_timeout_is_not_number_should_raise() -> None:
     with pytest.raises(ValueError):
         DevHubClientOptions(client_id="unit-test-client", request_timeout="50").validate()  # type: ignore[arg-type]
 
 
-def test_M5_PY_UT_002_client_options_when_protocol_version_is_bool_should_raise() -> None:
+def test_client_options_when_protocol_version_is_bool_should_raise() -> None:
     with pytest.raises(ValueError):
         DevHubClientOptions(client_id="unit-test-client", protocol_version=True).validate()  # type: ignore[arg-type]
 

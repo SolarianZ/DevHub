@@ -28,7 +28,7 @@ from devhub_sdk._payloads import (
 from devhub_sdk.models import AppInstanceRegistration, InvokeRequest, ListInstancesRequest, PollRequest, RespondRequest
 
 
-def test_M5_PY_UT_004_notify_builder_should_apply_default_options() -> None:
+def test_notify_builder_should_apply_default_options() -> None:
     payload = build_notify_params(InvokeRequest(app_id="test.app", method="test.notify"))
 
     assert payload["options"]["ttlMs"] == 60000
@@ -38,17 +38,17 @@ def test_M5_PY_UT_004_notify_builder_should_apply_default_options() -> None:
     assert "target" not in payload
 
 
-def test_M6_PY_UT_004_ping_builder_should_preserve_explicit_null_and_omit_unset() -> None:
+def test_ping_builder_should_preserve_explicit_null_and_omit_unset() -> None:
     assert build_ping_params() is None
     assert build_ping_params(None) == {"echo": None}
 
 
-def test_M6_PY_UT_004_ping_builder_when_echo_contains_non_finite_number_should_raise() -> None:
+def test_ping_builder_when_echo_contains_non_finite_number_should_raise() -> None:
     with pytest.raises(ValueError, match="echo.value 必须为有限数字"):
         build_ping_params({"value": float("nan")})
 
 
-def test_M5_PY_UT_004_request_builder_should_apply_default_options() -> None:
+def test_request_builder_should_apply_default_options() -> None:
     payload = build_request_params(InvokeRequest(app_id="test.app", method="test.request"))
 
     assert payload["options"]["ttlMs"] == 300000
@@ -58,7 +58,7 @@ def test_M5_PY_UT_004_request_builder_should_apply_default_options() -> None:
     assert "args" not in payload
 
 
-def test_M5_PY_UT_004_notify_builder_when_wait_timeout_specified_should_raise() -> None:
+def test_notify_builder_when_wait_timeout_specified_should_raise() -> None:
     with pytest.raises(ValueError, match="wait_timeout_ms"):
         build_notify_params(
             InvokeRequest(
@@ -69,14 +69,14 @@ def test_M5_PY_UT_004_notify_builder_when_wait_timeout_specified_should_raise() 
         )
 
 
-def test_M5_PY_UT_004_notify_builder_should_preserve_explicit_null_args() -> None:
+def test_notify_builder_should_preserve_explicit_null_args() -> None:
     payload = build_notify_params(InvokeRequest(app_id="test.app", method="test.notify", args=None))
 
     assert "args" in payload
     assert payload["args"] is None
 
 
-def test_M5_PY_UT_004_request_builder_should_preserve_explicit_empty_scope() -> None:
+def test_request_builder_should_preserve_explicit_empty_scope() -> None:
     payload = build_notify_params(
         InvokeRequest(
             app_id="test.app",
@@ -88,7 +88,7 @@ def test_M5_PY_UT_004_request_builder_should_preserve_explicit_empty_scope() -> 
     assert payload["target"]["scope"] == ""
 
 
-def test_M5_PY_UT_004_request_builder_when_auto_launch_enabled_with_instance_id_should_raise() -> None:
+def test_request_builder_when_auto_launch_enabled_with_instance_id_should_raise() -> None:
     with pytest.raises(ValueError):
         build_notify_params(
             InvokeRequest(
@@ -100,12 +100,12 @@ def test_M5_PY_UT_004_request_builder_when_auto_launch_enabled_with_instance_id_
         )
 
 
-def test_M5_PY_UT_004_request_builder_when_app_id_violates_spec_should_raise() -> None:
+def test_request_builder_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
         build_request_params(InvokeRequest(app_id="Test.App", method="test.request"))
 
 
-def test_M5_PY_UT_004_notify_builder_when_target_instance_id_violates_spec_should_raise() -> None:
+def test_notify_builder_when_target_instance_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
         build_notify_params(
             InvokeRequest(
@@ -116,7 +116,7 @@ def test_M5_PY_UT_004_notify_builder_when_target_instance_id_violates_spec_shoul
         )
 
 
-def test_M5_PY_UT_004_request_builder_when_auto_launch_requires_queue_if_offline_true_should_raise() -> None:
+def test_request_builder_when_auto_launch_requires_queue_if_offline_true_should_raise() -> None:
     with pytest.raises(ValueError):
         build_notify_params(
             InvokeRequest(
@@ -127,14 +127,14 @@ def test_M5_PY_UT_004_request_builder_when_auto_launch_requires_queue_if_offline
         )
 
 
-def test_M5_PY_UT_004_poll_builder_should_apply_defaults() -> None:
+def test_poll_builder_should_apply_defaults() -> None:
     payload = build_poll_params(PollRequest(instance_id="inst-1"))
 
     assert payload["maxCount"] == 10
     assert payload["waitMs"] == 25000
 
 
-def test_M6_PY_UT_004_definition_builder_should_preserve_supported_fields() -> None:
+def test_definition_builder_should_preserve_supported_fields() -> None:
     payload = build_upsert_definition_params(
         AppDefinition(
             app_id="test.app",
@@ -169,26 +169,26 @@ def test_M6_PY_UT_004_definition_builder_should_preserve_supported_fields() -> N
     }
 
 
-def test_M6_PY_UT_004_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
+def test_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
         build_validate_definition_params(AppDefinition(app_id="Test.App", display_name="Broken"))
 
 
-def test_M6_PY_UT_004_delete_definition_builder_should_validate_app_id() -> None:
+def test_delete_definition_builder_should_validate_app_id() -> None:
     assert build_delete_definition_params("test.app") == {"appId": "test.app"}
 
     with pytest.raises(ValueError):
         build_delete_definition_params("Test.App")
 
 
-def test_M6_PY_UT_004_get_definition_builder_should_validate_app_id() -> None:
+def test_get_definition_builder_should_validate_app_id() -> None:
     assert build_get_definition_params("test.app") == {"appId": "test.app"}
 
     with pytest.raises(ValueError):
         build_get_definition_params("Test.App")
 
 
-def test_M6_PY_UT_004_list_instances_builder_should_share_filter_validation_rules() -> None:
+def test_list_instances_builder_should_share_filter_validation_rules() -> None:
     assert build_list_instances_params(ListInstancesRequest(app_id="test.app", include_offline=True)) == {
         "appId": "test.app",
         "includeOffline": True,
@@ -198,7 +198,7 @@ def test_M6_PY_UT_004_list_instances_builder_should_share_filter_validation_rule
         build_list_instances_params(ListInstancesRequest(app_id="Test.App"))
 
 
-def test_M6_PY_UT_004_register_instance_builder_should_place_password_at_top_level() -> None:
+def test_register_instance_builder_should_place_password_at_top_level() -> None:
     payload = build_register_instance_params(
         AppInstanceRegistration(
             instance_id="inst-1",
@@ -214,7 +214,7 @@ def test_M6_PY_UT_004_register_instance_builder_should_place_password_at_top_lev
     assert "password" not in payload["instance"]
 
 
-def test_M5_PY_UT_004_register_instance_builder_when_meta_is_not_object_should_raise() -> None:
+def test_register_instance_builder_when_meta_is_not_object_should_raise() -> None:
     with pytest.raises(ValueError):
         build_register_instance_params(
             AppInstanceRegistration(
@@ -228,7 +228,7 @@ def test_M5_PY_UT_004_register_instance_builder_when_meta_is_not_object_should_r
         )
 
 
-def test_M5_PY_UT_004_register_instance_builder_when_meta_contains_non_finite_number_should_raise() -> None:
+def test_register_instance_builder_when_meta_contains_non_finite_number_should_raise() -> None:
     with pytest.raises(ValueError, match=r"meta\.value 必须为有限数字。"):
         build_register_instance_params(
             AppInstanceRegistration(
@@ -242,7 +242,7 @@ def test_M5_PY_UT_004_register_instance_builder_when_meta_contains_non_finite_nu
         )
 
 
-def test_M5_PY_UT_004_register_instance_builder_when_invoke_poll_is_not_bool_should_raise() -> None:
+def test_register_instance_builder_when_invoke_poll_is_not_bool_should_raise() -> None:
     with pytest.raises(ValueError):
         build_register_instance_params(
             AppInstanceRegistration(
@@ -255,7 +255,7 @@ def test_M5_PY_UT_004_register_instance_builder_when_invoke_poll_is_not_bool_sho
         )
 
 
-def test_M5_PY_UT_004_register_instance_builder_when_instance_id_violates_spec_should_raise() -> None:
+def test_register_instance_builder_when_instance_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
         build_register_instance_params(
             AppInstanceRegistration(
@@ -268,12 +268,12 @@ def test_M5_PY_UT_004_register_instance_builder_when_instance_id_violates_spec_s
         )
 
 
-def test_M6_PY_UT_004_unregister_builder_when_password_missing_should_raise() -> None:
+def test_unregister_builder_when_password_missing_should_raise() -> None:
     with pytest.raises(ValueError):
         build_unregister_params("inst-1", "  ")
 
 
-def test_M5_PY_UT_004_respond_builder_when_error_message_missing_should_raise() -> None:
+def test_respond_builder_when_error_message_missing_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
             RespondRequest(
@@ -284,7 +284,7 @@ def test_M5_PY_UT_004_respond_builder_when_error_message_missing_should_raise() 
         )
 
 
-def test_M5_PY_UT_004_notify_builder_when_target_instance_id_is_not_string_should_raise() -> None:
+def test_notify_builder_when_target_instance_id_is_not_string_should_raise() -> None:
     with pytest.raises(ValueError):
         build_notify_params(
             InvokeRequest(
@@ -295,7 +295,7 @@ def test_M5_PY_UT_004_notify_builder_when_target_instance_id_is_not_string_shoul
         )
 
 
-def test_M5_PY_UT_004_notify_builder_when_args_contains_non_finite_number_should_raise() -> None:
+def test_notify_builder_when_args_contains_non_finite_number_should_raise() -> None:
     with pytest.raises(ValueError, match=r"args\.value 必须为有限数字。"):
         build_notify_params(
             InvokeRequest(
@@ -306,7 +306,7 @@ def test_M5_PY_UT_004_notify_builder_when_args_contains_non_finite_number_should
         )
 
 
-def test_M5_PY_UT_004_poll_builder_when_wait_ms_is_not_integer_should_raise() -> None:
+def test_poll_builder_when_wait_ms_is_not_integer_should_raise() -> None:
     with pytest.raises(ValueError):
         build_poll_params(
             PollRequest(
@@ -316,7 +316,7 @@ def test_M5_PY_UT_004_poll_builder_when_wait_ms_is_not_integer_should_raise() ->
         )
 
 
-def test_M5_PY_UT_004_respond_builder_should_allow_null_value() -> None:
+def test_respond_builder_should_allow_null_value() -> None:
     payload = build_respond_params(
         RespondRequest(
             instance_id="inst-1",
@@ -329,7 +329,7 @@ def test_M5_PY_UT_004_respond_builder_should_allow_null_value() -> None:
     assert "error" not in payload
 
 
-def test_M5_PY_UT_004_respond_builder_when_value_and_error_both_missing_should_raise() -> None:
+def test_respond_builder_when_value_and_error_both_missing_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
             RespondRequest(
@@ -339,7 +339,7 @@ def test_M5_PY_UT_004_respond_builder_when_value_and_error_both_missing_should_r
         )
 
 
-def test_M5_PY_UT_004_respond_builder_when_invocation_id_violates_spec_should_raise() -> None:
+def test_respond_builder_when_invocation_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
             RespondRequest(
@@ -350,7 +350,7 @@ def test_M5_PY_UT_004_respond_builder_when_invocation_id_violates_spec_should_ra
         )
 
 
-def test_M5_PY_UT_004_respond_builder_when_value_and_error_present_should_raise() -> None:
+def test_respond_builder_when_value_and_error_present_should_raise() -> None:
     with pytest.raises(ValueError):
         build_respond_params(
             RespondRequest(
@@ -362,7 +362,7 @@ def test_M5_PY_UT_004_respond_builder_when_value_and_error_present_should_raise(
         )
 
 
-def test_M5_PY_UT_004_respond_builder_when_value_contains_unsupported_json_type_should_raise() -> None:
+def test_respond_builder_when_value_contains_unsupported_json_type_should_raise() -> None:
     with pytest.raises(ValueError, match=r"value\.callback 包含不支持的 JSON 类型。"):
         build_respond_params(
             RespondRequest(
@@ -373,7 +373,7 @@ def test_M5_PY_UT_004_respond_builder_when_value_contains_unsupported_json_type_
         )
 
 
-def test_M5_PY_UT_004_respond_builder_when_error_data_is_not_json_object_should_raise() -> None:
+def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> None:
     with pytest.raises(ValueError, match=r"error\.data\.callback 包含不支持的 JSON 类型。"):
         build_respond_params(
             RespondRequest(

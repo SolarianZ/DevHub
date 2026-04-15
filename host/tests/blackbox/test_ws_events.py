@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M4 WebSocket 鉴权与事件测试
+DevHub WebSocket 鉴权与事件测试
 """
 
 import os
@@ -218,7 +218,7 @@ class SimpleWebSocketClient:
 
 
 class TestWsEvents:
-    """M4 WebSocket 测试集合。"""
+    """WebSocket 测试集合。"""
 
     @staticmethod
     def _runtime_hub_info():
@@ -230,7 +230,7 @@ class TestWsEvents:
 
     @staticmethod
     def _new_app_id(suffix):
-        return f"m4-ws-{suffix}-{uuid.uuid4().hex[:6]}"
+        return f"ws-{suffix}-{uuid.uuid4().hex[:6]}"
 
     @staticmethod
     def _definition_payload(app_id, display_name=None):
@@ -375,9 +375,9 @@ class TestWsEvents:
         result.mark_failure(f"❌ 未收到 {expected_type} 事件")
         return None
 
-    def test_m4_ws_001_first_message_must_authenticate(self):
-        """M4-WS-001: 首条非鉴权请求（带 id）应返回 unauthorized。"""
-        result = TestResult("M4-WS-001 首条非鉴权请求应返回 unauthorized")
+    def test_ws_001_first_message_must_authenticate(self):
+        """WS-001: 首条非鉴权请求（带 id）应返回 unauthorized。"""
+        result = TestResult("WS-001 首条非鉴权请求应返回 unauthorized")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -403,9 +403,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_002_pre_auth_notification_should_close_connection(self):
-        """M4-WS-002: 鉴权前非鉴权通知（无 id）应关闭连接。"""
-        result = TestResult("M4-WS-002 鉴权前通知应触发断连")
+    def test_ws_002_pre_auth_notification_should_close_connection(self):
+        """WS-002: 鉴权前非鉴权通知（无 id）应关闭连接。"""
+        result = TestResult("WS-002 鉴权前通知应触发断连")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -427,9 +427,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_003_authenticate_invalid_token_should_close(self):
-        """M4-WS-003: 非法 token 鉴权返回 unauthorized 并断开连接。"""
-        result = TestResult("M4-WS-003 非法 token 鉴权")
+    def test_ws_003_authenticate_invalid_token_should_close(self):
+        """WS-003: 非法 token 鉴权返回 unauthorized 并断开连接。"""
+        result = TestResult("WS-003 非法 token 鉴权")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -467,9 +467,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_004_authenticate_unsupported_protocol_should_close(self):
-        """M4-WS-004: 协议版本不匹配应返回 not_supported 并断连。"""
-        result = TestResult("M4-WS-004 协议版本不匹配鉴权")
+    def test_ws_004_authenticate_unsupported_protocol_should_close(self):
+        """WS-004: 协议版本不匹配应返回 not_supported 并断连。"""
+        result = TestResult("WS-004 协议版本不匹配鉴权")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -503,9 +503,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(self):
-        """M4-WS-005: 鉴权后可 subscribe/unsubscribe。"""
-        result = TestResult("M4-WS-005 鉴权后订阅与取消订阅")
+    def test_ws_005_subscribe_unsubscribe_should_work_after_auth(self):
+        """WS-005: 鉴权后可 subscribe/unsubscribe。"""
+        result = TestResult("WS-005 鉴权后订阅与取消订阅")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -549,11 +549,11 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_006_should_push_registered_delivered_completed_events(self):
-        """M4-WS-006: 订阅后应收到 registered/queued/delivered/completed。"""
-        result = TestResult("M4-WS-006 事件推送 completed 主链路")
+    def test_ws_006_should_push_registered_delivered_completed_events(self):
+        """WS-006: 订阅后应收到 registered/queued/delivered/completed。"""
+        result = TestResult("WS-006 事件推送 completed 主链路")
 
-        instance_id = self._new_instance_id("m4-ws-event-completed")
+        instance_id = self._new_instance_id("ws-event-completed")
 
         try:
             http_base_url, ws_url, token = self._runtime_hub_info()
@@ -648,11 +648,11 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_007_reconnect_after_disconnect_should_receive_events(self):
-        """M4-WS-007: 断线后重连并重新订阅，事件链路应保持稳定。"""
-        result = TestResult("M4-WS-007 断线后重连订阅稳定性")
+    def test_ws_007_reconnect_after_disconnect_should_receive_events(self):
+        """WS-007: 断线后重连并重新订阅，事件链路应保持稳定。"""
+        result = TestResult("WS-007 断线后重连订阅稳定性")
 
-        instance_id = self._new_instance_id("m4-ws-reconnect")
+        instance_id = self._new_instance_id("ws-reconnect")
 
         try:
             http_base_url, ws_url, token = self._runtime_hub_info()
@@ -754,11 +754,11 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_008_should_push_failed_event(self):
-        """M4-WS-008: 被调用方回传 error 应触发 invocation.failed。"""
-        result = TestResult("M4-WS-008 事件推送 failed 主链路")
+    def test_ws_008_should_push_failed_event(self):
+        """WS-008: 被调用方回传 error 应触发 invocation.failed。"""
+        result = TestResult("WS-008 事件推送 failed 主链路")
 
-        instance_id = self._new_instance_id("m4-ws-event-failed")
+        instance_id = self._new_instance_id("ws-event-failed")
 
         try:
             http_base_url, ws_url, token = self._runtime_hub_info()
@@ -853,9 +853,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(self):
-        """M4-WS-009: 未鉴权首条非鉴权请求（params=[]）应 unauthorized 并断连。"""
-        result = TestResult("M4-WS-009 未鉴权请求(params=[])应 unauthorized 并断连")
+    def test_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(self):
+        """WS-009: 未鉴权首条非鉴权请求（params=[]）应 unauthorized 并断连。"""
+        result = TestResult("WS-009 未鉴权请求(params=[])应 unauthorized 并断连")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -881,9 +881,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_010_pre_auth_notification_array_params_should_close(self):
-        """M4-WS-010: 未鉴权非鉴权通知（params=[]）应直接断连。"""
-        result = TestResult("M4-WS-010 未鉴权通知(params=[])应断连")
+    def test_ws_010_pre_auth_notification_array_params_should_close(self):
+        """WS-010: 未鉴权非鉴权通知（params=[]）应直接断连。"""
+        result = TestResult("WS-010 未鉴权通知(params=[])应断连")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -904,9 +904,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(self):
-        """M4-WS-011: 订阅未知事件类型应返回 invalid_params。"""
-        result = TestResult("M4-WS-011 订阅未知事件类型返回 invalid_params")
+    def test_ws_011_subscribe_unknown_event_type_should_invalid_params(self):
+        """WS-011: 订阅未知事件类型应返回 invalid_params。"""
+        result = TestResult("WS-011 订阅未知事件类型返回 invalid_params")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -934,11 +934,11 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_012_should_push_unregistered_event(self):
-        """M4-WS-012: 注销实例应推送 app.instance.unregistered。"""
-        result = TestResult("M4-WS-012 事件推送 app.instance.unregistered")
+    def test_ws_012_should_push_unregistered_event(self):
+        """WS-012: 注销实例应推送 app.instance.unregistered。"""
+        result = TestResult("WS-012 事件推送 app.instance.unregistered")
 
-        instance_id = self._new_instance_id("m4-ws-event-unregistered")
+        instance_id = self._new_instance_id("ws-event-unregistered")
         app_id = self._new_app_id("unregistered")
         scope = "workspace-unregistered"
 
@@ -1033,9 +1033,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_012d_should_push_definition_upserted_event(self):
-        """M4-WS-012D: upsertDefinition 成功后应推送 app.definition.upserted。"""
-        result = TestResult("M4-WS-012D 事件推送 app.definition.upserted")
+    def test_ws_012d_should_push_definition_upserted_event(self):
+        """WS-012D: upsertDefinition 成功后应推送 app.definition.upserted。"""
+        result = TestResult("WS-012D 事件推送 app.definition.upserted")
         app_id = self._new_app_id("definition-upserted")
 
         try:
@@ -1105,9 +1105,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_012e_should_push_definition_deleted_event(self):
-        """M4-WS-012E: deleteDefinition 成功后应推送 app.definition.deleted。"""
-        result = TestResult("M4-WS-012E 事件推送 app.definition.deleted")
+    def test_ws_012e_should_push_definition_deleted_event(self):
+        """WS-012E: deleteDefinition 成功后应推送 app.definition.deleted。"""
+        result = TestResult("WS-012E 事件推送 app.definition.deleted")
         app_id = self._new_app_id("definition-deleted")
 
         try:
@@ -1162,9 +1162,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(self):
-        """M4-WS-012B: 取消订阅未知 subscriptionId 仍应返回 ok。"""
-        result = TestResult("M4-WS-012B unknown subscriptionId 取消订阅幂等")
+    def test_ws_012b_unsubscribe_unknown_id_should_be_idempotent(self):
+        """WS-012B: 取消订阅未知 subscriptionId 仍应返回 ok。"""
+        result = TestResult("WS-012B unknown subscriptionId 取消订阅幂等")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -1192,9 +1192,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_013_pre_auth_invalid_json_should_parse_error(self):
-        """M4-WS-013: 鉴权前非法 JSON 应返回 parse_error 并断连。"""
-        result = TestResult("M4-WS-013 鉴权前非法JSON返回 parse_error")
+    def test_ws_013_pre_auth_invalid_json_should_parse_error(self):
+        """WS-013: 鉴权前非法 JSON 应返回 parse_error 并断连。"""
+        result = TestResult("WS-013 鉴权前非法JSON返回 parse_error")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -1215,9 +1215,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(self):
-        """M4-WS-014: 鉴权前非法信封应返回 invalid_request 并断连。"""
-        result = TestResult("M4-WS-014 鉴权前非法信封返回 invalid_request")
+    def test_ws_014_pre_auth_invalid_envelope_should_invalid_request(self):
+        """WS-014: 鉴权前非法信封应返回 invalid_request 并断连。"""
+        result = TestResult("WS-014 鉴权前非法信封返回 invalid_request")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -1262,11 +1262,11 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_012c_unsubscribe_existing_id_should_stop_delivery(self):
-        """M4-WS-012C: 取消真实 subscriptionId 后不应再收到 hub.event。"""
-        result = TestResult("M4-WS-012C 真实 subscriptionId 取消后停止事件投递")
+    def test_ws_012c_unsubscribe_existing_id_should_stop_delivery(self):
+        """WS-012C: 取消真实 subscriptionId 后不应再收到 hub.event。"""
+        result = TestResult("WS-012C 真实 subscriptionId 取消后停止事件投递")
 
-        instance_id = self._new_instance_id("m4-ws-unsub-stop")
+        instance_id = self._new_instance_id("ws-unsub-stop")
         app_id = self._new_app_id("unsub-stop")
 
         try:
@@ -1344,9 +1344,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_015_first_authenticate_without_id_should_invalid_request(self):
-        """M4-WS-015: 首条 hub.ws.authenticate 缺失 id 应 invalid_request 并断连。"""
-        result = TestResult("M4-WS-015 首条鉴权缺失id返回 invalid_request")
+    def test_ws_015_first_authenticate_without_id_should_invalid_request(self):
+        """WS-015: 首条 hub.ws.authenticate 缺失 id 应 invalid_request 并断连。"""
+        result = TestResult("WS-015 首条鉴权缺失id返回 invalid_request")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -1376,9 +1376,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request(self):
-        """M4-WS-016: 鉴权前根数组 batch 应返回单一 invalid_request 并断连。"""
-        result = TestResult("M4-WS-016 鉴权前根数组batch返回 invalid_request")
+    def test_ws_016_pre_auth_batch_root_array_should_invalid_request(self):
+        """WS-016: 鉴权前根数组 batch 应返回单一 invalid_request 并断连。"""
+        result = TestResult("WS-016 鉴权前根数组batch返回 invalid_request")
 
         try:
             _, ws_url, _ = self._runtime_hub_info()
@@ -1410,9 +1410,9 @@ class TestWsEvents:
 
         return result
 
-    def test_m4_ws_017_authenticate_invalid_params_should_close_and_block_retry(self):
-        """M4-WS-017: 首条鉴权 invalid_params 后必须断连，不能在同连接重试。"""
-        result = TestResult("M4-WS-017 鉴权 invalid_params 后断连且禁止重试")
+    def test_ws_017_authenticate_invalid_params_should_close_and_block_retry(self):
+        """WS-017: 首条鉴权 invalid_params 后必须断连，不能在同连接重试。"""
+        result = TestResult("WS-017 鉴权 invalid_params 后断连且禁止重试")
 
         try:
             _, ws_url, token = self._runtime_hub_info()
@@ -1455,30 +1455,30 @@ class TestWsEvents:
 
     def run_all_tests(self, full=False):
         results = [
-            self.test_m4_ws_001_first_message_must_authenticate(),
-            self.test_m4_ws_002_pre_auth_notification_should_close_connection(),
-            self.test_m4_ws_003_authenticate_invalid_token_should_close(),
-            self.test_m4_ws_004_authenticate_unsupported_protocol_should_close(),
-            self.test_m4_ws_005_subscribe_unsubscribe_should_work_after_auth(),
-            self.test_m4_ws_006_should_push_registered_delivered_completed_events(),
-            self.test_m4_ws_007_reconnect_after_disconnect_should_receive_events(),
-            self.test_m4_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(),
-            self.test_m4_ws_010_pre_auth_notification_array_params_should_close(),
-            self.test_m4_ws_011_subscribe_unknown_event_type_should_invalid_params(),
-            self.test_m4_ws_012_should_push_unregistered_event(),
-            self.test_m4_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
-            self.test_m4_ws_012c_unsubscribe_existing_id_should_stop_delivery(),
-            self.test_m4_ws_012d_should_push_definition_upserted_event(),
-            self.test_m4_ws_012e_should_push_definition_deleted_event(),
-            self.test_m4_ws_013_pre_auth_invalid_json_should_parse_error(),
-            self.test_m4_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
-            self.test_m4_ws_015_first_authenticate_without_id_should_invalid_request(),
-            self.test_m4_ws_016_pre_auth_batch_root_array_should_invalid_request(),
-            self.test_m4_ws_017_authenticate_invalid_params_should_close_and_block_retry(),
+            self.test_ws_001_first_message_must_authenticate(),
+            self.test_ws_002_pre_auth_notification_should_close_connection(),
+            self.test_ws_003_authenticate_invalid_token_should_close(),
+            self.test_ws_004_authenticate_unsupported_protocol_should_close(),
+            self.test_ws_005_subscribe_unsubscribe_should_work_after_auth(),
+            self.test_ws_006_should_push_registered_delivered_completed_events(),
+            self.test_ws_007_reconnect_after_disconnect_should_receive_events(),
+            self.test_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(),
+            self.test_ws_010_pre_auth_notification_array_params_should_close(),
+            self.test_ws_011_subscribe_unknown_event_type_should_invalid_params(),
+            self.test_ws_012_should_push_unregistered_event(),
+            self.test_ws_012b_unsubscribe_unknown_id_should_be_idempotent(),
+            self.test_ws_012c_unsubscribe_existing_id_should_stop_delivery(),
+            self.test_ws_012d_should_push_definition_upserted_event(),
+            self.test_ws_012e_should_push_definition_deleted_event(),
+            self.test_ws_013_pre_auth_invalid_json_should_parse_error(),
+            self.test_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
+            self.test_ws_015_first_authenticate_without_id_should_invalid_request(),
+            self.test_ws_016_pre_auth_batch_root_array_should_invalid_request(),
+            self.test_ws_017_authenticate_invalid_params_should_close_and_block_retry(),
         ]
 
         if full:
-            results.append(self.test_m4_ws_008_should_push_failed_event())
+            results.append(self.test_ws_008_should_push_failed_event())
 
         return results
 

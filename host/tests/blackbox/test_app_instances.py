@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M1 AppInstance 测试
+DevHub 实例管理测试
 """
 
 import os
@@ -16,6 +16,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
+    sleep_with_long_wait_status,
 )
 
 
@@ -24,17 +25,8 @@ class TestAppInstances(unittest.TestCase):
 
     @staticmethod
     def _wait_with_progress(total_seconds, label):
-        """等待并输出终端进度条。"""
-        # 避免终端长时间无反应，测试人员误以为卡死
-        bar_width = 30
-        for elapsed in range(total_seconds):
-            completed = elapsed + 1
-            ratio = completed / total_seconds
-            filled = int(bar_width * ratio)
-            bar = "=" * filled + "-" * (bar_width - filled)
-            print(f"\r{label} [{bar}] {completed}/{total_seconds}s", end="", flush=True)
-            time.sleep(1)
-        print()
+        """等待并输出统一长等待状态。"""
+        sleep_with_long_wait_status(total_seconds, label)
 
     def generate_unique_instance_id(self):
         """生成唯一的实例 ID"""
@@ -158,7 +150,7 @@ class TestAppInstances(unittest.TestCase):
             register_response = client.call("hub.apps.registerInstance", {
                 "instance": {
                     "instanceId": instance_id,
-                    "appId": "test-app-m1-core",
+                    "appId": "test-app-core",
                     "scope": None,
                     "pid": 12345,
                     "invoke": {"poll": True, "respond": True}
@@ -192,7 +184,7 @@ class TestAppInstances(unittest.TestCase):
         return result
 
     def test_register_unknown_appid_is_allowed(self):
-        """测试未知 appId 允许注册（M1 要求）"""
+        """测试未知 appId 允许注册（符合当前规范）"""
         result = TestResult("测试未知 appId 允许注册")
 
         try:

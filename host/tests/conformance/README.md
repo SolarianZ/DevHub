@@ -3,7 +3,7 @@
 本目录承载 DevHub Spec v1.0.1 协议基线的跨语言符合性向量与运行器。
 
 - 对仓库开发者，它是官方 `.NET` / `JS/TS` / `Python` 适配器的统一回归入口。
-- 对第三方接入方，它也是可公开挂接“自研 adapter”的官方自测入口。
+- 对第三方接入方，它也是挂接自研 adapter 的官方自测入口。
 
 ## 1. 目标
 
@@ -14,7 +14,7 @@ conformance 的目标不是替代单元测试，而是从“第三方消费者�
 - WebSocket events
 - 标准 JSON-RPC 错误与 DevHub 自定义错误
 
-这些向量与 [`docs/spec/Spec.md`](../../../docs/spec/Spec.md) §10.1 / §10.2 对齐，是当前仓库公开发布的最小符合性基线。
+这些向量与 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md) §10.1 / §10.2 对齐，是当前仓库公开发布的最小符合性基线。
 
 ## 2. 目录结构
 
@@ -35,10 +35,10 @@ host/tests/conformance/
 - `v1.0.1/*.json`：签名向量文件
 - `vector_runner.py`：统一运行器
 - `raw_protocol_helper.py`：中立原始协议编排 helper
-- 官方适配器实现位于各 SDK 工作区测试目录：
-- `.NET`：`sdks/dotnet/tests/DevHub.Sdk.ConformanceAdapter/`
-- `JS/TS`：`sdks/javascript/tests/conformance/devhub_conformance_js.mjs`
-- `Python`：`sdks/python/tests/conformance/devhub_conformance_py.py`
+- 官方适配器实现分别位于：
+  - `.NET`：`sdks/dotnet/tests/DevHub.Sdk.ConformanceAdapter/`
+  - `JS/TS`：`sdks/javascript/tests/conformance/devhub_conformance_js.mjs`
+  - `Python`：`sdks/python/tests/conformance/devhub_conformance_py.py`
 
 ## 3. 官方回归模式
 
@@ -226,12 +226,12 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 
 如果你的目标是“无需阅读仓库内 SDK 源码，完成接入与自测”，最小步骤是：
 
-1. 阅读 [`docs/spec/Spec.md`](../../../docs/spec/Spec.md)、[`docs/spec/schema/v1.0.1/README.md`](../../../docs/spec/schema/v1.0.1/README.md) 与 [`docs/spec/protocol-examples/v1.0.1/README.md`](../../../docs/spec/protocol-examples/v1.0.1/README.md)。
+1. 阅读 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md)、[`docs/specification/schema/v1.0.1/README.md`](../../../docs/specification/schema/v1.0.1/README.md) 与 [`docs/specification/protocol-examples/v1.0.1/README.md`](../../../docs/specification/protocol-examples/v1.0.1/README.md)。
 2. 用自己的技术栈实现一个 adapter，读取 `execution-context.json` 并执行对应向量。
 3. 编写 adapter manifest。
 4. 运行 `python host/tests/conformance/vector_runner.py --adapter-manifest <manifest>`，必要时再用 `--case-id CONF-001` 或 `--vector-id ...` 缩小范围。
 
-这样即可在不依赖仓库内 SDK 源码的前提下，直接复用官方向量与 runner 完成自测。
+这样就能在不依赖仓库内 SDK 源码的前提下，直接复用官方向量与 runner 完成自测。
 
 ## 8. 输出解释
 

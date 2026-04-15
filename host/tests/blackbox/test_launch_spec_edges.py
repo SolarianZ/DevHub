@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M2/M3 Launch 规范边界补充测试
+DevHub 启动规范边界补充测试
 """
 
 import os
@@ -27,7 +27,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
     @staticmethod
     def _new_app_id(suffix):
-        return f"m2-launch-edge-{suffix}-{uuid.uuid4().hex[:6]}"
+        return f"launch-edge-{suffix}-{uuid.uuid4().hex[:6]}"
 
     def _launch_script_path(self):
         return get_shared_test_asset_path("launch_noop.py")
@@ -50,8 +50,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         )
 
     def test_launch_edge_001_default_dedupe_template_should_apply(self):
-        """M2-LAUNCH-EDGE-001: 未配置 dedupeKeyTemplate 时使用默认模板。"""
-        result = TestResult("M2-LAUNCH-EDGE-001 默认 dedupe 模板")
+        """LAUNCH-EDGE-001: 未配置 dedupeKeyTemplate 时使用默认模板。"""
+        result = TestResult("LAUNCH-EDGE-001 默认 dedupe 模板")
         definition_path = None
 
         try:
@@ -109,8 +109,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return result
 
     def test_launch_edge_002_explicit_dedupe_key_should_take_effect(self):
-        """M2-LAUNCH-EDGE-002: 显式 dedupeKey 相同时应去重。"""
-        result = TestResult("M2-LAUNCH-EDGE-002 显式 dedupeKey 去重")
+        """LAUNCH-EDGE-002: 显式 dedupeKey 相同时应去重。"""
+        result = TestResult("LAUNCH-EDGE-002 显式 dedupeKey 去重")
         definition_path = None
 
         try:
@@ -161,8 +161,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return result
 
     def test_launch_edge_003_wait_for_register_positive_should_return_started_or_starting(self):
-        """M2-LAUNCH-EDGE-003: waitForRegisterMs>0 时状态需符合 Spec。"""
-        result = TestResult("M2-LAUNCH-EDGE-003 waitForRegisterMs 正值状态")
+        """LAUNCH-EDGE-003: waitForRegisterMs>0 时状态需符合 Spec。"""
+        result = TestResult("LAUNCH-EDGE-003 waitForRegisterMs 正值状态")
         definition_path = None
 
         try:
@@ -206,8 +206,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return result
 
     def test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(self):
-        """M3-SCOPE-LAUNCH-EDGE-004: dedupeKeyTemplate 作用域占位符应隔离。"""
-        result = TestResult("M3-SCOPE-LAUNCH-EDGE-004 dedupe 模板 scope 隔离")
+        """SCOPE-LAUNCH-EDGE-004: dedupeKeyTemplate 作用域占位符应隔离。"""
+        result = TestResult("SCOPE-LAUNCH-EDGE-004 dedupe 模板 scope 隔离")
         definition_path = None
 
         try:

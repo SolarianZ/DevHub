@@ -18,8 +18,10 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private const string SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
     private const string PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_DOTNET_SDK_HOST_ASSEMBLY";
     private const string SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
+    private const string TestLiveStatusEnvironmentVariable = "DEVHUB_TEST_LIVE_STATUS";
     private const string HostAssemblyFileName = "DevHub.Host.dll";
     private const string HostTargetFramework = "net10.0";
+    private const int LongWaitStatusThresholdSeconds = 8;
     private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> SharedHostAssemblyBuilds = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentBag<string> SharedHostBuildRoots = new();
     private static int _cleanupHandlerRegistered;
@@ -29,6 +31,59 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private readonly StringBuilder _stdout = new();
     private readonly StringBuilder _stderr = new();
     private Process? _hostProcess;
+
+    private sealed class LongWaitStatus
+    {
+        private readonly string _label;
+        private readonly int _estimatedSeconds;
+        private readonly bool _liveEnabled;
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private bool _entered;
+        private int _lastRenderedSecond = -1;
+        private int _lastRenderLength;
+
+        public LongWaitStatus(string label, double estimatedSeconds)
+        {
+            _label = label;
+            _estimatedSeconds = Math.Max(0, (int)Math.Ceiling(estimatedSeconds));
+            _liveEnabled = ReadLiveStatusEnabled();
+        }
+
+        public void Tick()
+        {
+            var elapsedSeconds = (int)_stopwatch.Elapsed.TotalSeconds;
+            if (!_entered && elapsedSeconds >= LongWaitStatusThresholdSeconds)
+            {
+                _entered = true;
+                if (!_liveEnabled)
+                {
+                    Console.WriteLine($"[状态] {_label} 开始，预计等待约 {_estimatedSeconds}s");
+                    return;
+                }
+            }
+
+            if (_liveEnabled && _entered && elapsedSeconds != _lastRenderedSecond)
+            {
+                _lastRenderedSecond = elapsedSeconds;
+                var content = $"[状态] {_label} 已等待 {elapsedSeconds}s";
+                var trailingSpaces = new string(' ', Math.Max(0, _lastRenderLength - content.Length));
+                Console.Write($"\r{content}{trailingSpaces}");
+                Console.Out.Flush();
+                _lastRenderLength = Math.Max(_lastRenderLength, content.Length);
+            }
+        }
+
+        public void Finish()
+        {
+            if (!(_liveEnabled && _entered))
+            {
+                return;
+            }
+
+            Tick();
+            Console.WriteLine();
+        }
+    }
 
     private DevHubHostFixture(
         string tempRoot,
@@ -191,19 +246,28 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
         var hubJsonPath = Path.Combine(RuntimeDirectory, "hub.json");
         var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
+        var status = new LongWaitStatus("等待 .NET SDK Host fixture 生成 hub.json", 30);
+        try
         {
-            if (File.Exists(hubJsonPath))
+            while (DateTime.UtcNow < deadline)
             {
-                return;
-            }
+                if (File.Exists(hubJsonPath))
+                {
+                    return;
+                }
 
-            if (_hostProcess.HasExited)
-            {
-                throw new InvalidOperationException($"Host 进程提前退出。stdout={_stdout} stderr={_stderr}");
-            }
+                if (_hostProcess.HasExited)
+                {
+                    throw new InvalidOperationException($"Host 进程提前退出。stdout={_stdout} stderr={_stderr}");
+                }
 
-            await Task.Delay(250);
+                await Task.Delay(250);
+                status.Tick();
+            }
+        }
+        finally
+        {
+            status.Finish();
         }
 
         throw new InvalidOperationException($"等待 hub.json 超时。stdout={_stdout} stderr={_stderr}");
@@ -264,6 +328,29 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
 
         return null;
+    }
+
+    private static bool ReadLiveStatusEnabled()
+    {
+        var rawValue = Environment.GetEnvironmentVariable(TestLiveStatusEnvironmentVariable);
+        if (rawValue is null)
+        {
+            return false;
+        }
+
+        var candidate = rawValue.Trim().ToLowerInvariant();
+        if (candidate is "1" or "true" or "yes" or "on")
+        {
+            return true;
+        }
+
+        if (candidate is "0" or "false" or "no" or "off")
+        {
+            return false;
+        }
+
+        throw new InvalidOperationException(
+            $"{TestLiveStatusEnvironmentVariable} 必须是布尔值（1/0/true/false/yes/no/on/off）。");
     }
 
     internal static string ResolveConfiguredHostAssemblyPath(

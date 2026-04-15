@@ -12,9 +12,74 @@ const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
 const SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
 const SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
+const TestLiveStatusEnvironmentVariable = "DEVHUB_TEST_LIVE_STATUS";
+const LongWaitStatusThresholdSeconds = 8;
 let sharedHostAssemblyPromise: Promise<string> | undefined;
 let sharedHostBuildRoot: string | undefined;
 let sharedHostCleanupRegistered = false;
+
+function readLiveStatusEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
+  const rawValue = environment[TestLiveStatusEnvironmentVariable];
+  if (rawValue === undefined) {
+    return false;
+  }
+
+  const candidate = rawValue.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(candidate)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(candidate)) {
+    return false;
+  }
+
+  throw new Error(
+    `${TestLiveStatusEnvironmentVariable} 必须是布尔值（1/0/true/false/yes/no/on/off）。`
+  );
+}
+
+class LongWaitStatus {
+  private readonly label: string;
+  private readonly estimatedSeconds: number;
+  private readonly liveEnabled: boolean;
+  private readonly startedAt = Date.now();
+  private entered = false;
+  private lastRenderedSecond = -1;
+  private lastRenderLength = 0;
+
+  constructor(label: string, estimatedSeconds: number, environment: NodeJS.ProcessEnv = process.env) {
+    this.label = label;
+    this.estimatedSeconds = Math.max(0, Math.ceil(estimatedSeconds));
+    this.liveEnabled = readLiveStatusEnabled(environment);
+  }
+
+  tick(): void {
+    const elapsedSeconds = Math.floor((Date.now() - this.startedAt) / 1000);
+    if (!this.entered && elapsedSeconds >= LongWaitStatusThresholdSeconds) {
+      this.entered = true;
+      if (!this.liveEnabled) {
+        console.log(`[状态] ${this.label} 开始，预计等待约 ${this.estimatedSeconds}s`);
+        return;
+      }
+    }
+
+    if (this.liveEnabled && this.entered && elapsedSeconds !== this.lastRenderedSecond) {
+      this.lastRenderedSecond = elapsedSeconds;
+      const content = `[状态] ${this.label} 已等待 ${elapsedSeconds}s`;
+      const trailingSpaces = " ".repeat(Math.max(0, this.lastRenderLength - content.length));
+      process.stdout.write(`\r${content}${trailingSpaces}`);
+      this.lastRenderLength = Math.max(this.lastRenderLength, content.length);
+    }
+  }
+
+  finish(): void {
+    if (!(this.liveEnabled && this.entered)) {
+      return;
+    }
+
+    this.tick();
+    process.stdout.write("\n");
+  }
+}
 
 export class DevHubHostFixture {
   readonly repoRoot: string;
@@ -138,19 +203,25 @@ export class DevHubHostFixture {
 
     const hubJsonPath = path.join(this.runtimeDirectory, "hub.json");
     const deadline = Date.now() + 30_000;
+    const status = new LongWaitStatus("等待 JS SDK Host fixture 生成 hub.json", 30, process.env);
 
-    while (Date.now() < deadline) {
-      if (await fileExists(hubJsonPath)) {
-        return;
+    try {
+      while (Date.now() < deadline) {
+        if (await fileExists(hubJsonPath)) {
+          return;
+        }
+
+        if (this.process.exitCode !== null) {
+          throw new Error(
+            `Host 进程提前退出。stdout=${this.stdoutBuffer.join("") || ""} stderr=${this.stderrBuffer.join("") || ""}`
+          );
+        }
+
+        await delay(250);
+        status.tick();
       }
-
-      if (this.process.exitCode !== null) {
-        throw new Error(
-          `Host 进程提前退出。stdout=${this.stdoutBuffer.join("") || ""} stderr=${this.stderrBuffer.join("") || ""}`
-        );
-      }
-
-      await delay(250);
+    } finally {
+      status.finish();
     }
 
     throw new Error("等待 hub.json 超时。");

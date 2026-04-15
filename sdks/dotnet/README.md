@@ -1,8 +1,12 @@
 # DevHub .NET SDK
 
-**当前分支专为Unity项目调整了 .NET SDK 。若要使用通用 .NET SDK ，请查看 [main分支](https://github.com/SolarianZ/DevHub/tree/main) 。**
+本目录用于维护独立于主工程的 DevHub .NET SDK 工作区，并保持 Unity 2019.4 可消费的发布基线。
 
-当前目录用于维护独立于主工程的 DevHub .NET SDK 工作区。
+## 接入导航
+
+- [`../../docs/user/sdk/dotnet.md`](../../docs/user/sdk/dotnet.md)：面向外部调用方的 `.NET SDK` 接入指南。
+- [`../../docs/user/host/quickstart.md`](../../docs/user/host/quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/user/protocol/README.md`](../../docs/user/protocol/README.md)：不依赖官方 SDK 的原始协议路径。
 
 - 解决方案：`DevHub.DotNetSdk.slnx`
 - 核心 SDK 项目：`src/DevHub.Sdk/`
@@ -11,9 +15,9 @@
 - 集成测试项目：`tests/DevHub.Sdk.IntegrationTests/`
 - conformance 适配器项目：`tests/DevHub.Sdk.ConformanceAdapter/`
 
-## 当前能力范围
+## 能力范围
 
-当前 `.NET SDK` 已覆盖 `docs/spec/Spec.md` 中当前已实现的公开协议能力：
+当前 `.NET SDK` 已覆盖 `docs/specification/protocol/Specification.md` 中当前已实现的公开协议能力：
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`
 - HTTP JSON-RPC：`hub.ping`、`hub.apps.*`、`hub.invoke.*`
@@ -34,7 +38,7 @@
 仓库级 `host/tests/conformance` 与跨语言 CI 门禁属于仓库整体测试与工程规划，不属于 `.NET SDK` 的公开 API 范围。
 工作区中的 `tests/DevHub.Sdk.ConformanceAdapter/` 仅用于对接仓库级 conformance runner，不构成面向消费方的公开 API。
 
-## 安装方式
+## 仓库内使用方式
 
 按消费方式选择引用边界：
 
@@ -73,6 +77,13 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DotNet.DependencyInjection` 会直接依赖 `DevHub.Sdk.DotNet`。
 
+### 正式发布占位
+
+```xml
+<!-- TODO(devhub-release): 正式发布资产可用后，用该资产中的 SDK 版本替换 TODO-FIRST-RELEASE-VERSION。当前不要填写未生成的版本号。 -->
+<PackageReference Include="DevHub.Sdk.DotNet" Version="TODO-FIRST-RELEASE-VERSION" />
+```
+
 ### Unity 本地发布
 
 ```powershell
@@ -93,12 +104,12 @@ python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-fo
 
 ## Unity 2019.4 适配说明
 
-当前分支发布的 `DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 均仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线。
+当前交付的 `DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 均仅包含 `netstandard2.0` 目标资产，用于匹配 Unity 2019.4 可稳定消费的程序集基线。
 
 SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 
 - `PingResult.Echo`、`RequestResult.Value`、`Invocation.Args`、`DevHubEvent.Payload`、`DevHubRpcException.ErrorData` 等公开载荷现在使用 `JToken` / `JObject`
-- 旧版基于 `System.Text.Json` 的 `JsonElement`、`JsonDocument`、`GetRawText()` 与对应特性不再属于当前 Unity 分支的公开契约
+- 旧版基于 `System.Text.Json` 的 `JsonElement`、`JsonDocument`、`GetRawText()` 与对应特性不再属于当前公开契约
 - 若消费端需要读取载荷字段，推荐使用 `JObject` / `JToken` 的属性访问与 `Value<T>()` 系列 API
 
 ## SDK 包依赖边界
@@ -528,4 +539,4 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - `DevHub.Sdk.DotNet.DependencyInjection` 单独承载 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
 - SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不进入 NuGet 发布产物
 - Unity 本地 publish 脚本只后处理 `DevHub.Sdk.dll`，不改 `dotnet pack` 生成的 NuGet 主包依赖元数据
-- `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前分支按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准
+- `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前仓库按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准

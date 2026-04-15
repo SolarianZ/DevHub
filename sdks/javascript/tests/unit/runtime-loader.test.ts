@@ -7,7 +7,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("M6_TS_UT_006 显式 runtimeResolver 不应触发默认 runtime 模块加载", async () => {
+it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () => {
   let runtimeModuleLoaded = false;
   vi.doMock("../../src/runtime.js", () => {
     runtimeModuleLoaded = true;
@@ -68,7 +68,7 @@ it("M6_TS_UT_006 显式 runtimeResolver 不应触发默认 runtime 模块加载"
   await eventsClient.dispose();
 });
 
-it("M6_TS_UT_006 默认 runtime 模块应在两个入口之间共享缓存", async () => {
+it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
   let constructorCount = 0;
   const resolve = vi.fn(async () => createConnectionInfo());
 

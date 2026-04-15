@@ -7,7 +7,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("M6_TS_UT_006 全局 WebSocket 应优先处理文本帧且不加载 ws", async () => {
+it("全局 WebSocket 应优先处理文本帧且不加载 ws", async () => {
   vi.doMock("ws", () => {
     throw new Error("ws 模块不应在存在全局 WebSocket 时被加载。");
   });

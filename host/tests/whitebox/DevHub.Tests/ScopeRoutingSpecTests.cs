@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// M3 scope 与路由矩阵规范白盒测试。
+/// scope 与路由矩阵规范白盒测试。
 /// </summary>
 [Trait("Category", "Spec")]
 public class ScopeRoutingSpecTests : IDisposable

@@ -468,7 +468,7 @@ public class InvocationScopeRoutingTests : IDisposable
                 };
             }
 
-            var noQueueAppId = $"m3-scope-010-noqueue-{scopeTag}";
+            var noQueueAppId = $"scope-010-noqueue-{scopeTag}";
             WriteDefinition(noQueueAppId, rpcEnabled: true);
             definitionProvider.Refresh();
 
@@ -488,7 +488,7 @@ public class InvocationScopeRoutingTests : IDisposable
             var noQueueData = JsonSerializer.SerializeToElement(noQueueResponse.Error.Data);
             Assert.Equal("offline_no_queue", noQueueData.GetProperty("reason").GetString());
 
-            var pendingAppId = $"m3-scope-010-pending-{scopeTag}";
+            var pendingAppId = $"scope-010-pending-{scopeTag}";
             WriteDefinition(pendingAppId, rpcEnabled: true);
             definitionProvider.Refresh();
 
@@ -509,7 +509,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
             var matchingInstance = appRegistry.RegisterInstance(new AppInstance
             {
-                InstanceId = $"m3-scope-010-pending-inst-{scopeName}",
+                InstanceId = $"scope-010-pending-inst-{scopeName}",
                 AppId = pendingAppId,
                 Scope = targetScope,
                 Pid = 6021,
@@ -519,7 +519,7 @@ public class InvocationScopeRoutingTests : IDisposable
             var pendingPoll = await store.PollAsync(matchingInstance, maxCount: 10, waitMs: 0, CancellationToken.None);
             Assert.Contains(pendingPoll, item => item.InvocationId == pendingInvocationId);
 
-            var autoLaunchAppId = $"m3-scope-010-autolaunch-{scopeTag}";
+            var autoLaunchAppId = $"scope-010-autolaunch-{scopeTag}";
             WriteDefinition(
                 autoLaunchAppId,
                 rpcEnabled: true,
@@ -545,7 +545,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
             var autoLaunchReceiver = appRegistry.RegisterInstance(new AppInstance
             {
-                InstanceId = $"m3-scope-010-autolaunch-inst-{scopeName}",
+                InstanceId = $"scope-010-autolaunch-inst-{scopeName}",
                 AppId = autoLaunchAppId,
                 Scope = targetScope,
                 Pid = 6022,
@@ -574,7 +574,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Equal(expectedLaunchArguments, launchArguments);
             processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
 
-            var noDefinitionAppId = $"m3-scope-010-nodef-{scopeTag}";
+            var noDefinitionAppId = $"scope-010-nodef-{scopeTag}";
             var noDefinitionResponse = await invocationHandler.HandleAsync(
                 BuildNotifyRequest(
                     id: $"scope010-{scopeTag}-nodef",

@@ -5,28 +5,36 @@ DevHub 仓库级黑盒测试基础类和工具函数
 
 import os
 import json
+import math
 import platform
 import shlex
 import subprocess
 import sys
+import threading
+import time
 import requests
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
 
 
 TEST_HUB_COMMAND_ENV_VAR = "DEVHUB_TEST_HUB_COMMAND"
 TEST_HUB_CWD_ENV_VAR = "DEVHUB_TEST_HUB_CWD"
 TEST_HUB_ENV_JSON_ENV_VAR = "DEVHUB_TEST_HUB_ENV_JSON"
 TEST_BUILD_HOST_ENV_VAR = "DEVHUB_TEST_BUILD_HOST"
+TEST_LIVE_STATUS_ENV_VAR = "DEVHUB_TEST_LIVE_STATUS"
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
 _UNSET = object()
+PENDING_WAIT_STATUS = object()
 DEFAULT_INSTANCE_PASSWORD = "test-instance-password"
 _DEFAULT_TEST_HOST_BUILD_COMPLETED = False
+LONG_WAIT_STATUS_THRESHOLD_SECONDS = 8
+_LONG_WAIT_STATUS_RENDER_INTERVAL_SECONDS = 1.0
+_WaitStatusResult = TypeVar("_WaitStatusResult")
 
 
 @contextmanager
@@ -195,6 +203,233 @@ def _read_boolean_env(name: str, default: bool) -> bool:
         return False
 
     raise ValueError(f"{name} 必须是布尔值（true/false/1/0）")
+
+
+def read_strict_boolean_env(name: str, default: bool) -> bool:
+    """读取严格布尔环境变量，仅接受统一约定的布尔字面值。"""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    candidate = raw_value.strip().lower()
+    if candidate in ("1", "true", "yes", "on"):
+        return True
+    if candidate in ("0", "false", "no", "off"):
+        return False
+
+    raise ValueError(f"{name} 必须是布尔值（1/0/true/false/yes/no/on/off）")
+
+
+def is_live_status_enabled() -> bool:
+    """判断是否启用测试长等待 live 状态输出。"""
+    return read_strict_boolean_env(TEST_LIVE_STATUS_ENV_VAR, default=False)
+
+
+def _default_status_emitter(message: str) -> None:
+    """默认状态输出。"""
+    print(message, flush=True)
+
+
+def _format_estimated_wait_seconds(wait_seconds: float) -> int:
+    """将等待时长格式化为人类可读的秒数。"""
+    return max(0, int(math.ceil(wait_seconds)))
+
+
+class LongWaitStatus:
+    """统一管理测试长等待状态输出。"""
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        estimated_seconds: Optional[float] = None,
+        threshold_seconds: float = LONG_WAIT_STATUS_THRESHOLD_SECONDS,
+        emit_plain: Optional[Callable[[str], None]] = None,
+        stream=None,
+        enter_immediately: bool = False,
+        plain_message_factory: Optional[Callable[[], str]] = None,
+        live_message_factory: Optional[Callable[[int], str]] = None,
+        live_interval_seconds: float = _LONG_WAIT_STATUS_RENDER_INTERVAL_SECONDS,
+    ) -> None:
+        self._label = label
+        self._estimated_seconds = estimated_seconds
+        self._threshold_seconds = threshold_seconds
+        self._emit_plain = emit_plain or _default_status_emitter
+        self._stream = stream or sys.stdout
+        self._enter_immediately = enter_immediately
+        self._plain_message_factory = plain_message_factory or self._build_default_plain_message
+        self._live_message_factory = live_message_factory or self._build_default_live_message
+        self._live_interval_seconds = live_interval_seconds
+        self._live_enabled = is_live_status_enabled()
+        self._started_monotonic = 0.0
+        self._entered = False
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._last_render_length = 0
+
+    def start(self) -> None:
+        """启动状态跟踪。"""
+        if self._started_monotonic > 0:
+            return
+
+        self._started_monotonic = time.monotonic()
+        if self._enter_immediately:
+            self._enter()
+
+    def maybe_enter(self) -> None:
+        """在实际等待跨过阈值后进入状态输出。"""
+        if self._started_monotonic == 0:
+            self.start()
+
+        if self._entered:
+            return
+
+        if time.monotonic() - self._started_monotonic >= self._threshold_seconds:
+            self._enter()
+
+    def finish(self) -> None:
+        """结束状态输出。"""
+        if not self._entered:
+            return
+
+        if self._live_enabled:
+            self._stop_event.set()
+            if self._thread is not None:
+                self._thread.join(timeout=1.0)
+                self._thread = None
+
+            self._render_now()
+            self._stream.write("\n")
+            self._stream.flush()
+            self._last_render_length = 0
+
+    def _enter(self) -> None:
+        if self._entered:
+            return
+
+        self._entered = True
+        if not self._live_enabled:
+            self._emit_plain(self._plain_message_factory())
+            return
+
+        self._stop_event.clear()
+        self._render_now()
+        self._thread = threading.Thread(target=self._render_loop, name="devhub-test-live-status", daemon=True)
+        self._thread.start()
+
+    def _build_default_plain_message(self) -> str:
+        if self._estimated_seconds is None:
+            return f"[状态] {self._label} 开始"
+
+        return f"[状态] {self._label} 开始，预计等待约 {_format_estimated_wait_seconds(self._estimated_seconds)}s"
+
+    def _build_default_live_message(self, elapsed_seconds: int) -> str:
+        return f"[状态] {self._label} 已等待 {elapsed_seconds}s"
+
+    def _render_loop(self) -> None:
+        while not self._stop_event.wait(self._live_interval_seconds):
+            self._render_now()
+
+    def _render_now(self) -> None:
+        elapsed_seconds = int(max(0, time.monotonic() - self._started_monotonic))
+        content = self._live_message_factory(elapsed_seconds)
+        trailing_spaces = " " * max(0, self._last_render_length - len(content))
+        self._stream.write(f"\r{content}{trailing_spaces}")
+        self._stream.flush()
+        self._last_render_length = max(self._last_render_length, len(content))
+
+
+def sleep_with_long_wait_status(
+    total_seconds: float,
+    label: str,
+    *,
+    emit_plain: Optional[Callable[[str], None]] = None,
+    stream=None,
+) -> None:
+    """按秒 sleep，并在长等待时输出统一状态。"""
+    wait_seconds = max(0.0, float(total_seconds))
+    status = LongWaitStatus(
+        label,
+        estimated_seconds=wait_seconds,
+        emit_plain=emit_plain,
+        stream=stream,
+        enter_immediately=wait_seconds >= LONG_WAIT_STATUS_THRESHOLD_SECONDS,
+    )
+    status.start()
+
+    try:
+        remaining = wait_seconds
+        while remaining > 0:
+            sleep_seconds = min(1.0, remaining)
+            time.sleep(sleep_seconds)
+            status.maybe_enter()
+            remaining -= sleep_seconds
+    finally:
+        status.finish()
+
+
+def call_with_long_wait_status(
+    label: str,
+    estimated_seconds: float,
+    operation: Callable[[], _WaitStatusResult],
+    *,
+    emit_plain: Optional[Callable[[str], None]] = None,
+    stream=None,
+) -> _WaitStatusResult:
+    """包装单次长等待调用。"""
+    wait_seconds = max(0.0, float(estimated_seconds))
+    status = LongWaitStatus(
+        label,
+        estimated_seconds=wait_seconds,
+        emit_plain=emit_plain,
+        stream=stream,
+        enter_immediately=wait_seconds >= LONG_WAIT_STATUS_THRESHOLD_SECONDS,
+    )
+    status.start()
+
+    try:
+        return operation()
+    finally:
+        status.finish()
+
+
+def poll_until_deadline_with_long_wait_status(
+    label: str,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+    poll_once: Callable[[], _WaitStatusResult | object],
+    on_timeout: Callable[[], _WaitStatusResult],
+    *,
+    emit_plain: Optional[Callable[[str], None]] = None,
+    stream=None,
+) -> _WaitStatusResult:
+    """轮询直到成功或超时，并在实际跨过长等待阈值后输出统一状态。"""
+    total_seconds = max(0.0, float(timeout_seconds))
+    interval_seconds = max(0.01, float(poll_interval_seconds))
+    status = LongWaitStatus(
+        label,
+        estimated_seconds=total_seconds,
+        emit_plain=emit_plain,
+        stream=stream,
+        enter_immediately=False,
+    )
+    deadline = time.monotonic() + total_seconds
+    status.start()
+
+    try:
+        while True:
+            outcome = poll_once()
+            if outcome is not PENDING_WAIT_STATUS:
+                return outcome
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return on_timeout()
+
+            time.sleep(min(interval_seconds, remaining))
+            status.maybe_enter()
+    finally:
+        status.finish()
 
 
 def should_build_default_test_host() -> bool:

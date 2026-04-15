@@ -27,7 +27,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_001_RuntimeDiscovery_WithValidHubJson_ShouldReadTokenFile()
+    public async Task RuntimeDiscovery_WithValidHubJson_ShouldReadTokenFile()
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -67,7 +67,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     [Theory]
     [InlineData("null")]
     [InlineData("123")]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenHubVersionIsNotString_ShouldThrowInvalidOperationException(string hubVersionLiteral)
+    public async Task RuntimeDiscovery_WhenHubVersionIsNotString_ShouldThrowInvalidOperationException(string hubVersionLiteral)
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -105,7 +105,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     [InlineData("wsUrl")]
     [InlineData("tokenFile")]
     [InlineData("startedAtUtc")]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenHubJsonMissingRequiredField_ShouldThrowInvalidOperationException(string missingProperty)
+    public async Task RuntimeDiscovery_WhenHubJsonMissingRequiredField_ShouldThrowInvalidOperationException(string missingProperty)
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -141,7 +141,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     [Theory]
     [InlineData(2, 30)]
     [InlineData(1, 0)]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenProtocolVersionOrRuntimeTuningInvalid_ShouldThrowInvalidOperationException(int protocolVersion, int leaseSeconds)
+    public async Task RuntimeDiscovery_WhenProtocolVersionOrRuntimeTuningInvalid_ShouldThrowInvalidOperationException(int protocolVersion, int leaseSeconds)
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -175,7 +175,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     [InlineData("http://devhub.example.com:47231", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
     [InlineData("http://127.0.0.1:47231", "ws://127.0.0.1:47231/ws/", "wsUrl")]
     [InlineData("http://127.0.0.1:47231", "wss://devhub.example.com/ws", "wsUrl")]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenEndpointViolatesSpec_ShouldThrowInvalidOperationException(
+    public async Task RuntimeDiscovery_WhenEndpointViolatesSpec_ShouldThrowInvalidOperationException(
         string httpBaseUrl,
         string wsUrl,
         string invalidProperty)
@@ -210,7 +210,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenTokenFileIsNotAbsolutePath_ShouldThrowInvalidOperationException()
+    public async Task RuntimeDiscovery_WhenTokenFileIsNotAbsolutePath_ShouldThrowInvalidOperationException()
     {
         var dataDir = CreateDataDirectory();
         await WriteHubJsonAsync(dataDir, new HubRuntime
@@ -239,7 +239,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenTokenFileIsBlank_ShouldThrowInvalidOperationException()
+    public async Task RuntimeDiscovery_WhenTokenFileIsBlank_ShouldThrowInvalidOperationException()
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -271,7 +271,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_001_RuntimeDiscovery_WhenEnvironmentOverrideProvided_ShouldUseEnvironmentDataDir()
+    public async Task RuntimeDiscovery_WhenEnvironmentOverrideProvided_ShouldUseEnvironmentDataDir()
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -304,7 +304,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_001_RuntimeDiscovery_WhenExplicitDataDirProvided_ShouldOverrideEnvironmentVariable()
+    public async Task RuntimeDiscovery_WhenExplicitDataDirProvided_ShouldOverrideEnvironmentVariable()
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -339,7 +339,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task M5_DN_UT_002_RuntimeDiscovery_WhenRuntimeDirectoryPassedAsDataDir_ShouldThrowMigrationException()
+    public async Task RuntimeDiscovery_WhenRuntimeDirectoryPassedAsDataDir_ShouldThrowMigrationException()
     {
         var dataDir = CreateDataDirectory();
         var runtimeDir = GetRuntimeDirectory(dataDir);
@@ -371,7 +371,7 @@ public sealed class RuntimeDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public void M5_DN_UT_001_RuntimeDiscovery_WhenNoOverrideProvided_ShouldResolvePlatformDefaultDataDir()
+    public void RuntimeDiscovery_WhenNoOverrideProvided_ShouldResolvePlatformDefaultDataDir()
     {
         using var scope = CreateEnvironmentScope();
 

@@ -1,61 +1,61 @@
 # DevHub 开发指导文档
 
-本仓库包含 DevHub 协议规范、核心实现及测试套件。`docs/spec/Spec.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/spec/Spec.md` 迁就实现。
+本仓库包含 DevHub 协议规范、核心实现及测试套件。`docs/specification/protocol/Specification.md` 是唯一权威标准：所有公开行为、字段命名、状态转换、错误语义、序列化契约、测试断言与评审结论都必须与其一致；禁止通过修改 `docs/specification/protocol/Specification.md` 迁就实现。
 
 ## 项目结构
 
 ```text
 DevHub/
-├── docs/                                        # 协议规范、架构、指南与运维文档
-│   ├── README.md                                # 文档导航与分类规则
-│   ├── spec/                                    # 权威规范与版本化协议资产
-│   │   ├── Spec.md                              # 权威技术规范（Single Source of Truth）
-│   │   ├── schema/                              # 版本化 Schema 资产
-│   │   └── protocol-examples/                   # 版本化原始协议示例
-│   ├── architecture/                            # 架构演进与专题评估
-│   ├── milestones/                              # 当前阶段任务文档
-│   ├── guides/                                  # 开发与接入指南
-│   ├── operations/                              # 部署与排障文档
-│   └── assets/                                  # 文档静态资源
-├── host/                                        # Host相关代码
-│   ├── DevHub.slnx                              # Host 工作区解决方案文件
-│   ├── src/                                     # Host生产代码（.NET）
-│   │   ├── DevHub.Core/                         # 核心领域模型与基础服务
-│   │   └── DevHub.Host/                         # 基于 ASP.NET Core 的宿主程序
-│   └── tests/                                   # Host测试与验证资产
-│       ├── whitebox/                            # .NET 白盒测试工程
-│       │   ├── DevHub.Tests/                    # Core / 领域规则测试
-│       │   └── DevHub.Host.Tests/               # Host 级白盒测试
-│       ├── README.md                            # 测试分层与执行说明
-│       ├── blackbox/                            # Python 黑盒测试与 runner
-│       ├── conformance/                         # 符合性向量、runner 与自测
-│       └── tools/                               # 覆盖率配置与辅助脚本
-├── sdks/                                        # 多语言 SDK、示例代码与相关开发资源
-│   ├── dotnet/                                  # .NET SDK 工作区
-│   │   ├── src/                                 # .NET SDK 源码
-│   │   │   ├── DevHub.Sdk/                      # .NET SDK 核心库
-│   │   │   └── DevHub.Sdk.DependencyInjection/  # .NET SDK 可选 DI companion package
-│   │   ├── tests/                               # .NET SDK 测试项目
-│   │   │   ├── DevHub.Sdk.UnitTests/            # .NET SDK 单元测试
-│   │   │   ├── DevHub.Sdk.IntegrationTests/     # .NET SDK 集成测试
-│   │   │   └── DevHub.Sdk.ConformanceAdapter/   # .NET SDK conformance 适配器
-│   │   ├── DevHub.DotNetSdk.slnx                # .NET SDK 解决方案文件
-│   │   ├── Directory.Build.props                # .NET SDK 工作区公共构建配置
-│   │   ├── Directory.Packages.props             # .NET SDK 工作区统一依赖版本管理
-│   │   └── README.md                            # .NET SDK 使用与开发说明
-│   ├── javascript/                              # JavaScript / TypeScript SDK 工作区
-│   │   ├── src/                                 # JS/TS SDK 源码
-│   │   ├── tests/                               # JS/TS SDK 单元测试与集成测试
-│   │   ├── package.json                         # JS/TS SDK 包定义
-│   │   └── README.md                            # JS/TS SDK 使用与开发说明
-│   └── python/                                  # Python SDK 工作区
-│       ├── src/                                 # Python SDK 源码
-│       │   └── devhub_sdk/                      # Python SDK 核心包
-│       ├── tests/                               # Python SDK 单元测试与集成测试
-│       ├── pyproject.toml                       # Python SDK 构建配置
-│       └── README.md                            # Python SDK 使用与开发说明
-├── temp/                                        # 生成的测试报告与临时产物
-└── LICENSE                                      # 许可证文件
+├── docs/                                     # 文档系统
+│   ├── README.md                             # 文档导航与分类规则
+│   ├── user/                                 # 面向使用者与集成方的文档
+│   ├── developer/                            # 面向开发与维护的文档
+│   ├── specification/                        # 权威规范与版本化协议资产
+│   │   ├── protocol/                         # 协议规范正文
+│   │   ├── schema/                           # 版本化 Schema 资产
+│   │   └── protocol-examples/                # 版本化原始协议示例
+│   └── assets/                               # 文档静态资源
+├── host/                                     # Host相关代码
+│   ├── DevHub.slnx                           # Host 工作区解决方案文件
+│   ├── src/                                  # Host生产代码（.NET）
+│   │   ├── DevHub.Core/                      # 核心领域模型与基础服务
+│   │   └── DevHub.Host/                      # 基于 ASP.NET Core 的宿主程序
+│   └── tests/                                # Host测试与验证资产
+│       ├── whitebox/                         # .NET 白盒测试工程
+│       │   ├── DevHub.Tests/                 # Core / 领域规则测试
+│       │   └── DevHub.Host.Tests/            # Host 级白盒测试
+│       ├── README.md                         # 测试分层与执行说明
+│       ├── blackbox/                         # Python 黑盒测试与 runner
+│       ├── conformance/                      # 符合性向量、runner 与自测
+│       └── tools/                            # 覆盖率配置与辅助脚本
+├── sdks/                                     # 多语言 SDK、示例代码与相关开发资源
+│   ├── dotnet/                               # .NET SDK 工作区
+│   │   ├── src/                              # .NET SDK 源码
+│   │   │   ├── DevHub.Sdk/                   # .NET SDK 核心库
+│   │   │   └── DevHub.Sdk.DependencyInjection/ # .NET SDK 可选 DI companion package
+│   │   ├── tests/                            # .NET SDK 测试项目
+│   │   │   ├── DevHub.Sdk.UnitTests/         # .NET SDK 单元测试
+│   │   │   ├── DevHub.Sdk.IntegrationTests/  # .NET SDK 集成测试
+│   │   │   └── DevHub.Sdk.ConformanceAdapter/ # .NET SDK conformance 适配器
+│   │   ├── tools/                            # .NET SDK 工具与发布辅助
+│   │   │   └── DevHub.Sdk.UnityPublish/      # Unity 本地发布工具
+│   │   ├── DevHub.DotNetSdk.slnx             # .NET SDK 解决方案文件
+│   │   ├── Directory.Build.props             # .NET SDK 工作区公共构建配置
+│   │   ├── Directory.Packages.props          # .NET SDK 工作区统一依赖版本管理
+│   │   └── README.md                         # .NET SDK 使用与开发说明
+│   ├── javascript/                           # JavaScript / TypeScript SDK 工作区
+│   │   ├── src/                              # JS/TS SDK 源码
+│   │   ├── tests/                            # JS/TS SDK 单元测试与集成测试
+│   │   ├── package.json                      # JS/TS SDK 包定义
+│   │   └── README.md                         # JS/TS SDK 使用与开发说明
+│   └── python/                               # Python SDK 工作区
+│       ├── src/                              # Python SDK 源码
+│       │   └── devhub_sdk/                   # Python SDK 核心包
+│       ├── tests/                            # Python SDK 单元测试与集成测试
+│       ├── pyproject.toml                    # Python SDK 构建配置
+│       └── README.md                         # Python SDK 使用与开发说明
+├── temp/                                     # 生成的测试报告与临时产物
+└── LICENSE                                   # 许可证文件
 ```
 
 ## 运行时数据规约
@@ -114,7 +114,7 @@ DevHub/
 ### 测试规范
 
 - 遵循测试金字塔，以单元测试为主体，以集成测试验证完整公开契约。
-- 测试必须以 `docs/spec/Spec.md`、核心业务路径、改动范围、历史缺陷和高风险分支为依据；严禁依据当前实现反推用例。
+- 测试必须以 `docs/specification/protocol/Specification.md`、核心业务路径、改动范围、历史缺陷和高风险分支为依据；严禁依据当前实现反推用例。
 - 断言应优先验证外部可观察结果，包括返回值、状态变化、输出契约、异常语义与协作边界。
 - 除明确白盒场景外，不得复制实现逻辑或依赖私有调用顺序。
 
@@ -153,14 +153,13 @@ DevHub/
 
 - 提交信息应保持简短、祈使式，并沿用现有前缀风格，如 `fix:`、`test:`、`ci:`。
 - 每次提交只处理一个明确关注点，避免将协议变更、重构、测试补充和杂项修复混在一起。
-- PR 说明应明确关联的里程碑或 `Spec.md` 章节，并列出已执行的验证命令。
+- PR 说明应明确关联的 `Specification.md` 章节或本次变更涉及的能力范围，并列出已执行的验证命令。
 - 若改动涉及运行时路径、鉴权令牌、协议契约、序列化字段或公开接口行为，必须在评审说明中明确指出。
 - 仅在确有必要时附带日志、请求样例、响应样例或截图，用于说明行为变化。
-- 必须根据当前 Git 分支名称判断所属里程碑，仅在该里程碑定义的范围内开发与评审。
-- 新增或修改功能后，应在最后阶段统一更新开发进度等相关文档。
+- 新增或修改功能后，应在任务收尾时统一更新相关文档，并确保文档内容与项目当前状态一致。
 - 修改文件后，只在明确收到commit指令时才自动提交Git，否则不做任何Git操作。
 
 ## 参考资料
 
-- [协议规范 (`docs/spec/Spec.md`)](docs/spec/Spec.md)
-- [架构与开发规划 (`docs/architecture/DevHub协议与开发规划.md`)](docs/architecture/DevHub协议与开发规划.md)
+- [协议规范 (`docs/specification/protocol/Specification.md`)](docs/specification/protocol/Specification.md)
+- [系统架构总览 (`docs/developer/architecture/system-overview.md`)](docs/developer/architecture/system-overview.md)

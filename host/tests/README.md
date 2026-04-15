@@ -1,7 +1,7 @@
 # DevHub 仓库级测试说明
 
-- 仓库级测试以 `docs/spec/Spec.md` 为最高优先级规范。
-- 这部分资产只覆盖当前分支所属里程碑，不应提前绑定未来里程碑行为。
+- 仓库级测试以 `docs/specification/protocol/Specification.md` 为最高优先级规范。
+- 这部分资产覆盖仓库当前公开的契约与验证入口，不预先固化尚未落地的额外能力。
 
 ## 目录分层
 
@@ -38,7 +38,7 @@ host/tests/
 - `blackbox/` 只承载面向公开行为的仓库级黑盒测试；具体用例不应再依赖 `host/tests/` 顶层旧布局。
 - `conformance/` 负责跨语言协议符合性，不替代白盒测试或黑盒业务回归。
 - 官方 conformance 适配器按语言归属放在各自 SDK 的 `tests/` 目录下，`host/tests/conformance` 只保留仓库级向量、runner 与自测。
-- `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免继续与 `host/src/` 生产工程混放。
+- `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免与 `host/src/` 生产工程混放。
 - `tools/` 只放验证入口和辅助脚本，不混入黑盒或 conformance 用例。
 
 ## 前置要求
@@ -75,6 +75,14 @@ host/tests/
 - `--isolated-hub-env-json` / `DEVHUB_TEST_HUB_ENV_JSON`：额外环境变量覆盖，值为 JSON 对象。
 
 说明：Windows 上若临时目录同时出现 8.3 短路径与长路径表示，启动与发现夹具会按“同一文件位置”而非字符串字面值进行比较，避免 `DEVHUB_DATA_DIR` 用例出现误报。
+
+#### 长等待状态输出
+
+仓库级黑盒测试、隔离 Host 启动等待与 conformance 启动等待统一使用环境变量 `DEVHUB_TEST_LIVE_STATUS` 控制长等待状态输出：
+
+- 默认不设置，或显式设置为 `0` / `false` / `no` / `off` 时，只有在等待预计或实际超过 8 秒时才输出 1 行普通状态日志。
+- 显式设置为 `1` / `true` / `yes` / `on` 时，长等待阶段会按 1 秒节奏原地刷新状态，并在等待结束时补 1 个换行。
+- 其他取值会直接报错，避免误把非法值静默当成启用或禁用。
 
 #### Default
 
@@ -137,7 +145,7 @@ python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bran
 
 补充说明：
 
-- Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/spec/Spec.md`](../../docs/spec/Spec.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
+- Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/specification/protocol/Specification.md`](../../docs/specification/protocol/Specification.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
 - `find host -type d -name TestResults -prune -exec rm -rf {} +` 与 GitHub CI 保持一致，用于清理历史 `TestResults`，避免旧的 coverage 报告混入当前校验。
 - 启用 `trx` logger 时，Coverlet 会同时生成 `TestResults/_*/In/**/coverage.cobertura.xml` 附件副本和 GUID 目录下的镜像副本。
 - `host/tests/tools/verify_coverage.py` 会优先使用 `trx` 附件副本参与阈值计算，并忽略同一测试工程下内容完全相同的 GUID 镜像副本；这样既保留 `trx`/诊断附件所需文件，又避免重复报告干扰 coverage 口径。

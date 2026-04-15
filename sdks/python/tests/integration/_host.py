@@ -8,6 +8,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import sys
 from collections import deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,10 +22,66 @@ PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_PYTHON_SDK_HOST_ASSEMBLY"
 SHARED_PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_SDK_HOST_ASSEMBLY"
 HOST_BUILD_CONFIGURATION = "Release"
 HOST_TARGET_FRAMEWORK = "net10.0"
+TEST_LIVE_STATUS_ENV_VAR = "DEVHUB_TEST_LIVE_STATUS"
+LONG_WAIT_STATUS_THRESHOLD_SECONDS = 8
 
 _shared_host_assembly_path: Path | None = None
 _shared_host_build_root: Path | None = None
 _shared_host_assembly_lock = Lock()
+
+
+def _read_live_status_enabled() -> bool:
+    raw_value = os.environ.get(TEST_LIVE_STATUS_ENV_VAR)
+    if raw_value is None:
+        return False
+
+    candidate = raw_value.strip().lower()
+    if candidate in ("1", "true", "yes", "on"):
+        return True
+    if candidate in ("0", "false", "no", "off"):
+        return False
+
+    raise RuntimeError(f"{TEST_LIVE_STATUS_ENV_VAR} 必须是布尔值（1/0/true/false/yes/no/on/off）")
+
+
+class _LongWaitStatus:
+    """统一管理 Python SDK 集成测试中的长等待状态输出。"""
+
+    def __init__(self, label: str, estimated_seconds: float) -> None:
+        self._label = label
+        self._estimated_seconds = max(0, int(estimated_seconds + 0.999))
+        self._live_enabled = _read_live_status_enabled()
+        self._started_at = time.monotonic()
+        self._entered = False
+        self._last_rendered_second = -1
+        self._last_render_length = 0
+
+    def tick(self) -> None:
+        elapsed_seconds = int(time.monotonic() - self._started_at)
+        if not self._entered and elapsed_seconds >= LONG_WAIT_STATUS_THRESHOLD_SECONDS:
+            self._entered = True
+            if not self._live_enabled:
+                print(
+                    f"[状态] {self._label} 开始，预计等待约 {self._estimated_seconds}s",
+                    flush=True,
+                )
+                return
+
+        if self._live_enabled and self._entered and elapsed_seconds != self._last_rendered_second:
+            self._last_rendered_second = elapsed_seconds
+            content = f"[状态] {self._label} 已等待 {elapsed_seconds}s"
+            trailing_spaces = " " * max(0, self._last_render_length - len(content))
+            sys.stdout.write(f"\r{content}{trailing_spaces}")
+            sys.stdout.flush()
+            self._last_render_length = max(self._last_render_length, len(content))
+
+    def finish(self) -> None:
+        if not (self._live_enabled and self._entered):
+            return
+
+        self.tick()
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 class DevHubHostFixture:
@@ -140,14 +197,19 @@ class DevHubHostFixture:
 
         hub_json_path = self.runtime_directory / "hub.json"
         deadline = time.time() + 30
-        while time.time() < deadline:
-            if hub_json_path.is_file():
-                return
-            if self._process.poll() is not None:
-                stdout = self._collect_output(self._stdout_buffer)
-                stderr = self._collect_output(self._stderr_buffer)
-                raise RuntimeError(f"Host 进程提前退出。stdout={stdout} stderr={stderr}")
-            time.sleep(0.25)
+        status = _LongWaitStatus("等待 Python SDK Host fixture 生成 hub.json", 30)
+        try:
+            while time.time() < deadline:
+                if hub_json_path.is_file():
+                    return
+                if self._process.poll() is not None:
+                    stdout = self._collect_output(self._stdout_buffer)
+                    stderr = self._collect_output(self._stderr_buffer)
+                    raise RuntimeError(f"Host 进程提前退出。stdout={stdout} stderr={stderr}")
+                time.sleep(0.25)
+                status.tick()
+        finally:
+            status.finish()
 
         raise RuntimeError("等待 hub.json 超时。")
 

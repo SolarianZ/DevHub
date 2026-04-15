@@ -1,12 +1,12 @@
 # DevHub Python SDK
 
-DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现，覆盖运行时发现、HTTP JSON-RPC 与 WebSocket 事件订阅。
+DevHub Python SDK 基于 `docs/specification/protocol/Specification.md` 中的 DevHub Hub v1.x 协议实现，覆盖运行时发现、HTTP JSON-RPC 与 WebSocket 事件订阅。
 
 ## 接入导航
 
-- [`../../docs/guides/sdk/python.md`](../../docs/guides/sdk/python.md)：面向外部调用方的 `Python SDK` 接入指南。
-- [`../../docs/guides/getting-started/host-quickstart.md`](../../docs/guides/getting-started/host-quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
-- [`../../docs/guides/无SDK接入指南.md`](../../docs/guides/无SDK接入指南.md)：不依赖官方 SDK 的原始协议路径。
+- [`../../docs/user/sdk/python.md`](../../docs/user/sdk/python.md)：面向外部调用方的 `Python SDK` 接入指南。
+- [`../../docs/user/host/quickstart.md`](../../docs/user/host/quickstart.md)：启动 Host、读取 `hub.json` 和 `tokenFile` 的入口。
+- [`../../docs/user/protocol/README.md`](../../docs/user/protocol/README.md)：不依赖官方 SDK 的原始协议路径。
 
 ## 能力范围
 
@@ -18,7 +18,7 @@ DevHub Python SDK 基于 `docs/spec/Spec.md` 中的 DevHub Hub v1.x 协议实现
 - 本地 JSON 校验：在发送前严格校验 `echo`、`meta`、`args`、`value`、`error.data`，拒绝 `NaN`、回调、循环引用等非法 JSON 结构
 - 错误模型：统一映射为 `DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力
 
-## 当前仓库内安装方式
+## 仓库内安装方式
 
 以下命令用于仓库内开发与测试，不代表正式发布后的安装入口：
 
@@ -32,7 +32,7 @@ python3 -m pip install -e '.[test]'
 TODO(devhub-release): 正式发布资产可用后，在此补充 DevHub Python SDK 的发布资产名称、版本号与安装命令；当前不要填写未生成的版本号、下载链接或仓库外安装命令。
 ```
 
-正式发布后，Python distribution name 固定为 `devhub-sdk-python`，导入模块继续使用 `devhub_sdk`。
+正式发布后，Python distribution name 固定为 `devhub-sdk-python`，导入模块使用 `devhub_sdk`。
 
 ## 快速示例
 
@@ -89,7 +89,7 @@ client.delete_definition(definition.app_id)
 
 ## 高级扩展
 
-默认情况下，推荐继续使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
+默认情况下，推荐使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
 
 `data_dir` 参数与环境变量 `DEVHUB_DATA_DIR` 只接受数据根目录，SDK 固定从以下位置发现运行时信息：
 
@@ -147,6 +147,7 @@ events_client = await DevHubEventsClient.from_runtime(
 - 因此，“临时 Host + 独立数据根目录”说明运行时状态与默认构建产物都尽量彼此隔离，但仍不等同于默认无条件支持 Python / JavaScript / .NET SDK 集成测试并行执行。
 - 如果需要关闭这一步默认构建，或希望并行执行多套 SDK 集成测试，请先串行准备好 Host 程序，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向固定的已构建 `DevHub.Host.dll`。如需仅覆盖 Python SDK，也可以改用 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY`；当两者同时存在时，后者优先。
 - 如果你要验证 SDK 集成测试，请直接运行 `pytest tests/integration`，不要先手工启动本地 Hub。
+- 如需观察 Host fixture 启动阶段的实时等待状态，可设置 `DEVHUB_TEST_LIVE_STATUS=true`；默认不设置时，仅在实际等待跨过 8 秒后输出 1 行普通状态日志。该变量接受 `1/0`、`true/false`、`yes/no`、`on/off`，其他取值会直接报错。
 
 ## 验证命令
 

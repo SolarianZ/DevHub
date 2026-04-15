@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DevHub M3 Scope 路由专项测试
+DevHub 作用域路由专项测试
 """
 
 import os
@@ -20,12 +20,13 @@ from tests.blackbox.test_base import (
     get_test_python_executable,
     new_instance_id,
     safe_remove,
+    sleep_with_long_wait_status,
     write_app_definition,
 )
 
 
 class TestScopeRouting(unittest.TestCase):
-    """M3 Scope 路由测试类"""
+    """作用域路由测试类"""
 
     def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
         launch_config = None
@@ -50,7 +51,7 @@ class TestScopeRouting(unittest.TestCase):
 
     @staticmethod
     def _app_id(suffix):
-        return f"m3-scope-{suffix}-{uuid.uuid4().hex[:6]}"
+        return f"scope-{suffix}-{uuid.uuid4().hex[:6]}"
 
     @staticmethod
     def _extract_invocation_ids(items):
@@ -60,9 +61,9 @@ class TestScopeRouting(unittest.TestCase):
         poll_response = client.poll_once(instance_id, max_count=10, wait_ms=wait_ms)
         return poll_response, self._extract_invocation_ids(poll_response.get("result", {}).get("items", []))
 
-    def test_m3_scope_001_register_omitted_and_null_should_both_be_global(self):
-        """M3-SCOPE-001: register scope omitted/null => Global 生效"""
-        result = TestResult("M3-SCOPE-001 register omitted/null => Global")
+    def test_scope_001_register_omitted_and_null_should_both_be_global(self):
+        """SCOPE-001: register scope omitted/null => Global 生效"""
+        result = TestResult("SCOPE-001 register omitted/null => Global")
         app_id = self._app_id("001")
 
         omitted_instance = None
@@ -72,8 +73,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            omitted_instance = self._instance_id("m3-scope-omitted")
-            null_instance = self._instance_id("m3-scope-null")
+            omitted_instance = self._instance_id("scope-omitted")
+            null_instance = self._instance_id("scope-null")
 
             omitted_response = client.call("hub.apps.registerInstance", {
                 "instance": {
@@ -82,7 +83,7 @@ class TestScopeRouting(unittest.TestCase):
                     "pid": 31001,
                     "invoke": {"poll": True, "respond": True}
                 }
-            }, request_id="m3-scope-001-omitted")
+            }, request_id="scope-001-omitted")
             if not RpcAssertions.expect_success(result, omitted_response, ["instance"]):
                 return result
 
@@ -97,7 +98,7 @@ class TestScopeRouting(unittest.TestCase):
             if not RpcAssertions.expect_success(result, null_response, ["instance"]):
                 return result
 
-            default_list = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-001-list-default")
+            default_list = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-001-list-default")
             if not RpcAssertions.expect_success(result, default_list, ["instances"]):
                 return result
 
@@ -123,9 +124,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_002_register_scope_should_match_exactly(self):
-        """M3-SCOPE-002: register 显式 scope 精确匹配"""
-        result = TestResult("M3-SCOPE-002 register 显式 scope 精确匹配")
+    def test_scope_002_register_scope_should_match_exactly(self):
+        """SCOPE-002: register 显式 scope 精确匹配"""
+        result = TestResult("SCOPE-002 register 显式 scope 精确匹配")
         app_id = self._app_id("002")
 
         upper_instance = None
@@ -135,8 +136,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            upper_instance = self._instance_id("m3-scope-upper")
-            lower_instance = self._instance_id("m3-scope-lower")
+            upper_instance = self._instance_id("scope-upper")
+            lower_instance = self._instance_id("scope-lower")
 
             upper_register = client.register_instance(
                 instance_id=upper_instance,
@@ -160,11 +161,11 @@ class TestScopeRouting(unittest.TestCase):
             if not RpcAssertions.expect_success(result, lower_register, ["instance"]):
                 return result
 
-            upper_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-A"}, request_id="m3-scope-002-upper")
+            upper_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-A"}, request_id="scope-002-upper")
             if not RpcAssertions.expect_success(result, upper_list, ["instances"]):
                 return result
 
-            lower_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-a"}, request_id="m3-scope-002-lower")
+            lower_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "workspace-a"}, request_id="scope-002-lower")
             if not RpcAssertions.expect_success(result, lower_list, ["instances"]):
                 return result
 
@@ -195,9 +196,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_003_empty_scope_should_be_global_equivalent(self):
-        """M3-SCOPE-003: register/list/launch scope='' 与 Global 等价"""
-        result = TestResult("M3-SCOPE-003 scope='' 等价 Global")
+    def test_scope_003_empty_scope_should_be_global_equivalent(self):
+        """SCOPE-003: register/list/launch scope='' 与 Global 等价"""
+        result = TestResult("SCOPE-003 scope='' 等价 Global")
         app_id = self._app_id("003")
         definition_path = None
         empty_instance = None
@@ -208,8 +209,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            empty_instance = self._instance_id("m3-scope-empty")
-            null_instance = self._instance_id("m3-scope-null")
+            empty_instance = self._instance_id("scope-empty")
+            null_instance = self._instance_id("scope-null")
 
             register_empty_response = client.register_instance(
                 instance_id=empty_instance,
@@ -239,7 +240,7 @@ class TestScopeRouting(unittest.TestCase):
                     f"⚠️ scope='' 注册响应未回显为 null（非阻断，按行为校验通过即可）: scope={empty_registered_scope}"
                 )
 
-            list_default = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-003-list-default")
+            list_default = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-003-list-default")
             if not RpcAssertions.expect_success(result, list_default, ["instances"]):
                 return result
 
@@ -248,7 +249,7 @@ class TestScopeRouting(unittest.TestCase):
                 result.mark_failure(f"❌ 默认 Global 过滤未命中 scope='' 与 scope=null 实例: {default_ids}")
                 return result
 
-            list_empty_scope = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="m3-scope-003-list-empty")
+            list_empty_scope = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="scope-003-list-empty")
             if not RpcAssertions.expect_success(result, list_empty_scope, ["instances"]):
                 return result
 
@@ -261,7 +262,7 @@ class TestScopeRouting(unittest.TestCase):
                 app_id=app_id,
                 scope="",
                 wait_for_register_ms=0,
-                request_id="m3-scope-003-launch-empty",
+                request_id="scope-003-launch-empty",
             )
             if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "launchId"]):
                 return result
@@ -270,7 +271,7 @@ class TestScopeRouting(unittest.TestCase):
                 app_id=app_id,
                 scope=None,
                 wait_for_register_ms=0,
-                request_id="m3-scope-003-launch-null",
+                request_id="scope-003-launch-null",
             )
             if not RpcAssertions.expect_success(result, launch_null_scope, ["status", "launchId"]):
                 return result
@@ -293,9 +294,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_004_global_literal_should_be_explicit_scope(self):
-        """M3-SCOPE-004: scope='global' 作为显式作用域，不回退默认 Global"""
-        result = TestResult("M3-SCOPE-004 scope='global' 显式作用域")
+    def test_scope_004_global_literal_should_be_explicit_scope(self):
+        """SCOPE-004: scope='global' 作为显式作用域，不回退默认 Global"""
+        result = TestResult("SCOPE-004 scope='global' 显式作用域")
         app_id = self._app_id("004")
         definition_path = None
         scoped_global_instance = None
@@ -306,8 +307,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            scoped_global_instance = self._instance_id("m3-scope-global")
-            null_global_instance = self._instance_id("m3-scope-null")
+            scoped_global_instance = self._instance_id("scope-global")
+            null_global_instance = self._instance_id("scope-null")
 
             register_global_literal = client.register_instance(
                 instance_id=scoped_global_instance,
@@ -331,7 +332,7 @@ class TestScopeRouting(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_null_global, ["instance"]):
                 return result
 
-            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="m3-scope-004-list")
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="scope-004-list")
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
@@ -343,7 +344,7 @@ class TestScopeRouting(unittest.TestCase):
                 result.mark_failure(f"❌ scope='global' 查询错误回退到默认 Global: {scoped_global_ids}")
                 return result
 
-            default_list_response = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="m3-scope-004-list-default")
+            default_list_response = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-004-list-default")
             if not RpcAssertions.expect_success(result, default_list_response, ["instances"]):
                 return result
 
@@ -359,7 +360,7 @@ class TestScopeRouting(unittest.TestCase):
                 app_id=app_id,
                 scope="global",
                 wait_for_register_ms=0,
-                request_id="m3-scope-004-launch",
+                request_id="scope-004-launch",
             )
             if not RpcAssertions.expect_success(result, launch_response, ["status", "launchId"]):
                 return result
@@ -368,7 +369,7 @@ class TestScopeRouting(unittest.TestCase):
                 app_id=app_id,
                 scope=None,
                 wait_for_register_ms=0,
-                request_id="m3-scope-004-launch-default",
+                request_id="scope-004-launch-default",
             )
             if not RpcAssertions.expect_success(result, launch_global_default, ["status", "launchId"]):
                 return result
@@ -391,9 +392,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_005_notify_request_default_scope_should_only_hit_global(self):
-        """M3-SCOPE-005: notify/request target.scope omitted/null 仅命中 Global"""
-        result = TestResult("M3-SCOPE-005 notify/request 默认 Global 路由")
+    def test_scope_005_notify_request_default_scope_should_only_hit_global(self):
+        """SCOPE-005: notify/request target.scope omitted/null 仅命中 Global"""
+        result = TestResult("SCOPE-005 notify/request 默认 Global 路由")
         app_id = self._app_id("005")
         definition_path = None
 
@@ -405,8 +406,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            global_instance = self._instance_id("m3-scope-global")
-            scoped_instance = self._instance_id("m3-scope-scoped")
+            global_instance = self._instance_id("scope-global")
+            scoped_instance = self._instance_id("scope-scoped")
 
             register_global = client.register_instance(
                 instance_id=global_instance,
@@ -437,7 +438,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope=None,
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-005-notify",
+                request_id="scope-005-notify",
             )
             if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
                 return result
@@ -508,7 +509,7 @@ class TestScopeRouting(unittest.TestCase):
                     "queueIfOffline": False,
                     "autoLaunch": False,
                 },
-                request_id="m3-scope-005-request",
+                request_id="scope-005-request",
             )
 
             global_worker.join(timeout=3)
@@ -550,9 +551,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_006_explicit_scope_should_not_fallback_to_global(self):
-        """M3-SCOPE-006: notify/request 显式 scope 不回退 Global"""
-        result = TestResult("M3-SCOPE-006 显式 scope 不回退 Global")
+    def test_scope_006_explicit_scope_should_not_fallback_to_global(self):
+        """SCOPE-006: notify/request 显式 scope 不回退 Global"""
+        result = TestResult("SCOPE-006 显式 scope 不回退 Global")
         app_id = self._app_id("006")
         definition_path = None
         global_instance = None
@@ -562,7 +563,7 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            global_instance = self._instance_id("m3-scope-only-global")
+            global_instance = self._instance_id("scope-only-global")
             register_response = client.register_instance(
                 instance_id=global_instance,
                 app_id=app_id,
@@ -581,7 +582,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="workspace-A",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-006-notify",
+                request_id="scope-006-notify",
             )
             if not RpcAssertions.expect_error(result, notify_response, -32010, "instance_not_found"):
                 return result
@@ -599,7 +600,7 @@ class TestScopeRouting(unittest.TestCase):
                     "queueIfOffline": False,
                     "autoLaunch": False,
                 },
-                request_id="m3-scope-006-request",
+                request_id="scope-006-request",
             )
             if not RpcAssertions.expect_error(result, request_response, -32010, "instance_not_found"):
                 return result
@@ -629,9 +630,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_007_invalid_target_scope_type_should_return_invalid_params(self):
-        """M3-SCOPE-007: target.scope 类型非法 -> -32602 invalid_params"""
-        result = TestResult("M3-SCOPE-007 target.scope 类型非法")
+    def test_scope_007_invalid_target_scope_type_should_return_invalid_params(self):
+        """SCOPE-007: target.scope 类型非法 -> -32602 invalid_params"""
+        result = TestResult("SCOPE-007 target.scope 类型非法")
         app_id = self._app_id("007")
         definition_path = None
 
@@ -641,9 +642,9 @@ class TestScopeRouting(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             invalid_notify_cases = [
-                ("m3-scope-007-notify-int", 123),
-                ("m3-scope-007-notify-bool", True),
-                ("m3-scope-007-notify-object", {"scope": "workspace-a"}),
+                ("scope-007-notify-int", 123),
+                ("scope-007-notify-bool", True),
+                ("scope-007-notify-object", {"scope": "workspace-a"}),
             ]
             for request_id, target_scope in invalid_notify_cases:
                 notify_response = client.invoke_notify(
@@ -658,9 +659,9 @@ class TestScopeRouting(unittest.TestCase):
                     return result
 
             invalid_request_cases = [
-                ("m3-scope-007-request-int", 123),
-                ("m3-scope-007-request-bool", True),
-                ("m3-scope-007-request-object", {"scope": "workspace-a"}),
+                ("scope-007-request-int", 123),
+                ("scope-007-request-bool", True),
+                ("scope-007-request-object", {"scope": "workspace-a"}),
             ]
             for request_id, target_scope in invalid_request_cases:
                 request_response = client.invoke_request(
@@ -686,9 +687,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_008_scope_match_should_be_case_sensitive(self):
-        """M3-SCOPE-008: case-sensitive 精确匹配"""
-        result = TestResult("M3-SCOPE-008 scope 大小写敏感")
+    def test_scope_008_scope_match_should_be_case_sensitive(self):
+        """SCOPE-008: case-sensitive 精确匹配"""
+        result = TestResult("SCOPE-008 scope 大小写敏感")
         app_id = self._app_id("008")
         definition_path = None
 
@@ -700,8 +701,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            upper_instance = self._instance_id("m3-scope-upper")
-            lower_instance = self._instance_id("m3-scope-lower")
+            upper_instance = self._instance_id("scope-upper")
+            lower_instance = self._instance_id("scope-lower")
 
             upper_register = client.register_instance(
                 instance_id=upper_instance,
@@ -732,7 +733,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="workspace-A",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-008-upper",
+                request_id="scope-008-upper",
             )
             if not RpcAssertions.expect_success(result, notify_upper, ["invocationId"]):
                 return result
@@ -744,7 +745,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="workspace-a",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-008-lower",
+                request_id="scope-008-lower",
             )
             if not RpcAssertions.expect_success(result, notify_lower, ["invocationId"]):
                 return result
@@ -786,9 +787,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(self):
-        """M3-SCOPE-008-WS: 空白字符串 scope 按原值精确匹配（不 trim）"""
-        result = TestResult("M3-SCOPE-008-WS 空白 scope 精确匹配")
+    def test_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(self):
+        """SCOPE-008-WS: 空白字符串 scope 按原值精确匹配（不 trim）"""
+        result = TestResult("SCOPE-008-WS 空白 scope 精确匹配")
         app_id = self._app_id("008ws")
         definition_path = None
 
@@ -800,8 +801,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            global_instance = self._instance_id("m3-scope-ws-global")
-            whitespace_instance = self._instance_id("m3-scope-ws-space")
+            global_instance = self._instance_id("scope-ws-global")
+            whitespace_instance = self._instance_id("scope-ws-space")
 
             register_global = client.register_instance(
                 instance_id=global_instance,
@@ -828,7 +829,7 @@ class TestScopeRouting(unittest.TestCase):
             scoped_list = client.call(
                 "hub.apps.listInstances",
                 {"appId": app_id, "scope": "   "},
-                request_id="m3-scope-008ws-list",
+                request_id="scope-008ws-list",
             )
             if not RpcAssertions.expect_success(result, scoped_list, ["instances"]):
                 return result
@@ -849,7 +850,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="   ",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-008ws-notify",
+                request_id="scope-008ws-notify",
             )
             if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
                 return result
@@ -922,7 +923,7 @@ class TestScopeRouting(unittest.TestCase):
                     "queueIfOffline": False,
                     "autoLaunch": False,
                 },
-                request_id="m3-scope-008ws-request",
+                request_id="scope-008ws-request",
             )
 
             whitespace_worker.join(timeout=3)
@@ -964,9 +965,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_009_target_instance_id_should_take_precedence(self):
-        """M3-SCOPE-009: target.instanceId 优先且不回退"""
-        result = TestResult("M3-SCOPE-009 target.instanceId 优先")
+    def test_scope_009_target_instance_id_should_take_precedence(self):
+        """SCOPE-009: target.instanceId 优先且不回退"""
+        result = TestResult("SCOPE-009 target.instanceId 优先")
         app_id = self._app_id("009")
         definition_path = None
 
@@ -977,7 +978,7 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            available_instance = self._instance_id("m3-scope-available")
+            available_instance = self._instance_id("scope-available")
             register_response = client.register_instance(
                 instance_id=available_instance,
                 app_id=app_id,
@@ -989,7 +990,7 @@ class TestScopeRouting(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            missing_target = self._instance_id("m3-scope-missing")
+            missing_target = self._instance_id("scope-missing")
 
             notify_response = client.invoke_notify(
                 app_id=app_id,
@@ -998,7 +999,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_instance_id=missing_target,
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-009-notify",
+                request_id="scope-009-notify",
             )
             if not RpcAssertions.expect_error(result, notify_response, -32010, "instance_not_found"):
                 return result
@@ -1016,7 +1017,7 @@ class TestScopeRouting(unittest.TestCase):
                     "queueIfOffline": False,
                     "autoLaunch": False,
                 },
-                request_id="m3-scope-009-request",
+                request_id="scope-009-request",
             )
             if not RpcAssertions.expect_error(result, request_response, -32010, "instance_not_found"):
                 return result
@@ -1046,9 +1047,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_010_offline_matrix_should_be_consistent_across_scopes(self):
-        """M3-SCOPE-010: offline matrix 在 Global 与显式 scope 下一致"""
-        result = TestResult("M3-SCOPE-010 offline matrix scope 一致性")
+    def test_scope_010_offline_matrix_should_be_consistent_across_scopes(self):
+        """SCOPE-010: offline matrix 在 Global 与显式 scope 下一致"""
+        result = TestResult("SCOPE-010 offline matrix scope 一致性")
 
         definition_paths = []
         registered_instances = []
@@ -1072,7 +1073,7 @@ class TestScopeRouting(unittest.TestCase):
                     target_scope=target_scope,
                     queue_if_offline=False,
                     auto_launch=False,
-                    request_id=f"m3-scope-010-{scope_tag}-noqueue",
+                    request_id=f"scope-010-{scope_tag}-noqueue",
                 )
                 if not RpcAssertions.expect_error(result, queue_off_resp, -32010, "instance_not_found"):
                     return result
@@ -1088,13 +1089,13 @@ class TestScopeRouting(unittest.TestCase):
                     target_scope=target_scope,
                     queue_if_offline=True,
                     auto_launch=False,
-                    request_id=f"m3-scope-010-{scope_tag}-pending",
+                    request_id=f"scope-010-{scope_tag}-pending",
                 )
                 if not RpcAssertions.expect_success(result, pending_resp, ["invocationId"]):
                     return result
 
                 pending_invocation_id = pending_resp["result"]["invocationId"]
-                pending_instance = self._instance_id(f"m3-scope-010-{scope_tag}-pending")
+                pending_instance = self._instance_id(f"scope-010-{scope_tag}-pending")
                 registered_instances.append(pending_instance)
 
                 register_pending = client.register_instance(
@@ -1130,7 +1131,7 @@ class TestScopeRouting(unittest.TestCase):
                     target_scope=target_scope,
                     queue_if_offline=True,
                     auto_launch=True,
-                    request_id=f"m3-scope-010-{scope_tag}-autolaunch",
+                    request_id=f"scope-010-{scope_tag}-autolaunch",
                 )
                 if not RpcAssertions.expect_success(result, autolaunch_resp, ["invocationId"]):
                     return result
@@ -1139,7 +1140,7 @@ class TestScopeRouting(unittest.TestCase):
                     app_id=autolaunch_app,
                     scope=target_scope,
                     wait_for_register_ms=0,
-                    request_id=f"m3-scope-010-{scope_tag}-launch-check",
+                    request_id=f"scope-010-{scope_tag}-launch-check",
                 )
                 if not RpcAssertions.expect_success(result, launch_after_autolaunch, ["status", "launchId"]):
                     return result
@@ -1158,7 +1159,7 @@ class TestScopeRouting(unittest.TestCase):
                     target_scope=target_scope,
                     queue_if_offline=True,
                     auto_launch=False,
-                    request_id=f"m3-scope-010-{scope_tag}-nodef",
+                    request_id=f"scope-010-{scope_tag}-nodef",
                 )
                 if not RpcAssertions.expect_error(result, no_definition_resp, -32010, "instance_not_found"):
                     return result
@@ -1180,9 +1181,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_012_poll_should_not_leak_between_scopes(self):
-        """M3-SCOPE-012: poll 投递不跨 scope 泄漏"""
-        result = TestResult("M3-SCOPE-012 poll 不跨 scope 泄漏")
+    def test_scope_012_poll_should_not_leak_between_scopes(self):
+        """SCOPE-012: poll 投递不跨 scope 泄漏"""
+        result = TestResult("SCOPE-012 poll 不跨 scope 泄漏")
         app_id = self._app_id("012")
         definition_path = None
 
@@ -1194,8 +1195,8 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            global_instance = self._instance_id("m3-scope-global")
-            scoped_instance = self._instance_id("m3-scope-workspace")
+            global_instance = self._instance_id("scope-global")
+            scoped_instance = self._instance_id("scope-workspace")
 
             register_global = client.register_instance(
                 instance_id=global_instance,
@@ -1226,7 +1227,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="workspace-A",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-012-notify",
+                request_id="scope-012-notify",
             )
             if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
                 return result
@@ -1265,9 +1266,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_m3_scope_full_lease_redelivery_should_respect_scope(self):
+    def test_scope_full_lease_redelivery_should_respect_scope(self):
         """full-only: lease 到期重投递后仍严格遵守 scope 过滤"""
-        result = TestResult("M3-SCOPE-FULL lease 重投递 scope 过滤")
+        result = TestResult("SCOPE-FULL lease 重投递 scope 过滤")
         app_id = self._app_id("010-full-lease")
         definition_path = None
 
@@ -1281,10 +1282,10 @@ class TestScopeRouting(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            holder_instance = self._instance_id("m3-scope-full-holder")
-            same_scope_receiver = self._instance_id("m3-scope-full-receiver")
-            global_instance = self._instance_id("m3-scope-full-global")
-            other_scope_instance = self._instance_id("m3-scope-full-other")
+            holder_instance = self._instance_id("scope-full-holder")
+            same_scope_receiver = self._instance_id("scope-full-receiver")
+            global_instance = self._instance_id("scope-full-global")
+            other_scope_instance = self._instance_id("scope-full-other")
 
             for instance_id, scope, pid in [
                 (holder_instance, "workspace-A", 31911),
@@ -1310,7 +1311,7 @@ class TestScopeRouting(unittest.TestCase):
                 target_scope="workspace-A",
                 queue_if_offline=False,
                 auto_launch=False,
-                request_id="m3-scope-full-lease-notify",
+                request_id="scope-full-lease-notify",
             )
             if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
                 return result
@@ -1342,7 +1343,7 @@ class TestScopeRouting(unittest.TestCase):
                 result.mark_failure(f"❌ 首次 delivery.leaseSeconds 非法: {first_delivery}")
                 return result
 
-            time.sleep(lease_seconds + 1.0)
+            sleep_with_long_wait_status(lease_seconds + 1.0, "等待 scoped invocation lease 到期后重投递")
 
             global_poll, global_ids = self._poll_invocation_ids(client, global_instance, wait_ms=500)
             if not RpcAssertions.expect_success(result, global_poll, ["items"]):
@@ -1400,24 +1401,24 @@ class TestScopeRouting(unittest.TestCase):
         return result
 
     def run_all_tests(self, full=False):
-        """运行所有 M3 scope 测试。"""
+        """运行所有 scope 路由测试。"""
         results = [
-            self.test_m3_scope_001_register_omitted_and_null_should_both_be_global(),
-            self.test_m3_scope_002_register_scope_should_match_exactly(),
-            self.test_m3_scope_003_empty_scope_should_be_global_equivalent(),
-            self.test_m3_scope_004_global_literal_should_be_explicit_scope(),
-            self.test_m3_scope_005_notify_request_default_scope_should_only_hit_global(),
-            self.test_m3_scope_006_explicit_scope_should_not_fallback_to_global(),
-            self.test_m3_scope_007_invalid_target_scope_type_should_return_invalid_params(),
-            self.test_m3_scope_008_scope_match_should_be_case_sensitive(),
-            self.test_m3_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(),
-            self.test_m3_scope_009_target_instance_id_should_take_precedence(),
-            self.test_m3_scope_010_offline_matrix_should_be_consistent_across_scopes(),
-            self.test_m3_scope_012_poll_should_not_leak_between_scopes(),
+            self.test_scope_001_register_omitted_and_null_should_both_be_global(),
+            self.test_scope_002_register_scope_should_match_exactly(),
+            self.test_scope_003_empty_scope_should_be_global_equivalent(),
+            self.test_scope_004_global_literal_should_be_explicit_scope(),
+            self.test_scope_005_notify_request_default_scope_should_only_hit_global(),
+            self.test_scope_006_explicit_scope_should_not_fallback_to_global(),
+            self.test_scope_007_invalid_target_scope_type_should_return_invalid_params(),
+            self.test_scope_008_scope_match_should_be_case_sensitive(),
+            self.test_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(),
+            self.test_scope_009_target_instance_id_should_take_precedence(),
+            self.test_scope_010_offline_matrix_should_be_consistent_across_scopes(),
+            self.test_scope_012_poll_should_not_leak_between_scopes(),
         ]
 
         if full:
-            results.append(self.test_m3_scope_full_lease_redelivery_should_respect_scope())
+            results.append(self.test_scope_full_lease_redelivery_should_respect_scope())
 
         return results
 
