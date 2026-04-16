@@ -7,6 +7,7 @@
 - 已按 [`../host/quickstart.md`](../host/quickstart.md) 启动 Host，并确认 `hub.json` 与 `tokenFile` 可读。
 - Node.js 调用方需具备 `Node.js 20+` 与 `npm`。
 - 浏览器 / WebView 调用方需由宿主应用提供可用的运行时连接信息，并通过自定义 `runtimeResolver` 交给 SDK。
+- 浏览器 / WebView 直连 Host 时，宿主应用还需提供 `tokenFile` 中的 Bearer Token，并确保前端可以直接访问 `hub.json.httpBaseUrl` 指向的回环地址。
 - 若当前分发渠道尚未提供正式安装资产，请按 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 ## 2. 获取 SDK
@@ -28,7 +29,7 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 
 - `@devhub/sdk-javascript`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、错误类型、模型类型、脱敏 `runtime` 视图，以及供高级接入使用的扩展 seam 类型。
 - `@devhub/sdk-javascript/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
-- 浏览器 / WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`。
+- 浏览器 / WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`；官方支持路径是前端直接访问 Host，而不是通过原生层代理 `/rpc`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
 
 Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript/runtime`。
@@ -88,6 +89,13 @@ const client = await DevHubClient.fromRuntime(
   { runtimeResolver }
 );
 ```
+
+浏览器 / WebView 直连要点：
+
+- `runtimeResolver` 返回的 `RuntimeConnectionInfo` 必须来自宿主应用对 `hub.json` / `tokenFile` 的安全读取结果，而不是前端自行扫描本地文件。
+- 前端首次调用 `/rpc` 时，浏览器通常会先发送 `OPTIONS /rpc` 预检；Host 会允许 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`，随后前端再发起正式 `POST /rpc`。
+- 实际 RPC 请求仍然必须携带 Bearer Token 与全部协议头；若响应是 JSON-RPC `error`，浏览器 / WebView 仍可读取原始错误载荷。
+- 原生层职责是提供运行时连接信息与令牌，不需要为前端再包一层 HTTP transport 代理。
 
 ### 5.3 Node.js 显式使用运行时发现辅助
 

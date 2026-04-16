@@ -151,6 +151,8 @@ Invoke-RestMethod -Method Post -Uri "$($hub.httpBaseUrl)/rpc" -Headers $headers 
 
 ## 5. 下一步
 
+- 如果你的宿主应用需要把前端运行在浏览器 / WebView 中，可直接把 `hub.json` 中的 `httpBaseUrl`、`wsUrl` 与 `tokenFile` 中的 Bearer Token 安全传给前端；前端会直接访问 Host，而不是要求原生层代理 `/rpc`。
+- 浏览器 / WebView 首次访问 `POST {httpBaseUrl}/rpc` 前，通常会先向 `OPTIONS {httpBaseUrl}/rpc` 发送预检；正式调用仍然需要 `Authorization`、`X-DevHub-Protocol`、`X-DevHub-ClientId` 与 `X-DevHub-ClientSessionId`。
 - 如果你准备使用官方 SDK，请阅读 [`../sdk/README.md`](../sdk/README.md) 并选择对应语言的接入文档。
 - 如果你计划直接对接协议，请阅读 [`../protocol/README.md`](../protocol/README.md)。
 - 如果你需要排查启动失败、运行时文件缺失或 `hub.ping` 返回错误，请阅读 [`../../developer/operations/troubleshooting.md`](../../developer/operations/troubleshooting.md)。

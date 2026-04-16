@@ -57,7 +57,7 @@
 
 ## 3. HTTP 鉴权与最小调用
 
-HTTP 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对象。
+HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对象。浏览器 / WebView 直连同样使用该端点；首次跨源请求前，运行时通常会先向 `OPTIONS {httpBaseUrl}/rpc` 发送预检。
 
 每个 HTTP 请求都必须携带：
 
@@ -66,6 +66,13 @@ HTTP 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对
 - `X-DevHub-ClientId: <stable-client-id>`
 - `X-DevHub-ClientSessionId: <uuid>`
 - `Content-Type: application/json`
+
+浏览器 / WebView 直连前提：
+
+- 宿主应用必须先从 `<dataDir>/runtime/hub.json` 和 `tokenFile` 读取运行时连接信息，再把 `httpBaseUrl`、`wsUrl` 和 Bearer Token 交给前端；禁止硬编码端口、固定 URL 或绕过 token。
+- 前端必须能够直接访问 Host 暴露的回环地址 `httpBaseUrl`；官方支持路径是“前端直连 Host”，而不是要求原生层代理 `/rpc`。
+- 浏览器 / WebView 首次向 `/rpc` 发起带 `Origin` 的调用时，Host 会先处理 `OPTIONS /rpc` 预检，并允许 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`。
+- 实际 `POST /rpc` 仍必须携带本节列出的全部协议头与 Bearer Token；无论 RPC 结果成功还是返回 JSON-RPC `error`，带 `Origin` 的响应都可以读取原始响应体。
 
 最小健康检查可以直接调用 `hub.ping`。原始 JSON 示例见：
 
@@ -97,6 +104,7 @@ HTTP 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对
 - `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
 - `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中。
+- 浏览器 / WebView 预检成功仅代表 `/rpc` 可建立 HTTP 会话；WebSocket 连接与 `hub.ws.authenticate` 仍按协议规范单独处理。
 
 ## 4. WebSocket 鉴权与事件订阅
 

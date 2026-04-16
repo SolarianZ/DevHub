@@ -118,12 +118,20 @@
 
 ### 3.2 HTTP 传输
 
-| 属性            | 要求                                            |
-| --------------- | ----------------------------------------------- |
-| 端点 (Endpoint) | `POST /rpc`（基础 URL 来自 `hub.json`）         |
-| `Content-Type`  | **必须**为 `application/json`（允许指定字符集） |
-| HTTP 状态码     | 即使发生错误也**必须**始终返回 `200 OK`         |
-| 错误信号        | **必须**使用 JSON-RPC 的 `error` 字段           |
+| 属性            | 要求                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| 端点 (Endpoint) | `/rpc`（基础 URL 来自 `hub.json`）；JSON-RPC 请求使用 `POST`，浏览器 / WebView 预检使用 `OPTIONS`        |
+| `Content-Type`  | `POST /rpc` 的请求体 **必须**为 `application/json`（允许指定字符集）                                      |
+| HTTP 状态码     | `POST /rpc` 即使发生错误也**必须**始终返回 `200 OK`；`OPTIONS /rpc` 预检成功时**必须**返回 `204 No Content` |
+| 错误信号        | `POST /rpc` **必须**使用 JSON-RPC 的 `error` 字段；`OPTIONS /rpc` **不得**返回 JSON-RPC 响应体           |
+
+规范性要求：
+- `OPTIONS /rpc` **必须**作为浏览器 / WebView 直连 Host 的预检入口单独处理，**不得**进入 JSON-RPC 请求体验证、协议头校验或 Bearer Token 鉴权链路。
+- 当 `OPTIONS /rpc` 请求同时携带 `Origin` 和 `Access-Control-Request-Method: POST` 时，Host **必须**将其视为有效预检，并在响应中声明允许的方法 `POST`、`OPTIONS`。
+- 上述预检响应 **必须**允许至少以下请求头：`Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`。
+- `OPTIONS /rpc` 预检成功时 **不得**要求 `Authorization`、JSON-RPC body 或其他仅适用于 `POST /rpc` 的业务字段。
+- 当 `POST /rpc` 请求携带 `Origin` 时，无论响应是 JSON-RPC `result` 还是 JSON-RPC `error`，Host **必须**返回与请求 `Origin` 完全一致的 `Access-Control-Allow-Origin`，并 **必须**返回 `Vary: Origin`。
+- 上述浏览器 / WebView 直连规则仅适用于 `/rpc`；WebSocket 传输行为仍以本规范 §3.3、§4.3 为准。
 
 ---
 
@@ -235,7 +243,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 
 ---
 
-### 4.2 HTTP 请求头（**必须**存在）
+### 4.2 HTTP 请求头（`POST /rpc` **必须**存在）
 
 | 请求头                     | 格式             | 描述                                                                    |
 | -------------------------- | ---------------- | ----------------------------------------------------------------------- |
@@ -248,6 +256,8 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - 缺失/无效 `Authorization`：返回 `-32001 unauthorized`
 - 缺失/无效 `X-DevHub-Protocol`：返回 `-32099 not_supported`
 - 缺失 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId`：返回 `-32600 invalid_request` 且 `error.data.reason="missing_header"`
+
+浏览器 / WebView 的 `OPTIONS /rpc` 预检请求不适用本节要求；其行为由 §3.2 的 HTTP 传输规则定义。
 
 ---
 
