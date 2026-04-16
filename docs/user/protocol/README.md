@@ -59,7 +59,7 @@
 
 HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RPC 2.0 对象。浏览器 / WebView 直连同样使用该端点；首次跨源请求前，运行时通常会先向 `OPTIONS {httpBaseUrl}/rpc` 发送预检。
 
-每个 HTTP 请求都必须携带：
+每个 `POST /rpc` 请求都必须携带：
 
 - `Authorization: Bearer <token>`
 - `X-DevHub-Protocol: 1`
@@ -67,11 +67,13 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - `X-DevHub-ClientSessionId: <uuid>`
 - `Content-Type: application/json`
 
+`OPTIONS /rpc` 预检不要求携带上述协议头，也不携带 JSON-RPC body。
+
 浏览器 / WebView 直连前提：
 
 - 宿主应用必须先从 `<dataDir>/runtime/hub.json` 和 `tokenFile` 读取运行时连接信息，再把 `httpBaseUrl`、`wsUrl` 和 Bearer Token 交给前端；禁止硬编码端口、固定 URL 或绕过 token。
 - 前端必须能够直接访问 Host 暴露的回环地址 `httpBaseUrl`；官方支持路径是“前端直连 Host”，而不是要求原生层代理 `/rpc`。
-- 浏览器 / WebView 首次向 `/rpc` 发起带 `Origin` 的调用时，Host 会先处理 `OPTIONS /rpc` 预检，并允许 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`。
+- 浏览器 / WebView 首次向 `/rpc` 发起带 `Origin` 的调用时，Host 会先处理 `OPTIONS /rpc` 预检，回显当前请求 `Origin`，并声明 `POST`、`OPTIONS` 以及 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId` 可用于后续正式请求。
 - 实际 `POST /rpc` 仍必须携带本节列出的全部协议头与 Bearer Token；无论 RPC 结果成功还是返回 JSON-RPC `error`，带 `Origin` 的响应都可以读取原始响应体。
 
 最小健康检查可以直接调用 `hub.ping`。原始 JSON 示例见：

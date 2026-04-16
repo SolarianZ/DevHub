@@ -93,7 +93,7 @@ const client = await DevHubClient.fromRuntime(
 浏览器 / WebView 直连要点：
 
 - `runtimeResolver` 返回的 `RuntimeConnectionInfo` 必须来自宿主应用对 `hub.json` / `tokenFile` 的安全读取结果，而不是前端自行扫描本地文件。
-- 前端首次调用 `/rpc` 时，浏览器通常会先发送 `OPTIONS /rpc` 预检；Host 会允许 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`，随后前端再发起正式 `POST /rpc`。
+- 前端首次调用 `/rpc` 时，浏览器通常会先发送 `OPTIONS /rpc` 预检；Host 会回显当前请求 `Origin`，并声明 `POST`、`OPTIONS` 以及 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId` 可用于后续正式请求，随后前端再发起正式 `POST /rpc`。
 - 实际 RPC 请求仍然必须携带 Bearer Token 与全部协议头；若响应是 JSON-RPC `error`，浏览器 / WebView 仍可读取原始错误载荷。
 - 原生层职责是提供运行时连接信息与令牌，不需要为前端再包一层 HTTP transport 代理。
 
