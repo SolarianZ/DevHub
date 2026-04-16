@@ -13,6 +13,12 @@
 - `npm run verify`
 - `python ../../scripts/release/package_monitor.py --release-id local-dry-run`
 
+## 环境要求
+
+- Node.js：`20.19+` 或 `22.12+`
+- npm：使用仓库当前 lock 文件对应的 `npm ci`
+- Rust：按 Tauri 2 官方要求安装稳定工具链
+
 ## 验证入口
 
 推荐先安装本地依赖：
