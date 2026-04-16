@@ -15,7 +15,7 @@ HOST_PROJECT_PATH = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.cs
 
 
 def main() -> int:
-    temp_root = Path(tempfile.mkdtemp(prefix="devhub-sdk-full-"))
+    temp_root = Path(tempfile.mkdtemp(prefix="devhub-sdk-full-")).resolve()
 
     try:
         host_build_root = temp_root / "host-build"

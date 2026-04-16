@@ -99,7 +99,7 @@ def main() -> int:
     failure_count = 0
     snapshot_run_root = build_snapshot_run_root()
     with tempfile.TemporaryDirectory(prefix="devhub-conformance-") as temp_root_str:
-        temp_root = Path(temp_root_str)
+        temp_root = Path(temp_root_str).resolve()
         host_context, process, log_file = start_suite_host(temp_root)
         try:
             for vector_path, vector in vectors:

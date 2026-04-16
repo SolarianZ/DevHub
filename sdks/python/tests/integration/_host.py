@@ -114,7 +114,7 @@ class DevHubHostFixture:
     def start(cls) -> "DevHubHostFixture":
         repo_root = _resolve_repo_root()
         temp_root = TemporaryDirectory(prefix="devhub-python-sdk-")
-        data_directory = Path(temp_root.name)
+        data_directory = Path(temp_root.name).resolve()
         runtime_directory = data_directory / "runtime"
         definitions_directory = data_directory / "apps" / "definitions"
         instances_directory = data_directory / "apps" / "instances"
@@ -281,7 +281,7 @@ def _resolve_host_assembly_path(repo_root: Path) -> Path:
             _shared_host_assembly_path = configured_host_assembly_path
             return configured_host_assembly_path
 
-        build_root = Path(tempfile.mkdtemp(prefix="devhub-python-sdk-host-build-"))
+        build_root = Path(tempfile.mkdtemp(prefix="devhub-python-sdk-host-build-")).resolve()
         try:
             host_assembly_path = _build_isolated_host_assembly(repo_root, build_root)
         except Exception:

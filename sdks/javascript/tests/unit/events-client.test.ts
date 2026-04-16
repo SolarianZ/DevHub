@@ -813,7 +813,9 @@ async function createRuntime(overrides?: {
   httpBaseUrl?: string;
   wsUrl?: string;
 }): Promise<string> {
-  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"));
+  const dataDir = await fsPromises.realpath(
+    await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"))
+  );
   const runtimeDir = path.join(dataDir, "runtime");
   tempRoots.push(dataDir);
 

@@ -1650,7 +1650,9 @@ function createConnectionInfo() {
 }
 
 async function createRuntime(): Promise<string> {
-  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
+  const dataDir = await fsPromises.realpath(
+    await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"))
+  );
   const runtimeDir = path.join(dataDir, "runtime");
   tempRoots.push(dataDir);
 

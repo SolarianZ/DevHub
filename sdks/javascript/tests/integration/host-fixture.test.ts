@@ -164,7 +164,9 @@ function quoteCommandArgument(value: string): string {
 }
 
 async function createFakeRepositoryRoot(): Promise<string> {
-  return await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-host-fixture-"));
+  return await fsPromises.realpath(
+    await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-host-fixture-"))
+  );
 }
 
 async function createConfiguredHostAssembly(repoRoot: string, relativePath: string): Promise<string> {
