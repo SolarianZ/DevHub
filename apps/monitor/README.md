@@ -58,5 +58,5 @@ Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，只有在真实 `h
 
 - Host 日志固定来自 `<DEVHUB_DATA_DIR>/logs/`。
 - Monitor 自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`；当前目录会显示在设置页的“Monitor 日志目录”字段中。
-- 前端通过 `@devhub/sdk` 访问 Host RPC 与事件，不直接访问本地文件。
-- 原生后端负责设置持久化、运行时发现、Host 启动、日志读写和系统托盘，不直接依赖 `JS/TS SDK`。
+- 前端在 `host_available` 后通过 `@devhub/sdk` 直接访问 Host `/rpc` 与 `/ws`，浏览器 / WebView 对 `/rpc` 的预检也由 Host 自身处理，不直接访问本地文件。
+- 原生后端负责设置持久化、运行时发现、Host 启动、日志读写和系统托盘，不代理 DevHub transport，也不直接依赖 `JS/TS SDK`。

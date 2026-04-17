@@ -278,6 +278,9 @@ def execute_all_tests(temp_dir, logger, full=False, fast=False, smoke=False):
             auth_protocol_tests.test_ping_with_valid_credentials(),
             auth_protocol_tests.test_ping_with_invalid_token(),
             auth_protocol_tests.test_ping_without_protocol_header(),
+            auth_protocol_tests.test_rpc_options_preflight_returns_cors_headers(),
+            auth_protocol_tests.test_post_with_origin_returns_cors_headers_on_success(),
+            auth_protocol_tests.test_post_with_origin_returns_cors_headers_on_jsonrpc_error(),
         ])
 
         logger.info("=== 运行 WebSocket 事件 smoke 测试 ===")

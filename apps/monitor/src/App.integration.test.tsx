@@ -63,9 +63,11 @@ vi.mock("./lib/monitor-api", async () => {
 
 let host: DevHubHostFixture | undefined;
 let originalWebSocket: typeof globalThis.WebSocket | undefined;
+let originalFetch: typeof globalThis.fetch | undefined;
 
 beforeAll(async () => {
   originalWebSocket = globalThis.WebSocket;
+  originalFetch = globalThis.fetch;
   Object.defineProperty(globalThis, "WebSocket", {
     configurable: true,
     value: undefined,
@@ -132,6 +134,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host?.close();
+  if (originalFetch) {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch,
+      writable: true,
+    });
+  }
   Object.defineProperty(globalThis, "WebSocket", {
     configurable: true,
     value: originalWebSocket,
@@ -140,41 +149,48 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Monitor App real-host integration", () => {
-  it("loads state from a real host, reacts to definition events, and recovers after host termination", async () => {
-    render(<App />);
-
-    await screen.findByText("连接摘要", {}, { timeout: 15_000 });
-    await screen.findByText("Monitor Integration App", {}, { timeout: 15_000 });
-    await screen.findByText("monitor-integration-instance", {}, { timeout: 15_000 });
-
-    const triggerClient = await DevHubClient.fromRuntime({
-      clientId: "monitor-integration-trigger",
-      dataDir: getHost().dataDirectory,
-    }, {
-      runtimeResolver: createSdkRuntimeResolver(await createConnection(getHost())),
-    });
+  it("keeps the direct SDK handoff working when browser-style `/rpc` preflight is required", async () => {
+    const connection = await createConnection(getHost());
+    const restoreFetch = installBrowserStyleRpcFetch(connection.rpcEndpoint, "tauri://monitor-integration");
 
     try {
-      await triggerClient.upsertDefinition({
-        appId: "monitor.integration.extra",
-        displayName: "Monitor Integration Extra",
-        capabilities: {
-          rpc: true,
-        },
+      render(<App />);
+
+      await screen.findByText("连接摘要", {}, { timeout: 15_000 });
+      await screen.findByText("Monitor Integration App", {}, { timeout: 15_000 });
+      await screen.findByText("monitor-integration-instance", {}, { timeout: 15_000 });
+
+      const triggerClient = await DevHubClient.fromRuntime({
+        clientId: "monitor-integration-trigger",
+        dataDir: getHost().dataDirectory,
+      }, {
+        runtimeResolver: createSdkRuntimeResolver(connection),
       });
+
+      try {
+        await triggerClient.upsertDefinition({
+          appId: "monitor.integration.extra",
+          displayName: "Monitor Integration Extra",
+          capabilities: {
+            rpc: true,
+          },
+        });
+      } finally {
+        await triggerClient.dispose();
+      }
+
+      await screen.findByText("Monitor Integration Extra", {}, { timeout: 15_000 });
+
+      await getHost().close();
+      host = undefined;
+
+      await waitFor(() => {
+        expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
+      }, { timeout: 15_000 });
+      await screen.findByText("扫描与启动流程", {}, { timeout: 15_000 });
     } finally {
-      await triggerClient.dispose();
+      restoreFetch();
     }
-
-    await screen.findByText("Monitor Integration Extra", {}, { timeout: 15_000 });
-
-    await getHost().close();
-    host = undefined;
-
-    await waitFor(() => {
-      expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
-    }, { timeout: 15_000 });
-    await screen.findByText("扫描与启动流程", {}, { timeout: 15_000 });
   }, 120_000);
 });
 
@@ -277,4 +293,95 @@ function createSdkRuntimeResolver(connection: MonitorRuntimeConnectionInfo) {
       };
     },
   };
+}
+
+function installBrowserStyleRpcFetch(rpcEndpoint: string, origin: string): () => void {
+  if (!globalThis.fetch) {
+    throw new Error("global fetch is unavailable.");
+  }
+
+  const delegatedFetch = globalThis.fetch.bind(globalThis);
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const requestUrl = resolveRequestUrl(input);
+    const requestMethod = resolveRequestMethod(input, init);
+
+    if (requestUrl === rpcEndpoint && requestMethod === "POST") {
+      const requestHeaders = new Headers(resolveRequestHeaders(input, init));
+      const requestedHeaderNames = Array.from(requestHeaders.keys())
+        .filter((name) => name.toLowerCase() !== "origin")
+        .sort((left, right) => left.localeCompare(right));
+
+      const preflightResponse = await delegatedFetch(rpcEndpoint, {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": requestedHeaderNames.join(", "),
+        },
+      });
+
+      expect(preflightResponse.status).toBe(204);
+      expect(preflightResponse.headers.get("access-control-allow-origin")).toBe(origin);
+      expect((preflightResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
+      expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("POST");
+      expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("OPTIONS");
+
+      const allowHeaders = (preflightResponse.headers.get("access-control-allow-headers") ?? "").toLowerCase();
+      for (const headerName of requestedHeaderNames) {
+        expect(allowHeaders).toContain(headerName.toLowerCase());
+      }
+
+      const postHeaders = new Headers(requestHeaders);
+      postHeaders.set("Origin", origin);
+      const postResponse = await delegatedFetch(rpcEndpoint, {
+        ...init,
+        method: "POST",
+        headers: postHeaders,
+      });
+
+      expect(postResponse.headers.get("access-control-allow-origin")).toBe(origin);
+      expect((postResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
+      return postResponse;
+    }
+
+    return delegatedFetch(input, init);
+  });
+
+  return () => fetchMock.mockRestore();
+}
+
+function resolveRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}
+
+function resolveRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) {
+    return init.method.toUpperCase();
+  }
+
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.method.toUpperCase();
+  }
+
+  return "GET";
+}
+
+function resolveRequestHeaders(input: RequestInfo | URL, init?: RequestInit): HeadersInit | undefined {
+  if (init?.headers !== undefined) {
+    return init.headers;
+  }
+
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.headers;
+  }
+
+  return undefined;
 }
