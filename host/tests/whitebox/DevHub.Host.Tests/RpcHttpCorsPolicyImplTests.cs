@@ -42,9 +42,32 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, httpContext.Response.StatusCode);
         Assert.Equal("tauri://localhost", httpContext.Response.Headers["Access-Control-Allow-Origin"]);
-        Assert.Contains("Origin", httpContext.Response.Headers["Vary"].ToString(), StringComparison.Ordinal);
+        AssertContainsOriginVary(httpContext.Response.Headers);
         Assert.Equal(RpcHttpCorsPolicy.AllowMethodsValue, httpContext.Response.Headers["Access-Control-Allow-Methods"]);
         Assert.Equal(RpcHttpCorsPolicy.AllowHeadersValue, httpContext.Response.Headers["Access-Control-Allow-Headers"]);
+        Assert.Equal(0L, httpContext.Response.Body.Length);
+    }
+
+    [Fact]
+    public async Task Impl_RpcHttpCorsPolicy_CreatePreflightResponse_WhenRequestMethodHeaderMissing_ShouldReturnNoContentWithoutCorsHeaders()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = HttpMethods.Options;
+        httpContext.Request.Headers["Origin"] = "tauri://localhost";
+        httpContext.RequestServices = new ServiceCollection()
+            .AddLogging()
+            .AddOptions()
+            .BuildServiceProvider();
+        httpContext.Response.Body = new MemoryStream();
+
+        var result = RpcHttpCorsPolicy.CreatePreflightResponse(httpContext.Request);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status204NoContent, httpContext.Response.StatusCode);
+        Assert.False(httpContext.Response.Headers.ContainsKey("Access-Control-Allow-Origin"));
+        Assert.False(httpContext.Response.Headers.ContainsKey("Access-Control-Allow-Methods"));
+        Assert.False(httpContext.Response.Headers.ContainsKey("Access-Control-Allow-Headers"));
+        Assert.False(httpContext.Response.Headers.ContainsKey("Vary"));
         Assert.Equal(0L, httpContext.Response.Body.Length);
     }
 
@@ -71,7 +94,7 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
 
         Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
         Assert.Equal("http://localhost:1420", httpContext.Response.Headers["Access-Control-Allow-Origin"]);
-        Assert.Contains("Origin", httpContext.Response.Headers["Vary"].ToString(), StringComparison.Ordinal);
+        AssertContainsOriginVary(httpContext.Response.Headers);
 
         httpContext.Response.Body.Position = 0;
         using var document = JsonDocument.Parse(httpContext.Response.Body);
@@ -101,7 +124,7 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
 
         Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
         Assert.Equal("tauri://localhost", httpContext.Response.Headers["Access-Control-Allow-Origin"]);
-        Assert.Contains("Origin", httpContext.Response.Headers["Vary"].ToString(), StringComparison.Ordinal);
+        AssertContainsOriginVary(httpContext.Response.Headers);
 
         httpContext.Response.Body.Position = 0;
         using var document = JsonDocument.Parse(httpContext.Response.Body);
@@ -117,6 +140,13 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
         {
             Directory.Delete(_tempRoot, recursive: true);
         }
+    }
+
+    private static void AssertContainsOriginVary(IHeaderDictionary headers)
+    {
+        var varyValues = headers["Vary"]
+            .SelectMany(value => (value ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains(varyValues, value => string.Equals(value, "Origin", StringComparison.OrdinalIgnoreCase));
     }
 
     private static DefaultHttpContext CreatePostContext(string token, string requestJson, bool includeProtocolHeader)

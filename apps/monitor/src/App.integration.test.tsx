@@ -149,7 +149,7 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Monitor App real-host integration", () => {
-  it("keeps the direct SDK handoff working when browser-style `/rpc` preflight is required", async () => {
+  it("handles browser-style `/rpc` preflight and still recovers after host termination", async () => {
     const connection = await createConnection(getHost());
     const restoreFetch = installBrowserStyleRpcFetch(connection.rpcEndpoint, "tauri://monitor-integration");
 

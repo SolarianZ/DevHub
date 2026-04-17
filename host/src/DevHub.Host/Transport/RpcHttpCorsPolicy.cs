@@ -16,10 +16,14 @@ internal static class RpcHttpCorsPolicy
     private const string AllowOriginHeaderName = "Access-Control-Allow-Origin";
     private const string AllowMethodsHeaderName = "Access-Control-Allow-Methods";
     private const string AllowHeadersHeaderName = "Access-Control-Allow-Headers";
+    private const string AccessControlRequestMethodHeaderName = "Access-Control-Request-Method";
 
     internal static IResult CreatePreflightResponse(HttpRequest request)
     {
-        ApplyPreflightHeaders(request.HttpContext.Response.Headers, request.Headers[OriginHeaderName].ToString());
+        ApplyPreflightHeaders(
+            request.HttpContext.Response.Headers,
+            request.Headers[OriginHeaderName].ToString(),
+            request.Headers[AccessControlRequestMethodHeaderName].ToString());
         return Results.NoContent();
     }
 
@@ -29,9 +33,14 @@ internal static class RpcHttpCorsPolicy
         return result;
     }
 
-    private static void ApplyPreflightHeaders(IHeaderDictionary headers, string? origin)
+    private static void ApplyPreflightHeaders(IHeaderDictionary headers, string? origin, string? requestedMethod)
     {
         if (string.IsNullOrWhiteSpace(origin))
+        {
+            return;
+        }
+
+        if (!string.Equals(requestedMethod?.Trim(), HttpMethods.Post, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
