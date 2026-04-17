@@ -453,6 +453,89 @@ class TestConformanceRunner(unittest.TestCase):
         self.assertIsNotNone(failure)
         self.assertIn("$contract.error.message", failure["diffFields"])
 
+    def test_normalize_optional_event_payload_fields_when_scope_omitted_in_expectation_should_drop_actual_scope(self) -> None:
+        expected = {
+            "phase": "sdk-events",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "type": "app.instance.registered",
+                    "payload": {
+                        "appId": "events.subscribe.registered",
+                        "instanceId": "events-register-inst-1",
+                    },
+                }
+            },
+        }
+        actual = {
+            "phase": "sdk-events",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "type": "app.instance.registered",
+                    "payload": {
+                        "appId": "events.subscribe.registered",
+                        "instanceId": "events-register-inst-1",
+                        "scope": None,
+                    },
+                }
+            },
+        }
+
+        normalized = vector_runner.normalize_optional_event_payload_fields(actual, expected)
+
+        self.assertEqual(
+            {
+                "phase": "sdk-events",
+                "outcome": "success",
+                "actual": {
+                    "event": {
+                        "type": "app.instance.registered",
+                        "payload": {
+                            "appId": "events.subscribe.registered",
+                            "instanceId": "events-register-inst-1",
+                        },
+                    }
+                },
+            },
+            normalized,
+        )
+
+    def test_normalize_optional_event_payload_fields_should_preserve_unexpected_fields_outside_optional_scope(self) -> None:
+        expected = {
+            "phase": "sdk-events",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "type": "app.instance.registered",
+                    "payload": {
+                        "appId": "events.subscribe.registered",
+                        "instanceId": "events-register-inst-1",
+                    },
+                }
+            },
+        }
+        actual = {
+            "phase": "sdk-events",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "type": "app.instance.registered",
+                    "payload": {
+                        "appId": "events.subscribe.registered",
+                        "instanceId": "events-register-inst-1",
+                        "scope": None,
+                        "extra": True,
+                    },
+                }
+            },
+        }
+
+        normalized = vector_runner.normalize_optional_event_payload_fields(actual, expected)
+        diffs = vector_runner.collect_differences(expected, normalized)
+
+        self.assertEqual(["$.actual.event.payload.extra"], diffs)
+
     def test_run_adapter_when_process_times_out_should_return_process_error(self) -> None:
         adapter = vector_runner.AdapterTarget(
             name="timeout-adapter",

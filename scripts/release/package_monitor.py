@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,7 +69,7 @@ def main() -> int:
     checks_dir = output_dir / "checks"
 
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        remove_tree(output_dir)
 
     checks_dir.mkdir(parents=True, exist_ok=True)
     validation_records: list[ValidationRecord] = []
@@ -204,7 +205,7 @@ def build_monitor_assets(
     bundle_output_dir = output_dir / "bundle"
 
     if bundle_source_dir.exists():
-        shutil.rmtree(bundle_source_dir)
+        remove_tree(bundle_source_dir)
 
     command = [NPM_COMMAND, "run", "tauri:build"]
     if tauri_args:
@@ -227,6 +228,27 @@ def build_monitor_assets(
         raise RuntimeError("Monitor bundle 输出目录为空。")
 
     return asset_paths
+
+
+def remove_tree(path: Path, retries: int = 10, delay_seconds: float = 0.2) -> None:
+    if not path.exists():
+        return
+
+    last_error: OSError | None = None
+    for attempt in range(retries):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            last_error = exc
+            if attempt == retries - 1:
+                raise
+            time.sleep(delay_seconds * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
 
 
 def build_manifest(

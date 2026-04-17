@@ -361,6 +361,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
               payload: {
                 appId: "test.app",
                 instanceId: "inst-1",
+                scope: null,
                 password: "secret-1"
               }
             });

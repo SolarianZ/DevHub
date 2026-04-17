@@ -754,6 +754,106 @@ class TestWsEvents:
 
         return result
 
+    def test_ws_007b_same_event_matching_two_subscriptions_should_fan_out(self):
+        """WS-007B: 同一连接两个订阅同时命中时，必须逐订阅 fan-out 两条 hub.event。"""
+        result = TestResult("WS-007B 同连接多订阅逐订阅 fan-out")
+
+        instance_id = self._new_instance_id("ws-fanout")
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            rpc_client = RpcClient(http_base_url, token)
+            app_id = self._new_app_id("fanout")
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-7b")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-7b-1",
+                    "method": "hub.events.subscribe",
+                    "params": {
+                        "types": ["app.instance.registered"]
+                    }
+                })
+                subscribe_one = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_one, ["subscriptionId"]):
+                    return result
+                subscription_one = subscribe_one["result"].get("subscriptionId")
+
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "sub-7b-2",
+                    "method": "hub.events.subscribe",
+                    "params": {}
+                })
+                subscribe_two = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_success(result, subscribe_two, ["subscriptionId"]):
+                    return result
+                subscription_two = subscribe_two["result"].get("subscriptionId")
+
+                register_response = rpc_client.register_instance(
+                    instance_id=instance_id,
+                    app_id=app_id,
+                    scope=None,
+                    poll=True,
+                    respond=True,
+                    pid=62031,
+                )
+                if not RpcAssertions.expect_success(result, register_response):
+                    return result
+
+                expected_subscription_ids = {subscription_one, subscription_two}
+                received_subscription_ids = []
+                deadline = time.time() + 6
+                while time.time() < deadline and len(received_subscription_ids) < 2:
+                    timeout = max(0.1, deadline - time.time())
+                    try:
+                        message = ws.recv_json(timeout=timeout)
+                    except TimeoutError:
+                        continue
+
+                    if not isinstance(message, dict) or message.get("method") != "hub.event":
+                        continue
+
+                    event_params = self._assert_event_notification_contract(result, message)
+                    if event_params is None:
+                        return result
+
+                    if event_params.get("type") != "app.instance.registered":
+                        continue
+
+                    payload = event_params.get("payload", {})
+                    if payload.get("appId") != app_id or payload.get("instanceId") != instance_id:
+                        result.mark_failure(f"❌ fan-out 事件 payload 不匹配: {payload}")
+                        return result
+
+                    if payload.get("scope", "__missing__") is not None:
+                        result.mark_failure(f"❌ fan-out 事件 payload.scope 应为 null: {payload}")
+                        return result
+
+                    received_subscription_ids.append(event_params.get("subscriptionId"))
+
+                if set(received_subscription_ids) != expected_subscription_ids:
+                    result.mark_failure(
+                        f"❌ fan-out 未按订阅逐条投递: expected={sorted(expected_subscription_ids)}, actual={received_subscription_ids}"
+                    )
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                http_base_url, _, token = self._runtime_hub_info()
+                RpcClient(http_base_url, token).unregister_instance(instance_id)
+            except Exception:
+                pass
+
+        return result
+
     def test_ws_008_should_push_failed_event(self):
         """WS-008: 被调用方回传 error 应触发 invocation.failed。"""
         result = TestResult("WS-008 事件推送 failed 主链路")
@@ -1462,6 +1562,7 @@ class TestWsEvents:
             self.test_ws_005_subscribe_unsubscribe_should_work_after_auth(),
             self.test_ws_006_should_push_registered_delivered_completed_events(),
             self.test_ws_007_reconnect_after_disconnect_should_receive_events(),
+            self.test_ws_007b_same_event_matching_two_subscriptions_should_fan_out(),
             self.test_ws_009_pre_auth_request_array_params_should_unauthorized_and_close(),
             self.test_ws_010_pre_auth_notification_array_params_should_close(),
             self.test_ws_011_subscribe_unknown_event_type_should_invalid_params(),

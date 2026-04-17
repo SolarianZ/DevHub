@@ -319,11 +319,56 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
         return result
 
+    def test_invoke_edge_006_respond_unknown_invocation_should_return_unknown_reason(self):
+        """INVOKE-EDGE-006: respond 未知 invocationId 必须返回 unknown_invocation。"""
+        result = TestResult("INVOKE-EDGE-006 respond unknown_invocation 细分")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = self._new_app_id("respond-unknown")
+            definition_path = self._create_definition(app_id)
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._new_instance_id("respond-unknown")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope=None,
+                poll=True,
+                respond=True,
+                pid=6406,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            response = client.respond_value(instance_id, "invk-unknown", {"ok": True})
+            if not RpcAssertions.expect_error(
+                result,
+                response,
+                -32011,
+                "invocation_expired",
+                expected_data={"reason": "unknown_invocation", "invocationId": "invk-unknown"},
+            ):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+            safe_remove(definition_path)
+
+        return result
+
     def run_all_tests(self, full=False):
         results = [
             self.test_invoke_edge_004_poll_success_should_refresh_last_seen(),
             self.test_invoke_edge_002_respond_success_should_refresh_last_seen(),
             self.test_invoke_edge_003_respond_after_unregister_should_instance_not_found(),
+            self.test_invoke_edge_006_respond_unknown_invocation_should_return_unknown_reason(),
         ]
 
         if full:

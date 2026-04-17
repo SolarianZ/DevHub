@@ -80,7 +80,7 @@ def main() -> int:
     checks_dir = output_dir / "checks"
 
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        remove_tree(output_dir)
 
     checks_dir.mkdir(parents=True, exist_ok=True)
     validation_records: list[ValidationRecord] = []
@@ -349,7 +349,7 @@ def build_release_assets(
     asset_paths.extend(sorted(python_dir.glob("*")))
 
     if staging_dir.exists():
-        shutil.rmtree(staging_dir)
+        remove_tree(staging_dir)
 
     return asset_paths
 
@@ -492,7 +492,7 @@ def run_host_smoke(checks_dir: Path, validation_records: list[ValidationRecord])
     runner_log = checks_dir / "smoke-runner.log"
 
     if smoke_data_dir.exists():
-        shutil.rmtree(smoke_data_dir)
+        remove_tree(smoke_data_dir)
     smoke_data_dir.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
@@ -531,7 +531,7 @@ def run_host_smoke(checks_dir: Path, validation_records: list[ValidationRecord])
             terminate_process(process)
 
     if smoke_data_dir.exists():
-        shutil.rmtree(smoke_data_dir)
+        remove_tree(smoke_data_dir)
 
 
 def wait_for_path(path: Path, timeout_seconds: int) -> None:
@@ -552,6 +552,27 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=10)
+
+
+def remove_tree(path: Path, retries: int = 10, delay_seconds: float = 0.2) -> None:
+    if not path.exists():
+        return
+
+    last_error: OSError | None = None
+    for attempt in range(retries):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            last_error = exc
+            if attempt == retries - 1:
+                raise
+            time.sleep(delay_seconds * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
 
 
 def run_logged_command(

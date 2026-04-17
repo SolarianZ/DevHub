@@ -452,6 +452,36 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_ShouldKeepUndocumentedTokensLiteral()
+    {
+        WriteDefinition(
+            "launch-args-template-literal.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "{dedupeKey}|{appId}|{scopeOrGlobal}");
+
+        string? capturedArguments = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((_, args) => capturedArguments = args)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-literal.app",
+            scope: "workspace-B",
+            dedupeKey: "manual-key",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+        Assert.Equal("{dedupeKey}|launch-args-template-literal.app|workspace-B", capturedArguments);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
     {
         WriteDefinition("launch-null-process.app", includeLaunch: true);
@@ -694,5 +724,4 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
-
 

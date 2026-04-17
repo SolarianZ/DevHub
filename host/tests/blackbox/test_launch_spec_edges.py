@@ -7,6 +7,7 @@ import os
 import uuid
 import json
 import time
+import tempfile
 import unittest
 
 
@@ -87,7 +88,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             first_launch_id = first["result"].get("launchId")
             second_launch_id = second["result"].get("launchId")
 
-            if first_status not in ("started", "starting", "already_running"):
+            if first_status != "started":
                 result.mark_failure(f"❌ 首次 launch status 异常: {first}")
                 return result
 
@@ -188,12 +189,12 @@ class TestLaunchSpecEdges(unittest.TestCase):
                 return result
 
             status = response["result"].get("status")
-            if status not in ("started", "starting"):
-                result.mark_failure(f"❌ waitForRegisterMs>0 返回非法 status: {response}")
+            if status != "starting":
+                result.mark_failure(f"❌ waitForRegisterMs>0 超时后应返回 starting: {response}")
                 return result
 
             if elapsed_ms < 500:
-                result.add_detail(f"⚠️ 等待时长较短（{elapsed_ms}ms），但状态分支已命中 {status}")
+                result.add_detail(f"⚠️ 等待时长较短（{elapsed_ms}ms），但返回状态已为 {status}")
             else:
                 result.add_detail(f"✅ waitForRegisterMs 分支耗时 {elapsed_ms}ms，状态 {status}")
 
@@ -271,12 +272,81 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_005_undocumented_placeholder_should_remain_literal(self):
+        """LAUNCH-EDGE-005: argsTemplate 中未文档化占位符必须保持字面量。"""
+        result = TestResult("LAUNCH-EDGE-005 未文档化占位符保持字面量")
+        definition_path = None
+        script_path = None
+        capture_file = None
+
+        try:
+            app_id = self._new_app_id("literal-placeholder")
+            temp_dir = tempfile.mkdtemp(prefix="devhub-launch-edge-")
+            script_path = os.path.join(temp_dir, "capture_args.py")
+            capture_file = os.path.join(temp_dir, "captured.txt")
+
+            with open(script_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "import pathlib, sys\n"
+                    "pathlib.Path(sys.argv[1]).write_text('|'.join(sys.argv[2:]), encoding='utf-8')\n"
+                )
+
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "argsTemplate": f'"{script_path}" "{capture_file}" "{{dedupeKey}}" "{{appId}}"',
+                },
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.launch_app(
+                app_id=app_id,
+                scope=None,
+                dedupe_key="manual-key",
+                wait_for_register_ms=0,
+                request_id="launch-edge-005",
+            )
+            if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                return result
+
+            deadline = time.time() + 3
+            while time.time() < deadline and not os.path.exists(capture_file):
+                time.sleep(0.05)
+
+            if not os.path.exists(capture_file):
+                result.mark_failure("❌ 启动进程未写出参数捕获文件")
+                return result
+
+            with open(capture_file, "r", encoding="utf-8") as handle:
+                captured = handle.read().strip()
+
+            expected = f"{{dedupeKey}}|{app_id}"
+            if captured != expected:
+                result.mark_failure(f"❌ 未文档化占位符被替换或参数异常: expected={expected}, actual={captured}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+            safe_remove(capture_file)
+            safe_remove(script_path)
+            if script_path:
+                safe_remove(os.path.dirname(script_path))
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
             self.test_launch_edge_002_explicit_dedupe_key_should_take_effect(),
             self.test_launch_edge_003_wait_for_register_positive_should_return_started_or_starting(),
             self.test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(),
+            self.test_launch_edge_005_undocumented_placeholder_should_remain_literal(),
         ]
 
 

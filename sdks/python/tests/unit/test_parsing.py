@@ -386,6 +386,7 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
                 "payload": {
                     "appId": "test.app",
                     "instanceId": "inst-1",
+                    "scope": None,
                     "password": "secret-1",
                 },
             },

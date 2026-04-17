@@ -295,6 +295,9 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }, CancellationToken.None);
 
         AssertError(response, -32011, "invocation_expired");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invk-not-exists", errorData.GetProperty("invocationId").GetString());
+        Assert.Equal("unknown_invocation", errorData.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -814,5 +817,3 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
     }
 }
-
-

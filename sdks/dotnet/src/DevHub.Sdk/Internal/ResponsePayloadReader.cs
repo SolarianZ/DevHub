@@ -174,6 +174,7 @@ internal static class ResponsePayloadReader
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
                 EnsureStringProperty(payload, $"{location}.payload", "instanceId");
+                EnsureOptionalStringOrNullProperty(payload, $"{location}.payload", "scope");
                 if (payload.TryGetProperty("password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");

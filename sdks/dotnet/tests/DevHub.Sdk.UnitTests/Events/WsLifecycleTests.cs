@@ -31,7 +31,7 @@ public sealed class WsLifecycleTests : IDisposable
             "appId"
         },
         {
-            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","password":"secret-1"}}}""",
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":null,"password":"secret-1"}}}""",
             "password"
         }
     };

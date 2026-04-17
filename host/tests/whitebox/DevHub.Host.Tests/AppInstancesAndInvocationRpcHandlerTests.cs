@@ -664,6 +664,23 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         AssertError(respondDisabledResponse, -32002, "forbidden", "respond-disabled");
         Assert.Equal("respond_not_enabled", JsonSerializer.SerializeToElement(respondDisabledResponse.Error!.Data).GetProperty("reason").GetString());
 
+        var unknownInvocationResponse = await context.Handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubInvokeRespond,
+                "respond-unknown-invocation",
+                new
+                {
+                    instanceId = "holder.instance",
+                    invocationId = "invk-unknown",
+                    value = new { ok = true }
+                }),
+            CancellationToken.None);
+
+        AssertError(unknownInvocationResponse, -32011, "invocation_expired", "respond-unknown-invocation");
+        var unknownData = JsonSerializer.SerializeToElement(unknownInvocationResponse.Error!.Data);
+        Assert.Equal("invk-unknown", unknownData.GetProperty("invocationId").GetString());
+        Assert.Equal("unknown_invocation", unknownData.GetProperty("reason").GetString());
+
         var notifyResponse = await context.Handler.HandleAsync(
             CreateRequest(
                 HubRpcMethods.HubInvokeNotify,
