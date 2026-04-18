@@ -52,6 +52,7 @@
 - 前端单独调试：`npm run dev`
 - 生产发布优先入口：`python ../../scripts/release/package_monitor.py --release-id <release-id>`
 - 底层 Tauri 构建命令：`npm run tauri:build`
+- 安装包与桌面快捷方式按单实例运行；重复启动时会唤醒已有主窗口，不会创建新的 Monitor 进程。
 
 `package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml` 的版本一致性，再串联 `npm ci`、`npm run verify`、`npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。
 

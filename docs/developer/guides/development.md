@@ -88,6 +88,7 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
 - Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
+- Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。
 - `python3 scripts/sdk/run_integration_full.py` 是仓库级 SDK 集成测试的 build-once / run-many 本地入口：脚本会先把 `DevHub.Host` 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 依次运行 `.NET`、`JS/TS`、`Python` SDK 测试。执行前请先准备好 JS / Python 依赖。
 - `python3 scripts/docs/check_markdown_links.py` 会扫描仓库内所有未被 `.gitignore` 忽略的 `.md` 文件，提取 `[text](path)` 形式的本地路径超链接并校验目标是否存在；发现失效路径时，会按文件分组输出原始超链接并返回非零退出码。

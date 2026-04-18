@@ -140,6 +140,9 @@ pub fn run() {
     let monitor_state = MonitorCore::new().expect("failed to initialize monitor state");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = show_main_window(app);
+        }))
         .manage(monitor_state)
         .setup(|app| setup_monitor(app).map_err(Into::into))
         .on_window_event(|window, event| {
@@ -175,6 +178,26 @@ fn setup_monitor(app: &mut tauri::App) -> Result<()> {
     Ok(())
 }
 
+trait MainWindowHandle {
+    fn show_window(&self) -> tauri::Result<()>;
+    fn unminimize_window(&self) -> tauri::Result<()>;
+    fn focus_window(&self) -> tauri::Result<()>;
+}
+
+impl<R: tauri::Runtime> MainWindowHandle for tauri::WebviewWindow<R> {
+    fn show_window(&self) -> tauri::Result<()> {
+        self.show()
+    }
+
+    fn unminimize_window(&self) -> tauri::Result<()> {
+        self.unminimize()
+    }
+
+    fn focus_window(&self) -> tauri::Result<()> {
+        self.set_focus()
+    }
+}
+
 fn create_tray(app: &mut tauri::App) -> Result<()> {
     let show_item = MenuItem::with_id(app, "show_main_window", "显示主窗口", true, None::<&str>)
         .context("无法创建托盘菜单项：显示主窗口。")?;
@@ -208,13 +231,18 @@ fn create_tray(app: &mut tauri::App) -> Result<()> {
     Ok(())
 }
 
-fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
+fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("main") {
-        window.show()?;
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        restore_main_window(&window)?;
     }
 
+    Ok(())
+}
+
+fn restore_main_window(window: &impl MainWindowHandle) -> tauri::Result<()> {
+    window.show_window()?;
+    let _ = window.unminimize_window();
+    let _ = window.focus_window();
     Ok(())
 }
 
@@ -280,7 +308,12 @@ fn validate_optional_absolute_path(value: Option<&str>, field: &str) -> CommandR
 
 #[cfg(test)]
 mod tests {
-    use super::{should_hide_window_on_close, tray_menu_action_from_id, TrayMenuAction};
+    use super::{
+        restore_main_window, should_hide_window_on_close, tray_menu_action_from_id,
+        MainWindowHandle, TrayMenuAction,
+    };
+    use std::cell::Cell;
+    use std::io;
 
     #[test]
     fn should_hide_window_when_close_requested_without_exit_flag() {
@@ -299,5 +332,103 @@ mod tests {
             TrayMenuAction::Quit
         );
         assert_eq!(tray_menu_action_from_id("unknown"), TrayMenuAction::Ignore);
+    }
+
+    #[test]
+    fn restore_main_window_invokes_show_unminimize_and_focus() {
+        let window = RecordingWindow::success();
+
+        restore_main_window(&window).expect("expected window restore to succeed");
+
+        assert!(window.show_called.get());
+        assert!(window.unminimize_called.get());
+        assert!(window.focus_called.get());
+    }
+
+    #[test]
+    fn restore_main_window_returns_show_error_before_follow_up_actions() {
+        let window = RecordingWindow::with_results(
+            Err(tauri::Error::Io(io::Error::other("show failed"))),
+            Ok(()),
+            Ok(()),
+        );
+
+        let error = restore_main_window(&window).expect_err("expected show failure");
+
+        assert!(error.to_string().contains("show failed"));
+        assert!(window.show_called.get());
+        assert!(!window.unminimize_called.get());
+        assert!(!window.focus_called.get());
+    }
+
+    #[test]
+    fn restore_main_window_ignores_unminimize_and_focus_failures_after_show() {
+        let window = RecordingWindow::with_results(
+            Ok(()),
+            Err(tauri::Error::Io(io::Error::other("unminimize failed"))),
+            Err(tauri::Error::Io(io::Error::other("focus failed"))),
+        );
+
+        restore_main_window(&window).expect("follow-up failures should be ignored");
+
+        assert!(window.show_called.get());
+        assert!(window.unminimize_called.get());
+        assert!(window.focus_called.get());
+    }
+
+    struct RecordingWindow {
+        show_result: tauri::Result<()>,
+        unminimize_result: tauri::Result<()>,
+        focus_result: tauri::Result<()>,
+        show_called: Cell<bool>,
+        unminimize_called: Cell<bool>,
+        focus_called: Cell<bool>,
+    }
+
+    impl RecordingWindow {
+        fn success() -> Self {
+            Self::with_results(Ok(()), Ok(()), Ok(()))
+        }
+
+        fn with_results(
+            show_result: tauri::Result<()>,
+            unminimize_result: tauri::Result<()>,
+            focus_result: tauri::Result<()>,
+        ) -> Self {
+            Self {
+                show_result,
+                unminimize_result,
+                focus_result,
+                show_called: Cell::new(false),
+                unminimize_called: Cell::new(false),
+                focus_called: Cell::new(false),
+            }
+        }
+    }
+
+    impl MainWindowHandle for RecordingWindow {
+        fn show_window(&self) -> tauri::Result<()> {
+            self.show_called.set(true);
+            self.show_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
+
+        fn unminimize_window(&self) -> tauri::Result<()> {
+            self.unminimize_called.set(true);
+            self.unminimize_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
+
+        fn focus_window(&self) -> tauri::Result<()> {
+            self.focus_called.set(true);
+            self.focus_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
     }
 }
