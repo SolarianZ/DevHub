@@ -8,9 +8,7 @@ import App from "./App";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
-  LogFileInfo,
   LogKind,
-  LogReadResult,
   MonitorRuntimeConnectionInfo,
   SettingsSnapshot,
 } from "./lib/models";
@@ -21,8 +19,7 @@ const {
   listenMock,
   getBootstrapStateMock,
   getSettingsSnapshotMock,
-  listLogsMock,
-  readLogMock,
+  openLogDirectoryMock,
   requestHostLaunchMock,
   resumeDiscoveryMock,
   saveSettingsMock,
@@ -31,10 +28,7 @@ const {
   listenMock: vi.fn(),
   getBootstrapStateMock: vi.fn<() => Promise<BootstrapSnapshot>>(),
   getSettingsSnapshotMock: vi.fn<() => Promise<SettingsSnapshot>>(),
-  listLogsMock: vi.fn<(kind: LogKind) => Promise<LogFileInfo[]>>(),
-  readLogMock: vi.fn<
-    (request: { kind: LogKind; fileName: string }) => Promise<LogReadResult>
-  >(),
+  openLogDirectoryMock: vi.fn<(kind: LogKind) => Promise<void>>(),
   requestHostLaunchMock: vi.fn(),
   resumeDiscoveryMock: vi.fn(),
   saveSettingsMock: vi.fn(),
@@ -52,8 +46,7 @@ vi.mock("./lib/monitor-api", async () => {
     ...actual,
     getBootstrapState: getBootstrapStateMock,
     getSettingsSnapshot: getSettingsSnapshotMock,
-    listLogs: listLogsMock,
-    readLog: readLogMock,
+    openLogDirectory: openLogDirectoryMock,
     requestHostLaunch: requestHostLaunchMock,
     resumeDiscovery: resumeDiscoveryMock,
     saveSettings: saveSettingsMock,
@@ -105,15 +98,7 @@ beforeAll(async () => {
 
   getBootstrapStateMock.mockResolvedValue(createBootstrapSnapshot(connection));
   getSettingsSnapshotMock.mockResolvedValue(createSettingsSnapshot());
-  listLogsMock.mockResolvedValue([]);
-  readLogMock.mockResolvedValue({
-    kind: "monitor",
-    fileName: "monitor-latest.log",
-    filePath: join(getHost().dataDirectory, "logs", "monitor-latest.log"),
-    sizeBytes: 0,
-    truncated: false,
-    contents: "",
-  });
+  openLogDirectoryMock.mockResolvedValue(undefined);
   requestHostLaunchMock.mockResolvedValue({
     status: "started",
     effectiveDataDir: getHost().dataDirectory,
@@ -149,16 +134,19 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Monitor App real-host integration", () => {
-  it("handles browser-style `/rpc` preflight and still recovers after host termination", async () => {
+  it("keeps the product shell working across real host connect, refresh, and recovery", async () => {
     const connection = await createConnection(getHost());
     const restoreFetch = installBrowserStyleRpcFetch(connection.rpcEndpoint, "tauri://monitor-integration");
 
     try {
       render(<App />);
 
-      await screen.findByText("连接摘要", {}, { timeout: 15_000 });
+      await screen.findByRole("heading", { name: "应用定义" }, { timeout: 15_000 });
       await screen.findByText("Monitor Integration App", {}, { timeout: 15_000 });
       await screen.findByText("monitor-integration-instance", {}, { timeout: 15_000 });
+      screen.getByRole("button", { name: "设置" });
+      screen.getByRole("button", { name: "帮助" });
+      expect(screen.queryByRole("button", { name: "日志" })).toBeNull();
 
       const triggerClient = await DevHubClient.fromRuntime({
         clientId: "monitor-integration-trigger",
@@ -187,7 +175,7 @@ describe("Monitor App real-host integration", () => {
       await waitFor(() => {
         expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
       }, { timeout: 15_000 });
-      await screen.findByText("扫描与启动流程", {}, { timeout: 15_000 });
+      await screen.findByText("连接 DevHub Host", {}, { timeout: 15_000 });
     } finally {
       restoreFetch();
     }

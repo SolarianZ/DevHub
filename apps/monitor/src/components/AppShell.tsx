@@ -2,20 +2,17 @@ import type { AppDefinition, AppInstance } from "@devhub/sdk";
 import type { DefinitionFormState } from "../lib/definition-form";
 import type {
   BootstrapSnapshot,
-  LogFileInfo,
   LogKind,
-  LogReadResult,
   MonitorSettings,
   SettingsSnapshot,
 } from "../lib/models";
 import {
   type DefinitionDialogState,
   type HostSessionStatus,
-  type RoutePage,
+  type PrimaryWorkspaceMode,
   type SettingsFieldErrors,
   formatBootstrapDescription,
   formatBootstrapHeadline,
-  formatBytes,
   formatDataDirSource,
   formatDefinitionCapabilities,
   formatPhaseLabel,
@@ -27,8 +24,10 @@ import {
 } from "../lib/monitor-ui";
 
 interface AppShellProps {
-  route: RoutePage;
-  canOpenStatus: boolean;
+  workspaceMode: PrimaryWorkspaceMode;
+  helpMenuOpen: boolean;
+  openingLogKind: LogKind | null;
+  settingsOpen: boolean;
   activeError: string | null;
   bootstrap: BootstrapSnapshot | null;
   bootstrapBusy: boolean;
@@ -42,20 +41,15 @@ interface AppShellProps {
   instances: AppInstance[];
   inventoryMessage: string;
   nowTick: number;
-  activeLogKind: LogKind;
-  monitorLogDirectory: string | null;
-  visibleLogs: LogFileInfo[];
-  selectedLog: LogReadResult | null;
-  logsBusy: boolean;
   definitionDialog: DefinitionDialogState | null;
-  onNavigate: (route: RoutePage) => void;
+  onOpenSettings: () => void;
+  onCloseSettings: () => void;
+  onToggleHelpMenu: () => void;
+  onOpenLogDirectory: (kind: LogKind) => void;
   onResumeDiscovery: () => void;
   onLaunchHost: () => void;
   onChangeSettingsField: (field: keyof MonitorSettings, value: string) => void;
   onSaveSettings: () => void;
-  onRefreshLogs: () => void;
-  onSelectLogKind: (kind: LogKind) => void;
-  onOpenLog: (kind: LogKind, fileName: string) => void;
   onAddDefinition: () => void;
   onEditDefinition: (appId: string) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
@@ -67,8 +61,10 @@ interface AppShellProps {
 
 export function AppShell(props: AppShellProps) {
   const {
-    route,
-    canOpenStatus,
+    workspaceMode,
+    helpMenuOpen,
+    openingLogKind,
+    settingsOpen,
     activeError,
     bootstrap,
     bootstrapBusy,
@@ -82,20 +78,15 @@ export function AppShell(props: AppShellProps) {
     instances,
     inventoryMessage,
     nowTick,
-    activeLogKind,
-    monitorLogDirectory,
-    visibleLogs,
-    selectedLog,
-    logsBusy,
     definitionDialog,
-    onNavigate,
+    onOpenSettings,
+    onCloseSettings,
+    onToggleHelpMenu,
+    onOpenLogDirectory,
     onResumeDiscovery,
     onLaunchHost,
     onChangeSettingsField,
     onSaveSettings,
-    onRefreshLogs,
-    onSelectLogKind,
-    onOpenLog,
     onAddDefinition,
     onEditDefinition,
     onViewInstanceDefinition,
@@ -110,69 +101,102 @@ export function AppShell(props: AppShellProps) {
       <header className="shell-header">
         <div className="shell-title">
           <p className="eyebrow">DevHub Monitor</p>
-          <h1>Desktop workflow shell</h1>
+          <h1>连接并管理你的 DevHub Host</h1>
           <p className="hero-copy">
-            Monitor 前端通过壳层装配各条工作流：初始化探测、Host 会话、定义管理、设置保存与日志排障分别由独立控制器负责。
+            {workspaceMode === "status"
+              ? "当前主界面会持续展示连接状态、应用定义和实例清单；辅助操作通过顶部菜单进入。"
+              : "Monitor 会持续查找可用的 DevHub Host，并在连接就绪后自动切换到管理视图。"}
           </p>
         </div>
-        <div className="shell-status">
-          <span className={`phase phase-${bootstrap?.phase ?? "loading"}`}>
-            {formatPhaseLabel(bootstrap?.phase)}
-          </span>
-          <span className={`session-badge session-${hostSessionStatus}`}>
-            {formatSessionLabel(hostSessionStatus)}
-          </span>
+
+        <div className="shell-side">
+          <nav className="menu-bar" aria-label="Monitor menu">
+            <button type="button" className="menu-trigger" onClick={onOpenSettings}>
+              设置
+            </button>
+
+            <div className="menu-group">
+              <button
+                type="button"
+                className={`menu-trigger ${helpMenuOpen ? "active" : ""}`}
+                aria-expanded={helpMenuOpen}
+                aria-haspopup="menu"
+                onClick={onToggleHelpMenu}
+              >
+                帮助
+              </button>
+
+              {helpMenuOpen ? (
+                <div className="menu-popover" role="menu" aria-label="帮助菜单">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="menu-item"
+                    onClick={() => onOpenLogDirectory("host")}
+                    disabled={openingLogKind !== null}
+                  >
+                    {openingLogKind === "host" ? "正在打开 Host 日志..." : "打开 Host 日志"}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="menu-item"
+                    onClick={() => onOpenLogDirectory("monitor")}
+                    disabled={openingLogKind !== null}
+                  >
+                    {openingLogKind === "monitor" ? "正在打开 Monitor 日志..." : "打开 Monitor 日志"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </nav>
+
+          <div className="shell-status">
+            <span className={`phase phase-${bootstrap?.phase ?? "loading"}`}>
+              {formatPhaseLabel(bootstrap?.phase)}
+            </span>
+            <span className={`session-badge session-${hostSessionStatus}`}>
+              {formatSessionLabel(hostSessionStatus)}
+            </span>
+          </div>
         </div>
       </header>
 
-      <nav className="route-bar" aria-label="Monitor navigation">
-        <RouteButton active={route === "bootstrap"} label="初始化" onClick={() => onNavigate("bootstrap")} />
-        <RouteButton
-          active={route === "status"}
-          label="状态"
-          disabled={!canOpenStatus}
-          onClick={() => onNavigate("status")}
-        />
-        <RouteButton active={route === "settings"} label="设置" onClick={() => onNavigate("settings")} />
-        <RouteButton active={route === "logs"} label="日志" onClick={() => onNavigate("logs")} />
-      </nav>
-
       <section className="summary-grid">
         <article className="summary-card">
-          <span className="summary-label">生效数据目录</span>
+          <span className="summary-label">当前数据目录</span>
           <strong>{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}</strong>
           <span className="summary-meta">
             来源：{formatDataDirSource(bootstrap?.dataDirSource ?? settings?.dataDirSource)}
           </span>
         </article>
+
         <article className="summary-card">
-          <span className="summary-label">当前端口</span>
+          <span className="summary-label">当前连接</span>
           <strong>{bootstrap?.connection ? getRuntimePort(bootstrap.connection) : "未连接"}</strong>
           <span className="summary-meta">
-            {bootstrap?.connection?.rpcEndpoint ?? "等待验证可用 Host。"}
+            {bootstrap?.connection?.rpcEndpoint ?? "等待发现并验证可用的 Host。"}
           </span>
         </article>
+
         <article className="summary-card">
-          <span className="summary-label">定义 / 实例</span>
+          <span className="summary-label">资产概览</span>
           <strong>
-            {definitions.length} / {instances.length}
+            {definitions.length} 个定义 / {instances.length} 个实例
           </strong>
           <span className="summary-meta">{inventoryMessage}</span>
         </article>
       </section>
 
-      {route === "bootstrap" ? (
-        <BootstrapPage
+      {workspaceMode === "bootstrap" ? (
+        <BootstrapWorkspace
           bootstrap={bootstrap}
           busy={bootstrapBusy}
           onResumeDiscovery={onResumeDiscovery}
           onLaunchHost={onLaunchHost}
-          onOpenSettings={() => onNavigate("settings")}
         />
-      ) : null}
-
-      {route === "status" ? (
-        <StatusPage
+      ) : (
+        <StatusWorkspace
           bootstrap={bootstrap}
           definitions={definitions}
           hostSessionStatus={hostSessionStatus}
@@ -182,10 +206,10 @@ export function AppShell(props: AppShellProps) {
           onEditDefinition={onEditDefinition}
           onViewInstanceDefinition={onViewInstanceDefinition}
         />
-      ) : null}
+      )}
 
-      {route === "settings" ? (
-        <SettingsPage
+      {settingsOpen ? (
+        <SettingsDialog
           bootstrap={bootstrap}
           busy={settingsBusy}
           fieldErrors={settingsFieldErrors}
@@ -193,20 +217,8 @@ export function AppShell(props: AppShellProps) {
           settingsDirty={settingsDirty}
           settingsDraft={settingsDraft}
           onChangeField={onChangeSettingsField}
+          onClose={onCloseSettings}
           onSave={onSaveSettings}
-        />
-      ) : null}
-
-      {route === "logs" ? (
-        <LogsPage
-          activeLogKind={activeLogKind}
-          busy={logsBusy}
-          monitorLogDirectory={monitorLogDirectory}
-          selectedLog={selectedLog}
-          visibleLogs={visibleLogs}
-          onOpenLog={onOpenLog}
-          onRefresh={onRefreshLogs}
-          onSelectKind={onSelectLogKind}
         />
       ) : null}
 
@@ -225,23 +237,23 @@ export function AppShell(props: AppShellProps) {
   );
 }
 
-function BootstrapPage(props: {
+function BootstrapWorkspace(props: {
   bootstrap: BootstrapSnapshot | null;
   busy: boolean;
   onResumeDiscovery: () => void;
   onLaunchHost: () => void;
-  onOpenSettings: () => void;
 }) {
-  const { bootstrap, busy, onResumeDiscovery, onLaunchHost, onOpenSettings } = props;
+  const { bootstrap, busy, onResumeDiscovery, onLaunchHost } = props;
 
   return (
     <section className="page-grid bootstrap-grid">
-      <article className="panel panel-primary">
+      <article className="panel panel-primary panel-span">
         <header className="panel-header">
           <div>
-            <p className="eyebrow">Initialization</p>
-            <h2>扫描与启动流程</h2>
+            <p className="eyebrow">Connection</p>
+            <h2>连接 DevHub Host</h2>
           </div>
+
           <div className="button-row">
             <button type="button" onClick={onResumeDiscovery} disabled={busy}>
               重新扫描
@@ -253,9 +265,6 @@ function BootstrapPage(props: {
             >
               启动 DevHub Host
             </button>
-            <button type="button" className="button-secondary" onClick={onOpenSettings} disabled={busy}>
-              打开设置
-            </button>
           </div>
         </header>
 
@@ -263,10 +272,15 @@ function BootstrapPage(props: {
           <strong>{formatBootstrapHeadline(bootstrap?.phase)}</strong>
           <p>{formatBootstrapDescription(bootstrap)}</p>
         </div>
+      </article>
 
+      <article className="panel">
+        <header className="panel-header">
+          <h2>当前环境</h2>
+        </header>
         <dl className="detail-list">
           <div>
-            <dt>有效数据目录</dt>
+            <dt>生效数据目录</dt>
             <dd>{bootstrap?.effectiveDataDir ?? "加载中"}</dd>
           </div>
           <div>
@@ -278,7 +292,7 @@ function BootstrapPage(props: {
             <dd>{bootstrap?.settings.hostExecutablePath ?? "未配置"}</dd>
           </div>
           <div>
-            <dt>连接状态</dt>
+            <dt>当前连接</dt>
             <dd>{bootstrap?.connection?.rpcEndpoint ?? "尚未发现可用 Host。"}</dd>
           </div>
         </dl>
@@ -286,37 +300,32 @@ function BootstrapPage(props: {
 
       <article className="panel">
         <header className="panel-header">
-          <h2>流程断点</h2>
+          <h2>下一步</h2>
         </header>
         <div className="stack-list">
           <div className="stack-item">
-            <strong>3 秒后显示启动按钮</strong>
-            <p>当前 phase 为 `launch_available` 时，初始化页会继续扫描，但允许用户主动拉起 Host。</p>
+            <strong>继续等待自动发现</strong>
+            <p>Monitor 会持续验证当前数据目录中的运行时信息，不需要手动切换页面。</p>
           </div>
           <div className="stack-item">
-            <strong>缺少 Host 路径自动转设置</strong>
-            <p>原生层返回 `settings_required` 时，前端立即切到设置页，而不是继续发起启动。</p>
+            <strong>无法启动时先检查设置</strong>
+            <p>如果缺少 Host 路径或需要调整数据目录，请使用顶部“设置”菜单更新本机配置。</p>
           </div>
           <div className="stack-item">
-            <strong>断线回退初始化</strong>
-            <p>状态页关键会话断开时会释放客户端并恢复扫描，避免停留在过期运行时上。</p>
+            <strong>排障入口位于帮助菜单</strong>
+            <p>需要查看日志时，可通过顶部“帮助”菜单直接打开 Host 或 Monitor 的日志目录。</p>
           </div>
         </div>
-      </article>
 
-      <article className="panel">
-        <header className="panel-header">
-          <h2>最近问题</h2>
-        </header>
-        <p className="problem-card">
-          {bootstrap?.lastProblem?.message ?? "当前没有记录到扫描或连接问题。"}
-        </p>
+        <div className="problem-card">
+          {bootstrap?.lastProblem?.message ?? "当前没有记录到需要处理的连接问题。"}
+        </div>
       </article>
     </section>
   );
 }
 
-function StatusPage(props: {
+function StatusWorkspace(props: {
   bootstrap: BootstrapSnapshot | null;
   definitions: AppDefinition[];
   hostSessionStatus: HostSessionStatus;
@@ -342,8 +351,8 @@ function StatusPage(props: {
       <article className="panel panel-primary">
         <header className="panel-header">
           <div>
-            <p className="eyebrow">Status</p>
-            <h2>连接摘要</h2>
+            <p className="eyebrow">Connection</p>
+            <h2>当前连接</h2>
           </div>
           <span className={`session-badge session-${hostSessionStatus}`}>
             {formatSessionLabel(hostSessionStatus)}
@@ -374,7 +383,7 @@ function StatusPage(props: {
         <header className="panel-header">
           <div>
             <p className="eyebrow">App Definitions</p>
-            <h2>定义列表</h2>
+            <h2>应用定义</h2>
           </div>
           <button type="button" onClick={onAddDefinition}>
             新增定义
@@ -383,8 +392,8 @@ function StatusPage(props: {
 
         {definitions.length === 0 ? (
           <EmptyState
-            title="当前没有已注册定义"
-            description="连接建立后会拉取完整的 Definition 列表，后续变更会通过事件触发自动刷新。"
+            title="当前没有应用定义"
+            description="连接已建立，但 Host 还没有返回任何定义。你可以先创建一个新的应用定义。"
           />
         ) : (
           <div className="inventory-list">
@@ -404,6 +413,7 @@ function StatusPage(props: {
                     ))}
                   </div>
                 </div>
+
                 <div className="inventory-actions">
                   <button type="button" className="button-secondary" onClick={() => onEditDefinition(definition.appId)}>
                     编辑
@@ -419,15 +429,15 @@ function StatusPage(props: {
         <header className="panel-header">
           <div>
             <p className="eyebrow">App Instances</p>
-            <h2>跨 scope 实例</h2>
+            <h2>应用实例</h2>
           </div>
-          <span className="subtle">包含离线实例</span>
+          <span className="subtle">列表包含离线保留实例</span>
         </header>
 
         {instances.length === 0 ? (
           <EmptyState
-            title="当前没有实例"
-            description="状态页会通过 `includeAllScopes=true` 和 `includeOffline=true` 拉取完整实例镜像。"
+            title="当前没有应用实例"
+            description="实例会在 Host 接收到注册后显示在这里，离线保留实例也会继续保留在列表中。"
           />
         ) : (
           <div className="inventory-list">
@@ -456,6 +466,7 @@ function StatusPage(props: {
                       </span>
                     </div>
                   </div>
+
                   <div className="inventory-actions">
                     <button
                       type="button"
@@ -475,7 +486,7 @@ function StatusPage(props: {
   );
 }
 
-function SettingsPage(props: {
+function SettingsDialog(props: {
   bootstrap: BootstrapSnapshot | null;
   busy: boolean;
   fieldErrors: SettingsFieldErrors;
@@ -483,170 +494,87 @@ function SettingsPage(props: {
   settingsDirty: boolean;
   settingsDraft: MonitorSettings;
   onChangeField: (field: keyof MonitorSettings, value: string) => void;
+  onClose: () => void;
   onSave: () => void;
 }) {
-  const { bootstrap, busy, fieldErrors, settings, settingsDirty, settingsDraft, onChangeField, onSave } = props;
+  const { bootstrap, busy, fieldErrors, settings, settingsDirty, settingsDraft, onChangeField, onClose, onSave } = props;
 
   return (
-    <section className="page-grid settings-grid">
-      <article className="panel panel-primary">
-        <header className="panel-header">
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal-card settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+        <header className="modal-header">
           <div>
             <p className="eyebrow">Settings</p>
-            <h2>Monitor 运行时设置</h2>
-          </div>
-          <button type="button" onClick={onSave} disabled={busy || !settingsDirty}>
-            保存设置
-          </button>
-        </header>
-
-        <div className="form-grid">
-          <label className="field">
-            <span>DEVHUB_DATA_DIR 覆盖值</span>
-            <input
-              type="text"
-              value={settingsDraft.dataDirOverride ?? ""}
-              placeholder="留空表示使用环境变量或平台默认目录"
-              onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
-            />
-            <FieldError message={fieldErrors.dataDirOverride} />
-          </label>
-
-          <label className="field">
-            <span>Host 可执行文件路径</span>
-            <input
-              type="text"
-              value={settingsDraft.hostExecutablePath ?? ""}
-              placeholder="例如 D:\\path\\to\\DevHub.Host.exe"
-              onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
-            />
-            <FieldError message={fieldErrors.hostExecutablePath} />
-          </label>
-        </div>
-      </article>
-
-      <article className="panel">
-        <header className="panel-header">
-          <h2>当前解析结果</h2>
-        </header>
-        <dl className="detail-list">
-          <div>
-            <dt>设置文件</dt>
-            <dd>{settings?.settingsFilePath ?? "加载中"}</dd>
-          </div>
-          <div>
-            <dt>生效数据目录</dt>
-            <dd>{settings?.effectiveDataDir ?? bootstrap?.effectiveDataDir ?? "加载中"}</dd>
-          </div>
-          <div>
-            <dt>目录来源</dt>
-            <dd>{formatDataDirSource(settings?.dataDirSource ?? bootstrap?.dataDirSource)}</dd>
-          </div>
-          <div>
-            <dt>Monitor 日志目录</dt>
-            <dd>{settings?.monitorLogDirectory ?? "加载中"}</dd>
-          </div>
-        </dl>
-      </article>
-    </section>
-  );
-}
-
-function LogsPage(props: {
-  activeLogKind: LogKind;
-  busy: boolean;
-  monitorLogDirectory: string | null;
-  selectedLog: LogReadResult | null;
-  visibleLogs: LogFileInfo[];
-  onOpenLog: (kind: LogKind, fileName: string) => void;
-  onRefresh: () => void;
-  onSelectKind: (kind: LogKind) => void;
-}) {
-  const {
-    activeLogKind,
-    busy,
-    monitorLogDirectory,
-    selectedLog,
-    visibleLogs,
-    onOpenLog,
-    onRefresh,
-    onSelectKind,
-  } = props;
-
-  return (
-    <section className="page-grid logs-grid-page">
-      <article className="panel panel-span">
-        <header className="panel-header">
-          <div>
-            <p className="eyebrow">Logs</p>
-            <h2>Host / Monitor 双视图</h2>
+            <h2 id="settings-dialog-title">Monitor 设置</h2>
+            <p className="modal-subtitle">更新数据目录和 Host 启动路径。保存后 Monitor 会重新扫描当前环境。</p>
           </div>
           <div className="button-row">
-            <button
-              type="button"
-              className={activeLogKind === "monitor" ? "active" : ""}
-              onClick={() => onSelectKind("monitor")}
-            >
-              Monitor 日志
+            <button type="button" className="button-secondary" onClick={onClose} disabled={busy}>
+              关闭
             </button>
-            <button
-              type="button"
-              className={activeLogKind === "host" ? "active" : ""}
-              onClick={() => onSelectKind("host")}
-            >
-              Host 日志
-            </button>
-            <button type="button" className="button-secondary" onClick={onRefresh} disabled={busy}>
-              刷新
+            <button type="button" onClick={onSave} disabled={busy || !settingsDirty}>
+              {busy ? "保存中..." : "保存设置"}
             </button>
           </div>
         </header>
 
-        <div className="status-banner compact-banner">
-          <strong>{activeLogKind === "monitor" ? "Monitor 结构化日志" : "Host 运行日志"}</strong>
-          <p>
-            {activeLogKind === "monitor"
-              ? monitorLogDirectory ?? "加载中"
-              : "当前有效 DEVHUB_DATA_DIR/logs/ 下的日志文件会显示在这里。"}
-          </p>
-        </div>
+        <div className="modal-body settings-dialog-grid">
+          <article className="panel panel-primary">
+            <div className="form-grid">
+              <label className="field">
+                <span>DEVHUB_DATA_DIR 覆盖值</span>
+                <input
+                  type="text"
+                  value={settingsDraft.dataDirOverride ?? ""}
+                  placeholder="留空表示使用环境变量或平台默认目录"
+                  onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
+                />
+                <FieldError message={fieldErrors.dataDirOverride} />
+              </label>
 
-        <div className="logs-grid">
-          <div className="log-list">
-            {visibleLogs.length === 0 ? (
-              <EmptyState
-                title="当前没有可读取的日志文件"
-                description="切换页面或执行启动、设置保存、定义管理等关键路径后，这里会出现最新日志。"
-              />
-            ) : (
-              visibleLogs.map((file) => (
-                <button
-                  key={`${file.kind}-${file.name}`}
-                  type="button"
-                  className={`log-item ${
-                    selectedLog?.kind === file.kind && selectedLog.fileName === file.name
-                      ? "selected"
-                      : ""
-                  }`}
-                  onClick={() => onOpenLog(file.kind, file.name)}
-                >
-                  <span>{file.name}</span>
-                  <span className="subtle">{formatBytes(file.sizeBytes)}</span>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div className="log-content">
-            <div className="log-meta">
-              <strong>{selectedLog?.fileName ?? "未选择日志文件"}</strong>
-              <span className="subtle">{selectedLog?.filePath ?? "请选择左侧日志。"}</span>
+              <label className="field">
+                <span>Host 可执行文件路径</span>
+                <input
+                  type="text"
+                  value={settingsDraft.hostExecutablePath ?? ""}
+                  placeholder="例如 D:\\path\\to\\DevHub.Host.exe"
+                  onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
+                />
+                <FieldError message={fieldErrors.hostExecutablePath} />
+              </label>
             </div>
-            <pre>{selectedLog?.contents ?? "暂无内容。"}</pre>
-          </div>
+
+            <p className="subtle settings-note">
+              两个路径字段都只接受绝对路径。调整完成后，Monitor 会立即用新的配置重新发现 Host。
+            </p>
+          </article>
+
+          <article className="panel">
+            <header className="panel-header">
+              <h2>当前解析结果</h2>
+            </header>
+            <dl className="detail-list">
+              <div>
+                <dt>设置文件</dt>
+                <dd>{settings?.settingsFilePath ?? "加载中"}</dd>
+              </div>
+              <div>
+                <dt>生效数据目录</dt>
+                <dd>{settings?.effectiveDataDir ?? bootstrap?.effectiveDataDir ?? "加载中"}</dd>
+              </div>
+              <div>
+                <dt>目录来源</dt>
+                <dd>{formatDataDirSource(settings?.dataDirSource ?? bootstrap?.dataDirSource)}</dd>
+              </div>
+              <div>
+                <dt>Monitor 日志目录</dt>
+                <dd>{settings?.monitorLogDirectory ?? "加载中"}</dd>
+              </div>
+            </dl>
+          </article>
         </div>
-      </article>
-    </section>
+      </section>
+    </div>
   );
 }
 
@@ -681,7 +609,7 @@ function DefinitionDialog(props: {
         {dialog.loading ? (
           <div className="empty-state modal-state">
             <h3>正在读取定义</h3>
-            <p>状态页会优先拉取最新持久化定义，再决定是否进入编辑或只读查看。</p>
+            <p>Monitor 会先同步 Host 中的最新定义，再决定是进入编辑模式还是只读视图。</p>
           </div>
         ) : dialog.missing ? (
           <div className="empty-state modal-state">
@@ -811,7 +739,7 @@ function DefinitionDialog(props: {
                   </label>
                 </div>
               ) : (
-                <p className="subtle">未启用 launch 配置时，将不会向 Host 提交 launch 字段。</p>
+                <p className="subtle">未启用 launch 配置时，Host 不会接收 launch 字段。</p>
               )}
               <FieldIssues issues={dialog.fieldErrors["definition.launch"]} />
             </section>
@@ -841,26 +769,6 @@ function DefinitionDialog(props: {
         </footer>
       </section>
     </div>
-  );
-}
-
-function RouteButton(props: {
-  active: boolean;
-  disabled?: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  const { active, disabled, label, onClick } = props;
-
-  return (
-    <button
-      type="button"
-      className={`route-pill ${active ? "active" : ""}`}
-      onClick={onClick}
-      disabled={disabled}
-    >
-      {label}
-    </button>
   );
 }
 

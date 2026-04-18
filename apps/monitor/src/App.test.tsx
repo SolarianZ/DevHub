@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   DevHubRpcError,
@@ -12,9 +12,7 @@ import App from "./App";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
-  LogFileInfo,
   LogKind,
-  LogReadResult,
   MonitorRuntimeConnectionInfo,
   SettingsSnapshot,
 } from "./lib/models";
@@ -24,8 +22,7 @@ const {
   createStaticRuntimeResolverMock,
   getBootstrapStateMock,
   getSettingsSnapshotMock,
-  listLogsMock,
-  readLogMock,
+  openLogDirectoryMock,
   requestHostLaunchMock,
   resumeDiscoveryMock,
   saveSettingsMock,
@@ -41,10 +38,7 @@ const {
   ),
   getBootstrapStateMock: vi.fn<() => Promise<BootstrapSnapshot>>(),
   getSettingsSnapshotMock: vi.fn<() => Promise<SettingsSnapshot>>(),
-  listLogsMock: vi.fn<(kind: LogKind) => Promise<LogFileInfo[]>>(),
-  readLogMock: vi.fn<
-    (request: { kind: LogKind; fileName: string }) => Promise<LogReadResult>
-  >(),
+  openLogDirectoryMock: vi.fn<(kind: LogKind) => Promise<void>>(),
   requestHostLaunchMock: vi.fn(),
   resumeDiscoveryMock: vi.fn(),
   saveSettingsMock: vi.fn(),
@@ -63,8 +57,7 @@ vi.mock("./lib/monitor-api", () => ({
   createStaticRuntimeResolver: createStaticRuntimeResolverMock,
   getBootstrapState: getBootstrapStateMock,
   getSettingsSnapshot: getSettingsSnapshotMock,
-  listLogs: listLogsMock,
-  readLog: readLogMock,
+  openLogDirectory: openLogDirectoryMock,
   requestHostLaunch: requestHostLaunchMock,
   resumeDiscovery: resumeDiscoveryMock,
   saveSettings: saveSettingsMock,
@@ -195,20 +188,11 @@ function createFailingEventStream(error: Error): AsyncIterable<unknown> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.location.hash = "";
 
   listenMock.mockImplementation(async () => () => {});
   getBootstrapStateMock.mockResolvedValue(createBootstrapSnapshot());
   getSettingsSnapshotMock.mockResolvedValue(createSettingsSnapshot());
-  listLogsMock.mockResolvedValue([]);
-  readLogMock.mockResolvedValue({
-    kind: "monitor",
-    fileName: "monitor-20260412.jsonl",
-    filePath: "/tmp/monitor/logs/monitor-20260412.jsonl",
-    sizeBytes: 0,
-    truncated: false,
-    contents: "",
-  });
+  openLogDirectoryMock.mockResolvedValue(undefined);
   requestHostLaunchMock.mockResolvedValue({
     status: "started",
     effectiveDataDir: "/tmp/devhub",
@@ -227,7 +211,25 @@ beforeEach(() => {
 });
 
 describe("Monitor App", () => {
-  it("connects through the SDK clients and loads the status inventory", async () => {
+  it("promotes the single workspace from discovery into status and exposes top menus", async () => {
+    let bootstrapListener:
+      | ((event: { payload: BootstrapSnapshot }) => void)
+      | undefined;
+    listenMock.mockImplementation(async (eventName, callback) => {
+      if (eventName === "devhub://bootstrap-state-changed") {
+        bootstrapListener = callback as (event: { payload: BootstrapSnapshot }) => void;
+      }
+
+      return () => {};
+    });
+
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+
     const definition = createDefinition();
     const instance = createInstance();
     const hostClient = {
@@ -252,8 +254,20 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("连接摘要");
+    await screen.findByText("连接 DevHub Host");
+    expect(screen.getByRole("button", { name: "设置" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "帮助" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "初始化" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "日志" })).toBeNull();
 
+    await act(async () => {
+      bootstrapListener?.({
+        payload: createBootstrapSnapshot(),
+      });
+      await Promise.resolve();
+    });
+
+    await screen.findByText("应用定义");
     expect(hostClientFromRuntimeMock).toHaveBeenCalledTimes(1);
     expect(eventsClientFromRuntimeMock).toHaveBeenCalledTimes(1);
     expect(eventsClient.authenticate).toHaveBeenCalledTimes(1);
@@ -276,7 +290,7 @@ describe("Monitor App", () => {
     screen.getByText("instance-1");
   });
 
-  it("returns to bootstrap mode when the host event stream terminates", async () => {
+  it("returns to the discovery workspace when the host event stream terminates", async () => {
     const hostClient = {
       listDefinitions: vi.fn().mockResolvedValue([]),
       listInstances: vi.fn().mockResolvedValue([]),
@@ -303,8 +317,7 @@ describe("Monitor App", () => {
       expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
     });
 
-    await screen.findByText("扫描与启动流程");
-    expect(window.location.hash).toBe("");
+    await screen.findByText("连接 DevHub Host");
   });
 
   it("shows validation issues and blocks persistence when precheck fails", async () => {
@@ -341,7 +354,7 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("定义列表");
+    await screen.findByText("应用定义");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "新增定义" }));
@@ -356,71 +369,38 @@ describe("Monitor App", () => {
     expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
   });
 
-  it("refreshes logs only once when switching the active log kind", async () => {
+  it("opens log directories from help and keeps the current workspace visible on failure", async () => {
     getBootstrapStateMock.mockResolvedValue(
       createBootstrapSnapshot({
         phase: "scanning",
         connection: null,
       }),
     );
-    listLogsMock.mockImplementation(async (kind) => [
-      {
-        kind,
-        name: `${kind}-latest.log`,
-        filePath: `/tmp/${kind}-latest.log`,
-        sizeBytes: 32,
-        modifiedAtUtc: "2026-04-12T02:03:04Z",
-      },
-    ]);
-    readLogMock.mockImplementation(async ({ kind, fileName }) => ({
-      kind,
-      fileName,
-      filePath: `/tmp/${fileName}`,
-      sizeBytes: 32,
-      truncated: false,
-      contents: `${kind}:${fileName}`,
-    }));
 
     render(<App />);
 
-    await screen.findByText("扫描与启动流程");
-    await waitFor(() => {
-      expect(listLogsMock).toHaveBeenCalledTimes(2);
-    });
-
-    listLogsMock.mockClear();
-    readLogMock.mockClear();
+    await screen.findByText("连接 DevHub Host");
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "日志" }));
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    screen.getByRole("menuitem", { name: "打开 Host 日志" });
 
+    await user.click(screen.getByRole("menuitem", { name: "打开 Host 日志" }));
     await waitFor(() => {
-      expect(listLogsMock).toHaveBeenCalledTimes(1);
-      expect(listLogsMock).toHaveBeenCalledWith("monitor");
-      expect(readLogMock).toHaveBeenCalledTimes(1);
-      expect(readLogMock).toHaveBeenCalledWith({
-        kind: "monitor",
-        fileName: "monitor-latest.log",
-      });
+      expect(openLogDirectoryMock).toHaveBeenCalledWith("host");
     });
+    screen.getByText("连接 DevHub Host");
 
-    listLogsMock.mockClear();
-    readLogMock.mockClear();
+    openLogDirectoryMock.mockRejectedValueOnce(new Error("无法打开日志目录"));
 
-    await user.click(screen.getByRole("button", { name: "Host 日志" }));
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    await user.click(screen.getByRole("menuitem", { name: "打开 Monitor 日志" }));
 
-    await waitFor(() => {
-      expect(listLogsMock).toHaveBeenCalledTimes(1);
-      expect(listLogsMock).toHaveBeenCalledWith("host");
-      expect(readLogMock).toHaveBeenCalledTimes(1);
-      expect(readLogMock).toHaveBeenCalledWith({
-        kind: "host",
-        fileName: "host-latest.log",
-      });
-    });
+    await screen.findByText("无法打开日志目录");
+    screen.getByText("连接 DevHub Host");
   });
 
-  it("rejects relative settings paths before saving", async () => {
+  it("opens settings from the menu and rejects relative paths before saving", async () => {
     getBootstrapStateMock.mockResolvedValue(
       createBootstrapSnapshot({
         phase: "scanning",
@@ -430,10 +410,12 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("扫描与启动流程");
+    await screen.findByText("连接 DevHub Host");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("dialog", { name: "Monitor 设置" });
+
     await user.clear(screen.getByLabelText("DEVHUB_DATA_DIR 覆盖值"));
     await user.type(screen.getByLabelText("DEVHUB_DATA_DIR 覆盖值"), "./relative-data");
     await user.click(screen.getByRole("button", { name: "保存设置" }));
@@ -468,7 +450,7 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("定义列表");
+    await screen.findByText("Demo App");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "编辑" }));
@@ -512,7 +494,7 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("跨 scope 实例");
+    await screen.findByText("应用实例");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "查看定义" }));

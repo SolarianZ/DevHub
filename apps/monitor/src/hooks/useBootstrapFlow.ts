@@ -9,25 +9,27 @@ import {
   resumeDiscovery,
   saveSettings,
 } from "../lib/monitor-api";
-import type { BootstrapSnapshot, FrontendLogInput, LogKind, MonitorSettings, SettingsSnapshot } from "../lib/models";
+import type {
+  BootstrapSnapshot,
+  FrontendLogInput,
+  LaunchHostResult,
+  MonitorSettings,
+  SettingsSnapshot,
+} from "../lib/models";
 import {
-  type RoutePage,
   type SettingsFieldErrors,
   hasSettingsFieldErrors,
   normalizeOptionalInput,
   toErrorMessage,
   validateSettingsDraft,
 } from "../lib/monitor-ui";
-import type { RefreshLogsOptions } from "./useLogsPanel";
 
 interface BootstrapFlowOptions {
-  onNavigate: (route: RoutePage) => void;
   recordFrontendLog: (entry: FrontendLogInput) => void;
-  refreshLogKind: (kind: LogKind, options?: RefreshLogsOptions) => Promise<void>;
 }
 
 export function useBootstrapFlow(options: BootstrapFlowOptions) {
-  const { onNavigate, recordFrontendLog, refreshLogKind } = options;
+  const { recordFrontendLog } = options;
 
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
   const [settings, setSettings] = useState<SettingsSnapshot | null>(null);
@@ -39,28 +41,9 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
-  const previousPhaseRef = useRef<BootstrapSnapshot["phase"] | null>(null);
   const settingsDirtyRef = useRef(false);
 
   settingsDirtyRef.current = settingsDirty;
-
-  useEffect(() => {
-    if (!bootstrap) {
-      return;
-    }
-
-    const previousPhase = previousPhaseRef.current;
-
-    if (bootstrap.phase === "settings_required") {
-      onNavigate("settings");
-    } else if (bootstrap.phase === "host_available" && previousPhase !== "host_available") {
-      onNavigate("status");
-    } else if (previousPhase === "host_available" && bootstrap.phase !== "host_available") {
-      onNavigate("bootstrap");
-    }
-
-    previousPhaseRef.current = bootstrap.phase;
-  }, [bootstrap, onNavigate]);
 
   useEffect(() => {
     let disposed = false;
@@ -84,11 +67,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
           setSettingsDirty(false);
           setSettingsFieldErrors({});
         });
-
-        await Promise.all([
-          refreshLogKind("monitor", { autoSelect: true }),
-          refreshLogKind("host"),
-        ]);
 
         const offBootstrap = await listen<BootstrapSnapshot>(
           BOOTSTRAP_STATE_CHANGED_EVENT,
@@ -161,7 +139,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
       startTransition(() => {
         setBootstrap(snapshot);
       });
-      onNavigate("bootstrap");
 
       recordFrontendLog({
         level: "info",
@@ -169,8 +146,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
         action: "resume_discovery",
         result: "requested",
       });
-
-      await refreshLogKind("monitor");
     } catch (resumeError) {
       setBootstrapError(toErrorMessage(resumeError));
     } finally {
@@ -178,7 +153,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
     }
   });
 
-  const handleLaunchHost = useEffectEvent(async () => {
+  const handleLaunchHost = useEffectEvent(async (): Promise<LaunchHostResult | null> => {
     setBootstrapBusy(true);
     setBootstrapError(null);
 
@@ -195,14 +170,10 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
           pid: result.pid ?? null,
         },
       });
-
-      onNavigate(result.status === "settings_required" ? "settings" : "bootstrap");
-      await Promise.all([
-        refreshLogKind("monitor"),
-        refreshLogKind("host"),
-      ]);
+      return result;
     } catch (launchError) {
       setBootstrapError(toErrorMessage(launchError));
+      return null;
     } finally {
       setBootstrapBusy(false);
     }
@@ -222,7 +193,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
     });
   });
 
-  const handleSaveSettings = useEffectEvent(async () => {
+  const handleSaveSettings = useEffectEvent(async (): Promise<boolean> => {
     const validationErrors = validateSettingsDraft(settingsDraft);
     if (hasSettingsFieldErrors(validationErrors)) {
       startTransition(() => {
@@ -236,7 +207,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
         action: "save",
         result: "invalid",
       });
-      return;
+      return false;
     }
 
     setSettingsBusy(true);
@@ -268,8 +239,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
         setSettingsFieldErrors({});
       });
 
-      onNavigate("bootstrap");
-
       recordFrontendLog({
         level: "info",
         category: "frontend.settings",
@@ -280,8 +249,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
           dataDirSource: snapshot.dataDirSource,
         },
       });
-
-      await refreshLogKind("monitor");
+      return true;
     } catch (saveError) {
       recordFrontendLog({
         level: "error",
@@ -291,6 +259,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
         message: toErrorMessage(saveError),
       });
       setSettingsError(toErrorMessage(saveError));
+      return false;
     } finally {
       setSettingsBusy(false);
     }

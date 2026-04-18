@@ -121,6 +121,14 @@ textarea:focus {
   margin: 0;
 }
 
+.shell-side {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 19rem;
+}
+
 .shell-status {
   align-items: flex-end;
   display: flex;
@@ -151,32 +159,58 @@ textarea:focus {
   max-width: 44rem;
 }
 
-.route-bar,
 .summary-grid,
 .page-grid,
-.logs-grid,
 .form-grid,
 .toggle-grid {
   display: grid;
   gap: 1rem;
 }
 
-.route-bar {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 1rem;
+.menu-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 
-.route-pill {
-  border-radius: 1.1rem;
-  padding: 0.95rem 1rem;
+.menu-group {
+  position: relative;
 }
 
-.route-pill.active,
-.button-row .active,
-.log-item.selected {
+.menu-trigger {
+  min-width: 6.25rem;
+}
+
+.menu-trigger.active,
+.button-row .active {
   background: var(--ink-strong);
   border-color: var(--ink-strong);
   color: #f7f4eb;
+}
+
+.menu-popover {
+  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 1.25rem;
+  box-shadow: 0 18px 48px rgba(52, 74, 66, 0.18);
+  display: grid;
+  gap: 0.45rem;
+  min-width: 14rem;
+  padding: 0.55rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.55rem);
+  z-index: 20;
+}
+
+.menu-item {
+  border-radius: 0.95rem;
+  justify-content: flex-start;
+  padding: 0.8rem 0.95rem;
+  text-align: left;
 }
 
 .summary-grid {
@@ -210,14 +244,16 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.bootstrap-grid,
-.settings-grid {
+.bootstrap-grid {
   align-items: start;
 }
 
-.status-grid,
-.logs-grid-page {
+.status-grid {
   grid-template-columns: 1fr;
+}
+
+.settings-dialog-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .panel {
@@ -471,55 +507,6 @@ textarea:focus {
   width: auto;
 }
 
-.logs-grid {
-  grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr);
-}
-
-.log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  max-height: 34rem;
-  overflow: auto;
-}
-
-.log-item {
-  align-items: center;
-  border-radius: 1rem;
-  display: flex;
-  justify-content: space-between;
-  text-align: left;
-}
-
-.log-content {
-  background: var(--surface-dark);
-  border-radius: 1.25rem;
-  color: #dfe9e1;
-  min-height: 34rem;
-  overflow: hidden;
-}
-
-.log-meta {
-  align-items: flex-start;
-  border-bottom: 1px solid rgba(223, 232, 225, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem;
-}
-
-.log-content pre {
-  font-family: "SF Mono", "SFMono-Regular", "JetBrains Mono", monospace;
-  font-size: 0.83rem;
-  line-height: 1.55;
-  margin: 0;
-  max-height: 30rem;
-  overflow: auto;
-  padding: 1rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .modal-backdrop {
   align-items: center;
   background: rgba(18, 28, 25, 0.28);
@@ -560,6 +547,14 @@ textarea:focus {
   padding-bottom: 1rem;
 }
 
+.settings-modal {
+  max-width: 60rem;
+}
+
+.settings-note {
+  margin: 1rem 0 0;
+}
+
 .modal-state {
   min-height: 14rem;
 }
@@ -590,13 +585,13 @@ textarea:focus {
 @media (max-width: 1080px) {
   .summary-grid,
   .page-grid,
-  .logs-grid,
-  .form-grid,
-  .route-bar {
+  .settings-dialog-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 
   .shell-header,
+  .shell-side,
   .panel-header,
   .modal-header,
   .modal-footer,
@@ -608,13 +603,20 @@ textarea:focus {
 
   .shell-status,
   .inventory-actions,
-  .button-row {
+  .button-row,
+  .menu-bar {
     width: 100%;
   }
 
   .button-row,
-  .inventory-actions {
+  .inventory-actions,
+  .menu-bar {
     justify-content: flex-start;
+  }
+
+  .menu-popover {
+    left: 0;
+    right: auto;
   }
 
   .field-full {

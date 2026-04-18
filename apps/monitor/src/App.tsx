@@ -4,14 +4,16 @@ import { AppShell } from "./components/AppShell";
 import { useBootstrapFlow } from "./hooks/useBootstrapFlow";
 import { useDefinitionEditor } from "./hooks/useDefinitionEditor";
 import { useHostSession } from "./hooks/useHostSession";
-import { useLogsPanel } from "./hooks/useLogsPanel";
-import { writeFrontendLog } from "./lib/monitor-api";
-import type { FrontendLogInput } from "./lib/models";
-import { type RoutePage, readHashRoute, writeHashRoute } from "./lib/monitor-ui";
+import { openLogDirectory, writeFrontendLog } from "./lib/monitor-api";
+import type { FrontendLogInput, LogKind } from "./lib/models";
+import { getPrimaryWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
 
 function App() {
-  const [route, setRoute] = useState<RoutePage>(() => readHashRoute());
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [openingLogKind, setOpeningLogKind] = useState<LogKind | null>(null);
+  const [shellError, setShellError] = useState<string | null>(null);
 
   const recordFrontendLog = useEffectEvent((entry: FrontendLogInput) => {
     void writeFrontendLog(entry).catch(() => {
@@ -19,31 +21,13 @@ function App() {
     });
   });
 
-  function navigateTo(nextRoute: RoutePage): void {
-    writeHashRoute(nextRoute);
-    startTransition(() => {
-      setRoute(nextRoute);
-    });
-  }
-
-  const {
-    activeLogKind,
-    logsBusy,
-    logsError,
-    openLog,
-    refreshLogKind,
-    selectLogKind,
-    selectedLog,
-    visibleLogs,
-  } = useLogsPanel(route);
-
   const {
     bootstrap,
     bootstrapBusy,
     bootstrapError,
     handleLaunchHost,
     handleResumeDiscovery,
-    handleSaveSettings,
+    handleSaveSettings: handleSaveSettingsRequest,
     replaceBootstrap,
     settings,
     settingsBusy,
@@ -53,9 +37,7 @@ function App() {
     settingsFieldErrors,
     updateSettingsDraftField,
   } = useBootstrapFlow({
-    onNavigate: navigateTo,
     recordFrontendLog,
-    refreshLogKind,
   });
 
   const {
@@ -70,7 +52,6 @@ function App() {
     sessionResetVersion,
   } = useHostSession({
     bootstrap,
-    onNavigate: navigateTo,
     onReplaceBootstrap: replaceBootstrap,
     recordFrontendLog,
   });
@@ -106,41 +87,110 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const nextRoute = readHashRoute();
-      if (nextRoute === "status" && !(bootstrap?.connection && bootstrap.phase === "host_available")) {
-        writeHashRoute("bootstrap");
-        startTransition(() => {
-          setRoute("bootstrap");
-        });
-        return;
-      }
-
+    if (bootstrap?.phase === "settings_required") {
       startTransition(() => {
-        setRoute(nextRoute);
+        setSettingsOpen(true);
       });
-    };
+    }
+  }, [bootstrap?.phase]);
 
-    window.addEventListener("hashchange", handleHashChange);
+  const handleOpenSettings = useEffectEvent(() => {
+    startTransition(() => {
+      setHelpMenuOpen(false);
+      setSettingsOpen(true);
+    });
+  });
 
-    return () => {
-      window.removeEventListener("hashchange", handleHashChange);
-    };
-  }, [bootstrap?.connection, bootstrap?.phase]);
+  const handleCloseSettings = useEffectEvent(() => {
+    startTransition(() => {
+      setSettingsOpen(false);
+    });
+  });
 
-  const canOpenStatus = Boolean(bootstrap?.connection && bootstrap.phase === "host_available");
-  const activeError = route === "bootstrap"
-    ? bootstrapError
-    : route === "settings"
-      ? settingsError
-      : route === "logs"
-        ? logsError
-        : definitionError ?? sessionError;
+  const handleToggleHelpMenu = useEffectEvent(() => {
+    startTransition(() => {
+      setHelpMenuOpen((current) => !current);
+    });
+  });
+
+  const handleOpenLogHelp = useEffectEvent(async (kind: LogKind) => {
+    startTransition(() => {
+      setHelpMenuOpen(false);
+    });
+    setShellError(null);
+    setOpeningLogKind(kind);
+
+    try {
+      await openLogDirectory(kind);
+      recordFrontendLog({
+        level: "info",
+        category: "frontend.support",
+        action: "open_log_directory",
+        result: "opened",
+        context: {
+          kind,
+        },
+      });
+    } catch (openError) {
+      const message = toErrorMessage(openError);
+      setShellError(message);
+
+      recordFrontendLog({
+        level: "error",
+        category: "frontend.support",
+        action: "open_log_directory",
+        result: "failed",
+        message,
+        context: {
+          kind,
+        },
+      });
+    } finally {
+      setOpeningLogKind(null);
+    }
+  });
+
+  const handleLaunch = useEffectEvent(async () => {
+    setShellError(null);
+    const result = await handleLaunchHost();
+    if (result?.status === "settings_required") {
+      startTransition(() => {
+        setSettingsOpen(true);
+      });
+    }
+  });
+
+  const handleSaveSettings = useEffectEvent(async () => {
+    const saved = await handleSaveSettingsRequest();
+    if (saved) {
+      startTransition(() => {
+        setSettingsOpen(false);
+      });
+    }
+  });
+
+  const workspaceMode = getPrimaryWorkspaceMode(bootstrap);
+  const activeError =
+    shellError
+    ?? definitionError
+    ?? sessionError
+    ?? settingsError
+    ?? bootstrapError;
+
+  useEffect(() => {
+    if (workspaceMode === "status") {
+      startTransition(() => {
+        setHelpMenuOpen(false);
+      });
+    }
+  }, [workspaceMode]);
 
   return (
     <AppShell
-      route={route}
-      canOpenStatus={canOpenStatus}
+      workspaceMode={workspaceMode}
+      helpMenuOpen={helpMenuOpen}
+      openingLogKind={openingLogKind}
+      settingsOpen={settingsOpen}
       activeError={activeError}
       bootstrap={bootstrap}
       bootstrapBusy={bootstrapBusy}
@@ -154,31 +204,23 @@ function App() {
       instances={instances}
       inventoryMessage={inventoryMessage}
       nowTick={nowTick}
-      activeLogKind={activeLogKind}
-      monitorLogDirectory={settings?.monitorLogDirectory ?? null}
-      visibleLogs={visibleLogs}
-      selectedLog={selectedLog}
-      logsBusy={logsBusy}
       definitionDialog={definitionDialog}
-      onNavigate={navigateTo}
+      onOpenSettings={handleOpenSettings}
+      onCloseSettings={handleCloseSettings}
+      onToggleHelpMenu={handleToggleHelpMenu}
+      onOpenLogDirectory={(kind) => {
+        void handleOpenLogHelp(kind);
+      }}
       onResumeDiscovery={() => {
+        setShellError(null);
         void handleResumeDiscovery();
       }}
       onLaunchHost={() => {
-        void handleLaunchHost();
+        void handleLaunch();
       }}
       onChangeSettingsField={updateSettingsDraftField}
       onSaveSettings={() => {
         void handleSaveSettings();
-      }}
-      onRefreshLogs={() => {
-        void refreshLogKind(activeLogKind, { autoSelect: true });
-      }}
-      onSelectLogKind={(kind) => {
-        selectLogKind(kind);
-      }}
-      onOpenLog={(kind, fileName) => {
-        void openLog(kind, fileName);
       }}
       onAddDefinition={() => {
         void openCreateDefinitionDialog();

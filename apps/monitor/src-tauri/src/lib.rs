@@ -8,8 +8,8 @@ mod settings;
 mod snapshot;
 
 use crate::models::{
-    BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogFileInfo, LogKind, LogReadResult,
-    MonitorSettings, ReadLogRequest, SettingsSnapshot,
+    BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogKind, MonitorSettings,
+    SettingsSnapshot,
 };
 use crate::monitor::MonitorCore;
 use anyhow::{Context, Result};
@@ -112,20 +112,13 @@ async fn monitor_resume_discovery(
 }
 
 #[tauri::command]
-async fn monitor_list_logs(
+async fn monitor_open_log_directory(
     state: State<'_, MonitorCore>,
     kind: LogKind,
-) -> CommandResult<Vec<LogFileInfo>> {
-    state.list_logs(kind).map_err(CommandError::internal)
-}
-
-#[tauri::command]
-async fn monitor_read_log(
-    state: State<'_, MonitorCore>,
-    request: ReadLogRequest,
-) -> CommandResult<LogReadResult> {
-    validate_required_text(&request.file_name, "fileName", 255)?;
-    state.read_log(request).map_err(CommandError::internal)
+) -> CommandResult<()> {
+    state
+        .open_log_directory(kind)
+        .map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -166,8 +159,7 @@ pub fn run() {
             monitor_save_settings,
             monitor_request_host_launch,
             monitor_resume_discovery,
-            monitor_list_logs,
-            monitor_read_log,
+            monitor_open_log_directory,
             monitor_write_frontend_log
         ])
         .run(tauri::generate_context!())

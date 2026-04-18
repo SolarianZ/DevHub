@@ -17,10 +17,7 @@ import type {
   MonitorSettings,
   SettingsSnapshot,
 } from "./models";
-
-export const ROUTE_SEQUENCE = ["bootstrap", "status", "settings", "logs"] as const;
-
-export type RoutePage = (typeof ROUTE_SEQUENCE)[number];
+export type PrimaryWorkspaceMode = "bootstrap" | "status";
 export type HostSessionStatus = "idle" | "connecting" | "connected" | "recovering";
 export type DefinitionDialogMode = "view" | "create" | "edit";
 
@@ -43,16 +40,10 @@ export interface SettingsFieldErrors {
   hostExecutablePath?: string | null;
 }
 
-export function readHashRoute(): RoutePage {
-  const raw = window.location.hash.replace(/^#\/?/, "").trim();
-  return ROUTE_SEQUENCE.includes(raw as RoutePage) ? (raw as RoutePage) : "bootstrap";
-}
-
-export function writeHashRoute(route: RoutePage): void {
-  const nextHash = route === "bootstrap" ? "" : `#/${route}`;
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
-  }
+export function getPrimaryWorkspaceMode(
+  snapshot: BootstrapSnapshot | null,
+): PrimaryWorkspaceMode {
+  return snapshot?.phase === "host_available" && snapshot.connection ? "status" : "bootstrap";
 }
 
 export function normalizeOptionalInput(value?: string | null): string | null {
@@ -198,36 +189,36 @@ export function formatDataDirSource(source?: SettingsSnapshot["dataDirSource"]):
 export function formatBootstrapHeadline(phase?: BootstrapSnapshot["phase"]): string {
   switch (phase) {
     case "launch_available":
-      return "3 秒内未发现可用 Host，已经开放启动入口。";
+      return "尚未连接到 DevHub Host，可以继续扫描或立即启动。";
     case "settings_required":
-      return "缺少 Host 可执行文件路径，需要先完成设置。";
+      return "启动 Host 前需要先补充本机设置。";
     case "host_available":
-      return "已验证到可用 Host，前端会自动切入状态页。";
+      return "已连接到 DevHub Host，可以开始查看定义与实例。";
     case "scanning":
-      return "正在持续扫描当前有效数据目录。";
+      return "正在查找当前数据目录中的可用 Host。";
     default:
-      return "正在初始化 Monitor。";
+      return "正在准备 Monitor。";
   }
 }
 
 export function formatBootstrapDescription(snapshot: BootstrapSnapshot | null): string {
   if (!snapshot) {
-    return "正在读取 Monitor 原生后端的初始化状态。";
+    return "Monitor 正在读取本机设置并检查当前运行环境。";
   }
 
   if (snapshot.phase === "host_available" && snapshot.connection) {
-    return `已通过真实连通性校验确认 ${snapshot.connection.rpcEndpoint} 可用，接下来由前端接管 Host RPC 与事件连接。`;
+    return `已确认 ${snapshot.connection.rpcEndpoint} 可用，当前主界面会持续展示连接状态、应用定义和实例清单。`;
   }
 
   if (snapshot.phase === "settings_required") {
-    return "用户发起启动请求，但当前尚未配置 DevHub Host 可执行文件路径。";
+    return "当前还没有可用于启动 Host 的可执行文件路径，请从顶部“设置”菜单补全后再试。";
   }
 
   if (snapshot.phase === "launch_available") {
-    return "虽然初始化页显示了启动按钮，但后台扫描不会停止，一旦发现可用 Host 会立即切到状态页。";
+    return "Monitor 会继续扫描当前数据目录；如果 Host 尚未运行，你也可以直接从这里启动。";
   }
 
-  return "原生后端会持续读取 hub.json 与 token，并通过真实 hub.ping 校验过滤掉过期运行时文件。";
+  return "Monitor 会持续验证当前数据目录中的运行时信息，并在发现可用 Host 后自动进入管理视图。";
 }
 
 export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null): string {
@@ -286,18 +277,6 @@ export function formatDefinitionCapabilities(definition: AppDefinition): string[
   }
 
   return capabilities.length > 0 ? capabilities : ["基础定义"];
-}
-
-export function formatBytes(value: number): string {
-  if (value < 1_024) {
-    return `${value} B`;
-  }
-
-  if (value < 1_024 * 1_024) {
-    return `${(value / 1_024).toFixed(1)} KB`;
-  }
-
-  return `${(value / (1_024 * 1_024)).toFixed(1)} MB`;
 }
 
 export function toErrorMessage(error: unknown): string {

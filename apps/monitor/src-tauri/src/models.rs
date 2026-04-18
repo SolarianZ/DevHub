@@ -119,32 +119,13 @@ pub enum LogKind {
     Monitor,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LogFileInfo {
-    pub kind: LogKind,
-    pub name: String,
-    pub file_path: String,
-    pub size_bytes: u64,
-    pub modified_at_utc: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadLogRequest {
-    pub kind: LogKind,
-    pub file_name: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LogReadResult {
-    pub kind: LogKind,
-    pub file_name: String,
-    pub file_path: String,
-    pub size_bytes: u64,
-    pub truncated: bool,
-    pub contents: String,
+impl LogKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::Monitor => "monitor",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

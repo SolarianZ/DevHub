@@ -1,10 +1,12 @@
 use crate::discovery::{build_snapshot, DiscoveryCoordinator};
 use crate::launch::HostLaunchService;
-use crate::logging::{list_log_files, read_log_file, MonitorLogService};
+use crate::logging::{
+    open_log_directory as open_log_directory_in_shell, resolve_log_directory, MonitorLogService,
+};
 use crate::models::{
     BootstrapPhase, BootstrapSnapshot, FrontendLogInput, HostLaunchStatus, LaunchHostResult,
-    LogFileInfo, LogKind, LogReadResult, MonitorLogLevel, MonitorProblem, MonitorSettings,
-    MonitorStructuredLogRecord, ReadLogRequest, SettingsSnapshot, EVENT_SETTINGS_CHANGED,
+    LogKind, MonitorLogLevel, MonitorProblem, MonitorSettings, MonitorStructuredLogRecord,
+    SettingsSnapshot, EVENT_SETTINGS_CHANGED,
 };
 use crate::settings::SettingsService;
 use crate::snapshot::SnapshotPublisher;
@@ -236,14 +238,48 @@ impl MonitorCore {
         Ok(self.get_bootstrap_state())
     }
 
-    pub fn list_logs(&self, kind: LogKind) -> Result<Vec<LogFileInfo>> {
-        let base_directory = self.log_base_directory(kind);
-        list_log_files(&base_directory, kind)
-    }
+    pub fn open_log_directory(&self, kind: LogKind) -> Result<()> {
+        let effective_data_dir = PathBuf::from(self.settings_service.resolve_effective_data_dir().path);
+        let monitor_log_directory = self.log_service.log_directory().to_path_buf();
+        let target_directory =
+            resolve_log_directory(kind, &effective_data_dir, &monitor_log_directory);
 
-    pub fn read_log(&self, request: ReadLogRequest) -> Result<LogReadResult> {
-        let base_directory = self.log_base_directory(request.kind);
-        read_log_file(&base_directory, request.kind, &request.file_name)
+        match open_log_directory_in_shell(kind, &effective_data_dir, &monitor_log_directory) {
+            Ok(opened_directory) => {
+                self.record_backend_log(
+                    MonitorLogLevel::Info,
+                    "support",
+                    "open_log_directory",
+                    "opened",
+                    Some("Opened log directory."),
+                    Some(json_map(vec![
+                        ("kind", Value::String(kind.as_str().to_string())),
+                        (
+                            "path",
+                            Value::String(opened_directory.display().to_string()),
+                        ),
+                    ])),
+                )?;
+                Ok(())
+            }
+            Err(error) => {
+                self.record_backend_log(
+                    MonitorLogLevel::Error,
+                    "support",
+                    "open_log_directory",
+                    "failed",
+                    Some(&error.to_string()),
+                    Some(json_map(vec![
+                        ("kind", Value::String(kind.as_str().to_string())),
+                        (
+                            "path",
+                            Value::String(target_directory.display().to_string()),
+                        ),
+                    ])),
+                )?;
+                Err(error)
+            }
+        }
     }
 
     pub fn record_frontend_log(&self, entry: FrontendLogInput) -> Result<()> {
@@ -312,14 +348,6 @@ impl MonitorCore {
         })
     }
 
-    fn log_base_directory(&self, kind: LogKind) -> PathBuf {
-        match kind {
-            LogKind::Monitor => self.log_service.log_directory().to_path_buf(),
-            LogKind::Host => {
-                PathBuf::from(self.settings_service.resolve_effective_data_dir().path).join("logs")
-            }
-        }
-    }
 }
 
 fn problem(code: impl Into<String>, message: impl Into<String>) -> MonitorProblem {

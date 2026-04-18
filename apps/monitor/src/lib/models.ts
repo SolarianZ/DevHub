@@ -73,28 +73,6 @@ export interface LaunchHostResult {
   pid?: number | null;
 }
 
-export interface LogFileInfo {
-  kind: LogKind;
-  name: string;
-  filePath: string;
-  sizeBytes: number;
-  modifiedAtUtc?: string | null;
-}
-
-export interface ReadLogRequest {
-  kind: LogKind;
-  fileName: string;
-}
-
-export interface LogReadResult {
-  kind: LogKind;
-  fileName: string;
-  filePath: string;
-  sizeBytes: number;
-  truncated: boolean;
-  contents: string;
-}
-
 export interface FrontendLogInput {
   level: MonitorLogLevel;
   category: string;

@@ -29,13 +29,12 @@ const DEFINITION_REFRESH_EVENT_TYPES = [APP_DEFINITION_UPSERTED, APP_DEFINITION_
 
 interface HostSessionOptions {
   bootstrap: BootstrapSnapshot | null;
-  onNavigate: (route: "bootstrap" | "status" | "settings" | "logs") => void;
   onReplaceBootstrap: (snapshot: BootstrapSnapshot) => void;
   recordFrontendLog: (entry: FrontendLogInput) => void;
 }
 
 export function useHostSession(options: HostSessionOptions) {
-  const { bootstrap, onNavigate, onReplaceBootstrap, recordFrontendLog } = options;
+  const { bootstrap, onReplaceBootstrap, recordFrontendLog } = options;
 
   const [definitions, setDefinitions] = useState<AppDefinition[]>([]);
   const [instances, setInstances] = useState<AppInstance[]>([]);
@@ -83,7 +82,7 @@ export function useHostSession(options: HostSessionOptions) {
       setDefinitions([]);
       setInstances([]);
       setHostSessionStatus("recovering");
-      setInventoryMessage("当前 Host 会话已失效，正在返回初始化页并恢复扫描。");
+      setInventoryMessage("当前 Host 会话已失效，正在重新查找可用连接。");
       setSessionError(null);
       setSessionResetVersion((current) => current + 1);
     });
@@ -93,7 +92,6 @@ export function useHostSession(options: HostSessionOptions) {
     try {
       const snapshot = await resumeDiscovery(reason);
       onReplaceBootstrap(snapshot);
-      onNavigate("bootstrap");
     } catch (resumeError) {
       setSessionError(toErrorMessage(resumeError));
     } finally {
@@ -219,7 +217,7 @@ export function useHostSession(options: HostSessionOptions) {
 
     startTransition(() => {
       setHostSessionStatus("connecting");
-      setInventoryMessage("正在连接 DevHub Host，并同步定义与实例清单。");
+      setInventoryMessage("正在连接 DevHub Host，并同步应用定义与实例。");
       setSessionError(null);
     });
 
@@ -281,7 +279,7 @@ export function useHostSession(options: HostSessionOptions) {
           setDefinitions(sortDefinitions(nextDefinitions));
           setInstances(sortInstances(nextInstances));
           setHostSessionStatus("connected");
-          setInventoryMessage("状态页已连接到当前 DevHub Host。");
+          setInventoryMessage("已连接到当前 DevHub Host。");
           setSessionError(null);
         });
 
