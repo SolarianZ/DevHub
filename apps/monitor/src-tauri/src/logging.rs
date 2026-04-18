@@ -64,19 +64,8 @@ pub struct SystemShellOpener;
 
 impl ShellOpener for SystemShellOpener {
     fn open_directory(&self, directory: &Path) -> Result<()> {
-        let status = build_open_directory_command(directory)
-            .status()
-            .with_context(|| format!("无法调用系统外壳打开日志目录：{}", directory.display()))?;
-
-        if !status.success() {
-            anyhow::bail!(
-                "系统未能打开日志目录：{}（退出码：{}）",
-                directory.display(),
-                status
-            );
-        }
-
-        Ok(())
+        let mut command = build_open_directory_command(directory);
+        run_open_directory_command(&mut command, directory)
     }
 }
 
@@ -119,6 +108,32 @@ fn validate_log_directory(directory: &Path) -> Result<()> {
 }
 
 #[cfg(target_os = "windows")]
+fn run_open_directory_command(command: &mut Command, directory: &Path) -> Result<()> {
+    command
+        .spawn()
+        .with_context(|| format!("无法调用系统外壳打开日志目录：{}", directory.display()))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_open_directory_command(command: &mut Command, directory: &Path) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("无法调用系统外壳打开日志目录：{}", directory.display()))?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "系统未能打开日志目录：{}（退出码：{}）",
+            directory.display(),
+            status
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
 fn build_open_directory_command(directory: &Path) -> Command {
     let mut command = Command::new("explorer");
     command.arg(directory);
@@ -141,12 +156,16 @@ fn build_open_directory_command(directory: &Path) -> Command {
 
 #[cfg(test)]
 mod tests {
-    use super::{open_directory_with, resolve_log_directory, LogKind, MonitorLogService, ShellOpener};
+    use super::{
+        open_directory_with, resolve_log_directory, run_open_directory_command, LogKind,
+        MonitorLogService, ShellOpener,
+    };
     use crate::models::{MonitorLogLevel, MonitorStructuredLogRecord};
     use anyhow::Result;
     use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
     use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -230,14 +249,17 @@ mod tests {
     #[test]
     fn open_directory_with_rejects_missing_directory_and_surfaces_shell_failures() {
         let missing_directory = std::env::temp_dir().join("devhub-monitor-missing-log-dir");
-        let missing_error =
-            open_directory_with(&RecordingShellOpener::success(Arc::new(Mutex::new(Vec::new()))), &missing_directory)
-                .expect_err("expected missing directory error");
+        let missing_error = open_directory_with(
+            &RecordingShellOpener::success(Arc::new(Mutex::new(Vec::new()))),
+            &missing_directory,
+        )
+        .expect_err("expected missing directory error");
         assert!(missing_error.to_string().contains("日志目录不存在"));
 
         let directory = create_temp_directory("open-failure");
         let opener = RecordingShellOpener::failure("shell open failed");
-        let open_error = open_directory_with(&opener, &directory).expect_err("expected shell failure");
+        let open_error =
+            open_directory_with(&opener, &directory).expect_err("expected shell failure");
         assert!(open_error.to_string().contains("shell open failed"));
 
         fs::remove_dir_all(directory).expect("failed to clean temp directory");
@@ -270,6 +292,25 @@ mod tests {
 
         fs::remove_dir_all(effective_data_dir).expect("failed to clean temp directory");
         fs::remove_dir_all(monitor_path).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn run_open_directory_command_respects_platform_open_semantics() {
+        let directory = create_temp_directory("shell-open");
+        let mut command = build_nonzero_exit_command();
+
+        #[cfg(target_os = "windows")]
+        run_open_directory_command(&mut command, &directory)
+            .expect("expected spawned command to count as success on Windows");
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let error = run_open_directory_command(&mut command, &directory)
+                .expect_err("expected non-zero exit status to fail");
+            assert!(error.to_string().contains("系统未能打开日志目录"));
+        }
+
+        fs::remove_dir_all(directory).expect("failed to clean temp directory");
     }
 
     fn open_log_directory_for_test(
@@ -316,5 +357,19 @@ mod tests {
                 .push(directory.to_path_buf());
             Ok(())
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn build_nonzero_exit_command() -> Command {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "exit /b 1"]);
+        command
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn build_nonzero_exit_command() -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 1"]);
+        command
     }
 }

@@ -248,11 +248,7 @@ mod tests {
             "hubVersion": "0.6.0"
         }))
         .expect("failed to serialize hub.json");
-        fs::write(
-            runtime_directory.join("hub.json"),
-            hub_json,
-        )
-        .expect("failed to write hub.json");
+        fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
 
         let connection = discover_runtime(&data_directory).expect("expected runtime discovery");
 

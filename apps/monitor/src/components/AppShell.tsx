@@ -34,14 +34,13 @@ interface AppShellProps {
   hostSessionStatus: HostSessionStatus;
   definitions: AppDefinition[];
   instances: AppInstance[];
-  inventoryMessage: string;
-  nowTick: number;
   definitionWorkspace: DefinitionWorkspaceState | null;
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
-  onResumeDiscovery: () => void;
   onLaunchHost: () => void;
   onChangeSettingsField: (field: keyof MonitorSettings, value: string) => void;
+  onSelectHostExecutablePath: () => void;
+  onSelectDataDirectory: () => void;
   onSaveSettings: () => void;
   onAddDefinition: () => void;
   onEditDefinition: (appId: string) => void;
@@ -73,9 +72,10 @@ export function AppShell(props: AppShellProps) {
     definitionWorkspace,
     onNavigateWorkspace,
     onOpenLogDirectory,
-    onResumeDiscovery,
     onLaunchHost,
     onChangeSettingsField,
+    onSelectHostExecutablePath,
+    onSelectDataDirectory,
     onSaveSettings,
     onAddDefinition,
     onEditDefinition,
@@ -119,7 +119,6 @@ export function AppShell(props: AppShellProps) {
               onEditDefinition={onEditDefinition}
               onLaunchHost={onLaunchHost}
               onOpenSettings={() => onNavigateWorkspace("settings")}
-              onResumeDiscovery={onResumeDiscovery}
               onViewInstanceDefinition={onViewInstanceDefinition}
             />
           ) : null}
@@ -141,6 +140,8 @@ export function AppShell(props: AppShellProps) {
               settingsDirty={settingsDirty}
               settingsDraft={settingsDraft}
               onChangeField={onChangeSettingsField}
+              onSelectHostExecutablePath={onSelectHostExecutablePath}
+              onSelectDataDirectory={onSelectDataDirectory}
               onSave={onSaveSettings}
             />
           ) : null}
@@ -221,7 +222,7 @@ function SidebarButton(props: {
   return (
     <button
       type="button"
-      className={`sidebar-button ${active ? "active" : ""}`}
+      className={`sidebar-button${collapsed ? " collapsed" : ""}${active ? " active" : ""}`}
       aria-current={active ? "page" : undefined}
       aria-label={label}
       onClick={onClick}
@@ -244,7 +245,6 @@ function HomeWorkspace(props: {
   onEditDefinition: (appId: string) => void;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
-  onResumeDiscovery: () => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
 }) {
   const { homeWorkspaceMode, ...rest } = props;
@@ -259,10 +259,10 @@ function HomeDiscoveryWorkspace(props: {
   busy: boolean;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
-  onResumeDiscovery: () => void;
 }) {
-  const { bootstrap, busy, onLaunchHost, onOpenSettings, onResumeDiscovery } = props;
+  const { bootstrap, busy, onLaunchHost, onOpenSettings } = props;
   const requiresSettings = bootstrap?.phase === "settings_required" || !bootstrap?.hasConfiguredHostExecutable;
+  const showLaunchAction = bootstrap !== null && (requiresSettings || bootstrap.phase === "launch_available");
 
   return (
     <section className="workspace-view">
@@ -273,18 +273,17 @@ function HomeDiscoveryWorkspace(props: {
         <p className="status-title">{getDiscoveryTitle(bootstrap?.phase)}</p>
         <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
 
-        <div className="status-actions">
-          <button type="button" className="button-secondary" onClick={onResumeDiscovery} disabled={busy}>
-            重新扫描
-          </button>
-          <button
-            type="button"
-            onClick={requiresSettings ? onOpenSettings : onLaunchHost}
-            disabled={busy && !requiresSettings}
-          >
-            {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
-          </button>
-        </div>
+        {showLaunchAction ? (
+          <div className="status-actions">
+            <button
+              type="button"
+              onClick={requiresSettings ? onOpenSettings : onLaunchHost}
+              disabled={busy && !requiresSettings}
+            >
+              {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -313,6 +312,7 @@ function HomeStatusWorkspace(props: {
 
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
+  const showInventories = hostSessionStatus === "connected";
 
   return (
     <section className="workspace-view">
@@ -327,76 +327,80 @@ function HomeStatusWorkspace(props: {
         </p>
       </header>
 
-      <InventorySection
-        collapsed={instancesCollapsed}
-        count={instances.length}
-        title="App 实例"
-        onToggle={() => setInstancesCollapsed((current) => !current)}
-      >
-        {instances.length === 0 ? (
-          <EmptyState title="当前没有 App 实例" />
-        ) : (
-          <div className="list">
-            {instances.map((instance) => (
-              <article key={instance.instanceId} className="list-item">
-                <span className="item-name">{instance.instanceId}</span>
-                <div className="item-actions">
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="查看定义"
-                    title="查看定义"
-                    onClick={() => onViewInstanceDefinition(instance)}
-                  >
-                    <ViewIcon />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </InventorySection>
-
-      <InventorySection
-        action={(
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="新增定义"
-            title="新增定义"
-            onClick={onAddDefinition}
+      {showInventories ? (
+        <>
+          <InventorySection
+            collapsed={instancesCollapsed}
+            count={instances.length}
+            title="App 实例"
+            onToggle={() => setInstancesCollapsed((current) => !current)}
           >
-            <PlusIcon />
-          </button>
-        )}
-        collapsed={definitionsCollapsed}
-        count={definitions.length}
-        title="App 定义"
-        onToggle={() => setDefinitionsCollapsed((current) => !current)}
-      >
-        {definitions.length === 0 ? (
-          <EmptyState title="当前没有 App 定义" />
-        ) : (
-          <div className="list">
-            {definitions.map((definition) => (
-              <article key={definition.appId} className="list-item">
-                <span className="item-name">{definition.displayName || definition.appId}</span>
-                <div className="item-actions">
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="编辑"
-                    title="编辑"
-                    onClick={() => onEditDefinition(definition.appId)}
-                  >
-                    <EditIcon />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </InventorySection>
+            {instances.length === 0 ? (
+              <EmptyState title="当前没有 App 实例" />
+            ) : (
+              <div className="list">
+                {instances.map((instance) => (
+                  <article key={instance.instanceId} className="list-item">
+                    <span className="item-name">{instance.instanceId}</span>
+                    <div className="item-actions">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="查看定义"
+                        title="查看定义"
+                        onClick={() => onViewInstanceDefinition(instance)}
+                      >
+                        <ViewIcon />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </InventorySection>
+
+          <InventorySection
+            action={(
+              <button
+                type="button"
+                className="icon-button icon-button-prominent"
+                aria-label="新增定义"
+                title="新增定义"
+                onClick={onAddDefinition}
+              >
+                <PlusIcon />
+              </button>
+            )}
+            collapsed={definitionsCollapsed}
+            count={definitions.length}
+            title="App 定义"
+            onToggle={() => setDefinitionsCollapsed((current) => !current)}
+          >
+            {definitions.length === 0 ? (
+              <EmptyState title="当前没有 App 定义" />
+            ) : (
+              <div className="list">
+                {definitions.map((definition) => (
+                  <article key={definition.appId} className="list-item">
+                    <span className="item-name">{definition.displayName || definition.appId}</span>
+                    <div className="item-actions">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="编辑"
+                        title="编辑"
+                        onClick={() => onEditDefinition(definition.appId)}
+                      >
+                        <EditIcon />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </InventorySection>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -499,9 +503,20 @@ function SettingsWorkspace(props: {
   settingsDirty: boolean;
   settingsDraft: MonitorSettings;
   onChangeField: (field: keyof MonitorSettings, value: string) => void;
+  onSelectHostExecutablePath: () => void;
+  onSelectDataDirectory: () => void;
   onSave: () => void;
 }) {
-  const { busy, fieldErrors, settingsDirty, settingsDraft, onChangeField, onSave } = props;
+  const {
+    busy,
+    fieldErrors,
+    settingsDirty,
+    settingsDraft,
+    onChangeField,
+    onSelectHostExecutablePath,
+    onSelectDataDirectory,
+    onSave,
+  } = props;
 
   return (
     <section className="workspace-view">
@@ -510,23 +525,47 @@ function SettingsWorkspace(props: {
       <div className="settings-form">
         <label className="field">
           <span>Host 可执行文件路径</span>
-          <input
-            type="text"
-            value={settingsDraft.hostExecutablePath ?? ""}
-            placeholder="例如 D:\\path\\to\\DevHub.Host.exe"
-            onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
-          />
+          <div className="field-input-row">
+            <input
+              type="text"
+              value={settingsDraft.hostExecutablePath ?? ""}
+              placeholder="请选择 DevHub.Host 可执行文件路径"
+              onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="选择 Host 可执行文件"
+              title="选择 Host 可执行文件"
+              onClick={onSelectHostExecutablePath}
+              disabled={busy}
+            >
+              <FileIcon />
+            </button>
+          </div>
           <FieldError message={fieldErrors.hostExecutablePath} />
         </label>
 
         <label className="field">
-          <span>Host 数据目录 (DEVHUB_DATA_DIR)</span>
-          <input
-            type="text"
-            value={settingsDraft.dataDirOverride ?? ""}
-            placeholder="留空表示使用环境变量或平台默认目录"
-            onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
-          />
+          <span>Host 数据目录</span>
+          <div className="field-input-row">
+            <input
+              type="text"
+              value={settingsDraft.dataDirOverride ?? ""}
+              placeholder="留空表示使用环境变量或平台默认目录"
+              onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="选择 Host 数据目录"
+              title="选择 Host 数据目录"
+              onClick={onSelectDataDirectory}
+              disabled={busy}
+            >
+              <FolderIcon />
+            </button>
+          </div>
           <FieldError message={fieldErrors.dataDirOverride} />
         </label>
 
@@ -553,7 +592,18 @@ function DefinitionWorkspacePage(props: {
   if (!workspace) {
     return (
       <section className="workspace-view">
-        <h1 className="view-title">App Definition</h1>
+        <div className="workspace-title-row">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="返回主页"
+            title="返回主页"
+            onClick={onClose}
+          >
+            <BackIcon />
+          </button>
+          <h1 className="view-title">App Definition</h1>
+        </div>
         <EmptyState title="正在准备 App Definition 工作区" />
       </section>
     );
@@ -565,7 +615,19 @@ function DefinitionWorkspacePage(props: {
 
   return (
     <section className="workspace-view definition-page">
-      <h1 className="view-title">{workspace.title}</h1>
+      <div className="workspace-title-row">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="返回主页"
+          title="返回主页"
+          onClick={onClose}
+          disabled={workspace.saving}
+        >
+          <BackIcon />
+        </button>
+        <h1 className="view-title">{workspace.title}</h1>
+      </div>
 
       {workspace.submitError ? (
         <div className="inline-error" role="alert">
@@ -710,28 +772,27 @@ function DefinitionWorkspacePage(props: {
         </>
       )}
 
-      <div className="definition-actions">
-        {canDelete ? (
-          <button type="button" className="button-danger" onClick={onDelete} disabled={workspace.saving}>
-            删除定义
-          </button>
-        ) : workspace.readOnly ? (
-          <span className="definition-note">只读模式不允许保存或删除。</span>
-        ) : (
-          <div className="action-spacer" />
-        )}
-
-        <div className="button-row">
-          <button type="button" className="button-secondary" onClick={onClose} disabled={workspace.saving}>
-            返回主页
-          </button>
-          {!workspace.readOnly && !workspace.missing && !workspace.loading ? (
-            <button type="button" onClick={onSubmit} disabled={workspace.saving}>
-              {workspace.saving ? "处理中..." : submitLabel}
+      {canDelete || workspace.readOnly || (!workspace.readOnly && !workspace.missing && !workspace.loading) ? (
+        <div className="definition-actions">
+          {canDelete ? (
+            <button type="button" className="button-danger" onClick={onDelete} disabled={workspace.saving}>
+              删除定义
             </button>
+          ) : workspace.readOnly ? (
+            <span className="definition-note">只读模式不允许保存或删除。</span>
+          ) : (
+            <div className="action-spacer" />
+          )}
+
+          {!workspace.readOnly && !workspace.missing && !workspace.loading ? (
+            <div className="button-row">
+              <button type="button" onClick={onSubmit} disabled={workspace.saving}>
+                {workspace.saving ? "处理中..." : submitLabel}
+              </button>
+            </div>
           ) : null}
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -779,12 +840,12 @@ function getDiscoveryTitle(phase?: BootstrapSnapshot["phase"]): string {
     case "settings_required":
       return "需要先补充 Host 设置";
     case "launch_available":
-      return "尚未连接到 DevHub Host";
+    case "scanning":
+      return "正在搜索 DevHub Host";
     case "host_available":
       return "已连接到 DevHub Host";
-    case "scanning":
     default:
-      return "正在寻找 DevHub Host...";
+      return "正在搜索 DevHub Host";
   }
 }
 
@@ -816,9 +877,9 @@ function HelpIcon() {
 
 function SettingsIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m12 3 1.7 2.7 3.1.7-.7 3.1 2.1 2.2-2.1 2.2.7 3.1-3.1.7L12 21l-1.7-2.7-3.1-.7.7-3.1-2.1-2.2 2.1-2.2-.7-3.1 3.1-.7z" />
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="settings-icon">
       <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.83l.05.05a2 2 0 0 1-2.82 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.34 1.7 1.7 0 0 0-1.03 1.57V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.03-1.57 1.7 1.7 0 0 0-1.82.34l-.06.06a2 2 0 0 1-2.82-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.82l-.05-.06a2 2 0 1 1 2.82-2.82l.06.05A1.7 1.7 0 0 0 8.91 4.6h.01A1.7 1.7 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.08 1.51h.01a1.7 1.7 0 0 0 1.82-.34l.06-.05a2 2 0 0 1 2.82 2.82l-.05.06A1.7 1.7 0 0 0 19.4 8v.01a1.7 1.7 0 0 0 1.51.99H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
     </svg>
   );
 }
@@ -863,6 +924,33 @@ function ChevronIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="m8 10 4 4 4-4" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 3h6l5 5v13a1 1 0 0 1-1 1H8a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" />
+      <path d="M14 3v5h5" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 8a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M15 18 9 12l6-6" />
+      <path d="M9 12h10" />
     </svg>
   );
 }

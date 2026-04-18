@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   DevHubRpcError,
@@ -24,6 +24,8 @@ const {
   getBootstrapStateMock,
   getSettingsSnapshotMock,
   openLogDirectoryMock,
+  pickDataDirectoryMock,
+  pickHostExecutablePathMock,
   requestHostLaunchMock,
   resumeDiscoveryMock,
   saveSettingsMock,
@@ -40,6 +42,8 @@ const {
   getBootstrapStateMock: vi.fn<() => Promise<BootstrapSnapshot>>(),
   getSettingsSnapshotMock: vi.fn<() => Promise<SettingsSnapshot>>(),
   openLogDirectoryMock: vi.fn<(kind: LogKind) => Promise<void>>(),
+  pickDataDirectoryMock: vi.fn<(currentPath?: string | null) => Promise<string | null>>(),
+  pickHostExecutablePathMock: vi.fn<(currentPath?: string | null) => Promise<string | null>>(),
   requestHostLaunchMock: vi.fn(),
   resumeDiscoveryMock: vi.fn(),
   saveSettingsMock: vi.fn(),
@@ -59,6 +63,8 @@ vi.mock("./lib/monitor-api", () => ({
   getBootstrapState: getBootstrapStateMock,
   getSettingsSnapshot: getSettingsSnapshotMock,
   openLogDirectory: openLogDirectoryMock,
+  pickDataDirectory: pickDataDirectoryMock,
+  pickHostExecutablePath: pickHostExecutablePathMock,
   requestHostLaunch: requestHostLaunchMock,
   resumeDiscovery: resumeDiscoveryMock,
   saveSettings: saveSettingsMock,
@@ -188,6 +194,25 @@ function createFailingEventStream(error: Error): AsyncIterable<unknown> {
   };
 }
 
+async function respondToConfirmDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  action: "confirm" | "cancel",
+  message?: string,
+) {
+  const dialog = await screen.findByRole("alertdialog", { name: "请注意" });
+  if (message) {
+    within(dialog).getByText(message);
+  }
+
+  await user.click(within(dialog).getByRole("button", {
+    name: action === "confirm" ? "确定" : "取消",
+  }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole("alertdialog", { name: "请注意" })).toBeNull();
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 
@@ -195,6 +220,8 @@ beforeEach(() => {
   getBootstrapStateMock.mockResolvedValue(createBootstrapSnapshot());
   getSettingsSnapshotMock.mockResolvedValue(createSettingsSnapshot());
   openLogDirectoryMock.mockResolvedValue(undefined);
+  pickDataDirectoryMock.mockResolvedValue(null);
+  pickHostExecutablePathMock.mockResolvedValue(null);
   requestHostLaunchMock.mockResolvedValue({
     status: "started",
     effectiveDataDir: "/tmp/devhub",
@@ -260,7 +287,10 @@ describe("Monitor App", () => {
     screen.getByRole("button", { name: "主页" });
     screen.getByRole("button", { name: "帮助" });
     screen.getByRole("button", { name: "设置" });
-    screen.getByText("重新扫描");
+    expect(screen.getByRole("button", { name: "设置" }).querySelector("svg")?.classList.contains("settings-icon")).toBe(true);
+    screen.getByText("正在搜索 DevHub Host");
+    expect(screen.queryByRole("button", { name: "启动 Host" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
 
     await act(async () => {
       bootstrapListener?.({
@@ -271,6 +301,7 @@ describe("Monitor App", () => {
 
     await screen.findByText("Demo App");
     screen.getByText("instance-1");
+    expect(screen.getByRole("button", { name: "新增定义" }).className).toContain("icon-button-prominent");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
@@ -332,7 +363,25 @@ describe("Monitor App", () => {
     });
 
     await screen.findByRole("heading", { name: "主页" });
-    screen.getByText("重新扫描");
+    screen.getByText("正在搜索 DevHub Host");
+    expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
+  });
+
+  it("keeps the searching copy in launch-available mode and only then shows the launch action", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "launch_available",
+        connection: null,
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+    await screen.findByRole("button", { name: "启动 Host" });
+    screen.getByText("正在搜索 DevHub Host");
+    expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
+    expect(screen.queryByText("尚未连接到 DevHub Host")).toBeNull();
   });
 
   it("opens log directories from help and keeps the help workspace visible on failure", async () => {
@@ -396,6 +445,105 @@ describe("Monitor App", () => {
     await screen.findByRole("heading", { name: "主页" });
   });
 
+  it("fills settings fields from the native file and directory pickers", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+    pickHostExecutablePathMock.mockResolvedValue("/tmp/picked-host");
+    pickDataDirectoryMock.mockResolvedValue("/tmp/picked-data");
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+
+    await user.click(screen.getByRole("button", { name: "选择 Host 可执行文件" }));
+    await user.click(screen.getByRole("button", { name: "选择 Host 数据目录" }));
+
+    expect(pickHostExecutablePathMock).toHaveBeenCalledWith("/tmp/DevHub.Host");
+    expect(pickDataDirectoryMock).toHaveBeenCalledWith("/tmp/devhub");
+    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/picked-host");
+    expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/picked-data");
+  });
+
+  it("prompts before leaving settings with unsaved changes and discards the draft after confirmation", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+
+    const hostPathInput = screen.getByLabelText("Host 可执行文件路径");
+    await user.clear(hostPathInput);
+    await user.type(hostPathInput, "/tmp/alt-host");
+
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    await respondToConfirmDialog(user, "cancel", "设置中的修改尚未保存，确认放弃并离开当前工作区吗？");
+    await screen.findByRole("heading", { name: "设置" });
+    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/alt-host");
+
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    await respondToConfirmDialog(user, "confirm", "设置中的修改尚未保存，确认放弃并离开当前工作区吗？");
+    await screen.findByRole("heading", { name: "帮助" });
+
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/DevHub.Host");
+  });
+
+  it("keeps the home workspace visible without empty inventories while the host session is still connecting", async () => {
+    const pendingConnection = new Promise<never>(() => {});
+    hostClientFromRuntimeMock.mockImplementation(() => pendingConnection);
+    eventsClientFromRuntimeMock.mockImplementation(() => pendingConnection);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+    await screen.findByText("http://127.0.0.1:4123/rpc");
+
+    expect(screen.queryByText("App 定义")).toBeNull();
+    expect(screen.queryByText("App 实例")).toBeNull();
+    expect(screen.queryByText("当前没有 App 定义")).toBeNull();
+    expect(screen.queryByText("当前没有 App 实例")).toBeNull();
+    expect(screen.queryByRole("button", { name: "新增定义" })).toBeNull();
+  });
+
+  it("adds the collapsed class to sidebar buttons after collapsing the sidebar", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "折叠侧边栏" }));
+
+    expect(screen.getByRole("button", { name: "主页" }).className).toContain("collapsed");
+    expect(screen.getByRole("button", { name: "帮助" }).className).toContain("collapsed");
+    expect(screen.getByRole("button", { name: "设置" }).className).toContain("collapsed");
+    screen.getByRole("button", { name: "展开侧边栏" });
+  });
+
   it("shows inline validation and stays in the definition workspace when precheck fails", async () => {
     const invalidValidation: DefinitionValidationResult = {
       ok: true,
@@ -434,14 +582,14 @@ describe("Monitor App", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "新增定义" }));
-    await screen.findByRole("heading", { name: "新增 App Definition" });
+    await screen.findByRole("heading", { name: "新增 App 定义" });
     await user.type(screen.getByLabelText("App ID"), "demo.app");
     await user.type(screen.getByLabelText("显示名称"), "Demo App");
     await user.click(screen.getByRole("button", { name: "创建定义" }));
 
     await screen.findByText("预校验未通过，请修正下列字段错误后再提交。");
     screen.getByText("appId 不能为空。");
-    screen.getByRole("heading", { name: "新增 App Definition" });
+    screen.getByRole("heading", { name: "新增 App 定义" });
 
     expect(hostClient.validateDefinition).toHaveBeenCalledTimes(1);
     expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
@@ -469,8 +617,6 @@ describe("Monitor App", () => {
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
 
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-
     render(<App />);
 
     await screen.findByText("Demo App");
@@ -479,12 +625,11 @@ describe("Monitor App", () => {
     await user.click(screen.getByRole("button", { name: "编辑" }));
     await screen.findByRole("heading", { name: "编辑 App Definition" });
     await user.click(screen.getByRole("button", { name: "删除定义" }));
+    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app” 吗？");
 
     await screen.findAllByText("delete failed");
     screen.getByRole("heading", { name: "编辑 App Definition" });
     expect(resumeDiscoveryMock).not.toHaveBeenCalled();
-
-    confirmSpy.mockRestore();
   });
 
   it("keeps missing definitions in read-only mode when an instance link is stale", async () => {

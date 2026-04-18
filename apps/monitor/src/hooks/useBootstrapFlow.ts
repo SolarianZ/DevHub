@@ -17,6 +17,7 @@ import type {
   SettingsSnapshot,
 } from "../lib/models";
 import {
+  areMonitorSettingsEqual,
   type SettingsFieldErrors,
   hasSettingsFieldErrors,
   normalizeOptionalInput,
@@ -34,15 +35,14 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
   const [settings, setSettings] = useState<SettingsSnapshot | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<MonitorSettings>({});
-  const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsFieldErrors, setSettingsFieldErrors] = useState<SettingsFieldErrors>({});
   const [bootstrapBusy, setBootstrapBusy] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
+  const settingsDirty = !areMonitorSettingsEqual(settingsDraft, settings?.settings);
   const settingsDirtyRef = useRef(false);
-
   settingsDirtyRef.current = settingsDirty;
 
   useEffect(() => {
@@ -64,7 +64,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
           setBootstrap(bootstrapSnapshot);
           setSettings(settingsSnapshot);
           setSettingsDraft(settingsSnapshot.settings);
-          setSettingsDirty(false);
           setSettingsFieldErrors({});
         });
 
@@ -84,7 +83,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
 
               if (!settingsDirtyRef.current) {
                 setSettingsDraft(event.payload.settings);
-                setSettingsDirty(false);
                 setSettingsFieldErrors({});
               }
             });
@@ -185,11 +183,18 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
         ...current,
         [field]: value,
       }));
-      setSettingsDirty(true);
       setSettingsFieldErrors((current) => ({
         ...current,
         [field]: null,
       }));
+    });
+  });
+
+  const discardSettingsChanges = useEffectEvent(() => {
+    startTransition(() => {
+      setSettingsDraft(settings?.settings ?? {});
+      setSettingsFieldErrors({});
+      setSettingsError(null);
     });
   });
 
@@ -235,7 +240,6 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
       startTransition(() => {
         setSettings(snapshot);
         setSettingsDraft(snapshot.settings);
-        setSettingsDirty(false);
         setSettingsFieldErrors({});
       });
 
@@ -272,6 +276,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
     handleLaunchHost,
     handleResumeDiscovery,
     handleSaveSettings,
+    discardSettingsChanges,
     replaceBootstrap,
     settings,
     settingsBusy,

@@ -90,6 +90,10 @@ export function definitionFormToModel(form: DefinitionFormState): AppDefinition 
   return definition;
 }
 
+export function areDefinitionFormsEqual(left: DefinitionFormState, right: DefinitionFormState): boolean {
+  return JSON.stringify(definitionFormToModel(left)) === JSON.stringify(definitionFormToModel(right));
+}
+
 export function mapValidationIssues(errors: readonly ValidationIssue[]): DefinitionIssueMap {
   const result: DefinitionIssueMap = {};
 

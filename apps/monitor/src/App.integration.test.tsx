@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DevHubClient } from "@devhub/sdk";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
 import App from "./App";
 import type {
@@ -25,6 +25,8 @@ const {
   getBootstrapStateMock,
   getSettingsSnapshotMock,
   openLogDirectoryMock,
+  pickDataDirectoryMock,
+  pickHostExecutablePathMock,
   requestHostLaunchMock,
   resumeDiscoveryMock,
   saveSettingsMock,
@@ -34,6 +36,8 @@ const {
   getBootstrapStateMock: vi.fn<() => Promise<BootstrapSnapshot>>(),
   getSettingsSnapshotMock: vi.fn<() => Promise<SettingsSnapshot>>(),
   openLogDirectoryMock: vi.fn<(kind: LogKind) => Promise<void>>(),
+  pickDataDirectoryMock: vi.fn<(currentPath?: string | null) => Promise<string | null>>(),
+  pickHostExecutablePathMock: vi.fn<(currentPath?: string | null) => Promise<string | null>>(),
   requestHostLaunchMock: vi.fn(),
   resumeDiscoveryMock: vi.fn(),
   saveSettingsMock: vi.fn(),
@@ -52,6 +56,8 @@ vi.mock("./lib/monitor-api", async () => {
     getBootstrapState: getBootstrapStateMock,
     getSettingsSnapshot: getSettingsSnapshotMock,
     openLogDirectory: openLogDirectoryMock,
+    pickDataDirectory: pickDataDirectoryMock,
+    pickHostExecutablePath: pickHostExecutablePathMock,
     requestHostLaunch: requestHostLaunchMock,
     resumeDiscovery: resumeDiscoveryMock,
     saveSettings: saveSettingsMock,
@@ -139,6 +145,11 @@ beforeAll(async () => {
   listenMock.mockImplementation(async () => () => {});
 }, 120_000);
 
+beforeEach(() => {
+  pickDataDirectoryMock.mockResolvedValue(null);
+  pickHostExecutablePathMock.mockResolvedValue(null);
+});
+
 afterAll(async () => {
   await host?.close();
   if (originalFetch) {
@@ -171,7 +182,7 @@ describe("Monitor App real-host integration", () => {
       const user = userEvent.setup();
 
       await user.click(screen.getByRole("button", { name: "新增定义" }));
-      await screen.findByRole("heading", { name: "新增 App Definition" }, { timeout: 15_000 });
+      await screen.findByRole("heading", { name: "新增 App 定义" }, { timeout: 15_000 });
       await user.type(screen.getByLabelText("App ID"), "monitor.integration.created");
       await user.type(screen.getByLabelText("显示名称"), "Monitor Created App");
       await user.type(screen.getByLabelText("描述"), "通过 Monitor UI 创建的定义。");
@@ -203,7 +214,7 @@ describe("Monitor App real-host integration", () => {
       await screen.findByRole("heading", { name: "实例关联定义" }, { timeout: 15_000 });
       expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe("Monitor Integration App Updated");
       screen.getByText("只读模式不允许保存或删除。");
-      await user.click(screen.getAllByRole("button", { name: "返回主页" })[0]);
+      await user.click(screen.getByRole("button", { name: "返回主页" }));
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
 
@@ -216,7 +227,7 @@ describe("Monitor App real-host integration", () => {
       await screen.findByRole("heading", { name: "定义不存在" }, { timeout: 15_000 });
       expect(screen.getAllByText(new RegExp(MISSING_INSTANCE_ID)).length).toBeGreaterThan(0);
       expect(screen.getAllByText(new RegExp(MISSING_APP_ID)).length).toBeGreaterThan(0);
-      await user.click(screen.getAllByRole("button", { name: "返回主页" })[0]);
+      await user.click(screen.getByRole("button", { name: "返回主页" }));
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
 
@@ -226,7 +237,107 @@ describe("Monitor App real-host integration", () => {
       await waitFor(() => {
         expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
       }, { timeout: 15_000 });
-      await screen.findByText("重新扫描", {}, { timeout: 15_000 });
+      await screen.findByText("正在搜索 DevHub Host", {}, { timeout: 15_000 });
+    } finally {
+      restoreFetch();
+    }
+  }, 120_000);
+
+  it("confirms before discarding definition edits and returns home after save or delete", async () => {
+    const guardAppId = "monitor.integration.guard";
+    const guardDisplayName = "Monitor Guard App";
+    const guardSavedDisplayName = "Monitor Guard App Saved";
+
+    vi.clearAllMocks();
+    if (!host) {
+      host = await DevHubHostFixture.start();
+    }
+    listenMock.mockImplementation(async () => () => {});
+    openLogDirectoryMock.mockResolvedValue(undefined);
+    requestHostLaunchMock.mockResolvedValue({
+      status: "started",
+      effectiveDataDir: getHost().dataDirectory,
+      dataDirSource: "settings_override",
+      pid: null,
+    });
+    saveSettingsMock.mockResolvedValue(createSettingsSnapshot());
+    writeFrontendLogMock.mockResolvedValue(undefined);
+
+    await getHost().writeDefinition({
+      appId: guardAppId,
+      displayName: guardDisplayName,
+      description: "用于验证未保存离开保护和返回主页路径。",
+    });
+
+    const connection = await createConnection(getHost());
+    getBootstrapStateMock.mockResolvedValue(createBootstrapSnapshot(connection));
+    getSettingsSnapshotMock.mockResolvedValue(createSettingsSnapshot());
+    resumeDiscoveryMock.mockResolvedValue(
+      createBootstrapSnapshot(connection, {
+        generation: 2,
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+    const restoreFetch = installBrowserStyleRpcFetch(connection.rpcEndpoint, "tauri://monitor-integration");
+
+    try {
+      render(<App />);
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+      await screen.findByText(guardDisplayName, {}, { timeout: 15_000 });
+
+      const user = userEvent.setup();
+      const guardDefinitionRow = screen.getByText(guardDisplayName).closest("article");
+      if (!guardDefinitionRow) {
+        throw new Error("Guard definition row not found.");
+      }
+
+      await user.click(within(guardDefinitionRow).getByRole("button", { name: "编辑" }));
+      await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+      await user.clear(screen.getByLabelText("显示名称"));
+      await user.type(screen.getByLabelText("显示名称"), "Monitor Guard App Draft");
+
+      await user.click(screen.getByRole("button", { name: "返回主页" }));
+      await respondToConfirmDialog(user, "cancel", "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？");
+      await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe("Monitor Guard App Draft");
+
+      await user.click(screen.getByRole("button", { name: "返回主页" }));
+      await respondToConfirmDialog(user, "confirm", "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？");
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+
+      const guardDefinitionRowAfterDiscard = screen.getByText(guardDisplayName).closest("article");
+      if (!guardDefinitionRowAfterDiscard) {
+        throw new Error("Guard definition row not found after discard.");
+      }
+
+      await user.click(within(guardDefinitionRowAfterDiscard).getByRole("button", { name: "编辑" }));
+      await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe(guardDisplayName);
+
+      await user.clear(screen.getByLabelText("显示名称"));
+      await user.type(screen.getByLabelText("显示名称"), guardSavedDisplayName);
+      await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+      await screen.findByText(guardSavedDisplayName, {}, { timeout: 15_000 });
+
+      const guardDefinitionRowAfterSave = screen.getByText(guardSavedDisplayName).closest("article");
+      if (!guardDefinitionRowAfterSave) {
+        throw new Error("Guard definition row not found after save.");
+      }
+
+      await user.click(within(guardDefinitionRowAfterSave).getByRole("button", { name: "编辑" }));
+      await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+
+      await user.click(screen.getByRole("button", { name: "删除定义" }));
+      await respondToConfirmDialog(user, "confirm", `确认删除 App Definition “${guardAppId}” 吗？`);
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+      await waitFor(() => {
+        expect(screen.queryByText(guardSavedDisplayName)).toBeNull();
+      }, { timeout: 15_000 });
     } finally {
       restoreFetch();
     }
@@ -239,6 +350,25 @@ function getHost(): DevHubHostFixture {
   }
 
   return host;
+}
+
+async function respondToConfirmDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  action: "confirm" | "cancel",
+  message?: string,
+) {
+  const dialog = await screen.findByRole("alertdialog", { name: "请注意" }, { timeout: 15_000 });
+  if (message) {
+    within(dialog).getByText(message);
+  }
+
+  await user.click(within(dialog).getByRole("button", {
+    name: action === "confirm" ? "确定" : "取消",
+  }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole("alertdialog", { name: "请注意" })).toBeNull();
+  }, { timeout: 15_000 });
 }
 
 async function createConnection(activeHost: DevHubHostFixture): Promise<MonitorRuntimeConnectionInfo> {

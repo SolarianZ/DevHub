@@ -3,6 +3,7 @@ mod launch;
 mod logging;
 mod models;
 mod monitor;
+mod picker;
 mod runtime;
 mod settings;
 mod snapshot;
@@ -122,6 +123,26 @@ async fn monitor_open_log_directory(
 }
 
 #[tauri::command]
+async fn monitor_pick_host_executable_path(
+    current_path: Option<String>,
+) -> CommandResult<Option<String>> {
+    validate_optional_text(current_path.as_deref(), "currentPath", 4096)?;
+    let selected_path = picker::pick_host_executable_path(current_path.as_deref());
+    validate_optional_absolute_path(selected_path.as_deref(), "selectedPath")?;
+    Ok(selected_path)
+}
+
+#[tauri::command]
+async fn monitor_pick_data_directory(
+    current_path: Option<String>,
+) -> CommandResult<Option<String>> {
+    validate_optional_text(current_path.as_deref(), "currentPath", 4096)?;
+    let selected_path = picker::pick_data_directory(current_path.as_deref());
+    validate_optional_absolute_path(selected_path.as_deref(), "selectedPath")?;
+    Ok(selected_path)
+}
+
+#[tauri::command]
 async fn monitor_write_frontend_log(
     state: State<'_, MonitorCore>,
     entry: FrontendLogInput,
@@ -163,6 +184,8 @@ pub fn run() {
             monitor_request_host_launch,
             monitor_resume_discovery,
             monitor_open_log_directory,
+            monitor_pick_host_executable_path,
+            monitor_pick_data_directory,
             monitor_write_frontend_log
         ])
         .run(tauri::generate_context!())

@@ -39,7 +39,6 @@ export function useHostSession(options: HostSessionOptions) {
   const [definitions, setDefinitions] = useState<AppDefinition[]>([]);
   const [instances, setInstances] = useState<AppInstance[]>([]);
   const [hostSessionStatus, setHostSessionStatus] = useState<HostSessionStatus>("idle");
-  const [inventoryMessage, setInventoryMessage] = useState("等待发现可用的 DevHub Host。");
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionResetVersion, setSessionResetVersion] = useState(0);
 
@@ -82,7 +81,6 @@ export function useHostSession(options: HostSessionOptions) {
       setDefinitions([]);
       setInstances([]);
       setHostSessionStatus("recovering");
-      setInventoryMessage("当前 Host 会话已失效，正在重新查找可用连接。");
       setSessionError(null);
       setSessionResetVersion((current) => current + 1);
     });
@@ -135,9 +133,6 @@ export function useHostSession(options: HostSessionOptions) {
     if (!bootstrap?.connection || bootstrap.phase !== "host_available") {
       startTransition(() => {
         setHostSessionStatus((current) => (current === "recovering" ? current : "idle"));
-        if (!recoveryInFlightRef.current) {
-          setInventoryMessage("等待发现可用的 DevHub Host。");
-        }
       });
       void disposeHostSession();
       return;
@@ -217,7 +212,6 @@ export function useHostSession(options: HostSessionOptions) {
 
     startTransition(() => {
       setHostSessionStatus("connecting");
-      setInventoryMessage("正在连接 DevHub Host，并同步应用定义与实例。");
       setSessionError(null);
     });
 
@@ -279,7 +273,6 @@ export function useHostSession(options: HostSessionOptions) {
           setDefinitions(sortDefinitions(nextDefinitions));
           setInstances(sortInstances(nextInstances));
           setHostSessionStatus("connected");
-          setInventoryMessage("已连接到当前 DevHub Host。");
           setSessionError(null);
         });
 
@@ -347,7 +340,6 @@ export function useHostSession(options: HostSessionOptions) {
     disposeHostSession,
     hostSessionStatus,
     instances,
-    inventoryMessage,
     removeDefinitionFromState,
     replaceDefinitionInState,
     runHostAction,

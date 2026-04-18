@@ -20,6 +20,8 @@
 html,
 body,
 #root {
+  width: 100%;
+  height: 100%;
   min-height: 100vh;
 }
 
@@ -70,6 +72,8 @@ button:focus-visible {
 }
 
 svg {
+  display: block;
+  flex: none;
   width: 18px;
   height: 18px;
   fill: none;
@@ -93,28 +97,24 @@ svg {
 
 .monitor-layout {
   display: flex;
-  gap: 20px;
   min-height: 100vh;
-  max-width: 1160px;
-  margin: 0 auto;
-  padding: 20px;
+  width: 100%;
 }
 
 .monitor-sidebar {
-  width: 220px;
+  width: 236px;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 10px 10px 20px;
+  padding: 14px 10px 18px;
   background: var(--bg-sidebar);
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border-right: 1px solid #d1d5db;
   overflow: hidden;
   transition: width 0.25s ease;
 }
 
 .monitor-sidebar.collapsed {
-  width: 56px;
+  width: 72px;
 }
 
 .sidebar-toggle,
@@ -129,6 +129,16 @@ svg {
   background: transparent;
   color: var(--text-main);
   transition: background-color 0.2s ease;
+}
+
+.sidebar-button {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.sidebar-toggle {
+  justify-content: center;
 }
 
 .sidebar-toggle,
@@ -156,6 +166,11 @@ svg {
   position: relative;
 }
 
+.sidebar-button.collapsed {
+  justify-content: center;
+  padding-inline: 0;
+}
+
 .sidebar-button.active {
   background: #ffffff;
   font-weight: 600;
@@ -179,11 +194,19 @@ svg {
   flex-shrink: 0;
   width: 24px;
   height: 24px;
-  margin-left: 4px;
+}
+
+.sidebar-icon > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .sidebar-label {
-  margin-left: 12px;
   white-space: nowrap;
   font-size: 14px;
 }
@@ -196,17 +219,16 @@ svg {
 .monitor-stage {
   flex: 1;
   min-width: 0;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   overflow: hidden;
 }
 
 .workspace-scroll {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -214,7 +236,18 @@ svg {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding: 32px;
+  padding: 32px clamp(20px, 4vw, 40px);
+}
+
+.workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.workspace-title-row .view-title {
+  margin: 0;
 }
 
 .view-title {
@@ -339,6 +372,22 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   width: 36px;
   height: 36px;
   padding: 0;
+}
+
+.icon-button > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.icon-button-prominent {
+  width: 40px;
+  height: 40px;
+}
+
+.icon-button-prominent > svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.4;
 }
 
 .host-header {
@@ -520,6 +569,17 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.field-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -574,45 +634,57 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   margin: 0;
 }
 
+.action-spacer {
+  flex: 1;
+}
+
 .definition-note {
   margin-bottom: 16px;
   color: var(--text-sub);
-}
-
-.action-spacer {
-  flex: 1;
 }
 
 .empty-state {
   color: var(--text-sub);
 }
 
-@media (max-width: 960px) {
-  .monitor-layout {
-    gap: 12px;
-    padding: 12px;
-  }
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+}
 
-  .monitor-sidebar {
-    width: 88px;
-  }
+.confirm-dialog {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
 
-  .monitor-sidebar .sidebar-label {
-    display: none;
-  }
+.confirm-dialog-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
 
-  .sidebar-button {
-    justify-content: center;
-  }
+.confirm-dialog-message {
+  margin: 0;
+  color: var(--text-main);
+  white-space: pre-wrap;
+}
 
-  .sidebar-button.active::before {
-    left: 50%;
-    top: auto;
-    bottom: 2px;
-    width: 24px;
-    height: 3px;
-    transform: translateX(-50%);
-  }
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 @media (max-width: 720px) {
@@ -623,9 +695,12 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   .monitor-sidebar,
   .monitor-sidebar.collapsed {
     width: 100%;
+    min-height: auto;
     flex-direction: row;
     gap: 8px;
-    padding-bottom: 10px;
+    padding: 12px;
+    border-right: none;
+    border-bottom: 1px solid #d1d5db;
   }
 
   .sidebar-toggle {
@@ -636,12 +711,24 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   .sidebar-nav {
     flex-direction: row;
     align-items: center;
+    gap: 8px;
     min-width: 0;
   }
 
   .sidebar-nav-bottom {
     margin-top: 0;
     margin-left: auto;
+  }
+
+  .sidebar-button,
+  .sidebar-button.collapsed {
+    flex: 0 0 auto;
+    min-width: 52px;
+    padding-inline: 10px;
+  }
+
+  .monitor-stage {
+    min-height: 0;
   }
 
   .workspace-view {
@@ -651,8 +738,10 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   .status-actions,
   .definition-actions,
   .button-row,
+  .confirm-dialog-actions,
   .form-section-header,
   .form-value-row,
+  .field-input-row,
   .section-header {
     flex-direction: column;
     align-items: stretch;

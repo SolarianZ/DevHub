@@ -74,6 +74,14 @@ export function openLogDirectory(kind: LogKind): Promise<void> {
   return invoke("monitor_open_log_directory", { kind });
 }
 
+export function pickHostExecutablePath(currentPath?: string | null): Promise<string | null> {
+  return invoke("monitor_pick_host_executable_path", { currentPath });
+}
+
+export function pickDataDirectory(currentPath?: string | null): Promise<string | null> {
+  return invoke("monitor_pick_data_directory", { currentPath });
+}
+
 export function writeFrontendLog(entry: FrontendLogInput): Promise<void> {
   return invoke("monitor_write_frontend_log", { entry });
 }

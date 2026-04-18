@@ -1,6 +1,6 @@
 # DevHub Monitor
 
-`apps/monitor/` 是 DevHub 的官方桌面 Monitor 工作区，使用 Tauri 2 提供运行时发现、Host 启动、日志访问、系统托盘和前端 WebView 桥接能力。
+`apps/monitor/` 是 DevHub 的官方桌面 Monitor 工作区，使用 Tauri 2 提供运行时发现、Host 启动、日志目录访问，以及前端 WebView 与本机能力之间的桥接。
 
 ## 常用命令
 
@@ -40,15 +40,6 @@
 - `src-tauri/`：Rust 原生后端；Tauri command 只做参数校验与转发，设置、快照、discovery、Host 启动、日志写入与日志目录打开能力由独立服务协作。
 - `../../sdks/javascript`：前端 Host 通信依赖来源，当前通过本地 `file:` 依赖映射为 `@devhub/sdk`。
 
-## 主界面结构
-
-- 左侧侧边栏提供 `主页`、`帮助`、`设置` 三个一级工作区入口，并支持折叠为图标模式；Definition 工作区由主页中的资产操作打开，不出现在一级导航中。
-- `主页` 保持阶段驱动：未发现可用 Host 时只显示发现 / 启动所需的最小元素；发现并验证可用 Host 后切换为连接地址、数据目录、应用定义和实例清单。
-- `帮助` 只提供 `打开 Host 日志`、`打开 Monitor 日志` 两个入口以及版本信息。
-- `设置` 只提供 `Host 可执行文件路径` 与 `Host 数据目录 (DEVHUB_DATA_DIR)` 两个字段，以及保存动作和字段级校验。
-- App Definition 通过独立页面工作流处理 `create / edit / view / missing` 四种状态；页面只保留查看、编辑和提交定义所必需的字段、状态提示与操作按钮。
-- `DEVHUB_DATA_DIR` 覆盖值和 Host 可执行文件路径都只接受绝对路径；相对路径会在前端与原生命令层同时被拒绝。
-
 ## 运行方式
 
 - 开发态桌面运行：`npm run tauri:dev`
@@ -61,7 +52,7 @@
 
 当前 Monitor 的一键发布脚本只负责本地打包，不接入仓库现有的 GitHub Release / CI 自动发布流程。
 
-Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，只有在真实 `hub.ping` 校验成功后才切换到运行态摘要。若未配置 Host 可执行文件路径，启动请求会保留当前壳层，并引导用户进入 `设置` 工作区补全配置。
+Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜索可用 Host。只有在真实 `hub.ping` 校验成功且前端 Host session 已完成连接后，`主页` 才会显示运行态摘要和库存列表。若自动搜索约 3 秒后仍未发现可用 Host，`主页` 才会显示 `启动 Host`；若未配置 Host 可执行文件路径，则会引导用户进入 `设置` 工作区补全配置。
 
 ## 日志与能力边界
 
@@ -70,3 +61,4 @@ Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，只有在真实 `h
 - 前端不提供内嵌日志列表或日志内容预览；需要排障时，通过 `帮助` 工作区直接调用系统外壳打开 Host / Monitor 日志目录。
 - 前端在 `host_available` 后通过 `@devhub/sdk` 直接访问 Host `/rpc` 与 `/ws`，浏览器 / WebView 对 `/rpc` 的预检也由 Host 自身处理，不直接访问本地文件。
 - 原生后端负责设置持久化、运行时发现、Host 启动、日志写入、日志目录打开和系统托盘，不代理 DevHub transport，也不直接依赖 `JS/TS SDK`。
+- `DEVHUB_DATA_DIR` 覆盖值和 Host 可执行文件路径都只接受绝对路径；相对路径会在前端与原生命令层同时被拒绝。

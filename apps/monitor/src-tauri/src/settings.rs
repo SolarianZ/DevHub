@@ -341,9 +341,7 @@ mod tests {
             .expect("failed to save settings");
 
         assert_eq!(
-            saved
-                .data_dir_override
-                .expect("missing data dir override"),
+            saved.data_dir_override.expect("missing data dir override"),
             data_dir
         );
         assert_eq!(
@@ -366,7 +364,10 @@ mod tests {
             snapshot.monitor_log_directory,
             log_directory.display().to_string()
         );
-        assert_eq!(snapshot.effective_data_dir, absolute_test_path("runtime-data"));
+        assert_eq!(
+            snapshot.effective_data_dir,
+            absolute_test_path("runtime-data")
+        );
 
         fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
     }

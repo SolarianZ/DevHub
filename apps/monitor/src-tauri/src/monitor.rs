@@ -239,7 +239,8 @@ impl MonitorCore {
     }
 
     pub fn open_log_directory(&self, kind: LogKind) -> Result<()> {
-        let effective_data_dir = PathBuf::from(self.settings_service.resolve_effective_data_dir().path);
+        let effective_data_dir =
+            PathBuf::from(self.settings_service.resolve_effective_data_dir().path);
         let monitor_log_directory = self.log_service.log_directory().to_path_buf();
         let target_directory =
             resolve_log_directory(kind, &effective_data_dir, &monitor_log_directory);
@@ -347,7 +348,6 @@ impl MonitorCore {
             context,
         })
     }
-
 }
 
 fn problem(code: impl Into<String>, message: impl Into<String>) -> MonitorProblem {

@@ -126,6 +126,7 @@ sdks/javascript/dist/
 
 # Temp files
 [Tt]emp/
+output/playwright/
 **/__pycache__/
 
 # AI

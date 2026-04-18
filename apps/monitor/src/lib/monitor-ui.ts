@@ -15,7 +15,6 @@ import type {
   BootstrapSnapshot,
   MonitorRuntimeConnectionInfo,
   MonitorSettings,
-  SettingsSnapshot,
 } from "./models";
 export type MonitorWorkspace = "home" | "help" | "settings" | "definition";
 export type SidebarWorkspace = Exclude<MonitorWorkspace, "definition">;
@@ -26,7 +25,6 @@ export type DefinitionWorkspaceMode = "view" | "create" | "edit";
 export interface DefinitionWorkspaceState {
   mode: DefinitionWorkspaceMode;
   title: string;
-  subtitle: string;
   form: DefinitionFormState;
   fieldErrors: DefinitionIssueMap;
   loading: boolean;
@@ -55,6 +53,14 @@ export function getSidebarWorkspace(workspace: MonitorWorkspace): SidebarWorkspa
 export function normalizeOptionalInput(value?: string | null): string | null {
   const trimmed = value?.trim() ?? "";
   return trimmed ? trimmed : null;
+}
+
+export function areMonitorSettingsEqual(
+  left?: MonitorSettings | null,
+  right?: MonitorSettings | null,
+): boolean {
+  return normalizeOptionalInput(left?.dataDirOverride) === normalizeOptionalInput(right?.dataDirOverride)
+    && normalizeOptionalInput(left?.hostExecutablePath) === normalizeOptionalInput(right?.hostExecutablePath);
 }
 
 export function validateSettingsDraft(settings: MonitorSettings): SettingsFieldErrors {
@@ -151,82 +157,6 @@ export function createMissingDefinitionForm(appId: string): DefinitionFormState 
   return form;
 }
 
-export function formatPhaseLabel(phase?: BootstrapSnapshot["phase"]): string {
-  switch (phase) {
-    case "scanning":
-      return "正在扫描";
-    case "launch_available":
-      return "可启动 Host";
-    case "settings_required":
-      return "需要设置";
-    case "host_available":
-      return "Host 可用";
-    default:
-      return "初始化中";
-  }
-}
-
-export function formatSessionLabel(status: HostSessionStatus): string {
-  switch (status) {
-    case "connecting":
-      return "连接中";
-    case "connected":
-      return "已连接";
-    case "recovering":
-      return "恢复中";
-    default:
-      return "未连接";
-  }
-}
-
-export function formatDataDirSource(source?: SettingsSnapshot["dataDirSource"]): string {
-  switch (source) {
-    case "settings_override":
-      return "设置覆盖";
-    case "environment":
-      return "环境变量";
-    case "platform_default":
-      return "平台默认";
-    default:
-      return "加载中";
-  }
-}
-
-export function formatBootstrapHeadline(phase?: BootstrapSnapshot["phase"]): string {
-  switch (phase) {
-    case "launch_available":
-      return "尚未连接到 DevHub Host，可以继续扫描或立即启动。";
-    case "settings_required":
-      return "启动 Host 前需要先补充本机设置。";
-    case "host_available":
-      return "已连接到 DevHub Host，可以开始查看定义与实例。";
-    case "scanning":
-      return "正在查找当前数据目录中的可用 Host。";
-    default:
-      return "正在准备 Monitor。";
-  }
-}
-
-export function formatBootstrapDescription(snapshot: BootstrapSnapshot | null): string {
-  if (!snapshot) {
-    return "Monitor 正在读取本机设置并检查当前运行环境。";
-  }
-
-  if (snapshot.phase === "host_available" && snapshot.connection) {
-    return `已确认 ${snapshot.connection.rpcEndpoint} 可用，主页会持续展示连接状态、应用定义和实例清单。`;
-  }
-
-  if (snapshot.phase === "settings_required") {
-    return "当前还没有可用于启动 Host 的可执行文件路径，请前往“设置”补全后再试。";
-  }
-
-  if (snapshot.phase === "launch_available") {
-    return "Monitor 会继续扫描当前数据目录；如果 Host 尚未运行，你也可以直接从这里启动。";
-  }
-
-  return "Monitor 会持续验证当前数据目录中的运行时信息，并在发现可用 Host 后自动进入管理视图。";
-}
-
 export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null): string {
   if (!connection) {
     return "未连接";
@@ -239,50 +169,8 @@ export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null)
   }
 }
 
-export function isInstanceOffline(
-  instance: AppInstance,
-  connection: MonitorRuntimeConnectionInfo | undefined | null,
-  nowTick: number,
-): boolean {
-  const thresholdSeconds = connection?.runtime.runtimeTuning.onlineThresholdSeconds ?? 30;
-  return nowTick - instance.lastSeenUtc.getTime() > thresholdSeconds * 1_000;
-}
-
 export function formatScope(scope?: string | null): string {
   return scope && scope.trim() ? scope : "global";
-}
-
-export function formatRelativeTime(value: Date, nowTick: number): string {
-  const deltaMs = Math.max(0, nowTick - value.getTime());
-  const deltaSeconds = Math.floor(deltaMs / 1_000);
-
-  if (deltaSeconds < 60) {
-    return `${deltaSeconds}s 前`;
-  }
-
-  const minutes = Math.floor(deltaSeconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m 前`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h 前`;
-}
-
-export function formatDefinitionCapabilities(definition: AppDefinition): string[] {
-  const capabilities: string[] = [];
-
-  if (definition.capabilities?.rpc ?? true) {
-    capabilities.push("RPC");
-  }
-  if (definition.capabilities?.events) {
-    capabilities.push("Events");
-  }
-  if (definition.launch?.exePath) {
-    capabilities.push("Launch");
-  }
-
-  return capabilities.length > 0 ? capabilities : ["基础定义"];
 }
 
 export function formatHostLogDirectory(effectiveDataDir?: string | null): string {

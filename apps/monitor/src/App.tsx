@@ -1,18 +1,25 @@
 import { startTransition, useEffect, useEffectEvent, useState } from "react";
 import "./App.css";
 import { AppShell } from "./components/AppShell";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { useBootstrapFlow } from "./hooks/useBootstrapFlow";
+import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { useDefinitionEditor } from "./hooks/useDefinitionEditor";
 import { useHostSession } from "./hooks/useHostSession";
-import { openLogDirectory, writeFrontendLog } from "./lib/monitor-api";
+import {
+  openLogDirectory,
+  pickDataDirectory,
+  pickHostExecutablePath,
+  writeFrontendLog,
+} from "./lib/monitor-api";
 import type { FrontendLogInput, LogKind } from "./lib/models";
 import { type MonitorWorkspace, getHomeWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
 
 function App() {
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const [activeWorkspace, setActiveWorkspace] = useState<MonitorWorkspace>("home");
   const [openingLogKind, setOpeningLogKind] = useState<LogKind | null>(null);
   const [shellError, setShellError] = useState<string | null>(null);
+  const { closeDialog, confirm, dialog } = useConfirmDialog();
 
   const recordFrontendLog = useEffectEvent((entry: FrontendLogInput) => {
     void writeFrontendLog(entry).catch(() => {
@@ -24,8 +31,8 @@ function App() {
     bootstrap,
     bootstrapBusy,
     bootstrapError,
+    discardSettingsChanges,
     handleLaunchHost,
-    handleResumeDiscovery,
     handleSaveSettings: handleSaveSettingsRequest,
     replaceBootstrap,
     settings,
@@ -43,7 +50,6 @@ function App() {
     definitions,
     hostSessionStatus,
     instances,
-    inventoryMessage,
     removeDefinitionFromState,
     replaceDefinitionInState,
     runHostAction,
@@ -57,6 +63,7 @@ function App() {
 
   const {
     closeDefinitionWorkspace,
+    definitionDirty,
     definitionWorkspace,
     definitionError,
     handleDefinitionDelete,
@@ -66,24 +73,13 @@ function App() {
     openInstanceDefinitionWorkspace,
     updateDefinitionField,
   } = useDefinitionEditor({
+    confirmAction: confirm,
     onRemoveDefinition: removeDefinitionFromState,
     onReplaceDefinition: replaceDefinitionInState,
     recordFrontendLog,
     runHostAction,
     sessionResetVersion,
   });
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      startTransition(() => {
-        setNowTick(Date.now());
-      });
-    }, 15_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
 
   useEffect(() => {
     if (bootstrap?.phase === "settings_required") {
@@ -101,7 +97,54 @@ function App() {
     }
   }, [activeWorkspace, definitionWorkspace]);
 
-  const handleNavigateWorkspace = useEffectEvent((workspace: "home" | "help" | "settings") => {
+  const confirmDiscardWorkspace = useEffectEvent(async (workspace: MonitorWorkspace) => {
+    switch (workspace) {
+      case "settings":
+        return confirm({
+          message: "设置中的修改尚未保存，确认放弃并离开当前工作区吗？",
+          variant: "danger",
+        });
+      case "definition":
+        return confirm({
+          message: "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？",
+          variant: "danger",
+        });
+      default:
+        return true;
+    }
+  });
+
+  const leaveCurrentWorkspace = useEffectEvent(async (nextWorkspace: MonitorWorkspace) => {
+    if (nextWorkspace === activeWorkspace) {
+      return true;
+    }
+
+    if (activeWorkspace === "settings") {
+      if (settingsDirty && !(await confirmDiscardWorkspace("settings"))) {
+        return false;
+      }
+
+      discardSettingsChanges();
+      return true;
+    }
+
+    if (activeWorkspace === "definition") {
+      if (definitionDirty && !(await confirmDiscardWorkspace("definition"))) {
+        return false;
+      }
+
+      closeDefinitionWorkspace();
+      return true;
+    }
+
+    return true;
+  });
+
+  const handleNavigateWorkspace = useEffectEvent(async (workspace: "home" | "help" | "settings") => {
+    if (!(await leaveCurrentWorkspace(workspace))) {
+      return;
+    }
+
     startTransition(() => {
       setActiveWorkspace(workspace);
     });
@@ -128,8 +171,11 @@ function App() {
     void openInstanceDefinitionWorkspace(instance);
   });
 
-  const handleCloseDefinition = useEffectEvent(() => {
-    closeDefinitionWorkspace();
+  const handleCloseDefinition = useEffectEvent(async () => {
+    if (!(await leaveCurrentWorkspace("home"))) {
+      return;
+    }
+
     startTransition(() => {
       setActiveWorkspace("home");
     });
@@ -206,6 +252,36 @@ function App() {
     }
   });
 
+  const handleSelectHostExecutablePath = useEffectEvent(async () => {
+    setShellError(null);
+
+    try {
+      const selectedPath = await pickHostExecutablePath(settingsDraft.hostExecutablePath ?? null);
+      if (!selectedPath) {
+        return;
+      }
+
+      updateSettingsDraftField("hostExecutablePath", selectedPath);
+    } catch (pickError) {
+      setShellError(toErrorMessage(pickError));
+    }
+  });
+
+  const handleSelectDataDirectory = useEffectEvent(async () => {
+    setShellError(null);
+
+    try {
+      const selectedPath = await pickDataDirectory(settingsDraft.dataDirOverride ?? null);
+      if (!selectedPath) {
+        return;
+      }
+
+      updateSettingsDraftField("dataDirOverride", selectedPath);
+    } catch (pickError) {
+      setShellError(toErrorMessage(pickError));
+    }
+  });
+
   const homeWorkspaceMode = getHomeWorkspaceMode(bootstrap);
   const activeError =
     shellError
@@ -215,57 +291,65 @@ function App() {
     ?? bootstrapError;
 
   return (
-    <AppShell
-      activeWorkspace={activeWorkspace}
-      homeWorkspaceMode={homeWorkspaceMode}
-      openingLogKind={openingLogKind}
-      activeError={activeError}
-      bootstrap={bootstrap}
-      bootstrapBusy={bootstrapBusy}
-      settings={settings}
-      settingsDraft={settingsDraft}
-      settingsDirty={settingsDirty}
-      settingsFieldErrors={settingsFieldErrors}
-      settingsBusy={settingsBusy}
-      hostSessionStatus={hostSessionStatus}
-      definitions={definitions}
-      instances={instances}
-      inventoryMessage={inventoryMessage}
-      nowTick={nowTick}
-      definitionWorkspace={definitionWorkspace}
-      onNavigateWorkspace={handleNavigateWorkspace}
-      onOpenLogDirectory={(kind) => {
-        void handleOpenLogHelp(kind);
-      }}
-      onResumeDiscovery={() => {
-        setShellError(null);
-        void handleResumeDiscovery();
-      }}
-      onLaunchHost={() => {
-        void handleLaunch();
-      }}
-      onChangeSettingsField={updateSettingsDraftField}
-      onSaveSettings={() => {
-        void handleSaveSettings();
-      }}
-      onAddDefinition={() => {
-        handleOpenDefinitionCreate();
-      }}
-      onEditDefinition={(appId) => {
-        handleOpenDefinitionEdit(appId);
-      }}
-      onViewInstanceDefinition={(instance) => {
-        handleOpenInstanceDefinition(instance);
-      }}
-      onChangeDefinitionField={updateDefinitionField}
-      onCloseDefinitionWorkspace={handleCloseDefinition}
-      onDeleteDefinition={() => {
-        void handleDeleteDefinition();
-      }}
-      onSubmitDefinition={() => {
-        void handleSubmitDefinition();
-      }}
-    />
+    <>
+      <AppShell
+        activeWorkspace={activeWorkspace}
+        homeWorkspaceMode={homeWorkspaceMode}
+        openingLogKind={openingLogKind}
+        activeError={activeError}
+        bootstrap={bootstrap}
+        bootstrapBusy={bootstrapBusy}
+        settings={settings}
+        settingsDraft={settingsDraft}
+        settingsDirty={settingsDirty}
+        settingsFieldErrors={settingsFieldErrors}
+        settingsBusy={settingsBusy}
+        hostSessionStatus={hostSessionStatus}
+        definitions={definitions}
+        instances={instances}
+        definitionWorkspace={definitionWorkspace}
+        onNavigateWorkspace={(workspace) => {
+          void handleNavigateWorkspace(workspace);
+        }}
+        onOpenLogDirectory={(kind) => {
+          void handleOpenLogHelp(kind);
+        }}
+        onLaunchHost={() => {
+          void handleLaunch();
+        }}
+        onChangeSettingsField={updateSettingsDraftField}
+        onSelectHostExecutablePath={() => {
+          void handleSelectHostExecutablePath();
+        }}
+        onSelectDataDirectory={() => {
+          void handleSelectDataDirectory();
+        }}
+        onSaveSettings={() => {
+          void handleSaveSettings();
+        }}
+        onAddDefinition={() => {
+          handleOpenDefinitionCreate();
+        }}
+        onEditDefinition={(appId) => {
+          handleOpenDefinitionEdit(appId);
+        }}
+        onViewInstanceDefinition={(instance) => {
+          handleOpenInstanceDefinition(instance);
+        }}
+        onChangeDefinitionField={updateDefinitionField}
+        onCloseDefinitionWorkspace={() => {
+          void handleCloseDefinition();
+        }}
+        onDeleteDefinition={() => {
+          void handleDeleteDefinition();
+        }}
+        onSubmitDefinition={() => {
+          void handleSubmitDefinition();
+        }}
+      />
+
+      <ConfirmDialog dialog={dialog} onClose={closeDialog} />
+    </>
   );
 }
 
