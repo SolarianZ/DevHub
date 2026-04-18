@@ -9,7 +9,7 @@ import {
 } from "../lib/definition-form";
 import type { FrontendLogInput } from "../lib/models";
 import {
-  type DefinitionDialogState,
+  type DefinitionWorkspaceState,
   createMissingDefinitionForm,
   toErrorMessage,
 } from "../lib/monitor-ui";
@@ -25,24 +25,24 @@ interface DefinitionEditorOptions {
 export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const { onRemoveDefinition, onReplaceDefinition, recordFrontendLog, runHostAction, sessionResetVersion } = options;
 
-  const [definitionDialog, setDefinitionDialog] = useState<DefinitionDialogState | null>(null);
+  const [definitionWorkspace, setDefinitionWorkspace] = useState<DefinitionWorkspaceState | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
 
   useEffect(() => {
     startTransition(() => {
-      setDefinitionDialog(null);
+      setDefinitionWorkspace(null);
     });
   }, [sessionResetVersion]);
 
-  const closeDefinitionDialog = useEffectEvent(() => {
+  const closeDefinitionWorkspace = useEffectEvent(() => {
     startTransition(() => {
-      setDefinitionDialog(null);
+      setDefinitionWorkspace(null);
     });
   });
 
   const updateDefinitionField = useEffectEvent((field: keyof DefinitionFormState, value: string | boolean) => {
     startTransition(() => {
-      setDefinitionDialog((current) => {
+      setDefinitionWorkspace((current) => {
         if (!current) {
           return current;
         }
@@ -69,7 +69,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
   });
 
-  const openCreateDefinitionDialog = useEffectEvent(async () => {
+  const openCreateDefinitionWorkspace = useEffectEvent(async () => {
     setDefinitionError(null);
 
     recordFrontendLog({
@@ -80,7 +80,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
 
     startTransition(() => {
-      setDefinitionDialog({
+      setDefinitionWorkspace({
         mode: "create",
         title: "新增 App Definition",
         subtitle: "提交前会先通过 hub.apps.validateDefinition 进行预校验。",
@@ -96,7 +96,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
   });
 
-  const openEditDefinitionDialog = useEffectEvent(async (appId: string) => {
+  const openEditDefinitionWorkspace = useEffectEvent(async (appId: string) => {
     setDefinitionError(null);
 
     recordFrontendLog({
@@ -110,7 +110,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
 
     startTransition(() => {
-      setDefinitionDialog({
+      setDefinitionWorkspace({
         mode: "edit",
         title: "编辑 App Definition",
         subtitle: "编辑模式固定读取最新持久化定义，再允许保存或删除。",
@@ -131,7 +131,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       );
 
       startTransition(() => {
-        setDefinitionDialog({
+        setDefinitionWorkspace({
           mode: "edit",
           title: "编辑 App Definition",
           subtitle: "编辑模式固定读取最新持久化定义，再允许保存或删除。",
@@ -148,7 +148,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     } catch (dialogError) {
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
-          setDefinitionDialog({
+          setDefinitionWorkspace({
             mode: "edit",
             title: "定义已不可用",
             subtitle: "该定义在打开编辑器前已被删除，当前窗口仅展示只读空状态。",
@@ -166,11 +166,11 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       }
 
       setDefinitionError(toErrorMessage(dialogError));
-      closeDefinitionDialog();
+      closeDefinitionWorkspace();
     }
   });
 
-  const openInstanceDefinitionDialog = useEffectEvent(async (instance: AppInstance) => {
+  const openInstanceDefinitionWorkspace = useEffectEvent(async (instance: AppInstance) => {
     setDefinitionError(null);
 
     recordFrontendLog({
@@ -185,7 +185,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
 
     startTransition(() => {
-      setDefinitionDialog({
+      setDefinitionWorkspace({
         mode: "view",
         title: "实例关联定义",
         subtitle: `实例 ${instance.instanceId} 的定义详情只读展示。`,
@@ -206,7 +206,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       );
 
       startTransition(() => {
-        setDefinitionDialog({
+        setDefinitionWorkspace({
           mode: "view",
           title: "实例关联定义",
           subtitle: `实例 ${instance.instanceId} 的定义详情只读展示。`,
@@ -223,7 +223,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     } catch (dialogError) {
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
-          setDefinitionDialog({
+          setDefinitionWorkspace({
             mode: "view",
             title: "定义不存在",
             subtitle: `实例 ${instance.instanceId} 仍然保留注册记录，但对应定义已不可用。`,
@@ -241,19 +241,19 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       }
 
       setDefinitionError(toErrorMessage(dialogError));
-      closeDefinitionDialog();
+      closeDefinitionWorkspace();
     }
   });
 
-  const handleDefinitionSubmit = useEffectEvent(async () => {
-    if (!definitionDialog || definitionDialog.readOnly) {
-      return;
+  const handleDefinitionSubmit = useEffectEvent(async (): Promise<boolean> => {
+    if (!definitionWorkspace || definitionWorkspace.readOnly) {
+      return false;
     }
 
-    const candidateDefinition = definitionFormToModel(definitionDialog.form);
+    const candidateDefinition = definitionFormToModel(definitionWorkspace.form);
 
     startTransition(() => {
-      setDefinitionDialog((current) =>
+      setDefinitionWorkspace((current) =>
         current
           ? {
               ...current,
@@ -267,14 +267,14 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     recordFrontendLog({
       level: "info",
-      category: "frontend.definition",
-      action: "submit",
-      result: "validating",
-      context: {
-        appId: candidateDefinition.appId,
-        mode: definitionDialog.mode,
-      },
-    });
+        category: "frontend.definition",
+        action: "submit",
+        result: "validating",
+        context: {
+          appId: candidateDefinition.appId,
+          mode: definitionWorkspace.mode,
+        },
+      });
 
     try {
       const validation = await runHostAction("validate_definition", (client) =>
@@ -285,7 +285,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         const issues = mapValidationIssues(validation.errors);
 
         startTransition(() => {
-          setDefinitionDialog((current) =>
+          setDefinitionWorkspace((current) =>
             current
               ? {
                   ...current,
@@ -296,7 +296,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
               : current,
           );
         });
-        return;
+        return false;
       }
 
       const savedDefinition = await runHostAction("upsert_definition", (client) =>
@@ -317,8 +317,9 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       });
 
       startTransition(() => {
-        setDefinitionDialog(null);
+        setDefinitionWorkspace(null);
       });
+      return true;
     } catch (submitError) {
       const message = toErrorMessage(submitError);
       setDefinitionError(message);
@@ -335,30 +336,31 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       });
 
       startTransition(() => {
-        setDefinitionDialog((current) =>
+        setDefinitionWorkspace((current) =>
           current
             ? {
                 ...current,
                 saving: false,
                 submitError: message,
-              }
-            : current,
+            }
+          : current,
         );
       });
+      return false;
     }
   });
 
-  const handleDefinitionDelete = useEffectEvent(async () => {
-    if (!definitionDialog || definitionDialog.mode !== "edit" || definitionDialog.readOnly) {
-      return;
+  const handleDefinitionDelete = useEffectEvent(async (): Promise<boolean> => {
+    if (!definitionWorkspace || definitionWorkspace.mode !== "edit" || definitionWorkspace.readOnly) {
+      return false;
     }
 
-    if (!window.confirm(`确认删除 App Definition “${definitionDialog.form.appId}” 吗？`)) {
-      return;
+    if (!window.confirm(`确认删除 App Definition “${definitionWorkspace.form.appId}” 吗？`)) {
+      return false;
     }
 
     startTransition(() => {
-      setDefinitionDialog((current) =>
+      setDefinitionWorkspace((current) =>
         current
           ? {
               ...current,
@@ -371,20 +373,20 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     recordFrontendLog({
       level: "warn",
-      category: "frontend.definition",
-      action: "delete",
-      result: "requested",
-      context: {
-        appId: definitionDialog.form.appId,
-      },
-    });
+        category: "frontend.definition",
+        action: "delete",
+        result: "requested",
+        context: {
+          appId: definitionWorkspace.form.appId,
+        },
+      });
 
     try {
       await runHostAction("delete_definition", (client) =>
-        client.deleteDefinition(definitionDialog.form.appId),
+        client.deleteDefinition(definitionWorkspace.form.appId),
       );
 
-      onRemoveDefinition(definitionDialog.form.appId);
+      onRemoveDefinition(definitionWorkspace.form.appId);
       setDefinitionError(null);
 
       recordFrontendLog({
@@ -393,13 +395,14 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         action: "delete",
         result: "deleted",
         context: {
-          appId: definitionDialog.form.appId,
+          appId: definitionWorkspace.form.appId,
         },
       });
 
       startTransition(() => {
-        setDefinitionDialog(null);
+        setDefinitionWorkspace(null);
       });
+      return true;
     } catch (deleteError) {
       const message = toErrorMessage(deleteError);
       setDefinitionError(message);
@@ -411,33 +414,34 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         result: "failed",
         message,
         context: {
-          appId: definitionDialog.form.appId,
+          appId: definitionWorkspace.form.appId,
         },
       });
 
       startTransition(() => {
-        setDefinitionDialog((current) =>
+        setDefinitionWorkspace((current) =>
           current
             ? {
                 ...current,
                 saving: false,
                 submitError: message,
-              }
-            : current,
+            }
+          : current,
         );
       });
+      return false;
     }
   });
 
   return {
-    closeDefinitionDialog,
-    definitionDialog,
+    closeDefinitionWorkspace,
+    definitionWorkspace,
     definitionError,
     handleDefinitionDelete,
     handleDefinitionSubmit,
-    openCreateDefinitionDialog,
-    openEditDefinitionDialog,
-    openInstanceDefinitionDialog,
+    openCreateDefinitionWorkspace,
+    openEditDefinitionWorkspace,
+    openInstanceDefinitionWorkspace,
     updateDefinitionField,
   };
 }

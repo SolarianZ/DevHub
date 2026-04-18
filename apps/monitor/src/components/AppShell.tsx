@@ -1,4 +1,5 @@
 import type { AppDefinition, AppInstance } from "@devhub/sdk";
+import { type ReactNode, useState } from "react";
 import type { DefinitionFormState } from "../lib/definition-form";
 import type {
   BootstrapSnapshot,
@@ -7,27 +8,30 @@ import type {
   SettingsSnapshot,
 } from "../lib/models";
 import {
-  type DefinitionDialogState,
+  type DefinitionWorkspaceState,
+  type HomeWorkspaceMode,
   type HostSessionStatus,
-  type PrimaryWorkspaceMode,
+  type MonitorWorkspace,
   type SettingsFieldErrors,
+  type SidebarWorkspace,
   formatBootstrapDescription,
   formatBootstrapHeadline,
   formatDataDirSource,
   formatDefinitionCapabilities,
+  formatHostLogDirectory,
   formatPhaseLabel,
   formatRelativeTime,
   formatScope,
   formatSessionLabel,
   getRuntimePort,
+  getSidebarWorkspace,
   isInstanceOffline,
 } from "../lib/monitor-ui";
 
 interface AppShellProps {
-  workspaceMode: PrimaryWorkspaceMode;
-  helpMenuOpen: boolean;
+  activeWorkspace: MonitorWorkspace;
+  homeWorkspaceMode: HomeWorkspaceMode;
   openingLogKind: LogKind | null;
-  settingsOpen: boolean;
   activeError: string | null;
   bootstrap: BootstrapSnapshot | null;
   bootstrapBusy: boolean;
@@ -41,10 +45,8 @@ interface AppShellProps {
   instances: AppInstance[];
   inventoryMessage: string;
   nowTick: number;
-  definitionDialog: DefinitionDialogState | null;
-  onOpenSettings: () => void;
-  onCloseSettings: () => void;
-  onToggleHelpMenu: () => void;
+  definitionWorkspace: DefinitionWorkspaceState | null;
+  onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onResumeDiscovery: () => void;
   onLaunchHost: () => void;
@@ -54,17 +56,16 @@ interface AppShellProps {
   onEditDefinition: (appId: string) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
   onChangeDefinitionField: (field: keyof DefinitionFormState, value: string | boolean) => void;
-  onCloseDefinitionDialog: () => void;
+  onCloseDefinitionWorkspace: () => void;
   onDeleteDefinition: () => void;
   onSubmitDefinition: () => void;
 }
 
 export function AppShell(props: AppShellProps) {
   const {
-    workspaceMode,
-    helpMenuOpen,
+    activeWorkspace,
+    homeWorkspaceMode,
     openingLogKind,
-    settingsOpen,
     activeError,
     bootstrap,
     bootstrapBusy,
@@ -78,10 +79,8 @@ export function AppShell(props: AppShellProps) {
     instances,
     inventoryMessage,
     nowTick,
-    definitionDialog,
-    onOpenSettings,
-    onCloseSettings,
-    onToggleHelpMenu,
+    definitionWorkspace,
+    onNavigateWorkspace,
     onOpenLogDirectory,
     onResumeDiscovery,
     onLaunchHost,
@@ -91,67 +90,33 @@ export function AppShell(props: AppShellProps) {
     onEditDefinition,
     onViewInstanceDefinition,
     onChangeDefinitionField,
-    onCloseDefinitionDialog,
+    onCloseDefinitionWorkspace,
     onDeleteDefinition,
     onSubmitDefinition,
   } = props;
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarWorkspace = getSidebarWorkspace(activeWorkspace);
+  const workspaceMeta = getWorkspaceMeta(activeWorkspace, homeWorkspaceMode, definitionWorkspace);
+
   return (
-    <main className="app-shell">
-      <header className="shell-header">
-        <div className="shell-title">
-          <p className="eyebrow">DevHub Monitor</p>
-          <h1>连接并管理你的 DevHub Host</h1>
-          <p className="hero-copy">
-            {workspaceMode === "status"
-              ? "当前主界面会持续展示连接状态、应用定义和实例清单；辅助操作通过顶部菜单进入。"
-              : "Monitor 会持续查找可用的 DevHub Host，并在连接就绪后自动切换到管理视图。"}
-          </p>
-        </div>
+    <main className="monitor-layout">
+      <MonitorSidebar
+        activeWorkspace={sidebarWorkspace}
+        collapsed={sidebarCollapsed}
+        onNavigate={onNavigateWorkspace}
+        onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
+      />
 
-        <div className="shell-side">
-          <nav className="menu-bar" aria-label="Monitor menu">
-            <button type="button" className="menu-trigger" onClick={onOpenSettings}>
-              设置
-            </button>
+      <section className="monitor-stage">
+        <header className="workspace-hero">
+          <div className="workspace-copy">
+            <p className="eyebrow">{workspaceMeta.eyebrow}</p>
+            <h1>{workspaceMeta.title}</h1>
+            <p className="workspace-description">{workspaceMeta.description}</p>
+          </div>
 
-            <div className="menu-group">
-              <button
-                type="button"
-                className={`menu-trigger ${helpMenuOpen ? "active" : ""}`}
-                aria-expanded={helpMenuOpen}
-                aria-haspopup="menu"
-                onClick={onToggleHelpMenu}
-              >
-                帮助
-              </button>
-
-              {helpMenuOpen ? (
-                <div className="menu-popover" role="menu" aria-label="帮助菜单">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="menu-item"
-                    onClick={() => onOpenLogDirectory("host")}
-                    disabled={openingLogKind !== null}
-                  >
-                    {openingLogKind === "host" ? "正在打开 Host 日志..." : "打开 Host 日志"}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="menu-item"
-                    onClick={() => onOpenLogDirectory("monitor")}
-                    disabled={openingLogKind !== null}
-                  >
-                    {openingLogKind === "monitor" ? "正在打开 Monitor 日志..." : "打开 Monitor 日志"}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </nav>
-
-          <div className="shell-status">
+          <div className="workspace-status">
             <span className={`phase phase-${bootstrap?.phase ?? "loading"}`}>
               {formatPhaseLabel(bootstrap?.phase)}
             </span>
@@ -159,9 +124,307 @@ export function AppShell(props: AppShellProps) {
               {formatSessionLabel(hostSessionStatus)}
             </span>
           </div>
-        </div>
-      </header>
+        </header>
 
+        {activeError ? (
+          <div className="error-banner" role="alert">
+            {activeError}
+          </div>
+        ) : null}
+
+        <div className="workspace-scroll">
+          {activeWorkspace === "home" ? (
+            <HomeWorkspace
+              bootstrap={bootstrap}
+              busy={bootstrapBusy}
+              definitions={definitions}
+              homeWorkspaceMode={homeWorkspaceMode}
+              hostSessionStatus={hostSessionStatus}
+              instances={instances}
+              inventoryMessage={inventoryMessage}
+              nowTick={nowTick}
+              settings={settings}
+              onAddDefinition={onAddDefinition}
+              onEditDefinition={onEditDefinition}
+              onLaunchHost={onLaunchHost}
+              onOpenSettings={() => onNavigateWorkspace("settings")}
+              onResumeDiscovery={onResumeDiscovery}
+              onViewInstanceDefinition={onViewInstanceDefinition}
+            />
+          ) : null}
+
+          {activeWorkspace === "help" ? (
+            <HelpWorkspace
+              bootstrap={bootstrap}
+              openingLogKind={openingLogKind}
+              settings={settings}
+              onOpenLogDirectory={onOpenLogDirectory}
+            />
+          ) : null}
+
+          {activeWorkspace === "settings" ? (
+            <SettingsWorkspace
+              bootstrap={bootstrap}
+              busy={settingsBusy}
+              fieldErrors={settingsFieldErrors}
+              settings={settings}
+              settingsDirty={settingsDirty}
+              settingsDraft={settingsDraft}
+              onChangeField={onChangeSettingsField}
+              onSave={onSaveSettings}
+            />
+          ) : null}
+
+          {activeWorkspace === "definition" ? (
+            <DefinitionWorkspacePage
+              workspace={definitionWorkspace}
+              onChangeField={onChangeDefinitionField}
+              onClose={onCloseDefinitionWorkspace}
+              onDelete={onDeleteDefinition}
+              onSubmit={onSubmitDefinition}
+            />
+          ) : null}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function MonitorSidebar(props: {
+  activeWorkspace: SidebarWorkspace;
+  collapsed: boolean;
+  onNavigate: (workspace: SidebarWorkspace) => void;
+  onToggleCollapse: () => void;
+}) {
+  const { activeWorkspace, collapsed, onNavigate, onToggleCollapse } = props;
+
+  return (
+    <aside className={`monitor-sidebar ${collapsed ? "collapsed" : ""}`}>
+      <button
+        type="button"
+        className="sidebar-toggle"
+        aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+        onClick={onToggleCollapse}
+      >
+        <MenuIcon />
+      </button>
+
+      <div className="sidebar-brand">
+        <span className="sidebar-brand-mark">DH</span>
+        <div className="sidebar-brand-copy">
+          <strong>DevHub Monitor</strong>
+          <span>桌面工作区</span>
+        </div>
+      </div>
+
+      <nav className="sidebar-nav" aria-label="Monitor 工作区">
+        <SidebarButton
+          active={activeWorkspace === "home"}
+          collapsed={collapsed}
+          icon={<HomeIcon />}
+          label="主页"
+          onClick={() => onNavigate("home")}
+        />
+        <SidebarButton
+          active={activeWorkspace === "help"}
+          collapsed={collapsed}
+          icon={<HelpIcon />}
+          label="帮助"
+          onClick={() => onNavigate("help")}
+        />
+
+        <div className="sidebar-nav-bottom">
+          <SidebarButton
+            active={activeWorkspace === "settings"}
+            collapsed={collapsed}
+            icon={<SettingsIcon />}
+            label="设置"
+            onClick={() => onNavigate("settings")}
+          />
+        </div>
+      </nav>
+    </aside>
+  );
+}
+
+function SidebarButton(props: {
+  active: boolean;
+  collapsed: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  const { active, collapsed, icon, label, onClick } = props;
+
+  return (
+    <button
+      type="button"
+      className={`sidebar-button ${active ? "active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <span className="sidebar-icon">{icon}</span>
+      {!collapsed ? <span className="sidebar-label">{label}</span> : null}
+    </button>
+  );
+}
+
+function HomeWorkspace(props: {
+  bootstrap: BootstrapSnapshot | null;
+  busy: boolean;
+  definitions: AppDefinition[];
+  homeWorkspaceMode: HomeWorkspaceMode;
+  hostSessionStatus: HostSessionStatus;
+  instances: AppInstance[];
+  inventoryMessage: string;
+  nowTick: number;
+  settings: SettingsSnapshot | null;
+  onAddDefinition: () => void;
+  onEditDefinition: (appId: string) => void;
+  onLaunchHost: () => void;
+  onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
+  onViewInstanceDefinition: (instance: AppInstance) => void;
+}) {
+  const { homeWorkspaceMode, ...rest } = props;
+
+  return homeWorkspaceMode === "status"
+    ? <HomeStatusWorkspace {...rest} />
+    : <HomeDiscoveryWorkspace {...rest} />;
+}
+
+function HomeDiscoveryWorkspace(props: {
+  bootstrap: BootstrapSnapshot | null;
+  busy: boolean;
+  onLaunchHost: () => void;
+  onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
+}) {
+  const { bootstrap, busy, onLaunchHost, onOpenSettings, onResumeDiscovery } = props;
+  const requiresSettings = bootstrap?.phase === "settings_required" || !bootstrap?.hasConfiguredHostExecutable;
+
+  return (
+    <section className="workspace-stack">
+      <article className="panel panel-primary hero-panel">
+        <p className="eyebrow">Discovery</p>
+        <h2>{formatBootstrapHeadline(bootstrap?.phase)}</h2>
+        <p className="panel-copy">{formatBootstrapDescription(bootstrap)}</p>
+
+        <div className="hero-highlight-row">
+          <div className="hero-highlight">
+            <span className="summary-label">当前数据目录</span>
+            <strong>{bootstrap?.effectiveDataDir ?? "加载中"}</strong>
+            <span className="summary-meta">
+              来源：{formatDataDirSource(bootstrap?.dataDirSource)}
+            </span>
+          </div>
+          <div className="hero-highlight">
+            <span className="summary-label">当前连接</span>
+            <strong>{bootstrap?.connection?.rpcEndpoint ?? "尚未发现可用 Host"}</strong>
+            <span className="summary-meta">
+              {bootstrap?.connection?.runtimeDirectory ?? "Monitor 会持续扫描当前运行环境。"}
+            </span>
+          </div>
+        </div>
+
+        <div className="button-row">
+          <button type="button" className="button-secondary" onClick={onResumeDiscovery} disabled={busy}>
+            重新扫描
+          </button>
+          <button
+            type="button"
+            onClick={requiresSettings ? onOpenSettings : onLaunchHost}
+            disabled={busy && !requiresSettings}
+          >
+            {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 DevHub Host"}
+          </button>
+        </div>
+      </article>
+
+      <section className="page-grid">
+        <article className="panel">
+          <header className="panel-header">
+            <h2>当前环境</h2>
+          </header>
+          <dl className="detail-list">
+            <div>
+              <dt>生效数据目录</dt>
+              <dd>{bootstrap?.effectiveDataDir ?? "加载中"}</dd>
+            </div>
+            <div>
+              <dt>目录来源</dt>
+              <dd>{formatDataDirSource(bootstrap?.dataDirSource)}</dd>
+            </div>
+            <div>
+              <dt>Host 可执行文件</dt>
+              <dd>{bootstrap?.settings.hostExecutablePath ?? "未配置"}</dd>
+            </div>
+            <div>
+              <dt>当前连接</dt>
+              <dd>{bootstrap?.connection?.rpcEndpoint ?? "尚未发现可用 Host。"}</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="panel">
+          <header className="panel-header">
+            <h2>下一步</h2>
+          </header>
+          <div className="stack-list">
+            <div className="stack-item">
+              <strong>保持在主页等待发现</strong>
+              <p>当 Host 变为可用时，主页会直接切换成连接与资产视图，不需要跳转到其他页面。</p>
+            </div>
+            <div className="stack-item">
+              <strong>缺少路径时进入设置</strong>
+              <p>如果当前无法启动 Host，可前往“设置”补充绝对路径并重新保存。</p>
+            </div>
+            <div className="stack-item">
+              <strong>排障入口集中在帮助页</strong>
+              <p>需要查看日志时，可切换到“帮助”直接打开 Host 或 Monitor 日志目录。</p>
+            </div>
+          </div>
+
+          <div className="problem-card">
+            {bootstrap?.lastProblem?.message ?? "当前没有记录到需要处理的连接问题。"}
+          </div>
+        </article>
+      </section>
+    </section>
+  );
+}
+
+function HomeStatusWorkspace(props: {
+  bootstrap: BootstrapSnapshot | null;
+  definitions: AppDefinition[];
+  hostSessionStatus: HostSessionStatus;
+  instances: AppInstance[];
+  inventoryMessage: string;
+  nowTick: number;
+  settings: SettingsSnapshot | null;
+  onAddDefinition: () => void;
+  onEditDefinition: (appId: string) => void;
+  onViewInstanceDefinition: (instance: AppInstance) => void;
+}) {
+  const {
+    bootstrap,
+    definitions,
+    hostSessionStatus,
+    instances,
+    inventoryMessage,
+    nowTick,
+    settings,
+    onAddDefinition,
+    onEditDefinition,
+    onViewInstanceDefinition,
+  } = props;
+
+  const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
+  const [instancesCollapsed, setInstancesCollapsed] = useState(false);
+
+  return (
+    <section className="workspace-stack">
       <section className="summary-grid">
         <article className="summary-card">
           <span className="summary-label">当前数据目录</span>
@@ -175,7 +438,7 @@ export function AppShell(props: AppShellProps) {
           <span className="summary-label">当前连接</span>
           <strong>{bootstrap?.connection ? getRuntimePort(bootstrap.connection) : "未连接"}</strong>
           <span className="summary-meta">
-            {bootstrap?.connection?.rpcEndpoint ?? "等待发现并验证可用的 Host。"}
+            {bootstrap?.connection?.rpcEndpoint ?? "等待重新发现可用 Host。"}
           </span>
         </article>
 
@@ -188,166 +451,6 @@ export function AppShell(props: AppShellProps) {
         </article>
       </section>
 
-      {workspaceMode === "bootstrap" ? (
-        <BootstrapWorkspace
-          bootstrap={bootstrap}
-          busy={bootstrapBusy}
-          onResumeDiscovery={onResumeDiscovery}
-          onLaunchHost={onLaunchHost}
-        />
-      ) : (
-        <StatusWorkspace
-          bootstrap={bootstrap}
-          definitions={definitions}
-          hostSessionStatus={hostSessionStatus}
-          instances={instances}
-          nowTick={nowTick}
-          onAddDefinition={onAddDefinition}
-          onEditDefinition={onEditDefinition}
-          onViewInstanceDefinition={onViewInstanceDefinition}
-        />
-      )}
-
-      {settingsOpen ? (
-        <SettingsDialog
-          bootstrap={bootstrap}
-          busy={settingsBusy}
-          fieldErrors={settingsFieldErrors}
-          settings={settings}
-          settingsDirty={settingsDirty}
-          settingsDraft={settingsDraft}
-          onChangeField={onChangeSettingsField}
-          onClose={onCloseSettings}
-          onSave={onSaveSettings}
-        />
-      ) : null}
-
-      {definitionDialog ? (
-        <DefinitionDialog
-          dialog={definitionDialog}
-          onChangeField={onChangeDefinitionField}
-          onClose={onCloseDefinitionDialog}
-          onDelete={onDeleteDefinition}
-          onSubmit={onSubmitDefinition}
-        />
-      ) : null}
-
-      {activeError ? <div className="error-banner">{activeError}</div> : null}
-    </main>
-  );
-}
-
-function BootstrapWorkspace(props: {
-  bootstrap: BootstrapSnapshot | null;
-  busy: boolean;
-  onResumeDiscovery: () => void;
-  onLaunchHost: () => void;
-}) {
-  const { bootstrap, busy, onResumeDiscovery, onLaunchHost } = props;
-
-  return (
-    <section className="page-grid bootstrap-grid">
-      <article className="panel panel-primary panel-span">
-        <header className="panel-header">
-          <div>
-            <p className="eyebrow">Connection</p>
-            <h2>连接 DevHub Host</h2>
-          </div>
-
-          <div className="button-row">
-            <button type="button" onClick={onResumeDiscovery} disabled={busy}>
-              重新扫描
-            </button>
-            <button
-              type="button"
-              onClick={onLaunchHost}
-              disabled={busy || bootstrap?.phase === "host_available"}
-            >
-              启动 DevHub Host
-            </button>
-          </div>
-        </header>
-
-        <div className="status-banner">
-          <strong>{formatBootstrapHeadline(bootstrap?.phase)}</strong>
-          <p>{formatBootstrapDescription(bootstrap)}</p>
-        </div>
-      </article>
-
-      <article className="panel">
-        <header className="panel-header">
-          <h2>当前环境</h2>
-        </header>
-        <dl className="detail-list">
-          <div>
-            <dt>生效数据目录</dt>
-            <dd>{bootstrap?.effectiveDataDir ?? "加载中"}</dd>
-          </div>
-          <div>
-            <dt>目录来源</dt>
-            <dd>{formatDataDirSource(bootstrap?.dataDirSource)}</dd>
-          </div>
-          <div>
-            <dt>Host 可执行文件</dt>
-            <dd>{bootstrap?.settings.hostExecutablePath ?? "未配置"}</dd>
-          </div>
-          <div>
-            <dt>当前连接</dt>
-            <dd>{bootstrap?.connection?.rpcEndpoint ?? "尚未发现可用 Host。"}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <article className="panel">
-        <header className="panel-header">
-          <h2>下一步</h2>
-        </header>
-        <div className="stack-list">
-          <div className="stack-item">
-            <strong>继续等待自动发现</strong>
-            <p>Monitor 会持续验证当前数据目录中的运行时信息，不需要手动切换页面。</p>
-          </div>
-          <div className="stack-item">
-            <strong>无法启动时先检查设置</strong>
-            <p>如果缺少 Host 路径或需要调整数据目录，请使用顶部“设置”菜单更新本机配置。</p>
-          </div>
-          <div className="stack-item">
-            <strong>排障入口位于帮助菜单</strong>
-            <p>需要查看日志时，可通过顶部“帮助”菜单直接打开 Host 或 Monitor 的日志目录。</p>
-          </div>
-        </div>
-
-        <div className="problem-card">
-          {bootstrap?.lastProblem?.message ?? "当前没有记录到需要处理的连接问题。"}
-        </div>
-      </article>
-    </section>
-  );
-}
-
-function StatusWorkspace(props: {
-  bootstrap: BootstrapSnapshot | null;
-  definitions: AppDefinition[];
-  hostSessionStatus: HostSessionStatus;
-  instances: AppInstance[];
-  nowTick: number;
-  onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
-  onViewInstanceDefinition: (instance: AppInstance) => void;
-}) {
-  const {
-    bootstrap,
-    definitions,
-    hostSessionStatus,
-    instances,
-    nowTick,
-    onAddDefinition,
-    onEditDefinition,
-    onViewInstanceDefinition,
-  } = props;
-
-  return (
-    <section className="page-grid status-grid">
       <article className="panel panel-primary">
         <header className="panel-header">
           <div>
@@ -379,17 +482,18 @@ function StatusWorkspace(props: {
         </dl>
       </article>
 
-      <article className="panel panel-span">
-        <header className="panel-header">
-          <div>
-            <p className="eyebrow">App Definitions</p>
-            <h2>应用定义</h2>
-          </div>
-          <button type="button" onClick={onAddDefinition}>
+      <InventorySection
+        action={(
+          <button type="button" className="icon-action-button" onClick={onAddDefinition}>
+            <PlusIcon />
             新增定义
           </button>
-        </header>
-
+        )}
+        collapsed={definitionsCollapsed}
+        count={definitions.length}
+        onToggle={() => setDefinitionsCollapsed((current) => !current)}
+        title="应用定义"
+      >
         {definitions.length === 0 ? (
           <EmptyState
             title="当前没有应用定义"
@@ -402,7 +506,7 @@ function StatusWorkspace(props: {
                 <div className="inventory-main">
                   <div className="inventory-heading">
                     <strong>{definition.displayName}</strong>
-                    <span className="chip">{definition.appId}</span>
+                    <span className="chip subtle-chip">{definition.appId}</span>
                   </div>
                   <p>{definition.description ?? "未提供描述。"}</p>
                   <div className="chip-row">
@@ -416,6 +520,7 @@ function StatusWorkspace(props: {
 
                 <div className="inventory-actions">
                   <button type="button" className="button-secondary" onClick={() => onEditDefinition(definition.appId)}>
+                    <EditIcon />
                     编辑
                   </button>
                 </div>
@@ -423,17 +528,14 @@ function StatusWorkspace(props: {
             ))}
           </div>
         )}
-      </article>
+      </InventorySection>
 
-      <article className="panel panel-span">
-        <header className="panel-header">
-          <div>
-            <p className="eyebrow">App Instances</p>
-            <h2>应用实例</h2>
-          </div>
-          <span className="subtle">列表包含离线保留实例</span>
-        </header>
-
+      <InventorySection
+        collapsed={instancesCollapsed}
+        count={instances.length}
+        onToggle={() => setInstancesCollapsed((current) => !current)}
+        title="应用实例"
+      >
         {instances.length === 0 ? (
           <EmptyState
             title="当前没有应用实例"
@@ -481,12 +583,126 @@ function StatusWorkspace(props: {
             })}
           </div>
         )}
+      </InventorySection>
+    </section>
+  );
+}
+
+function InventorySection(props: {
+  action?: ReactNode;
+  collapsed: boolean;
+  count: number;
+  children: ReactNode;
+  onToggle: () => void;
+  title: string;
+}) {
+  const { action, collapsed, count, children, onToggle, title } = props;
+
+  return (
+    <section className={`inventory-section ${collapsed ? "collapsed" : ""}`}>
+      <div className="inventory-section-header">
+        <button
+          type="button"
+          className="inventory-section-trigger"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+        >
+          <span className={`section-caret ${collapsed ? "collapsed" : ""}`}>
+            <ChevronIcon />
+          </span>
+          <span>{title}</span>
+          <span className="section-count">{count}</span>
+        </button>
+
+        {action ? <div className="inventory-section-action">{action}</div> : null}
+      </div>
+
+      {!collapsed ? <div className="inventory-section-body">{children}</div> : null}
+    </section>
+  );
+}
+
+function HelpWorkspace(props: {
+  bootstrap: BootstrapSnapshot | null;
+  openingLogKind: LogKind | null;
+  settings: SettingsSnapshot | null;
+  onOpenLogDirectory: (kind: LogKind) => void;
+}) {
+  const { bootstrap, openingLogKind, settings, onOpenLogDirectory } = props;
+  const hostLogDirectory = formatHostLogDirectory(bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir);
+
+  return (
+    <section className="workspace-stack">
+      <article className="panel panel-primary">
+        <p className="eyebrow">Support</p>
+        <h2>日志与支持</h2>
+        <p className="panel-copy">
+          遇到启动、连接或运行异常时，可直接打开日志目录进行排查；Monitor 不会在主界面内嵌日志阅读器。
+        </p>
+      </article>
+
+      <section className="page-grid">
+        <article className="panel support-card">
+          <header className="panel-header">
+            <h2>Host 日志</h2>
+          </header>
+          <p className="support-path">{hostLogDirectory}</p>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => onOpenLogDirectory("host")}
+            disabled={openingLogKind !== null}
+          >
+            <OpenExternalIcon />
+            {openingLogKind === "host" ? "正在打开 Host 日志..." : "打开 Host 日志"}
+          </button>
+        </article>
+
+        <article className="panel support-card">
+          <header className="panel-header">
+            <h2>Monitor 日志</h2>
+          </header>
+          <p className="support-path">{settings?.monitorLogDirectory ?? "加载中"}</p>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => onOpenLogDirectory("monitor")}
+            disabled={openingLogKind !== null}
+          >
+            <OpenExternalIcon />
+            {openingLogKind === "monitor" ? "正在打开 Monitor 日志..." : "打开 Monitor 日志"}
+          </button>
+        </article>
+      </section>
+
+      <article className="panel">
+        <header className="panel-header">
+          <h2>运行信息</h2>
+        </header>
+        <dl className="detail-list">
+          <div>
+            <dt>生效数据目录</dt>
+            <dd>{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}</dd>
+          </div>
+          <div>
+            <dt>设置文件</dt>
+            <dd>{settings?.settingsFilePath ?? "加载中"}</dd>
+          </div>
+          <div>
+            <dt>当前 RPC</dt>
+            <dd>{bootstrap?.connection?.rpcEndpoint ?? "尚未连接"}</dd>
+          </div>
+          <div>
+            <dt>Host 版本</dt>
+            <dd>{bootstrap?.connection?.runtime.hubVersion ?? "未知"}</dd>
+          </div>
+        </dl>
       </article>
     </section>
   );
 }
 
-function SettingsDialog(props: {
+function SettingsWorkspace(props: {
   bootstrap: BootstrapSnapshot | null;
   busy: boolean;
   fieldErrors: SettingsFieldErrors;
@@ -494,281 +710,305 @@ function SettingsDialog(props: {
   settingsDirty: boolean;
   settingsDraft: MonitorSettings;
   onChangeField: (field: keyof MonitorSettings, value: string) => void;
-  onClose: () => void;
   onSave: () => void;
 }) {
-  const { bootstrap, busy, fieldErrors, settings, settingsDirty, settingsDraft, onChangeField, onClose, onSave } = props;
+  const { bootstrap, busy, fieldErrors, settings, settingsDirty, settingsDraft, onChangeField, onSave } = props;
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section className="modal-card settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
-        <header className="modal-header">
-          <div>
-            <p className="eyebrow">Settings</p>
-            <h2 id="settings-dialog-title">Monitor 设置</h2>
-            <p className="modal-subtitle">更新数据目录和 Host 启动路径。保存后 Monitor 会重新扫描当前环境。</p>
-          </div>
+    <section className="page-grid settings-grid">
+      <article className="panel panel-primary">
+        <div className="form-grid">
+          <label className="field">
+            <span>DEVHUB_DATA_DIR 覆盖值</span>
+            <input
+              type="text"
+              value={settingsDraft.dataDirOverride ?? ""}
+              placeholder="留空表示使用环境变量或平台默认目录"
+              onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
+            />
+            <FieldError message={fieldErrors.dataDirOverride} />
+          </label>
+
+          <label className="field">
+            <span>Host 可执行文件路径</span>
+            <input
+              type="text"
+              value={settingsDraft.hostExecutablePath ?? ""}
+              placeholder="例如 D:\\path\\to\\DevHub.Host.exe"
+              onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
+            />
+            <FieldError message={fieldErrors.hostExecutablePath} />
+          </label>
+        </div>
+
+        <p className="subtle settings-note">
+          两个路径字段都只接受绝对路径。保存成功后，Monitor 会回到主页并用新的配置重新发现 Host。
+        </p>
+
+        <div className="workspace-footer sticky-footer">
+          <span className="subtle">
+            {settingsDirty ? "当前草稿尚未保存。" : "当前设置已与磁盘内容同步。"}
+          </span>
           <div className="button-row">
-            <button type="button" className="button-secondary" onClick={onClose} disabled={busy}>
-              关闭
-            </button>
             <button type="button" onClick={onSave} disabled={busy || !settingsDirty}>
               {busy ? "保存中..." : "保存设置"}
             </button>
           </div>
-        </header>
-
-        <div className="modal-body settings-dialog-grid">
-          <article className="panel panel-primary">
-            <div className="form-grid">
-              <label className="field">
-                <span>DEVHUB_DATA_DIR 覆盖值</span>
-                <input
-                  type="text"
-                  value={settingsDraft.dataDirOverride ?? ""}
-                  placeholder="留空表示使用环境变量或平台默认目录"
-                  onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
-                />
-                <FieldError message={fieldErrors.dataDirOverride} />
-              </label>
-
-              <label className="field">
-                <span>Host 可执行文件路径</span>
-                <input
-                  type="text"
-                  value={settingsDraft.hostExecutablePath ?? ""}
-                  placeholder="例如 D:\\path\\to\\DevHub.Host.exe"
-                  onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
-                />
-                <FieldError message={fieldErrors.hostExecutablePath} />
-              </label>
-            </div>
-
-            <p className="subtle settings-note">
-              两个路径字段都只接受绝对路径。调整完成后，Monitor 会立即用新的配置重新发现 Host。
-            </p>
-          </article>
-
-          <article className="panel">
-            <header className="panel-header">
-              <h2>当前解析结果</h2>
-            </header>
-            <dl className="detail-list">
-              <div>
-                <dt>设置文件</dt>
-                <dd>{settings?.settingsFilePath ?? "加载中"}</dd>
-              </div>
-              <div>
-                <dt>生效数据目录</dt>
-                <dd>{settings?.effectiveDataDir ?? bootstrap?.effectiveDataDir ?? "加载中"}</dd>
-              </div>
-              <div>
-                <dt>目录来源</dt>
-                <dd>{formatDataDirSource(settings?.dataDirSource ?? bootstrap?.dataDirSource)}</dd>
-              </div>
-              <div>
-                <dt>Monitor 日志目录</dt>
-                <dd>{settings?.monitorLogDirectory ?? "加载中"}</dd>
-              </div>
-            </dl>
-          </article>
         </div>
-      </section>
-    </div>
+      </article>
+
+      <article className="panel">
+        <header className="panel-header">
+          <h2>当前解析结果</h2>
+        </header>
+        <dl className="detail-list">
+          <div>
+            <dt>设置文件</dt>
+            <dd>{settings?.settingsFilePath ?? "加载中"}</dd>
+          </div>
+          <div>
+            <dt>生效数据目录</dt>
+            <dd>{settings?.effectiveDataDir ?? bootstrap?.effectiveDataDir ?? "加载中"}</dd>
+          </div>
+          <div>
+            <dt>目录来源</dt>
+            <dd>{formatDataDirSource(settings?.dataDirSource ?? bootstrap?.dataDirSource)}</dd>
+          </div>
+          <div>
+            <dt>Monitor 日志目录</dt>
+            <dd>{settings?.monitorLogDirectory ?? "加载中"}</dd>
+          </div>
+        </dl>
+      </article>
+    </section>
   );
 }
 
-function DefinitionDialog(props: {
-  dialog: DefinitionDialogState;
+function DefinitionWorkspacePage(props: {
+  workspace: DefinitionWorkspaceState | null;
   onChangeField: (field: keyof DefinitionFormState, value: string | boolean) => void;
   onClose: () => void;
   onDelete: () => void;
   onSubmit: () => void;
 }) {
-  const { dialog, onChangeField, onClose, onDelete, onSubmit } = props;
-  const submitLabel = dialog.mode === "create" ? "创建定义" : "保存修改";
-  const canDelete = dialog.mode === "edit" && !dialog.readOnly && !dialog.missing;
-  const disableInputs = dialog.readOnly || dialog.loading || dialog.saving;
+  const { workspace, onChangeField, onClose, onDelete, onSubmit } = props;
+
+  if (!workspace) {
+    return (
+      <article className="panel">
+        <EmptyState
+          title="正在准备 App Definition 工作区"
+          description="Monitor 正在同步当前页面状态，请稍候。"
+        />
+      </article>
+    );
+  }
+
+  const submitLabel = workspace.mode === "create" ? "创建定义" : "保存修改";
+  const canDelete = workspace.mode === "edit" && !workspace.readOnly && !workspace.missing;
+  const disableInputs = workspace.readOnly || workspace.loading || workspace.saving;
+  const modeLabel = workspace.readOnly
+    ? "只读"
+    : workspace.mode === "create"
+      ? "新建"
+      : "编辑";
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="definition-dialog-title">
-        <header className="modal-header">
-          <div>
-            <p className="eyebrow">App Definition</p>
-            <h2 id="definition-dialog-title">{dialog.title}</h2>
-            <p className="modal-subtitle">{dialog.subtitle}</p>
-          </div>
-          <button type="button" className="button-secondary" onClick={onClose}>
-            关闭
-          </button>
-        </header>
-
-        {dialog.submitError ? <div className="inline-error">{dialog.submitError}</div> : null}
-
-        {dialog.loading ? (
-          <div className="empty-state modal-state">
-            <h3>正在读取定义</h3>
-            <p>Monitor 会先同步 Host 中的最新定义，再决定是进入编辑模式还是只读视图。</p>
-          </div>
-        ) : dialog.missing ? (
-          <div className="empty-state modal-state">
-            <h3>定义不可用</h3>
-            <p>{dialog.emptyStateMessage}</p>
-          </div>
-        ) : (
-          <div className="modal-body">
-            <div className="form-grid">
-              <label className="field">
-                <span>App ID</span>
-                <input
-                  type="text"
-                  value={dialog.form.appId}
-                  disabled={disableInputs || dialog.mode !== "create"}
-                  onChange={(event) => onChangeField("appId", event.target.value)}
-                />
-                <FieldIssues issues={dialog.fieldErrors["definition.appId"]} />
-              </label>
-
-              <label className="field">
-                <span>显示名称</span>
-                <input
-                  type="text"
-                  value={dialog.form.displayName}
-                  disabled={disableInputs}
-                  onChange={(event) => onChangeField("displayName", event.target.value)}
-                />
-                <FieldIssues issues={dialog.fieldErrors["definition.displayName"]} />
-              </label>
-
-              <label className="field field-full">
-                <span>描述</span>
-                <textarea
-                  rows={3}
-                  value={dialog.form.description}
-                  disabled={disableInputs}
-                  onChange={(event) => onChangeField("description", event.target.value)}
-                />
-                <FieldIssues issues={dialog.fieldErrors["definition.description"]} />
-              </label>
-            </div>
-
-            <section className="section-block">
-              <header className="section-header">
-                <h3>Capabilities</h3>
-              </header>
-              <div className="toggle-grid">
-                <label className="toggle-item">
-                  <input
-                    type="checkbox"
-                    checked={dialog.form.enableRpc}
-                    disabled={disableInputs}
-                    onChange={(event) => onChangeField("enableRpc", event.target.checked)}
-                  />
-                  <span>RPC</span>
-                </label>
-                <label className="toggle-item">
-                  <input
-                    type="checkbox"
-                    checked={dialog.form.enableEvents}
-                    disabled={disableInputs}
-                    onChange={(event) => onChangeField("enableEvents", event.target.checked)}
-                  />
-                  <span>Events</span>
-                </label>
-              </div>
-              <FieldIssues issues={dialog.fieldErrors["definition.capabilities"]} />
-              <FieldIssues issues={dialog.fieldErrors["definition.capabilities.rpc"]} />
-              <FieldIssues issues={dialog.fieldErrors["definition.capabilities.events"]} />
-            </section>
-
-            <section className="section-block">
-              <header className="section-header">
-                <h3>Launch</h3>
-                <label className="toggle-item">
-                  <input
-                    type="checkbox"
-                    checked={dialog.form.enableLaunch}
-                    disabled={disableInputs}
-                    onChange={(event) => onChangeField("enableLaunch", event.target.checked)}
-                  />
-                  <span>启用 launch 配置</span>
-                </label>
-              </header>
-              {dialog.form.enableLaunch ? (
-                <div className="form-grid">
-                  <label className="field">
-                    <span>exePath</span>
-                    <input
-                      type="text"
-                      value={dialog.form.launchExePath}
-                      disabled={disableInputs}
-                      onChange={(event) => onChangeField("launchExePath", event.target.value)}
-                    />
-                    <FieldIssues issues={dialog.fieldErrors["definition.launch.exePath"]} />
-                  </label>
-                  <label className="field">
-                    <span>argsTemplate</span>
-                    <input
-                      type="text"
-                      value={dialog.form.launchArgsTemplate}
-                      disabled={disableInputs}
-                      onChange={(event) => onChangeField("launchArgsTemplate", event.target.value)}
-                    />
-                    <FieldIssues issues={dialog.fieldErrors["definition.launch.argsTemplate"]} />
-                  </label>
-                  <label className="field">
-                    <span>workingDirectory</span>
-                    <input
-                      type="text"
-                      value={dialog.form.launchWorkingDirectory}
-                      disabled={disableInputs}
-                      onChange={(event) => onChangeField("launchWorkingDirectory", event.target.value)}
-                    />
-                    <FieldIssues issues={dialog.fieldErrors["definition.launch.workingDirectory"]} />
-                  </label>
-                  <label className="field">
-                    <span>dedupeKeyTemplate</span>
-                    <input
-                      type="text"
-                      value={dialog.form.launchDedupeKeyTemplate}
-                      disabled={disableInputs}
-                      onChange={(event) => onChangeField("launchDedupeKeyTemplate", event.target.value)}
-                    />
-                    <FieldIssues issues={dialog.fieldErrors["definition.launch.dedupeKeyTemplate"]} />
-                  </label>
-                </div>
-              ) : (
-                <p className="subtle">未启用 launch 配置时，Host 不会接收 launch 字段。</p>
-              )}
-              <FieldIssues issues={dialog.fieldErrors["definition.launch"]} />
-            </section>
-          </div>
-        )}
-
-        <footer className="modal-footer">
-          {canDelete ? (
-            <button type="button" className="button-danger" onClick={onDelete} disabled={dialog.saving}>
-              删除定义
-            </button>
-          ) : (
-            <span className="subtle">
-              {dialog.readOnly ? "只读模式不允许保存或删除。" : "删除操作仅在编辑现有定义时可用。"}
-            </span>
-          )}
-          <div className="button-row">
-            <button type="button" className="button-secondary" onClick={onClose} disabled={dialog.saving}>
-              {dialog.readOnly ? "关闭" : "取消"}
-            </button>
-            {!dialog.readOnly && !dialog.missing ? (
-              <button type="button" onClick={onSubmit} disabled={dialog.saving}>
-                {dialog.saving ? "处理中..." : submitLabel}
-              </button>
+    <section className="workspace-stack definition-stack">
+      <article className="panel command-panel">
+        <div className="command-bar">
+          <div className="chip-row">
+            <span className="chip subtle-chip">{modeLabel}</span>
+            {workspace.form.appId ? (
+              <span className="chip subtle-chip">{workspace.form.appId}</span>
             ) : null}
           </div>
-        </footer>
-      </section>
-    </div>
+
+          <button type="button" className="button-secondary" onClick={onClose} disabled={workspace.saving}>
+            <ArrowLeftIcon />
+            返回主页
+          </button>
+        </div>
+      </article>
+
+      {workspace.submitError ? <div className="inline-error">{workspace.submitError}</div> : null}
+
+      {workspace.loading ? (
+        <article className="panel">
+          <EmptyState
+            title="正在读取定义"
+            description="Monitor 会先同步 Host 中的最新定义，再决定是进入编辑模式还是只读视图。"
+          />
+        </article>
+      ) : workspace.missing ? (
+        <article className="panel">
+          <EmptyState
+            title="定义不可用"
+            description={workspace.emptyStateMessage ?? "请求的 App Definition 当前不可用。"}
+          />
+        </article>
+      ) : (
+        <article className="panel">
+          {workspace.readOnly ? (
+            <div className="status-banner compact-banner">
+              <strong>当前为只读视图</strong>
+              <p>只读模式不会提供保存或删除操作，但你仍然可以查看当前定义的完整配置。</p>
+            </div>
+          ) : null}
+
+          <div className="form-grid">
+            <label className="field">
+              <span>App ID</span>
+              <input
+                type="text"
+                value={workspace.form.appId}
+                disabled={disableInputs || workspace.mode !== "create"}
+                onChange={(event) => onChangeField("appId", event.target.value)}
+              />
+              <FieldIssues issues={workspace.fieldErrors["definition.appId"]} />
+            </label>
+
+            <label className="field">
+              <span>显示名称</span>
+              <input
+                type="text"
+                value={workspace.form.displayName}
+                disabled={disableInputs}
+                onChange={(event) => onChangeField("displayName", event.target.value)}
+              />
+              <FieldIssues issues={workspace.fieldErrors["definition.displayName"]} />
+            </label>
+
+            <label className="field field-full">
+              <span>描述</span>
+              <textarea
+                rows={3}
+                value={workspace.form.description}
+                disabled={disableInputs}
+                onChange={(event) => onChangeField("description", event.target.value)}
+              />
+              <FieldIssues issues={workspace.fieldErrors["definition.description"]} />
+            </label>
+          </div>
+
+          <section className="section-block">
+            <header className="section-header">
+              <h3>能力</h3>
+            </header>
+            <div className="toggle-grid">
+              <label className="toggle-item">
+                <input
+                  type="checkbox"
+                  checked={workspace.form.enableRpc}
+                  disabled={disableInputs}
+                  onChange={(event) => onChangeField("enableRpc", event.target.checked)}
+                />
+                <span>RPC</span>
+              </label>
+              <label className="toggle-item">
+                <input
+                  type="checkbox"
+                  checked={workspace.form.enableEvents}
+                  disabled={disableInputs}
+                  onChange={(event) => onChangeField("enableEvents", event.target.checked)}
+                />
+                <span>Events</span>
+              </label>
+            </div>
+            <FieldIssues issues={workspace.fieldErrors["definition.capabilities"]} />
+            <FieldIssues issues={workspace.fieldErrors["definition.capabilities.rpc"]} />
+            <FieldIssues issues={workspace.fieldErrors["definition.capabilities.events"]} />
+          </section>
+
+          <section className="section-block">
+            <header className="section-header">
+              <h3>启动配置</h3>
+              <label className="toggle-item">
+                <input
+                  type="checkbox"
+                  checked={workspace.form.enableLaunch}
+                  disabled={disableInputs}
+                  onChange={(event) => onChangeField("enableLaunch", event.target.checked)}
+                />
+                <span>启用 launch</span>
+              </label>
+            </header>
+            {workspace.form.enableLaunch ? (
+              <div className="form-grid">
+                <label className="field">
+                  <span>exePath</span>
+                  <input
+                    type="text"
+                    value={workspace.form.launchExePath}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("launchExePath", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.launch.exePath"]} />
+                </label>
+
+                <label className="field">
+                  <span>argsTemplate</span>
+                  <input
+                    type="text"
+                    value={workspace.form.launchArgsTemplate}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("launchArgsTemplate", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.launch.argsTemplate"]} />
+                </label>
+
+                <label className="field">
+                  <span>workingDirectory</span>
+                  <input
+                    type="text"
+                    value={workspace.form.launchWorkingDirectory}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("launchWorkingDirectory", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.launch.workingDirectory"]} />
+                </label>
+
+                <label className="field">
+                  <span>dedupeKeyTemplate</span>
+                  <input
+                    type="text"
+                    value={workspace.form.launchDedupeKeyTemplate}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("launchDedupeKeyTemplate", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.launch.dedupeKeyTemplate"]} />
+                </label>
+              </div>
+            ) : (
+              <p className="subtle">未启用 launch 配置时，Host 不会接收 launch 字段。</p>
+            )}
+            <FieldIssues issues={workspace.fieldErrors["definition.launch"]} />
+          </section>
+        </article>
+      )}
+
+      <footer className="workspace-footer sticky-footer">
+        {canDelete ? (
+          <button type="button" className="button-danger" onClick={onDelete} disabled={workspace.saving}>
+            删除定义
+          </button>
+        ) : (
+          <span className="subtle">
+            {workspace.readOnly ? "只读模式不允许保存或删除。" : "删除操作仅在编辑现有定义时可用。"}
+          </span>
+        )}
+        <div className="button-row">
+          <button type="button" className="button-secondary" onClick={onClose} disabled={workspace.saving}>
+            返回主页
+          </button>
+          {!workspace.readOnly && !workspace.missing ? (
+            <button type="button" onClick={onSubmit} disabled={workspace.saving}>
+              {workspace.saving ? "处理中..." : submitLabel}
+            </button>
+          ) : null}
+        </div>
+      </footer>
+    </section>
   );
 }
 
@@ -815,5 +1055,120 @@ function EmptyState(props: {
       <h3>{title}</h3>
       <p>{description}</p>
     </div>
+  );
+}
+
+function getWorkspaceMeta(
+  activeWorkspace: MonitorWorkspace,
+  homeWorkspaceMode: HomeWorkspaceMode,
+  definitionWorkspace: DefinitionWorkspaceState | null,
+) {
+  switch (activeWorkspace) {
+    case "help":
+      return {
+        eyebrow: "DevHub Support",
+        title: "帮助",
+        description: "集中查看日志入口与当前运行信息，排查连接、启动和资产同步问题。",
+      };
+    case "settings":
+      return {
+        eyebrow: "Monitor Settings",
+        title: "设置",
+        description: "更新数据目录和 Host 启动路径。保存成功后，主页会继续当前发现或连接流程。",
+      };
+    case "definition":
+      return {
+        eyebrow: "App Definition",
+        title: definitionWorkspace?.title ?? "App Definition",
+        description: definitionWorkspace?.subtitle ?? "在独立工作区中查看或维护 App Definition。",
+      };
+    case "home":
+    default:
+      return {
+        eyebrow: "DevHub Monitor",
+        title: "主页",
+        description: homeWorkspaceMode === "status"
+          ? "主页会持续展示当前 Host 连接、应用定义和应用实例，不需要跳转到独立状态页。"
+          : "主页会持续扫描并尝试连接 DevHub Host，待连接可用后会在原位切换成运行视图。",
+      };
+  }
+}
+
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
+function HelpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2.3-3 4" />
+      <circle cx="12" cy="17.3" r="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m12 3 1.7 2.7 3.1.7-.7 3.1 2.1 2.2-2.1 2.2.7 3.1-3.1.7L12 21l-1.7-2.7-3.1-.7.7-3.1-2.1-2.2 2.1-2.2-.7-3.1 3.1-.7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function OpenExternalIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14 5h5v5" />
+      <path d="M19 5 10 14" />
+      <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m4 20 4.5-1 9.2-9.2a1.7 1.7 0 0 0 0-2.4l-1.1-1.1a1.7 1.7 0 0 0-2.4 0L5 15.5z" />
+      <path d="M13 6.5 17.5 11" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m8 10 4 4 4-4" />
+    </svg>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19 12H5" />
+      <path d="m11 18-6-6 6-6" />
+    </svg>
   );
 }

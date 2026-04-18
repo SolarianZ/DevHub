@@ -6,12 +6,11 @@ import { useDefinitionEditor } from "./hooks/useDefinitionEditor";
 import { useHostSession } from "./hooks/useHostSession";
 import { openLogDirectory, writeFrontendLog } from "./lib/monitor-api";
 import type { FrontendLogInput, LogKind } from "./lib/models";
-import { getPrimaryWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
+import { type MonitorWorkspace, getHomeWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
 
 function App() {
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<MonitorWorkspace>("home");
   const [openingLogKind, setOpeningLogKind] = useState<LogKind | null>(null);
   const [shellError, setShellError] = useState<string | null>(null);
 
@@ -57,14 +56,14 @@ function App() {
   });
 
   const {
-    closeDefinitionDialog,
-    definitionDialog,
+    closeDefinitionWorkspace,
+    definitionWorkspace,
     definitionError,
     handleDefinitionDelete,
     handleDefinitionSubmit,
-    openCreateDefinitionDialog,
-    openEditDefinitionDialog,
-    openInstanceDefinitionDialog,
+    openCreateDefinitionWorkspace,
+    openEditDefinitionWorkspace,
+    openInstanceDefinitionWorkspace,
     updateDefinitionField,
   } = useDefinitionEditor({
     onRemoveDefinition: removeDefinitionFromState,
@@ -89,34 +88,54 @@ function App() {
   useEffect(() => {
     if (bootstrap?.phase === "settings_required") {
       startTransition(() => {
-        setSettingsOpen(true);
+        setActiveWorkspace("settings");
       });
     }
   }, [bootstrap?.phase]);
 
-  const handleOpenSettings = useEffectEvent(() => {
+  useEffect(() => {
+    if (activeWorkspace === "definition" && !definitionWorkspace) {
+      startTransition(() => {
+        setActiveWorkspace("home");
+      });
+    }
+  }, [activeWorkspace, definitionWorkspace]);
+
+  const handleNavigateWorkspace = useEffectEvent((workspace: "home" | "help" | "settings") => {
     startTransition(() => {
-      setHelpMenuOpen(false);
-      setSettingsOpen(true);
+      setActiveWorkspace(workspace);
     });
   });
 
-  const handleCloseSettings = useEffectEvent(() => {
+  const handleOpenDefinitionCreate = useEffectEvent(() => {
     startTransition(() => {
-      setSettingsOpen(false);
+      setActiveWorkspace("definition");
     });
+    void openCreateDefinitionWorkspace();
   });
 
-  const handleToggleHelpMenu = useEffectEvent(() => {
+  const handleOpenDefinitionEdit = useEffectEvent((appId: string) => {
     startTransition(() => {
-      setHelpMenuOpen((current) => !current);
+      setActiveWorkspace("definition");
+    });
+    void openEditDefinitionWorkspace(appId);
+  });
+
+  const handleOpenInstanceDefinition = useEffectEvent((instance: Parameters<typeof openInstanceDefinitionWorkspace>[0]) => {
+    startTransition(() => {
+      setActiveWorkspace("definition");
+    });
+    void openInstanceDefinitionWorkspace(instance);
+  });
+
+  const handleCloseDefinition = useEffectEvent(() => {
+    closeDefinitionWorkspace();
+    startTransition(() => {
+      setActiveWorkspace("home");
     });
   });
 
   const handleOpenLogHelp = useEffectEvent(async (kind: LogKind) => {
-    startTransition(() => {
-      setHelpMenuOpen(false);
-    });
     setShellError(null);
     setOpeningLogKind(kind);
 
@@ -155,7 +174,7 @@ function App() {
     const result = await handleLaunchHost();
     if (result?.status === "settings_required") {
       startTransition(() => {
-        setSettingsOpen(true);
+        setActiveWorkspace("settings");
       });
     }
   });
@@ -164,12 +183,30 @@ function App() {
     const saved = await handleSaveSettingsRequest();
     if (saved) {
       startTransition(() => {
-        setSettingsOpen(false);
+        setActiveWorkspace("home");
       });
     }
   });
 
-  const workspaceMode = getPrimaryWorkspaceMode(bootstrap);
+  const handleSubmitDefinition = useEffectEvent(async () => {
+    const saved = await handleDefinitionSubmit();
+    if (saved) {
+      startTransition(() => {
+        setActiveWorkspace("home");
+      });
+    }
+  });
+
+  const handleDeleteDefinition = useEffectEvent(async () => {
+    const deleted = await handleDefinitionDelete();
+    if (deleted) {
+      startTransition(() => {
+        setActiveWorkspace("home");
+      });
+    }
+  });
+
+  const homeWorkspaceMode = getHomeWorkspaceMode(bootstrap);
   const activeError =
     shellError
     ?? definitionError
@@ -177,20 +214,11 @@ function App() {
     ?? settingsError
     ?? bootstrapError;
 
-  useEffect(() => {
-    if (workspaceMode === "status") {
-      startTransition(() => {
-        setHelpMenuOpen(false);
-      });
-    }
-  }, [workspaceMode]);
-
   return (
     <AppShell
-      workspaceMode={workspaceMode}
-      helpMenuOpen={helpMenuOpen}
+      activeWorkspace={activeWorkspace}
+      homeWorkspaceMode={homeWorkspaceMode}
       openingLogKind={openingLogKind}
-      settingsOpen={settingsOpen}
       activeError={activeError}
       bootstrap={bootstrap}
       bootstrapBusy={bootstrapBusy}
@@ -204,10 +232,8 @@ function App() {
       instances={instances}
       inventoryMessage={inventoryMessage}
       nowTick={nowTick}
-      definitionDialog={definitionDialog}
-      onOpenSettings={handleOpenSettings}
-      onCloseSettings={handleCloseSettings}
-      onToggleHelpMenu={handleToggleHelpMenu}
+      definitionWorkspace={definitionWorkspace}
+      onNavigateWorkspace={handleNavigateWorkspace}
       onOpenLogDirectory={(kind) => {
         void handleOpenLogHelp(kind);
       }}
@@ -223,21 +249,21 @@ function App() {
         void handleSaveSettings();
       }}
       onAddDefinition={() => {
-        void openCreateDefinitionDialog();
+        handleOpenDefinitionCreate();
       }}
       onEditDefinition={(appId) => {
-        void openEditDefinitionDialog(appId);
+        handleOpenDefinitionEdit(appId);
       }}
       onViewInstanceDefinition={(instance) => {
-        void openInstanceDefinitionDialog(instance);
+        handleOpenInstanceDefinition(instance);
       }}
       onChangeDefinitionField={updateDefinitionField}
-      onCloseDefinitionDialog={closeDefinitionDialog}
+      onCloseDefinitionWorkspace={handleCloseDefinition}
       onDeleteDefinition={() => {
-        void handleDefinitionDelete();
+        void handleDeleteDefinition();
       }}
       onSubmitDefinition={() => {
-        void handleDefinitionSubmit();
+        void handleSubmitDefinition();
       }}
     />
   );

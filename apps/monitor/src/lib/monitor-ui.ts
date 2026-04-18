@@ -17,12 +17,14 @@ import type {
   MonitorSettings,
   SettingsSnapshot,
 } from "./models";
-export type PrimaryWorkspaceMode = "bootstrap" | "status";
+export type MonitorWorkspace = "home" | "help" | "settings" | "definition";
+export type SidebarWorkspace = Exclude<MonitorWorkspace, "definition">;
+export type HomeWorkspaceMode = "discovery" | "status";
 export type HostSessionStatus = "idle" | "connecting" | "connected" | "recovering";
-export type DefinitionDialogMode = "view" | "create" | "edit";
+export type DefinitionWorkspaceMode = "view" | "create" | "edit";
 
-export interface DefinitionDialogState {
-  mode: DefinitionDialogMode;
+export interface DefinitionWorkspaceState {
+  mode: DefinitionWorkspaceMode;
   title: string;
   subtitle: string;
   form: DefinitionFormState;
@@ -40,10 +42,14 @@ export interface SettingsFieldErrors {
   hostExecutablePath?: string | null;
 }
 
-export function getPrimaryWorkspaceMode(
+export function getHomeWorkspaceMode(
   snapshot: BootstrapSnapshot | null,
-): PrimaryWorkspaceMode {
-  return snapshot?.phase === "host_available" && snapshot.connection ? "status" : "bootstrap";
+): HomeWorkspaceMode {
+  return snapshot?.phase === "host_available" && snapshot.connection ? "status" : "discovery";
+}
+
+export function getSidebarWorkspace(workspace: MonitorWorkspace): SidebarWorkspace {
+  return workspace === "definition" ? "home" : workspace;
 }
 
 export function normalizeOptionalInput(value?: string | null): string | null {
@@ -207,11 +213,11 @@ export function formatBootstrapDescription(snapshot: BootstrapSnapshot | null): 
   }
 
   if (snapshot.phase === "host_available" && snapshot.connection) {
-    return `已确认 ${snapshot.connection.rpcEndpoint} 可用，当前主界面会持续展示连接状态、应用定义和实例清单。`;
+    return `已确认 ${snapshot.connection.rpcEndpoint} 可用，主页会持续展示连接状态、应用定义和实例清单。`;
   }
 
   if (snapshot.phase === "settings_required") {
-    return "当前还没有可用于启动 Host 的可执行文件路径，请从顶部“设置”菜单补全后再试。";
+    return "当前还没有可用于启动 Host 的可执行文件路径，请前往“设置”补全后再试。";
   }
 
   if (snapshot.phase === "launch_available") {
@@ -277,6 +283,17 @@ export function formatDefinitionCapabilities(definition: AppDefinition): string[
   }
 
   return capabilities.length > 0 ? capabilities : ["基础定义"];
+}
+
+export function formatHostLogDirectory(effectiveDataDir?: string | null): string {
+  const normalized = effectiveDataDir?.trim();
+  if (!normalized) {
+    return "加载中";
+  }
+
+  const trimmed = normalized.replace(/[\\/]+$/, "");
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  return `${trimmed}${separator}logs`;
 }
 
 export function toErrorMessage(error: unknown): string {

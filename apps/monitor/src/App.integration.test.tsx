@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { DevHubClient } from "@devhub/sdk";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
@@ -14,6 +15,10 @@ import type {
 } from "./lib/models";
 
 const INSTANCE_PASSWORD = "monitor-integration-password";
+const PRIMARY_APP_ID = "monitor.integration.app";
+const PRIMARY_INSTANCE_ID = "monitor-integration-instance";
+const MISSING_APP_ID = "monitor.integration.missing";
+const MISSING_INSTANCE_ID = "monitor-missing-instance";
 
 const {
   listenMock,
@@ -69,12 +74,17 @@ beforeAll(async () => {
 
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
-    appId: "monitor.integration.app",
+    appId: PRIMARY_APP_ID,
     displayName: "Monitor Integration App",
     description: "用于 Monitor 真实 Host 集成回归。",
   });
-  const connection = await createConnection(getHost());
+  await host.writeDefinition({
+    appId: MISSING_APP_ID,
+    displayName: "Monitor Missing App",
+    description: "用于缺失定义工作流。",
+  });
 
+  const connection = await createConnection(getHost());
   const setupClient = await DevHubClient.fromRuntime({
     clientId: "monitor-integration-setup",
     dataDir: host.dataDirectory,
@@ -84,14 +94,26 @@ beforeAll(async () => {
 
   try {
     await setupClient.registerInstance({
-      instanceId: "monitor-integration-instance",
-      appId: "monitor.integration.app",
+      instanceId: PRIMARY_INSTANCE_ID,
+      appId: PRIMARY_APP_ID,
       pid: process.pid,
       invoke: {
         poll: true,
         respond: true,
       },
     }, INSTANCE_PASSWORD);
+
+    await setupClient.registerInstance({
+      instanceId: MISSING_INSTANCE_ID,
+      appId: MISSING_APP_ID,
+      pid: process.pid,
+      invoke: {
+        poll: true,
+        respond: true,
+      },
+    }, INSTANCE_PASSWORD);
+
+    await setupClient.deleteDefinition(MISSING_APP_ID);
   } finally {
     await setupClient.dispose();
   }
@@ -134,40 +156,69 @@ afterAll(async () => {
 }, 120_000);
 
 describe("Monitor App real-host integration", () => {
-  it("keeps the product shell working across real host connect, refresh, and recovery", async () => {
+  it("supports create, edit, view, and missing definition workflows against a real host", async () => {
     const connection = await createConnection(getHost());
     const restoreFetch = installBrowserStyleRpcFetch(connection.rpcEndpoint, "tauri://monitor-integration");
 
     try {
       render(<App />);
 
-      await screen.findByRole("heading", { name: "应用定义" }, { timeout: 15_000 });
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
       await screen.findByText("Monitor Integration App", {}, { timeout: 15_000 });
-      await screen.findByText("monitor-integration-instance", {}, { timeout: 15_000 });
-      screen.getByRole("button", { name: "设置" });
-      screen.getByRole("button", { name: "帮助" });
-      expect(screen.queryByRole("button", { name: "日志" })).toBeNull();
+      await screen.findByText(PRIMARY_INSTANCE_ID, {}, { timeout: 15_000 });
+      await screen.findByText(MISSING_INSTANCE_ID, {}, { timeout: 15_000 });
 
-      const triggerClient = await DevHubClient.fromRuntime({
-        clientId: "monitor-integration-trigger",
-        dataDir: getHost().dataDirectory,
-      }, {
-        runtimeResolver: createSdkRuntimeResolver(connection),
-      });
+      const user = userEvent.setup();
 
-      try {
-        await triggerClient.upsertDefinition({
-          appId: "monitor.integration.extra",
-          displayName: "Monitor Integration Extra",
-          capabilities: {
-            rpc: true,
-          },
-        });
-      } finally {
-        await triggerClient.dispose();
+      await user.click(screen.getByRole("button", { name: "新增定义" }));
+      await screen.findByRole("heading", { name: "新增 App Definition" }, { timeout: 15_000 });
+      await user.type(screen.getByLabelText("App ID"), "monitor.integration.created");
+      await user.type(screen.getByLabelText("显示名称"), "Monitor Created App");
+      await user.type(screen.getByLabelText("描述"), "通过 Monitor UI 创建的定义。");
+      await user.click(screen.getByRole("button", { name: "创建定义" }));
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+      await screen.findByText("Monitor Created App", {}, { timeout: 15_000 });
+
+      const existingDefinitionRow = screen.getByText("Monitor Integration App").closest("article");
+      if (!existingDefinitionRow) {
+        throw new Error("Definition row not found.");
       }
 
-      await screen.findByText("Monitor Integration Extra", {}, { timeout: 15_000 });
+      await user.click(within(existingDefinitionRow).getByRole("button", { name: "编辑" }));
+      await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+      await user.clear(screen.getByLabelText("显示名称"));
+      await user.type(screen.getByLabelText("显示名称"), "Monitor Integration App Updated");
+      await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+      await screen.findByText("Monitor Integration App Updated", {}, { timeout: 15_000 });
+
+      const primaryInstanceRow = screen.getByText(PRIMARY_INSTANCE_ID).closest("article");
+      if (!primaryInstanceRow) {
+        throw new Error("Primary instance row not found.");
+      }
+
+      await user.click(within(primaryInstanceRow).getByRole("button", { name: "查看定义" }));
+      await screen.findByRole("heading", { name: "实例关联定义" }, { timeout: 15_000 });
+      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe("Monitor Integration App Updated");
+      screen.getByText("只读模式不允许保存或删除。");
+      await user.click(screen.getAllByRole("button", { name: "返回主页" })[0]);
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+
+      const missingInstanceRow = screen.getByText(MISSING_INSTANCE_ID).closest("article");
+      if (!missingInstanceRow) {
+        throw new Error("Missing instance row not found.");
+      }
+
+      await user.click(within(missingInstanceRow).getByRole("button", { name: "查看定义" }));
+      await screen.findByRole("heading", { name: "定义不存在" }, { timeout: 15_000 });
+      expect(screen.getAllByText(new RegExp(MISSING_INSTANCE_ID)).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(new RegExp(MISSING_APP_ID)).length).toBeGreaterThan(0);
+      await user.click(screen.getAllByRole("button", { name: "返回主页" })[0]);
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
 
       await getHost().close();
       host = undefined;
@@ -175,7 +226,7 @@ describe("Monitor App real-host integration", () => {
       await waitFor(() => {
         expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
       }, { timeout: 15_000 });
-      await screen.findByText("连接 DevHub Host", {}, { timeout: 15_000 });
+      await screen.findByText("重新扫描", {}, { timeout: 15_000 });
     } finally {
       restoreFetch();
     }
