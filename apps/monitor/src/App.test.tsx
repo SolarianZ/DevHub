@@ -9,6 +9,7 @@ import {
 } from "@devhub/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import packageManifest from "../package.json";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
@@ -275,6 +276,7 @@ describe("Monitor App", () => {
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
     screen.getByRole("button", { name: "打开 Host 日志" });
+    screen.getByText(`Monitor v${packageManifest.version}`);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     await screen.findByRole("heading", { name: "设置" });
@@ -348,6 +350,7 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
+    screen.getByText(`Monitor v${packageManifest.version}`);
 
     await user.click(screen.getByRole("button", { name: "打开 Host 日志" }));
     await waitFor(() => {
@@ -515,7 +518,7 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByText("查看定义");
+    await screen.findByRole("button", { name: "查看定义" });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "查看定义" }));

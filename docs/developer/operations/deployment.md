@@ -118,7 +118,7 @@ npm --prefix apps/monitor run tauri:dev
 
 - Monitor 通过原生后端解析有效 `DEVHUB_DATA_DIR`，并只在真实 `hub.ping` 成功后切入状态页。
 - Host 日志固定读取 `<DEVHUB_DATA_DIR>/logs/`。
-- Monitor 自身日志写入其本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`，当前目录会显示在 Monitor 设置页的“Monitor 日志目录”字段中。
+- Monitor 自身日志写入其本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`，帮助页提供 Host / Monitor 日志目录的直接打开入口。
 - 通过 Monitor 启动 Host 时，会把当前有效 `DEVHUB_DATA_DIR` 传递给子进程，保持发现目录与 Host 写盘目录一致。
 - Monitor 桌面壳层按单实例运行；重复打开安装后的快捷方式时，会直接唤醒已在运行的主窗口。
 

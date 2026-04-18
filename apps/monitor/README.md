@@ -43,10 +43,10 @@
 ## 主界面结构
 
 - 左侧侧边栏提供 `主页`、`帮助`、`设置` 三个一级工作区入口，并支持折叠为图标模式；Definition 工作区由主页中的资产操作打开，不出现在一级导航中。
-- `主页` 保持阶段驱动：未发现可用 Host 时展示发现 / 启动流程，发现并验证可用 Host 后在同一工作区内切换为连接摘要、应用定义和实例清单。
-- `帮助` 是独立页面，集中提供 `打开 Host 日志` 与 `打开 Monitor 日志` 两个动作，并展示当前运行信息。
-- `设置` 是独立页面，显示设置草稿、解析结果和字段级校验；保存成功后返回 `主页`，继续 discovery 或运行态流程。
-- App Definition 通过独立页面工作流处理 `create / edit / view / missing` 四种状态；主页的 Definition 列表和 Instance 列表都会导航到该页面。
+- `主页` 保持阶段驱动：未发现可用 Host 时只显示发现 / 启动所需的最小元素；发现并验证可用 Host 后切换为连接地址、数据目录、应用定义和实例清单。
+- `帮助` 只提供 `打开 Host 日志`、`打开 Monitor 日志` 两个入口以及版本信息。
+- `设置` 只提供 `Host 可执行文件路径` 与 `Host 数据目录 (DEVHUB_DATA_DIR)` 两个字段，以及保存动作和字段级校验。
+- App Definition 通过独立页面工作流处理 `create / edit / view / missing` 四种状态；页面只保留查看、编辑和提交定义所必需的字段、状态提示与操作按钮。
 - `DEVHUB_DATA_DIR` 覆盖值和 Host 可执行文件路径都只接受绝对路径；相对路径会在前端与原生命令层同时被拒绝。
 
 ## 运行方式
@@ -66,7 +66,7 @@ Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，只有在真实 `h
 ## 日志与能力边界
 
 - Host 日志固定来自 `<DEVHUB_DATA_DIR>/logs/`。
-- Monitor 自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`；当前目录会显示在 `设置` 工作区的“Monitor 日志目录”字段中。
+- Monitor 自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`。
 - 前端不提供内嵌日志列表或日志内容预览；需要排障时，通过 `帮助` 工作区直接调用系统外壳打开 Host / Monitor 日志目录。
 - 前端在 `host_available` 后通过 `@devhub/sdk` 直接访问 Host `/rpc` 与 `/ws`，浏览器 / WebView 对 `/rpc` 的预检也由 Host 自身处理，不直接访问本地文件。
 - 原生后端负责设置持久化、运行时发现、Host 启动、日志写入、日志目录打开和系统托盘，不代理 DevHub transport，也不直接依赖 `JS/TS SDK`。
