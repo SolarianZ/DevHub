@@ -82,7 +82,7 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 
 - 解决方案统一使用 `.slnx`，不要引入 `.sln` 文件。
 - `dotnet run` 适合本地开发与联调；仓库级发布或 dry-run 打包优先使用 [`deployment.md`](../operations/deployment.md) 中的仓库级一键打包脚本，只有在需要 Host 本地固定产物目录时才单独使用 `dotnet publish`。
-- `npm --prefix apps/monitor run build:web` 用于验证 Monitor 前端构建、类型检查和 `JS/TS SDK` 构建入口。
+- `npm --prefix apps/monitor run build:web` 用于验证 Monitor 前端构建与类型检查。
 - `npm --prefix apps/monitor test` 用于执行 Monitor 前端控制器测试、日志/定义工作流测试，以及基于真实 Host fixture 的前端回归。
 - `npm --prefix apps/monitor run test:native` 用于执行 Monitor 原生后端单元测试。
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。

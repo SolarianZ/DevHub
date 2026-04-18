@@ -23,12 +23,11 @@
 
 推荐先安装本地依赖：
 
-- `npm --prefix ../../sdks/javascript ci`
 - `npm ci`
 
 与仓库 CI 对齐的验证命令：
 
-- `npm run build:web`：构建前端、执行类型检查，并构建 `@devhub/sdk` 本地依赖。
+- `npm run build:web`：构建前端并执行类型检查。
 - `npm test`：执行前端侧边栏导航、主页 phase 切换、帮助/设置页面、Definition 页面工作流，以及基于真实 Host fixture 的前端回归。
 - `npm run test:native`：执行 `src-tauri/` 原生后端单元测试。
 - `npm run tauri:check`：执行 Tauri 原生侧非平台特定编译校验。
@@ -38,7 +37,7 @@
 
 - `src/`：前端 WebView 工程；`App.tsx` 负责 `主页 / 帮助 / 设置 / Definition` 多工作区状态编排，bootstrap / Host 会话 / Definition 编辑分别落在独立 hooks，壳层通过侧边栏驱动切换。
 - `src-tauri/`：Rust 原生后端；Tauri command 只做参数校验与转发，设置、快照、discovery、Host 启动、日志写入与日志目录打开能力由独立服务协作。
-- `../../sdks/javascript`：前端 Host 通信依赖来源，当前通过本地 `file:` 依赖映射为 `@devhub/sdk`。
+- `@devhub/sdk`：前端 Host 通信依赖，固定指向 `https://github.com/SolarianZ/DevHub/releases/download/preview-latest/devhub-sdk-javascript-0.6.0.tgz`。
 
 ## 运行方式
 

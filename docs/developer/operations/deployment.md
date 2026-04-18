@@ -109,7 +109,6 @@ dotnet .\artifacts\devhub\DevHub.Host.dll
 本地运行命令：
 
 ```bash
-npm --prefix sdks/javascript ci
 npm --prefix apps/monitor ci
 npm --prefix apps/monitor run tauri:dev
 ```

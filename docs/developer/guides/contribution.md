@@ -24,7 +24,7 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖映射到 `sdks/javascript/` 工作区。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖固定指向仓库 GitHub Release 中的 `devhub-sdk-javascript-0.6.0.tgz` 资产。
 
 `JS/TS SDK` 的额外开发约束：
 

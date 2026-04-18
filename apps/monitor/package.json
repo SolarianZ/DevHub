@@ -4,14 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "sdk:build": "npm --prefix ../../sdks/javascript run build",
     "dev": "vite --host 0.0.0.0 --port 1420",
-    "dev:tauri": "npm run sdk:build && npm run dev",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "build:web": "npm run sdk:build && npm run typecheck && vite build",
+    "build:web": "npm run typecheck && vite build",
     "build": "npm run build:web",
-    "test": "npm run sdk:build && vitest run",
-    "test:watch": "npm run sdk:build && vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:native": "cargo test --manifest-path src-tauri/Cargo.toml",
     "verify": "npm run build:web && npm run test && npm run test:native && npm run tauri:check",
     "preview": "vite preview",
@@ -21,7 +19,7 @@
     "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
-    "@devhub/sdk": "file:../../sdks/javascript",
+    "@devhub/sdk": "https://github.com/SolarianZ/DevHub/releases/download/preview-latest/devhub-sdk-javascript-0.6.0.tgz",
     "@tauri-apps/api": "^2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

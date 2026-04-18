@@ -26,7 +26,6 @@ MONITOR_PACKAGE_JSON = MONITOR_DIR / "package.json"
 MONITOR_PACKAGE_LOCK = MONITOR_DIR / "package-lock.json"
 MONITOR_TAURI_CONFIG = MONITOR_TAURI_DIR / "tauri.conf.json"
 MONITOR_CARGO_TOML = MONITOR_TAURI_DIR / "Cargo.toml"
-JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
 SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 
@@ -172,13 +171,6 @@ def ensure_monitor_version_consistency() -> dict[str, str]:
 
 
 def run_monitor_validation(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
-    run_logged_command(
-        name="Monitor SDK install",
-        command=[NPM_COMMAND, "ci"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "monitor-sdk-install.log",
-        validation_records=validation_records,
-    )
     run_logged_command(
         name="Monitor install",
         command=[NPM_COMMAND, "ci"],
