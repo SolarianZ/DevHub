@@ -7,7 +7,7 @@ using DevHub.Sdk.Models;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Unity Editor 侧 DevHub dispatcher 的唯一对外入口。
@@ -59,7 +59,7 @@ namespace DevHub.Editor
             catch (Exception ex)
             {
                 SetLastError("dispatcher 初始化失败: " + ex.Message);
-                DevHubDispatcherLog.Error(LifecycleLogCategory, "Dispatcher 静态初始化失败。", ex);
+                DevHubDispatcherLogger.Error(LifecycleLogCategory, "Dispatcher 静态初始化失败。", ex);
             }
         }
 
@@ -96,7 +96,7 @@ namespace DevHub.Editor
                 ToolIdsByInstance.Add(tool, tool.ToolId);
             }
 
-            DevHubDispatcherLog.Info(ToolRegistryLogCategory, "Tool 已注册。toolId=" + tool.ToolId);
+            DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注册。toolId=" + tool.ToolId);
             return Result.Ok("Tool 已注册: " + tool.ToolId);
         }
 
@@ -114,15 +114,14 @@ namespace DevHub.Editor
 
             lock (SyncRoot)
             {
-                string toolId;
-                if (!ToolIdsByInstance.TryGetValue(tool, out toolId))
+                if (!ToolIdsByInstance.TryGetValue(tool, out string toolId))
                 {
                     return LogFailure(ToolRegistryLogCategory, "该 Tool 实例尚未注册。");
                 }
 
                 ToolIdsByInstance.Remove(tool);
                 ToolsById.Remove(toolId);
-                DevHubDispatcherLog.Info(ToolRegistryLogCategory, "Tool 已注销。toolId=" + toolId);
+                DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注销。toolId=" + toolId);
                 return Result.Ok("Tool 已注销: " + toolId);
             }
         }
@@ -137,38 +136,32 @@ namespace DevHub.Editor
         /// <param name="options">可选目标与调用选项。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>发送结果。</returns>
-        public static async Task<Result> NotifyAsync(IDevHubTool tool, string appId, string method, JToken payload, DevHubDispatcherSendOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
+        public static async Task<Result> NotifyAsync(IDevHubTool tool, string appId, string method, JToken payload, DevHubDispatcherSendOptions options = null, CancellationToken cancellationToken = default)
         {
-            string toolId;
-            Result toolIdResult;
-            if (!TryGetRegisteredToolId(tool, out toolId, out toolIdResult))
+            if (!TryGetRegisteredToolId(tool, out string toolId, out Result toolIdResult))
             {
                 return LogFailure(OutboundLogCategory, toolIdResult.Message);
             }
 
-            DevHubClient client;
-            string clientError;
-            if (!TryGetConnectedClient(out client, out clientError))
+            if (!TryGetConnectedClient(out DevHubClient client, out string clientError))
             {
                 return LogFailure(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, clientError));
             }
 
-            InvokeRequest request;
-            string requestError;
-            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out request, out requestError))
+            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out InvokeRequest request, out string requestError))
             {
                 return LogFailure(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, requestError));
             }
 
             try
             {
-                var notifyResult = await client.NotifyAsync(request, cancellationToken);
+                NotifyResult notifyResult = await client.NotifyAsync(request, cancellationToken);
                 return Result.Ok("Notify 已发送: " + notifyResult.InvocationId);
             }
             catch (OperationCanceledException ex)
             {
-                var message = BuildOutboundFailureMessage(toolId, method, "Notify 已取消。");
-                DevHubDispatcherLog.Warning(OutboundLogCategory, message, ex);
+                string message = BuildOutboundFailureMessage(toolId, method, "Notify 已取消。");
+                DevHubDispatcherLogger.Warning(OutboundLogCategory, message, ex);
                 return Result.Fail(message);
             }
             catch (Exception ex)
@@ -187,39 +180,33 @@ namespace DevHub.Editor
         /// <param name="options">可选目标与调用选项。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>Host 返回的业务结果，dispatcher 不改写成功载荷。</returns>
-        public static async Task<Result<JToken>> RequestAsync(IDevHubTool tool, string appId, string method, JToken payload, DevHubDispatcherSendOptions options = null, CancellationToken cancellationToken = default(CancellationToken))
+        public static async Task<Result<JToken>> RequestAsync(IDevHubTool tool, string appId, string method, JToken payload, DevHubDispatcherSendOptions options = null, CancellationToken cancellationToken = default)
         {
-            string toolId;
-            Result toolIdResult;
-            if (!TryGetRegisteredToolId(tool, out toolId, out toolIdResult))
+            if (!TryGetRegisteredToolId(tool, out string toolId, out Result toolIdResult))
             {
                 return LogFailure<JToken>(OutboundLogCategory, toolIdResult.Message);
             }
 
-            DevHubClient client;
-            string clientError;
-            if (!TryGetConnectedClient(out client, out clientError))
+            if (!TryGetConnectedClient(out DevHubClient client, out string clientError))
             {
                 return LogFailure<JToken>(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, clientError));
             }
 
-            InvokeRequest request;
-            string requestError;
-            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out request, out requestError))
+            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out InvokeRequest request, out string requestError))
             {
                 return LogFailure<JToken>(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, requestError));
             }
 
             try
             {
-                var requestResult = await client.RequestAsync(request, cancellationToken);
-                var value = requestResult.Value == null ? JValue.CreateNull() : requestResult.Value;
+                RequestResult requestResult = await client.RequestAsync(request, cancellationToken);
+                JToken value = requestResult.Value ?? JValue.CreateNull();
                 return Result<JToken>.Ok(value, "Request 已完成: " + requestResult.InvocationId);
             }
             catch (OperationCanceledException ex)
             {
-                var message = BuildOutboundFailureMessage(toolId, method, "Request 已取消。");
-                DevHubDispatcherLog.Warning(OutboundLogCategory, message, ex);
+                string message = BuildOutboundFailureMessage(toolId, method, "Request 已取消。");
+                DevHubDispatcherLogger.Warning(OutboundLogCategory, message, ex);
                 return Result<JToken>.Fail(message);
             }
             catch (Exception ex)
@@ -266,7 +253,7 @@ namespace DevHub.Editor
             catch (Exception ex)
             {
                 SetLastError("beforeAssemblyReload failed: " + ex.Message);
-                DevHubDispatcherLog.Error(LifecycleLogCategory, "beforeAssemblyReload 处理失败。", ex);
+                DevHubDispatcherLogger.Error(LifecycleLogCategory, "beforeAssemblyReload 处理失败。", ex);
             }
         }
 
@@ -280,7 +267,7 @@ namespace DevHub.Editor
             catch (Exception ex)
             {
                 SetLastError("afterAssemblyReload failed: " + ex.Message);
-                DevHubDispatcherLog.Error(LifecycleLogCategory, "afterAssemblyReload 处理失败。", ex);
+                DevHubDispatcherLogger.Error(LifecycleLogCategory, "afterAssemblyReload 处理失败。", ex);
             }
         }
 
@@ -293,7 +280,7 @@ namespace DevHub.Editor
             catch (Exception ex)
             {
                 SetLastError("editorQuitting failed: " + ex.Message);
-                DevHubDispatcherLog.Error(LifecycleLogCategory, "editorQuitting 处理失败。", ex);
+                DevHubDispatcherLogger.Error(LifecycleLogCategory, "editorQuitting 处理失败。", ex);
             }
         }
 
@@ -316,7 +303,7 @@ namespace DevHub.Editor
                 _nextInitializeUtc = DateTime.UtcNow;
             }
 
-            DevHubDispatcherLog.Info(LifecycleLogCategory, "runtime start: " + reason);
+            DevHubDispatcherLogger.Info(LifecycleLogCategory, "runtime start: " + reason);
         }
 
         private static void StopRuntime(bool unregisterInstance, bool stopUntilRestart)
@@ -401,7 +388,6 @@ namespace DevHub.Editor
 
         private static void BeginInitializeIfDue()
         {
-            RuntimeEditorContext editorContext;
             CancellationToken token;
             lock (SyncRoot)
             {
@@ -418,7 +404,7 @@ namespace DevHub.Editor
                 token = _lifetimeCts.Token;
             }
 
-            editorContext = RuntimeEditorContext.Capture();
+            RuntimeEditorContext editorContext = RuntimeEditorContext.Capture();
             lock (SyncRoot)
             {
                 _initializeTask = InitializeRuntimeAsync(_identity, editorContext, token);
@@ -437,7 +423,7 @@ namespace DevHub.Editor
                 }, cancellationToken);
 
                 await client.UpsertDefinitionAsync(BuildAppDefinition(identity, editorContext), cancellationToken);
-                var instance = await client.RegisterInstanceAsync(BuildAppInstanceRegistration(identity, editorContext), identity.InstancePassword, cancellationToken);
+                AppInstance instance = await client.RegisterInstanceAsync(BuildAppInstanceRegistration(identity, editorContext), identity.InstancePassword, cancellationToken);
                 return Result<RuntimeConnection>.Ok(new RuntimeConnection(client, instance, client.Runtime.RuntimeTuning), string.Empty);
             }
             catch (OperationCanceledException ex)
@@ -450,7 +436,7 @@ namespace DevHub.Editor
                     }
                     catch (Exception disposeEx)
                     {
-                        DevHubDispatcherLog.Error(CleanupLogCategory, "initialize 取消后的 client 清理失败。", disposeEx);
+                        DevHubDispatcherLogger.Error(CleanupLogCategory, "initialize 取消后的 client 清理失败。", disposeEx);
                     }
                 }
 
@@ -466,7 +452,7 @@ namespace DevHub.Editor
                     }
                     catch (Exception disposeEx)
                     {
-                        DevHubDispatcherLog.Error(CleanupLogCategory, "initialize 失败后的 client 清理失败。", disposeEx);
+                        DevHubDispatcherLogger.Error(CleanupLogCategory, "initialize 失败后的 client 清理失败。", disposeEx);
                     }
                 }
 
@@ -507,16 +493,16 @@ namespace DevHub.Editor
                 return;
             }
 
-            var initializeResult = task.Result;
+            Result<RuntimeConnection> initializeResult = task.Result;
             if (!initializeResult.Success)
             {
                 ScheduleInitializeRetry("initialize", initializeResult.Message);
                 return;
             }
 
-            var connection = initializeResult.Value;
+            RuntimeConnection connection = initializeResult.Value;
             DevHubClient oldClient = null;
-            var shouldDisposeConnection = false;
+            bool shouldDisposeConnection = false;
             lock (SyncRoot)
             {
                 if (_lifetimeCts == null || _lifetimeCts.IsCancellationRequested || _stopping)
@@ -548,7 +534,7 @@ namespace DevHub.Editor
                 DisposeClientSilently(oldClient);
             }
 
-            DevHubDispatcherLog.Info(LifecycleLogCategory, "dispatcher connected. AppId=" + _identity.AppId + ", InstanceId=" + _identity.InstanceId);
+            DevHubDispatcherLogger.Info(LifecycleLogCategory, "dispatcher connected. AppId=" + _identity.AppId + ", InstanceId=" + _identity.InstanceId);
         }
 
         private static void ScheduleInitializeRetry(string stage, Exception exception)
@@ -562,17 +548,17 @@ namespace DevHub.Editor
 
             if (exception == null)
             {
-                DevHubDispatcherLog.Warning(LifecycleLogCategory, stage + " 已取消，将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
+                DevHubDispatcherLogger.Warning(LifecycleLogCategory, stage + " 已取消，将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
                 return;
             }
 
-            DevHubDispatcherLog.Error(LifecycleLogCategory, stage + " failed.", exception);
-            DevHubDispatcherLog.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
+            DevHubDispatcherLogger.Error(LifecycleLogCategory, stage + " failed.", exception);
+            DevHubDispatcherLogger.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
         }
 
         private static void ScheduleInitializeRetry(string stage, string reason)
         {
-            var normalizedReason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
+            string normalizedReason = string.IsNullOrWhiteSpace(reason) ? "unknown" : reason;
             SetLastError(stage + " failed: " + normalizedReason);
             lock (SyncRoot)
             {
@@ -582,12 +568,12 @@ namespace DevHub.Editor
 
             if (normalizedReason.IndexOf("canceled", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                DevHubDispatcherLog.Warning(LifecycleLogCategory, stage + " 已取消，将在 " + DefaultRetryDelaySeconds + " 秒后重试。原因: " + normalizedReason);
+                DevHubDispatcherLogger.Warning(LifecycleLogCategory, stage + " 已取消，将在 " + DefaultRetryDelaySeconds + " 秒后重试。原因: " + normalizedReason);
                 return;
             }
 
-            DevHubDispatcherLog.Error(LifecycleLogCategory, stage + " failed: " + normalizedReason);
-            DevHubDispatcherLog.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
+            DevHubDispatcherLogger.Error(LifecycleLogCategory, stage + " failed: " + normalizedReason);
+            DevHubDispatcherLogger.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
         }
 
         private static void BeginHeartbeatIfDue()
@@ -631,7 +617,7 @@ namespace DevHub.Editor
                     _nextHeartbeatUtc = DateTime.UtcNow.AddSeconds(DefaultRetryDelaySeconds);
                 }
 
-                DevHubDispatcherLog.Warning(LifecycleLogCategory, "heartbeat 已取消，将延后重试。");
+                DevHubDispatcherLogger.Warning(LifecycleLogCategory, "heartbeat 已取消，将延后重试。");
                 return;
             }
 
@@ -696,7 +682,7 @@ namespace DevHub.Editor
                     _nextPollUtc = DateTime.UtcNow.AddSeconds(DefaultRetryDelaySeconds);
                 }
 
-                DevHubDispatcherLog.Warning(LifecycleLogCategory, "poll 已取消，将延后重试。");
+                DevHubDispatcherLogger.Warning(LifecycleLogCategory, "poll 已取消，将延后重试。");
                 return;
             }
 
@@ -706,7 +692,7 @@ namespace DevHub.Editor
                 return;
             }
 
-            var result = task.Result;
+            PollResult result = task.Result;
             lock (SyncRoot)
             {
                 _hostConnected = true;
@@ -715,7 +701,7 @@ namespace DevHub.Editor
                 _lastError = string.Empty;
             }
 
-            for (var index = 0; index < result.Items.Count; index++)
+            for (int index = 0; index < result.Items.Count; index++)
             {
                 RouteInvocation(result.Items[index]);
             }
@@ -728,17 +714,13 @@ namespace DevHub.Editor
                 return;
             }
 
-            string toolId;
-            JToken payload;
-            string envelopeError;
-            if (!TryReadEnvelope(invocation.Args, out toolId, out payload, out envelopeError))
+            if (!TryReadEnvelope(invocation.Args, out string toolId, out JToken payload, out string envelopeError))
             {
                 HandleRoutingFailure(invocation, InvalidDispatcherMessageCode, "invalid_dispatcher_message", null, envelopeError, null);
                 return;
             }
 
-            IDevHubTool tool;
-            if (!TryGetTool(toolId, out tool))
+            if (!TryGetTool(toolId, out IDevHubTool tool))
             {
                 HandleRoutingFailure(invocation, ToolNotFoundCode, "tool_not_found", toolId, "Tool 未注册。", null);
                 return;
@@ -762,9 +744,9 @@ namespace DevHub.Editor
 
         private static void HandleRoutingFailure(Invocation invocation, int code, string message, string toolId, string reason, Exception exception)
         {
-            var logMessage = "Tool 路由失败。toolId=" + (toolId ?? string.Empty) + ", method=" + (invocation.Method ?? string.Empty) + ", code=" + code + ", reason=" + (reason ?? string.Empty);
+            string logMessage = "Tool 路由失败。toolId=" + (toolId ?? string.Empty) + ", method=" + invocation.Method + ", code=" + code + ", reason=" + (reason ?? string.Empty);
             SetLastError(logMessage);
-            DevHubDispatcherLog.Error(RoutingLogCategory, logMessage, exception);
+            DevHubDispatcherLogger.Error(RoutingLogCategory, logMessage, exception);
 
             if (invocation.Kind == InvocationKind.Request)
             {
@@ -774,10 +756,7 @@ namespace DevHub.Editor
 
         private static async Task RespondWithValueAsync(Invocation invocation, string toolId, JToken value)
         {
-            DevHubClient client;
-            string instanceId;
-            CancellationToken token;
-            if (!TryGetRespondContext(out client, out instanceId, out token))
+            if (!TryGetRespondContext(out DevHubClient client, out string instanceId, out CancellationToken token))
             {
                 return;
             }
@@ -788,29 +767,26 @@ namespace DevHub.Editor
                 {
                     InstanceId = instanceId,
                     InvocationId = invocation.InvocationId,
-                    Value = value == null ? JValue.CreateNull() : value
+                    Value = value ?? JValue.CreateNull()
                 }, token);
             }
             catch (OperationCanceledException ex)
             {
-                var message = "返回 request 响应已取消。toolId=" + (toolId ?? string.Empty) + ", method=" + (invocation.Method ?? string.Empty);
+                string message = "返回 request 响应已取消。toolId=" + (toolId ?? string.Empty) + ", method=" + invocation.Method;
                 SetLastError(message);
-                DevHubDispatcherLog.Warning(OutboundLogCategory, message, ex);
+                DevHubDispatcherLogger.Warning(OutboundLogCategory, message, ex);
             }
             catch (Exception ex)
             {
-                var message = "返回 request 响应失败。toolId=" + (toolId ?? string.Empty) + ", method=" + (invocation.Method ?? string.Empty);
+                string message = "返回 request 响应失败。toolId=" + (toolId ?? string.Empty) + ", method=" + invocation.Method;
                 SetLastError(message);
-                DevHubDispatcherLog.Error(OutboundLogCategory, message, ex);
+                DevHubDispatcherLogger.Error(OutboundLogCategory, message, ex);
             }
         }
 
         private static async Task RespondWithErrorAsync(Invocation invocation, int code, string message, string toolId, string reason)
         {
-            DevHubClient client;
-            string instanceId;
-            CancellationToken token;
-            if (!TryGetRespondContext(out client, out instanceId, out token))
+            if (!TryGetRespondContext(out DevHubClient client, out string instanceId, out CancellationToken token))
             {
                 return;
             }
@@ -824,22 +800,22 @@ namespace DevHub.Editor
                     Error = DevHubCalleeError.Create(code, message, new
                     {
                         toolId = toolId ?? string.Empty,
-                        method = invocation.Method ?? string.Empty,
+                        method = invocation.Method,
                         reason = reason ?? string.Empty
                     })
                 }, token);
             }
             catch (OperationCanceledException ex)
             {
-                var errorMessage = "返回错误响应已取消。toolId=" + (toolId ?? string.Empty) + ", method=" + (invocation.Method ?? string.Empty);
+                string errorMessage = "返回错误响应已取消。toolId=" + (toolId ?? string.Empty) + ", method=" + invocation.Method;
                 SetLastError(errorMessage);
-                DevHubDispatcherLog.Warning(OutboundLogCategory, errorMessage, ex);
+                DevHubDispatcherLogger.Warning(OutboundLogCategory, errorMessage, ex);
             }
             catch (Exception ex)
             {
-                var errorMessage = "返回错误响应失败。toolId=" + (toolId ?? string.Empty) + ", method=" + (invocation.Method ?? string.Empty);
+                string errorMessage = "返回错误响应失败。toolId=" + (toolId ?? string.Empty) + ", method=" + invocation.Method;
                 SetLastError(errorMessage);
-                DevHubDispatcherLog.Error(OutboundLogCategory, errorMessage, ex);
+                DevHubDispatcherLogger.Error(OutboundLogCategory, errorMessage, ex);
             }
         }
 
@@ -853,9 +829,9 @@ namespace DevHub.Editor
 
         private static void ObserveBackgroundTasks()
         {
-            for (var index = BackgroundTasks.Count - 1; index >= 0; index--)
+            for (int index = BackgroundTasks.Count - 1; index >= 0; index--)
             {
-                var task = BackgroundTasks[index];
+                Task task = BackgroundTasks[index];
                 if (!task.IsCompleted)
                 {
                     continue;
@@ -864,10 +840,10 @@ namespace DevHub.Editor
                 BackgroundTasks.RemoveAt(index);
                 if (task.IsFaulted)
                 {
-                    var exception = GetTaskException(task);
-                    var message = "background task failed: " + (exception == null ? "unknown" : exception.Message);
+                    Exception exception = GetTaskException(task);
+                    string message = "background task failed: " + (exception == null ? "unknown" : exception.Message);
                     SetLastError(message);
-                    DevHubDispatcherLog.Error(BackgroundLogCategory, message, exception);
+                    DevHubDispatcherLogger.Error(BackgroundLogCategory, message, exception);
                 }
             }
         }
@@ -875,7 +851,7 @@ namespace DevHub.Editor
         private static void ResetRuntimeForRetry(string stage, Exception exception)
         {
             SetLastError(stage + " failed: " + (exception == null ? "unknown" : exception.Message));
-            DevHubDispatcherLog.Error(LifecycleLogCategory, stage + " failed.", exception);
+            DevHubDispatcherLogger.Error(LifecycleLogCategory, stage + " failed.", exception);
             StopRuntime(false, false);
             StartRuntime(stage + "-retry");
             lock (SyncRoot)
@@ -884,7 +860,7 @@ namespace DevHub.Editor
                 _nextInitializeUtc = DateTime.UtcNow.AddSeconds(DefaultRetryDelaySeconds);
             }
 
-            DevHubDispatcherLog.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
+            DevHubDispatcherLogger.Warning(LifecycleLogCategory, stage + " 将在 " + DefaultRetryDelaySeconds + " 秒后重试。");
         }
 
         private static bool TryReadEnvelope(JToken args, out string toolId, out JToken payload, out string error)
@@ -893,14 +869,14 @@ namespace DevHub.Editor
             payload = null;
             error = null;
 
-            var obj = args as JObject;
+            JObject obj = args as JObject;
             if (obj == null)
             {
                 error = "args 必须是对象。";
                 return false;
             }
 
-            var toolIdToken = obj["toolId"];
+            JToken toolIdToken = obj["toolId"];
             if (toolIdToken == null || toolIdToken.Type != JTokenType.String)
             {
                 error = "缺少合法 toolId。";
@@ -979,7 +955,7 @@ namespace DevHub.Editor
 
                 client = _client;
                 instanceId = _identity.InstanceId;
-                token = _lifetimeCts == null ? CancellationToken.None : _lifetimeCts.Token;
+                token = _lifetimeCts?.Token ?? CancellationToken.None;
                 return true;
             }
         }
@@ -1024,15 +1000,13 @@ namespace DevHub.Editor
 
             if (!string.IsNullOrEmpty(options.Scope) || !string.IsNullOrEmpty(options.InstanceId))
             {
-                string scope;
-                if (!TryNormalizeOptionalString(options.Scope, "options.Scope", out scope, out error))
+                if (!TryNormalizeOptionalString(options.Scope, "options.Scope", out string scope, out error))
                 {
                     request = null;
                     return false;
                 }
 
-                string instanceId;
-                if (!TryNormalizeOptionalString(options.InstanceId, "options.InstanceId", out instanceId, out error))
+                if (!TryNormalizeOptionalString(options.InstanceId, "options.InstanceId", out string instanceId, out error))
                 {
                     request = null;
                     return false;
@@ -1137,14 +1111,14 @@ namespace DevHub.Editor
                 return TimeSpan.FromSeconds(10);
             }
 
-            var leaseSeconds = tuning.LeaseSeconds > 0 ? tuning.LeaseSeconds : 30;
-            var onlineThresholdSeconds = tuning.OnlineThresholdSeconds > 0 ? tuning.OnlineThresholdSeconds : leaseSeconds;
+            int leaseSeconds = tuning.LeaseSeconds > 0 ? tuning.LeaseSeconds : 30;
+            int onlineThresholdSeconds = tuning.OnlineThresholdSeconds > 0 ? tuning.OnlineThresholdSeconds : leaseSeconds;
             return TimeSpan.FromSeconds(Math.Max(1, Math.Min(leaseSeconds, onlineThresholdSeconds) / 2));
         }
 
         private static int ResolvePollWaitMs(HubRuntimeTuning tuning)
         {
-            var leaseSeconds = tuning == null || tuning.LeaseSeconds <= 0 ? 30 : tuning.LeaseSeconds;
+            int leaseSeconds = tuning == null || tuning.LeaseSeconds <= 0 ? 30 : tuning.LeaseSeconds;
             return Math.Max(1000, Math.Min(5000, leaseSeconds * 1000 / 2));
         }
 
@@ -1156,12 +1130,12 @@ namespace DevHub.Editor
             }
             catch (OperationCanceledException ex)
             {
-                DevHubDispatcherLog.Warning(CleanupLogCategory, "unregisterInstance 已取消。", ex);
+                DevHubDispatcherLogger.Warning(CleanupLogCategory, "unregisterInstance 已取消。", ex);
             }
             catch (Exception ex)
             {
                 SetLastError("unregisterInstance failed: " + ex.Message);
-                DevHubDispatcherLog.Error(CleanupLogCategory, "unregisterInstance failed.", ex);
+                DevHubDispatcherLogger.Error(CleanupLogCategory, "unregisterInstance failed.", ex);
             }
         }
 
@@ -1178,12 +1152,12 @@ namespace DevHub.Editor
             }
             catch (OperationCanceledException ex)
             {
-                DevHubDispatcherLog.Warning(CleanupLogCategory, "dispose 已取消。", ex);
+                DevHubDispatcherLogger.Warning(CleanupLogCategory, "dispose 已取消。", ex);
             }
             catch (Exception ex)
             {
                 SetLastError("dispose failed: " + ex.Message);
-                DevHubDispatcherLog.Error(CleanupLogCategory, "dispose failed.", ex);
+                DevHubDispatcherLogger.Error(CleanupLogCategory, "dispose failed.", ex);
             }
         }
 
@@ -1214,13 +1188,13 @@ namespace DevHub.Editor
 
             task.ContinueWith(t =>
             {
-                var ignored = t.Exception;
+                AggregateException ignored = t.Exception;
             }, TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private static Exception GetTaskException(Task task)
         {
-            return task.Exception == null ? null : task.Exception.GetBaseException();
+            return task.Exception?.GetBaseException();
         }
 
         private static void SetLastError(string message)
@@ -1234,14 +1208,14 @@ namespace DevHub.Editor
         private static Result LogFailure(string category, string message, Exception exception = null)
         {
             SetLastError(message);
-            DevHubDispatcherLog.Error(category, message, exception);
+            DevHubDispatcherLogger.Error(category, message, exception);
             return Result.Fail(message);
         }
 
         private static Result<T> LogFailure<T>(string category, string message, Exception exception = null)
         {
             SetLastError(message);
-            DevHubDispatcherLog.Error(category, message, exception);
+            DevHubDispatcherLogger.Error(category, message, exception);
             return Result<T>.Fail(message);
         }
 

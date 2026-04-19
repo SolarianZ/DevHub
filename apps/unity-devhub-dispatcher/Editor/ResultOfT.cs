@@ -1,4 +1,4 @@
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// 带返回值的 Dispatcher 操作结果。
@@ -48,7 +48,7 @@ namespace DevHub.Editor
             {
                 Success = false,
                 Message = message ?? string.Empty,
-                Value = default(T)
+                Value = default
             };
         }
     }

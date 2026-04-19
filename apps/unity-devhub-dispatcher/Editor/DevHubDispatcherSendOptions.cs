@@ -1,4 +1,4 @@
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Tool 通过 dispatcher 主动发送消息时使用的可选目标与调用选项。

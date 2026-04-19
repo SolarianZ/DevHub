@@ -1,19 +1,14 @@
 using System;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Dispatcher 当前运行态快照。
     /// </summary>
     public struct DevHubDispatcherStatus
     {
-        internal DevHubDispatcherStatus(
-            bool hostConnected,
-            string appId,
-            string instanceId,
-            int registeredToolCount,
-            string lastError,
-            DateTime? lastConnectedAtUtc)
+        internal DevHubDispatcherStatus(bool hostConnected, string appId, string instanceId,
+            int registeredToolCount, string lastError, DateTime? lastConnectedAtUtc)
         {
             HostConnected = hostConnected;
             AppId = appId ?? string.Empty;

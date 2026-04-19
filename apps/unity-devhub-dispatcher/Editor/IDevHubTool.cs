@@ -1,6 +1,7 @@
+using System;
 using Newtonsoft.Json.Linq;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Unity 内部 Tool 接入 dispatcher 的最小契约。
@@ -26,5 +27,49 @@ namespace DevHub.Editor
         /// <param name="method">Host invocation 的方法名。</param>
         /// <param name="payload">信封中的业务载荷。</param>
         void HandleDevHubNotify(string method, JToken payload);
+    }
+
+    internal class DevHubToolDelegate : IDevHubTool
+    {
+        public string ToolId { get; }
+
+        private readonly Func<JToken, JToken> _handleDevHubRequest;
+        private readonly Action<JToken> _handleDevHubNotify;
+
+
+        public DevHubToolDelegate(string toolId, Func<JToken, JToken> handleDevHubRequest, Action<JToken> handleDevHubNotify)
+        {
+            if (string.IsNullOrEmpty(toolId))
+                throw new ArgumentNullException(nameof(toolId));
+
+            if (handleDevHubRequest == null && handleDevHubNotify == null)
+                throw new ArgumentException($"{nameof(handleDevHubRequest)}和{nameof(handleDevHubNotify)}不能同时为null");
+
+            ToolId = toolId;
+            _handleDevHubRequest = handleDevHubRequest;
+            _handleDevHubNotify = handleDevHubNotify;
+        }
+
+        public DevHubToolDelegate(string toolId, Func<JToken, JToken> handleDevHubRequest)
+            : this(toolId, handleDevHubRequest, null)
+        {
+        }
+
+        public DevHubToolDelegate(string toolId, Action<JToken> devHubRequestHandler)
+            : this(toolId, null, devHubRequestHandler)
+        {
+        }
+
+        /// <inheritdoc />
+        public JToken HandleDevHubRequest(string method, JToken payload)
+        {
+            throw new System.NotImplementedException();
+        }
+
+        /// <inheritdoc />
+        public void HandleDevHubNotify(string method, JToken payload)
+        {
+            throw new System.NotImplementedException();
+        }
     }
 }

@@ -1,4 +1,4 @@
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Dispatcher 操作结果。

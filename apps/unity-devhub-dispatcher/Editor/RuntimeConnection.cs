@@ -1,7 +1,7 @@
 using DevHub.Sdk;
 using DevHub.Sdk.Models;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     internal sealed class RuntimeConnection
     {

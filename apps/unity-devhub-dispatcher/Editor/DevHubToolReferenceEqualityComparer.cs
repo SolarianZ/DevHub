@@ -1,6 +1,7 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     internal sealed class DevHubToolReferenceEqualityComparer : IEqualityComparer<IDevHubTool>
     {
@@ -11,9 +12,9 @@ namespace DevHub.Editor
             return ReferenceEquals(x, y);
         }
 
-        public int GetHashCode(IDevHubTool obj)
+        public int GetHashCode(IDevHubTool tool)
         {
-            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+            return RuntimeHelpers.GetHashCode(tool);
         }
     }
 }

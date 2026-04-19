@@ -1,7 +1,7 @@
 using System;
 using UnityEditor;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     internal sealed class DevHubDispatcherIdentity
     {
@@ -25,19 +25,19 @@ namespace DevHub.Editor
 
         public static DevHubDispatcherIdentity LoadOrCreate()
         {
-            var appIdOverride = TryGetCommandLineAppId();
-            var storedAppId = EditorUserSettings.GetConfigValue(AppIdKey);
-            var storedInstanceId = EditorUserSettings.GetConfigValue(InstanceIdKey);
-            var storedInstancePassword = EditorUserSettings.GetConfigValue(InstancePasswordKey);
+            string appIdOverride = TryGetCommandLineAppId();
+            string storedAppId = EditorUserSettings.GetConfigValue(AppIdKey);
+            string storedInstanceId = EditorUserSettings.GetConfigValue(InstanceIdKey);
+            string storedInstancePassword = EditorUserSettings.GetConfigValue(InstancePasswordKey);
 
-            var appId = !string.IsNullOrEmpty(appIdOverride)
+            string appId = !string.IsNullOrEmpty(appIdOverride)
                 ? appIdOverride
                 : IsValidAppId(storedAppId) ? storedAppId : GenerateAppId();
 
-            var instanceId = IsValidInstanceId(storedInstanceId) ? storedInstanceId : GenerateInstanceId();
-            var instancePassword = string.IsNullOrWhiteSpace(storedInstancePassword) ? GenerateInstancePassword() : storedInstancePassword;
+            string instanceId = IsValidInstanceId(storedInstanceId) ? storedInstanceId : GenerateInstanceId();
+            string instancePassword = string.IsNullOrWhiteSpace(storedInstancePassword) ? GenerateInstancePassword() : storedInstancePassword;
 
-            var identity = new DevHubDispatcherIdentity(appId, instanceId, instancePassword);
+            DevHubDispatcherIdentity identity = new DevHubDispatcherIdentity(appId, instanceId, instancePassword);
             identity.Save();
             return identity;
         }
@@ -51,8 +51,8 @@ namespace DevHub.Editor
 
         private static string TryGetCommandLineAppId()
         {
-            var args = Environment.GetCommandLineArgs();
-            for (var index = 0; index < args.Length; index++)
+            string[] args = Environment.GetCommandLineArgs();
+            for (int index = 0; index < args.Length; index++)
             {
                 if (!string.Equals(args[index], AppIdSwitch, StringComparison.Ordinal))
                 {
@@ -61,17 +61,17 @@ namespace DevHub.Editor
 
                 if (index + 1 >= args.Length)
                 {
-                    DevHubDispatcherLog.Warning("Identity", "忽略缺少值的 -devhubAppId 参数。");
+                    DevHubDispatcherLogger.Warning("Identity", "忽略缺少值的 -devhubAppId 参数。");
                     return null;
                 }
 
-                var candidate = args[index + 1];
+                string candidate = args[index + 1];
                 if (IsValidAppId(candidate))
                 {
                     return candidate;
                 }
 
-                DevHubDispatcherLog.Warning("Identity", "忽略非法 -devhubAppId 参数: " + candidate);
+                DevHubDispatcherLogger.Warning("Identity", "忽略非法 -devhubAppId 参数: " + candidate);
                 return null;
             }
 
@@ -105,9 +105,9 @@ namespace DevHub.Editor
                 return false;
             }
 
-            for (var index = 1; index < value.Length; index++)
+            for (int index = 1; index < value.Length; index++)
             {
-                var ch = value[index];
+                char ch = value[index];
                 if (!IsLowerAlphaNumeric(ch) && ch != '.' && ch != '-')
                 {
                     return false;
@@ -124,9 +124,9 @@ namespace DevHub.Editor
                 return false;
             }
 
-            for (var index = 0; index < value.Length; index++)
+            for (int index = 0; index < value.Length; index++)
             {
-                var ch = value[index];
+                char ch = value[index];
                 if (!IsAsciiAlphaNumeric(ch) && ch != '.' && ch != '_' && ch != ':' && ch != '-')
                 {
                     return false;

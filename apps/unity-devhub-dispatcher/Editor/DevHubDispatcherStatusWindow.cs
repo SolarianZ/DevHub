@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace DevHub.Editor
+namespace DevHubDispatcher.Editor
 {
     /// <summary>
     /// Dispatcher 最小运行态窗口。
@@ -19,7 +19,7 @@ namespace DevHub.Editor
 
         private void OnGUI()
         {
-            var status = DevHubDispatcher.GetStatus();
+            DevHubDispatcherStatus status = DevHubDispatcher.GetStatus();
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("DevHub Dispatcher", EditorStyles.boldLabel);
@@ -29,7 +29,7 @@ namespace DevHub.Editor
             EditorGUILayout.LabelField("AppId", string.IsNullOrEmpty(status.AppId) ? "-" : status.AppId);
             EditorGUILayout.LabelField("InstanceId", string.IsNullOrEmpty(status.InstanceId) ? "-" : status.InstanceId);
 
-            var lastConnected = status.LastConnectedAtUtc.HasValue
+            string lastConnected = status.LastConnectedAtUtc.HasValue
                 ? status.LastConnectedAtUtc.Value.ToString("u")
                 : "-";
             EditorGUILayout.LabelField("最近连接时间", lastConnected);
