@@ -407,6 +407,7 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
   if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
+    readOptionalStringOrNull(payload, location, "scope");
     ensureNoPasswordField(payload, location);
   }
 }

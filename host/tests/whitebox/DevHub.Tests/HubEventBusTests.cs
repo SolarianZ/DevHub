@@ -90,6 +90,29 @@ public class HubEventBusTests
     }
 
     [Fact]
+    public void Impl_Publish_WhenSameEventMatchesTwoSubscriptionsOnOneConnection_ShouldFanOutPerSubscription()
+    {
+        var bus = new HubEventBus(_logger.Object);
+
+        bus.RegisterConnection("conn-fanout");
+        Assert.True(bus.TryMarkAuthenticated("conn-fanout", "client-fanout", Guid.NewGuid().ToString("D")));
+        Assert.True(bus.TrySubscribe("conn-fanout", null, out var subscribeAll));
+        Assert.True(bus.TrySubscribe("conn-fanout", ["app.instance.registered"], out var subscribeRegistered));
+
+        bus.Publish(new HubEventMessage
+        {
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new { appId = "demo.app", instanceId = "inst-1", scope = (string?)null }
+        });
+
+        var deliveries = bus.DrainDeliveries("conn-fanout", maxCount: 10);
+        Assert.Equal(2, deliveries.Count);
+        Assert.Contains(deliveries, delivery => delivery.SubscriptionId == subscribeAll && delivery.Type == "app.instance.registered");
+        Assert.Contains(deliveries, delivery => delivery.SubscriptionId == subscribeRegistered && delivery.Type == "app.instance.registered");
+    }
+
+    [Fact]
     public void Impl_Unsubscribe_ShouldBeIdempotentAndStopFutureDelivery()
     {
         var bus = new HubEventBus(_logger.Object);
@@ -207,4 +230,3 @@ public class HubEventBusTests
         Assert.Equal("app.instance.registered", deliveries[0].Type);
     }
 }
-

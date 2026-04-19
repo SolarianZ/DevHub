@@ -295,9 +295,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: |
-            apps/monitor/package-lock.json
-            sdks/javascript/package-lock.json
+          cache-dependency-path: apps/monitor/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -315,9 +313,6 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-
-      - name: Install JavaScript SDK dependencies
-        run: npm --prefix sdks/javascript ci
 
       - name: Install Monitor dependencies
         run: npm --prefix apps/monitor ci

@@ -1,5 +1,6 @@
 using DevHub.Core.Services;
 using DevHub.Host.Extensions;
+using DevHub.Host.Transport;
 using Serilog;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -144,6 +145,11 @@ public class Program
             app.Map("/ws", async (HttpContext context, WebSocketSessionHandler wsHandler, CancellationToken cancellationToken) =>
             {
                 await wsHandler.HandleEndpointAsync(context, cancellationToken);
+            });
+
+            app.MapMethods("/rpc", [HttpMethods.Options], static (HttpRequest request) =>
+            {
+                return RpcHttpCorsPolicy.CreatePreflightResponse(request);
             });
 
             app.MapPost("/rpc", async (HttpRequest request, RpcHttpEndpointHandler rpcHandler, CancellationToken cancellationToken) =>

@@ -1,12 +1,10 @@
-use crate::models::{LogFileInfo, LogKind, LogReadResult, MonitorStructuredLogRecord};
+use crate::models::{LogKind, MonitorStructuredLogRecord};
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
-
-const MAX_LOG_READ_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone)]
 pub struct MonitorLogService {
@@ -52,126 +50,123 @@ impl MonitorLogService {
     }
 
     fn current_log_file_path(&self) -> PathBuf {
-        let date = Utc::now().format("%Y%m%d");
+        let date = chrono::Utc::now().format("%Y%m%d");
         self.log_directory.join(format!("monitor-{date}.jsonl"))
     }
 }
 
-pub fn list_log_files(base_directory: &Path, kind: LogKind) -> Result<Vec<LogFileInfo>> {
-    if !base_directory.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut files = Vec::new();
-    for entry in fs::read_dir(base_directory)
-        .with_context(|| format!("无法枚举日志目录：{}", base_directory.display()))?
-    {
-        let entry =
-            entry.with_context(|| format!("读取日志目录项失败：{}", base_directory.display()))?;
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("无法读取日志元数据：{}", entry.path().display()))?;
-
-        if !metadata.is_file() {
-            continue;
-        }
-
-        let modified_at_utc = metadata
-            .modified()
-            .ok()
-            .map(DateTime::<Utc>::from)
-            .map(|timestamp| timestamp.to_rfc3339());
-
-        files.push(LogFileInfo {
-            kind,
-            name: entry.file_name().to_string_lossy().to_string(),
-            file_path: entry.path().display().to_string(),
-            size_bytes: metadata.len(),
-            modified_at_utc,
-        });
-    }
-
-    files.sort_by(|left, right| {
-        right
-            .modified_at_utc
-            .cmp(&left.modified_at_utc)
-            .then_with(|| left.name.cmp(&right.name))
-    });
-
-    Ok(files)
+pub trait ShellOpener {
+    fn open_directory(&self, directory: &Path) -> Result<()>;
 }
 
-pub fn read_log_file(
-    base_directory: &Path,
+#[derive(Debug, Clone, Copy)]
+pub struct SystemShellOpener;
+
+impl ShellOpener for SystemShellOpener {
+    fn open_directory(&self, directory: &Path) -> Result<()> {
+        let mut command = build_open_directory_command(directory);
+        run_open_directory_command(&mut command, directory)
+    }
+}
+
+pub fn resolve_log_directory(
     kind: LogKind,
-    file_name: &str,
-) -> Result<LogReadResult> {
-    let target_path = resolve_log_path(base_directory, file_name)?;
-    let mut file = File::open(&target_path)
-        .with_context(|| format!("无法打开日志文件：{}", target_path.display()))?;
-    let metadata = file
-        .metadata()
-        .with_context(|| format!("无法读取日志文件元数据：{}", target_path.display()))?;
-
-    let size_bytes = metadata.len();
-    let truncated = size_bytes > MAX_LOG_READ_BYTES;
-    let read_from = if truncated {
-        size_bytes - MAX_LOG_READ_BYTES
-    } else {
-        0
-    };
-
-    file.seek(SeekFrom::Start(read_from))
-        .with_context(|| format!("无法定位日志文件：{}", target_path.display()))?;
-
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)
-        .with_context(|| format!("无法读取日志文件：{}", target_path.display()))?;
-
-    Ok(LogReadResult {
-        kind,
-        file_name: file_name.to_string(),
-        file_path: target_path.display().to_string(),
-        size_bytes,
-        truncated,
-        contents: String::from_utf8_lossy(&buffer).to_string(),
-    })
+    effective_data_dir: &Path,
+    monitor_log_directory: &Path,
+) -> PathBuf {
+    match kind {
+        LogKind::Monitor => monitor_log_directory.to_path_buf(),
+        LogKind::Host => effective_data_dir.join("logs"),
+    }
 }
 
-fn resolve_log_path(base_directory: &Path, file_name: &str) -> Result<PathBuf> {
-    if file_name.trim().is_empty() {
-        anyhow::bail!("日志文件名不能为空。");
+pub fn open_log_directory(
+    kind: LogKind,
+    effective_data_dir: &Path,
+    monitor_log_directory: &Path,
+) -> Result<PathBuf> {
+    let directory = resolve_log_directory(kind, effective_data_dir, monitor_log_directory);
+    open_directory_with(&SystemShellOpener, &directory)?;
+    Ok(directory)
+}
+
+fn open_directory_with(opener: &dyn ShellOpener, directory: &Path) -> Result<()> {
+    validate_log_directory(directory)?;
+    opener.open_directory(directory)
+}
+
+fn validate_log_directory(directory: &Path) -> Result<()> {
+    if !directory.exists() {
+        anyhow::bail!("日志目录不存在：{}", directory.display());
     }
 
-    let candidate = Path::new(file_name);
-    if candidate.components().count() != 1 {
-        anyhow::bail!("日志文件名非法：{file_name}");
+    if !directory.is_dir() {
+        anyhow::bail!("日志目录无效：{}", directory.display());
     }
 
-    let resolved = base_directory.join(candidate);
-    let canonical_parent = base_directory
-        .canonicalize()
-        .unwrap_or_else(|_| base_directory.to_path_buf());
-    let resolved_parent = resolved
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| base_directory.to_path_buf());
-    let canonical_resolved_parent = resolved_parent.canonicalize().unwrap_or(resolved_parent);
+    Ok(())
+}
 
-    if canonical_resolved_parent != canonical_parent {
-        anyhow::bail!("日志文件路径越界：{file_name}");
+#[cfg(target_os = "windows")]
+fn run_open_directory_command(command: &mut Command, directory: &Path) -> Result<()> {
+    command
+        .spawn()
+        .with_context(|| format!("无法调用系统外壳打开日志目录：{}", directory.display()))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_open_directory_command(command: &mut Command, directory: &Path) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("无法调用系统外壳打开日志目录：{}", directory.display()))?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "系统未能打开日志目录：{}（退出码：{}）",
+            directory.display(),
+            status
+        );
     }
 
-    Ok(resolved)
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn build_open_directory_command(directory: &Path) -> Command {
+    let mut command = Command::new("explorer");
+    command.arg(directory);
+    command
+}
+
+#[cfg(target_os = "macos")]
+fn build_open_directory_command(directory: &Path) -> Command {
+    let mut command = Command::new("open");
+    command.arg(directory);
+    command
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn build_open_directory_command(directory: &Path) -> Command {
+    let mut command = Command::new("xdg-open");
+    command.arg(directory);
+    command
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{list_log_files, read_log_file, LogKind, MonitorLogService, MAX_LOG_READ_BYTES};
+    use super::{
+        open_directory_with, resolve_log_directory, run_open_directory_command, LogKind,
+        MonitorLogService, ShellOpener,
+    };
     use crate::models::{MonitorLogLevel, MonitorStructuredLogRecord};
+    use anyhow::Result;
     use serde_json::json;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_temp_directory(name: &str) -> PathBuf {
@@ -185,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn log_service_writes_and_lists_monitor_logs() {
+    fn log_service_writes_monitor_logs() {
         let log_directory = create_temp_directory("logs");
         let service = MonitorLogService::new(log_directory.clone())
             .expect("failed to initialize log service");
@@ -212,33 +207,169 @@ mod tests {
             })
             .expect("failed to record log");
 
-        let files = list_log_files(&log_directory, LogKind::Monitor).expect("failed to list logs");
-        assert_eq!(files.len(), 1);
-        let contents = read_log_file(&log_directory, LogKind::Monitor, &files[0].name)
-            .expect("failed to read log");
+        let files = fs::read_dir(&log_directory)
+            .expect("failed to read log directory")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("failed to collect log files");
 
-        assert!(!contents.truncated);
-        assert!(contents.contents.contains("\"category\":\"test\""));
+        assert_eq!(files.len(), 1);
 
         fs::remove_dir_all(log_directory).expect("failed to clean temp directory");
     }
 
     #[test]
-    fn read_log_file_truncates_large_payloads_and_rejects_path_escape() {
-        let log_directory = create_temp_directory("large-log");
-        let file_name = "host-large.log";
-        let payload = "a".repeat(MAX_LOG_READ_BYTES as usize + 128);
-        fs::write(log_directory.join(file_name), payload).expect("failed to write log payload");
+    fn resolve_log_directory_uses_expected_paths() {
+        let effective_data_dir = Path::new("/tmp/devhub-data");
+        let monitor_log_directory = Path::new("/tmp/monitor-logs");
 
-        let read_result =
-            read_log_file(&log_directory, LogKind::Host, file_name).expect("failed to read log");
-        assert!(read_result.truncated);
-        assert_eq!(read_result.contents.len(), MAX_LOG_READ_BYTES as usize);
+        assert_eq!(
+            resolve_log_directory(LogKind::Host, effective_data_dir, monitor_log_directory),
+            effective_data_dir.join("logs")
+        );
+        assert_eq!(
+            resolve_log_directory(LogKind::Monitor, effective_data_dir, monitor_log_directory),
+            monitor_log_directory
+        );
+    }
 
-        let error =
-            read_log_file(&log_directory, LogKind::Host, "../escape.log").expect_err("expected");
-        assert!(error.to_string().contains("日志文件名非法"));
+    #[test]
+    fn open_directory_with_invokes_shell_for_existing_directory() {
+        let directory = create_temp_directory("open-success");
+        let opened_paths = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+        let opener = RecordingShellOpener::success(opened_paths.clone());
 
-        fs::remove_dir_all(log_directory).expect("failed to clean temp directory");
+        open_directory_with(&opener, &directory).expect("expected open success");
+
+        let opened = opened_paths.lock().expect("open paths lock poisoned");
+        assert_eq!(opened.as_slice(), &[directory.clone()]);
+
+        fs::remove_dir_all(directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn open_directory_with_rejects_missing_directory_and_surfaces_shell_failures() {
+        let missing_directory = std::env::temp_dir().join("devhub-monitor-missing-log-dir");
+        let missing_error = open_directory_with(
+            &RecordingShellOpener::success(Arc::new(Mutex::new(Vec::new()))),
+            &missing_directory,
+        )
+        .expect_err("expected missing directory error");
+        assert!(missing_error.to_string().contains("日志目录不存在"));
+
+        let directory = create_temp_directory("open-failure");
+        let opener = RecordingShellOpener::failure("shell open failed");
+        let open_error =
+            open_directory_with(&opener, &directory).expect_err("expected shell failure");
+        assert!(open_error.to_string().contains("shell open failed"));
+
+        fs::remove_dir_all(directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn open_log_directory_returns_resolved_directory() {
+        let effective_data_dir = create_temp_directory("runtime-data");
+        let host_logs = effective_data_dir.join("logs");
+        let monitor_logs = create_temp_directory("monitor-logs");
+        fs::create_dir_all(&host_logs).expect("failed to create host logs");
+
+        let host_path = open_log_directory_for_test(
+            LogKind::Host,
+            &effective_data_dir,
+            &monitor_logs,
+            &RecordingShellOpener::success(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .expect("expected host log path");
+        assert_eq!(host_path, host_logs);
+
+        let monitor_path = open_log_directory_for_test(
+            LogKind::Monitor,
+            &effective_data_dir,
+            &monitor_logs,
+            &RecordingShellOpener::success(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .expect("expected monitor log path");
+        assert_eq!(monitor_path, monitor_logs);
+
+        fs::remove_dir_all(effective_data_dir).expect("failed to clean temp directory");
+        fs::remove_dir_all(monitor_path).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn run_open_directory_command_respects_platform_open_semantics() {
+        let directory = create_temp_directory("shell-open");
+        let mut command = build_nonzero_exit_command();
+
+        #[cfg(target_os = "windows")]
+        run_open_directory_command(&mut command, &directory)
+            .expect("expected spawned command to count as success on Windows");
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let error = run_open_directory_command(&mut command, &directory)
+                .expect_err("expected non-zero exit status to fail");
+            assert!(error.to_string().contains("系统未能打开日志目录"));
+        }
+
+        fs::remove_dir_all(directory).expect("failed to clean temp directory");
+    }
+
+    fn open_log_directory_for_test(
+        kind: LogKind,
+        effective_data_dir: &Path,
+        monitor_log_directory: &Path,
+        opener: &dyn ShellOpener,
+    ) -> Result<PathBuf> {
+        let directory = resolve_log_directory(kind, effective_data_dir, monitor_log_directory);
+        open_directory_with(opener, &directory)?;
+        Ok(directory)
+    }
+
+    struct RecordingShellOpener {
+        opened_paths: Arc<Mutex<Vec<PathBuf>>>,
+        failure_message: Option<String>,
+    }
+
+    impl RecordingShellOpener {
+        fn success(opened_paths: Arc<Mutex<Vec<PathBuf>>>) -> Self {
+            Self {
+                opened_paths,
+                failure_message: None,
+            }
+        }
+
+        fn failure(message: &str) -> Self {
+            Self {
+                opened_paths: Arc::new(Mutex::new(Vec::new())),
+                failure_message: Some(message.to_string()),
+            }
+        }
+    }
+
+    impl ShellOpener for RecordingShellOpener {
+        fn open_directory(&self, directory: &Path) -> Result<()> {
+            if let Some(message) = &self.failure_message {
+                anyhow::bail!(message.clone());
+            }
+
+            self.opened_paths
+                .lock()
+                .expect("open paths lock poisoned")
+                .push(directory.to_path_buf());
+            Ok(())
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn build_nonzero_exit_command() -> Command {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "exit /b 1"]);
+        command
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn build_nonzero_exit_command() -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 1"]);
+        command
     }
 }

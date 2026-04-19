@@ -1,0 +1,95 @@
+{
+  "id": "events.same_event_matching_two_subscriptions_fans_out_per_subscription",
+  "caseId": "CONF-007",
+  "description": "同一 EventsClient 上两个订阅同时命中同一注册事件时，必须收到两条分别携带 subscriptionId 的 hub.event。",
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsFanOut",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "subscriptionIdOne"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.instance.registered"
+        ],
+        "captureAs": "subscriptionIdTwo"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "register_instance",
+        "client": "http",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "events-fanout-inst-1",
+          "appId": "events.fanout",
+          "scope": null,
+          "pid": 33103,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "firstEvent"
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "secondEvent"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionIdOne": "${ANY_NON_EMPTY_STRING}",
+      "subscriptionIdTwo": "${ANY_NON_EMPTY_STRING}",
+      "firstEvent": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.instance.registered",
+        "payload": {
+          "appId": "events.fanout",
+          "instanceId": "events-fanout-inst-1"
+        }
+      },
+      "secondEvent": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.instance.registered",
+        "payload": {
+          "appId": "events.fanout",
+          "instanceId": "events-fanout-inst-1"
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk",
+    "fanout"
+  ]
+}

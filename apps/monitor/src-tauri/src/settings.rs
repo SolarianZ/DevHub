@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone)]
@@ -70,6 +70,14 @@ impl SettingsStore {
 
     pub fn save(&self, settings: MonitorSettings) -> Result<MonitorSettings> {
         let normalized = normalize_settings(settings);
+        validate_optional_absolute_path(
+            normalized.data_dir_override.as_deref(),
+            "dataDirOverride",
+        )?;
+        validate_optional_absolute_path(
+            normalized.host_executable_path.as_deref(),
+            "hostExecutablePath",
+        )?;
 
         if let Some(parent) = self.file_path.parent() {
             fs::create_dir_all(parent)
@@ -99,12 +107,49 @@ impl SettingsStore {
     }
 }
 
+#[derive(Clone)]
+pub struct SettingsService {
+    paths: MonitorPaths,
+    store: SettingsStore,
+}
+
+impl SettingsService {
+    pub fn new() -> Result<Self> {
+        let paths = MonitorPaths::resolve()?;
+        let store = SettingsStore::load(paths.settings_file.clone())?;
+        Ok(Self { paths, store })
+    }
+
+    pub fn current(&self) -> MonitorSettings {
+        self.store.current()
+    }
+
+    pub fn snapshot(&self) -> SettingsSnapshot {
+        self.store.snapshot(&self.paths)
+    }
+
+    pub fn save(&self, settings: MonitorSettings) -> Result<SettingsSnapshot> {
+        self.store.save(settings)?;
+        Ok(self.snapshot())
+    }
+
+    pub fn resolve_effective_data_dir(&self) -> ResolvedDataDir {
+        resolve_effective_data_dir(&self.store.current())
+    }
+
+    pub fn monitor_log_directory(&self) -> PathBuf {
+        self.paths.monitor_log_directory.clone()
+    }
+}
+
 pub fn resolve_effective_data_dir(settings: &MonitorSettings) -> ResolvedDataDir {
     if let Some(override_path) = settings.data_dir_override.as_deref() {
-        return ResolvedDataDir {
-            path: make_absolute_path(override_path),
-            source: DataDirSource::SettingsOverride,
-        };
+        if is_absolute_path(override_path) {
+            return ResolvedDataDir {
+                path: override_path.trim().to_string(),
+                source: DataDirSource::SettingsOverride,
+            };
+        }
     }
 
     if let Ok(environment_path) = env::var(DEVHUB_DATA_DIR_ENV) {
@@ -137,7 +182,7 @@ fn normalize_optional_path(value: Option<String>) -> Option<String> {
         return None;
     }
 
-    Some(make_absolute_path(trimmed))
+    Some(trimmed.to_string())
 }
 
 fn make_absolute_path(input: &str) -> String {
@@ -185,6 +230,20 @@ fn default_devhub_data_dir() -> PathBuf {
     base.join("DevHub")
 }
 
+fn validate_optional_absolute_path(value: Option<&str>, field: &str) -> Result<()> {
+    if let Some(value) = value {
+        if !is_absolute_path(value) {
+            anyhow::bail!("{field} 必须为绝对路径。");
+        }
+    }
+
+    Ok(())
+}
+
+fn is_absolute_path(value: &str) -> bool {
+    Path::new(value.trim()).is_absolute()
+}
+
 fn user_home_directory() -> Option<PathBuf> {
     env::var("HOME")
         .ok()
@@ -213,20 +272,30 @@ mod tests {
         directory
     }
 
+    fn absolute_test_path(name: &str) -> String {
+        if cfg!(windows) {
+            format!(r"C:\devhub-tests\{name}")
+        } else {
+            format!("/tmp/{name}")
+        }
+    }
+
     #[test]
-    fn resolve_effective_data_dir_prefers_settings_override_over_environment() {
+    fn resolve_effective_data_dir_prefers_absolute_settings_override_over_environment() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let env_path = absolute_test_path("from-env");
+        let override_path = absolute_test_path("override");
         unsafe {
-            std::env::set_var(DEVHUB_DATA_DIR_ENV, "/tmp/from-env");
+            std::env::set_var(DEVHUB_DATA_DIR_ENV, &env_path);
         }
 
         let resolved = resolve_effective_data_dir(&MonitorSettings {
-            data_dir_override: Some("./override".to_string()),
+            data_dir_override: Some(override_path.clone()),
             host_executable_path: None,
         });
 
         assert!(matches!(resolved.source, DataDirSource::SettingsOverride));
-        assert!(resolved.path.ends_with("/override"));
+        assert_eq!(resolved.path, override_path);
 
         unsafe {
             std::env::remove_var(DEVHUB_DATA_DIR_ENV);
@@ -234,28 +303,53 @@ mod tests {
     }
 
     #[test]
-    fn settings_store_save_normalizes_paths_and_updates_snapshot() {
+    fn resolve_effective_data_dir_ignores_relative_settings_override() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let env_path = absolute_test_path("from-env");
+        unsafe {
+            std::env::set_var(DEVHUB_DATA_DIR_ENV, &env_path);
+        }
+
+        let resolved = resolve_effective_data_dir(&MonitorSettings {
+            data_dir_override: Some("./override".to_string()),
+            host_executable_path: None,
+        });
+
+        assert!(matches!(resolved.source, DataDirSource::Environment));
+        assert_eq!(resolved.path, env_path);
+
+        unsafe {
+            std::env::remove_var(DEVHUB_DATA_DIR_ENV);
+        }
+    }
+
+    #[test]
+    fn settings_store_save_preserves_absolute_paths_and_updates_snapshot() {
         let temp_directory = create_temp_directory("settings");
         let settings_file = temp_directory.join("settings.json");
         let log_directory = temp_directory.join("monitor-logs");
         fs::create_dir_all(&log_directory).expect("failed to create log directory");
+        let data_dir = absolute_test_path("runtime-data");
+        let host_path = absolute_test_path("host-bin");
 
         let store = SettingsStore::load(settings_file.clone()).expect("failed to load store");
         let saved = store
             .save(MonitorSettings {
-                data_dir_override: Some("./runtime-data".to_string()),
-                host_executable_path: Some("./host/bin/DevHub.Host".to_string()),
+                data_dir_override: Some(data_dir.clone()),
+                host_executable_path: Some(host_path.clone()),
             })
             .expect("failed to save settings");
 
-        assert!(saved
-            .data_dir_override
-            .expect("missing data dir override")
-            .ends_with("/runtime-data"));
-        assert!(saved
-            .host_executable_path
-            .expect("missing host executable path")
-            .ends_with("/host/bin/DevHub.Host"));
+        assert_eq!(
+            saved.data_dir_override.expect("missing data dir override"),
+            data_dir
+        );
+        assert_eq!(
+            saved
+                .host_executable_path
+                .expect("missing host executable path"),
+            host_path
+        );
 
         let snapshot = store.snapshot(&super::MonitorPaths {
             settings_file: settings_file.clone(),
@@ -270,7 +364,28 @@ mod tests {
             snapshot.monitor_log_directory,
             log_directory.display().to_string()
         );
-        assert!(snapshot.effective_data_dir.ends_with("/runtime-data"));
+        assert_eq!(
+            snapshot.effective_data_dir,
+            absolute_test_path("runtime-data")
+        );
+
+        fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn settings_store_save_rejects_relative_paths() {
+        let temp_directory = create_temp_directory("settings-relative");
+        let settings_file = temp_directory.join("settings.json");
+        let store = SettingsStore::load(settings_file).expect("failed to load store");
+
+        let error = store
+            .save(MonitorSettings {
+                data_dir_override: Some("./runtime-data".to_string()),
+                host_executable_path: Some("/tmp/host/bin/DevHub.Host".to_string()),
+            })
+            .expect_err("expected relative path error");
+
+        assert!(error.to_string().contains("dataDirOverride 必须为绝对路径"));
 
         fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
     }

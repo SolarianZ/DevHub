@@ -1,0 +1,63 @@
+{
+  "id": "errors.invocation.respond_unknown_invocation_returns_reason",
+  "caseId": "CONF-008",
+  "description": "hub.invoke.respond 传入未知 invocationId 时，必须返回 invocation_expired，并在 error.data.reason 中给出 unknown_invocation。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "errors-respond-unknown-inst-1",
+          "appId": "errors.respond.unknown",
+          "scope": null,
+          "pid": 33102,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceInvocationRespond",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000134"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "invocation-respond-unknown",
+    "method": "hub.invoke.respond",
+    "params": {
+      "instanceId": "errors-respond-unknown-inst-1",
+      "invocationId": "invk-unknown",
+      "value": {
+        "ok": true
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "invocation-respond-unknown",
+    "error": {
+      "code": -32011,
+      "message": "invocation_expired",
+      "data": {
+        "invocationId": "invk-unknown",
+        "reason": "unknown_invocation"
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "invocation",
+    "respond"
+  ]
+}

@@ -4,11 +4,8 @@ import type {
   BootstrapSnapshot,
   FrontendLogInput,
   LaunchHostResult,
-  LogFileInfo,
   LogKind,
-  LogReadResult,
   MonitorRuntimeConnectionInfo,
-  ReadLogRequest,
   MonitorSettings,
   SettingsSnapshot,
 } from "./models";
@@ -73,12 +70,16 @@ export function resumeDiscovery(reason?: string): Promise<BootstrapSnapshot> {
   return invoke("monitor_resume_discovery", { reason });
 }
 
-export function listLogs(kind: LogKind): Promise<LogFileInfo[]> {
-  return invoke("monitor_list_logs", { kind });
+export function openLogDirectory(kind: LogKind): Promise<void> {
+  return invoke("monitor_open_log_directory", { kind });
 }
 
-export function readLog(request: ReadLogRequest): Promise<LogReadResult> {
-  return invoke("monitor_read_log", { request });
+export function pickHostExecutablePath(currentPath?: string | null): Promise<string | null> {
+  return invoke("monitor_pick_host_executable_path", { currentPath });
+}
+
+export function pickDataDirectory(currentPath?: string | null): Promise<string | null> {
+  return invoke("monitor_pick_data_directory", { currentPath });
 }
 
 export function writeFrontendLog(entry: FrontendLogInput): Promise<void> {

@@ -121,7 +121,9 @@ export class DevHubHostFixture {
 
   static async start(): Promise<DevHubHostFixture> {
     const repoRoot = resolveRepoRoot();
-    const tempRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-"));
+    const tempRoot = await fsPromises.realpath(
+      await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-"))
+    );
     const dataDirectory = tempRoot;
     const runtimeDirectory = path.join(dataDirectory, "runtime");
     const definitionsDirectory = path.join(dataDirectory, "apps", "definitions");
@@ -256,7 +258,9 @@ export function resolveHostAssemblyPath(
   }
 
   sharedHostAssemblyPromise ??= (async () => {
-    const hostBuildRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-host-build-"));
+    const hostBuildRoot = await fsPromises.realpath(
+      await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-host-build-"))
+    );
     sharedHostBuildRoot = hostBuildRoot;
     registerSharedHostCleanup();
 

@@ -77,7 +77,52 @@ public class AppInstanceEventTests
         Assert.False(registerPayload.TryGetProperty("password", out _));
 
         var unregisterPayload = JsonSerializer.SerializeToElement(deliveries.First(d => d.Type == "app.instance.unregistered").Payload);
+        Assert.Equal("event.app", unregisterPayload.GetProperty("appId").GetString());
+        Assert.Equal("inst-event-001", unregisterPayload.GetProperty("instanceId").GetString());
+        Assert.Equal("workspace-A", unregisterPayload.GetProperty("scope").GetString());
         Assert.False(unregisterPayload.TryGetProperty("password", out _));
+    }
+
+    [Fact]
+    public async Task Impl_RegisterGlobalInstance_ShouldPublishRegisteredEventWithNullScope()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var eventBus = new HubEventBus(_eventBusLogger.Object);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventBus);
+
+        eventBus.RegisterConnection("conn-instance-global");
+        Assert.True(eventBus.TryMarkAuthenticated("conn-instance-global", "test-client", Guid.NewGuid().ToString("D")));
+        Assert.True(eventBus.TrySubscribe("conn-instance-global", ["app.instance.registered"], out _));
+
+        var registerResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-global-instance",
+            Method = "hub.apps.registerInstance",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                password = InstancePassword,
+                instance = new
+                {
+                    instanceId = "inst-event-global",
+                    appId = "event.global.app",
+                    scope = (string?)null,
+                    pid = 5012,
+                    invoke = new { poll = true, respond = true }
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+
+        var deliveries = eventBus.DrainDeliveries("conn-instance-global", maxCount: 10);
+        var registeredDelivery = Assert.Single(deliveries);
+        Assert.Equal("app.instance.registered", registeredDelivery.Type);
+
+        var registeredPayload = JsonSerializer.SerializeToElement(registeredDelivery.Payload);
+        Assert.Equal("event.global.app", registeredPayload.GetProperty("appId").GetString());
+        Assert.Equal("inst-event-global", registeredPayload.GetProperty("instanceId").GetString());
+        Assert.Equal(JsonValueKind.Null, registeredPayload.GetProperty("scope").ValueKind);
+        Assert.False(registeredPayload.TryGetProperty("password", out _));
     }
 
     [Fact]
@@ -108,4 +153,3 @@ public class AppInstanceEventTests
         Assert.Empty(deliveries);
     }
 }
-

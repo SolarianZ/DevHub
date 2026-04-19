@@ -1,5 +1,6 @@
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DevHub.Host.Transport;
@@ -9,6 +10,11 @@ namespace DevHub.Host.Transport;
 /// </summary>
 public static class HubEventNotificationFactory
 {
+    private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never
+    };
+
     /// <summary>
     /// 根据投递记录构造标准 <c>hub.event</c> JSON-RPC 通知负载。
     /// </summary>
@@ -23,9 +29,35 @@ public static class HubEventNotificationFactory
                 SubscriptionId = delivery.SubscriptionId,
                 Type = delivery.Type,
                 TimeUtc = delivery.TimeUtc.ToString("O"),
-                Payload = delivery.Payload
+                Payload = SerializePayload(delivery.Type, delivery.Payload)
             }
         };
+    }
+
+    private static object? SerializePayload(string eventType, object? payload)
+    {
+        if (!ShouldPreserveNestedNulls(eventType))
+        {
+            return payload switch
+            {
+                JsonDocument document => document.RootElement.Clone(),
+                JsonElement element => element.Clone(),
+                _ => payload
+            };
+        }
+
+        return payload switch
+        {
+            JsonDocument document => document.RootElement.Clone(),
+            JsonElement element => element.Clone(),
+            _ => JsonSerializer.SerializeToElement(payload, PayloadJsonOptions)
+        };
+    }
+
+    private static bool ShouldPreserveNestedNulls(string eventType)
+    {
+        return string.Equals(eventType, HubEventTypes.AppInstanceRegistered, StringComparison.Ordinal)
+            || string.Equals(eventType, HubEventTypes.AppInstanceUnregistered, StringComparison.Ordinal);
     }
 
     /// <summary>

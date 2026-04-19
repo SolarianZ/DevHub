@@ -70,7 +70,7 @@ def test_resolve_host_assembly_path_should_skip_local_build_when_prebuilt_host_p
 
 
 def _create_fake_repository_root() -> Path:
-    return Path(tempfile.mkdtemp(prefix="devhub-python-host-fixture-"))
+    return Path(tempfile.mkdtemp(prefix="devhub-python-host-fixture-")).resolve()
 
 
 def _create_configured_host_assembly(repo_root: Path, relative_path: Path) -> Path:

@@ -1,6 +1,6 @@
 # DevHub Schema 包（v1.0.1）
 
-本目录提供 DevHub Hub v1.0.1 的版本化 JSON Schema 资产，供第三方开发者在不阅读 SDK 源码的前提下完成：
+本目录提供 DevHub Hub v1.0.1 的版本化 JSON Schema 资产，供第三方开发者在不阅读 SDK 源代码的前提下完成：
 
 - `hub.json` 发现文件校验
 - AppDefinition / AppInstance / AppInstanceRegistration / Invocation / ValidationIssue 数据结构校验

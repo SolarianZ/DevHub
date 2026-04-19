@@ -670,7 +670,11 @@ public sealed class InvocationRpcHandler : IRpcHandler
                 -32011,
                 "invocation_expired",
                 request.Id,
-                new { invocationId }),
+                new
+                {
+                    invocationId,
+                    reason = "unknown_invocation"
+                }),
             InvocationRespondStatus.Expired => TransportResponseFactory.CreateErrorResponse(
                 -32011,
                 "invocation_expired",

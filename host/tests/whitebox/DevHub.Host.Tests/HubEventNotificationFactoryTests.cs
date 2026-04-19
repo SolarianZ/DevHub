@@ -2,6 +2,7 @@ namespace DevHub.Host.Tests;
 
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DevHub.Core.Services.Events;
 using DevHub.Host.Transport;
 
@@ -66,5 +67,65 @@ public class HubEventNotificationFactoryTests
         Assert.True(parameters.TryGetProperty("payload", out var payload));
         Assert.Equal(JsonValueKind.Null, payload.ValueKind);
     }
-}
 
+    [Fact]
+    public void Impl_HubEventNotification_WhenPayloadContainsNullField_ShouldPreserveNestedNull()
+    {
+        var delivery = new HubEventDelivery
+        {
+            ConnectionId = "conn-3",
+            SubscriptionId = "sub-3",
+            Type = "app.instance.registered",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "event.global.app",
+                instanceId = "inst-event-global",
+                scope = (string?)null
+            }
+        };
+
+        var json = JsonSerializer.SerializeToElement(
+            HubEventNotificationFactory.Create(delivery),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+        var payload = json.GetProperty("params").GetProperty("payload");
+        Assert.True(payload.TryGetProperty("scope", out var scope));
+        Assert.Equal(JsonValueKind.Null, scope.ValueKind);
+    }
+
+    [Fact]
+    public void Impl_HubEventNotification_WhenDefinitionPayloadContainsOptionalNullField_ShouldOmitNestedNull()
+    {
+        var delivery = new HubEventDelivery
+        {
+            ConnectionId = "conn-4",
+            SubscriptionId = "sub-4",
+            Type = "app.definition.upserted",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "definition.app",
+                definition = new
+                {
+                    appId = "definition.app",
+                    displayName = "Definition App",
+                    description = (string?)null
+                }
+            }
+        };
+
+        var json = JsonSerializer.SerializeToElement(
+            HubEventNotificationFactory.Create(delivery),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+        var definition = json.GetProperty("params").GetProperty("payload").GetProperty("definition");
+        Assert.False(definition.TryGetProperty("description", out _));
+    }
+}

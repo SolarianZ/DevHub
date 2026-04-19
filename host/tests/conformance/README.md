@@ -224,14 +224,14 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 
 ## 7. 第三方最小闭环
 
-如果你的目标是“无需阅读仓库内 SDK 源码，完成接入与自测”，最小步骤是：
+如果你的目标是“无需阅读仓库内 SDK 源代码，完成接入与自测”，最小步骤是：
 
 1. 阅读 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md)、[`docs/specification/schema/v1.0.1/README.md`](../../../docs/specification/schema/v1.0.1/README.md) 与 [`docs/specification/protocol-examples/v1.0.1/README.md`](../../../docs/specification/protocol-examples/v1.0.1/README.md)。
 2. 用自己的技术栈实现一个 adapter，读取 `execution-context.json` 并执行对应向量。
 3. 编写 adapter manifest。
 4. 运行 `python host/tests/conformance/vector_runner.py --adapter-manifest <manifest>`，必要时再用 `--case-id CONF-001` 或 `--vector-id ...` 缩小范围。
 
-这样就能在不依赖仓库内 SDK 源码的前提下，直接复用官方向量与 runner 完成自测。
+这样就能在不依赖仓库内 SDK 源代码的前提下，直接复用官方向量与 runner 完成自测。
 
 ## 8. 输出解释
 

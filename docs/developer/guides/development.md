@@ -81,12 +81,14 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 说明：
 
 - 解决方案统一使用 `.slnx`，不要引入 `.sln` 文件。
-- `dotnet run` 适合本地开发与联调；发布场景请使用 [`deployment.md`](../operations/deployment.md) 中的 `dotnet publish` 流程。
-- `npm --prefix apps/monitor run build:web` 用于验证 Monitor 前端构建、类型检查和 `JS/TS SDK` 构建入口。
-- `npm --prefix apps/monitor test` 用于执行 Monitor 前端状态机、连接层和定义编辑流程测试。
+- `dotnet run` 适合本地开发与联调；仓库级发布或 dry-run 打包优先使用 [`deployment.md`](../operations/deployment.md) 中的仓库级一键打包脚本，只有在需要 Host 本地固定产物目录时才单独使用 `dotnet publish`。
+- `npm --prefix apps/monitor run build:web` 用于验证 Monitor 前端构建与类型检查。
+- `npm --prefix apps/monitor test` 用于执行 Monitor 前端控制器测试、日志/定义工作流测试，以及基于真实 Host fixture 的前端回归。
 - `npm --prefix apps/monitor run test:native` 用于执行 Monitor 原生后端单元测试。
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
+- Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
+- Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。
 - `python3 scripts/sdk/run_integration_full.py` 是仓库级 SDK 集成测试的 build-once / run-many 本地入口：脚本会先把 `DevHub.Host` 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 依次运行 `.NET`、`JS/TS`、`Python` SDK 测试。执行前请先准备好 JS / Python 依赖。
 - `python3 scripts/docs/check_markdown_links.py` 会扫描仓库内所有未被 `.gitignore` 忽略的 `.md` 文件，提取 `[text](path)` 形式的本地路径超链接并校验目标是否存在；发现失效路径时，会按文件分组输出原始超链接并返回非零退出码。
@@ -95,7 +97,64 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --branch-threshold 0.80` 用于校验 Host 白盒测试覆盖率门槛；覆盖率 settings 位于 `host/tests/tools/coverage.runsettings`，脚本会优先使用 `trx` 附件中的 `coverage.cobertura.xml`，并忽略同工程下内容重复的 GUID 镜像副本。
 - 更细的黑盒 / conformance / tools 分层说明见 [`host/tests/README.md`](../../../host/tests/README.md)。
 
-## 5. 推荐开发流程
+## 5. SDK 工作区开发与验证
+
+### 5.1 `.NET SDK`
+
+常用命令：
+
+```bash
+dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
+dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+```
+
+说明：
+
+- `.NET SDK` 集成测试会先准备隔离 Host 运行副本，再为每个测试用例分配独立临时 `DEVHUB_DATA_DIR`。
+- 默认情况下，测试夹具会把 Host 构建到自己的隔离输出目录，再从该隔离产物启动临时 Host，不直接复用源代码树下的默认构建输出。
+- 如果需要关闭这一步默认构建，或希望与其他语言 SDK 统一复用同一份 Host 产物，请优先设置 `DEVHUB_SDK_HOST_ASSEMBLY`；如需只覆盖 `.NET SDK`，可改用 `DEVHUB_DOTNET_SDK_HOST_ASSEMBLY`。
+
+### 5.2 `JS/TS SDK`
+
+常用命令：
+
+```bash
+npm --prefix sdks/javascript ci
+npm --prefix sdks/javascript run typecheck
+npm --prefix sdks/javascript run build
+npm --prefix sdks/javascript test
+npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
+```
+
+说明：
+
+- `JS/TS SDK` 根入口必须保持 `Node.js 20+` 与浏览器 / WebView 双运行时可导入；Node.js 文件系统发现能力统一通过 `@devhub/sdk-javascript/runtime` 暴露。
+- `npm --prefix sdks/javascript test` 中的集成测试会自行构建并启动临时 DevHub Host，为当前测试文件分配独立临时 `dataDir`，不会连接开发机默认数据目录下的常驻 Hub。
+- 如果需要关闭 Host 的默认临时构建，或希望与其他语言 SDK 并行复用同一份 Host 产物，请优先设置 `DEVHUB_SDK_HOST_ASSEMBLY`；如需只覆盖 `JS/TS SDK`，可改用 `DEVHUB_JS_SDK_HOST_ASSEMBLY`。
+
+### 5.3 `Python SDK`
+
+常用命令：
+
+```bash
+python3 -m pip install -e "./sdks/python[test]"
+python3 -m pytest sdks/python/tests
+python3 -m pip install build
+python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
+```
+
+说明：
+
+- `Python SDK` 集成测试会先准备隔离 Host 运行副本，再为每个用例分配独立临时 `DEVHUB_DATA_DIR`；如需验证这组测试，请直接运行 `pytest`，不要先手工启动本地 Hub。
+- 如果需要关闭 Host 的默认临时构建，或希望与其他语言 SDK 并行复用同一份 Host 产物，请优先设置 `DEVHUB_SDK_HOST_ASSEMBLY`；如需只覆盖 `Python SDK`，可改用 `DEVHUB_PYTHON_SDK_HOST_ASSEMBLY`。
+
+### 5.4 跨语言 SDK 验证
+
+- `python3 scripts/sdk/run_integration_full.py` 会先把 `DevHub.Host` 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 依次运行 `.NET`、`JS/TS`、`Python` SDK 测试。
+- 如需观察 SDK 集成测试或 Host fixture 启动阶段的实时等待状态，可设置 `DEVHUB_TEST_LIVE_STATUS=true`；该变量接受 `1/0`、`true/false`、`yes/no`、`on/off`。
+
+## 6. 推荐开发流程
 
 1. 先阅读 [`Specification.md`](../../specification/protocol/Specification.md) 中对应章节，确认改动是否影响公开契约。
 2. 执行 `dotnet build host/DevHub.slnx -c Release`，确保当前工作区基础可构建。
@@ -109,9 +168,9 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 npm --prefix apps/monitor run verify
 ```
 
-## 6. 本地联调
+## 7. 本地联调
 
-### 6.1 启动 Host
+### 7.1 启动 Host
 
 ```bash
 dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
@@ -119,7 +178,7 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
 启动后，Hub 会在 `<dataDir>/runtime/` 下写出发现文件 `hub.json` 与访问令牌 `token.txt`。数据根目录的默认位置与覆盖方式见 [`deployment.md`](../operations/deployment.md)。
 
-### 6.2 发现地址与 token
+### 7.2 发现地址与 token
 
 客户端必须以 `hub.json` 为权威来源读取下列字段：
 
@@ -129,9 +188,9 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
 如需查看当前数据根目录、发现文件和 token 的最小诊断脚本，请参考 [`troubleshooting.md`](../operations/troubleshooting.md) 中“3.1 读取 `hub.json` 与 token”一节。
 
-### 6.3 HTTP 鉴权与 `hub.ping`
+### 7.3 HTTP 鉴权与 `hub.ping`
 
-以下示例中的 `DEVHUB_HTTP_BASE_URL` 与 `DEVHUB_TOKEN` 需要替换为 6.2 中从 `hub.json` 与 `tokenFile` 读取出的实际值，或先导出为同名环境变量。
+以下示例中的 `DEVHUB_HTTP_BASE_URL` 与 `DEVHUB_TOKEN` 需要替换为 7.2 中从 `hub.json` 与 `tokenFile` 读取出的实际值，或先导出为同名环境变量。
 
 ```bash
 curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
@@ -162,7 +221,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 }
 ```
 
-### 6.4 `hub.invoke.request` 请求体示例
+### 7.4 `hub.invoke.request` 请求体示例
 
 前提：目标 `appId` 有在线实例可 `poll/respond`；否则会返回 `-32010 instance_not_found`。
 
@@ -190,7 +249,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 }
 ```
 
-### 6.5 WebSocket 鉴权与订阅
+### 7.5 WebSocket 鉴权与订阅
 
 首条消息必须是带 `id` 的 `hub.ws.authenticate` 请求：
 
@@ -210,7 +269,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 
 认证成功后，可发送 `hub.events.subscribe` 订阅事件。
 
-## 7. 最小验证要求
+## 8. 最小验证要求
 
 涉及协议、宿主、公开接口或运行时行为的改动，在提交前至少执行：
 
@@ -227,7 +286,7 @@ python3 host/tests/blackbox/test_runner.py --smoke --no-header
 python3 host/tests/blackbox/test_runner.py --full --no-header
 ```
 
-## 8. 相关文档
+## 9. 相关文档
 
 - [`docs/README.md`](../../README.md)
 - [`docs/specification/protocol/Specification.md`](../../specification/protocol/Specification.md)

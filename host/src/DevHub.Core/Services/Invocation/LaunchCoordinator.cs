@@ -147,7 +147,7 @@ public class LaunchCoordinator
         System.Diagnostics.Process? process;
         try
         {
-            process = StartProcess(launchConfig!, appId, scope, httpBaseUrl, resolvedDedupeKey);
+            process = StartProcess(launchConfig!, appId, scope, httpBaseUrl);
             if (process is null)
             {
                 RemoveDedupeRecord(resolvedDedupeKey, launchId);
@@ -215,15 +215,13 @@ public class LaunchCoordinator
         LaunchConfiguration launchConfig,
         string appId,
         string? scope,
-        string httpBaseUrl,
-        string dedupeKey)
+        string httpBaseUrl)
     {
         var arguments = RenderTemplate(
             launchConfig.ArgsTemplate,
             appId,
             scope,
-            httpBaseUrl,
-            dedupeKey);
+            httpBaseUrl);
 
         return _processLauncher.Start(launchConfig, arguments);
     }
@@ -251,8 +249,7 @@ public class LaunchCoordinator
         string? template,
         string appId,
         string? scope,
-        string httpBaseUrl,
-        string? dedupeKey)
+        string httpBaseUrl)
     {
         if (string.IsNullOrEmpty(template))
         {
@@ -266,8 +263,7 @@ public class LaunchCoordinator
             .Replace("{appId}", appId, StringComparison.Ordinal)
             .Replace("{scope}", scopeValue, StringComparison.Ordinal)
             .Replace("{scopeOrGlobal}", scopeOrGlobal, StringComparison.Ordinal)
-            .Replace("{httpBaseUrl}", httpBaseUrl, StringComparison.Ordinal)
-            .Replace("{dedupeKey}", dedupeKey ?? string.Empty, StringComparison.Ordinal);
+            .Replace("{httpBaseUrl}", httpBaseUrl, StringComparison.Ordinal);
     }
 
     private string ResolveDedupeKey(
@@ -288,9 +284,9 @@ public class LaunchCoordinator
             template = DefaultDedupeKeyTemplate;
         }
 
-        var rendered = RenderTemplate(template, appId, scope, httpBaseUrl, dedupeKey: string.Empty);
+        var rendered = RenderTemplate(template, appId, scope, httpBaseUrl);
         return string.IsNullOrWhiteSpace(rendered)
-            ? RenderTemplate(DefaultDedupeKeyTemplate, appId, scope, httpBaseUrl, dedupeKey: string.Empty) ?? $"{appId}:{scope ?? "global"}"
+            ? RenderTemplate(DefaultDedupeKeyTemplate, appId, scope, httpBaseUrl) ?? $"{appId}:{scope ?? "global"}"
             : rendered;
     }
 

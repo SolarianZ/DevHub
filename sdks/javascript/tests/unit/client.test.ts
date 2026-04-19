@@ -712,6 +712,40 @@ it("RPC 错误应映射为 DevHubRpcError 并暴露辅助属性", async () => {
   });
 });
 
+it("invocation_expired 应暴露 unknown_invocation 的辅助属性", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, undefined, {
+      code: DevHubRpcErrorCode.InvocationExpired,
+      message: "invocation_expired",
+      data: {
+        invocationId: "invk-unknown",
+        reason: "unknown_invocation"
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-unknown-invocation-client",
+    dataDir: runtimeDir
+  });
+
+  let capturedError: unknown;
+  try {
+    await client.ping();
+  } catch (error) {
+    capturedError = error;
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(DevHubRpcErrorCode.InvocationExpired);
+  expect(rpcError.invocationId).toBe("invk-unknown");
+  expect(rpcError.reason).toBe("unknown_invocation");
+});
+
 it("请求应携带协议头与鉴权头", async () => {
   const runtimeDir = await createRuntime();
   const clientSessionId = "11111111-1111-4111-8111-111111111111";
@@ -1650,7 +1684,9 @@ function createConnectionInfo() {
 }
 
 async function createRuntime(): Promise<string> {
-  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"));
+  const dataDir = await fsPromises.realpath(
+    await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-unit-"))
+  );
   const runtimeDir = path.join(dataDir, "runtime");
   tempRoots.push(dataDir);
 

@@ -14,6 +14,13 @@ from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, Rp
 
 class TestAuthProtocol(unittest.TestCase):
     """鉴权与协议版本测试类"""
+    _RPC_CORS_ALLOWED_HEADERS = [
+        "Authorization",
+        "Content-Type",
+        "X-DevHub-Protocol",
+        "X-DevHub-ClientId",
+        "X-DevHub-ClientSessionId",
+    ]
 
     def _build_payload(self, request_id, method="hub.ping", params=None):
         """构造 JSON-RPC 请求体"""
@@ -24,20 +31,73 @@ class TestAuthProtocol(unittest.TestCase):
             "params": params or {}
         }
 
-    def _build_headers(self, token, content_type="application/json"):
+    def _build_headers(self, token, content_type="application/json", origin=None):
         """构造标准请求头"""
-        return {
+        headers = {
             "Content-Type": content_type,
             "Authorization": f"Bearer {token}",
             "X-DevHub-Protocol": "1",
             "X-DevHub-ClientId": "PythonTestClient",
             "X-DevHub-ClientSessionId": str(uuid.uuid4())
         }
+        if origin:
+            headers["Origin"] = origin
+        return headers
 
     def _post_json(self, base_url, headers, payload):
         """发送 JSON 请求并返回 (status_code, json_response)"""
         response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
         return response.status_code, response.json()
+
+    def _post_json_response(self, base_url, headers, payload):
+        """发送 JSON 请求并返回原始 HTTP 响应。"""
+        return requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+
+    def _assert_origin_cors_headers(self, result, response, origin, require_preflight=False):
+        """断言带 Origin 的 /rpc 响应包含 CORS 头。"""
+        allow_origin = response.headers.get("Access-Control-Allow-Origin")
+        if allow_origin != origin:
+            result.mark_failure(
+                f"❌ Access-Control-Allow-Origin 不正确: 期望 {origin}，实际 {allow_origin}"
+            )
+            return False
+
+        vary_values = [
+            item.strip().lower()
+            for item in response.headers.get("Vary", "").split(",")
+            if item.strip()
+        ]
+        if "origin" not in vary_values:
+            result.mark_failure(f"❌ Vary 头缺少 Origin: {response.headers.get('Vary')}")
+            return False
+
+        if not require_preflight:
+            return True
+
+        allow_methods = {
+            item.strip().upper()
+            for item in response.headers.get("Access-Control-Allow-Methods", "").split(",")
+            if item.strip()
+        }
+        if not {"POST", "OPTIONS"}.issubset(allow_methods):
+            result.mark_failure(
+                f"❌ Access-Control-Allow-Methods 未包含 POST/OPTIONS: {response.headers.get('Access-Control-Allow-Methods')}"
+            )
+            return False
+
+        allow_headers = {
+            item.strip().lower()
+            for item in response.headers.get("Access-Control-Allow-Headers", "").split(",")
+            if item.strip()
+        }
+        for required_header in self._RPC_CORS_ALLOWED_HEADERS:
+            if required_header.lower() not in allow_headers:
+                result.mark_failure(
+                    f"❌ Access-Control-Allow-Headers 缺少 {required_header}: {response.headers.get('Access-Control-Allow-Headers')}"
+                )
+                return False
+
+        return True
 
     def test_ping_with_valid_credentials(self):
         """测试使用有效凭证调用 hub.ping"""
@@ -515,6 +575,109 @@ class TestAuthProtocol(unittest.TestCase):
 
         return result
 
+    def test_rpc_options_preflight_returns_cors_headers(self):
+        """测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头。"""
+        result = TestResult("测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头")
+
+        try:
+            base_url, _ = DiscoveryService.get_hub_info()
+            origin = "http://localhost:1420"
+            response = requests.options(
+                f"{base_url}/rpc",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": ", ".join(self._RPC_CORS_ALLOWED_HEADERS),
+                },
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code, expected_status=204):
+                return result
+
+            if not self._assert_origin_cors_headers(result, response, origin, require_preflight=True):
+                return result
+
+            if response.text.strip():
+                result.mark_failure(f"❌ OPTIONS /rpc 不应返回响应体: {response.text}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_post_with_origin_returns_cors_headers_on_success(self):
+        """测试带 Origin 的 POST /rpc 成功响应返回 CORS 头。"""
+        result = TestResult("测试带 Origin 的 POST /rpc 成功响应返回 CORS 头")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            origin = "tauri://localhost"
+            response = self._post_json_response(
+                base_url,
+                self._build_headers(token, origin=origin),
+                self._build_payload("cors-success-id"),
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_success(result, body, ["serverTimeUtc"]):
+                return result
+
+            if not self._assert_origin_cors_headers(result, response, origin):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_post_with_origin_returns_cors_headers_on_jsonrpc_error(self):
+        """测试带 Origin 的 POST /rpc 错误响应返回 CORS 头。"""
+        result = TestResult("测试带 Origin 的 POST /rpc 错误响应返回 CORS 头")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            origin = "http://localhost:1420"
+            headers = self._build_headers(token, origin=origin)
+            headers.pop("X-DevHub-Protocol", None)
+            response = self._post_json_response(
+                base_url,
+                headers,
+                self._build_payload("cors-error-id"),
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                body,
+                expected_code=-32099,
+                expected_message="not_supported",
+                expected_id="cors-error-id",
+                expected_data={"expected": 1, "reason": "missing"}
+            ):
+                return result
+
+            if not self._assert_origin_cors_headers(result, response, origin):
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_http_status_code_always_200(self):
         """测试 HTTP 响应状态码始终为 200"""
         result = TestResult("测试 HTTP 响应状态码始终为 200")
@@ -577,6 +740,9 @@ class TestAuthProtocol(unittest.TestCase):
             self.test_jsonrpc_id_null_rejected,
             self.test_jsonrpc_id_must_be_string_or_number,
             self.test_content_type_must_be_application_json,
+            self.test_rpc_options_preflight_returns_cors_headers,
+            self.test_post_with_origin_returns_cors_headers_on_success,
+            self.test_post_with_origin_returns_cors_headers_on_jsonrpc_error,
             self.test_http_status_code_always_200
         ]
         return [test() for test in tests]

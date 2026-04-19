@@ -118,12 +118,21 @@
 
 ### 3.2 HTTP 传输
 
-| 属性            | 要求                                            |
-| --------------- | ----------------------------------------------- |
-| 端点 (Endpoint) | `POST /rpc`（基础 URL 来自 `hub.json`）         |
-| `Content-Type`  | **必须**为 `application/json`（允许指定字符集） |
-| HTTP 状态码     | 即使发生错误也**必须**始终返回 `200 OK`         |
-| 错误信号        | **必须**使用 JSON-RPC 的 `error` 字段           |
+| 属性            | 要求                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| 端点 (Endpoint) | `/rpc`（基础 URL 来自 `hub.json`）；JSON-RPC 请求使用 `POST`，浏览器 / WebView 预检使用 `OPTIONS`        |
+| `Content-Type`  | `POST /rpc` 的请求体 **必须**为 `application/json`（允许指定字符集）                                      |
+| HTTP 状态码     | `POST /rpc` 即使发生错误也**必须**始终返回 `200 OK`；`OPTIONS /rpc` 预检成功时**必须**返回 `204 No Content` |
+| 错误信号        | `POST /rpc` **必须**使用 JSON-RPC 的 `error` 字段；`OPTIONS /rpc` **不得**返回 JSON-RPC 响应体           |
+
+规范性要求：
+- `OPTIONS /rpc` **必须**作为浏览器 / WebView 直连 Host 的预检入口单独处理，**不得**进入 JSON-RPC 请求体验证、协议头校验或 Bearer Token 鉴权链路。
+- 当 `OPTIONS /rpc` 请求同时携带 `Origin` 和 `Access-Control-Request-Method: POST` 时，Host **必须**将其视为有效预检，并在响应中声明允许的方法 `POST`、`OPTIONS`。
+- 上述预检成功响应 **必须**返回与请求 `Origin` 完全一致的 `Access-Control-Allow-Origin`，并 **必须**返回 `Vary: Origin`。
+- 上述预检响应 **必须**允许至少以下请求头：`Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId`。
+- `OPTIONS /rpc` 预检成功时 **不得**要求 `Authorization`、JSON-RPC body 或其他仅适用于 `POST /rpc` 的业务字段。
+- 当 `POST /rpc` 请求携带 `Origin` 时，无论响应是 JSON-RPC `result` 还是 JSON-RPC `error`，Host **必须**返回与请求 `Origin` 完全一致的 `Access-Control-Allow-Origin`，并 **必须**返回 `Vary: Origin`。
+- 上述浏览器 / WebView 直连规则仅适用于 `/rpc`；WebSocket 传输行为仍以本规范 §3.3、§4.3 为准。
 
 ---
 
@@ -235,7 +244,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 
 ---
 
-### 4.2 HTTP 请求头（**必须**存在）
+### 4.2 HTTP 请求头（`POST /rpc` **必须**存在）
 
 | 请求头                     | 格式             | 描述                                                                    |
 | -------------------------- | ---------------- | ----------------------------------------------------------------------- |
@@ -248,6 +257,8 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - 缺失/无效 `Authorization`：返回 `-32001 unauthorized`
 - 缺失/无效 `X-DevHub-Protocol`：返回 `-32099 not_supported`
 - 缺失 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId`：返回 `-32600 invalid_request` 且 `error.data.reason="missing_header"`
+
+浏览器 / WebView 的 `OPTIONS /rpc` 预检请求不适用本节要求；其行为由 §3.2 的 HTTP 传输规则定义。
 
 ---
 
@@ -768,8 +779,8 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 { "ok": true, "instances": [ /* AppInstance[] */ ] }
 ```
 规范性行为：
-- 如果 `includeAllScopes` 为 `true`，Hub **必须**忽略 `scope` 参数并返回所有作用域的实例。
-- 如果 `includeAllScopes` 为 `false`（或省略），Hub **必须**按 `scope` 过滤（省略时默认为全局）。
+- 如果 `includeAllScopes` 为 `true`，Hub **必须**忽略 `scope` 参数并返回所有作用域的实例；此时 `scope` 字段**不得**单独触发 `invalid_scope`。
+- 如果 `includeAllScopes` 为 `false`（或省略），Hub **必须**按 `scope` 过滤（省略时默认为全局）；若提供了 `scope` 字段，Hub **必须**先按 `string|null` 校验其类型与规范化规则，非法值（包括对象、数组、布尔值等）**必须**返回 `-32602 invalid_params`，并使用 `error.data.reason="invalid_scope"`。
 - `includeOffline` 默认为 `false`。
 
 #### 6.3.12 `hub.apps.launch` (仅限 HTTP)
@@ -794,18 +805,20 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```
 
 规范性行为：
-- `status` **必须**是以下之一：`started`, `starting`, `already_running`。
-- “Already running” (已在运行) 的定义为：“存在匹配 `appId` 和 `scope` 的**在线**注册实例” 或 “具有相同 `dedupeKey` 的启动正在进行中”。
+- `status` **必须**是以下之一：`started`, `starting`, `already_running`，且**必须**按以下路径稳定映射：
+  - `already_running`：存在匹配 `appId` 和 `scope` 的**在线**注册实例，或具有相同解析后 `dedupeKey` 的启动正在进行中。
+  - `started`：进程创建成功，且 `waitForRegisterMs = 0`；或 `waitForRegisterMs > 0` 且在等待窗口耗尽前观察到匹配实例在线。
+  - `starting`：进程创建成功，`waitForRegisterMs > 0`，且等待窗口耗尽前仍未观察到匹配实例在线。
 - Hub **必须**为 `dedupeKey` 维护一个去重窗口（默认 30 秒）。在此窗口内，具有相同 key 的并发启动**必须**返回 `already_running`。
 - 如果省略 `dedupeKey`，Hub **必须**使用 `AppDefinition.launch.dedupeKeyTemplate` 生成它。
-- **模板替换**：Hub **必须**支持 `dedupeKeyTemplate` 和 `argsTemplate` 中的以下占位符：
+- **模板替换**：Hub **必须**只支持 `dedupeKeyTemplate` 和 `argsTemplate` 中的以下占位符：
   - `{appId}`: 应用程序 ID。
   - `{scope}`: 请求的作用域（若为全局则为空字符串）。
   - `{scopeOrGlobal}`: 请求的作用域，若 scope 为 null/省略则为字面量字符串 `global`。
   - `{httpBaseUrl}`: Hub 的 HTTP 基础 URL（例如 `http://127.0.0.1:47231`）。
+- 上述集合之外的 token（例如 `{dedupeKey}`）**不得**获得隐藏运行时语义；Hub **必须**将其保留为字面量文本。
 - 如果 `AppDefinition.launch.dedupeKeyTemplate` 被省略或为 null，Hub **必须**使用默认模板：`{appId}:{scopeOrGlobal}`。
 - `waitForRegisterMs` 若省略则默认为 `0`，且**必须**为 ≥ 0 的整数（超出范围 => `-32602 invalid_params`）。
-- 如果 `waitForRegisterMs > 0`，Hub **应该**等待最长该时长以待实例注册。如果超时但进程已启动，返回 `status: "starting"`。
 - 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空，Hub **必须**返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。
 - Hub **必须**读取 `AppDefinition.launch.exePath`。若定义缺失：返回 `-32014`。若进程创建失败：返回 `-32020`。
 
@@ -905,7 +918,9 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 规范性行为：
 - Hub **必须**要求实例在轮询前已注册（`hub.apps.registerInstance`）；否则返回 `-32010 instance_not_found`。
 - Hub **必须**强制要求实例具有 `invoke.poll==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="poll_not_enabled"`。
-- Hub **必须**支持长轮询 (Long Polling)：如果没有可用项，Hub **必须**等待最长 `waitMs` 时长再返回空列表。
+- `waitMs` 若省略则默认为 `25000`，且**必须**为大于等于 `0` 的整数（非法值 => `-32602 invalid_params`）。
+- `waitMs = 0` **必须**表示“立即返回当前可用项或空列表”，不得进入长轮询等待。
+- 当 `waitMs > 0` 且没有可用项时，Hub **必须**支持长轮询 (Long Polling)：等待最长 `waitMs` 时长后返回当前可用项或空列表。
 - 成功的 `poll` **必须**更新实例的 `lastSeenUtc`。
 - 租约时长在每个条目的 `delivery.leaseSeconds` 中返回。
 
@@ -940,7 +955,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 **错误**：
 - `-32030 delivery_conflict`：如果租约无效/已过期、错误的实例响应或重复响应。
-- `-32011 invocation_expired`：如果调用已过期/被取消/超时。
+- `-32011 invocation_expired`：如果调用已过期/被取消/超时；当 `invocationId` 从未存在或已被 Hub 清理时，Hub **必须**继续返回该错误，并在 `error.data.reason="unknown_invocation"` 下提供稳定细分。
 - `-32602 invalid_params`：负载格式错误。
 
 #### 6.3.17 `hub.events.subscribe` (仅限 WS)
@@ -988,20 +1003,22 @@ Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
     "type": "app.instance.registered",
     "timeUtc": "2026-01-30T12:34:56Z",
     "payload": {
-      "invocationId": "...",
       "appId": "asset.indexer",
-      "instanceId": "asset.indexer:pid-12345:..."
+      "instanceId": "asset.indexer:pid-12345:...",
+      "scope": null
     }
   }
 }
 ```
 
 事件交付是尽力而为且非持久化的；Hub 在负载过高时**可以**丢弃事件。
+如果同一事件命中同一连接上的多个订阅，Hub **必须**按订阅逐条发送 `hub.event` 通知；每条通知**必须**只携带一个对应的 `subscriptionId`。
 
 规范性事件载荷：
 - `app.definition.upserted` 的 `payload` **必须**至少包含 `appId` 与最新 `definition`。
 - `app.definition.deleted` 的 `payload` **必须**至少包含 `appId`。
 - `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 `appId` 与 `instanceId`，且**不得**包含 `password`。
+- 如果 `app.instance.*.payload.scope` 存在，其值 **必须**使用实例镜像的规范化作用域表示：Global 为 `null`，显式作用域为非空字符串。
 
 ---
 
@@ -1096,7 +1113,7 @@ stateDiagram-v2
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
 | -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`; 包含上下文字段 |
 | -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`                                     |
-| -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用       | `invocationId?`: string; `elapsedMs?`: number                                                                         |
+| -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
 | -32014 | `app_definition_not_found` | 定义文件缺失 / 启动所需定义缺失     | `appId?`: string                                                                                                      |
 | -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string                                                     |

@@ -4,6 +4,7 @@
         "**/obj": true,
         "**/.vs": true,
         "**/.idea": true,
+        "**/.pytest_cache": true,
         "**/__pycache__": true
     },
     "search.exclude": {
@@ -11,6 +12,7 @@
         "**/obj": true,
         "**/.vs": true,
         "**/.idea": true,
+        "**/.pytest_cache": true,
         "**/__pycache__": true
     },
     "dotnet.defaultSolution": "host/DevHub.slnx"

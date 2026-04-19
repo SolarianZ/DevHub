@@ -1,16 +1,21 @@
+mod discovery;
+mod launch;
 mod logging;
 mod models;
 mod monitor;
+mod picker;
 mod runtime;
 mod settings;
+mod snapshot;
 
 use crate::models::{
-    BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogFileInfo, LogKind, LogReadResult,
-    MonitorSettings, ReadLogRequest, SettingsSnapshot,
+    BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogKind, MonitorSettings,
+    SettingsSnapshot,
 };
 use crate::monitor::MonitorCore;
 use anyhow::{Context, Result};
 use serde::Serialize;
+use std::path::Path;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State, WindowEvent};
@@ -74,6 +79,11 @@ async fn monitor_save_settings(
         "hostExecutablePath",
         4096,
     )?;
+    validate_optional_absolute_path(settings.data_dir_override.as_deref(), "dataDirOverride")?;
+    validate_optional_absolute_path(
+        settings.host_executable_path.as_deref(),
+        "hostExecutablePath",
+    )?;
 
     state
         .save_settings(app, settings)
@@ -103,20 +113,33 @@ async fn monitor_resume_discovery(
 }
 
 #[tauri::command]
-async fn monitor_list_logs(
+async fn monitor_open_log_directory(
     state: State<'_, MonitorCore>,
     kind: LogKind,
-) -> CommandResult<Vec<LogFileInfo>> {
-    state.list_logs(kind).map_err(CommandError::internal)
+) -> CommandResult<()> {
+    state
+        .open_log_directory(kind)
+        .map_err(CommandError::internal)
 }
 
 #[tauri::command]
-async fn monitor_read_log(
-    state: State<'_, MonitorCore>,
-    request: ReadLogRequest,
-) -> CommandResult<LogReadResult> {
-    validate_required_text(&request.file_name, "fileName", 255)?;
-    state.read_log(request).map_err(CommandError::internal)
+async fn monitor_pick_host_executable_path(
+    current_path: Option<String>,
+) -> CommandResult<Option<String>> {
+    validate_optional_text(current_path.as_deref(), "currentPath", 4096)?;
+    let selected_path = picker::pick_host_executable_path(current_path.as_deref());
+    validate_optional_absolute_path(selected_path.as_deref(), "selectedPath")?;
+    Ok(selected_path)
+}
+
+#[tauri::command]
+async fn monitor_pick_data_directory(
+    current_path: Option<String>,
+) -> CommandResult<Option<String>> {
+    validate_optional_text(current_path.as_deref(), "currentPath", 4096)?;
+    let selected_path = picker::pick_data_directory(current_path.as_deref());
+    validate_optional_absolute_path(selected_path.as_deref(), "selectedPath")?;
+    Ok(selected_path)
 }
 
 #[tauri::command]
@@ -138,6 +161,9 @@ pub fn run() {
     let monitor_state = MonitorCore::new().expect("failed to initialize monitor state");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = show_main_window(app);
+        }))
         .manage(monitor_state)
         .setup(|app| setup_monitor(app).map_err(Into::into))
         .on_window_event(|window, event| {
@@ -157,8 +183,9 @@ pub fn run() {
             monitor_save_settings,
             monitor_request_host_launch,
             monitor_resume_discovery,
-            monitor_list_logs,
-            monitor_read_log,
+            monitor_open_log_directory,
+            monitor_pick_host_executable_path,
+            monitor_pick_data_directory,
             monitor_write_frontend_log
         ])
         .run(tauri::generate_context!())
@@ -172,6 +199,26 @@ fn setup_monitor(app: &mut tauri::App) -> Result<()> {
     let state = app.state::<MonitorCore>();
     state.initialize(app.handle().clone())?;
     Ok(())
+}
+
+trait MainWindowHandle {
+    fn show_window(&self) -> tauri::Result<()>;
+    fn unminimize_window(&self) -> tauri::Result<()>;
+    fn focus_window(&self) -> tauri::Result<()>;
+}
+
+impl<R: tauri::Runtime> MainWindowHandle for tauri::WebviewWindow<R> {
+    fn show_window(&self) -> tauri::Result<()> {
+        self.show()
+    }
+
+    fn unminimize_window(&self) -> tauri::Result<()> {
+        self.unminimize()
+    }
+
+    fn focus_window(&self) -> tauri::Result<()> {
+        self.set_focus()
+    }
 }
 
 fn create_tray(app: &mut tauri::App) -> Result<()> {
@@ -207,13 +254,18 @@ fn create_tray(app: &mut tauri::App) -> Result<()> {
     Ok(())
 }
 
-fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
+fn show_main_window<R: tauri::Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("main") {
-        window.show()?;
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        restore_main_window(&window)?;
     }
 
+    Ok(())
+}
+
+fn restore_main_window(window: &impl MainWindowHandle) -> tauri::Result<()> {
+    window.show_window()?;
+    let _ = window.unminimize_window();
+    let _ = window.focus_window();
     Ok(())
 }
 
@@ -264,9 +316,27 @@ fn validate_optional_text(
     Ok(())
 }
 
+fn validate_optional_absolute_path(value: Option<&str>, field: &str) -> CommandResult<()> {
+    if let Some(value) = value {
+        if !Path::new(value.trim()).is_absolute() {
+            return Err(CommandError::new(
+                "invalid_argument",
+                format!("{field} 必须为绝对路径。"),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{should_hide_window_on_close, tray_menu_action_from_id, TrayMenuAction};
+    use super::{
+        restore_main_window, should_hide_window_on_close, tray_menu_action_from_id,
+        MainWindowHandle, TrayMenuAction,
+    };
+    use std::cell::Cell;
+    use std::io;
 
     #[test]
     fn should_hide_window_when_close_requested_without_exit_flag() {
@@ -285,5 +355,103 @@ mod tests {
             TrayMenuAction::Quit
         );
         assert_eq!(tray_menu_action_from_id("unknown"), TrayMenuAction::Ignore);
+    }
+
+    #[test]
+    fn restore_main_window_invokes_show_unminimize_and_focus() {
+        let window = RecordingWindow::success();
+
+        restore_main_window(&window).expect("expected window restore to succeed");
+
+        assert!(window.show_called.get());
+        assert!(window.unminimize_called.get());
+        assert!(window.focus_called.get());
+    }
+
+    #[test]
+    fn restore_main_window_returns_show_error_before_follow_up_actions() {
+        let window = RecordingWindow::with_results(
+            Err(tauri::Error::Io(io::Error::other("show failed"))),
+            Ok(()),
+            Ok(()),
+        );
+
+        let error = restore_main_window(&window).expect_err("expected show failure");
+
+        assert!(error.to_string().contains("show failed"));
+        assert!(window.show_called.get());
+        assert!(!window.unminimize_called.get());
+        assert!(!window.focus_called.get());
+    }
+
+    #[test]
+    fn restore_main_window_ignores_unminimize_and_focus_failures_after_show() {
+        let window = RecordingWindow::with_results(
+            Ok(()),
+            Err(tauri::Error::Io(io::Error::other("unminimize failed"))),
+            Err(tauri::Error::Io(io::Error::other("focus failed"))),
+        );
+
+        restore_main_window(&window).expect("follow-up failures should be ignored");
+
+        assert!(window.show_called.get());
+        assert!(window.unminimize_called.get());
+        assert!(window.focus_called.get());
+    }
+
+    struct RecordingWindow {
+        show_result: tauri::Result<()>,
+        unminimize_result: tauri::Result<()>,
+        focus_result: tauri::Result<()>,
+        show_called: Cell<bool>,
+        unminimize_called: Cell<bool>,
+        focus_called: Cell<bool>,
+    }
+
+    impl RecordingWindow {
+        fn success() -> Self {
+            Self::with_results(Ok(()), Ok(()), Ok(()))
+        }
+
+        fn with_results(
+            show_result: tauri::Result<()>,
+            unminimize_result: tauri::Result<()>,
+            focus_result: tauri::Result<()>,
+        ) -> Self {
+            Self {
+                show_result,
+                unminimize_result,
+                focus_result,
+                show_called: Cell::new(false),
+                unminimize_called: Cell::new(false),
+                focus_called: Cell::new(false),
+            }
+        }
+    }
+
+    impl MainWindowHandle for RecordingWindow {
+        fn show_window(&self) -> tauri::Result<()> {
+            self.show_called.set(true);
+            self.show_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
+
+        fn unminimize_window(&self) -> tauri::Result<()> {
+            self.unminimize_called.set(true);
+            self.unminimize_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
+
+        fn focus_window(&self) -> tauri::Result<()> {
+            self.focus_called.set(true);
+            self.focus_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|error| anyhow::anyhow!(error.to_string()).into())
+        }
     }
 }

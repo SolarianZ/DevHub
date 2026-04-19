@@ -24,7 +24,7 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖映射到 `sdks/javascript/` 工作区的 `@devhub/sdk-javascript` 包。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖固定指向仓库 GitHub Release 产出的 `devhub-sdk-javascript-<version>.tgz` 资产，对应 `sdks/javascript/` 工作区生成的 `@devhub/sdk-javascript` 包。
 
 `JS/TS SDK` 的额外开发约束：
 
@@ -60,6 +60,14 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 ```bash
 npm --prefix apps/monitor run verify
 ```
+
+如需单独生成 Monitor 本地发布产物，请使用独立脚本：
+
+```bash
+python scripts/release/package_monitor.py --release-id local-dry-run
+```
+
+该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程。
 
 ## 3. 外部协作者常用入口
 

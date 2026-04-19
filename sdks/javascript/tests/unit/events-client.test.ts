@@ -361,6 +361,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
               payload: {
                 appId: "test.app",
                 instanceId: "inst-1",
+                scope: null,
                 password: "secret-1"
               }
             });
@@ -813,7 +814,9 @@ async function createRuntime(overrides?: {
   httpBaseUrl?: string;
   wsUrl?: string;
 }): Promise<string> {
-  const dataDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"));
+  const dataDir = await fsPromises.realpath(
+    await fsPromises.mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-events-unit-"))
+  );
   const runtimeDir = path.join(dataDir, "runtime");
   tempRoots.push(dataDir);
 

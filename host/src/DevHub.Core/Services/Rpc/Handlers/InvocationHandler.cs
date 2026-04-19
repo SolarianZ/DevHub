@@ -638,7 +638,11 @@ public class InvocationHandler : IRpcHandler
                 Id = request.Id,
                 Result = new { ok = true }
             }),
-            InvocationRespondStatus.NotFound => Task.FromResult(RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new { invocationId })),
+            InvocationRespondStatus.NotFound => Task.FromResult(RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new
+            {
+                invocationId,
+                reason = "unknown_invocation"
+            })),
             InvocationRespondStatus.Expired => Task.FromResult(RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new { invocationId })),
             InvocationRespondStatus.DeliveryConflict => Task.FromResult(RpcErrorFactory.Create(
                 request.Id,

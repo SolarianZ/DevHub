@@ -54,6 +54,20 @@ def test_devhub_rpc_exception_when_code_is_unknown_should_return_none() -> None:
     assert exception.reason == "custom"
 
 
+def test_devhub_rpc_exception_should_expose_unknown_invocation_reason_and_id() -> None:
+    exception = DevHubRpcException(
+        code=DevHubRpcErrorCode.INVOCATION_EXPIRED,
+        message="invocation_expired",
+        data={"reason": "unknown_invocation", "invocationId": "invk-unknown"},
+        request_id="req-unknown-invocation",
+    )
+
+    assert exception.known_code == DevHubRpcErrorCode.INVOCATION_EXPIRED
+    assert exception.reason == "unknown_invocation"
+    assert exception.invocation_id == "invk-unknown"
+    assert exception.try_get_data_string("reason") == "unknown_invocation"
+
+
 def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,

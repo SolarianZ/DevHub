@@ -94,6 +94,36 @@ public sealed class RpcErrorMappingTests : IDisposable
         Assert.False(exception.TryGetCalleeError(out _));
     }
 
+    [Fact]
+    public async Task RpcErrorResponse_ShouldExposeUnknownInvocationReasonAndInvocationId()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-fixed\",\"error\":{\"code\":-32011,\"message\":\"invocation_expired\",\"data\":{\"invocationId\":\"invk-unknown\",\"reason\":\"unknown_invocation\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => "req-fixed");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+
+        Assert.Equal(DevHubRpcErrorCode.InvocationExpired, exception.KnownCode);
+        Assert.Equal("invk-unknown", exception.InvocationId);
+        Assert.Equal("unknown_invocation", exception.Reason);
+        Assert.True(exception.TryGetDataString("reason", out var reason));
+        Assert.Equal("unknown_invocation", reason);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))

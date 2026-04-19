@@ -52,6 +52,7 @@ public class RpcHttpEndpointHandler
         object? requestId = null;
         string? method = null;
         var suppressJsonRpcResponse = false;
+        IResult FinalizeResponse(IResult result) => RpcHttpCorsPolicy.WrapResponse(request, result);
 
         try
         {
@@ -65,7 +66,7 @@ public class RpcHttpEndpointHandler
             {
                 _logger.LogWarning("HTTP Content-Type 校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
                     clientId, contentTypeError.Error?.Code, contentTypeError.Error?.Message);
-                return Results.Json(contentTypeError, JsonOptions);
+                return FinalizeResponse(Results.Json(contentTypeError, JsonOptions));
             }
 
             using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
@@ -81,7 +82,7 @@ public class RpcHttpEndpointHandler
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "JSON 解析失败，返回 parse_error，ClientId: {ClientId}", clientId);
-                return Results.Json(TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), JsonOptions);
+                return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), JsonOptions));
             }
 
             using (requestDocument)
@@ -90,19 +91,19 @@ public class RpcHttpEndpointHandler
                 if (root.ValueKind == JsonValueKind.Array)
                 {
                     _logger.LogWarning("收到批量请求，按规范拒绝，ClientId: {ClientId}", clientId);
-                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
+                    return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions));
                 }
 
                 if (root.ValueKind != JsonValueKind.Object)
                 {
                     _logger.LogWarning("收到非对象 JSON-RPC 根节点，ClientId: {ClientId}", clientId);
-                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions);
+                    return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions));
                 }
 
                 if (!JsonRpcEnvelopeParser.TryParse(root, out var rpcRequest, out var requestErrorResponse))
                 {
                     _logger.LogWarning("JSON-RPC 信封无效，ClientId: {ClientId}", clientId);
-                    return Results.Json(requestErrorResponse, JsonOptions);
+                    return FinalizeResponse(Results.Json(requestErrorResponse, JsonOptions));
                 }
 
                 requestId = rpcRequest.Id;
@@ -131,10 +132,10 @@ public class RpcHttpEndpointHandler
 
                     if (suppressJsonRpcResponse)
                     {
-                        return Results.Empty;
+                        return FinalizeResponse(Results.Empty);
                     }
 
-                    return Results.Json(errorResponse, JsonOptions);
+                    return FinalizeResponse(Results.Json(errorResponse, JsonOptions));
                 }
 
                 rpcRequest.ClientId = validatedClientId;
@@ -147,10 +148,10 @@ public class RpcHttpEndpointHandler
 
                     if (suppressJsonRpcResponse)
                     {
-                        return Results.Empty;
+                        return FinalizeResponse(Results.Empty);
                     }
 
-                    return Results.Json(TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions);
+                    return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions));
                 }
 
                 if (TransportMethodPolicy.IsWebSocketOnlyMethod(rpcRequest.Method))
@@ -160,16 +161,16 @@ public class RpcHttpEndpointHandler
 
                     if (suppressJsonRpcResponse)
                     {
-                        return Results.Empty;
+                        return FinalizeResponse(Results.Empty);
                     }
 
-                    return Results.Json(
+                    return FinalizeResponse(Results.Json(
                         TransportResponseFactory.CreateErrorResponse(
                             -32099,
                             "not_supported",
                             rpcRequest.Id,
                             new { reason = "transport_mismatch", expected = "ws" }),
-                        JsonOptions);
+                        JsonOptions));
                 }
 
                 var response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
@@ -178,7 +179,7 @@ public class RpcHttpEndpointHandler
                     stopwatch.Stop();
                     _logger.LogInformation("通知请求已处理（无 id，不返回 JSON-RPC 响应）: {Method}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                         rpcRequest.Method, clientId, stopwatch.ElapsedMilliseconds);
-                    return Results.Empty;
+                    return FinalizeResponse(Results.Empty);
                 }
 
                 stopwatch.Stop();
@@ -187,7 +188,7 @@ public class RpcHttpEndpointHandler
 
                 _logger.LogDebug("RPC响应已生成，Method: {Method}, RequestId: {RequestId}, 响应长度: {ResponseLength}",
                     rpcRequest.Method, rpcRequest.Id, JsonSerializer.Serialize(response, JsonOptions).Length);
-                return Results.Json(response, JsonOptions);
+                return FinalizeResponse(Results.Json(response, JsonOptions));
             }
         }
         catch (Exception ex)
@@ -198,10 +199,10 @@ public class RpcHttpEndpointHandler
 
             if (suppressJsonRpcResponse)
             {
-                return Results.Empty;
+                return FinalizeResponse(Results.Empty);
             }
 
-            return Results.Json(TransportResponseFactory.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions);
+            return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions));
         }
     }
 }

@@ -62,13 +62,21 @@
 
 ## 3. 发布
 
-建议使用 Release 配置发布 Host：
+仓库级发布、dry-run 打包或需要与 GitHub Release 流程保持一致时，统一使用仓库脚本：
+
+```bash
+python scripts/release/package_release.py --release-id local-dry-run --channel local
+```
+
+该入口会先执行发布门禁，再在 `artifacts/release/<release-id>/` 下生成 Host 多平台压缩包、SDK 包、`release-manifest.json` 与 `release-notes.md`。正式对外交付、发布候选验证和维护者本地打包都应优先使用这一入口。
+
+如果只需要为当前机器准备一个固定的 Host 运行目录，而不需要整套发布资产，也可以单独执行：
 
 ```bash
 dotnet publish host/src/DevHub.Host/DevHub.Host.csproj -c Release -o ./artifacts/devhub
 ```
 
-发布目录中会包含 `DevHub.Host.dll` 及其依赖文件。若只做本地开发联调，也可直接使用 `dotnet run`；正式交付或固定产物验证时，优先使用 `dotnet publish` 的输出目录。
+该目录会包含 `DevHub.Host.dll` 及其依赖文件。若只做本地开发联调，也可直接使用 `dotnet run`；若只验证 Host 的本地固定产物，可使用 `dotnet publish` 输出目录。
 
 ## 4. 启动
 
@@ -101,7 +109,6 @@ dotnet .\artifacts\devhub\DevHub.Host.dll
 本地运行命令：
 
 ```bash
-npm --prefix sdks/javascript ci
 npm --prefix apps/monitor ci
 npm --prefix apps/monitor run tauri:dev
 ```
@@ -110,8 +117,9 @@ npm --prefix apps/monitor run tauri:dev
 
 - Monitor 通过原生后端解析有效 `DEVHUB_DATA_DIR`，并只在真实 `hub.ping` 成功后切入状态页。
 - Host 日志固定读取 `<DEVHUB_DATA_DIR>/logs/`。
-- Monitor 自身日志写入其本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`，当前目录会显示在 Monitor 设置页的“Monitor 日志目录”字段中。
+- Monitor 自身日志写入其本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`，帮助页提供 Host / Monitor 日志目录的直接打开入口。
 - 通过 Monitor 启动 Host 时，会把当前有效 `DEVHUB_DATA_DIR` 传递给子进程，保持发现目录与 Host 写盘目录一致。
+- Monitor 桌面壳层按单实例运行；重复打开安装后的快捷方式时，会直接唤醒已在运行的主窗口。
 
 ## 5. 上线后校验
 
