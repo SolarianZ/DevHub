@@ -12,9 +12,49 @@
 ## Tool 注册
 
 Dispatcher 支持两类等价注册入口：
+- 自动可用的内置 Tool
 - 直接注册实现 `IDevHubTool` 的对象
 - 按 `toolId` 注册 request handler、notify handler，或两者组合。
 无论走哪条入口，Tool 都进入同一个本地注册表，复用同一套冲突检测、路由和错误语义。
+
+### 内置 Tool
+
+Dispatcher 在 Unity Editor 加载和 Domain Reload 后会自动注册以下固定 `toolId`。这些标识属于 dispatcher 保留本地能力，不应用于自定义 Tool：
+
+- `execute-menu-item`
+  `payload` 必须是非空 JSON 字符串，内容为 Unity 菜单路径；request 返回 `EditorApplication.ExecuteMenuItem(string)` 的 `bool` 结果，notify 执行同一逻辑但丢弃返回值。
+
+  ```json
+  {
+    "toolId": "execute-menu-item",
+    "payload": "Assets/Reimport"
+  }
+  ```
+
+- `execute-method`
+  `payload` 必须是包含 `TypeName` 和 `MethodName` 的 JSON 对象，两个字段都要求非空字符串并按大小写精确匹配。`TypeName` 可使用 `Type.FullName` 或 `AssemblyQualifiedName`；仅允许调用 `public static` 无参方法。request 会返回方法结果对应的 JSON 值；若方法返回 `JToken`，则原样返回；若返回 `void` 或 `null`，则返回 JSON `null`。notify 会执行该方法，但不会返回额外响应。
+
+  ```json
+  {
+    "toolId": "execute-method",
+    "payload": {
+      "TypeName": "UnityEditor.AssetDatabase, UnityEditor",
+      "MethodName": "Refresh"
+    }
+  }
+  ```
+
+- `get-data-path`
+  不要求额外参数；若提供 `payload` 会被忽略。request 返回当前 `Application.dataPath` 字符串，notify 不返回额外响应。
+
+  ```json
+  {
+    "toolId": "get-data-path",
+    "payload": {
+      "ignored": true
+    }
+  }
+  ```
 
 ### 对象注册
 
@@ -122,7 +162,7 @@ Request 路由失败时 dispatcher 返回固定 callee error：`1001 invalid_dis
 
 Dispatcher 在 Unity Editor 加载后自动读取 DevHub runtime discovery，upsert 当前 Unity 项目的 `AppDefinition`，并注册一个具备 `poll/respond` 能力的 `AppInstance`。`appId` 优先使用命令行 `-devhubAppId <value>`，否则读取 `EditorUserSettings`，首次运行时生成并保存。`instanceId` 与 `instancePassword` 同样保存到 `EditorUserSettings`，用于 Domain Reload 后保持同一逻辑实例身份。
 
-Tool 注册表不持久化。Domain Reload 后，Tool 需要自行重新调用 `RegisterTool`。
+Tool 注册表不持久化。Domain Reload 后，内置 Tool 会自动重新注册；自定义 Tool 仍需要自行调用 `RegisterTool`。
 
 ## 状态窗口
 
