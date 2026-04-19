@@ -64,46 +64,91 @@ namespace DevHubDispatcher.Editor
         }
 
         /// <summary>
+        /// 基于 request handler 注册一个 Unity 内部 Tool。
+        /// </summary>
+        /// <param name="toolId">Tool 的稳定标识。</param>
+        /// <param name="requestHandler">处理 request 的委托。</param>
+        /// <returns>注册是否成功以及诊断消息。</returns>
+        public static Result RegisterTool(string toolId, DevHubRequestHandler requestHandler)
+        {
+            return RegisterTool(toolId, requestHandler, null);
+        }
+
+        /// <summary>
+        /// 基于 notify handler 注册一个 Unity 内部 Tool。
+        /// </summary>
+        /// <param name="toolId">Tool 的稳定标识。</param>
+        /// <param name="notifyHandler">处理 notify 的委托。</param>
+        /// <returns>注册是否成功以及诊断消息。</returns>
+        public static Result RegisterTool(string toolId, DevHubNotifyHandler notifyHandler)
+        {
+            return RegisterTool(toolId, null, notifyHandler);
+        }
+
+        /// <summary>
+        /// 基于委托注册一个 Unity 内部 Tool。至少需要提供一个非空 handler。
+        /// </summary>
+        /// <param name="toolId">Tool 的稳定标识。</param>
+        /// <param name="requestHandler">处理 request 的委托；可为空。</param>
+        /// <param name="notifyHandler">处理 notify 的委托；可为空。</param>
+        /// <returns>注册是否成功以及诊断消息。</returns>
+        /// <remarks>当前重载集合即最终公开注册契约；dispatcher 不为早期未实现的占位 API 保留兼容层。</remarks>
+        public static Result RegisterTool(string toolId, DevHubRequestHandler requestHandler, DevHubNotifyHandler notifyHandler)
+        {
+            if (!TryCreateDelegateTool(toolId, requestHandler, notifyHandler, out DevHubToolDelegate tool, out Result validationResult))
+            {
+                return validationResult;
+            }
+
+            return RegisterToolCore(tool);
+        }
+
+        /// <summary>
         /// 注册一个 Unity 内部 Tool。Tool 只进入本地路由表，不会注册为 Host 可见的 app。
         /// </summary>
         /// <param name="tool">实现 <see cref="IDevHubTool"/> 的 Tool 实例。</param>
         /// <returns>注册是否成功以及诊断消息。</returns>
         public static Result RegisterTool(IDevHubTool tool)
         {
-            if (tool == null)
+            if (!TryValidateToolRegistration(tool, out Result validationResult))
             {
-                return LogFailure(ToolRegistryLogCategory, "tool 不能为空。");
+                return validationResult;
             }
 
-            if (string.IsNullOrWhiteSpace(tool.ToolId))
+            return RegisterToolCore(tool);
+        }
+
+        /// <summary>
+        /// 按 <paramref name="toolId"/> 注销一个 Unity 内部 Tool。对象注册和委托注册都适用。
+        /// </summary>
+        /// <param name="toolId">已注册 Tool 的稳定标识。</param>
+        /// <returns>注销是否成功以及诊断消息。</returns>
+        /// <remarks>调用方不需要持有委托包装实例，也不需要依赖未实现旧 API 的兼容行为。</remarks>
+        public static Result UnregisterTool(string toolId)
+        {
+            if (string.IsNullOrWhiteSpace(toolId))
             {
                 return LogFailure(ToolRegistryLogCategory, "toolId 不能为空。");
             }
 
             lock (SyncRoot)
             {
-                if (ToolIdsByInstance.ContainsKey(tool))
+                if (!ToolsById.TryGetValue(toolId, out IDevHubTool tool))
                 {
-                    return LogFailure(ToolRegistryLogCategory, "该 Tool 实例已经注册。");
+                    return LogFailure(ToolRegistryLogCategory, "toolId 尚未注册: " + toolId);
                 }
 
-                if (ToolsById.ContainsKey(tool.ToolId))
-                {
-                    return LogFailure(ToolRegistryLogCategory, "toolId 已经被注册: " + tool.ToolId);
-                }
-
-                ToolsById.Add(tool.ToolId, tool);
-                ToolIdsByInstance.Add(tool, tool.ToolId);
+                RemoveToolRegistration(tool, toolId);
             }
 
-            DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注册。toolId=" + tool.ToolId);
-            return Result.Ok("Tool 已注册: " + tool.ToolId);
+            DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注销。toolId=" + toolId);
+            return Result.Ok("Tool 已注销: " + toolId);
         }
 
         /// <summary>
         /// 注销一个 Unity 内部 Tool。注销只影响 dispatcher 本地路由表。
         /// </summary>
-        /// <param name="tool">曾通过 <see cref="RegisterTool"/> 注册的 Tool 实例。</param>
+        /// <param name="tool">曾通过 <see cref="RegisterTool(IDevHubTool)"/> 注册的 Tool 实例。</param>
         /// <returns>注销是否成功以及诊断消息。</returns>
         public static Result UnregisterTool(IDevHubTool tool)
         {
@@ -112,18 +157,19 @@ namespace DevHubDispatcher.Editor
                 return LogFailure(ToolRegistryLogCategory, "tool 不能为空。");
             }
 
+            string toolId;
             lock (SyncRoot)
             {
-                if (!ToolIdsByInstance.TryGetValue(tool, out string toolId))
+                if (!ToolIdsByInstance.TryGetValue(tool, out toolId))
                 {
                     return LogFailure(ToolRegistryLogCategory, "该 Tool 实例尚未注册。");
                 }
 
-                ToolIdsByInstance.Remove(tool);
-                ToolsById.Remove(toolId);
-                DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注销。toolId=" + toolId);
-                return Result.Ok("Tool 已注销: " + toolId);
+                RemoveToolRegistration(tool, toolId);
             }
+
+            DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注销。toolId=" + toolId);
+            return Result.Ok("Tool 已注销: " + toolId);
         }
 
         /// <summary>
@@ -900,6 +946,77 @@ namespace DevHubDispatcher.Editor
             {
                 return ToolsById.TryGetValue(toolId, out tool);
             }
+        }
+
+        private static bool TryValidateToolRegistration(IDevHubTool tool, out Result validationResult)
+        {
+            if (tool == null)
+            {
+                validationResult = LogFailure(ToolRegistryLogCategory, "tool 不能为空。");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(tool.ToolId))
+            {
+                validationResult = LogFailure(ToolRegistryLogCategory, "toolId 不能为空。");
+                return false;
+            }
+
+            validationResult = Result.Ok(string.Empty);
+            return true;
+        }
+
+        private static bool TryCreateDelegateTool(string toolId, DevHubRequestHandler requestHandler, DevHubNotifyHandler notifyHandler, out DevHubToolDelegate tool, out Result validationResult)
+        {
+            tool = null;
+            if (string.IsNullOrWhiteSpace(toolId))
+            {
+                validationResult = LogFailure(ToolRegistryLogCategory, "toolId 不能为空。");
+                return false;
+            }
+
+            if (requestHandler == null && notifyHandler == null)
+            {
+                validationResult = LogFailure(ToolRegistryLogCategory, "requestHandler 和 notifyHandler 不能同时为空。");
+                return false;
+            }
+
+            tool = new DevHubToolDelegate(toolId, requestHandler, notifyHandler);
+            validationResult = Result.Ok(string.Empty);
+            return true;
+        }
+
+        private static Result RegisterToolCore(IDevHubTool tool)
+        {
+            lock (SyncRoot)
+            {
+                if (ToolIdsByInstance.ContainsKey(tool))
+                {
+                    return LogFailure(ToolRegistryLogCategory, "该 Tool 实例已经注册。");
+                }
+
+                if (ToolsById.ContainsKey(tool.ToolId))
+                {
+                    return LogFailure(ToolRegistryLogCategory, "toolId 已经被注册: " + tool.ToolId);
+                }
+
+                AddToolRegistration(tool);
+            }
+
+            DevHubDispatcherLogger.Info(ToolRegistryLogCategory, "Tool 已注册。toolId=" + tool.ToolId);
+            return Result.Ok("Tool 已注册: " + tool.ToolId);
+        }
+
+        private static void AddToolRegistration(IDevHubTool tool)
+        {
+            ToolsById.Add(tool.ToolId, tool);
+            ToolIdsByInstance.Add(tool, tool.ToolId);
+        }
+
+        private static void RemoveToolRegistration(IDevHubTool tool, string toolId)
+        {
+            ToolIdsByInstance.Remove(tool);
+            ToolsById.Remove(toolId);
         }
 
         private static bool TryGetRegisteredToolId(IDevHubTool tool, out string toolId, out Result result)

@@ -11,10 +11,17 @@
 
 ## Tool 注册
 
-Tool 需要实现 `IDevHubTool`，并通过 `DevHubDispatcher.RegisterTool(this)` 注册：
+Dispatcher 支持两类等价注册入口：
+- 直接注册实现 `IDevHubTool` 的对象
+- 按 `toolId` 注册 request handler、notify handler，或两者组合。
+无论走哪条入口，Tool 都进入同一个本地注册表，复用同一套冲突检测、路由和错误语义。
+
+### 对象注册
+
+实现 `IDevHubTool` 后，可通过 `DevHubDispatcher.RegisterTool(this)` 注册：
 
 ```csharp
-using DevHub.Editor;
+using DevHubDispatcher.Editor;
 using Newtonsoft.Json.Linq;
 
 public sealed class SampleTool : IDevHubTool
@@ -38,7 +45,44 @@ public sealed class SampleTool : IDevHubTool
 }
 ```
 
-`toolId` 只在 Unity 进程内用于路由。重复 `toolId`、空 `toolId`、空 Tool 实例都会被拒绝。
+### 委托注册
+
+简单 Tool 不必手写完整 `IDevHubTool`。Dispatcher 支持 request-only、notify-only 和双 handler 注册：
+
+```csharp
+using DevHubDispatcher.Editor;
+using Newtonsoft.Json.Linq;
+
+Result requestOnly = DevHubDispatcher.RegisterTool(
+    "sample-request",
+    (method, payload) => new JObject
+    {
+        ["ok"] = true,
+        ["method"] = method
+    });
+
+Result notifyOnly = DevHubDispatcher.RegisterTool(
+    "sample-notify",
+    (DevHubNotifyHandler)((method, payload) =>
+    {
+        UnityEngine.Debug.Log("收到 DevHub notify: " + method + " " + payload);
+    }));
+
+Result dualHandlers = DevHubDispatcher.RegisterTool(
+    "sample-dual",
+    (method, payload) => JValue.CreateNull(),
+    (method, payload) => UnityEngine.Debug.Log("收到 notify: " + method));
+```
+
+`toolId` 只在 Unity 进程内用于路由。重复 `toolId`、空 `toolId`、空 Tool 实例，以及 request/notify handler 同时为空的委托注册都会被拒绝。
+
+### 注销
+
+已持有对象实例时，可以继续调用 `DevHubDispatcher.UnregisterTool(IDevHubTool tool)`。若调用方只知道 `toolId`，或注册的是委托包装 Tool，则应调用 `DevHubDispatcher.UnregisterTool(string toolId)`：
+
+```csharp
+DevHubDispatcher.UnregisterTool("sample-dual");
+```
 
 Tool 主动调用时，`NotifyAsync` 返回 `Task<Result>`，`RequestAsync` 返回 `Task<Result<JToken>>`。调用失败不会向 Unity 编辑器继续抛异常，而是返回失败结果并记录统一格式日志：
 
@@ -86,7 +130,13 @@ Unity 菜单 `Window/DevHub/Dispatcher Status` 会打开只读状态窗口，显
 
 ## 验证
 
-最小编译验证命令如下：
+最小可重复行为验证命令如下：
+
+```powershell
+dotnet test apps/unity-devhub-dispatcher/.tests/DevHubDispatcher.Tests/DevHubDispatcher.Tests.csproj -c Release
+```
+
+如果需要补做 Unity Editor 侧的最小编译验证，可在真实 Unity 工程中执行类似 batch mode 命令：
 
 ```powershell
 "D:\GameEngines\Unity\2019.4.40f1\Editor\Unity.exe" -batchMode -quit -projectPath "D:\Projects\UnityToolProject2019" -logFile "D:\Projects\DevHub\temp\unity-dispatcher-batchmode.log"
