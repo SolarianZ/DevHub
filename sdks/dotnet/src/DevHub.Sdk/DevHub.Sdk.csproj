@@ -21,9 +21,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Json.Net.Unity3D" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
-    <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="System.Threading.Channels" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 显式引用包内程序集，保证 ProjectReference 消费方也能解析 SDK 公开的 Newtonsoft.Json 类型。 -->
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(PkgJson_Net_Unity3D)\lib\net35\Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

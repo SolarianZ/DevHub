@@ -46,8 +46,6 @@ DevHub/
 │   │   │   ├── DevHub.Sdk.UnitTests/         # .NET SDK 单元测试
 │   │   │   ├── DevHub.Sdk.IntegrationTests/  # .NET SDK 集成测试
 │   │   │   └── DevHub.Sdk.ConformanceAdapter/ # .NET SDK conformance 适配器
-│   │   ├── tools/                            # .NET SDK 工具与发布辅助
-│   │   │   └── DevHub.Sdk.UnityPublish/      # Unity 本地发布工具
 │   │   ├── DevHub.DotNetSdk.slnx             # .NET SDK 解决方案文件
 │   │   ├── Directory.Build.props             # .NET SDK 工作区公共构建配置
 │   │   ├── Directory.Packages.props          # .NET SDK 工作区统一依赖版本管理

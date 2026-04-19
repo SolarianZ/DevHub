@@ -82,7 +82,7 @@ python3 scripts/sdk/publish_unity_dotnet_sdk.py
 
 Unity 版本只能通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成引用目录，并在 Unity 工程中引用该脚本输出目录内的 DLL；不要直接引用 SDK `.csproj`，也不要把 `dotnet pack` 生成的 `.nupkg` 作为 Unity 接入入口。
 
-该脚本会执行本地 `dotnet publish`，并在 publish 输出目录中仅后处理 `DevHub.Sdk.dll` 对 `Newtonsoft.Json` 的程序集引用，移除强签名 `PublicKeyToken`，用于匹配 Unity 常见的 `com.unity.nuget.newtonsoft-json` 未签名程序集。
+该脚本会执行本地 `dotnet publish`，输出目录可直接作为 Unity 工程引用的 DLL 集合。
 脚本每次执行前都会重建输出目录，避免残留上一次 publish 的陈旧 DLL。
 默认输出目录为 `artifacts/sdk/dotnet-for-unity`。
 
@@ -100,7 +100,7 @@ python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-fo
 
 Unity 接入边界固定为 `publish_unity_dotnet_sdk.py` 产出的 DLL 目录；`DevHub.Sdk.DotNet` 与 `DevHub.Sdk.DotNet.DependencyInjection` 的包资产用于常规 .NET 消费，不作为 Unity 工程的直接引用入口。
 
-SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
+SDK 的公开 JSON 类型面使用 `Newtonsoft.Json` 类型，并由 `Json.Net.Unity3D 9.0.1` 提供程序集：
 
 - `PingResult.Echo`、`RequestResult.Value`、`Invocation.Args`、`DevHubEvent.Payload`、`DevHubRpcException.ErrorData` 等公开载荷现在使用 `JToken` / `JObject`
 - 旧版基于 `System.Text.Json` 的 `JsonElement`、`JsonDocument`、`GetRawText()` 与对应特性不再属于当前公开契约
@@ -110,7 +110,7 @@ SDK 的公开 JSON 类型面已经切换到 `Newtonsoft.Json 9.0.1`：
 
 `DevHub.Sdk.DotNet` 主包仅保留与核心 SDK 能力直接对应的外部依赖：
 
-- `Newtonsoft.Json 9.0.1`：用于 runtime discovery、HTTP JSON-RPC、WebSocket 会话、公开模型标注与 `JToken` / `JObject` 载荷访问
+- `Json.Net.Unity3D 9.0.1`：提供 `Newtonsoft.Json` 程序集，用于 runtime discovery、HTTP JSON-RPC、WebSocket 会话、公开模型标注与 `JToken` / `JObject` 载荷访问
 - `Microsoft.Bcl.AsyncInterfaces`：为 `DevHubEventsClient.ReadEventsAsync()` 等 `IAsyncEnumerable<T>` / `IAsyncDisposable` 能力提供 `netstandard2.0` 兼容支持
 - `System.Threading.Channels`：支撑事件客户端内部的异步事件缓冲与消费队列
 
@@ -502,7 +502,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 包 `.nuspec` 声明的直接依赖如下：
 
-- `Newtonsoft.Json 9.0.1`
+- `Json.Net.Unity3D 9.0.1`
 - `Microsoft.Bcl.AsyncInterfaces 1.1.0`
 - `System.Threading.Channels 4.7.0`
 
@@ -532,5 +532,6 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - `System.Threading.Channels` 与 `Microsoft.Bcl.AsyncInterfaces` 继续保留，用于事件流 API 的异步缓冲、`IAsyncEnumerable<T>` 与 `IAsyncDisposable`
 - `DevHub.Sdk.DotNet.DependencyInjection` 单独承载 `AddDevHubSdk()`、`IDevHubClientFactory` 与 `IDevHubEventsClientFactory`
 - SDK 发布包仅面向 `netstandard2.0`，测试工程与 conformance adapter 继续使用 `net10.0` 以复用当前 Host 测试基线；这些测试项目不进入 NuGet 发布产物
-- Unity 本地 publish 脚本只后处理 `DevHub.Sdk.dll`，不改 `dotnet pack` 生成的 NuGet 主包依赖元数据
-- `Newtonsoft.Json 9.0.1` 在 restore/build/pack 期间会产生 `NU1903` 告警；当前仓库按 Unity 适配要求固定该版本，验收以包结构、依赖边界与 SDK 行为为准
+- Unity 本地 publish 脚本直接输出可供 Unity 引用的 DLL 目录，不再单独改写程序集引用元数据
+- `Json.Net.Unity3D 9.0.1` 提供未签名的 `Newtonsoft.Json` 程序集，验收以包结构、依赖边界与 SDK 行为为准
+- 由于 `Json.Net.Unity3D 9.0.1` 仅提供 .NET Framework 资产，当前 restore/build 会出现 `NU1701` 兼容性告警；仓库验收以构建结果、包依赖元数据与 SDK 行为为准

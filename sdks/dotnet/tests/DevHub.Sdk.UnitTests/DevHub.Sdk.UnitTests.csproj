@@ -9,21 +9,36 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Json.Net.Unity3D" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.TestPlatform.TestHost" VersionOverride="17.14.1" ExcludeAssets="compile" PrivateAssets="all" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Moq" />
   </ItemGroup>
 
   <ItemGroup>
+    <_UnityNewtonsoftJson Include="$(PkgJson_Net_Unity3D)\lib\net35\Newtonsoft.Json.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
-    <ProjectReference Include="..\..\tools\DevHub.Sdk.UnityPublish\DevHub.Sdk.UnityPublish.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+
+  <Target Name="PreferUnityNewtonsoftJsonReference" AfterTargets="ResolveReferences">
+    <ItemGroup>
+      <ReferencePath Remove="@(ReferencePath)" Condition="'%(Filename)%(Extension)' == 'Newtonsoft.Json.dll'" />
+      <ReferencePath Include="@(_UnityNewtonsoftJson)">
+        <HintPath>@(_UnityNewtonsoftJson)</HintPath>
+        <Private>true</Private>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
 
 </Project>

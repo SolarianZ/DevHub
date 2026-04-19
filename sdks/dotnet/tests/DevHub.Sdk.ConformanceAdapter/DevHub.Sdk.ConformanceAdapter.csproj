@@ -9,7 +9,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Json.Net.Unity3D" GeneratePathProperty="true" />
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Remove="Newtonsoft.Json" />
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(PkgJson_Net_Unity3D)\lib\net35\Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

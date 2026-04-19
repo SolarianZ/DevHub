@@ -8,14 +8,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SDK_PROJECT = REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj"
-UNITY_PUBLISH_TOOL_PROJECT = (
-    REPO_ROOT / "sdks" / "dotnet" / "tools" / "DevHub.Sdk.UnityPublish" / "DevHub.Sdk.UnityPublish.csproj"
-)
 DEFAULT_OUTPUT = REPO_ROOT / "artifacts" / "sdk" / "dotnet-for-unity"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Publish DevHub.Sdk for Unity and strip Newtonsoft.Json strong-name metadata.")
+    parser = argparse.ArgumentParser(description="Publish DevHub.Sdk for Unity.")
     parser.add_argument(
         "--output",
         default=str(DEFAULT_OUTPUT),
@@ -24,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--configuration",
         default="Release",
-        help="Build configuration used by dotnet publish and the rewrite tool.",
+        help="Build configuration used by dotnet publish.",
     )
     return parser.parse_args()
 
@@ -33,7 +30,6 @@ def main() -> int:
     args = parse_args()
     configuration = args.configuration.strip() or "Release"
     output_dir = resolve_output_path(args.output)
-    assembly_path = output_dir / "DevHub.Sdk.dll"
 
     prepare_output_directory(output_dir)
 
@@ -48,21 +44,8 @@ def main() -> int:
             str(output_dir),
         ]
     )
-    run(
-        [
-            "dotnet",
-            "run",
-            "--project",
-            str(UNITY_PUBLISH_TOOL_PROJECT),
-            "-c",
-            configuration,
-            "--",
-            str(assembly_path),
-        ]
-    )
 
     print(f"[devhub-sdk] Unity publish directory: {output_dir}")
-    print(f"[devhub-sdk] Rewritten assembly: {assembly_path}")
     return 0
 
 

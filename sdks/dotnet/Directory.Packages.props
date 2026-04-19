@@ -5,9 +5,8 @@
 
   <ItemGroup>
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Json.Net.Unity3D" Version="9.0.1" />
     <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="1.1.0" />
-    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
-    <PackageVersion Include="Newtonsoft.Json" Version="9.0.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.2" />
