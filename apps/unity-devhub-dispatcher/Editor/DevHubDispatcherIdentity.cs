@@ -1,6 +1,5 @@
 using System;
 using UnityEditor;
-using UnityEngine;
 
 namespace DevHub.Editor
 {
@@ -62,7 +61,7 @@ namespace DevHub.Editor
 
                 if (index + 1 >= args.Length)
                 {
-                    Debug.LogWarning("DevHub dispatcher 忽略缺少值的 -devhubAppId 参数。");
+                    DevHubDispatcherLog.Warning("Identity", "忽略缺少值的 -devhubAppId 参数。");
                     return null;
                 }
 
@@ -72,7 +71,7 @@ namespace DevHub.Editor
                     return candidate;
                 }
 
-                Debug.LogWarning("DevHub dispatcher 忽略非法 -devhubAppId 参数: " + candidate);
+                DevHubDispatcherLog.Warning("Identity", "忽略非法 -devhubAppId 参数: " + candidate);
                 return null;
             }
 

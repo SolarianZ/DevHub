@@ -38,7 +38,26 @@ public sealed class SampleTool : IDevHubTool
 }
 ```
 
-`toolId` 只在 Unity 进程内用于路由。重复 `toolId`、空 `toolId`、未实现 `IDevHubTool` 的对象都会被拒绝。
+`toolId` 只在 Unity 进程内用于路由。重复 `toolId`、空 `toolId`、空 Tool 实例都会被拒绝。
+
+Tool 主动调用时，`NotifyAsync` 返回 `Task<Result>`，`RequestAsync` 返回 `Task<Result<JToken>>`。调用失败不会向 Unity 编辑器继续抛异常，而是返回失败结果并记录统一格式日志：
+
+```csharp
+var requestResult = await DevHubDispatcher.RequestAsync(this, "sample.app", "sample.echo", new JObject());
+if (!requestResult.Success)
+{
+    UnityEngine.Debug.LogError(requestResult.Message);
+    return;
+}
+
+UnityEngine.Debug.Log("收到返回值: " + requestResult.Value);
+```
+
+Dispatcher 日志统一使用如下格式：
+
+```text
+[DevHub.Dispatcher][Error][Outbound] Tool 调用失败。toolId=sample-tool, method=sample.echo, reason=DevHub dispatcher 尚未建立 Host 连接。
+```
 
 ## 消息信封
 
@@ -53,7 +72,7 @@ Dispatcher 统一使用如下信封收发 Tool 消息：
 
 Tool 主动发送 notify/request 时，调用 `DevHubDispatcher.NotifyAsync(...)` 或 `DevHubDispatcher.RequestAsync(...)`，dispatcher 会写入 `toolId` 并把原始业务载荷放到 `payload` 字段。Host 发往 Unity 的 invocation 也需要使用相同结构，dispatcher 会把 invocation 的 `method` 和 `payload` 转发给匹配 Tool。
 
-Request 路由失败时 dispatcher 返回固定 callee error：`1001 invalid_dispatcher_message`、`1002 tool_not_found`、`1003 tool_handler_failed`。Notify 路由失败只记录日志，不影响后续 heartbeat、poll 或其他消息处理。
+Request 路由失败时 dispatcher 返回固定 callee error：`1001 invalid_dispatcher_message`、`1002 tool_not_found`、`1003 tool_handler_failed`。Notify 路由失败只记录错误日志，不影响后续 heartbeat、poll 或其他消息处理。
 
 ## 生命周期
 
