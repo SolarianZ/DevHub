@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "DevHub Monitor",
-        "width": 1360,
-        "height": 880,
-        "minWidth": 1024,
-        "minHeight": 680,
+        "width": 800,
+        "height": 600,
+        "minWidth": 600,
+        "minHeight": 400,
         "resizable": true
       }
     ],

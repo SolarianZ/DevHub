@@ -102,7 +102,7 @@ svg {
 }
 
 .monitor-sidebar {
-  width: 236px;
+  width: 140px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
