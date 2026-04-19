@@ -177,16 +177,25 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
     }
   });
 
-  const updateSettingsDraftField = useEffectEvent((field: keyof MonitorSettings, value: string) => {
+  const updateSettingsDraftField = useEffectEvent((
+    field: keyof MonitorSettings,
+    value: MonitorSettings[keyof MonitorSettings],
+  ) => {
     startTransition(() => {
       setSettingsDraft((current) => ({
         ...current,
         [field]: value,
       }));
-      setSettingsFieldErrors((current) => ({
-        ...current,
-        [field]: null,
-      }));
+      setSettingsFieldErrors((current) => {
+        if (field === "dataDirOverride" || field === "hostExecutablePath") {
+          return {
+            ...current,
+            [field]: null,
+          };
+        }
+
+        return current;
+      });
     });
   });
 
@@ -221,6 +230,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
     const payload: MonitorSettings = {
       dataDirOverride: normalizeOptionalInput(settingsDraft.dataDirOverride),
       hostExecutablePath: normalizeOptionalInput(settingsDraft.hostExecutablePath),
+      hideHostCommandLineWindow: settingsDraft.hideHostCommandLineWindow ?? true,
     };
 
     recordFrontendLog({
@@ -231,6 +241,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
       context: {
         dataDirOverride: payload.dataDirOverride ?? null,
         hostExecutablePath: payload.hostExecutablePath ?? null,
+        hideHostCommandLineWindow: payload.hideHostCommandLineWindow,
       },
     });
 

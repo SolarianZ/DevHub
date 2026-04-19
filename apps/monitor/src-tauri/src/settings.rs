@@ -1,5 +1,6 @@
 use crate::models::{
-    DataDirSource, MonitorSettings, ResolvedDataDir, SettingsSnapshot, DEVHUB_DATA_DIR_ENV,
+    DataDirSource, MonitorPlatform, MonitorSettings, ResolvedDataDir, SettingsSnapshot,
+    DEVHUB_DATA_DIR_ENV,
 };
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
@@ -99,6 +100,7 @@ impl SettingsStore {
 
         SettingsSnapshot {
             settings,
+            platform: current_platform(),
             effective_data_dir: resolved.path,
             data_dir_source: resolved.source,
             settings_file_path: self.file_path.display().to_string(),
@@ -142,6 +144,23 @@ impl SettingsService {
     }
 }
 
+fn current_platform() -> MonitorPlatform {
+    #[cfg(target_os = "windows")]
+    {
+        return MonitorPlatform::Windows;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return MonitorPlatform::Macos;
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        MonitorPlatform::Linux
+    }
+}
+
 pub fn resolve_effective_data_dir(settings: &MonitorSettings) -> ResolvedDataDir {
     if let Some(override_path) = settings.data_dir_override.as_deref() {
         if is_absolute_path(override_path) {
@@ -172,6 +191,7 @@ fn normalize_settings(settings: MonitorSettings) -> MonitorSettings {
     MonitorSettings {
         data_dir_override: normalize_optional_path(settings.data_dir_override),
         host_executable_path: normalize_optional_path(settings.host_executable_path),
+        hide_host_command_line_window: settings.hide_host_command_line_window,
     }
 }
 
@@ -292,6 +312,7 @@ mod tests {
         let resolved = resolve_effective_data_dir(&MonitorSettings {
             data_dir_override: Some(override_path.clone()),
             host_executable_path: None,
+            hide_host_command_line_window: false,
         });
 
         assert!(matches!(resolved.source, DataDirSource::SettingsOverride));
@@ -313,6 +334,7 @@ mod tests {
         let resolved = resolve_effective_data_dir(&MonitorSettings {
             data_dir_override: Some("./override".to_string()),
             host_executable_path: None,
+            hide_host_command_line_window: false,
         });
 
         assert!(matches!(resolved.source, DataDirSource::Environment));
@@ -337,6 +359,7 @@ mod tests {
             .save(MonitorSettings {
                 data_dir_override: Some(data_dir.clone()),
                 host_executable_path: Some(host_path.clone()),
+                hide_host_command_line_window: true,
             })
             .expect("failed to save settings");
 
@@ -350,6 +373,7 @@ mod tests {
                 .expect("missing host executable path"),
             host_path
         );
+        assert!(saved.hide_host_command_line_window);
 
         let snapshot = store.snapshot(&super::MonitorPaths {
             settings_file: settings_file.clone(),
@@ -382,10 +406,44 @@ mod tests {
             .save(MonitorSettings {
                 data_dir_override: Some("./runtime-data".to_string()),
                 host_executable_path: Some("/tmp/host/bin/DevHub.Host".to_string()),
+                hide_host_command_line_window: false,
             })
             .expect_err("expected relative path error");
 
         assert!(error.to_string().contains("dataDirOverride 必须为绝对路径"));
+
+        fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn settings_store_load_defaults_hide_host_command_line_window_to_true() {
+        let temp_directory = create_temp_directory("settings-backward-compatible");
+        let settings_file = temp_directory.join("settings.json");
+        let data_dir = absolute_test_path("runtime-data");
+        let host_path = absolute_test_path("host-bin");
+        fs::write(
+            &settings_file,
+            format!(
+                r#"{{
+  "dataDirOverride": "{data_dir}",
+  "hostExecutablePath": "{host_path}"
+}}"#
+            ),
+        )
+        .expect("failed to write settings file");
+
+        let store = SettingsStore::load(settings_file).expect("failed to load store");
+        let current = store.current();
+
+        assert_eq!(
+            current.data_dir_override.as_deref(),
+            Some(data_dir.as_str())
+        );
+        assert_eq!(
+            current.host_executable_path.as_deref(),
+            Some(host_path.as_str())
+        );
+        assert!(current.hide_host_command_line_window);
 
         fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
     }

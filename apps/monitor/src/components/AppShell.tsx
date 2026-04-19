@@ -38,7 +38,10 @@ interface AppShellProps {
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onLaunchHost: () => void;
-  onChangeSettingsField: (field: keyof MonitorSettings, value: string) => void;
+  onChangeSettingsField: (
+    field: keyof MonitorSettings,
+    value: MonitorSettings[keyof MonitorSettings],
+  ) => void;
   onSelectHostExecutablePath: () => void;
   onSelectDataDirectory: () => void;
   onSaveSettings: () => void;
@@ -52,6 +55,18 @@ interface AppShellProps {
 }
 
 const MONITOR_VERSION_TEXT = `Monitor v${packageManifest.version}`;
+const INVENTORY_DESCRIPTION_FALLBACK = "未提供 App 描述";
+
+interface InventoryItemViewModel {
+  key: string;
+  appId: string;
+  title: string;
+  description: string;
+  actionAccessibleName: string;
+  actionTitle: string;
+  actionIcon: ReactNode;
+  onAction: () => void;
+}
 
 export function AppShell(props: AppShellProps) {
   const {
@@ -139,6 +154,7 @@ export function AppShell(props: AppShellProps) {
               fieldErrors={settingsFieldErrors}
               settingsDirty={settingsDirty}
               settingsDraft={settingsDraft}
+              showHideHostCommandLineWindowOption={settings?.platform === "windows"}
               onChangeField={onChangeSettingsField}
               onSelectHostExecutablePath={onSelectHostExecutablePath}
               onSelectDataDirectory={onSelectDataDirectory}
@@ -313,6 +329,13 @@ function HomeStatusWorkspace(props: {
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
   const showInventories = hostSessionStatus === "connected";
+  const definitionIndex = new Map(definitions.map((definition) => [definition.appId, definition]));
+  const instanceItems = instances.map((instance) =>
+    createInstanceInventoryItem(instance, definitionIndex.get(instance.appId), onViewInstanceDefinition),
+  );
+  const definitionItems = definitions.map((definition) =>
+    createDefinitionInventoryItem(definition, onEditDefinition),
+  );
 
   return (
     <section className="workspace-view">
@@ -331,31 +354,14 @@ function HomeStatusWorkspace(props: {
         <>
           <InventorySection
             collapsed={instancesCollapsed}
-            count={instances.length}
+            count={instanceItems.length}
             title="App 实例"
             onToggle={() => setInstancesCollapsed((current) => !current)}
           >
-            {instances.length === 0 ? (
+            {instanceItems.length === 0 ? (
               <EmptyState title="当前没有 App 实例" />
             ) : (
-              <div className="list">
-                {instances.map((instance) => (
-                  <article key={instance.instanceId} className="list-item">
-                    <span className="item-name">{instance.instanceId}</span>
-                    <div className="item-actions">
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="查看定义"
-                        title="查看定义"
-                        onClick={() => onViewInstanceDefinition(instance)}
-                      >
-                        <ViewIcon />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+              <InventoryList items={instanceItems} />
             )}
           </InventorySection>
 
@@ -372,31 +378,14 @@ function HomeStatusWorkspace(props: {
               </button>
             )}
             collapsed={definitionsCollapsed}
-            count={definitions.length}
+            count={definitionItems.length}
             title="App 定义"
             onToggle={() => setDefinitionsCollapsed((current) => !current)}
           >
-            {definitions.length === 0 ? (
+            {definitionItems.length === 0 ? (
               <EmptyState title="当前没有 App 定义" />
             ) : (
-              <div className="list">
-                {definitions.map((definition) => (
-                  <article key={definition.appId} className="list-item">
-                    <span className="item-name">{definition.displayName || definition.appId}</span>
-                    <div className="item-actions">
-                      <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="编辑"
-                        title="编辑"
-                        onClick={() => onEditDefinition(definition.appId)}
-                      >
-                        <EditIcon />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+              <InventoryList items={definitionItems} />
             )}
           </InventorySection>
         </>
@@ -417,7 +406,7 @@ function InventorySection(props: {
 
   return (
     <section className={`section ${collapsed ? "collapsed" : ""}`}>
-      <div className="section-header">
+      <header className="section-header">
         <button
           type="button"
           className="section-trigger"
@@ -427,16 +416,100 @@ function InventorySection(props: {
           <span className={`section-caret ${collapsed ? "collapsed" : ""}`}>
             <ChevronIcon />
           </span>
-          <span>{title}</span>
-          <span className="section-count">({count})</span>
+          <span className="section-title-group">
+            <span>{title}</span>
+            <span className="section-count">({count})</span>
+          </span>
         </button>
 
         {action ? <div className="section-action">{action}</div> : null}
-      </div>
+      </header>
 
       {!collapsed ? <div className="section-body">{children}</div> : null}
     </section>
   );
+}
+
+function InventoryList(props: {
+  items: InventoryItemViewModel[];
+}) {
+  const { items } = props;
+
+  return (
+    <div className="list">
+      {items.map((item) => (
+        <article key={item.key} className="list-item inventory-item" data-app-id={item.appId}>
+          <div className="inventory-item-content">
+            <div className="inventory-item-heading">
+              <span className="inventory-item-name" title={item.title}>
+                {item.title}
+              </span>
+              <span className="inventory-item-app-id" title={item.appId}>
+                {item.appId}
+              </span>
+            </div>
+            <p className="inventory-item-description" title={item.description}>
+              {item.description}
+            </p>
+          </div>
+
+          <div className="item-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={item.actionAccessibleName}
+              title={item.actionTitle}
+              onClick={item.onAction}
+            >
+              {item.actionIcon}
+            </button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function createDefinitionInventoryItem(
+  definition: AppDefinition,
+  onEditDefinition: (appId: string) => void,
+): InventoryItemViewModel {
+  const title = normalizeInventoryText(definition.displayName, definition.appId);
+
+  return {
+    key: definition.appId,
+    appId: definition.appId,
+    title,
+    description: normalizeInventoryText(definition.description, INVENTORY_DESCRIPTION_FALLBACK),
+    actionAccessibleName: `编辑定义：${title}（${definition.appId}）`,
+    actionIcon: <EditIcon />,
+    actionTitle: "编辑",
+    onAction: () => onEditDefinition(definition.appId),
+  };
+}
+
+function createInstanceInventoryItem(
+  instance: AppInstance,
+  definition: AppDefinition | undefined,
+  onViewInstanceDefinition: (instance: AppInstance) => void,
+): InventoryItemViewModel {
+  const title = normalizeInventoryText(definition?.displayName, instance.appId);
+
+  return {
+    key: instance.instanceId,
+    appId: instance.appId,
+    title,
+    description: normalizeInventoryText(definition?.description, INVENTORY_DESCRIPTION_FALLBACK),
+    actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}）`,
+    actionIcon: <ViewIcon />,
+    actionTitle: "查看定义",
+    onAction: () => onViewInstanceDefinition(instance),
+  };
+}
+
+function normalizeInventoryText(value: string | undefined, fallback: string): string {
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : fallback;
 }
 
 function HelpWorkspace(props: {
@@ -502,7 +575,11 @@ function SettingsWorkspace(props: {
   fieldErrors: SettingsFieldErrors;
   settingsDirty: boolean;
   settingsDraft: MonitorSettings;
-  onChangeField: (field: keyof MonitorSettings, value: string) => void;
+  showHideHostCommandLineWindowOption: boolean;
+  onChangeField: (
+    field: keyof MonitorSettings,
+    value: MonitorSettings[keyof MonitorSettings],
+  ) => void;
   onSelectHostExecutablePath: () => void;
   onSelectDataDirectory: () => void;
   onSave: () => void;
@@ -512,6 +589,7 @@ function SettingsWorkspace(props: {
     fieldErrors,
     settingsDirty,
     settingsDraft,
+    showHideHostCommandLineWindowOption,
     onChangeField,
     onSelectHostExecutablePath,
     onSelectDataDirectory,
@@ -568,6 +646,21 @@ function SettingsWorkspace(props: {
           </div>
           <FieldError message={fieldErrors.dataDirOverride} />
         </label>
+
+        {showHideHostCommandLineWindowOption ? (
+          <div className="field">
+            <span>启动行为</span>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={settingsDraft.hideHostCommandLineWindow ?? true}
+                onChange={(event) => onChangeField("hideHostCommandLineWindow", event.target.checked)}
+                disabled={busy}
+              />
+              <span>隐藏 Host 命令行窗口</span>
+            </label>
+          </div>
+        ) : null}
 
         <div className="definition-actions">
           <div className="action-spacer" />

@@ -60,7 +60,8 @@ export function areMonitorSettingsEqual(
   right?: MonitorSettings | null,
 ): boolean {
   return normalizeOptionalInput(left?.dataDirOverride) === normalizeOptionalInput(right?.dataDirOverride)
-    && normalizeOptionalInput(left?.hostExecutablePath) === normalizeOptionalInput(right?.hostExecutablePath);
+    && normalizeOptionalInput(left?.hostExecutablePath) === normalizeOptionalInput(right?.hostExecutablePath)
+    && (left?.hideHostCommandLineWindow ?? true) === (right?.hideHostCommandLineWindow ?? true);
 }
 
 export function validateSettingsDraft(settings: MonitorSettings): SettingsFieldErrors {
