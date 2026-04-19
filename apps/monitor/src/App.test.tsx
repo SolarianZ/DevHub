@@ -624,6 +624,7 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "编辑" }));
     await screen.findByRole("heading", { name: "编辑 App Definition" });
+    await screen.findByLabelText("显示名称");
     await user.click(screen.getByRole("button", { name: "删除定义" }));
     await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app” 吗？");
 

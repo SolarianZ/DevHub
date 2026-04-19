@@ -198,8 +198,9 @@ describe("Monitor App real-host integration", () => {
 
       await user.click(within(existingDefinitionRow).getByRole("button", { name: "编辑" }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
-      await user.clear(screen.getByLabelText("显示名称"));
-      await user.type(screen.getByLabelText("显示名称"), "Monitor Integration App Updated");
+      const editDisplayNameInput = await findDefinitionInput("显示名称");
+      await user.clear(editDisplayNameInput);
+      await user.type(editDisplayNameInput, "Monitor Integration App Updated");
       await user.click(screen.getByRole("button", { name: "保存修改" }));
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
@@ -212,7 +213,7 @@ describe("Monitor App real-host integration", () => {
 
       await user.click(within(primaryInstanceRow).getByRole("button", { name: "查看定义" }));
       await screen.findByRole("heading", { name: "实例关联定义" }, { timeout: 15_000 });
-      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe("Monitor Integration App Updated");
+      expect((await findDefinitionInput("显示名称")).value).toBe("Monitor Integration App Updated");
       screen.getByText("只读模式不允许保存或删除。");
       await user.click(screen.getByRole("button", { name: "返回主页" }));
 
@@ -295,13 +296,14 @@ describe("Monitor App real-host integration", () => {
 
       await user.click(within(guardDefinitionRow).getByRole("button", { name: "编辑" }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
-      await user.clear(screen.getByLabelText("显示名称"));
-      await user.type(screen.getByLabelText("显示名称"), "Monitor Guard App Draft");
+      const draftDisplayNameInput = await findDefinitionInput("显示名称");
+      await user.clear(draftDisplayNameInput);
+      await user.type(draftDisplayNameInput, "Monitor Guard App Draft");
 
       await user.click(screen.getByRole("button", { name: "返回主页" }));
       await respondToConfirmDialog(user, "cancel", "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？");
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
-      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe("Monitor Guard App Draft");
+      expect((await findDefinitionInput("显示名称")).value).toBe("Monitor Guard App Draft");
 
       await user.click(screen.getByRole("button", { name: "返回主页" }));
       await respondToConfirmDialog(user, "confirm", "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？");
@@ -314,10 +316,11 @@ describe("Monitor App real-host integration", () => {
 
       await user.click(within(guardDefinitionRowAfterDiscard).getByRole("button", { name: "编辑" }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
-      expect((screen.getByLabelText("显示名称") as HTMLInputElement).value).toBe(guardDisplayName);
+      const savedDisplayNameInput = await findDefinitionInput("显示名称");
+      expect(savedDisplayNameInput.value).toBe(guardDisplayName);
 
-      await user.clear(screen.getByLabelText("显示名称"));
-      await user.type(screen.getByLabelText("显示名称"), guardSavedDisplayName);
+      await user.clear(savedDisplayNameInput);
+      await user.type(savedDisplayNameInput, guardSavedDisplayName);
       await user.click(screen.getByRole("button", { name: "保存修改" }));
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
@@ -330,6 +333,7 @@ describe("Monitor App real-host integration", () => {
 
       await user.click(within(guardDefinitionRowAfterSave).getByRole("button", { name: "编辑" }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
+      await findDefinitionInput("显示名称");
 
       await user.click(screen.getByRole("button", { name: "删除定义" }));
       await respondToConfirmDialog(user, "confirm", `确认删除 App Definition “${guardAppId}” 吗？`);
@@ -369,6 +373,14 @@ async function respondToConfirmDialog(
   await waitFor(() => {
     expect(screen.queryByRole("alertdialog", { name: "请注意" })).toBeNull();
   }, { timeout: 15_000 });
+}
+
+async function findDefinitionInput(label: "App ID" | "显示名称" | "描述"): Promise<HTMLInputElement | HTMLTextAreaElement> {
+  const field = await screen.findByLabelText(label, {}, { timeout: 15_000 });
+  if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) {
+    throw new Error(`Field ${label} is not an input control.`);
+  }
+  return field;
 }
 
 async function createConnection(activeHost: DevHubHostFixture): Promise<MonitorRuntimeConnectionInfo> {
