@@ -62,6 +62,7 @@ DevHub/
 - JSON 序列化统一使用 `System.Text.Json`。
 - 日志架构统一使用 `Microsoft.Extensions.Logging` + `Serilog`。
 - 单元测试使用 xUnit + Moq，集成测试使用 Python。
+- GitHub workflow 中的 Node.js 运行时与 JavaScript Action 统一使用 Node 24；选择 `actions/*` 等依赖时，必须使用已支持 Node 24 的版本，禁止使用仍运行在 Node 20 上的旧版本包。
 
 ## 开发与质量规范
 
