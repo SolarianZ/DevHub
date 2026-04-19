@@ -175,9 +175,32 @@ describe("Monitor App real-host integration", () => {
       render(<App />);
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
-      await screen.findByText("Monitor Integration App", {}, { timeout: 15_000 });
-      await screen.findByText(PRIMARY_INSTANCE_ID, {}, { timeout: 15_000 });
-      await screen.findByText(MISSING_INSTANCE_ID, {}, { timeout: 15_000 });
+      await screen.findAllByText("Monitor Integration App", {}, { timeout: 15_000 });
+
+      const instancesSection = getInventorySection("App 实例");
+      const definitionsSection = getInventorySection("App 定义");
+      const primaryInstanceRow = getInventoryRowByActionLabel(
+        instancesSection,
+        `查看定义：${PRIMARY_INSTANCE_ID}（${PRIMARY_APP_ID}）`,
+      );
+      within(primaryInstanceRow).getByText("Monitor Integration App");
+      within(primaryInstanceRow).getByText(PRIMARY_APP_ID);
+      within(primaryInstanceRow).getByText("用于 Monitor 真实 Host 集成回归。");
+
+      const missingInstanceRow = getInventoryRowByActionLabel(
+        instancesSection,
+        `查看定义：${MISSING_INSTANCE_ID}（${MISSING_APP_ID}）`,
+      );
+      expect(within(missingInstanceRow).getAllByText(MISSING_APP_ID)).toHaveLength(2);
+      within(missingInstanceRow).getByText("未提供 App 描述");
+
+      const existingDefinitionRow = getInventoryRowByActionLabel(
+        definitionsSection,
+        `编辑定义：Monitor Integration App（${PRIMARY_APP_ID}）`,
+      );
+      within(existingDefinitionRow).getByText("Monitor Integration App");
+      within(existingDefinitionRow).getByText(PRIMARY_APP_ID);
+      within(existingDefinitionRow).getByText("用于 Monitor 真实 Host 集成回归。");
 
       const user = userEvent.setup();
 
@@ -191,12 +214,13 @@ describe("Monitor App real-host integration", () => {
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
       await screen.findByText("Monitor Created App", {}, { timeout: 15_000 });
 
-      const existingDefinitionRow = screen.getByText("Monitor Integration App").closest("article");
-      if (!existingDefinitionRow) {
-        throw new Error("Definition row not found.");
-      }
-
-      await user.click(within(existingDefinitionRow).getByRole("button", { name: "编辑" }));
+      const existingDefinitionRowAfterCreate = getInventoryRowByActionLabel(
+        getInventorySection("App 定义"),
+        `编辑定义：Monitor Integration App（${PRIMARY_APP_ID}）`,
+      );
+      await user.click(within(existingDefinitionRowAfterCreate).getByRole("button", {
+        name: `编辑定义：Monitor Integration App（${PRIMARY_APP_ID}）`,
+      }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
       const editDisplayNameInput = await findDefinitionInput("显示名称");
       await user.clear(editDisplayNameInput);
@@ -204,14 +228,19 @@ describe("Monitor App real-host integration", () => {
       await user.click(screen.getByRole("button", { name: "保存修改" }));
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
-      await screen.findByText("Monitor Integration App Updated", {}, { timeout: 15_000 });
+      await screen.findAllByText("Monitor Integration App Updated", {}, { timeout: 15_000 });
 
-      const primaryInstanceRow = screen.getByText(PRIMARY_INSTANCE_ID).closest("article");
-      if (!primaryInstanceRow) {
-        throw new Error("Primary instance row not found.");
-      }
+      const primaryInstanceRowAfterUpdate = getInventoryRowByActionLabel(
+        getInventorySection("App 实例"),
+        `查看定义：${PRIMARY_INSTANCE_ID}（${PRIMARY_APP_ID}）`,
+      );
+      within(primaryInstanceRowAfterUpdate).getByText("Monitor Integration App Updated");
+      within(primaryInstanceRowAfterUpdate).getByText(PRIMARY_APP_ID);
+      within(primaryInstanceRowAfterUpdate).getByText("用于 Monitor 真实 Host 集成回归。");
 
-      await user.click(within(primaryInstanceRow).getByRole("button", { name: "查看定义" }));
+      await user.click(within(primaryInstanceRowAfterUpdate).getByRole("button", {
+        name: `查看定义：${PRIMARY_INSTANCE_ID}（${PRIMARY_APP_ID}）`,
+      }));
       await screen.findByRole("heading", { name: "实例关联定义" }, { timeout: 15_000 });
       expect((await findDefinitionInput("显示名称")).value).toBe("Monitor Integration App Updated");
       screen.getByText("只读模式不允许保存或删除。");
@@ -219,12 +248,16 @@ describe("Monitor App real-host integration", () => {
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
 
-      const missingInstanceRow = screen.getByText(MISSING_INSTANCE_ID).closest("article");
-      if (!missingInstanceRow) {
-        throw new Error("Missing instance row not found.");
-      }
+      const missingInstanceRowAfterUpdate = getInventoryRowByActionLabel(
+        getInventorySection("App 实例"),
+        `查看定义：${MISSING_INSTANCE_ID}（${MISSING_APP_ID}）`,
+      );
+      expect(within(missingInstanceRowAfterUpdate).getAllByText(MISSING_APP_ID)).toHaveLength(2);
+      within(missingInstanceRowAfterUpdate).getByText("未提供 App 描述");
 
-      await user.click(within(missingInstanceRow).getByRole("button", { name: "查看定义" }));
+      await user.click(within(missingInstanceRowAfterUpdate).getByRole("button", {
+        name: `查看定义：${MISSING_INSTANCE_ID}（${MISSING_APP_ID}）`,
+      }));
       await screen.findByRole("heading", { name: "定义不存在" }, { timeout: 15_000 });
       expect(screen.getAllByText(new RegExp(MISSING_INSTANCE_ID)).length).toBeGreaterThan(0);
       expect(screen.getAllByText(new RegExp(MISSING_APP_ID)).length).toBeGreaterThan(0);
@@ -289,12 +322,13 @@ describe("Monitor App real-host integration", () => {
       await screen.findByText(guardDisplayName, {}, { timeout: 15_000 });
 
       const user = userEvent.setup();
-      const guardDefinitionRow = screen.getByText(guardDisplayName).closest("article");
-      if (!guardDefinitionRow) {
-        throw new Error("Guard definition row not found.");
-      }
-
-      await user.click(within(guardDefinitionRow).getByRole("button", { name: "编辑" }));
+      const guardDefinitionRow = getInventoryRowByActionLabel(
+        getInventorySection("App 定义"),
+        `编辑定义：${guardDisplayName}（${guardAppId}）`,
+      );
+      await user.click(within(guardDefinitionRow).getByRole("button", {
+        name: `编辑定义：${guardDisplayName}（${guardAppId}）`,
+      }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
       const draftDisplayNameInput = await findDefinitionInput("显示名称");
       await user.clear(draftDisplayNameInput);
@@ -309,12 +343,13 @@ describe("Monitor App real-host integration", () => {
       await respondToConfirmDialog(user, "confirm", "App Definition 中的修改尚未保存，确认放弃并离开当前工作区吗？");
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
 
-      const guardDefinitionRowAfterDiscard = screen.getByText(guardDisplayName).closest("article");
-      if (!guardDefinitionRowAfterDiscard) {
-        throw new Error("Guard definition row not found after discard.");
-      }
-
-      await user.click(within(guardDefinitionRowAfterDiscard).getByRole("button", { name: "编辑" }));
+      const guardDefinitionRowAfterDiscard = getInventoryRowByActionLabel(
+        getInventorySection("App 定义"),
+        `编辑定义：${guardDisplayName}（${guardAppId}）`,
+      );
+      await user.click(within(guardDefinitionRowAfterDiscard).getByRole("button", {
+        name: `编辑定义：${guardDisplayName}（${guardAppId}）`,
+      }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
       const savedDisplayNameInput = await findDefinitionInput("显示名称");
       expect(savedDisplayNameInput.value).toBe(guardDisplayName);
@@ -326,12 +361,13 @@ describe("Monitor App real-host integration", () => {
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
       await screen.findByText(guardSavedDisplayName, {}, { timeout: 15_000 });
 
-      const guardDefinitionRowAfterSave = screen.getByText(guardSavedDisplayName).closest("article");
-      if (!guardDefinitionRowAfterSave) {
-        throw new Error("Guard definition row not found after save.");
-      }
-
-      await user.click(within(guardDefinitionRowAfterSave).getByRole("button", { name: "编辑" }));
+      const guardDefinitionRowAfterSave = getInventoryRowByActionLabel(
+        getInventorySection("App 定义"),
+        `编辑定义：${guardSavedDisplayName}（${guardAppId}）`,
+      );
+      await user.click(within(guardDefinitionRowAfterSave).getByRole("button", {
+        name: `编辑定义：${guardSavedDisplayName}（${guardAppId}）`,
+      }));
       await screen.findByRole("heading", { name: "编辑 App Definition" }, { timeout: 15_000 });
       await findDefinitionInput("显示名称");
 
@@ -347,6 +383,24 @@ describe("Monitor App real-host integration", () => {
     }
   }, 120_000);
 });
+
+function getInventorySection(title: "App 实例" | "App 定义"): HTMLElement {
+  const trigger = screen.getByRole("button", { name: new RegExp(title) });
+  const section = trigger.closest("section");
+  if (!section) {
+    throw new Error(`Inventory section ${title} not found.`);
+  }
+  return section;
+}
+
+function getInventoryRowByActionLabel(section: HTMLElement, actionLabel: string): HTMLElement {
+  const actionButton = within(section).getByRole("button", { name: actionLabel });
+  const row = actionButton.closest("article");
+  if (!row) {
+    throw new Error(`Inventory row for ${actionLabel} not found.`);
+  }
+  return row;
+}
 
 function getHost(): DevHubHostFixture {
   if (!host) {

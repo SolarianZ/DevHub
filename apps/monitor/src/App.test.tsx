@@ -299,9 +299,27 @@ describe("Monitor App", () => {
       await Promise.resolve();
     });
 
-    await screen.findByText("Demo App");
-    screen.getByText("instance-1");
-    expect(screen.getByRole("button", { name: "新增定义" }).className).toContain("icon-button-prominent");
+    await screen.findAllByText("Demo App");
+
+    const instancesSection = getInventorySection("App 实例");
+    const instanceRow = getInventoryRowByActionLabel(
+      instancesSection,
+      "查看定义：instance-1（demo.app）",
+    );
+    within(instanceRow).getByText("Demo App");
+    within(instanceRow).getByText("demo.app");
+    within(instanceRow).getByText("Demo description");
+
+    const definitionsSection = getInventorySection("App 定义");
+    const definitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      "编辑定义：Demo App（demo.app）",
+    );
+    within(definitionRow).getByText("Demo App");
+    within(definitionRow).getByText("demo.app");
+    within(definitionRow).getByText("Demo description");
+    expect(within(definitionsSection).getByRole("button", { name: "新增定义" }).className)
+      .toContain("icon-button-prominent");
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
@@ -314,7 +332,7 @@ describe("Monitor App", () => {
 
     await user.click(screen.getByRole("button", { name: "主页" }));
     await screen.findByRole("heading", { name: "主页" });
-    screen.getByText("Demo App");
+    expect(screen.getAllByText("Demo App").length).toBeGreaterThan(0);
 
     expect(hostClientFromRuntimeMock).toHaveBeenCalledTimes(1);
     expect(eventsClientFromRuntimeMock).toHaveBeenCalledTimes(1);
@@ -333,6 +351,78 @@ describe("Monitor App", () => {
         includeOffline: true,
       });
     });
+  });
+
+  it("renders shared inventory metadata rows with tooltip titles and missing-definition fallback", async () => {
+    const longDisplayName = "Monitor Inventory Display Name With Long Overflow";
+    const longAppId = "monitor.inventory.long.app.identifier";
+    const longDescription = "用于验证库存条目长文本悬停全文展示和单行布局。";
+    const orphanAppId = "monitor.inventory.orphan";
+    const orphanInstanceId = "orphan-instance";
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([
+        createDefinition({
+          appId: longAppId,
+          displayName: longDisplayName,
+          description: longDescription,
+        }),
+      ]),
+      listInstances: vi.fn().mockResolvedValue([
+        createInstance({
+          instanceId: "long-instance",
+          appId: longAppId,
+        }),
+        createInstance({
+          instanceId: orphanInstanceId,
+          appId: orphanAppId,
+        }),
+      ]),
+      getDefinition: vi.fn(),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText(longDisplayName);
+
+    const instancesSection = getInventorySection("App 实例");
+    const mappedInstanceRow = getInventoryRowByActionLabel(
+      instancesSection,
+      `查看定义：long-instance（${longAppId}）`,
+    );
+    expect(within(mappedInstanceRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
+    expect(within(mappedInstanceRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
+    expect(within(mappedInstanceRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
+
+    const orphanInstanceRow = getInventoryRowByActionLabel(
+      instancesSection,
+      `查看定义：${orphanInstanceId}（${orphanAppId}）`,
+    );
+    expect(within(orphanInstanceRow).getAllByText(orphanAppId)).toHaveLength(2);
+    expect(within(orphanInstanceRow).getByText("未提供 App 描述").getAttribute("title"))
+      .toBe("未提供 App 描述");
+
+    const definitionsSection = getInventorySection("App 定义");
+    const definitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      `编辑定义：${longDisplayName}（${longAppId}）`,
+    );
+    expect(within(definitionRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
+    expect(within(definitionRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
+    expect(within(definitionRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
   });
 
   it("returns home to discovery when the host event stream terminates", async () => {
@@ -622,7 +712,7 @@ describe("Monitor App", () => {
     await screen.findByText("Demo App");
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "编辑" }));
+    await user.click(screen.getByRole("button", { name: "编辑定义：Demo App（demo.app）" }));
     await screen.findByRole("heading", { name: "编辑 App Definition" });
     await screen.findByLabelText("显示名称");
     await user.click(screen.getByRole("button", { name: "删除定义" }));
@@ -664,12 +754,40 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByRole("button", { name: "查看定义" });
+    await screen.findByRole("button", { name: "查看定义：instance-1（demo.app）" });
+
+    const instancesSection = getInventorySection("App 实例");
+    const missingInstanceRow = getInventoryRowByActionLabel(
+      instancesSection,
+      "查看定义：instance-1（demo.app）",
+    );
+    expect(within(missingInstanceRow).getAllByText("demo.app")).toHaveLength(2);
+    within(missingInstanceRow).getByText("未提供 App 描述");
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "查看定义" }));
+    await user.click(within(missingInstanceRow).getByRole("button", {
+      name: "查看定义：instance-1（demo.app）",
+    }));
 
     await screen.findByRole("heading", { name: "定义不存在" });
     screen.getByText("只读模式不允许保存或删除。");
   });
 });
+
+function getInventorySection(title: "App 实例" | "App 定义"): HTMLElement {
+  const trigger = screen.getByRole("button", { name: new RegExp(title) });
+  const section = trigger.closest("section");
+  if (!section) {
+    throw new Error(`Inventory section ${title} not found.`);
+  }
+  return section;
+}
+
+function getInventoryRowByActionLabel(section: HTMLElement, actionLabel: string): HTMLElement {
+  const actionButton = within(section).getByRole("button", { name: actionLabel });
+  const row = actionButton.closest("article");
+  if (!row) {
+    throw new Error(`Inventory row for ${actionLabel} not found.`);
+  }
+  return row;
+}

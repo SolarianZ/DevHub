@@ -147,8 +147,7 @@ svg {
 }
 
 .sidebar-toggle:hover:not(:disabled),
-.sidebar-button:hover:not(:disabled),
-.section-trigger:hover:not(:disabled) {
+.sidebar-button:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 
@@ -431,6 +430,10 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
 
 .section {
   margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
 .section-header {
@@ -438,15 +441,22 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
-  background: var(--bg-muted);
-  border-radius: 6px;
 }
 
 .section-trigger {
   flex: 1;
   justify-content: flex-start;
   padding: 0;
+  min-height: 40px;
+  min-width: 0;
+}
+
+.section-title-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
 }
 
 .section-action {
@@ -468,45 +478,79 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
 
 .section-count {
   color: var(--text-sub);
-  margin-left: 4px;
 }
 
 .section-body {
-  padding-top: 8px;
+  padding-top: 12px;
 }
 
 .list {
   display: grid;
+  gap: 8px;
 }
 
 .list-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border-bottom: 1px solid #f3f4f6;
+  background: var(--bg-card);
+  border: 1px solid #eef2f7;
   border-radius: 6px;
 }
 
-.list-item:last-child {
-  border-bottom: none;
-}
-
 .list-item:hover {
-  background: var(--bg-muted);
+  background: #fdfefe;
 }
 
-.item-name {
+.inventory-item-content {
+  display: grid;
+  gap: 4px;
+  flex: 1;
   min-width: 0;
+}
+
+.inventory-item-heading {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.inventory-item-name {
+  min-width: 0;
+  max-width: 100%;
   font-size: 14px;
-  word-break: break-word;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-item-app-id {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-item-description {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .item-actions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .support-group,
