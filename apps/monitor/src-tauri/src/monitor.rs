@@ -107,6 +107,10 @@ impl MonitorCore {
                         .map(Value::String)
                         .unwrap_or(Value::Null),
                 ),
+                (
+                    "hideHostCommandLineWindow",
+                    Value::Bool(snapshot.settings.hide_host_command_line_window),
+                ),
             ])),
         )?;
         let _ = app.emit(EVENT_SETTINGS_CHANGED, snapshot.clone());
@@ -135,6 +139,7 @@ impl MonitorCore {
 
         let settings = self.settings_service.current();
         let resolved = self.settings_service.resolve_effective_data_dir();
+        let hide_host_command_line_window = settings.hide_host_command_line_window;
 
         let Some(host_path) = settings.host_executable_path.clone() else {
             self.launch_service.finish_launch_attempt();
@@ -175,7 +180,11 @@ impl MonitorCore {
             .restart(app.clone(), "launch_requested", None)?;
 
         let host_path = PathBuf::from(host_path);
-        let pid = match self.launch_service.spawn_host(&host_path, &resolved.path) {
+        let pid = match self.launch_service.spawn_host(
+            &host_path,
+            &resolved.path,
+            hide_host_command_line_window,
+        ) {
             Ok(pid) => pid,
             Err(error) => {
                 self.launch_service.finish_launch_attempt();
@@ -190,6 +199,10 @@ impl MonitorCore {
                         (
                             "hostExecutablePath",
                             Value::String(host_path.display().to_string()),
+                        ),
+                        (
+                            "hideHostCommandLineWindow",
+                            Value::Bool(hide_host_command_line_window),
                         ),
                     ])),
                 )?;
@@ -208,6 +221,10 @@ impl MonitorCore {
                 (
                     "hostExecutablePath",
                     Value::String(host_path.display().to_string()),
+                ),
+                (
+                    "hideHostCommandLineWindow",
+                    Value::Bool(hide_host_command_line_window),
                 ),
                 ("hostPid", Value::from(pid)),
             ])),

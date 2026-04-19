@@ -61,3 +61,4 @@ Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜
 - 前端在 `host_available` 后通过 `@devhub/sdk` 直接访问 Host `/rpc` 与 `/ws`，浏览器 / WebView 对 `/rpc` 的预检也由 Host 自身处理，不直接访问本地文件。
 - 原生后端负责设置持久化、运行时发现、Host 启动、日志写入、日志目录打开和系统托盘，不代理 DevHub transport，也不直接依赖 `JS/TS SDK`。
 - `DEVHUB_DATA_DIR` 覆盖值和 Host 可执行文件路径都只接受绝对路径；相对路径会在前端与原生命令层同时被拒绝。
+- Windows 平台的设置工作区提供“隐藏 Host 命令行窗口”开关，默认启用。

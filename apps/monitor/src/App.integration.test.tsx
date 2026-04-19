@@ -476,6 +476,7 @@ function createBootstrapSnapshot(
     settings: {
       dataDirOverride: getHost().dataDirectory,
       hostExecutablePath: absoluteHostPlaceholder(),
+      hideHostCommandLineWindow: true,
     },
     hasConfiguredHostExecutable: true,
     connection,
@@ -489,7 +490,9 @@ function createSettingsSnapshot(): SettingsSnapshot {
     settings: {
       dataDirOverride: getHost().dataDirectory,
       hostExecutablePath: absoluteHostPlaceholder(),
+      hideHostCommandLineWindow: true,
     },
+    platform: "windows",
     effectiveDataDir: getHost().dataDirectory,
     dataDirSource: "settings_override",
     settingsFilePath: join(getHost().dataDirectory, "monitor-settings.json"),

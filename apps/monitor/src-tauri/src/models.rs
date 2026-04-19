@@ -5,11 +5,36 @@ pub const EVENT_BOOTSTRAP_STATE_CHANGED: &str = "devhub://bootstrap-state-change
 pub const EVENT_SETTINGS_CHANGED: &str = "devhub://settings-changed";
 pub const DEVHUB_DATA_DIR_ENV: &str = "DEVHUB_DATA_DIR";
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorSettings {
     pub data_dir_override: Option<String>,
     pub host_executable_path: Option<String>,
+    #[serde(default = "default_hide_host_command_line_window")]
+    pub hide_host_command_line_window: bool,
+}
+
+impl Default for MonitorSettings {
+    fn default() -> Self {
+        Self {
+            data_dir_override: None,
+            host_executable_path: None,
+            hide_host_command_line_window: default_hide_host_command_line_window(),
+        }
+    }
+}
+
+fn default_hide_host_command_line_window() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
+pub enum MonitorPlatform {
+    Windows,
+    Macos,
+    Linux,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +55,7 @@ pub struct ResolvedDataDir {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSnapshot {
     pub settings: MonitorSettings,
+    pub platform: MonitorPlatform,
     pub effective_data_dir: String,
     pub data_dir_source: DataDirSource,
     pub settings_file_path: String,

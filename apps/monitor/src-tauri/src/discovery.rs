@@ -307,6 +307,7 @@ mod tests {
             MonitorSettings {
                 data_dir_override: Some("/tmp/devhub".to_string()),
                 host_executable_path: None,
+                hide_host_command_line_window: false,
             },
             ResolvedDataDir {
                 path: "/tmp/devhub".to_string(),

@@ -38,7 +38,10 @@ interface AppShellProps {
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onLaunchHost: () => void;
-  onChangeSettingsField: (field: keyof MonitorSettings, value: string) => void;
+  onChangeSettingsField: (
+    field: keyof MonitorSettings,
+    value: MonitorSettings[keyof MonitorSettings],
+  ) => void;
   onSelectHostExecutablePath: () => void;
   onSelectDataDirectory: () => void;
   onSaveSettings: () => void;
@@ -151,6 +154,7 @@ export function AppShell(props: AppShellProps) {
               fieldErrors={settingsFieldErrors}
               settingsDirty={settingsDirty}
               settingsDraft={settingsDraft}
+              showHideHostCommandLineWindowOption={settings?.platform === "windows"}
               onChangeField={onChangeSettingsField}
               onSelectHostExecutablePath={onSelectHostExecutablePath}
               onSelectDataDirectory={onSelectDataDirectory}
@@ -571,7 +575,11 @@ function SettingsWorkspace(props: {
   fieldErrors: SettingsFieldErrors;
   settingsDirty: boolean;
   settingsDraft: MonitorSettings;
-  onChangeField: (field: keyof MonitorSettings, value: string) => void;
+  showHideHostCommandLineWindowOption: boolean;
+  onChangeField: (
+    field: keyof MonitorSettings,
+    value: MonitorSettings[keyof MonitorSettings],
+  ) => void;
   onSelectHostExecutablePath: () => void;
   onSelectDataDirectory: () => void;
   onSave: () => void;
@@ -581,6 +589,7 @@ function SettingsWorkspace(props: {
     fieldErrors,
     settingsDirty,
     settingsDraft,
+    showHideHostCommandLineWindowOption,
     onChangeField,
     onSelectHostExecutablePath,
     onSelectDataDirectory,
@@ -637,6 +646,21 @@ function SettingsWorkspace(props: {
           </div>
           <FieldError message={fieldErrors.dataDirOverride} />
         </label>
+
+        {showHideHostCommandLineWindowOption ? (
+          <div className="field">
+            <span>启动行为</span>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={settingsDraft.hideHostCommandLineWindow ?? true}
+                onChange={(event) => onChangeField("hideHostCommandLineWindow", event.target.checked)}
+                disabled={busy}
+              />
+              <span>隐藏 Host 命令行窗口</span>
+            </label>
+          </div>
+        ) : null}
 
         <div className="definition-actions">
           <div className="action-spacer" />

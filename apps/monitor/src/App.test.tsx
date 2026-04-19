@@ -121,6 +121,7 @@ function createBootstrapSnapshot(
     settings: {
       dataDirOverride: "/tmp/devhub",
       hostExecutablePath: "/tmp/DevHub.Host",
+      hideHostCommandLineWindow: true,
     },
     hasConfiguredHostExecutable: true,
     connection,
@@ -134,7 +135,9 @@ function createSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): Sett
     settings: {
       dataDirOverride: "/tmp/devhub",
       hostExecutablePath: "/tmp/DevHub.Host",
+      hideHostCommandLineWindow: true,
     },
+    platform: "windows",
     effectiveDataDir: "/tmp/devhub",
     dataDirSource: "settings_override",
     settingsFilePath: "/tmp/settings.json",
@@ -523,16 +526,59 @@ describe("Monitor App", () => {
 
     await user.clear(screen.getByLabelText("Host 可执行文件路径"));
     await user.type(screen.getByLabelText("Host 可执行文件路径"), "/tmp/alt-host");
+    await user.click(screen.getByLabelText("隐藏 Host 命令行窗口"));
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
     await waitFor(() => {
       expect(saveSettingsMock).toHaveBeenCalledWith({
         dataDirOverride: "/tmp/devhub",
         hostExecutablePath: "/tmp/alt-host",
+        hideHostCommandLineWindow: false,
       });
     });
 
     await screen.findByRole("heading", { name: "主页" });
+  });
+
+  it("keeps the host command line window option checked by default on windows", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+
+    expect((screen.getByLabelText("隐藏 Host 命令行窗口") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("hides the host command line window option on non-windows platforms", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        phase: "scanning",
+        connection: null,
+      }),
+    );
+    getSettingsSnapshotMock.mockResolvedValue(createSettingsSnapshot({
+      platform: "macos",
+    }));
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+
+    expect(screen.queryByLabelText("隐藏 Host 命令行窗口")).toBeNull();
   });
 
   it("fills settings fields from the native file and directory pickers", async () => {

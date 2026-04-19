@@ -11,10 +11,12 @@ export type HostLaunchStatus = "started" | "settings_required";
 export type LogKind = "host" | "monitor";
 
 export type MonitorLogLevel = "trace" | "debug" | "info" | "warn" | "error";
+export type MonitorPlatform = "windows" | "macos" | "linux";
 
 export interface MonitorSettings {
   dataDirOverride?: string | null;
   hostExecutablePath?: string | null;
+  hideHostCommandLineWindow?: boolean;
 }
 
 export interface MonitorProblem {
@@ -60,6 +62,7 @@ export interface BootstrapSnapshot {
 
 export interface SettingsSnapshot {
   settings: MonitorSettings;
+  platform: MonitorPlatform;
   effectiveDataDir: string;
   dataDirSource: DataDirSource;
   settingsFilePath: string;
