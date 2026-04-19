@@ -1,0 +1,16 @@
+<Project>
+
+  <Target Name="PreferUnityNewtonsoftJsonReference"
+          AfterTargets="ResolveReferences"
+          Condition="'$(PkgJson_Net_Unity3D)' != ''">
+    <ItemGroup>
+      <!-- 测试基础设施会带入签名版 Newtonsoft.Json；统一切回 Unity 版未签名程序集，保证与 SDK 公开类型面一致。 -->
+      <ReferencePath Remove="@(ReferencePath)" Condition="'%(Filename)%(Extension)' == 'Newtonsoft.Json.dll'" />
+      <ReferencePath Include="$(PkgJson_Net_Unity3D)\lib\net35\Newtonsoft.Json.dll">
+        <HintPath>$(PkgJson_Net_Unity3D)\lib\net35\Newtonsoft.Json.dll</HintPath>
+        <Private>true</Private>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
+
+</Project>
