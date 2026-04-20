@@ -275,6 +275,7 @@ fn user_home_directory() -> Option<PathBuf> {
 mod tests {
     use super::{resolve_effective_data_dir, SettingsStore};
     use crate::models::{DataDirSource, MonitorSettings, DEVHUB_DATA_DIR_ENV};
+    use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -421,14 +422,14 @@ mod tests {
         let settings_file = temp_directory.join("settings.json");
         let data_dir = absolute_test_path("runtime-data");
         let host_path = absolute_test_path("host-bin");
+        let settings_payload = serde_json::to_vec_pretty(&json!({
+            "dataDirOverride": data_dir,
+            "hostExecutablePath": host_path,
+        }))
+        .expect("failed to serialize settings file");
         fs::write(
             &settings_file,
-            format!(
-                r#"{{
-  "dataDirOverride": "{data_dir}",
-  "hostExecutablePath": "{host_path}"
-}}"#
-            ),
+            settings_payload,
         )
         .expect("failed to write settings file");
 

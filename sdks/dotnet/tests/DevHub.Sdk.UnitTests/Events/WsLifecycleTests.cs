@@ -46,7 +46,8 @@ public sealed class WsLifecycleTests : IDisposable
     public async Task EventsClient_BeforeAuthenticate_ShouldRejectSubscribeAndRead()
     {
         var dataDir = await CreateDataDirectoryAsync();
-        var factory = new FakeWebSocketConnectionFactory(new FakeWebSocketConnection());
+        var connection = new FakeWebSocketConnection();
+        var factory = new FakeWebSocketConnectionFactory(connection);
         await using var client = await DevHubEventsClient.FromRuntimeAsync(
             new DevHubClientOptions
             {
@@ -58,6 +59,29 @@ public sealed class WsLifecycleTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted }));
         Assert.Throws<InvalidOperationException>(() => client.ReadEventsAsync());
+        Assert.Empty(connection.SentTexts);
+    }
+
+    [Fact]
+    public async Task EventsClient_BeforeAuthenticate_ShouldRejectReadOnlyRpcMethodsWithoutSendingRequest()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync());
+        Assert.Empty(connection.SentTexts);
     }
 
     [Fact]

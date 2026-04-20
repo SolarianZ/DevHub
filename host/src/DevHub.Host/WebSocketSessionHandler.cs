@@ -1,6 +1,6 @@
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
-using DevHub.Host.Events;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Rpc;
 using DevHub.Host.Runtime;
 using DevHub.Host.Transport;
@@ -24,7 +24,7 @@ public class WebSocketSessionHandler
 
     private readonly RpcRouter _rpcRouter;
     private readonly HostRuntimeArtifactManager _runtimeArtifactManager;
-    private readonly HubEventSessionManager _eventBus;
+    private readonly HubEventBus _eventBus;
     private readonly ILogger<WebSocketSessionHandler> _logger;
 
     /// <summary>
@@ -37,7 +37,7 @@ public class WebSocketSessionHandler
     public WebSocketSessionHandler(
         RpcRouter rpcRouter,
         HostRuntimeArtifactManager runtimeArtifactManager,
-        HubEventSessionManager eventBus,
+        HubEventBus eventBus,
         ILogger<WebSocketSessionHandler> logger)
     {
         _rpcRouter = rpcRouter;

@@ -1,3 +1,4 @@
+mod backend_support;
 mod discovery;
 mod launch;
 mod logging;

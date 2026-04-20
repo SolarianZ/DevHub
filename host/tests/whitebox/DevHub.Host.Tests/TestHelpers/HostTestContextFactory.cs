@@ -1,7 +1,7 @@
 namespace DevHub.Host.Tests.TestHelpers;
 
 using DevHub.Core.Services;
-using DevHub.Host.Events;
+using DevHub.Core.Services.Events;
 
 /// <summary>
 /// Host 测试上下文工厂。
@@ -34,7 +34,7 @@ internal sealed class HostTestContext : IDisposable
     /// <summary>
     /// 事件总线。
     /// </summary>
-    internal HubEventSessionManager EventBus => _harness.EventBus;
+    internal HubEventBus EventBus => _harness.EventBus;
 
     /// <summary>
     /// 当前测试环境 token。

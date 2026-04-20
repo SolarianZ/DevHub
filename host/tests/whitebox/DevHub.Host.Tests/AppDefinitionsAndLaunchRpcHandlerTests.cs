@@ -8,12 +8,12 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
-using DevHub.Host.Rpc.Handlers;
+using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// Host 定义管理与启动 RPC 适配层测试。
+/// Host 使用的共享定义管理与启动 RPC 处理器测试。
 /// </summary>
 [Trait("Category", "Spec")]
 public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
@@ -53,7 +53,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             }
             """);
 
-        var handler = new AppDefinitionsRpcHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsRpcHandler>>());
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var listResponse = await handler.HandleAsync(
             CreateRequest(HubRpcMethods.HubAppsListDefinitions, "list-definitions", new { }),
@@ -82,7 +82,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     public async Task Spec_6_3_4_AppDefinitionsRpcHandler_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         using var context = CreateDefinitionContext();
-        var handler = new AppDefinitionsRpcHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsRpcHandler>>());
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var response = await handler.HandleAsync(
             CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-missing-definition", new { appId = "missing.definition" }),
@@ -99,7 +99,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     public async Task Spec_6_3_5_And_6_3_6_AppDefinitionsRpcHandler_ShouldValidateAndRejectInvalidDefinitions()
     {
         using var context = CreateDefinitionContext();
-        var handler = new AppDefinitionsRpcHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsRpcHandler>>());
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var invalidDefinition = new
         {
@@ -137,7 +137,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     public async Task Spec_6_3_5_AppDefinitionsRpcHandler_WhenDefinitionParamMissing_ShouldReturnInvalidParams()
     {
         using var context = CreateDefinitionContext();
-        var handler = new AppDefinitionsRpcHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsRpcHandler>>());
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var response = await handler.HandleAsync(
             CreateRequest(HubRpcMethods.HubAppsValidateDefinition, "validate-missing-definition", new { appId = "bad" }),
@@ -154,7 +154,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
-        var handler = new AppDefinitionsRpcHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsRpcHandler>>());
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var upsertResponse = await handler.HandleAsync(
             CreateRequest(
@@ -318,7 +318,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         return new DefinitionTestContext(runtimePathOptions, definitionProvider, definitionManager);
     }
 
-    private static LaunchRpcHandler CreateLaunchHandler(
+    private static LaunchHandler CreateLaunchHandler(
         DefinitionTestContext context,
         IClock? clock = null,
         AppRegistry? appRegistry = null,
@@ -340,7 +340,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             effectiveRuntimeTuningOptions,
             Mock.Of<ILogger<LaunchCoordinator>>());
 
-        return new LaunchRpcHandler(coordinator, Mock.Of<ILogger<LaunchRpcHandler>>());
+        return new LaunchHandler(coordinator, Mock.Of<ILogger<LaunchHandler>>());
     }
 
     private static JsonRpcRequest CreateRequest(string method, object id, object? parameters)

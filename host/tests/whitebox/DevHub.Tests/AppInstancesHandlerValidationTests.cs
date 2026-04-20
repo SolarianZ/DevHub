@@ -458,7 +458,7 @@ public sealed class AppInstancesHandlerValidationTests
     public async Task Impl_RegisterAndUnregisterWithoutEventBus_ShouldReturnOk()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventBus: null);
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object, eventPublisher: null);
 
         var register = await handler.HandleAsync(new JsonRpcRequest
         {
