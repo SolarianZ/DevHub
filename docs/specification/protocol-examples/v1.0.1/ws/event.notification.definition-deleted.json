@@ -6,7 +6,8 @@
     "type": "app.definition.deleted",
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
-      "appId": "sample.app"
+      "appId": "sample.app",
+      "scope": null
     }
   }
 }

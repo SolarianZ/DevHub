@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.expired.json",
+        "fileName": "invoke.request.expired--global.json",
         "definition": {
           "appId": "invoke.request.expired",
+          "scope": null,
           "displayName": "invoke.request.expired"
         }
       }

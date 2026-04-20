@@ -5,6 +5,7 @@
     "ok": true,
     "definition": {
       "appId": "sample.app",
+      "scope": null,
       "displayName": "Sample App",
       "capabilities": {
         "rpc": true

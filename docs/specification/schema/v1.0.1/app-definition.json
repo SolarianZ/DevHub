@@ -4,12 +4,24 @@
   "type": "object",
   "required": [
     "appId",
+    "scope",
     "displayName"
   ],
   "properties": {
     "appId": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
     },
     "displayName": {
       "type": "string"

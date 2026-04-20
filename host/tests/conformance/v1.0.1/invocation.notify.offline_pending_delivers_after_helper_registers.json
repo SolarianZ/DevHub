@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.pending.json",
+        "fileName": "invoke.notify.pending--global.json",
         "definition": {
           "appId": "invoke.notify.pending",
+          "scope": null,
           "displayName": "invoke.notify.pending"
         }
       }

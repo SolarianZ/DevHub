@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.delete.existing.app.json",
+        "fileName": "apps.delete.existing.app--global.json",
         "definition": {
           "appId": "apps.delete.existing.app",
+          "scope": null,
           "displayName": "Apps Delete Existing"
         }
       }
@@ -21,13 +22,15 @@
         "method": "hub.apps.getDefinition",
         "requestId": "apps-definitions-delete-get-missing",
         "params": {
-          "appId": "apps.delete.existing.app"
+          "appId": "apps.delete.existing.app",
+          "scope": null
         },
         "expectedError": {
           "code": -32014,
           "message": "app_definition_not_found",
           "data": {
-            "appId": "apps.delete.existing.app"
+            "appId": "apps.delete.existing.app",
+            "scope": null
           }
         }
       }
@@ -47,7 +50,8 @@
     "id": "apps-definitions-delete-existing",
     "method": "hub.apps.deleteDefinition",
     "params": {
-      "appId": "apps.delete.existing.app"
+      "appId": "apps.delete.existing.app",
+      "scope": null
     }
   },
   "expectedResponse": {

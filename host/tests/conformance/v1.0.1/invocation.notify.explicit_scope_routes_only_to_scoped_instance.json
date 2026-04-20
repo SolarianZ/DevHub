@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.scope.json",
+        "fileName": "invoke.notify.scope--global.json",
         "definition": {
           "appId": "invoke.notify.scope",
+          "scope": null,
           "displayName": "invoke.notify.scope"
         }
       }

@@ -165,6 +165,7 @@ async function runEvents(context) {
   const request = ensureRecord(context.vector?.request, "request");
   const steps = ensureArray(request.steps, "request.steps");
   const dataDir = context.dataDir;
+  const rawRpcConnection = await discoverRuntime(dataDir);
 
   const eventClients = new Map();
   const eventIterators = new Map();
@@ -246,44 +247,83 @@ async function runEvents(context) {
       }
 
       if (action === "validate_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const result = await client.validateDefinition(
-          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-validate-definition-${index}`,
+          "hub.apps.validateDefinition",
+          {
+            definition: ensureRecord(step.definition, `request.steps[${index}].definition`)
+          }
         );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = normalizeDefinitionValidationResult(result);
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
         }
         continue;
       }
 
       if (action === "upsert_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const result = await client.upsertDefinition(
-          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-upsert-definition-${index}`,
+          "hub.apps.upsertDefinition",
+          {
+            definition: ensureRecord(step.definition, `request.steps[${index}].definition`)
+          }
         );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureRecord(
+            result.definition,
+            `request.steps[${index}].captureAs`
+          );
         }
         continue;
       }
 
       if (action === "get_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
-        const result = await client.getDefinition(appId);
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-get-definition-${index}`,
+          "hub.apps.getDefinition",
+          buildDefinitionIdentityParams(step, captures, index)
+        );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureRecord(
+            result.definition,
+            `request.steps[${index}].captureAs`
+          );
         }
         continue;
       }
 
       if (action === "delete_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
-        await client.deleteDefinition(appId);
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-delete-definition-${index}`,
+          "hub.apps.deleteDefinition",
+          buildDefinitionIdentityParams(step, captures, index)
+        );
+        readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
           captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = { ok: true };
         }
+        continue;
+      }
+
+      if (action === "list_definitions") {
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-list-definitions-${index}`,
+          "hub.apps.listDefinitions",
+          {}
+        );
+        const result = readRawResult(response, `request.steps[${index}]`);
+        captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureArray(
+          result.definitions,
+          `request.steps[${index}].captureAs`
+        );
         continue;
       }
 
@@ -573,6 +613,52 @@ function normalizeDefinitionValidationResult(result) {
     ok: result.ok,
     valid: result.valid,
     errors: result.errors
+  };
+}
+
+async function sendRawRpc(connection, requestId, method, params) {
+  const response = await fetch(`${connection.runtime.httpBaseUrl}/rpc`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${connection.token}`,
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawDefinitionRpc",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000099"
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: requestId,
+      method,
+      params
+    })
+  });
+  return JSON.parse(await response.text());
+}
+
+function readRawResult(response, pathLabel) {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    throw new Error(`${pathLabel} 定义 RPC 响应非法。`);
+  }
+
+  if ("error" in response) {
+    throw new Error(`${pathLabel} 定义 RPC 返回错误：${JSON.stringify(response.error)}`);
+  }
+
+  const result = ensureRecord(response.result, `${pathLabel}.result`);
+  if (result.ok !== true) {
+    throw new Error(`${pathLabel} 定义 RPC 缺少 result.ok=true。`);
+  }
+
+  return result;
+}
+
+function buildDefinitionIdentityParams(step, captures, index) {
+  const appId = String(resolveCaptureValue(step, captures, index, "appId"));
+  const scope = resolveCaptureValue(step, captures, index, "scope");
+  return {
+    appId,
+    scope: scope ?? null
   };
 }
 

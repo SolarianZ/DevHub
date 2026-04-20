@@ -215,6 +215,12 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
     request = require_mapping(vector["request"], "request")
     steps = require_list(request.get("steps"), "request.steps")
     data_dir = str(context["dataDir"])
+    raw_rpc_connection = discover_runtime(
+        DevHubClientOptions(
+            client_id="ConformanceRawDefinitionRpc",
+            data_dir=data_dir,
+        )
+    )
 
     event_clients: dict[str, DevHubEventsClient] = {}
     event_iterators: dict[str, Any] = {}
@@ -289,38 +295,81 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "validate_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
-                result = require_http_client(http_clients, client_name, index).validate_definition(
-                    build_app_definition(definition_payload)
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-validate-definition-{index}",
+                        method="hub.apps.validateDefinition",
+                        params={"definition": definition_payload},
+                    ),
+                    path=f"request.steps[{index}]",
                 )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
-                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = (
-                        normalize_definition_validation_result(result)
-                    )
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = result
                 continue
 
             if action == "upsert_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
-                definition = require_http_client(http_clients, client_name, index).upsert_definition(
-                    build_app_definition(definition_payload)
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-upsert-definition-{index}",
+                        method="hub.apps.upsertDefinition",
+                        params={"definition": definition_payload},
+                    ),
+                    path=f"request.steps[{index}]",
                 )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
-                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = normalize_app_definition(
-                        definition
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = require_mapping(
+                        result.get("definition"),
+                        f"request.steps[{index}].captureAs",
                     )
                 continue
 
             if action == "delete_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
-                app_id = resolve_capture_value(step, captures, index, "appId")
-                require_http_client(http_clients, client_name, index).delete_definition(str(app_id))
+                read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-delete-definition-{index}",
+                        method="hub.apps.deleteDefinition",
+                        params=build_definition_identity_params(step, captures, index),
+                    ),
+                    path=f"request.steps[{index}]",
+                )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
                     captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = {"ok": True}
+                continue
+
+            if action == "get_definition":
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-get-definition-{index}",
+                        method="hub.apps.getDefinition",
+                        params=build_definition_identity_params(step, captures, index),
+                    ),
+                    path=f"request.steps[{index}]",
+                )
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                captures[capture_as] = require_mapping(result.get("definition"), f"request.steps[{index}].captureAs")
+                continue
+
+            if action == "list_definitions":
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-list-definitions-{index}",
+                        method="hub.apps.listDefinitions",
+                        params={},
+                    ),
+                    path=f"request.steps[{index}]",
+                )
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                captures[capture_as] = require_list(result.get("definitions"), f"request.steps[{index}].captureAs")
                 continue
 
             if action == "read_event":
@@ -613,6 +662,51 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
     return actual
 
 
+def send_raw_rpc(
+    connection,
+    *,
+    request_id: str,
+    method: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    response = requests.post(
+        f"{connection.runtime.http_base_url}/rpc",
+        data=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {connection.token}",
+            "X-DevHub-Protocol": "1",
+            "X-DevHub-ClientId": "ConformanceRawDefinitionRpc",
+            "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000099",
+        },
+        timeout=30,
+    )
+    return json.loads(response.text)
+
+
+def read_raw_result(response: dict[str, Any], *, path: str) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        raise ValueError(f"{path} 定义 RPC 响应非法。")
+
+    if isinstance(response.get("error"), dict):
+        raise ValueError(f"{path} 定义 RPC 返回错误：{json.dumps(response['error'], ensure_ascii=False)}")
+
+    result = require_mapping(response.get("result"), f"{path}.result")
+    if result.get("ok") is not True:
+        raise ValueError(f"{path} 定义 RPC 缺少 result.ok=true。")
+
+    return result
+
+
 def normalize_event(event: Any) -> dict[str, Any]:
     return {
         "subscriptionId": event.subscription_id,
@@ -645,7 +739,16 @@ def resolve_capture_value(step: dict[str, Any], captures: dict[str, Any], index:
         if capture_key not in captures:
             raise ValueError(f"request.steps[{index}].{reference_field} 引用不存在：{capture_key}")
         return captures[capture_key]
+
     return step.get(field_name)
+
+
+def build_definition_identity_params(step: dict[str, Any], captures: dict[str, Any], index: int) -> dict[str, Any]:
+    app_id = require_string(resolve_capture_value(step, captures, index, "appId"), f"request.steps[{index}].appId")
+    return {
+        "appId": app_id,
+        "scope": resolve_capture_value(step, captures, index, "scope"),
+    }
 
 
 def resolve_password(

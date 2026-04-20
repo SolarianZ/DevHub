@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.list.valid-only.app.json",
+        "fileName": "apps.list.valid-only.app--global.json",
         "definition": {
           "appId": "apps.list.valid-only.app",
+          "scope": null,
           "displayName": "Apps List Valid Only"
         }
       },
@@ -41,6 +42,7 @@
       "definitions": [
         {
           "appId": "apps.list.valid-only.app",
+          "scope": null,
           "displayName": "Apps List Valid Only"
         }
       ]

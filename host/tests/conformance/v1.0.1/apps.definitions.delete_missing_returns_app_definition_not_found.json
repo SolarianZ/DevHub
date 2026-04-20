@@ -17,7 +17,8 @@
     "id": "apps-definitions-delete-missing",
     "method": "hub.apps.deleteDefinition",
     "params": {
-      "appId": "apps.delete.missing.app"
+      "appId": "apps.delete.missing.app",
+      "scope": null
     }
   },
   "expectedResponse": {
@@ -27,7 +28,8 @@
       "code": -32014,
       "message": "app_definition_not_found",
       "data": {
-        "appId": "apps.delete.missing.app"
+        "appId": "apps.delete.missing.app",
+        "scope": null
       }
     }
   },

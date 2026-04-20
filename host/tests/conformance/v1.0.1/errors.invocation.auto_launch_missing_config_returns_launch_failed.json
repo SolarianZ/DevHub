@@ -1,14 +1,15 @@
 {
   "id": "errors.invocation.auto_launch_missing_config_returns_launch_failed",
   "caseId": "CONF-008",
-  "description": "当 invocation 请求自动启动目标应用但缺失 launch 配置时，必须返回 launch_failed/launch_config_missing。", 
+  "description": "当 invocation 请求自动启动目标应用但缺失 launch 配置时，必须返回 launch_failed/launch_config_missing。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.launch-missing.json",
+        "fileName": "errors.invocation.launch-missing--global.json",
         "definition": {
           "appId": "errors.invocation.launch-missing",
+          "scope": null,
           "displayName": "errors.invocation.launch-missing"
         }
       }

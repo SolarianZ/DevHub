@@ -672,9 +672,25 @@ def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
     return definition_path
 
 
+def normalize_definition_scope(scope: Optional[str]) -> Optional[str]:
+    """规范化 Definition scope（空字符串视为 Global）。"""
+    if scope in (None, ""):
+        return None
+    return scope
+
+
+def build_definition_identity_params(app_id: str, scope: Optional[str] = None) -> Dict[str, Any]:
+    """构造按 `appId + scope` 标识 Definition 的 RPC 参数。"""
+    return {
+        "appId": app_id,
+        "scope": normalize_definition_scope(scope),
+    }
+
+
 def build_app_definition(
     app_id: str,
     *,
+    scope: Optional[str] = None,
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     rpc: bool = True,
@@ -684,6 +700,7 @@ def build_app_definition(
     """构造标准测试 AppDefinition 负载。"""
     payload: Dict[str, Any] = {
         "appId": app_id,
+        "scope": normalize_definition_scope(scope),
         "displayName": display_name or app_id,
         "capabilities": {
             "rpc": rpc,
@@ -700,6 +717,7 @@ def build_app_definition(
 def write_app_definition(
     app_id: str,
     *,
+    scope: Optional[str] = None,
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     rpc: bool = True,
@@ -711,6 +729,7 @@ def write_app_definition(
         app_id,
         build_app_definition(
             app_id=app_id,
+            scope=scope,
             display_name=display_name,
             description=description,
             rpc=rpc,

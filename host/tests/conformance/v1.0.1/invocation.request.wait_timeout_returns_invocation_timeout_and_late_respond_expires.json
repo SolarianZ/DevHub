@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.timeout.json",
+        "fileName": "invoke.request.timeout--global.json",
         "definition": {
           "appId": "invoke.request.timeout",
+          "scope": null,
           "displayName": "invoke.request.timeout"
         }
       }

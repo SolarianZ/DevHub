@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.delivery-conflict.json",
+        "fileName": "invoke.request.delivery-conflict--global.json",
         "definition": {
           "appId": "invoke.request.delivery-conflict",
+          "scope": null,
           "displayName": "invoke.request.delivery-conflict"
         }
       }

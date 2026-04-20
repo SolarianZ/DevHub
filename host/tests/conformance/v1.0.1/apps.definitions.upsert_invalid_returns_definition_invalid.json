@@ -19,6 +19,7 @@
     "params": {
       "definition": {
         "appId": "Invalid App",
+        "scope": null,
         "displayName": "Broken Definition"
       }
     }

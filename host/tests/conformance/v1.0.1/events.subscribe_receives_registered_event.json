@@ -1,14 +1,15 @@
 {
   "id": "events.subscribe_receives_registered_event",
   "caseId": "CONF-007",
-  "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。", 
+  "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。",
   "transport": "ws",
   "setup": {
     "definitions": [
       {
-        "fileName": "events.subscribe.registered.json",
+        "fileName": "events.subscribe.registered--global.json",
         "definition": {
           "appId": "events.subscribe.registered",
+          "scope": null,
           "displayName": "events.subscribe.registered"
         }
       }

@@ -7,8 +7,10 @@
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
       "appId": "sample.app",
+      "scope": null,
       "definition": {
         "appId": "sample.app",
+        "scope": null,
         "displayName": "Sample App"
       }
     }

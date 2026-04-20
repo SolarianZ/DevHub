@@ -5,6 +5,7 @@
   "params": {
     "definition": {
       "appId": "Sample App",
+      "scope": null,
       "displayName": "Sample App"
     }
   }

@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.empty-scope.json",
+        "fileName": "invoke.request.empty-scope--global.json",
         "definition": {
           "appId": "invoke.request.empty-scope",
+          "scope": null,
           "displayName": "invoke.request.empty-scope"
         }
       }

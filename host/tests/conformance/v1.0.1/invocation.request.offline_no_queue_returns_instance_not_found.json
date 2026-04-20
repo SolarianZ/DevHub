@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.no-queue.json",
+        "fileName": "invoke.request.no-queue--global.json",
         "definition": {
           "appId": "invoke.request.no-queue",
+          "scope": null,
           "displayName": "invoke.request.no-queue"
         }
       }

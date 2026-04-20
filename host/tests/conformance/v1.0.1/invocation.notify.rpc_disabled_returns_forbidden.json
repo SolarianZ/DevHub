@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.rpc-disabled.json",
+        "fileName": "invoke.notify.rpc-disabled--global.json",
         "definition": {
           "appId": "invoke.notify.rpc-disabled",
+          "scope": null,
           "displayName": "invoke.notify.rpc-disabled",
           "capabilities": {
             "rpc": false
