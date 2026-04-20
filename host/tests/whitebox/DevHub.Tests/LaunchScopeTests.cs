@@ -232,7 +232,14 @@ public class LaunchScopeTests : IDisposable
             "launch-scope-isolation.app",
             rpcEnabled: true,
             includeLaunch: true,
-            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            definitionScope: "workspace-A");
+        WriteDefinition(
+            "launch-scope-isolation.app",
+            rpcEnabled: true,
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            definitionScope: "workspace-B");
 
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
@@ -273,7 +280,8 @@ public class LaunchScopeTests : IDisposable
             rpcEnabled: true,
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-            argsTemplate: "--scope {scopeOrGlobal}");
+            argsTemplate: "--scope {scopeOrGlobal}",
+            definitionScope: targetScope);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
@@ -406,11 +414,13 @@ public class LaunchScopeTests : IDisposable
         bool rpcEnabled,
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = null)
+        string? argsTemplate = null,
+        string? definitionScope = null)
     {
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -435,7 +445,7 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -463,7 +473,6 @@ public class LaunchScopeTests : IDisposable
         throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
-
 
 
 

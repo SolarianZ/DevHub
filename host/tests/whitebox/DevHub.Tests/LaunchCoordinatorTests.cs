@@ -141,7 +141,7 @@ public class LaunchCoordinatorTests : IDisposable
     [Fact]
     public async Task Impl_LaunchAsync_WhenMatchingOnlineInstanceExists_ShouldNotInvokeProcessLauncher()
     {
-        WriteDefinition("launch-online-instance.app", includeLaunch: true);
+        WriteDefinition("launch-online-instance.app", includeLaunch: true, definitionScope: "workspace-A");
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
@@ -392,7 +392,8 @@ public class LaunchCoordinatorTests : IDisposable
             "launch-args-template.app",
             includeLaunch: true,
             exePath: "dotnet",
-            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}");
+            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}",
+            definitionScope: "workspace-A");
 
         string? capturedArguments = null;
         var processLauncher = new Mock<IProcessLauncher>();
@@ -458,7 +459,8 @@ public class LaunchCoordinatorTests : IDisposable
             "launch-args-template-literal.app",
             includeLaunch: true,
             exePath: "dotnet",
-            argsTemplate: "{dedupeKey}|{appId}|{scopeOrGlobal}");
+            argsTemplate: "{dedupeKey}|{appId}|{scopeOrGlobal}",
+            definitionScope: "workspace-B");
 
         string? capturedArguments = null;
         var processLauncher = new Mock<IProcessLauncher>();
@@ -655,11 +657,18 @@ public class LaunchCoordinatorTests : IDisposable
         File.WriteAllText(hubJsonPath, JsonSerializer.Serialize(payload));
     }
 
-    private void WriteDefinition(string appId, bool includeLaunch, string? dedupeKeyTemplate = null, string? argsTemplate = null, string? exePath = null)
+    private void WriteDefinition(
+        string appId,
+        bool includeLaunch,
+        string? dedupeKeyTemplate = null,
+        string? argsTemplate = null,
+        string? exePath = null,
+        string? definitionScope = null)
     {
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -684,7 +693,7 @@ public class LaunchCoordinatorTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -693,6 +702,7 @@ public class LaunchCoordinatorTests : IDisposable
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = (string?)null,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -705,7 +715,7 @@ public class LaunchCoordinatorTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -724,4 +734,3 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
-

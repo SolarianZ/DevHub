@@ -51,10 +51,15 @@ public sealed class AppDefinitionValidator
             issues.Add(CreateIssue("definition.appId", "invalid_app_id", "appId must match ^[a-z0-9][a-z0-9.-]*$"));
         }
 
+        var allowLegacyGlobalScope = !string.IsNullOrWhiteSpace(actualFileName);
+        var scope = ReadRequiredScope(definitionElement, issues, allowLegacyGlobalScope);
+
         if (!string.IsNullOrWhiteSpace(actualFileName) && IsValidAppId(appId))
         {
-            var expectedFileName = $"{appId}.json";
-            if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
+            var expectedFileName = AppDefinitionIdentity.Create(appId!, scope).GetFileName();
+            var isLegacyGlobalFile = scope is null
+                && string.Equals(actualFileName, $"{appId}.json", StringComparison.Ordinal);
+            if (!isLegacyGlobalFile && !string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
             {
                 issues.Add(CreateIssue("definition.appId", "file_name_mismatch", $"definition file name must be {expectedFileName}"));
             }
@@ -74,6 +79,7 @@ public sealed class AppDefinitionValidator
         definition = new AppDefinition
         {
             AppId = appId!,
+            Scope = scope,
             DisplayName = displayName!,
             Description = description,
             Launch = launch,
@@ -220,6 +226,43 @@ public sealed class AppDefinitionValidator
         }
 
         return property.GetString();
+    }
+
+    private static string? ReadRequiredScope(
+        JsonElement element,
+        ICollection<ValidationIssue> issues,
+        bool allowMissingScope)
+    {
+        if (!element.TryGetProperty("scope", out var scopeProperty))
+        {
+            if (allowMissingScope)
+            {
+                return null;
+            }
+
+            issues.Add(CreateIssue("definition.scope", "missing_scope", "scope is required"));
+            return null;
+        }
+
+        if (scopeProperty.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (scopeProperty.ValueKind != JsonValueKind.String)
+        {
+            issues.Add(CreateIssue("definition.scope", "invalid_field_type", "scope must be a string or null"));
+            return null;
+        }
+
+        var scope = scopeProperty.GetString();
+        if (string.IsNullOrWhiteSpace(scope))
+        {
+            issues.Add(CreateIssue("definition.scope", "invalid_scope", "scope must be null or a non-empty string"));
+            return null;
+        }
+
+        return scope;
     }
 
     private static bool? ReadOptionalBoolean(

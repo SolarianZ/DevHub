@@ -127,16 +127,26 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
-            var definition = _definitionProvider.GetDefinition(appId);
+            if (!RpcParamReader.TryGetOptionalScope(
+                    paramsElement,
+                    "scope",
+                    "invalid_scope",
+                    out var scope,
+                    out var scopeErrorData))
+            {
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+            }
+
+            _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}", appId, scope, request.Id);
+            var definition = _definitionProvider.GetDefinition(appId, scope);
 
             if (definition == null)
             {
-                _logger.LogWarning("未找到应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
-                return Task.FromResult(AppDefinitionNotFound(request.Id, appId));
+                _logger.LogWarning("未找到应用程序定义，AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}", appId, scope, request.Id);
+                return Task.FromResult(AppDefinitionNotFound(request.Id, appId, scope));
             }
 
-            _logger.LogInformation("成功获取应用程序定义，AppId: {AppId}, RequestId: {RequestId}", appId, request.Id);
+            _logger.LogInformation("成功获取应用程序定义，AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}", appId, scope, request.Id);
             var response = new JsonRpcResponse
             {
                 Id = request.Id,
@@ -249,9 +259,19 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!_definitionManager.Delete(appId))
+            if (!RpcParamReader.TryGetOptionalScope(
+                    paramsElement,
+                    "scope",
+                    "invalid_scope",
+                    out var scope,
+                    out var scopeErrorData))
             {
-                return Task.FromResult(AppDefinitionNotFound(request.Id, appId));
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+            }
+
+            if (!_definitionManager.Delete(appId, scope))
+            {
+                return Task.FromResult(AppDefinitionNotFound(request.Id, appId, scope));
             }
 
             return Task.FromResult(new JsonRpcResponse
@@ -290,9 +310,9 @@ public class AppDefinitionsHandler : IRpcHandler
         return true;
     }
 
-    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId)
+    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string? scope)
     {
-        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new { appId });
+        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new { appId, scope });
     }
 
     private sealed class UnsupportedDefinitionManager : IDefinitionManager
@@ -319,7 +339,7 @@ public class AppDefinitionsHandler : IRpcHandler
             throw new NotSupportedException("Definition management is not available in this handler instance.");
         }
 
-        public bool Delete(string appId)
+        public bool Delete(string appId, string? scope)
         {
             throw new NotSupportedException("Definition management is not available in this handler instance.");
         }

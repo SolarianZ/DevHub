@@ -188,7 +188,7 @@ public class LaunchSpecTests : IDisposable
     {
         const string appId = "spec-6.3.9-online-instance";
         const string scope = "workspace-A";
-        WriteDefinition(appId, includeLaunch: true);
+        WriteDefinition(appId, includeLaunch: true, definitionScope: scope);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         appRegistry.RegisterInstance(new AppInstance
@@ -226,7 +226,7 @@ public class LaunchSpecTests : IDisposable
     public async Task Spec_6_3_9_Launch_WhenDedupeHitsWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         const string appId = "spec-6.3.9-dedupe-hit";
-        WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+        WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}", definitionScope: "workspace-A");
 
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
@@ -329,7 +329,8 @@ public class LaunchSpecTests : IDisposable
             appId,
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scope}:{scopeOrGlobal}:{httpBaseUrl}",
-            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}");
+            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}",
+            definitionScope: scope);
 
         string? renderedArguments = null;
         var processLauncher = new Mock<IProcessLauncher>();
@@ -416,11 +417,13 @@ public class LaunchSpecTests : IDisposable
         string appId,
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = "--version")
+        string? argsTemplate = "--version",
+        string? definitionScope = null)
     {
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -445,7 +448,7 @@ public class LaunchSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
 

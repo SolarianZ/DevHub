@@ -489,7 +489,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Equal("offline_no_queue", noQueueData.GetProperty("reason").GetString());
 
             var pendingAppId = $"scope-010-pending-{scopeTag}";
-            WriteDefinition(pendingAppId, rpcEnabled: true);
+            WriteDefinition(pendingAppId, rpcEnabled: true, definitionScope: targetScope);
             definitionProvider.Refresh();
 
             var pendingResponse = await invocationHandler.HandleAsync(
@@ -525,7 +525,8 @@ public class InvocationScopeRoutingTests : IDisposable
                 rpcEnabled: true,
                 includeLaunch: true,
                 dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-                argsTemplate: "{scopeOrGlobal}");
+                argsTemplate: "{scopeOrGlobal}",
+                definitionScope: targetScope);
             definitionProvider.Refresh();
 
             var autoLaunchResponse = await invocationHandler.HandleAsync(
@@ -698,12 +699,14 @@ public class InvocationScopeRoutingTests : IDisposable
         bool rpcEnabled,
         bool includeLaunch = false,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = null)
+        string? argsTemplate = null,
+        string? definitionScope = null)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -767,8 +770,6 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
 }
-
-
 
 
 

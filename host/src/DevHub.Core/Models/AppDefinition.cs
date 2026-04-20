@@ -15,6 +15,13 @@ public class AppDefinition
     public required string AppId { get; set; }
 
     /// <summary>
+    /// Definition 作用域（null 表示 Global Definition）。
+    /// </summary>
+    [JsonPropertyName("scope")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? Scope { get; set; }
+
+    /// <summary>
     /// 显示名称
     /// </summary>
     [JsonPropertyName("displayName")]
@@ -69,6 +76,12 @@ public class LaunchConfiguration
     /// </summary>
     [JsonPropertyName("dedupeKeyTemplate")]
     public string? DedupeKeyTemplate { get; set; }
+
+    /// <summary>
+    /// 进程启动时附加的环境变量。
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<string, string?>? EnvironmentVariables { get; set; }
 }
 
 /// <summary>

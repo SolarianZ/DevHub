@@ -109,6 +109,144 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
     [Fact]
     [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.8")]
+    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedScopeMissing_ShouldReturnAppDefinitionNotFound()
+    {
+        WriteDefinition("managed.scope.app", rpcEnabled: true, definitionScope: "workspace-A");
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var handler = CreateAppInstancesHandler(appRegistry, definitionProvider: definitionProvider);
+
+        var response = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "register-missing-managed-scope",
+                new
+                {
+                    password = "managed-password",
+                    instance = new
+                    {
+                        instanceId = "managed.scope.instance",
+                        appId = "managed.scope.app",
+                        scope = "workspace-B",
+                        pid = 7309,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        AssertError(response, -32014, "app_definition_not_found", "register-missing-managed-scope");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("managed.scope.app", errorData.GetProperty("appId").GetString());
+        Assert.Equal("workspace-B", errorData.GetProperty("scope").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.8")]
+    public async Task Spec_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
+    {
+        const string appId = "managed.bound.launch";
+        const string launchScope = "workspace-A";
+        const string wrongScope = "workspace-B";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: wrongScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        string? capturedLaunchId = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
+            {
+                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+            })
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "bound-launch",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 300
+                }),
+            CancellationToken.None);
+
+        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
+        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "bound-register-wrong-scope",
+                new
+                {
+                    password = "bound-password",
+                    instance = new
+                    {
+                        instanceId = "bound.instance",
+                        appId,
+                        scope = wrongScope,
+                        pid = 7310,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        },
+                        meta = new
+                        {
+                            launchId = capturedLaunchId
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        AssertError(registerResponse, -32002, "forbidden", "bound-register-wrong-scope");
+        var registerErrorData = JsonSerializer.SerializeToElement(registerResponse.Error!.Data);
+        Assert.Equal("definition_scope_mismatch", registerErrorData.GetProperty("reason").GetString());
+        Assert.Equal(launchScope, registerErrorData.GetProperty("expectedScope").GetString());
+        Assert.Equal(wrongScope, registerErrorData.GetProperty("scope").GetString());
+
+        var launchResponse = await launchTask;
+        AssertError(launchResponse, -32020, "launch_failed", "bound-launch");
+        var launchErrorData = JsonSerializer.SerializeToElement(launchResponse.Error!.Data);
+        Assert.Equal("definition_scope_mismatch", launchErrorData.GetProperty("reason").GetString());
+        Assert.Equal(capturedLaunchId, launchErrorData.GetProperty("launchId").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.9")]
     public async Task Spec_6_3_9_AppInstancesRpcHandler_WhenHeartbeatUnknown_ShouldReturnInstanceNotFound()
     {
@@ -752,10 +890,23 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     private AppInstancesHandler CreateAppInstancesHandler(
         AppRegistry appRegistry,
         IClock? clock = null,
-        IHubEventPublisher? eventPublisher = null)
+        IHubEventPublisher? eventPublisher = null,
+        IDefinitionProvider? definitionProvider = null,
+        ILaunchRegistrationTracker? launchRegistrationTracker = null)
     {
+        if (definitionProvider is null)
+        {
+            return new AppInstancesHandler(
+                appRegistry,
+                clock ?? new SystemClock(),
+                Mock.Of<ILogger<AppInstancesHandler>>(),
+                eventPublisher);
+        }
+
         return new AppInstancesHandler(
             appRegistry,
+            definitionProvider,
+            launchRegistrationTracker ?? NullLaunchRegistrationTracker.Instance,
             clock ?? new SystemClock(),
             Mock.Of<ILogger<AppInstancesHandler>>(),
             eventPublisher);
@@ -806,11 +957,20 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         };
     }
 
-    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
+    private DefinitionProvider CreateDefinitionProvider()
+    {
+        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        return definitionProvider;
+    }
+
+    private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? definitionScope = null)
     {
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new
             {
@@ -829,7 +989,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         }
 
         File.WriteAllText(
-            Path.Combine(_definitionsDirectory, $"{appId}.json"),
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName()),
             JsonSerializer.Serialize(payload));
     }
 

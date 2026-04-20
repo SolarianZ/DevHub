@@ -320,7 +320,7 @@ public class InvocationHandler : IRpcHandler
         }
 
         _definitionProvider.Refresh();
-        var definition = _definitionProvider.GetDefinition(appId);
+        var definition = _definitionProvider.GetDefinition(appId, target.Scope);
         if (definition is not null && definition.Capabilities?.Rpc == false)
         {
             return new InvocationBuildResult(

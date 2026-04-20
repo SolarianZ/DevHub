@@ -3,7 +3,9 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
+using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -18,6 +20,8 @@ public class AppInstancesHandler : IRpcHandler
     private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
 
     private readonly AppRegistry _appRegistry;
+    private readonly IDefinitionProvider _definitionProvider;
+    private readonly ILaunchRegistrationTracker _launchRegistrationTracker;
     private readonly IHubEventPublisher? _eventPublisher;
     private readonly IClock _clock;
     private readonly ILogger<AppInstancesHandler> _logger;
@@ -26,14 +30,38 @@ public class AppInstancesHandler : IRpcHandler
     /// 初始化应用实例 RPC 处理器。
     /// </summary>
     /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="definitionProvider">Definition 快照提供器。</param>
+    /// <param name="launchRegistrationTracker">启动绑定跟踪器。</param>
+    /// <param name="clock">系统时钟。</param>
     /// <param name="logger">日志记录器。</param>
     /// <param name="eventPublisher">Hub 事件发布器。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, IHubEventPublisher? eventPublisher = null)
+    [ActivatorUtilitiesConstructor]
+    public AppInstancesHandler(
+        AppRegistry appRegistry,
+        IDefinitionProvider definitionProvider,
+        ILaunchRegistrationTracker launchRegistrationTracker,
+        IClock clock,
+        ILogger<AppInstancesHandler> logger,
+        IHubEventPublisher? eventPublisher = null)
     {
         _appRegistry = appRegistry;
+        _definitionProvider = definitionProvider;
+        _launchRegistrationTracker = launchRegistrationTracker;
         _clock = clock;
         _eventPublisher = eventPublisher;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 初始化应用实例 RPC 处理器。
+    /// </summary>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="clock">系统时钟。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="eventPublisher">Hub 事件发布器。</param>
+    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, IHubEventPublisher? eventPublisher = null)
+        : this(appRegistry, EmptyDefinitionProvider.Instance, NullLaunchRegistrationTracker.Instance, clock, logger, eventPublisher)
+    {
     }
 
     /// <inheritdoc />
@@ -89,6 +117,33 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
+            _definitionProvider.Refresh();
+            var launchId = TryGetLaunchId(instance.Meta);
+            var launchBindingValidation = _launchRegistrationTracker.ValidateRegistration(launchId, instance.AppId, instance.Scope);
+            if (launchBindingValidation.Status == LaunchRegistrationValidationStatus.Mismatched)
+            {
+                _logger.LogWarning(
+                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, LaunchId: {LaunchId}, RequestId: {RequestId}",
+                    instance.InstanceId,
+                    instance.AppId,
+                    instance.Scope,
+                    launchId,
+                    request.Id);
+                return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, launchBindingValidation.ErrorData));
+            }
+
+            if (_definitionProvider.HasDefinitions(instance.AppId)
+                && _definitionProvider.GetDefinition(instance.AppId, instance.Scope) is null)
+            {
+                _logger.LogWarning(
+                    "注册应用程序实例失败: 未找到匹配 Definition，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
+                    instance.InstanceId,
+                    instance.AppId,
+                    instance.Scope,
+                    request.Id);
+                return Task.FromResult(AppDefinitionNotFound(request.Id, instance.AppId, instance.Scope));
+            }
+
             if (!_appRegistry.TryRegisterInstance(instance, password, out var registeredInstance, out var passwordMismatch))
             {
                 if (passwordMismatch)
@@ -104,6 +159,7 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
             }
 
+            _launchRegistrationTracker.RecordSuccessfulRegistration(launchId, registeredInstance);
             PublishInstanceEvent(HubEventTypes.AppInstanceRegistered, registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
 
             _logger.LogInformation("成功注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
@@ -491,6 +547,50 @@ public class AppInstancesHandler : IRpcHandler
                 scope
             }
         });
+    }
+
+    private static string? TryGetLaunchId(Dictionary<string, object?>? meta)
+    {
+        if (meta is null || !meta.TryGetValue(LaunchCoordinator.LaunchIdMetaKey, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            string launchId when !string.IsNullOrWhiteSpace(launchId) => launchId,
+            JsonElement { ValueKind: JsonValueKind.String } element when !string.IsNullOrWhiteSpace(element.GetString()) => element.GetString(),
+            _ => null
+        };
+    }
+
+    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string? scope)
+    {
+        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new { appId, scope });
+    }
+
+    private sealed class EmptyDefinitionProvider : IDefinitionProvider
+    {
+        public static EmptyDefinitionProvider Instance { get; } = new();
+
+        public void Refresh()
+        {
+        }
+
+        public IReadOnlyList<AppDefinition> GetAllDefinitions()
+        {
+            return Array.Empty<AppDefinition>();
+        }
+
+        public AppDefinition? GetDefinition(string appId, string? scope)
+        {
+            return null;
+        }
+
+        public bool HasDefinitions(string appId)
+        {
+            return false;
+        }
     }
 
 }

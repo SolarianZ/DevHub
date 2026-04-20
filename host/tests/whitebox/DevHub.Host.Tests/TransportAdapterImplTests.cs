@@ -101,6 +101,7 @@ public sealed class TransportAdapterImplTests
                 """
                 {
                   "appId": "transport.parser",
+                  "scope": null,
                   "displayName": "Transport Parser",
                   "description": "adapter test",
                   "launch": {

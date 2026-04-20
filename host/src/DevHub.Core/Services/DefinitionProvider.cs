@@ -13,6 +13,7 @@ public sealed class DefinitionProvider : IDefinitionProvider
     private readonly DefinitionLoader _definitionLoader;
     private readonly object _syncRoot = new();
     private IReadOnlyList<AppDefinition> _snapshot = Array.Empty<AppDefinition>();
+    private Dictionary<AppDefinitionIdentity, AppDefinition> _snapshotByIdentity = new();
 
     /// <summary>
     /// 初始化定义提供器。
@@ -30,6 +31,7 @@ public sealed class DefinitionProvider : IDefinitionProvider
         {
             _definitionLoader.Load();
             _snapshot = _definitionLoader.GetAllDefinitions().ToArray();
+            _snapshotByIdentity = _snapshot.ToDictionary(AppDefinitionIdentity.FromDefinition);
         }
     }
 
@@ -45,9 +47,24 @@ public sealed class DefinitionProvider : IDefinitionProvider
     /// <inheritdoc />
     public AppDefinition? GetDefinition(string appId)
     {
+        return GetDefinition(appId, scope: null);
+    }
+
+    /// <inheritdoc />
+    public AppDefinition? GetDefinition(string appId, string? scope)
+    {
         lock (_syncRoot)
         {
-            return _snapshot.FirstOrDefault(definition => definition.AppId == appId);
+            return _snapshotByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, scope));
+        }
+    }
+
+    /// <inheritdoc />
+    public bool HasDefinitions(string appId)
+    {
+        lock (_syncRoot)
+        {
+            return _snapshot.Any(definition => definition.AppId == appId);
         }
     }
 }

@@ -14,6 +14,7 @@ public class DefinitionLoader
     private readonly AppDefinitionValidator _validator;
 
     private List<AppDefinition> _definitions = new();
+    private Dictionary<AppDefinitionIdentity, AppDefinition> _definitionsByIdentity = new();
 
     /// <summary>
     /// 初始化应用程序定义加载器。
@@ -46,6 +47,7 @@ public class DefinitionLoader
             var files = Directory.GetFiles(_definitionsPath, "*.json");
             _logger.LogDebug("发现 {Count} 个应用程序定义文件", files.Length);
             var definitions = new List<AppDefinition>();
+            var definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
 
             foreach (var file in files)
             {
@@ -67,6 +69,8 @@ public class DefinitionLoader
                         continue;
                     }
 
+                    var identity = AppDefinitionIdentity.FromDefinition(definition!);
+                    definitionsByIdentity[identity] = definition!;
                     definitions.Add(definition!);
                     _logger.LogDebug("成功加载应用程序定义: {AppId} (文件: {File}, 详细信息: {DefinitionDetails})",
                         definition!.AppId, file, JsonSerializer.Serialize(definition));
@@ -82,11 +86,13 @@ public class DefinitionLoader
             }
 
             _definitions = definitions;
+            _definitionsByIdentity = definitionsByIdentity;
             _logger.LogInformation("成功加载 {Count} 个应用程序定义", definitions.Count);
         }
         catch (Exception ex)
         {
             _definitions = new List<AppDefinition>();
+            _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
             _logger.LogError(ex, "加载应用程序定义失败，目录: {Path}", _definitionsPath);
         }
     }
@@ -105,18 +111,35 @@ public class DefinitionLoader
     /// </summary>
     public AppDefinition? GetDefinition(string appId)
     {
-        _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}", appId);
-        var definition = _definitions.FirstOrDefault(d => d.AppId == appId);
+        return GetDefinition(appId, scope: null);
+    }
+
+    /// <summary>
+    /// 根据复合键获取定义。
+    /// </summary>
+    public AppDefinition? GetDefinition(string appId, string? scope)
+    {
+        var normalizedScope = AppDefinitionIdentity.NormalizeScope(scope);
+        _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, Scope: {Scope}", appId, normalizedScope);
+        var definition = _definitionsByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, normalizedScope));
 
         if (definition != null)
         {
-            _logger.LogDebug("成功获取应用程序定义: {AppId}", appId);
+            _logger.LogDebug("成功获取应用程序定义: {AppId}, Scope: {Scope}", appId, normalizedScope);
         }
         else
         {
-            _logger.LogDebug("未找到应用程序定义: {AppId}", appId);
+            _logger.LogDebug("未找到应用程序定义: {AppId}, Scope: {Scope}", appId, normalizedScope);
         }
 
         return definition;
+    }
+
+    /// <summary>
+    /// 判断指定 appId 是否存在任意 Definition。
+    /// </summary>
+    public bool HasDefinitions(string appId)
+    {
+        return _definitions.Any(definition => definition.AppId == appId);
     }
 }

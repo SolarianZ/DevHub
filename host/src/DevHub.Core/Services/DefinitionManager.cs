@@ -104,13 +104,20 @@ public sealed class DefinitionManager : IDefinitionManager
     /// <inheritdoc />
     public bool Delete(string appId)
     {
+        return Delete(appId, scope: null);
+    }
+
+    /// <inheritdoc />
+    public bool Delete(string appId, string? scope)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         if (!AppDefinitionValidator.IsValidAppId(appId))
         {
             throw new ArgumentException("appId format is invalid.", nameof(appId));
         }
 
-        var path = Path.Combine(_definitionsPath, $"{appId}.json");
+        var identity = AppDefinitionIdentity.Create(appId, scope);
+        var path = Path.Combine(_definitionsPath, identity.GetFileName());
         if (!File.Exists(path))
         {
             return false;
@@ -118,8 +125,8 @@ public sealed class DefinitionManager : IDefinitionManager
 
         File.Delete(path);
         _definitionProvider.Refresh();
-        PublishDefinitionDeleted(appId);
-        _logger.LogInformation("已删除应用定义: {AppId}", appId);
+        PublishDefinitionDeleted(identity);
+        _logger.LogInformation("已删除应用定义: {AppId}, Scope: {Scope}", appId, identity.Scope);
         return true;
     }
 
@@ -127,7 +134,8 @@ public sealed class DefinitionManager : IDefinitionManager
     {
         Directory.CreateDirectory(_definitionsPath);
 
-        var targetPath = Path.Combine(_definitionsPath, $"{definition.AppId}.json");
+        var identity = AppDefinitionIdentity.FromDefinition(definition);
+        var targetPath = Path.Combine(_definitionsPath, identity.GetFileName());
         var tempPath = Path.Combine(_definitionsPath, $".{definition.AppId}.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -136,9 +144,9 @@ public sealed class DefinitionManager : IDefinitionManager
             File.Move(tempPath, targetPath, overwrite: true);
 
             _definitionProvider.Refresh();
-            var storedDefinition = _definitionProvider.GetDefinition(definition.AppId) ?? definition;
+            var storedDefinition = _definitionProvider.GetDefinition(definition.AppId, definition.Scope) ?? definition;
             PublishDefinitionUpserted(storedDefinition);
-            _logger.LogInformation("已写入应用定义: {AppId}", definition.AppId);
+            _logger.LogInformation("已写入应用定义: {AppId}, Scope: {Scope}", definition.AppId, identity.Scope);
             return storedDefinition;
         }
         finally
@@ -171,12 +179,13 @@ public sealed class DefinitionManager : IDefinitionManager
             Payload = new
             {
                 appId = definition.AppId,
+                scope = definition.Scope,
                 definition
             }
         });
     }
 
-    private void PublishDefinitionDeleted(string appId)
+    private void PublishDefinitionDeleted(AppDefinitionIdentity identity)
     {
         _eventPublisher?.Publish(new HubEventMessage
         {
@@ -184,7 +193,8 @@ public sealed class DefinitionManager : IDefinitionManager
             TimeUtc = _clock.UtcNow,
             Payload = new
             {
-                appId
+                appId = identity.AppId,
+                scope = identity.Scope
             }
         });
     }

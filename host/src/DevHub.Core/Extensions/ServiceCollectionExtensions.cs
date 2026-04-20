@@ -100,6 +100,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IClock>(),
                 sp.GetRequiredService<RuntimeTuningOptions>(),
                 sp.GetRequiredService<ILogger<LaunchCoordinator>>()));
+        services.AddSingleton<ILaunchRegistrationTracker>(sp => sp.GetRequiredService<LaunchCoordinator>());
 
         return services;
     }
