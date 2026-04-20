@@ -8,12 +8,12 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
-using DevHub.Host.Rpc.Handlers;
+using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// Host 实例管理与调用链 RPC 适配层测试。
+/// Host 使用的共享实例管理与调用链 RPC 处理器测试。
 /// </summary>
 [Trait("Category", "Spec")]
 public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
@@ -749,19 +749,19 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         }
     }
 
-    private AppInstancesRpcHandler CreateAppInstancesHandler(
+    private AppInstancesHandler CreateAppInstancesHandler(
         AppRegistry appRegistry,
         IClock? clock = null,
         IHubEventPublisher? eventPublisher = null)
     {
-        return new AppInstancesRpcHandler(
+        return new AppInstancesHandler(
             appRegistry,
             clock ?? new SystemClock(),
-            Mock.Of<ILogger<AppInstancesRpcHandler>>(),
+            Mock.Of<ILogger<AppInstancesHandler>>(),
             eventPublisher);
     }
 
-    private InvocationRpcHandlerTestContext CreateInvocationHandlerContext(
+    private InvocationHandlerTestContext CreateInvocationHandlerContext(
         AppRegistry appRegistry,
         IClock? clock = null,
         RuntimeTuningOptions? runtimeTuningOptions = null,
@@ -789,9 +789,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             effectiveRuntimeTuningOptions,
             Mock.Of<ILogger<LaunchCoordinator>>());
 
-        return new InvocationRpcHandlerTestContext
+        return new InvocationHandlerTestContext
         {
-            Handler = new InvocationRpcHandler(
+            Handler = new InvocationHandler(
                 appRegistry,
                 definitionProvider,
                 routingService,
@@ -799,8 +799,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 waiter,
                 launchCoordinator,
                 effectiveClock,
+                Mock.Of<ILogger<InvocationHandler>>(),
                 effectiveRuntimeTuningOptions,
-                Mock.Of<ILogger<InvocationRpcHandler>>(),
                 eventPublisher),
             Store = store
         };
@@ -905,9 +905,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         }
     }
 
-    private sealed class InvocationRpcHandlerTestContext : IDisposable
+    private sealed class InvocationHandlerTestContext : IDisposable
     {
-        public required InvocationRpcHandler Handler { get; init; }
+        public required InvocationHandler Handler { get; init; }
 
         public required InvocationStore Store { get; init; }
 

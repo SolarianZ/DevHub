@@ -56,6 +56,36 @@ internal static class RpcParamReader
     }
 
     /// <summary>
+    /// 尝试读取可选字符串字段。
+    /// </summary>
+    /// <param name="element">参数对象。</param>
+    /// <param name="propertyName">字段名。</param>
+    /// <param name="value">读取结果；缺失或为 null 时返回 null。</param>
+    /// <returns>字段缺失、为 null 或为字符串时返回 true，否则返回 false。</returns>
+    public static bool TryGetOptionalString(JsonElement element, string propertyName, out string? value)
+    {
+        value = null;
+
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return true;
+        }
+
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = property.GetString();
+        return true;
+    }
+
+    /// <summary>
     /// 尝试读取可选的 scope 字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
@@ -172,6 +202,54 @@ internal static class RpcParamReader
             InstanceId = instanceId
         };
 
+        return true;
+    }
+
+    /// <summary>
+    /// 尝试解析 invocation.respond 的 error 载荷。
+    /// </summary>
+    /// <param name="errorElement">error JSON 对象。</param>
+    /// <param name="error">解析后的错误对象。</param>
+    /// <returns>结构合法返回 true，否则返回 false。</returns>
+    public static bool TryParseRespondError(JsonElement errorElement, out object? error)
+    {
+        error = null;
+
+        if (errorElement.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (!errorElement.TryGetProperty("code", out var codeElement)
+            || codeElement.ValueKind != JsonValueKind.Number
+            || !codeElement.TryGetInt32(out var code))
+        {
+            return false;
+        }
+
+        if (!errorElement.TryGetProperty("message", out var messageElement)
+            || messageElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["code"] = code,
+            ["message"] = messageElement.GetString()
+        };
+
+        if (errorElement.TryGetProperty("data", out var dataElement))
+        {
+            if (dataElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            payload["data"] = JsonSerializer.Deserialize<object>(dataElement.GetRawText());
+        }
+
+        error = payload;
         return true;
     }
 }

@@ -45,7 +45,7 @@ public class InvocationHandler : IRpcHandler
     private readonly InvocationRequestWaiter _requestWaiter;
     private readonly LaunchCoordinator _launchCoordinator;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
-    private readonly HubEventBus? _eventBus;
+    private readonly IHubEventPublisher? _eventPublisher;
     private readonly IClock _clock;
     private readonly ILogger<InvocationHandler> _logger;
 
@@ -61,7 +61,7 @@ public class InvocationHandler : IRpcHandler
         LaunchCoordinator launchCoordinator,
         IClock clock,
         ILogger<InvocationHandler> logger,
-        HubEventBus? eventBus = null)
+        IHubEventPublisher? eventPublisher = null)
         : this(
             appRegistry,
             definitionProvider,
@@ -72,7 +72,7 @@ public class InvocationHandler : IRpcHandler
             clock,
             logger,
             RuntimeTuningOptions.Default,
-            eventBus)
+            eventPublisher)
     {
     }
 
@@ -90,7 +90,7 @@ public class InvocationHandler : IRpcHandler
         IClock clock,
         ILogger<InvocationHandler> logger,
         RuntimeTuningOptions runtimeTuningOptions,
-        HubEventBus? eventBus = null)
+        IHubEventPublisher? eventPublisher = null)
     {
         _appRegistry = appRegistry;
         _definitionProvider = definitionProvider;
@@ -99,7 +99,7 @@ public class InvocationHandler : IRpcHandler
         _requestWaiter = requestWaiter;
         _launchCoordinator = launchCoordinator;
         _runtimeTuningOptions = runtimeTuningOptions;
-        _eventBus = eventBus;
+        _eventPublisher = eventPublisher;
         _clock = clock;
         _logger = logger;
     }
@@ -573,7 +573,7 @@ public class InvocationHandler : IRpcHandler
         else
         {
             value = null;
-            if (!TryParseRespondError(errorElement, out error))
+            if (!RpcParamReader.TryParseRespondError(errorElement, out error))
             {
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
@@ -667,56 +667,14 @@ public class InvocationHandler : IRpcHandler
         return new { invocationId };
     }
 
-    private static bool TryParseRespondError(JsonElement errorElement, out object? error)
-    {
-        error = null;
-
-        if (errorElement.ValueKind != JsonValueKind.Object)
-        {
-            return false;
-        }
-
-        if (!errorElement.TryGetProperty("code", out var codeElement)
-            || codeElement.ValueKind != JsonValueKind.Number
-            || !codeElement.TryGetInt32(out var code))
-        {
-            return false;
-        }
-
-        if (!errorElement.TryGetProperty("message", out var messageElement)
-            || messageElement.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        var payload = new Dictionary<string, object?>
-        {
-            ["code"] = code,
-            ["message"] = messageElement.GetString()
-        };
-
-        if (errorElement.TryGetProperty("data", out var dataElement))
-        {
-            if (dataElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
-            payload["data"] = JsonSerializer.Deserialize<object>(dataElement.GetRawText());
-        }
-
-        error = payload;
-        return true;
-    }
-
     private void PublishInvocationLifecycleEvent(string eventType, InvocationModel invocation, string? instanceId, object? error)
     {
-        if (_eventBus is null)
+        if (_eventPublisher is null)
         {
             return;
         }
 
-        _eventBus.Publish(new HubEventMessage
+        _eventPublisher.Publish(new HubEventMessage
         {
             Type = eventType,
             TimeUtc = _clock.UtcNow,

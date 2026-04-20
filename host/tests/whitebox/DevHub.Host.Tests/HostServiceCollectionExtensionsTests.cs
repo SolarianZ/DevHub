@@ -5,10 +5,9 @@ using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
+using DevHub.Core.Services.Rpc.Handlers;
 using DevHub.Host.BackgroundServices;
-using DevHub.Host.Events;
 using DevHub.Host.Extensions;
-using DevHub.Host.Rpc.Handlers;
 using DevHub.Host.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -53,9 +52,9 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<IDefinitionManager>());
         Assert.NotNull(provider.GetRequiredService<HostRuntimeContext>());
         Assert.IsType<HostRuntimeHttpBaseUrlProvider>(provider.GetRequiredService<IRuntimeHttpBaseUrlProvider>());
-        Assert.NotNull(provider.GetRequiredService<HubEventSessionManager>());
+        Assert.NotNull(provider.GetRequiredService<HubEventBus>());
         Assert.Same(
-            provider.GetRequiredService<HubEventSessionManager>(),
+            provider.GetRequiredService<HubEventBus>(),
             provider.GetRequiredService<IHubEventPublisher>());
         Assert.NotNull(provider.GetRequiredService<InvocationRoutingService>());
         Assert.NotNull(provider.GetRequiredService<InvocationStore>());
@@ -72,11 +71,11 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
         Assert.NotNull(provider.GetRequiredService<WebSocketSessionHandler>());
 
         var handlers = provider.GetServices<IRpcHandler>().ToList();
-        Assert.Contains(handlers, handler => handler is HubPingRpcHandler);
-        Assert.Contains(handlers, handler => handler is AppDefinitionsRpcHandler);
-        Assert.Contains(handlers, handler => handler is AppInstancesRpcHandler);
-        Assert.Contains(handlers, handler => handler is InvocationRpcHandler);
-        Assert.Contains(handlers, handler => handler is LaunchRpcHandler);
+        Assert.Contains(handlers, handler => handler is HubPingHandler);
+        Assert.Contains(handlers, handler => handler is AppDefinitionsHandler);
+        Assert.Contains(handlers, handler => handler is AppInstancesHandler);
+        Assert.Contains(handlers, handler => handler is InvocationHandler);
+        Assert.Contains(handlers, handler => handler is LaunchHandler);
 
         var hostedServices = provider.GetServices<IHostedService>().ToList();
         Assert.Contains(hostedServices, service => service is AppRegistryCleanupBackgroundService);

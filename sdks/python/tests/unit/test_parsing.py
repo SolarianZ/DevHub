@@ -10,6 +10,7 @@ from devhub_sdk._parsing import (
     parse_datetime,
     parse_definition_validation_result,
     parse_event,
+    parse_hub_runtime,
     parse_invocation,
     parse_launch_result,
     parse_notify_result,
@@ -86,6 +87,26 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
 
     assert definition.launch is not None
     assert definition.launch.exe_path == ""
+
+
+def test_parse_hub_runtime_when_http_base_url_empty_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"httpBaseUrl"):
+        parse_hub_runtime(
+            {
+                "protocolVersion": 1,
+                "pid": 12345,
+                "httpBaseUrl": "",
+                "wsUrl": "ws://127.0.0.1:47231/ws",
+                "tokenFile": "/tmp/token.txt",
+                "startedAtUtc": "2026-03-09T00:00:00Z",
+                "runtimeTuning": {
+                    "leaseSeconds": 30,
+                    "onlineThresholdSeconds": 30,
+                    "launchDedupeWindowSeconds": 30,
+                },
+            },
+            source="hub.json",
+        )
 
 
 def test_parse_definition_validation_result_should_round_trip_issues() -> None:
@@ -248,7 +269,7 @@ def test_parse_invocation_when_wait_timeout_exceeds_ttl_should_raise() -> None:
     payload["options"]["ttlMs"] = 1000
     payload["options"]["waitTimeoutMs"] = 1001
 
-    with pytest.raises(RuntimeError, match=r"waitTimeoutMs"):
+    with pytest.raises(RuntimeError, match=r"waitTimeoutMs 必须小于等于 .*ttlMs"):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 

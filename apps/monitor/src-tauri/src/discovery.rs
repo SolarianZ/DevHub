@@ -1,15 +1,15 @@
+use crate::backend_support::{json_map, problem, record_backend_log};
 use crate::launch::HostLaunchService;
 use crate::logging::MonitorLogService;
 use crate::models::{
     BootstrapPhase, BootstrapSnapshot, MonitorLogLevel, MonitorProblem,
-    MonitorRuntimeConnectionInfo, MonitorSettings, MonitorStructuredLogRecord, ResolvedDataDir,
+    MonitorRuntimeConnectionInfo, MonitorSettings, ResolvedDataDir,
 };
 use crate::runtime::{discover_runtime, port_from_runtime, verify_runtime};
 use crate::settings::SettingsService;
 use crate::snapshot::SnapshotPublisher;
 use anyhow::Result;
-use chrono::Utc;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::path::Path;
 use tauri::AppHandle;
 use tokio::time::{sleep, Duration, Instant};
@@ -62,7 +62,9 @@ impl DiscoveryCoordinator {
             last_problem.clone(),
         );
         self.snapshot_publisher.publish(&app, snapshot);
-        self.record_backend_log(
+        record_backend_log(
+            &self.log_service,
+            self.snapshot_publisher.current().effective_data_dir,
             MonitorLogLevel::Info,
             "discovery",
             "scan_start",
@@ -77,7 +79,9 @@ impl DiscoveryCoordinator {
         let state = self.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(error) = state.run_loop(app, generation).await {
-                let _ = state.record_backend_log(
+                let _ = record_backend_log(
+                    &state.log_service,
+                    state.snapshot_publisher.current().effective_data_dir,
                     MonitorLogLevel::Error,
                     "discovery",
                     "scan_loop",
@@ -128,7 +132,9 @@ impl DiscoveryCoordinator {
                     );
                     self.snapshot_publisher.publish(&app, snapshot);
                     self.launch_service.finish_launch_attempt();
-                    self.record_backend_log(
+                    record_backend_log(
+                        &self.log_service,
+                        self.snapshot_publisher.current().effective_data_dir,
                         MonitorLogLevel::Info,
                         "discovery",
                         "validate_host",
@@ -156,7 +162,9 @@ impl DiscoveryCoordinator {
                 );
                 self.snapshot_publisher.publish(&app, snapshot);
                 self.launch_service.finish_launch_attempt();
-                self.record_backend_log(
+                record_backend_log(
+                    &self.log_service,
+                    self.snapshot_publisher.current().effective_data_dir,
                     MonitorLogLevel::Warn,
                     "discovery",
                     "launch_action",
@@ -171,54 +179,6 @@ impl DiscoveryCoordinator {
 
             sleep(DISCOVERY_INTERVAL).await;
         }
-    }
-
-    fn record_backend_log(
-        &self,
-        level: MonitorLogLevel,
-        category: &str,
-        action: &str,
-        result: &str,
-        message: Option<&str>,
-        context: Option<Map<String, Value>>,
-    ) -> Result<()> {
-        let effective_data_dir = self.snapshot_publisher.current().effective_data_dir;
-
-        self.log_service.record(MonitorStructuredLogRecord {
-            timestamp_utc: Utc::now().to_rfc3339(),
-            level,
-            category: category.to_string(),
-            action: action.to_string(),
-            result: result.to_string(),
-            message: message.map(str::to_string),
-            data_dir: Some(effective_data_dir),
-            host_pid: context
-                .as_ref()
-                .and_then(|map| map.get("hostPid"))
-                .and_then(Value::as_u64)
-                .map(|value| value as u32),
-            port: context
-                .as_ref()
-                .and_then(|map| map.get("port"))
-                .and_then(Value::as_u64)
-                .map(|value| value as u16),
-            app_id: context
-                .as_ref()
-                .and_then(|map| map.get("appId"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            instance_id: context
-                .as_ref()
-                .and_then(|map| map.get("instanceId"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            error_code: context
-                .as_ref()
-                .and_then(|map| map.get("errorCode"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            context,
-        })
     }
 }
 
@@ -256,20 +216,6 @@ fn build_launch_available_snapshot(
         None,
         Some(problem("host_unavailable", last_failure)),
     )
-}
-
-fn problem(code: impl Into<String>, message: impl Into<String>) -> MonitorProblem {
-    MonitorProblem {
-        code: code.into(),
-        message: message.into(),
-    }
-}
-
-fn json_map(entries: Vec<(&str, Value)>) -> Map<String, Value> {
-    entries
-        .into_iter()
-        .map(|(key, value)| (key.to_string(), value))
-        .collect()
 }
 
 fn should_transition_to_launch_available(elapsed: Duration, announced_launch_action: bool) -> bool {

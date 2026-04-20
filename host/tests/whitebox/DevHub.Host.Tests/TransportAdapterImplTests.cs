@@ -1,22 +1,23 @@
 namespace DevHub.Host.Tests;
 
 using System.Text.Json;
-using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
-using DevHub.Host.Transport;
+using DevHub.Core.Services.Rpc;
 
 /// <summary>
-/// Host 适配层 transport 解析器白盒测试。
+/// 共享参数读取与定义校验 helper 白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
 public sealed class TransportAdapterImplTests
 {
+    private readonly AppDefinitionValidator _validator = new();
+
     [Fact]
     [Trait("SpecRef", "5.1.2")]
-    public void Impl_AppDefinitionTransportParser_WhenRootIsNotObject_ShouldReturnInvalidDefinitionIssue()
+    public void Impl_AppDefinitionValidator_WhenRootIsNotObject_ShouldReturnInvalidDefinitionIssue()
     {
-        var ok = AppDefinitionTransportParser.TryParse(ParseElement("\"bad\""), out var definition, out var validationResult);
+        var ok = _validator.TryParseAndValidate(ParseElement("\"bad\""), out var definition, out var validationResult);
 
         Assert.False(ok);
         Assert.Null(definition);
@@ -31,9 +32,9 @@ public sealed class TransportAdapterImplTests
     [Fact]
     [Trait("SpecRef", "5.1.1")]
     [Trait("SpecRef", "5.1.2")]
-    public void Impl_AppDefinitionTransportParser_WhenDefinitionContainsInvalidNestedFields_ShouldCollectValidationIssues()
+    public void Impl_AppDefinitionValidator_WhenDefinitionContainsInvalidNestedFields_ShouldCollectValidationIssues()
     {
-        var ok = AppDefinitionTransportParser.TryParse(
+        var ok = _validator.TryParseAndValidate(
             ParseElement(
                 """
                 {
@@ -71,9 +72,9 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "5.1.1")]
-    public void Impl_AppDefinitionTransportParser_WhenLaunchOrCapabilitiesAreNotObjects_ShouldReturnInvalidFieldType()
+    public void Impl_AppDefinitionValidator_WhenLaunchOrCapabilitiesAreNotObjects_ShouldReturnInvalidFieldType()
     {
-        var ok = AppDefinitionTransportParser.TryParse(
+        var ok = _validator.TryParseAndValidate(
             ParseElement(
                 """
                 {
@@ -93,9 +94,9 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "5.1.1")]
-    public void Impl_AppDefinitionTransportParser_WhenDefinitionValid_ShouldParseModel()
+    public void Impl_AppDefinitionValidator_WhenDefinitionValid_ShouldParseModel()
     {
-        var ok = AppDefinitionTransportParser.TryParse(
+        var ok = _validator.TryParseAndValidate(
             ParseElement(
                 """
                 {
@@ -133,34 +134,40 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "6.1")]
-    public void Impl_RpcRequestParameterReader_StringHelpers_ShouldFollowObjectAndWhitespaceRules()
+    public void Impl_RpcParamReader_StringHelpers_ShouldFollowObjectAndWhitespaceRules()
     {
         var request = new JsonRpcRequest
         {
+            Id = "reader-request",
             Method = HubRpcMethods.HubAppsGetDefinition,
             Params = ParseElement("""{ "appId": "reader.app", "dedupeKey": null, "bad": 1 }""")
         };
 
-        var paramsOk = RpcRequestParameterReader.TryReadParamsObject(request, out var paramsElement);
-        var badParamsOk = RpcRequestParameterReader.TryReadParamsObject(
+        var paramsOk = RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams);
+        var badParamsOk = RpcParamReader.TryReadParamsObject(
             new JsonRpcRequest
             {
+                Id = "reader-request-bad",
                 Method = HubRpcMethods.HubAppsGetDefinition,
                 Params = ParseElement("""["bad"]""")
             },
-            out _);
+            out _,
+            out var badParamsError);
 
-        var requiredOk = RpcRequestParameterReader.TryGetRequiredString(paramsElement, "appId", out var appId);
-        var requiredWhitespaceOk = RpcRequestParameterReader.TryGetRequiredString(
+        var requiredOk = RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId);
+        var requiredWhitespaceOk = RpcParamReader.TryGetRequiredString(
             ParseElement("""{ "appId": "   " }"""),
             "appId",
             out _);
-        var optionalMissingOk = RpcRequestParameterReader.TryGetOptionalString(paramsElement, "missing", out var missingValue);
-        var optionalNullOk = RpcRequestParameterReader.TryGetOptionalString(paramsElement, "dedupeKey", out var nullValue);
-        var optionalBadTypeOk = RpcRequestParameterReader.TryGetOptionalString(paramsElement, "bad", out _);
+        var optionalMissingOk = RpcParamReader.TryGetOptionalString(paramsElement, "missing", out var missingValue);
+        var optionalNullOk = RpcParamReader.TryGetOptionalString(paramsElement, "dedupeKey", out var nullValue);
+        var optionalBadTypeOk = RpcParamReader.TryGetOptionalString(paramsElement, "bad", out _);
 
         Assert.True(paramsOk);
+        Assert.Null(invalidParams);
         Assert.False(badParamsOk);
+        Assert.Equal(-32602, badParamsError.Error!.Code);
+        Assert.Equal("invalid_params", badParamsError.Error.Message);
         Assert.True(requiredOk);
         Assert.Equal("reader.app", appId);
         Assert.False(requiredWhitespaceOk);
@@ -173,23 +180,23 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public void Impl_RpcRequestParameterReader_TryGetOptionalScope_ShouldNormalizeEmptyStringAndRejectInvalidType()
+    public void Impl_RpcParamReader_TryGetOptionalScope_ShouldNormalizeEmptyStringAndRejectInvalidType()
     {
-        var missingOk = RpcRequestParameterReader.TryGetOptionalScope(
+        var missingOk = RpcParamReader.TryGetOptionalScope(
             ParseElement("""{}"""),
             "scope",
             "invalid_scope",
             out var missingScope,
             out var missingError);
 
-        var emptyOk = RpcRequestParameterReader.TryGetOptionalScope(
+        var emptyOk = RpcParamReader.TryGetOptionalScope(
             ParseElement("""{ "scope": "" }"""),
             "scope",
             "invalid_scope",
             out var emptyScope,
             out _);
 
-        var invalidOk = RpcRequestParameterReader.TryGetOptionalScope(
+        var invalidOk = RpcParamReader.TryGetOptionalScope(
             ParseElement("""{ "scope": 1 }"""),
             "scope",
             "invalid_scope",
@@ -210,29 +217,29 @@ public sealed class TransportAdapterImplTests
     [Fact]
     [Trait("SpecRef", "5.5")]
     [Trait("SpecRef", "6.3.13")]
-    public void Impl_RpcRequestParameterReader_TryParseInvocationTarget_ShouldHandleMissingTargetAndInvalidMembers()
+    public void Impl_RpcParamReader_TryParseInvocationTarget_ShouldHandleMissingTargetAndInvalidMembers()
     {
-        var missingTargetOk = RpcRequestParameterReader.TryParseInvocationTarget(
+        var missingTargetOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{}"""),
             out var defaultTarget,
             out var defaultError);
 
-        var invalidTargetOk = RpcRequestParameterReader.TryParseInvocationTarget(
+        var invalidTargetOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{ "target": 1 }"""),
             out _,
             out var invalidTargetError);
 
-        var invalidScopeOk = RpcRequestParameterReader.TryParseInvocationTarget(
+        var invalidScopeOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{ "target": { "scope": 1 } }"""),
             out _,
             out var invalidScopeError);
 
-        var invalidInstanceOk = RpcRequestParameterReader.TryParseInvocationTarget(
+        var invalidInstanceOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{ "target": { "instanceId": "   " } }"""),
             out _,
             out var invalidInstanceError);
 
-        var validTargetOk = RpcRequestParameterReader.TryParseInvocationTarget(
+        var validTargetOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{ "target": { "scope": "tenant-a", "instanceId": "inst-1" } }"""),
             out var validTarget,
             out var validError);
@@ -259,14 +266,14 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "6.3.16")]
-    public void Impl_RpcRequestParameterReader_TryParseRespondError_ShouldValidateShapeAndDeserializeDataObject()
+    public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeDataObject()
     {
-        Assert.False(RpcRequestParameterReader.TryParseRespondError(ParseElement("""1"""), out _));
-        Assert.False(RpcRequestParameterReader.TryParseRespondError(ParseElement("""{ "message": "bad" }"""), out _));
-        Assert.False(RpcRequestParameterReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": 1 }"""), out _));
-        Assert.False(RpcRequestParameterReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": "bad", "data": "boom" }"""), out _));
+        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""1"""), out _));
+        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "message": "bad" }"""), out _));
+        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": 1 }"""), out _));
+        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": "bad", "data": "boom" }"""), out _));
 
-        var ok = RpcRequestParameterReader.TryParseRespondError(
+        var ok = RpcParamReader.TryParseRespondError(
             ParseElement("""{ "code": 1001, "message": "app_error", "data": { "detail": "boom" } }"""),
             out var parsedError);
 

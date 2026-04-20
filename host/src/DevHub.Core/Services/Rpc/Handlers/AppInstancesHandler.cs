@@ -18,7 +18,7 @@ public class AppInstancesHandler : IRpcHandler
     private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
 
     private readonly AppRegistry _appRegistry;
-    private readonly HubEventBus? _eventBus;
+    private readonly IHubEventPublisher? _eventPublisher;
     private readonly IClock _clock;
     private readonly ILogger<AppInstancesHandler> _logger;
 
@@ -27,12 +27,12 @@ public class AppInstancesHandler : IRpcHandler
     /// </summary>
     /// <param name="appRegistry">应用实例注册表。</param>
     /// <param name="logger">日志记录器。</param>
-    /// <param name="eventBus">Hub 事件总线。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, HubEventBus? eventBus = null)
+    /// <param name="eventPublisher">Hub 事件发布器。</param>
+    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, IHubEventPublisher? eventPublisher = null)
     {
         _appRegistry = appRegistry;
         _clock = clock;
-        _eventBus = eventBus;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -475,12 +475,12 @@ public class AppInstancesHandler : IRpcHandler
 
     private void PublishInstanceEvent(string eventType, string appId, string instanceId, string? scope)
     {
-        if (_eventBus is null)
+        if (_eventPublisher is null)
         {
             return;
         }
 
-        _eventBus.Publish(new HubEventMessage
+        _eventPublisher.Publish(new HubEventMessage
         {
             Type = eventType,
             TimeUtc = _clock.UtcNow,

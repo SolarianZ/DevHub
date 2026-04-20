@@ -63,13 +63,13 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     if pid < 1:
         raise RuntimeError(f"hub.json.pid 非法：{source}")
 
-    http_base_url = require_str(root, "httpBaseUrl", source)
+    http_base_url = require_non_empty_string(root, "httpBaseUrl", source)
     _validate_loopback_url(http_base_url, {"http", "https"}, source, "httpBaseUrl")
 
-    ws_url = require_str(root, "wsUrl", source)
+    ws_url = require_non_empty_string(root, "wsUrl", source)
     _validate_loopback_url(ws_url, {"ws", "wss"}, source, "wsUrl")
 
-    token_file = require_str(root, "tokenFile", source)
+    token_file = require_non_empty_string(root, "tokenFile", source)
     if not Path(token_file).is_absolute():
         raise RuntimeError(f"hub.json.tokenFile 非法：{source}")
 
@@ -176,7 +176,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     if "launch" in root:
         launch_root = require_mapping(root["launch"], f"{path}.launch")
         launch = LaunchConfiguration(
-            exe_path=require_string(launch_root, "exePath", f"{path}.launch"),
+            exe_path=require_string_allow_empty(launch_root, "exePath", f"{path}.launch"),
             args_template=optional_property_string(launch_root, "argsTemplate", f"{path}.launch"),
             working_directory=optional_property_string(launch_root, "workingDirectory", f"{path}.launch"),
             dedupe_key_template=optional_property_string(launch_root, "dedupeKeyTemplate", f"{path}.launch"),
@@ -184,7 +184,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
 
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        display_name=require_string(root, "displayName", path),
+        display_name=require_string_allow_empty(root, "displayName", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
@@ -196,9 +196,9 @@ def parse_validation_issue(value: Any, *, path: str) -> ValidationIssue:
 
     root = require_mapping(value, path)
     return ValidationIssue(
-        path=require_string(root, "path", path),
-        code=require_string(root, "code", path),
-        message=require_string(root, "message", path),
+        path=require_string_allow_empty(root, "path", path),
+        code=require_string_allow_empty(root, "code", path),
+        message=require_string_allow_empty(root, "message", path),
     )
 
 
@@ -250,7 +250,7 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
     ok = require_bool(root, "ok", path)
     if not ok:
         raise RuntimeError(f"{path} 返回结果非法。")
-    status = require_str(root, "status", path)
+    status = require_non_empty_string(root, "status", path)
     if status not in _LAUNCH_STATUS_VALUES:
         raise RuntimeError(f"{path}.status 取值非法。")
     pid = None
@@ -261,7 +261,7 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
     return LaunchResult(
         ok=ok,
         status=status,
-        launch_id=require_str(root, "launchId", path),
+        launch_id=require_non_empty_string(root, "launchId", path),
         pid=pid,
     )
 
@@ -329,7 +329,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         ttl_ms = optional_property_int_at_least(options_root, "ttlMs", f"{path}.options", 1000)
         wait_timeout_ms = optional_property_int_at_least(options_root, "waitTimeoutMs", f"{path}.options", 1)
         if wait_timeout_ms is not None and ttl_ms is not None and wait_timeout_ms > ttl_ms:
-            raise RuntimeError(f"{path}.options.waitTimeoutMs 蹇呴』灏忎簬绛変簬 ttlMs銆?")
+            raise RuntimeError(f"{path}.options.waitTimeoutMs 必须小于等于 {path}.options.ttlMs。")
         options = InvocationOptions(
             ttl_ms=ttl_ms,
             wait_timeout_ms=wait_timeout_ms,
@@ -346,7 +346,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         )
 
     caller_root = require_mapping(root.get("caller"), f"{path}.caller")
-    kind_value = require_str(root, "kind", path)
+    kind_value = require_non_empty_string(root, "kind", path)
     try:
         kind = InvocationKind(kind_value)
     except ValueError as exc:
@@ -355,11 +355,11 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     return Invocation(
         invocation_id=require_validated_string(root, "invocationId", path, validate_invocation_id),
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        method=require_str(root, "method", path),
+        method=require_non_empty_string(root, "method", path),
         kind=kind,
         created_at_utc=require_datetime(root, "createdAtUtc", path),
         caller=InvocationCaller(
-            client_id=require_str(caller_root, "clientId", f"{path}.caller"),
+            client_id=require_non_empty_string(caller_root, "clientId", f"{path}.caller"),
             client_session_id=require_validated_string(
                 caller_root,
                 "clientSessionId",
@@ -379,13 +379,13 @@ def parse_event(value: Any, *, path: str) -> DevHubEvent:
 
     root = require_mapping(value, path)
     try:
-        event_type = ensure_supported_event_type(require_str(root, "type", path), f"{path}.type")
+        event_type = ensure_supported_event_type(require_non_empty_string(root, "type", path), f"{path}.type")
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
     payload = _require_json_value(root["payload"], f"{path}.payload") if "payload" in root else None
     _validate_known_event_payload(event_type, payload, path=f"{path}.payload")
     return DevHubEvent(
-        subscription_id=require_str(root, "subscriptionId", path),
+        subscription_id=require_non_empty_string(root, "subscriptionId", path),
         type=event_type,
         time_utc=require_datetime(root, "timeUtc", path),
         payload=payload,
@@ -399,7 +399,7 @@ def parse_callee_error(value: Any, *, path: str) -> DevHubCalleeError:
     data = _require_json_object(root["data"], f"{path}.data") if "data" in root else None
     return DevHubCalleeError(
         code=require_int(root, "code", path),
-        message=require_str(root, "message", path),
+        message=require_non_empty_string(root, "message", path),
         data=data,
     )
 
@@ -470,7 +470,7 @@ def optional_property_string(root: Mapping[str, Any], name: str, path: str) -> s
 
     if name not in root:
         return None
-    return require_string(root, name, path)
+    return require_string_allow_empty(root, name, path)
 
 
 def optional_property_bool(root: Mapping[str, Any], name: str, path: str) -> bool | None:
@@ -519,7 +519,7 @@ def require_mapping(value: Any, path: str) -> dict[str, Any]:
     return value
 
 
-def require_str(root: Mapping[str, Any], name: str, path: str) -> str:
+def require_non_empty_string(root: Mapping[str, Any], name: str, path: str) -> str:
     """读取必填字符串属性。"""
 
     value = root.get(name)
@@ -528,7 +528,7 @@ def require_str(root: Mapping[str, Any], name: str, path: str) -> str:
     return value
 
 
-def require_string(root: Mapping[str, Any], name: str, path: str) -> str:
+def require_string_allow_empty(root: Mapping[str, Any], name: str, path: str) -> str:
     value = root.get(name)
     if not isinstance(value, str):
         raise RuntimeError(f"{path}.{name} 类型非法。")

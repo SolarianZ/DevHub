@@ -12,7 +12,7 @@ from ._parsing import (
     parse_ping_result,
     require_bool,
     require_mapping,
-    require_str,
+    require_non_empty_string,
 )
 from ._payloads import (
     build_get_definition_params,
@@ -185,7 +185,7 @@ class DevHubEventsClient:
         root = require_mapping(result, "hub.events.subscribe.result")
         if not require_bool(root, "ok", "hub.events.subscribe.result"):
             raise RuntimeError("hub.events.subscribe 返回结果非法。")
-        return require_str(root, "subscriptionId", "hub.events.subscribe.result")
+        return require_non_empty_string(root, "subscriptionId", "hub.events.subscribe.result")
 
     async def unsubscribe(self, subscription_id: str) -> None:
         """取消订阅。"""

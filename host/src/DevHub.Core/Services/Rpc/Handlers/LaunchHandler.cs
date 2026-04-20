@@ -54,7 +54,7 @@ public class LaunchHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!TryGetOptionalString(paramsElement, "dedupeKey", out var dedupeKey))
+        if (!RpcParamReader.TryGetOptionalString(paramsElement, "dedupeKey", out var dedupeKey))
         {
             return RpcErrorFactory.InvalidParams(request.Id);
         }
@@ -97,29 +97,6 @@ public class LaunchHandler : IRpcHandler
         }
 
         return waitForRegisterMs >= 0;
-    }
-
-    private static bool TryGetOptionalString(JsonElement element, string propertyName, out string? value)
-    {
-        value = null;
-
-        if (!element.TryGetProperty(propertyName, out var property))
-        {
-            return true;
-        }
-
-        if (property.ValueKind == JsonValueKind.Null)
-        {
-            return true;
-        }
-
-        if (property.ValueKind != JsonValueKind.String)
-        {
-            return false;
-        }
-
-        value = property.GetString();
-        return true;
     }
 
 }
