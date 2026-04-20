@@ -95,9 +95,13 @@ Migrations/
 Thumbs.db
 
 # Temporary files
+[Tt]emp/
+**/.tests/
+**/__pycache__/
 *.tmp
 *.temp
 *.log
+output/playwright/
 docs/*review.md
 
 # Runtime data
@@ -123,11 +127,6 @@ sdks/javascript/dist/
 # Python packaging artifacts
 *.egg-info/
 .pytest_cache/
-
-# Temp files
-[Tt]emp/
-output/playwright/
-**/__pycache__/
 
 # AI
 .codex/
