@@ -8,11 +8,24 @@ namespace DevHub.Sdk.Models;
 /// </summary>
 public sealed class AppDefinition
 {
+    private string? _scope;
+
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonPropertyName("appId")]
     public string AppId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Definition 作用域。<see langword="null"/> 表示 Global Definition。
+    /// </summary>
+    [JsonPropertyName("scope")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? Scope
+    {
+        get => _scope;
+        set => _scope = value is not null && value.Length == 0 ? null : value;
+    }
 
     /// <summary>
     /// 显示名称。

@@ -24,6 +24,7 @@ def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> Non
         parse_app_definition(
             {
                 "appId": "test.app",
+                "scope": None,
                 "displayName": "Test App",
                 "launch": {},
             },
@@ -36,6 +37,30 @@ def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
         parse_app_definition(
             {
                 "appId": "Test.App",
+                "scope": None,
+                "displayName": "Test App",
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_scope_missing_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "displayName": "Test App",
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_scope_is_blank_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": " ",
                 "displayName": "Test App",
             },
             path="app.definition",
@@ -46,6 +71,7 @@ def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": None,
             "displayName": "Test App",
         },
         path="app.definition",
@@ -60,6 +86,7 @@ def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_def
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": None,
             "displayName": "Test App",
             "capabilities": {
                 "events": False,
@@ -77,6 +104,7 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": None,
             "displayName": "Test App",
             "launch": {
                 "exePath": "",
@@ -163,6 +191,7 @@ def test_parse_definition_validation_result_when_valid_contains_errors_should_ra
 def test_parse_app_definition_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
     payload = {
         "appId": "test.app",
+        "scope": None,
         "displayName": "Test App",
         "capabilities": {
             "rpc": True,
@@ -370,8 +399,10 @@ def test_parse_event_should_accept_definition_lifecycle_type() -> None:
             "timeUtc": "2026-03-09T00:00:00Z",
             "payload": {
                 "appId": "test.app",
+                "scope": None,
                 "definition": {
                     "appId": "test.app",
+                    "scope": None,
                     "displayName": "Test App",
                 },
             },
@@ -391,6 +422,28 @@ def test_parse_event_when_definition_payload_missing_required_shape_should_raise
                 "timeUtc": "2026-03-09T00:00:00Z",
                 "payload": {
                     "appId": "test.app",
+                    "scope": None,
+                },
+            },
+            path="hub.event.params",
+        )
+
+
+def test_parse_event_when_definition_event_scope_mismatches_definition_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"definition\.scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.definition.upserted",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "scope": None,
+                    "definition": {
+                        "appId": "test.app",
+                        "scope": "workspace-a",
+                        "displayName": "Test App",
+                    },
                 },
             },
             path="hub.event.params",

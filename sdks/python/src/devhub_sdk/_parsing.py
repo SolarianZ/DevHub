@@ -185,6 +185,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
         display_name=require_string_allow_empty(root, "displayName", path),
+        scope=require_nullable_definition_scope(root, "scope", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
@@ -451,11 +452,15 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
         payload_root = require_mapping(payload, path)
         if event_type == "app.definition.upserted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
-            parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
+            payload_scope = require_nullable_definition_scope(payload_root, "scope", path)
+            definition = parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
+            if definition.scope != payload_scope:
+                raise RuntimeError(f"{path}.definition.scope 必须与 {path}.scope 一致。")
             return
 
         if event_type == "app.definition.deleted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
+            require_nullable_definition_scope(payload_root, "scope", path)
             return
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
@@ -495,6 +500,14 @@ def optional_property_int_at_least(
     if parsed < minimum_value:
         raise RuntimeError(f"{path}.{name} 必须大于等于 {minimum_value}。")
     return parsed
+
+
+def require_nullable_definition_scope(root: Mapping[str, Any], name: str, path: str) -> str | None:
+    """读取 Definition 上必须存在、且允许为 null 的 scope 属性。"""
+
+    if name not in root:
+        raise RuntimeError(f"{path}.{name} 必须存在。")
+    return parse_definition_scope(root.get(name), f"{path}.{name}")
 
 
 def _require_json_value(value: Any, path: str) -> Any:
@@ -541,6 +554,16 @@ def optional_str(value: Any, path: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
+        raise RuntimeError(f"{path} 类型非法。")
+    return value
+
+
+def parse_definition_scope(value: Any, path: str) -> str | None:
+    """读取 Definition 复合身份中的 scope。"""
+
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
         raise RuntimeError(f"{path} 类型非法。")
     return value
 

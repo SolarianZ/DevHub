@@ -40,8 +40,9 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         definitions = client.list_definitions()
         assert any(definition.app_id == "http.flow.app" for definition in definitions)
 
-        definition = client.get_definition("http.flow.app")
+        definition = client.get_definition("http.flow.app", None)
         assert definition.display_name == "HTTP Flow App"
+        assert definition.scope is None
 
         registered = client.register_instance(
             AppInstanceRegistration(
@@ -88,7 +89,8 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
 
         upserted = client.upsert_definition(definition)
         assert upserted.app_id == "http.manage.app"
-        assert client.get_definition("http.manage.app").display_name == "Managed HTTP App"
+        assert upserted.scope is None
+        assert client.get_definition("http.manage.app", None).display_name == "Managed HTTP App"
 
         with pytest.raises(DevHubRpcException) as upsert_error:
             client.upsert_definition(invalid_definition)
@@ -96,9 +98,9 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         assert upsert_error.value.reason == "definition_invalid"
         assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
 
-        client.delete_definition("http.manage.app")
+        client.delete_definition("http.manage.app", None)
         with pytest.raises(DevHubRpcException) as deleted_error:
-            client.get_definition("http.manage.app")
+            client.get_definition("http.manage.app", None)
         assert deleted_error.value.code == DevHubRpcErrorCode.APP_DEFINITION_NOT_FOUND
 
 
@@ -202,8 +204,8 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
         assert client_a.ping().ok is True
         assert client_b.ping().ok is True
-        assert client_a.get_definition("parallel.http.app").display_name == "Parallel HTTP App A"
-        assert client_b.get_definition("parallel.http.app").display_name == "Parallel HTTP App B"
+        assert client_a.get_definition("parallel.http.app", None).display_name == "Parallel HTTP App A"
+        assert client_b.get_definition("parallel.http.app", None).display_name == "Parallel HTTP App B"
 
         client_a.register_instance(
             AppInstanceRegistration(

@@ -140,7 +140,7 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
             await events_client.authenticate()
             ping = await events_client.ping({"source": "ws"})
             definitions = await events_client.list_definitions()
-            definition = await events_client.get_definition("events.ws.read.app")
+            definition = await events_client.get_definition("events.ws.read.app", None)
             instances = await events_client.list_instances()
         finally:
             await events_client.close()
@@ -148,6 +148,7 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
     assert ping.ok is True
     assert any(item.app_id == "events.ws.read.app" for item in definitions)
     assert definition.app_id == "events.ws.read.app"
+    assert definition.scope is None
     assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)
 
 
@@ -168,7 +169,7 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
             )
             upserted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
 
-            http_client.delete_definition("events.definition.app")
+            http_client.delete_definition("events.definition.app", None)
             deleted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
         finally:
             await events_client.close()
@@ -176,10 +177,13 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
     assert upserted.subscription_id == subscription_id
     assert upserted.type == APP_DEFINITION_UPSERTED
     assert upserted.payload["appId"] == "events.definition.app"
+    assert upserted.payload["scope"] is None
+    assert upserted.payload["definition"]["scope"] is None
     assert upserted.payload["definition"]["displayName"] == "Events Definition App"
     assert deleted.subscription_id == subscription_id
     assert deleted.type == APP_DEFINITION_DELETED
     assert deleted.payload["appId"] == "events.definition.app"
+    assert deleted.payload["scope"] is None
 
 
 @pytest.mark.asyncio

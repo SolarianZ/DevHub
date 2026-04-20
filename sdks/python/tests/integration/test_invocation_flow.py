@@ -147,6 +147,8 @@ def test_request_timeout_and_expired_should_map_expected_error_codes() -> None:
 def test_scope_routing_should_hit_expected_instance() -> None:
     with DevHubHostFixture.start() as host:
         host.write_definition({"appId": "invoke.scope.app", "displayName": "invoke.scope.app"})
+        host.write_definition({"appId": "invoke.scope.app", "scope": "scope-a", "displayName": "invoke.scope.app.scope-a"})
+        host.write_definition({"appId": "invoke.scope.app", "scope": "global", "displayName": "invoke.scope.app.literal-global"})
         client = host.create_client("invoke-scope-client")
         _register_instance(client, "invoke.scope.app", "scope-global-inst", None)
         _register_instance(client, "invoke.scope.app", "scope-a-inst", "scope-a")

@@ -72,6 +72,7 @@ class AppDefinition:
 
     app_id: str
     display_name: str
+    scope: str | None = None
     description: str | None = None
     capabilities: AppCapabilities | None = None
     launch: LaunchConfiguration | None = None

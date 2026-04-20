@@ -139,6 +139,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
         AppDefinition(
             app_id="test.app",
             display_name="Test App",
+            scope="workspace-a",
             description="用于测试。",
             capabilities=AppCapabilities(rpc=False, events=True),
             launch=LaunchConfiguration(
@@ -153,6 +154,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
     assert payload == {
         "definition": {
             "appId": "test.app",
+            "scope": "workspace-a",
             "displayName": "Test App",
             "description": "用于测试。",
             "capabilities": {
@@ -174,18 +176,37 @@ def test_validate_definition_builder_when_app_id_violates_spec_should_raise() ->
         build_validate_definition_params(AppDefinition(app_id="Test.App", display_name="Broken"))
 
 
+def test_validate_definition_builder_when_scope_is_blank_should_raise() -> None:
+    with pytest.raises(ValueError, match="definition.scope"):
+        build_validate_definition_params(AppDefinition(app_id="test.app", display_name="Broken", scope=" "))
+
+
 def test_delete_definition_builder_should_validate_app_id() -> None:
-    assert build_delete_definition_params("test.app") == {"appId": "test.app"}
+    assert build_delete_definition_params("test.app", None) == {"appId": "test.app", "scope": None}
+    assert build_delete_definition_params("test.app", "workspace-a") == {
+        "appId": "test.app",
+        "scope": "workspace-a",
+    }
 
     with pytest.raises(ValueError):
-        build_delete_definition_params("Test.App")
+        build_delete_definition_params("Test.App", None)
+
+    with pytest.raises(ValueError, match="scope"):
+        build_delete_definition_params("test.app", "")
 
 
 def test_get_definition_builder_should_validate_app_id() -> None:
-    assert build_get_definition_params("test.app") == {"appId": "test.app"}
+    assert build_get_definition_params("test.app", None) == {"appId": "test.app", "scope": None}
+    assert build_get_definition_params("test.app", "workspace-a") == {
+        "appId": "test.app",
+        "scope": "workspace-a",
+    }
 
     with pytest.raises(ValueError):
-        build_get_definition_params("Test.App")
+        build_get_definition_params("Test.App", None)
+
+    with pytest.raises(ValueError, match="scope"):
+        build_get_definition_params("test.app", "")
 
 
 def test_list_instances_builder_should_share_filter_validation_rules() -> None:

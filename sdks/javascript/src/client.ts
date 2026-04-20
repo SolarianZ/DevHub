@@ -13,6 +13,7 @@ import {
 } from "./models.js";
 import type {
   AppDefinition,
+  AppDefinitionIdentity,
   AppInstance,
   AppInstanceRegistration,
   DefinitionValidationResult,
@@ -122,9 +123,9 @@ export class DevHubClient {
     return parseDefinitionsResult(await this.#transport.send("hub.apps.listDefinitions"));
   }
 
-  async getDefinition(appId: string): Promise<AppDefinition> {
+  async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
     this.throwIfDisposed();
-    return parseDefinitionResult(await this.#transport.send("hub.apps.getDefinition", buildGetDefinitionParams(appId)));
+    return parseDefinitionResult(await this.#transport.send("hub.apps.getDefinition", buildGetDefinitionParams(identity)));
   }
 
   async validateDefinition(definition: AppDefinition): Promise<DefinitionValidationResult> {
@@ -141,10 +142,10 @@ export class DevHubClient {
     );
   }
 
-  async deleteDefinition(appId: string): Promise<void> {
+  async deleteDefinition(identity: AppDefinitionIdentity): Promise<void> {
     this.throwIfDisposed();
     parseVoidOkResult(
-      await this.#transport.send("hub.apps.deleteDefinition", buildDeleteDefinitionParams(appId)),
+      await this.#transport.send("hub.apps.deleteDefinition", buildDeleteDefinitionParams(identity)),
       "hub.apps.deleteDefinition.result"
     );
   }

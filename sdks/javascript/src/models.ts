@@ -40,8 +40,14 @@ export interface LaunchConfiguration {
   dedupeKeyTemplate?: string;
 }
 
+export interface AppDefinitionIdentity {
+  appId: string;
+  scope: string | null;
+}
+
 export interface AppDefinition {
   appId: string;
+  scope: string | null;
   displayName: string;
   description?: string;
   capabilities?: AppCapabilities;

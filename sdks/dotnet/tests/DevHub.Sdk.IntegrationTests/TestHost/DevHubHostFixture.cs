@@ -126,8 +126,9 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public async Task WriteDefinitionAsync(AppDefinition definition)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         Directory.CreateDirectory(DefinitionsDirectory);
-        var path = Path.Combine(DefinitionsDirectory, $"{definition.AppId}.json");
+        var path = Path.Combine(DefinitionsDirectory, GetDefinitionFileName(definition));
         var content = JsonSerializer.Serialize(
             definition,
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -461,6 +462,16 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         {
             throw new InvalidOperationException($"构建 Host 失败。stdout={stdout} stderr={stderr}");
         }
+    }
+
+    private static string GetDefinitionFileName(AppDefinition definition)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(definition.AppId);
+        var normalizedScope = string.IsNullOrEmpty(definition.Scope) ? null : definition.Scope;
+        var scopeSegment = normalizedScope is null
+            ? "global"
+            : Convert.ToHexString(Encoding.UTF8.GetBytes(normalizedScope));
+        return $"{definition.AppId}--{scopeSegment}.json";
     }
 
     private static string? ReadEnvironmentVariable(

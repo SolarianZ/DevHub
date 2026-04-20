@@ -585,6 +585,7 @@ def build_app_definition(payload: dict[str, Any]) -> AppDefinition:
     return AppDefinition(
         app_id=require_string(payload.get("appId"), "definition.appId"),
         display_name=require_string(payload.get("displayName"), "definition.displayName"),
+        scope=payload.get("scope"),
         description=payload.get("description"),
         capabilities=capabilities,
         launch=launch,
@@ -639,6 +640,7 @@ def normalize_definition_validation_result(result) -> dict[str, Any]:
 def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
     actual: dict[str, Any] = {
         "appId": definition.app_id,
+        "scope": definition.scope,
         "displayName": definition.display_name,
     }
     if definition.description is not None:

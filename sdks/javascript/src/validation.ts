@@ -186,6 +186,23 @@ export function readOptionalStringOrNull(
   return value;
 }
 
+export function readDefinitionScope(payload: Record<string, unknown>, location: string, key: string): string | null {
+  if (!(key in payload)) {
+    throw new Error(`${location}.${key} is required.`);
+  }
+
+  const value = payload[key];
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${location}.${key} must be null or a non-empty string.`);
+  }
+
+  return value;
+}
+
 export function readBoolean(payload: Record<string, unknown>, location: string, key: string): boolean {
   if (!(key in payload)) {
     throw new Error(`${location}.${key} is required.`);
@@ -298,6 +315,18 @@ export function ensureAppId(value: unknown, propertyName: string): string {
   }
 
   return parsed;
+}
+
+export function ensureDefinitionScope(value: unknown, propertyName: string): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${propertyName} 必须为 null 或非空字符串。`);
+  }
+
+  return value;
 }
 
 export function ensureInstanceId(value: unknown, propertyName: string): string {

@@ -17,10 +17,12 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: "events.flow.app",
+    scope: null,
     displayName: "events.flow.app"
   });
   await host.writeDefinition({
     appId: "events.reconnect.app",
+    scope: null,
     displayName: "events.reconnect.app"
   });
 }, 120_000);
@@ -100,6 +102,7 @@ it("定义变更事件应可订阅并携带最新载荷", async () => {
 
     await httpClient.upsertDefinition({
       appId: "events.managed.app",
+      scope: null,
       displayName: "Events Managed App",
       description: "用于事件定义变更集成测试。",
       capabilities: {
@@ -116,15 +119,20 @@ it("定义变更事件应可订阅并携带最新载荷", async () => {
     expect(upserted.value.subscriptionId).toBe(subscriptionId);
     expect(upserted.value.type).toBe(APP_DEFINITION_UPSERTED);
     expect(upserted.value.payload?.appId).toBe("events.managed.app");
+    expect(upserted.value.payload?.scope).toBeNull();
     expect((upserted.value.payload?.definition as { displayName?: string }).displayName).toBe("Events Managed App");
 
-    await httpClient.deleteDefinition("events.managed.app");
+    await httpClient.deleteDefinition({
+      appId: "events.managed.app",
+      scope: null
+    });
 
     const deleted = await nextWithTimeout(iterator, 5_000);
     expect(deleted.done).toBe(false);
     expect(deleted.value.subscriptionId).toBe(subscriptionId);
     expect(deleted.value.type).toBe(APP_DEFINITION_DELETED);
     expect(deleted.value.payload?.appId).toBe("events.managed.app");
+    expect(deleted.value.payload?.scope).toBeNull();
   } finally {
     await httpClient.dispose();
     await eventsClient.dispose();
@@ -156,8 +164,12 @@ it("authenticated WS should support ping and apps queries", async () => {
     const definitions = await eventsClient.listDefinitions();
     expect(definitions.some((definition) => definition.appId === "events.flow.app")).toBe(true);
 
-    const definition = await eventsClient.getDefinition("events.flow.app");
+    const definition = await eventsClient.getDefinition({
+      appId: "events.flow.app",
+      scope: null
+    });
     expect(definition.displayName).toBe("events.flow.app");
+    expect(definition.scope).toBeNull();
 
     await httpClient.registerInstance({
       instanceId: "events-query-inst-1",

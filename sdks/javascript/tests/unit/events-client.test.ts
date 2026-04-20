@@ -172,7 +172,10 @@ it("authenticate should support WS ping and apps queries", async () => {
       channel: "ws"
     });
     const definitions = await client.listDefinitions();
-    const definition = await client.getDefinition("test.launch.app");
+    const definition = await client.getDefinition({
+      appId: "test.launch.app",
+      scope: null
+    });
     const instances = await client.listInstances({
       appId: "test.launch.app",
       scope: null,
@@ -200,7 +203,8 @@ it("authenticate should support WS ping and apps queries", async () => {
       }
     });
     expect(session?.requests[3]?.params).toEqual({
-      appId: "test.launch.app"
+      appId: "test.launch.app",
+      scope: null
     });
     expect(session?.requests[4]?.params).toEqual({
       appId: "test.launch.app",
@@ -300,7 +304,8 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
               type: "app.definition.upserted",
               timeUtc: "2026-03-09T00:00:00Z",
               payload: {
-                appId: "test.app"
+                appId: "test.app",
+                scope: null
               }
             });
 
@@ -445,7 +450,10 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   await expect(client.subscribe()).rejects.toThrow();
   await expect(client.ping()).rejects.toThrow();
   await expect(client.listDefinitions()).rejects.toThrow();
-  await expect(client.getDefinition("test.app")).rejects.toThrow();
+  await expect(client.getDefinition({
+    appId: "test.app",
+    scope: null
+  })).rejects.toThrow();
   await expect(client.listInstances()).rejects.toThrow();
   expect(() => client.readEvents()).toThrow();
 });
@@ -960,6 +968,7 @@ class FakeInjectedWsSession {
         definitions: [
           {
             appId: "test.launch.app",
+            scope: null,
             displayName: "Test Launch App"
           }
         ]
@@ -971,6 +980,7 @@ class FakeInjectedWsSession {
         ok: true,
         definition: {
           appId: "test.launch.app",
+          scope: null,
           displayName: "Test Launch App",
           launch: {
             exePath: process.execPath

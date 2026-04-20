@@ -23,6 +23,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   try {
     await host.writeDefinition({
       appId: "host.cleanup.app",
+      scope: null,
       displayName: "host.cleanup.app",
       launch: {
         exePath: process.execPath,

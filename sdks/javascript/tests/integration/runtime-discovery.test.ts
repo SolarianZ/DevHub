@@ -93,10 +93,12 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
     await Promise.all([
       firstHost.writeDefinition({
         appId: "parallel.flow.app",
+        scope: null,
         displayName: "parallel.flow.app"
       }),
       secondHost.writeDefinition({
         appId: "parallel.flow.app",
+        scope: null,
         displayName: "parallel.flow.app"
       })
     ]);

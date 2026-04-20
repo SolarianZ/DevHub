@@ -137,8 +137,16 @@ class DevHubHostFixture:
         return fixture
 
     def write_definition(self, definition: Mapping[str, Any]) -> None:
-        path = self.definitions_directory / f"{definition['appId']}.json"
-        path.write_text(json.dumps(definition), encoding="utf-8")
+        payload = dict(definition)
+        app_id = payload.get("appId")
+        if not isinstance(app_id, str) or not app_id:
+            raise ValueError("definition.appId 必须为非空字符串。")
+
+        scope = _normalize_definition_scope(payload.get("scope"))
+        payload["scope"] = scope
+
+        path = self.definitions_directory / _build_definition_file_name(app_id, scope)
+        path.write_text(json.dumps(payload), encoding="utf-8")
 
     def create_client(self, client_id: str) -> DevHubClient:
         return DevHubClient.from_runtime(
@@ -365,6 +373,19 @@ def _build_host_assembly(repo_root: Path, build_root: Path) -> None:
 def _ensure_trailing_separator(path_value: Path) -> str:
     value = str(path_value)
     return value if value.endswith(os.sep) else f"{value}{os.sep}"
+
+
+def _normalize_definition_scope(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("definition.scope 必须为非空字符串或 None。")
+    return value
+
+
+def _build_definition_file_name(app_id: str, scope: str | None) -> str:
+    scope_segment = "global" if scope is None else scope.encode("utf-8").hex().upper()
+    return f"{app_id}--{scope_segment}.json"
 
 
 def _create_isolated_process_kwargs() -> dict[str, Any]:

@@ -142,10 +142,10 @@ class DevHubClient:
         result = self._send("hub.apps.listDefinitions", None)
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    def get_definition(self, app_id: str) -> AppDefinition:
-        """调用 `hub.apps.getDefinition`。"""
+    def get_definition(self, app_id: str, scope: str | None) -> AppDefinition:
+        """调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
-        result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id))
+        result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id, scope))
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
 
     def validate_definition(self, definition: AppDefinition) -> DefinitionValidationResult:
@@ -160,10 +160,10 @@ class DevHubClient:
         result = self._send("hub.apps.upsertDefinition", build_upsert_definition_params(definition))
         return parse_definition_result(result, path="hub.apps.upsertDefinition.result")
 
-    def delete_definition(self, app_id: str) -> None:
-        """调用 `hub.apps.deleteDefinition`。"""
+    def delete_definition(self, app_id: str, scope: str | None) -> None:
+        """调用 `hub.apps.deleteDefinition`，按 `appId + scope` 精确删除 Definition。"""
 
-        result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id))
+        result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id, scope))
         root = require_mapping(result, "hub.apps.deleteDefinition.result")
         if not require_bool(root, "ok", "hub.apps.deleteDefinition.result"):
             raise RuntimeError("hub.apps.deleteDefinition.result 返回结果非法。")

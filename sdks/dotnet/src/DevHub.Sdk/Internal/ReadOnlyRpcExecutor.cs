@@ -65,12 +65,13 @@ internal static class ReadOnlyRpcExecutor
     internal static Task<AppDefinition> GetDefinitionAsync(
         SendAsyncDelegate sendAsync,
         string appId,
+        string? scope,
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
             sendAsync,
             "hub.apps.getDefinition",
-            RequestPayloadFactory.BuildGetDefinitionParams(appId),
+            RequestPayloadFactory.BuildGetDefinitionParams(appId, scope),
             static result =>
             {
                 ResponsePayloadReader.ValidateAppDefinitionElement(

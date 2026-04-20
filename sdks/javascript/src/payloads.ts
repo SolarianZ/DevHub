@@ -1,5 +1,6 @@
 import type {
   AppDefinition,
+  AppDefinitionIdentity,
   AppInstanceRegistration,
   InvokeRequest,
   LaunchRequest,
@@ -9,6 +10,7 @@ import type {
 } from "./models.js";
 import {
   ensureAppId,
+  ensureDefinitionScope,
   ensureInputBoolean,
   ensureInstanceId,
   ensureInvocationId,
@@ -24,10 +26,8 @@ import {
   ensureRequiredInputStringValue
 } from "./validation.js";
 
-export function buildGetDefinitionParams(appId: string): Record<string, unknown> {
-  return {
-    appId: ensureAppId(appId, "appId")
-  };
+export function buildGetDefinitionParams(identity: AppDefinitionIdentity): Record<string, unknown> {
+  return buildDefinitionIdentityPayload(identity, "identity");
 }
 
 export function buildValidateDefinitionParams(definition: AppDefinition): Record<string, unknown> {
@@ -42,10 +42,8 @@ export function buildUpsertDefinitionParams(definition: AppDefinition): Record<s
   };
 }
 
-export function buildDeleteDefinitionParams(appId: string): Record<string, unknown> {
-  return {
-    appId: ensureAppId(appId, "appId")
-  };
+export function buildDeleteDefinitionParams(identity: AppDefinitionIdentity): Record<string, unknown> {
+  return buildDefinitionIdentityPayload(identity, "identity");
 }
 
 export function buildRegisterInstanceParams(
@@ -331,6 +329,7 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
 
   const payload: Record<string, unknown> = {
     appId: ensureAppId(definition.appId, "definition.appId"),
+    scope: ensureDefinitionScope(definition.scope, "definition.scope"),
     displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
   };
 
@@ -385,4 +384,15 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
   }
 
   return payload;
+}
+
+function buildDefinitionIdentityPayload(identity: AppDefinitionIdentity, propertyName: string): Record<string, unknown> {
+  if (!identity || typeof identity !== "object" || Array.isArray(identity)) {
+    throw new Error(`${propertyName} cannot be empty.`);
+  }
+
+  return {
+    appId: ensureAppId(identity.appId, `${propertyName}.appId`),
+    scope: ensureDefinitionScope(identity.scope, `${propertyName}.scope`)
+  };
 }

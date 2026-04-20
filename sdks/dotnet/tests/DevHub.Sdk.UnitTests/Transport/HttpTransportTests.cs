@@ -241,7 +241,7 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenGetDefinitionResultMissingScope_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -249,7 +249,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-get-definition\"," +
-                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\"}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"displayName\":\"Sample App\"}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -258,7 +258,29 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-get-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
+        Assert.Contains("scope", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetDefinitionResultMissingDisplayName_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-get-definition\"," +
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":null}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
         Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
     }
 
@@ -390,7 +412,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-get-definition\"," +
-                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"displayName\":\"Sample App\",\"capabilities\":{\"rpc\":\"true\"}}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":null,\"displayName\":\"Sample App\",\"capabilities\":{\"rpc\":\"true\"}}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -399,7 +421,7 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-get-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
         Assert.Contains("definition.capabilities", exception.Message, StringComparison.Ordinal);
         Assert.Contains("rpc", exception.Message, StringComparison.Ordinal);
     }

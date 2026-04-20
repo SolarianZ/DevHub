@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using DevHub.Sdk.IntegrationTests.TestHost;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
@@ -70,13 +71,16 @@ public sealed class EventsFlowTests
         Assert.Equal(subscriptionId, upsertedEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppDefinitionUpserted, upsertedEvent.Type);
         Assert.Equal(definition.AppId, upsertedEvent.Payload!.Value.GetProperty("appId").GetString());
+        Assert.Equal(JsonValueKind.Null, upsertedEvent.Payload!.Value.GetProperty("scope").ValueKind);
         Assert.Equal(definition.AppId, upsertedEvent.Payload!.Value.GetProperty("definition").GetProperty("appId").GetString());
+        Assert.Equal(JsonValueKind.Null, upsertedEvent.Payload!.Value.GetProperty("definition").GetProperty("scope").ValueKind);
 
-        await httpClient.DeleteDefinitionAsync(definition.AppId);
+        await httpClient.DeleteDefinitionAsync(definition.AppId, definition.Scope);
         var deletedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(subscriptionId, deletedEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, deletedEvent.Type);
         Assert.Equal(definition.AppId, deletedEvent.Payload!.Value.GetProperty("appId").GetString());
+        Assert.Equal(JsonValueKind.Null, deletedEvent.Payload!.Value.GetProperty("scope").ValueKind);
     }
 
     [Fact]
@@ -148,7 +152,7 @@ public sealed class EventsFlowTests
 
         var ping = await eventsClient.PingAsync(new { source = "ws" });
         var definitions = await eventsClient.ListDefinitionsAsync();
-        var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app");
+        var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app", null);
         var instances = await eventsClient.ListInstancesAsync(new ListInstancesRequest
         {
             AppId = "events.ws.read.app"
@@ -156,6 +160,7 @@ public sealed class EventsFlowTests
 
         Assert.True(ping.Ok);
         Assert.Equal("events.ws.read.app", definition.AppId);
+        Assert.Null(definition.Scope);
         Assert.Contains(definitions, item => item.AppId == "events.ws.read.app");
         Assert.Contains(instances, item => item.InstanceId == "events-ws-read-inst-1");
     }

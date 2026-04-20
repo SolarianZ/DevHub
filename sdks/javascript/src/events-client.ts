@@ -9,6 +9,7 @@ import {
 } from "./models.js";
 import type {
   AppDefinition,
+  AppDefinitionIdentity,
   AppInstance,
   DevHubClientOptions,
   DevHubEvent,
@@ -145,10 +146,10 @@ export class DevHubEventsClient {
     return parseDefinitionsResult(await this.#session.sendRequest("hub.apps.listDefinitions"));
   }
 
-  async getDefinition(appId: string): Promise<AppDefinition> {
+  async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
     this.ensureAuthenticated();
     return parseDefinitionResult(
-      await this.#session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(appId))
+      await this.#session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(identity))
     );
   }
 

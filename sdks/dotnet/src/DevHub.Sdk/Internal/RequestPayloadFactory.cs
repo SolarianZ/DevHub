@@ -5,12 +5,13 @@ namespace DevHub.Sdk.Internal;
 
 internal static class RequestPayloadFactory
 {
-    internal static object BuildGetDefinitionParams(string appId)
+    internal static object BuildGetDefinitionParams(string appId, string? scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
-            ["appId"] = appId
+            ["appId"] = appId,
+            ["scope"] = NormalizeDefinitionScope(scope, nameof(scope))
         };
     }
 
@@ -32,12 +33,13 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildDeleteDefinitionParams(string appId)
+    internal static object BuildDeleteDefinitionParams(string appId, string? scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
-            ["appId"] = appId
+            ["appId"] = appId,
+            ["scope"] = NormalizeDefinitionScope(scope, nameof(scope))
         };
     }
 
@@ -357,5 +359,20 @@ internal static class RequestPayloadFactory
         }
 
         return payload;
+    }
+
+    private static string? NormalizeDefinitionScope(string? scope, string paramName)
+    {
+        if (scope is null || scope.Length == 0)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(scope))
+        {
+            throw new ArgumentException("scope 不能为空白字符串。", paramName);
+        }
+
+        return scope;
     }
 }

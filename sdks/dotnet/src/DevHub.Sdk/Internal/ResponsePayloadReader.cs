@@ -74,6 +74,7 @@ internal static class ResponsePayloadReader
     {
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "appId");
+        EnsureRequiredStringOrNullProperty(element, location, "scope");
         EnsureStringProperty(element, location, "displayName");
         EnsureOptionalStringProperty(element, location, "description");
 
@@ -161,13 +162,20 @@ internal static class ResponsePayloadReader
             case "app.definition.upserted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
-                ValidateAppDefinitionElement(
-                    EnsurePropertyExists(payload, $"{location}.payload", "definition", JsonValueKind.Object),
-                    $"{location}.payload.definition");
+                var upsertedScope = EnsureRequiredStringOrNullProperty(payload, $"{location}.payload", "scope");
+                var definitionElement = EnsurePropertyExists(payload, $"{location}.payload", "definition", JsonValueKind.Object);
+                ValidateAppDefinitionElement(definitionElement, $"{location}.payload.definition");
+                var definitionScope = EnsureRequiredStringOrNullProperty(definitionElement, $"{location}.payload.definition", "scope");
+                if (!string.Equals(upsertedScope, definitionScope, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"{location}.payload 返回结果非法：scope 与 definition.scope 必须一致。");
+                }
+
                 break;
             case "app.definition.deleted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureRequiredStringOrNullProperty(payload, $"{location}.payload", "scope");
                 break;
             case "app.instance.registered":
             case "app.instance.unregistered":
@@ -287,6 +295,19 @@ internal static class ResponsePayloadReader
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
+    }
+
+    private static string? EnsureRequiredStringOrNullProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName);
+        return propertyValue.ValueKind switch
+        {
+            JsonValueKind.Null => null,
+            JsonValueKind.String => !string.IsNullOrWhiteSpace(propertyValue.GetString())
+                ? propertyValue.GetString()
+                : throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。"),
+            _ => throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。")
+        };
     }
 
     private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)

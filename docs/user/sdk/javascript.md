@@ -124,6 +124,7 @@ const client = await DevHubClient.fromRuntime(
 ```ts
 const definition = {
   appId: "sample.app",
+  scope: null,
   displayName: "Sample App",
   launch: {
     exePath: "python3",
@@ -144,7 +145,10 @@ const instance = await client.registerInstance({
 }, "sample-instance-secret");
 
 await client.unregisterInstance(instance.instanceId, "sample-instance-secret");
-await client.deleteDefinition(definition.appId);
+await client.deleteDefinition({
+  appId: definition.appId,
+  scope: definition.scope
+});
 ```
 
 ## 7. 高级扩展

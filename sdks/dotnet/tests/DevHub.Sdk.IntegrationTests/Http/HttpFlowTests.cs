@@ -32,8 +32,9 @@ public sealed class HttpFlowTests
         var definitions = await client.ListDefinitionsAsync();
         Assert.Contains(definitions, definition => definition.AppId == "http.flow.app");
 
-        var definitionResult = await client.GetDefinitionAsync("http.flow.app");
+        var definitionResult = await client.GetDefinitionAsync("http.flow.app", null);
         Assert.Equal("HTTP Flow App", definitionResult.DisplayName);
+        Assert.Null(definitionResult.Scope);
 
         var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
         {
@@ -98,8 +99,9 @@ public sealed class HttpFlowTests
         var upserted = await client.UpsertDefinitionAsync(validDefinition);
         Assert.Equal(validDefinition.AppId, upserted.AppId);
 
-        var fetched = await client.GetDefinitionAsync(validDefinition.AppId);
+        var fetched = await client.GetDefinitionAsync(validDefinition.AppId, validDefinition.Scope);
         Assert.Equal(validDefinition.DisplayName, fetched.DisplayName);
+        Assert.Equal(validDefinition.Scope, fetched.Scope);
 
         var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
         {
@@ -111,9 +113,9 @@ public sealed class HttpFlowTests
         Assert.True(invalidException.TryGetDataProperty("errors", out var errorsElement));
         Assert.Equal(JsonValueKind.Array, errorsElement.ValueKind);
 
-        await client.DeleteDefinitionAsync(validDefinition.AppId);
+        await client.DeleteDefinitionAsync(validDefinition.AppId, validDefinition.Scope);
 
-        var notFoundException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetDefinitionAsync(validDefinition.AppId));
+        var notFoundException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetDefinitionAsync(validDefinition.AppId, validDefinition.Scope));
         Assert.Equal(-32014, notFoundException.Code);
         Assert.Equal("app_definition_not_found", notFoundException.Message);
     }

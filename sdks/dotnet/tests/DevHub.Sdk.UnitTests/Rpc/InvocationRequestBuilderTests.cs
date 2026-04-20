@@ -195,30 +195,48 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void Impl_DefinitionBuilders_ShouldUseTopLevelDefinitionPayload()
+    public void Impl_DefinitionBuilders_ShouldIncludeScopeInDefinitionAndIdentityPayloads()
     {
         var definition = new AppDefinition
         {
             AppId = string.Empty,
+            Scope = null,
             DisplayName = string.Empty
         };
 
         var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
         var upsertPayload = RequestPayloadFactory.BuildUpsertDefinitionParams(definition);
+        var getPayload = RequestPayloadFactory.BuildGetDefinitionParams("test.app", string.Empty);
+        var deletePayload = RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "scope-a");
 
         using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload, DevHubJson.SerializerOptions));
         using var upsertDocument = JsonDocument.Parse(JsonSerializer.Serialize(upsertPayload, DevHubJson.SerializerOptions));
+        using var getDocument = JsonDocument.Parse(JsonSerializer.Serialize(getPayload, DevHubJson.SerializerOptions));
+        using var deleteDocument = JsonDocument.Parse(JsonSerializer.Serialize(deletePayload, DevHubJson.SerializerOptions));
 
         Assert.True(validateDocument.RootElement.TryGetProperty("definition", out var validateDefinition));
         Assert.Equal(JsonValueKind.Object, validateDefinition.ValueKind);
+        Assert.Equal(JsonValueKind.Null, validateDefinition.GetProperty("scope").ValueKind);
         Assert.False(validateDefinition.TryGetProperty("description", out _));
         Assert.False(validateDefinition.TryGetProperty("capabilities", out _));
         Assert.False(validateDefinition.TryGetProperty("launch", out _));
         Assert.True(upsertDocument.RootElement.TryGetProperty("definition", out var upsertDefinition));
         Assert.Equal(JsonValueKind.Object, upsertDefinition.ValueKind);
+        Assert.Equal(JsonValueKind.Null, upsertDefinition.GetProperty("scope").ValueKind);
         Assert.False(upsertDefinition.TryGetProperty("description", out _));
         Assert.False(upsertDefinition.TryGetProperty("capabilities", out _));
         Assert.False(upsertDefinition.TryGetProperty("launch", out _));
+        Assert.Equal("test.app", getDocument.RootElement.GetProperty("appId").GetString());
+        Assert.Equal(JsonValueKind.Null, getDocument.RootElement.GetProperty("scope").ValueKind);
+        Assert.Equal("test.app", deleteDocument.RootElement.GetProperty("appId").GetString());
+        Assert.Equal("scope-a", deleteDocument.RootElement.GetProperty("scope").GetString());
+    }
+
+    [Fact]
+    public void Impl_DefinitionIdentityBuilders_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetDefinitionParams("test.app", " "));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "\t"));
     }
 
     [Fact]

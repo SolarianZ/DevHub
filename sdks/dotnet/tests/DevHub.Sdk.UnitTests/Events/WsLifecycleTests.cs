@@ -27,8 +27,8 @@ public sealed class WsLifecycleTests : IDisposable
             "timeUtc"
         },
         {
-            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.definition.deleted","timeUtc":"2026-03-09T00:00:00Z","payload":{}}}""",
-            "appId"
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.definition.deleted","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app"}}}""",
+            "scope"
         },
         {
             """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":null,"password":"secret-1"}}}""",
@@ -79,7 +79,7 @@ public sealed class WsLifecycleTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync());
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app", null));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync());
         Assert.Empty(connection.SentTexts);
     }
@@ -210,7 +210,7 @@ public sealed class WsLifecycleTests : IDisposable
             {
                 return
                 [
-                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","displayName":"WS App"}]}}""")
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","scope":null,"displayName":"WS App"}]}}""")
                 ];
             }
 
@@ -218,7 +218,7 @@ public sealed class WsLifecycleTests : IDisposable
             {
                 return
                 [
-                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getdef-1","result":{"ok":true,"definition":{"appId":"ws.app","displayName":"WS App"}}}""")
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getdef-1","result":{"ok":true,"definition":{"appId":"ws.app","scope":null,"displayName":"WS App"}}}""")
                 ];
             }
 
@@ -247,12 +247,13 @@ public sealed class WsLifecycleTests : IDisposable
 
         var ping = await client.PingAsync(new { value = 1 });
         var definitions = await client.ListDefinitionsAsync();
-        var definition = await client.GetDefinitionAsync("ws.app");
+        var definition = await client.GetDefinitionAsync("ws.app", null);
         var instances = await client.ListInstancesAsync();
 
         Assert.True(ping.Ok);
         Assert.Equal("ws.app", definitions.Single().AppId);
         Assert.Equal("ws.app", definition.AppId);
+        Assert.Null(definition.Scope);
         Assert.Equal("inst-1", instances.Single().InstanceId);
 
         var listDefinitionsRequest = connection.SentTexts.Single(sent => sent.Contains("hub.apps.listDefinitions", StringComparison.Ordinal));
@@ -262,7 +263,11 @@ public sealed class WsLifecycleTests : IDisposable
             sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.ping", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.apps.listDefinitions", sent, StringComparison.Ordinal),
-            sent => Assert.Contains("hub.apps.getDefinition", sent, StringComparison.Ordinal),
+            sent =>
+            {
+                Assert.Contains("hub.apps.getDefinition", sent, StringComparison.Ordinal);
+                Assert.Contains("\"scope\":null", sent, StringComparison.Ordinal);
+            },
             sent => Assert.Contains("hub.apps.listInstances", sent, StringComparison.Ordinal));
     }
 

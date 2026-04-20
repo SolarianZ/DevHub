@@ -151,13 +151,13 @@ class DevHubEventsClient:
         result = await self._send_request("hub.apps.listDefinitions", None, require_authenticated=True)
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    async def get_definition(self, app_id: str) -> AppDefinition:
-        """通过 WebSocket 调用 `hub.apps.getDefinition`。"""
+    async def get_definition(self, app_id: str, scope: str | None) -> AppDefinition:
+        """通过 WebSocket 调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
         self._ensure_authenticated()
         result = await self._send_request(
             "hub.apps.getDefinition",
-            build_get_definition_params(app_id),
+            build_get_definition_params(app_id, scope),
             require_authenticated=True,
         )
         return parse_definition_result(result, path="hub.apps.getDefinition.result")

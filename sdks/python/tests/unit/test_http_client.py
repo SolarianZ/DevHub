@@ -364,6 +364,7 @@ def test_http_client_validate_definition_should_send_params_and_parse_result() -
         "params": {
             "definition": {
                 "appId": "test.app",
+                "scope": None,
                 "displayName": "Test App",
             }
         },
@@ -378,6 +379,7 @@ def test_http_client_upsert_definition_should_send_request_and_parse_definition(
             "ok": True,
             "definition": {
                 "appId": "test.app",
+                "scope": None,
                 "displayName": "Test App",
             },
         }
@@ -394,6 +396,34 @@ def test_http_client_upsert_definition_should_send_request_and_parse_definition(
     assert transport.calls[0]["method"] == "hub.apps.upsertDefinition"
 
 
+def test_http_client_get_definition_should_send_request_and_parse_definition() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "definition": {
+                "appId": "test.app",
+                "scope": "workspace-a",
+                "displayName": "Test App",
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    definition = client.get_definition("test.app", "workspace-a")
+
+    assert definition.scope == "workspace-a"
+    assert transport.calls[0] == {
+        "method": "hub.apps.getDefinition",
+        "params": {"appId": "test.app", "scope": "workspace-a"},
+    }
+
+
 def test_http_client_delete_definition_should_send_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
@@ -404,11 +434,11 @@ def test_http_client_delete_definition_should_send_request() -> None:
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    client.delete_definition("test.app")
+    client.delete_definition("test.app", None)
 
     assert transport.calls[0] == {
         "method": "hub.apps.deleteDefinition",
-        "params": {"appId": "test.app"},
+        "params": {"appId": "test.app", "scope": None},
     }
 
 

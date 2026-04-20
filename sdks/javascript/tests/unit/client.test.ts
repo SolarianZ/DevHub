@@ -348,6 +348,7 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
       definitions: [
         {
           appId: "test.launch.app",
+          scope: null,
           displayName: "Test Launch App",
           description: null,
           launch: {
@@ -373,11 +374,16 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.getDefinition");
+    expect(body.params).toEqual({
+      appId: "test.rpc-default.app",
+      scope: null
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.rpc-default.app",
+        scope: null,
         displayName: "RPC Default App",
         capabilities: {
           events: false
@@ -392,8 +398,12 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
     dataDir: runtimeDir
   });
 
-  const definition = await client.getDefinition("test.rpc-default.app");
+  const definition = await client.getDefinition({
+    appId: "test.rpc-default.app",
+    scope: null
+  });
 
+  expect(definition.scope).toBeNull();
   expect(definition.capabilities).toEqual({
     rpc: true,
     events: false
@@ -409,6 +419,7 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
     expect(body.params).toEqual({
       definition: {
         appId: "test.validate.app",
+        scope: null,
         displayName: ""
       }
     });
@@ -434,6 +445,7 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
 
   const result = await client.validateDefinition({
     appId: "test.validate.app",
+    scope: null,
     displayName: ""
   });
 
@@ -459,6 +471,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
     expect(body.params).toEqual({
       definition: {
         appId: "test.upsert.app",
+        scope: null,
         displayName: "Upsert App",
         capabilities: {
           rpc: true,
@@ -474,6 +487,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
       ok: true,
       definition: {
         appId: "test.upsert.app",
+        scope: null,
         displayName: "Upsert App",
         capabilities: {
           rpc: true,
@@ -494,6 +508,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
 
   const result = await client.upsertDefinition({
     appId: "test.upsert.app",
+    scope: null,
     displayName: "Upsert App",
     capabilities: {
       rpc: true,
@@ -506,6 +521,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
 
   expect(result).toEqual({
     appId: "test.upsert.app",
+    scope: null,
     displayName: "Upsert App",
     description: undefined,
     capabilities: {
@@ -528,7 +544,8 @@ it("deleteDefinition 应发送删除请求", async () => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.deleteDefinition");
     expect(body.params).toEqual({
-      appId: "test.delete.app"
+      appId: "test.delete.app",
+      scope: null
     });
 
     return createJsonResponse(body.id, {
@@ -542,7 +559,10 @@ it("deleteDefinition 应发送删除请求", async () => {
     dataDir: runtimeDir
   });
 
-  await expect(client.deleteDefinition("test.delete.app")).resolves.toBeUndefined();
+  await expect(client.deleteDefinition({
+    appId: "test.delete.app",
+    scope: null
+  })).resolves.toBeUndefined();
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -852,7 +872,10 @@ it("getDefinition should reject an invalid appId before sending the request", as
     dataDir: runtimeDir
   });
 
-  await expect(client.getDefinition("Invalid.App")).rejects.toThrow(/appId/);
+  await expect(client.getDefinition({
+    appId: "Invalid.App",
+    scope: null
+  })).rejects.toThrow(/appId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1427,11 +1450,16 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.getDefinition");
+    expect(body.params).toEqual({
+      appId: "test.empty-fields.app",
+      scope: null
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.empty-fields.app",
+        scope: null,
         displayName: "",
         launch: {
           exePath: ""
@@ -1446,10 +1474,14 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
     dataDir: runtimeDir
   });
 
-  const definition = await client.getDefinition("test.empty-fields.app");
+  const definition = await client.getDefinition({
+    appId: "test.empty-fields.app",
+    scope: null
+  });
 
   expect(definition).toEqual({
     appId: "test.empty-fields.app",
+    scope: null,
     displayName: "",
     description: undefined,
     capabilities: {
@@ -1470,11 +1502,16 @@ it("getDefinition should reject null capabilities flags", async () => {
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.getDefinition");
+    expect(body.params).toEqual({
+      appId: "test.invalid-capabilities.app",
+      scope: null
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.invalid-capabilities.app",
+        scope: null,
         displayName: "Invalid Capabilities App",
         capabilities: {
           rpc: null
@@ -1489,7 +1526,10 @@ it("getDefinition should reject null capabilities flags", async () => {
     dataDir: runtimeDir
   });
 
-  await expect(client.getDefinition("test.invalid-capabilities.app")).rejects.toThrow(/capabilities\.rpc/i);
+  await expect(client.getDefinition({
+    appId: "test.invalid-capabilities.app",
+    scope: null
+  })).rejects.toThrow(/capabilities\.rpc/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 

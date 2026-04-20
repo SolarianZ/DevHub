@@ -14,6 +14,7 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: "http.flow.app",
+    scope: null,
     displayName: "HTTP Flow App",
     description: "用于 SDK HTTP 链路测试。"
   });
@@ -42,14 +43,19 @@ it("HTTP 链路应可完成基础流程", async () => {
     rpc: true
   });
 
-  const definitionResult = await client.getDefinition("http.flow.app");
+  const definitionResult = await client.getDefinition({
+    appId: "http.flow.app",
+    scope: null
+  });
   expect(definitionResult.displayName).toBe("HTTP Flow App");
+  expect(definitionResult.scope).toBeNull();
   expect(definitionResult.capabilities).toEqual({
     rpc: true
   });
 
   const validation = await client.validateDefinition({
     appId: "http.managed.app",
+    scope: null,
     displayName: ""
   });
   expect(validation.ok).toBe(true);
@@ -61,6 +67,7 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   const upserted = await client.upsertDefinition({
     appId: "http.managed.app",
+    scope: null,
     displayName: "HTTP Managed App",
     description: "用于 HTTP upsert 集成测试。",
     capabilities: {
@@ -73,15 +80,25 @@ it("HTTP 链路应可完成基础流程", async () => {
   });
   expect(upserted.displayName).toBe("HTTP Managed App");
 
-  const managedDefinition = await client.getDefinition("http.managed.app");
+  const managedDefinition = await client.getDefinition({
+    appId: "http.managed.app",
+    scope: null
+  });
   expect(managedDefinition.displayName).toBe("HTTP Managed App");
+  expect(managedDefinition.scope).toBeNull();
   expect(managedDefinition.capabilities).toEqual({
     rpc: true,
     events: false
   });
 
-  await client.deleteDefinition("http.managed.app");
-  await expect(client.getDefinition("http.managed.app")).rejects.toMatchObject({
+  await client.deleteDefinition({
+    appId: "http.managed.app",
+    scope: null
+  });
+  await expect(client.getDefinition({
+    appId: "http.managed.app",
+    scope: null
+  })).rejects.toMatchObject({
     code: DevHubRpcErrorCode.AppDefinitionNotFound
   });
 
@@ -166,6 +183,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
 function createLaunchDefinition(appId: string): Record<string, unknown> {
   return {
     appId,
+    scope: null,
     displayName: appId,
     launch: {
       exePath: process.execPath,

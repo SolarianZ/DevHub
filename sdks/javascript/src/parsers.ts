@@ -28,6 +28,7 @@ import {
   readArray,
   readBoolean,
   readDate,
+  readDefinitionScope,
   readInstanceId,
   readInvocationId,
   readNumber,
@@ -247,6 +248,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
   return {
     appId,
+    scope: readDefinitionScope(record, location, "scope"),
     displayName,
     description,
     capabilities,
@@ -394,13 +396,21 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
   }
 
   if (type === APP_DEFINITION_UPSERTED) {
-    readAppId(payload, location, "appId");
-    parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
+    const appId = readAppId(payload, location, "appId");
+    const scope = readDefinitionScope(payload, location, "scope");
+    const definition = parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
+    if (definition.appId !== appId) {
+      throw new Error(`${location}.definition.appId must match ${location}.appId.`);
+    }
+    if (definition.scope !== scope) {
+      throw new Error(`${location}.definition.scope must match ${location}.scope.`);
+    }
     return;
   }
 
   if (type === APP_DEFINITION_DELETED) {
     readAppId(payload, location, "appId");
+    readDefinitionScope(payload, location, "scope");
     return;
   }
 

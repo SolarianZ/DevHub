@@ -138,8 +138,14 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
         responses={
             "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
             "hub.ping": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z", "echo": {"value": 1}},
-            "hub.apps.listDefinitions": {"ok": True, "definitions": [{"appId": "ws.app", "displayName": "WS App"}]},
-            "hub.apps.getDefinition": {"ok": True, "definition": {"appId": "ws.app", "displayName": "WS App"}},
+            "hub.apps.listDefinitions": {
+                "ok": True,
+                "definitions": [{"appId": "ws.app", "scope": None, "displayName": "WS App"}],
+            },
+            "hub.apps.getDefinition": {
+                "ok": True,
+                "definition": {"appId": "ws.app", "scope": None, "displayName": "WS App"},
+            },
             "hub.apps.listInstances": {
                 "ok": True,
                 "instances": [
@@ -170,7 +176,7 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
         await client.authenticate()
         ping = await client.ping({"value": 1})
         definitions = await client.list_definitions()
-        definition = await client.get_definition("ws.app")
+        definition = await client.get_definition("ws.app", None)
         instances = await client.list_instances()
     finally:
         await client.close()
@@ -186,6 +192,7 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
         "hub.apps.getDefinition",
         "hub.apps.listInstances",
     ]
+    assert session.requests[3]["params"] == {"appId": "ws.app", "scope": None}
 
 
 @pytest.mark.asyncio
@@ -210,7 +217,7 @@ async def test_events_client_get_definition_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.get_definition("Test.App")
+            await client.get_definition("Test.App", None)
     finally:
         await client.close()
 

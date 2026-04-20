@@ -530,6 +530,7 @@ function buildAppInstanceRegistration(payload) {
 function buildAppDefinition(payload) {
   const definition = {
     appId: ensureString(payload.appId, "definition.appId"),
+    scope: ensureDefinitionScope(payload.scope, "definition.scope"),
     displayName: ensureStringValue(payload.displayName, "definition.displayName")
   };
 
@@ -658,7 +659,7 @@ function buildDefinitionIdentityParams(step, captures, index) {
   const scope = resolveCaptureValue(step, captures, index, "scope");
   return {
     appId,
-    scope: scope ?? null
+    scope: scope === undefined ? null : ensureDefinitionScope(scope, `request.steps[${index}].scope`)
   };
 }
 
@@ -726,6 +727,14 @@ function ensureStringValue(value, pathLabel) {
     throw new Error(`${pathLabel} 必须为字符串。`);
   }
   return value;
+}
+
+function ensureDefinitionScope(value, pathLabel) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return ensureString(value, pathLabel);
 }
 
 function ensureInteger(value, pathLabel) {

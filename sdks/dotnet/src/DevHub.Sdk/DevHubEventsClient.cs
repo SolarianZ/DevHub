@@ -204,12 +204,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// 通过 WebSocket 调用 <c>hub.apps.getDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域。<see langword="null"/> 表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义。</returns>
-    public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
+    public async Task<AppDefinition> GetDefinitionAsync(string appId, string? scope, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken);
     }
 
     /// <summary>

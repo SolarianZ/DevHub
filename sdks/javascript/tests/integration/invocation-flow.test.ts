@@ -11,26 +11,32 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: "invoke.notify.app",
+    scope: null,
     displayName: "invoke.notify.app"
   });
   await host.writeDefinition({
     appId: "invoke.request.app",
+    scope: null,
     displayName: "invoke.request.app"
   });
   await host.writeDefinition({
     appId: "invoke.error.app",
+    scope: null,
     displayName: "invoke.error.app"
   });
   await host.writeDefinition({
     appId: "invoke.timeout.app",
+    scope: null,
     displayName: "invoke.timeout.app"
   });
   await host.writeDefinition({
     appId: "invoke.scope.app",
+    scope: null,
     displayName: "invoke.scope.app"
   });
   await host.writeDefinition({
     appId: "invoke.rpc-disabled.app",
+    scope: null,
     displayName: "invoke.rpc-disabled.app",
     capabilities: {
       rpc: false
@@ -38,10 +44,12 @@ beforeAll(async () => {
   });
   await host.writeDefinition({
     appId: "invoke.poll-disabled.app",
+    scope: null,
     displayName: "invoke.poll-disabled.app"
   });
   await host.writeDefinition({
     appId: "invoke.respond-disabled.app",
+    scope: null,
     displayName: "invoke.respond-disabled.app"
   });
 }, 120_000);

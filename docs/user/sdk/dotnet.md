@@ -128,7 +128,7 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 });
 
 var definitions = await client.ListDefinitionsAsync();
-var definition = await client.GetDefinitionAsync("sample.app");
+var definition = await client.GetDefinitionAsync("sample.app", scope: null);
 var instances = await client.ListInstancesAsync(new ListInstancesRequest
 {
     AppId = "sample.app",
@@ -150,6 +150,7 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 var definition = new AppDefinition
 {
     AppId = "sample.app",
+    Scope = null,
     DisplayName = "Sample App",
     Launch = new LaunchConfiguration
     {

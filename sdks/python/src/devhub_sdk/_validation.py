@@ -100,6 +100,18 @@ def require_optional_string(
     return value
 
 
+def require_definition_scope(value: Any, name: str) -> str | None:
+    """要求值必须为 AppDefinition 复合身份中的 scope。"""
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} 类型非法。")
+    if not value.strip():
+        raise ValueError(f"{name} 必须为非空字符串或 None。")
+    return value
+
+
 def require_bool(value: Any, name: str) -> bool:
     """要求值必须为布尔值。"""
 

@@ -9,6 +9,7 @@ from ._validation import (
     ensure_json_value,
     require_app_id,
     require_bool,
+    require_definition_scope,
     require_instance_id,
     require_invocation_id,
     require_non_empty_string,
@@ -41,10 +42,13 @@ from .models import (
 _MISSING = object()
 
 
-def build_get_definition_params(app_id: str) -> dict[str, Any]:
+def build_get_definition_params(app_id: str, scope: str | None) -> dict[str, Any]:
     """构造 `hub.apps.getDefinition` 参数。"""
 
-    return {"appId": require_app_id(app_id, "app_id")}
+    return {
+        "appId": require_app_id(app_id, "app_id"),
+        "scope": require_definition_scope(scope, "scope"),
+    }
 
 
 def build_ping_params(echo: Any = _MISSING) -> dict[str, Any] | None:
@@ -65,10 +69,13 @@ def build_upsert_definition_params(definition: AppDefinition) -> dict[str, Any]:
     return {"definition": _build_definition_payload(definition)}
 
 
-def build_delete_definition_params(app_id: str) -> dict[str, Any]:
+def build_delete_definition_params(app_id: str, scope: str | None) -> dict[str, Any]:
     """构造 `hub.apps.deleteDefinition` 参数。"""
 
-    return {"appId": require_app_id(app_id, "app_id")}
+    return {
+        "appId": require_app_id(app_id, "app_id"),
+        "scope": require_definition_scope(scope, "scope"),
+    }
 
 
 def build_register_instance_params(instance: AppInstanceRegistration, password: str) -> dict[str, Any]:
@@ -277,12 +284,14 @@ def _build_definition_payload(definition: AppDefinition) -> dict[str, Any]:
         raise ValueError("definition 不能为空。")
 
     app_id = require_app_id(definition.app_id, "definition.app_id")
+    scope = require_definition_scope(definition.scope, "definition.scope")
     display_name = require_optional_string(definition.display_name, "definition.display_name")
     if display_name is None:
         raise ValueError("definition.display_name 类型非法。")
 
     payload: dict[str, Any] = {
         "appId": app_id,
+        "scope": scope,
         "displayName": display_name,
     }
     description = require_optional_string(definition.description, "definition.description")
