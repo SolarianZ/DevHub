@@ -12,6 +12,14 @@
           "scope": null,
           "displayName": "invoke.request.scope"
         }
+      },
+      {
+        "fileName": "invoke.request.scope--73636F70652D61.json",
+        "definition": {
+          "appId": "invoke.request.scope",
+          "scope": "scope-a",
+          "displayName": "invoke.request.scope scope-a"
+        }
       }
     ]
   },

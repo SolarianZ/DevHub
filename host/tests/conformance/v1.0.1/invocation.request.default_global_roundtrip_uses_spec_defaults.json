@@ -12,6 +12,14 @@
           "scope": null,
           "displayName": "invoke.request.default-global"
         }
+      },
+      {
+        "fileName": "invoke.request.default-global--73636F70652D61.json",
+        "definition": {
+          "appId": "invoke.request.default-global",
+          "scope": "scope-a",
+          "displayName": "invoke.request.default-global scope-a"
+        }
       }
     ]
   },
