@@ -2,6 +2,7 @@ import {
   DevHubRpcError,
   DevHubRpcErrorCode,
   type AppDefinition,
+  type AppDefinitionIdentity,
   type AppInstance,
   type DevHubClient,
   type DevHubEventsClient,
@@ -120,9 +121,19 @@ export async function disposeSessionResources(
 }
 
 export function sortDefinitions(definitions: readonly AppDefinition[]): AppDefinition[] {
-  return [...definitions].sort((left, right) =>
-    left.appId.localeCompare(right.appId, "zh-CN"),
-  );
+  return [...definitions].sort((left, right) => {
+    const appCompare = left.appId.localeCompare(right.appId, "zh-CN");
+    if (appCompare !== 0) {
+      return appCompare;
+    }
+
+    const scopeCompare = formatScope(left.scope).localeCompare(formatScope(right.scope), "zh-CN");
+    if (scopeCompare !== 0) {
+      return scopeCompare;
+    }
+
+    return left.displayName.localeCompare(right.displayName, "zh-CN");
+  });
 }
 
 export function sortInstances(instances: readonly AppInstance[]): AppInstance[] {
@@ -146,14 +157,40 @@ export function upsertDefinition(
   nextDefinition: AppDefinition,
 ): AppDefinition[] {
   return sortDefinitions([
-    ...current.filter((definition) => definition.appId !== nextDefinition.appId),
+    ...current.filter((definition) => !isSameDefinitionIdentity(definition, nextDefinition)),
     nextDefinition,
   ]);
 }
 
-export function createMissingDefinitionForm(appId: string): DefinitionFormState {
+export function removeDefinition(
+  current: readonly AppDefinition[],
+  identity: AppDefinitionIdentity,
+): AppDefinition[] {
+  return current.filter((definition) => !isSameDefinitionIdentity(definition, identity));
+}
+
+export function createDefinitionIdentity(appId: string, scope?: string | null): AppDefinitionIdentity {
+  return {
+    appId,
+    scope: normalizeOptionalInput(scope),
+  };
+}
+
+export function definitionIdentityKey(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
+  return JSON.stringify([identity.appId, normalizeOptionalInput(identity.scope)]);
+}
+
+export function isSameDefinitionIdentity(
+  left: Pick<AppDefinitionIdentity, "appId" | "scope">,
+  right: Pick<AppDefinitionIdentity, "appId" | "scope">,
+): boolean {
+  return definitionIdentityKey(left) === definitionIdentityKey(right);
+}
+
+export function createMissingDefinitionForm(identity: AppDefinitionIdentity): DefinitionFormState {
   const form = createEmptyDefinitionForm();
-  form.appId = appId;
+  form.appId = identity.appId;
+  form.scope = identity.scope ?? "";
   form.enableRpc = false;
   return form;
 }
@@ -172,6 +209,14 @@ export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null)
 
 export function formatScope(scope?: string | null): string {
   return scope && scope.trim() ? scope : "global";
+}
+
+export function formatDefinitionScopeLabel(scope?: string | null): string {
+  return `scope：${formatScope(scope)}`;
+}
+
+export function formatDefinitionIdentity(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
+  return `${identity.appId}（${formatDefinitionScopeLabel(identity.scope)}）`;
 }
 
 export function formatHostLogDirectory(effectiveDataDir?: string | null): string {

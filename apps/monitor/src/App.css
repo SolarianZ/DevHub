@@ -517,6 +517,13 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   min-width: 0;
 }
 
+.inventory-item-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .inventory-item-name {
   min-width: 0;
   max-width: 100%;
@@ -535,6 +542,12 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.inventory-item-scope {
+  color: var(--text-sub);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .inventory-item-description {
@@ -627,6 +640,11 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
 .field {
   display: grid;
   gap: 8px;
+}
+
+.field-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .field-full {

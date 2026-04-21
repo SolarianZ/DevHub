@@ -2,6 +2,7 @@ import type { AppDefinition, ValidationIssue } from "@devhub/sdk";
 
 export interface DefinitionFormState {
   appId: string;
+  scope: string;
   displayName: string;
   description: string;
   enableRpc: boolean;
@@ -18,6 +19,7 @@ export type DefinitionIssueMap = Record<string, ValidationIssue[]>;
 export function createEmptyDefinitionForm(): DefinitionFormState {
   return {
     appId: "",
+    scope: "",
     displayName: "",
     description: "",
     enableRpc: true,
@@ -33,6 +35,7 @@ export function createEmptyDefinitionForm(): DefinitionFormState {
 export function definitionToForm(definition: AppDefinition): DefinitionFormState {
   return {
     appId: definition.appId,
+    scope: definition.scope ?? "",
     displayName: definition.displayName,
     description: definition.description ?? "",
     enableRpc: definition.capabilities?.rpc ?? true,
@@ -48,6 +51,7 @@ export function definitionToForm(definition: AppDefinition): DefinitionFormState
 export function definitionFormToModel(form: DefinitionFormState): AppDefinition {
   const definition: AppDefinition = {
     appId: form.appId.trim(),
+    scope: normalizeOptionalText(form.scope) ?? null,
     displayName: form.displayName.trim(),
   };
 

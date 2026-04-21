@@ -6,6 +6,7 @@ import {
   DevHubClient,
   DevHubEventsClient,
   type AppDefinition,
+  type AppDefinitionIdentity,
   type AppInstance,
 } from "@devhub/sdk";
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import {
   type HostSessionStatus,
   disposeSessionResources,
   getRuntimePort,
+  removeDefinition,
   shouldRecoverHostSession,
   sortDefinitions,
   sortInstances,
@@ -123,9 +125,9 @@ export function useHostSession(options: HostSessionOptions) {
     });
   });
 
-  const removeDefinitionFromState = useEffectEvent((appId: string) => {
+  const removeDefinitionFromState = useEffectEvent((identity: AppDefinitionIdentity) => {
     startTransition(() => {
-      setDefinitions((current) => current.filter((definition) => definition.appId !== appId));
+      setDefinitions((current) => removeDefinition(current, identity));
     });
   });
 

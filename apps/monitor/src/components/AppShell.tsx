@@ -1,5 +1,5 @@
 import packageManifest from "../../package.json";
-import type { AppDefinition, AppInstance } from "@devhub/sdk";
+import type { AppDefinition, AppDefinitionIdentity, AppInstance } from "@devhub/sdk";
 import { type ReactNode, useState } from "react";
 import type { DefinitionFormState } from "../lib/definition-form";
 import type {
@@ -15,6 +15,9 @@ import {
   type MonitorWorkspace,
   type SettingsFieldErrors,
   type SidebarWorkspace,
+  createDefinitionIdentity,
+  definitionIdentityKey,
+  formatDefinitionScopeLabel,
   formatHostLogDirectory,
   getSidebarWorkspace,
 } from "../lib/monitor-ui";
@@ -46,7 +49,7 @@ interface AppShellProps {
   onSelectDataDirectory: () => void;
   onSaveSettings: () => void;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
   onChangeDefinitionField: (field: keyof DefinitionFormState, value: string | boolean) => void;
   onCloseDefinitionWorkspace: () => void;
@@ -60,6 +63,7 @@ const INVENTORY_DESCRIPTION_FALLBACK = "未提供 App 描述";
 interface InventoryItemViewModel {
   key: string;
   appId: string;
+  scopeLabel: string;
   title: string;
   description: string;
   actionAccessibleName: string;
@@ -258,7 +262,7 @@ function HomeWorkspace(props: {
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
@@ -312,7 +316,7 @@ function HomeStatusWorkspace(props: {
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
 }) {
   const {
@@ -329,9 +333,13 @@ function HomeStatusWorkspace(props: {
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
   const showInventories = hostSessionStatus === "connected";
-  const definitionIndex = new Map(definitions.map((definition) => [definition.appId, definition]));
+  const definitionIndex = new Map(definitions.map((definition) => [definitionIdentityKey(definition), definition]));
   const instanceItems = instances.map((instance) =>
-    createInstanceInventoryItem(instance, definitionIndex.get(instance.appId), onViewInstanceDefinition),
+    createInstanceInventoryItem(
+      instance,
+      definitionIndex.get(definitionIdentityKey(createDefinitionIdentity(instance.appId, instance.scope))),
+      onViewInstanceDefinition,
+    ),
   );
   const definitionItems = definitions.map((definition) =>
     createDefinitionInventoryItem(definition, onEditDefinition),
@@ -444,9 +452,14 @@ function InventoryList(props: {
               <span className="inventory-item-name" title={item.title}>
                 {item.title}
               </span>
-              <span className="inventory-item-app-id" title={item.appId}>
-                {item.appId}
-              </span>
+              <div className="inventory-item-meta">
+                <span className="inventory-item-app-id" title={item.appId}>
+                  {item.appId}
+                </span>
+                <span className="inventory-item-scope" title={item.scopeLabel}>
+                  {item.scopeLabel}
+                </span>
+              </div>
             </div>
             <p className="inventory-item-description" title={item.description}>
               {item.description}
@@ -472,19 +485,22 @@ function InventoryList(props: {
 
 function createDefinitionInventoryItem(
   definition: AppDefinition,
-  onEditDefinition: (appId: string) => void,
+  onEditDefinition: (identity: AppDefinitionIdentity) => void,
 ): InventoryItemViewModel {
   const title = normalizeInventoryText(definition.displayName, definition.appId);
+  const scopeLabel = formatDefinitionScopeLabel(definition.scope);
+  const identity = createDefinitionIdentity(definition.appId, definition.scope);
 
   return {
-    key: definition.appId,
+    key: definitionIdentityKey(identity),
     appId: definition.appId,
+    scopeLabel,
     title,
     description: normalizeInventoryText(definition.description, INVENTORY_DESCRIPTION_FALLBACK),
-    actionAccessibleName: `编辑定义：${title}（${definition.appId}）`,
+    actionAccessibleName: `编辑定义：${title}（${definition.appId}，${scopeLabel}）`,
     actionIcon: <EditIcon />,
     actionTitle: "编辑",
-    onAction: () => onEditDefinition(definition.appId),
+    onAction: () => onEditDefinition(identity),
   };
 }
 
@@ -494,13 +510,15 @@ function createInstanceInventoryItem(
   onViewInstanceDefinition: (instance: AppInstance) => void,
 ): InventoryItemViewModel {
   const title = normalizeInventoryText(definition?.displayName, instance.appId);
+  const scopeLabel = formatDefinitionScopeLabel(instance.scope);
 
   return {
     key: instance.instanceId,
     appId: instance.appId,
+    scopeLabel,
     title,
     description: normalizeInventoryText(definition?.description, INVENTORY_DESCRIPTION_FALLBACK),
-    actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}）`,
+    actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}，${scopeLabel}）`,
     actionIcon: <ViewIcon />,
     actionTitle: "查看定义",
     onAction: () => onViewInstanceDefinition(instance),
@@ -736,16 +754,30 @@ function DefinitionWorkspacePage(props: {
         <>
           <div className="definition-form">
             <div className="form-grid">
-              <label className="field">
-                <span>App ID</span>
-                <input
-                  type="text"
-                  value={workspace.form.appId}
-                  disabled={disableInputs || workspace.mode !== "create"}
-                  onChange={(event) => onChangeField("appId", event.target.value)}
-                />
-                <FieldIssues issues={workspace.fieldErrors["definition.appId"]} />
-              </label>
+              <div className="field-stack">
+                <label className="field">
+                  <span>App ID</span>
+                  <input
+                    type="text"
+                    value={workspace.form.appId}
+                    disabled={disableInputs || workspace.mode !== "create"}
+                    onChange={(event) => onChangeField("appId", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.appId"]} />
+                </label>
+
+                <label className="field">
+                  <span>scope</span>
+                  <input
+                    aria-label="scope"
+                    type="text"
+                    value={workspace.form.scope}
+                    disabled={disableInputs || workspace.mode !== "create"}
+                    onChange={(event) => onChangeField("scope", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.scope"]} />
+                </label>
+              </div>
 
               <label className="field">
                 <span>显示名称</span>

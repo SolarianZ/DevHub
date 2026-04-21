@@ -12,6 +12,7 @@ import {
   pickHostExecutablePath,
   writeFrontendLog,
 } from "./lib/monitor-api";
+import type { AppDefinitionIdentity } from "@devhub/sdk";
 import type { FrontendLogInput, LogKind } from "./lib/models";
 import { type MonitorWorkspace, getHomeWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
 
@@ -157,11 +158,11 @@ function App() {
     void openCreateDefinitionWorkspace();
   });
 
-  const handleOpenDefinitionEdit = useEffectEvent((appId: string) => {
+  const handleOpenDefinitionEdit = useEffectEvent((identity: AppDefinitionIdentity) => {
     startTransition(() => {
       setActiveWorkspace("definition");
     });
-    void openEditDefinitionWorkspace(appId);
+    void openEditDefinitionWorkspace(identity);
   });
 
   const handleOpenInstanceDefinition = useEffectEvent((instance: Parameters<typeof openInstanceDefinitionWorkspace>[0]) => {
@@ -330,8 +331,8 @@ function App() {
         onAddDefinition={() => {
           handleOpenDefinitionCreate();
         }}
-        onEditDefinition={(appId) => {
-          handleOpenDefinitionEdit(appId);
+        onEditDefinition={(identity) => {
+          handleOpenDefinitionEdit(identity);
         }}
         onViewInstanceDefinition={(instance) => {
           handleOpenInstanceDefinition(instance);

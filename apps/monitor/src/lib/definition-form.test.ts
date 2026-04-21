@@ -11,6 +11,7 @@ describe("definition-form helpers", () => {
   it("omits empty optional fields when converting a form to a definition", () => {
     const form = createEmptyDefinitionForm();
     form.appId = " sample.app ";
+    form.scope = "   ";
     form.displayName = " Sample App ";
     form.description = "   ";
     form.enableEvents = true;
@@ -20,6 +21,7 @@ describe("definition-form helpers", () => {
 
     expect(definitionFormToModel(form)).toEqual<AppDefinition>({
       appId: "sample.app",
+      scope: null,
       displayName: "Sample App",
       capabilities: {
         rpc: true,
@@ -34,6 +36,7 @@ describe("definition-form helpers", () => {
   it("restores launch and capability state when loading a definition into the form", () => {
     const definition: AppDefinition = {
       appId: "demo.app",
+      scope: "workspace-a",
       displayName: "Demo",
       description: "Monitor test definition",
       capabilities: {
@@ -50,6 +53,7 @@ describe("definition-form helpers", () => {
 
     expect(definitionToForm(definition)).toEqual({
       appId: "demo.app",
+      scope: "workspace-a",
       displayName: "Demo",
       description: "Monitor test definition",
       enableRpc: false,

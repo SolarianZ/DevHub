@@ -149,6 +149,7 @@ function createSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): Sett
 function createDefinition(overrides: Partial<AppDefinition> = {}): AppDefinition {
   return {
     appId: "demo.app",
+    scope: null,
     displayName: "Demo App",
     description: "Demo description",
     capabilities: {
@@ -173,6 +174,18 @@ function createInstance(overrides: Partial<AppInstance> = {}): AppInstance {
     },
     ...overrides,
   };
+}
+
+function formatScopeLabel(scope?: string | null): string {
+  return `scope：${scope && scope.trim() ? scope : "global"}`;
+}
+
+function getDefinitionActionLabel(definition: Pick<AppDefinition, "appId" | "scope" | "displayName">): string {
+  return `编辑定义：${definition.displayName}（${definition.appId}，${formatScopeLabel(definition.scope)}）`;
+}
+
+function getInstanceActionLabel(instance: Pick<AppInstance, "instanceId" | "appId" | "scope">): string {
+  return `查看定义：${instance.instanceId}（${instance.appId}，${formatScopeLabel(instance.scope)}）`;
 }
 
 function createPendingEventStream(): AsyncIterable<unknown> {
@@ -307,19 +320,21 @@ describe("Monitor App", () => {
     const instancesSection = getInventorySection("App 实例");
     const instanceRow = getInventoryRowByActionLabel(
       instancesSection,
-      "查看定义：instance-1（demo.app）",
+      getInstanceActionLabel(instance),
     );
     within(instanceRow).getByText("Demo App");
     within(instanceRow).getByText("demo.app");
+    within(instanceRow).getByText("scope：global");
     within(instanceRow).getByText("Demo description");
 
     const definitionsSection = getInventorySection("App 定义");
     const definitionRow = getInventoryRowByActionLabel(
       definitionsSection,
-      "编辑定义：Demo App（demo.app）",
+      getDefinitionActionLabel(definition),
     );
     within(definitionRow).getByText("Demo App");
     within(definitionRow).getByText("demo.app");
+    within(definitionRow).getByText("scope：global");
     within(definitionRow).getByText("Demo description");
     expect(within(definitionsSection).getByRole("button", { name: "新增定义" }).className)
       .toContain("icon-button-prominent");
@@ -404,28 +419,140 @@ describe("Monitor App", () => {
     const instancesSection = getInventorySection("App 实例");
     const mappedInstanceRow = getInventoryRowByActionLabel(
       instancesSection,
-      `查看定义：long-instance（${longAppId}）`,
+      getInstanceActionLabel(createInstance({
+        instanceId: "long-instance",
+        appId: longAppId,
+      })),
     );
     expect(within(mappedInstanceRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
     expect(within(mappedInstanceRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
     expect(within(mappedInstanceRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
+    within(mappedInstanceRow).getByText("scope：global");
 
     const orphanInstanceRow = getInventoryRowByActionLabel(
       instancesSection,
-      `查看定义：${orphanInstanceId}（${orphanAppId}）`,
+      getInstanceActionLabel(createInstance({
+        instanceId: orphanInstanceId,
+        appId: orphanAppId,
+      })),
     );
     expect(within(orphanInstanceRow).getAllByText(orphanAppId)).toHaveLength(2);
+    within(orphanInstanceRow).getByText("scope：global");
     expect(within(orphanInstanceRow).getByText("未提供 App 描述").getAttribute("title"))
       .toBe("未提供 App 描述");
 
     const definitionsSection = getInventorySection("App 定义");
     const definitionRow = getInventoryRowByActionLabel(
       definitionsSection,
-      `编辑定义：${longDisplayName}（${longAppId}）`,
+      getDefinitionActionLabel(createDefinition({
+        appId: longAppId,
+        displayName: longDisplayName,
+      })),
     );
     expect(within(definitionRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
     expect(within(definitionRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
+    within(definitionRow).getByText("scope：global");
     expect(within(definitionRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
+  });
+
+  it("keys definition edit, view, and delete flows by appId plus scope", async () => {
+    const globalDefinition = createDefinition({
+      displayName: "Demo App Global",
+      description: "Global definition",
+    });
+    const scopedDefinition = createDefinition({
+      scope: "workspace-a",
+      displayName: "Demo App Scoped",
+      description: "Scoped definition",
+    });
+    const globalInstance = createInstance();
+    const scopedInstance = createInstance({
+      instanceId: "instance-workspace-a",
+      scope: "workspace-a",
+    });
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([globalDefinition, scopedDefinition]),
+      listInstances: vi.fn().mockResolvedValue([globalInstance, scopedInstance]),
+      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string | null }) => {
+        return identity.scope === "workspace-a" ? scopedDefinition : globalDefinition;
+      }),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText("Demo App Global");
+    await screen.findAllByText("Demo App Scoped");
+
+    const instancesSection = getInventorySection("App 实例");
+    const scopedInstanceRow = getInventoryRowByActionLabel(
+      instancesSection,
+      getInstanceActionLabel(scopedInstance),
+    );
+    within(scopedInstanceRow).getByText("scope：workspace-a");
+
+    const user = userEvent.setup();
+    await user.click(within(scopedInstanceRow).getByRole("button", {
+      name: getInstanceActionLabel(scopedInstance),
+    }));
+
+    await screen.findByRole("heading", { name: "实例关联定义" });
+    expect(hostClient.getDefinition).toHaveBeenCalledWith({
+      appId: "demo.app",
+      scope: "workspace-a",
+    });
+    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("workspace-a");
+
+    await user.click(screen.getByRole("button", { name: "返回主页" }));
+    await screen.findByRole("heading", { name: "主页" });
+
+    const definitionsSection = getInventorySection("App 定义");
+    const globalDefinitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      getDefinitionActionLabel(globalDefinition),
+    );
+    within(globalDefinitionRow).getByText("scope：global");
+
+    const scopedDefinitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      getDefinitionActionLabel(scopedDefinition),
+    );
+    within(scopedDefinitionRow).getByText("scope：workspace-a");
+
+    await user.click(within(scopedDefinitionRow).getByRole("button", {
+      name: getDefinitionActionLabel(scopedDefinition),
+    }));
+
+    await screen.findByRole("heading", { name: "编辑 App Definition" });
+    expect(hostClient.getDefinition).toHaveBeenLastCalledWith({
+      appId: "demo.app",
+      scope: "workspace-a",
+    });
+    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("workspace-a");
+
+    await user.click(screen.getByRole("button", { name: "删除定义" }));
+    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app（scope：workspace-a）” 吗？");
+
+    await screen.findByRole("heading", { name: "主页" });
+    expect(hostClient.deleteDefinition).toHaveBeenCalledWith({
+      appId: "demo.app",
+      scope: "workspace-a",
+    });
+    expect(screen.queryByText("Demo App Scoped")).toBeNull();
+    expect(screen.getAllByText("Demo App Global").length).toBeGreaterThan(0);
   });
 
   it("returns home to discovery when the host event stream terminates", async () => {
@@ -686,9 +813,9 @@ describe("Monitor App", () => {
       valid: false,
       errors: [
         {
-          path: "definition.appId",
-          code: "required",
-          message: "appId 不能为空。",
+          path: "definition.scope",
+          code: "format",
+          message: "scope 格式不合法。",
         },
       ],
     };
@@ -720,12 +847,14 @@ describe("Monitor App", () => {
     await user.click(screen.getByRole("button", { name: "新增定义" }));
     await screen.findByRole("heading", { name: "新增 App 定义" });
     await user.type(screen.getByLabelText("App ID"), "demo.app");
+    await user.type(screen.getByLabelText("scope"), "invalid scope");
     await user.type(screen.getByLabelText("显示名称"), "Demo App");
     await user.click(screen.getByRole("button", { name: "创建定义" }));
 
     await screen.findByText("预校验未通过，请修正下列字段错误后再提交。");
-    screen.getByText("appId 不能为空。");
+    screen.getByText("scope 格式不合法。");
     screen.getByRole("heading", { name: "新增 App 定义" });
+    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("invalid scope");
 
     expect(hostClient.validateDefinition).toHaveBeenCalledTimes(1);
     expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
@@ -758,11 +887,11 @@ describe("Monitor App", () => {
     await screen.findByText("Demo App");
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "编辑定义：Demo App（demo.app）" }));
+    await user.click(screen.getByRole("button", { name: getDefinitionActionLabel(definition) }));
     await screen.findByRole("heading", { name: "编辑 App Definition" });
     await screen.findByLabelText("显示名称");
     await user.click(screen.getByRole("button", { name: "删除定义" }));
-    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app” 吗？");
+    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app（scope：global）” 吗？");
 
     await screen.findAllByText("delete failed");
     screen.getByRole("heading", { name: "编辑 App Definition" });
@@ -800,19 +929,21 @@ describe("Monitor App", () => {
 
     render(<App />);
 
-    await screen.findByRole("button", { name: "查看定义：instance-1（demo.app）" });
+    const instance = createInstance();
+    await screen.findByRole("button", { name: getInstanceActionLabel(instance) });
 
     const instancesSection = getInventorySection("App 实例");
     const missingInstanceRow = getInventoryRowByActionLabel(
       instancesSection,
-      "查看定义：instance-1（demo.app）",
+      getInstanceActionLabel(instance),
     );
     expect(within(missingInstanceRow).getAllByText("demo.app")).toHaveLength(2);
+    within(missingInstanceRow).getByText("scope：global");
     within(missingInstanceRow).getByText("未提供 App 描述");
 
     const user = userEvent.setup();
     await user.click(within(missingInstanceRow).getByRole("button", {
-      name: "查看定义：instance-1（demo.app）",
+      name: getInstanceActionLabel(instance),
     }));
 
     await screen.findByRole("heading", { name: "定义不存在" });
