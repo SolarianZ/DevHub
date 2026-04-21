@@ -1,4 +1,14 @@
 {
+    "rust-analyzer.linkedProjects": [
+        "apps/monitor/src-tauri/Cargo.toml"
+    ],
+    "rust-analyzer.cargo.buildScripts.enable": true,
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.cargo.targetDir": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+    },
     "files.exclude": {
         "**/bin": true,
         "**/obj": true,
