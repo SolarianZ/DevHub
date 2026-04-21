@@ -116,6 +116,11 @@ public sealed class DefinitionManager : IDefinitionManager
             throw new ArgumentException("appId format is invalid.", nameof(appId));
         }
 
+        if (scope is not null && string.IsNullOrWhiteSpace(scope))
+        {
+            throw new ArgumentException("scope must be null or a non-empty string.", nameof(scope));
+        }
+
         var identity = AppDefinitionIdentity.Create(appId, scope);
         var path = Path.Combine(_definitionsPath, identity.GetFileName());
         if (!File.Exists(path))

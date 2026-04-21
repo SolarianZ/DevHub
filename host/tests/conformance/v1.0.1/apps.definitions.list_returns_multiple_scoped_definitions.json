@@ -1,0 +1,67 @@
+{
+  "id": "apps.definitions.list_returns_multiple_scoped_definitions",
+  "caseId": "CONF-003",
+  "description": "同一 appId 预置多份不同 scope Definition 时，hub.apps.listDefinitions 必须返回全部精确作用域记录。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.list.multi-scope.app--global.json",
+        "definition": {
+          "appId": "apps.list.multi-scope.app",
+          "scope": null,
+          "displayName": "Apps List Multi Scope Global"
+        }
+      },
+      {
+        "fileName": "apps.list.multi-scope.app--776F726B73706163652D61.json",
+        "definition": {
+          "appId": "apps.list.multi-scope.app",
+          "scope": "workspace-a",
+          "displayName": "Apps List Multi Scope Workspace A"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000127"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-multi-scope",
+    "method": "hub.apps.listDefinitions",
+    "params": {}
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-multi-scope",
+    "result": {
+      "ok": true,
+      "definitions": [
+        {
+          "appId": "apps.list.multi-scope.app",
+          "scope": "workspace-a",
+          "displayName": "Apps List Multi Scope Workspace A"
+        },
+        {
+          "appId": "apps.list.multi-scope.app",
+          "scope": null,
+          "displayName": "Apps List Multi Scope Global"
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "scope",
+    "success"
+  ]
+}

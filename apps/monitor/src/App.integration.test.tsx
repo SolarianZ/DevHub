@@ -47,7 +47,7 @@ const {
 }));
 
 function formatScopeLabel(scope?: string | null): string {
-  return `scope：${scope && scope.trim() ? scope : "global"}`;
+  return `scope：${scope ?? "Global"}`;
 }
 
 function getDefinitionActionLabel(displayName: string, appId: string, scope?: string | null): string {
@@ -223,7 +223,7 @@ describe("Monitor App real-host integration", () => {
       );
       within(primaryInstanceRow).getByText("Monitor Integration App");
       within(primaryInstanceRow).getByText(PRIMARY_APP_ID);
-      within(primaryInstanceRow).getByText("scope：global");
+      within(primaryInstanceRow).getByText("scope：Global");
       within(primaryInstanceRow).getByText("用于 Monitor 真实 Host 集成回归。");
 
       const scopedInstanceRow = getInventoryRowByActionLabel(
@@ -240,7 +240,7 @@ describe("Monitor App real-host integration", () => {
         getInstanceActionLabel(MISSING_INSTANCE_ID, MISSING_APP_ID, null),
       );
       expect(within(missingInstanceRow).getAllByText(MISSING_APP_ID)).toHaveLength(2);
-      within(missingInstanceRow).getByText("scope：global");
+      within(missingInstanceRow).getByText("scope：Global");
       within(missingInstanceRow).getByText("未提供 App 描述");
 
       const existingDefinitionRow = getInventoryRowByActionLabel(
@@ -249,7 +249,7 @@ describe("Monitor App real-host integration", () => {
       );
       within(existingDefinitionRow).getByText("Monitor Integration App");
       within(existingDefinitionRow).getByText(PRIMARY_APP_ID);
-      within(existingDefinitionRow).getByText("scope：global");
+      within(existingDefinitionRow).getByText("scope：Global");
       within(existingDefinitionRow).getByText("用于 Monitor 真实 Host 集成回归。");
 
       const scopedDefinitionRow = getInventoryRowByActionLabel(
@@ -266,7 +266,6 @@ describe("Monitor App real-host integration", () => {
       await user.click(screen.getByRole("button", { name: "新增定义" }));
       await screen.findByRole("heading", { name: "新增 App 定义" }, { timeout: 15_000 });
       await user.type(screen.getByLabelText("App ID"), "monitor.integration.created");
-      await user.type(screen.getByLabelText("scope"), "   ");
       await user.type(screen.getByLabelText("显示名称"), "Monitor Created App");
       await user.type(screen.getByLabelText("描述"), "通过 Monitor UI 创建的定义。");
       await user.click(screen.getByRole("button", { name: "创建定义" }));
@@ -277,7 +276,7 @@ describe("Monitor App real-host integration", () => {
         getInventorySection("App 定义"),
         getDefinitionActionLabel("Monitor Created App", "monitor.integration.created", null),
       );
-      within(createdDefinitionRow).getByText("scope：global");
+      within(createdDefinitionRow).getByText("scope：Global");
 
       const existingDefinitionRowAfterCreate = getInventoryRowByActionLabel(
         getInventorySection("App 定义"),
@@ -302,7 +301,7 @@ describe("Monitor App real-host integration", () => {
       );
       within(primaryInstanceRowAfterUpdate).getByText("Monitor Integration App Updated");
       within(primaryInstanceRowAfterUpdate).getByText(PRIMARY_APP_ID);
-      within(primaryInstanceRowAfterUpdate).getByText("scope：global");
+      within(primaryInstanceRowAfterUpdate).getByText("scope：Global");
       within(primaryInstanceRowAfterUpdate).getByText("用于 Monitor 真实 Host 集成回归。");
 
       await user.click(within(primaryInstanceRowAfterUpdate).getByRole("button", {
@@ -335,7 +334,7 @@ describe("Monitor App real-host integration", () => {
         getInstanceActionLabel(MISSING_INSTANCE_ID, MISSING_APP_ID, null),
       );
       expect(within(missingInstanceRowAfterUpdate).getAllByText(MISSING_APP_ID)).toHaveLength(2);
-      within(missingInstanceRowAfterUpdate).getByText("scope：global");
+      within(missingInstanceRowAfterUpdate).getByText("scope：Global");
       within(missingInstanceRowAfterUpdate).getByText("未提供 App 描述");
 
       await user.click(within(missingInstanceRowAfterUpdate).getByRole("button", {
@@ -458,7 +457,7 @@ describe("Monitor App real-host integration", () => {
       await findDefinitionInput("显示名称");
 
       await user.click(screen.getByRole("button", { name: "删除定义" }));
-      await respondToConfirmDialog(user, "confirm", `确认删除 App Definition “${guardAppId}（scope：global）” 吗？`);
+      await respondToConfirmDialog(user, "confirm", `确认删除 App Definition “${guardAppId}（scope：Global）” 吗？`);
 
       await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
       await waitFor(() => {

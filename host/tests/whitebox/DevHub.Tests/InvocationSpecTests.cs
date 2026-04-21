@@ -1246,10 +1246,11 @@ public class InvocationSpecTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         var payload = new
         {
             appId,
+            scope = (string?)null,
             displayName = appId,
             capabilities = new
             {

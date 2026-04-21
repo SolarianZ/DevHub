@@ -24,7 +24,15 @@ public sealed class AppDefinition
     public string? Scope
     {
         get => _scope;
-        set => _scope = value is not null && value.Length == 0 ? null : value;
+        set
+        {
+            if (value is not null && string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException("Scope 必须为 null 或非空字符串。", nameof(Scope));
+            }
+
+            _scope = value;
+        }
     }
 
     /// <summary>

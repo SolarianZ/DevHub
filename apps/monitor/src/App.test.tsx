@@ -85,12 +85,14 @@ vi.mock("@devhub/sdk", async () => {
   };
 });
 
-function createConnection(): MonitorRuntimeConnectionInfo {
+function createConnection(overrides: Partial<MonitorRuntimeConnectionInfo> = {}): MonitorRuntimeConnectionInfo {
+  const runtimeOverrides = overrides.runtime ?? {};
+
   return {
-    runtimeDirectory: "/tmp/devhub/runtime",
-    token: "test-token",
-    rpcEndpoint: "http://127.0.0.1:4123/rpc",
-    websocketEndpoint: "ws://127.0.0.1:4123/ws",
+    runtimeDirectory: overrides.runtimeDirectory ?? "/tmp/devhub/runtime",
+    token: overrides.token ?? "test-token",
+    rpcEndpoint: overrides.rpcEndpoint ?? "http://127.0.0.1:4123/rpc",
+    websocketEndpoint: overrides.websocketEndpoint ?? "ws://127.0.0.1:4123/ws",
     runtime: {
       protocolVersion: 1,
       pid: 4321,
@@ -104,6 +106,7 @@ function createConnection(): MonitorRuntimeConnectionInfo {
         launchDedupeWindowSeconds: 5,
       },
       hubVersion: "0.7.0",
+      ...runtimeOverrides,
     },
   };
 }
@@ -177,7 +180,7 @@ function createInstance(overrides: Partial<AppInstance> = {}): AppInstance {
 }
 
 function formatScopeLabel(scope?: string | null): string {
-  return `scope：${scope && scope.trim() ? scope : "global"}`;
+  return `scope：${scope ?? "Global"}`;
 }
 
 function getDefinitionActionLabel(definition: Pick<AppDefinition, "appId" | "scope" | "displayName">): string {
@@ -324,7 +327,7 @@ describe("Monitor App", () => {
     );
     within(instanceRow).getByText("Demo App");
     within(instanceRow).getByText("demo.app");
-    within(instanceRow).getByText("scope：global");
+    within(instanceRow).getByText("scope：Global");
     within(instanceRow).getByText("Demo description");
 
     const definitionsSection = getInventorySection("App 定义");
@@ -334,7 +337,7 @@ describe("Monitor App", () => {
     );
     within(definitionRow).getByText("Demo App");
     within(definitionRow).getByText("demo.app");
-    within(definitionRow).getByText("scope：global");
+    within(definitionRow).getByText("scope：Global");
     within(definitionRow).getByText("Demo description");
     expect(within(definitionsSection).getByRole("button", { name: "新增定义" }).className)
       .toContain("icon-button-prominent");
@@ -427,7 +430,7 @@ describe("Monitor App", () => {
     expect(within(mappedInstanceRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
     expect(within(mappedInstanceRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
     expect(within(mappedInstanceRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
-    within(mappedInstanceRow).getByText("scope：global");
+    within(mappedInstanceRow).getByText("scope：Global");
 
     const orphanInstanceRow = getInventoryRowByActionLabel(
       instancesSection,
@@ -437,7 +440,7 @@ describe("Monitor App", () => {
       })),
     );
     expect(within(orphanInstanceRow).getAllByText(orphanAppId)).toHaveLength(2);
-    within(orphanInstanceRow).getByText("scope：global");
+    within(orphanInstanceRow).getByText("scope：Global");
     expect(within(orphanInstanceRow).getByText("未提供 App 描述").getAttribute("title"))
       .toBe("未提供 App 描述");
 
@@ -451,7 +454,7 @@ describe("Monitor App", () => {
     );
     expect(within(definitionRow).getByText(longDisplayName).getAttribute("title")).toBe(longDisplayName);
     expect(within(definitionRow).getByText(longAppId).getAttribute("title")).toBe(longAppId);
-    within(definitionRow).getByText("scope：global");
+    within(definitionRow).getByText("scope：Global");
     expect(within(definitionRow).getByText(longDescription).getAttribute("title")).toBe(longDescription);
   });
 
@@ -524,7 +527,7 @@ describe("Monitor App", () => {
       definitionsSection,
       getDefinitionActionLabel(globalDefinition),
     );
-    within(globalDefinitionRow).getByText("scope：global");
+    within(globalDefinitionRow).getByText("scope：Global");
 
     const scopedDefinitionRow = getInventoryRowByActionLabel(
       definitionsSection,
@@ -553,6 +556,93 @@ describe("Monitor App", () => {
     });
     expect(screen.queryByText("Demo App Scoped")).toBeNull();
     expect(screen.getAllByText("Demo App Global").length).toBeGreaterThan(0);
+  });
+
+  it("keeps Global and literal global definition identities distinct in the inventory", async () => {
+    const globalDefinition = createDefinition({
+      displayName: "Demo App Global",
+      description: "Global definition",
+    });
+    const literalGlobalDefinition = createDefinition({
+      scope: "global",
+      displayName: "Demo App Literal Global",
+      description: "Literal global definition",
+    });
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([globalDefinition, literalGlobalDefinition]),
+      listInstances: vi.fn().mockResolvedValue([]),
+      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string | null }) => {
+        return identity.scope === "global" ? literalGlobalDefinition : globalDefinition;
+      }),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText("Demo App Global");
+    await screen.findAllByText("Demo App Literal Global");
+
+    const definitionsSection = getInventorySection("App 定义");
+    const globalDefinitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      getDefinitionActionLabel(globalDefinition),
+    );
+    within(globalDefinitionRow).getByText("scope：Global");
+
+    const literalGlobalDefinitionRow = getInventoryRowByActionLabel(
+      definitionsSection,
+      getDefinitionActionLabel(literalGlobalDefinition),
+    );
+    within(literalGlobalDefinitionRow).getByText("scope：global");
+
+    const user = userEvent.setup();
+    await user.click(within(literalGlobalDefinitionRow).getByRole("button", {
+      name: getDefinitionActionLabel(literalGlobalDefinition),
+    }));
+
+    await screen.findByRole("heading", { name: "编辑 App Definition" });
+    expect(hostClient.getDefinition).toHaveBeenLastCalledWith({
+      appId: "demo.app",
+      scope: "global",
+    });
+    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("global");
+  });
+
+  it("rejects unsupported hosts before opening the connected inventory workflow", async () => {
+    getBootstrapStateMock.mockResolvedValue(
+      createBootstrapSnapshot({
+        connection: createConnection({
+          runtime: {
+            ...createConnection().runtime,
+            hubVersion: "0.6.9",
+          },
+        }),
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "主页" });
+    await screen.findByText("当前 Host 版本不受支持");
+    await screen.findByText(/hubVersion=0\.6\.9/);
+
+    expect(hostClientFromRuntimeMock).not.toHaveBeenCalled();
+    expect(eventsClientFromRuntimeMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("App 定义")).toBeNull();
+    expect(screen.queryByText("App 实例")).toBeNull();
   });
 
   it("returns home to discovery when the host event stream terminates", async () => {
@@ -891,7 +981,7 @@ describe("Monitor App", () => {
     await screen.findByRole("heading", { name: "编辑 App Definition" });
     await screen.findByLabelText("显示名称");
     await user.click(screen.getByRole("button", { name: "删除定义" }));
-    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app（scope：global）” 吗？");
+    await respondToConfirmDialog(user, "confirm", "确认删除 App Definition “demo.app（scope：Global）” 吗？");
 
     await screen.findAllByText("delete failed");
     screen.getByRole("heading", { name: "编辑 App Definition" });
@@ -938,7 +1028,7 @@ describe("Monitor App", () => {
       getInstanceActionLabel(instance),
     );
     expect(within(missingInstanceRow).getAllByText("demo.app")).toHaveLength(2);
-    within(missingInstanceRow).getByText("scope：global");
+    within(missingInstanceRow).getByText("scope：Global");
     within(missingInstanceRow).getByText("未提供 App 描述");
 
     const user = userEvent.setup();

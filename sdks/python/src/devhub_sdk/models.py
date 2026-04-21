@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from .constants import DevHubEventType
 from ._validation import (
+    require_definition_scope,
     require_non_empty_string,
     require_positive_number,
     require_protocol_version,
@@ -72,10 +73,15 @@ class AppDefinition:
 
     app_id: str
     display_name: str
-    scope: str | None = None
     description: str | None = None
     capabilities: AppCapabilities | None = None
     launch: LaunchConfiguration | None = None
+    scope: str | None = field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        """校验 Definition 复合身份中的 scope。"""
+
+        self.scope = require_definition_scope(self.scope, "scope")
 
 
 @dataclass(slots=True)

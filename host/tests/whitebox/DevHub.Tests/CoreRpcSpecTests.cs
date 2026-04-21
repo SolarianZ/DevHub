@@ -84,9 +84,10 @@ public class CoreRpcSpecTests : IDisposable
     [Trait("SpecRef", "6.3.3")]
     public async Task Spec_6_3_3_ListDefinitions_ShouldReturnDefinitions()
     {
-        WriteJson("spec-6.3.3-target.json", new
+        WriteDefinition(new
         {
             appId = "spec-6.3.3-target",
+            scope = (string?)null,
             displayName = "Spec 6.3.3 Target"
         });
 
@@ -109,9 +110,10 @@ public class CoreRpcSpecTests : IDisposable
     [Trait("SpecRef", "6.3.4")]
     public async Task Spec_6_3_4_GetDefinition_ShouldReturnDefinitionWhenExists()
     {
-        WriteJson("spec-6.3.4-target.json", new
+        WriteDefinition(new
         {
             appId = "spec-6.3.4-target",
+            scope = (string?)null,
             displayName = "Spec 6.3.4 Target"
         });
 
@@ -506,9 +508,14 @@ public class CoreRpcSpecTests : IDisposable
         }
     }
 
-    private void WriteJson(string fileName, object payload)
+    private void WriteDefinition(object payload)
     {
-        var fullPath = Path.Combine(_tempDirectory, fileName);
+        var json = JsonSerializer.SerializeToElement(payload);
+        var appId = json.GetProperty("appId").GetString();
+        var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
+            ? scopeElement.GetString()
+            : null;
+        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId!, scope).GetFileName());
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }

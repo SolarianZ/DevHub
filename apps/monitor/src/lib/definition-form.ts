@@ -51,7 +51,7 @@ export function definitionToForm(definition: AppDefinition): DefinitionFormState
 export function definitionFormToModel(form: DefinitionFormState): AppDefinition {
   const definition: AppDefinition = {
     appId: form.appId.trim(),
-    scope: normalizeOptionalText(form.scope) ?? null,
+    scope: form.scope === "" ? null : form.scope,
     displayName: form.displayName.trim(),
   };
 

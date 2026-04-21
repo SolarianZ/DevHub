@@ -45,6 +45,8 @@
 └── logs/
 ```
 
+其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: null` 与 `scopeKey = global`；显式作用域 Definition 使用原样保留、且至少包含一个非空白字符的 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、空字符串 `scope` 或纯空白 `scope` 都不属于合法 Definition 资产。
+
 `hub.json` 至少需要读取这些字段：
 
 - `protocolVersion`
@@ -256,6 +258,8 @@ python host/tests/conformance/vector_runner.py \
 - 当前公开基线是 `protocolVersion=1`，适用于 Hub v1.x。
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
+
+当前 v1.x 的 `AppDefinition` 基线已经固定为精确复合身份 `(appId, scope)`：持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，Definition CRUD 与 launch 绑定只按精确 `appId + scope` 工作。历史资产或旧实现如果仍接受 `{appId}.json`、缺失 `scope`、空白 `scope` 或仅按 `appId` 做 Definition CRUD，属于未收敛到当前 v1.x 基线，而不是 v1.x 允许保留的兼容分支。
 
 `Specification.md` §9 中允许的兼容扩展包括：
 

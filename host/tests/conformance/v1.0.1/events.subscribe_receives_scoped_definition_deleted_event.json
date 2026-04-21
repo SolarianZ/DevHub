@@ -1,0 +1,73 @@
+{
+  "id": "events.subscribe_receives_scoped_definition_deleted_event",
+  "caseId": "CONF-007",
+  "description": "通过 SDK EventsClient 订阅 app.definition.deleted 后，成功删除非 Global Definition 必须收到携带精确 scope 的 hub.event。",
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceScopedDefinitionDeletedEvent",
+    "steps": [
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "upsert_definition",
+        "client": "http",
+        "definition": {
+          "appId": "events.definition.scoped-deleted",
+          "scope": "workspace-a",
+          "displayName": "Events Scoped Definition Deleted"
+        }
+      },
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.definition.deleted"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "delete_definition",
+        "client": "http",
+        "appId": "events.definition.scoped-deleted",
+        "scope": "workspace-a"
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "event"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "event": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.definition.deleted",
+        "payload": {
+          "appId": "events.definition.scoped-deleted",
+          "scope": "workspace-a"
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk",
+    "scope"
+  ]
+}

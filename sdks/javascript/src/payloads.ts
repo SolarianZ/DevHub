@@ -20,6 +20,7 @@ import {
   ensureOptionalInputIntegerAtLeast,
   ensureOptionalInputIntegerInRange,
   ensureOptionalInputRecord,
+  ensureOptionalDefinitionScope,
   ensureOptionalInputString,
   ensureOptionalInputStringOrNull,
   ensureRequiredInputString,
@@ -143,7 +144,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
   }
 
   const appId = ensureAppId(request.appId, "appId");
-  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
+  const scope = ensureOptionalDefinitionScope(request.scope, "scope");
   const dedupeKey = ensureOptionalInputString(request.dedupeKey, "dedupeKey", false);
   const waitForRegisterMs = ensureOptionalInputIntegerAtLeast(
     request.waitForRegisterMs,
@@ -153,7 +154,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
   );
 
   const payload: Record<string, unknown> = { appId };
-  if (scope !== undefined && scope !== null) {
+  if (scope !== undefined) {
     payload.scope = scope;
   }
 

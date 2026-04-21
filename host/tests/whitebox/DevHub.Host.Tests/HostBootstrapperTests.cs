@@ -1,6 +1,7 @@
 namespace DevHub.Host.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Host.Runtime;
@@ -183,6 +184,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var payload = new
         {
             appId,
+            scope = (string?)null,
             displayName = appId,
             capabilities = new
             {
@@ -191,7 +193,7 @@ public sealed class HostBootstrapperTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 

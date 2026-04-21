@@ -1032,10 +1032,11 @@ public class InvocationRoutingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = (string?)null,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -1063,6 +1064,5 @@ public class InvocationRoutingTests : IDisposable
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 }
-
 
 

@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -59,6 +60,7 @@ public class DefinitionProviderTests : IDisposable
         var payload = """
         {
           "appId": "broken.launch.app",
+          "scope": null,
           "displayName": "broken.launch.app",
           "launch": {
             "argsTemplate": "--serve"
@@ -66,7 +68,9 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(Path.Combine(_tempDirectory, "broken.launch.app.json"), payload);
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", null).GetFileName()),
+            payload);
 
         provider.Refresh();
 
@@ -112,6 +116,7 @@ public class DefinitionProviderTests : IDisposable
         var payload = $$"""
         {
           "appId": "{{appId}}",
+          "scope": null,
           "displayName": "{{appId}}",
           "entry": {
             "type": "stdio"
@@ -119,6 +124,8 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(Path.Combine(_tempDirectory, $"{appId}.json"), payload);
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName()),
+            payload);
     }
 }

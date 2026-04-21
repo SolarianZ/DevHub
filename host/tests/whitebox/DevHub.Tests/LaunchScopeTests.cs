@@ -74,7 +74,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
+    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldReturnInvalidParams()
     {
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -95,28 +95,11 @@ public class LaunchScopeTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var nullScopeResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "launch-scope-null",
-            Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "scope-launch-app",
-                scope = (string?)null
-            })
-        }, CancellationToken.None);
-
         Assert.NotNull(response.Error);
-        Assert.NotNull(nullScopeResponse.Error);
-        Assert.Equal(-32014, response.Error.Code);
-        Assert.Equal(-32014, nullScopeResponse.Error.Code);
-        Assert.Equal("app_definition_not_found", response.Error.Message);
-        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
-
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
         var emptyData = JsonSerializer.SerializeToElement(response.Error.Data);
-        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
-        Assert.Equal("scope-launch-app", emptyData.GetProperty("appId").GetString());
-        Assert.Equal("scope-launch-app", nullData.GetProperty("appId").GetString());
+        Assert.Equal("invalid_scope", emptyData.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -473,6 +456,5 @@ public class LaunchScopeTests : IDisposable
         throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
-
 
 

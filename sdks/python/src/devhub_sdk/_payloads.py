@@ -207,7 +207,7 @@ def build_launch_params(request: LaunchRequest) -> dict[str, Any]:
         raise ValueError("request 不能为空。")
 
     app_id = require_app_id(request.app_id, "request.app_id")
-    scope = require_optional_string(request.scope, "request.scope")
+    scope = require_definition_scope(request.scope, "request.scope")
     dedupe_key = require_optional_string(request.dedupe_key, "request.dedupe_key")
     wait_for_register_ms = require_optional_int_at_least(
         request.wait_for_register_ms,

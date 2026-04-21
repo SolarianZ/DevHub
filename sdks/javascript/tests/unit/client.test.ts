@@ -942,6 +942,24 @@ it("launch should reject null waitForRegisterMs before sending the request", asy
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it("launch should reject a blank definition scope before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-launch-empty-scope-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.launch({
+    appId: "test.app",
+    scope: ""
+  })).rejects.toThrow(/scope/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("poll 应在本地校验 waitMs 为整数", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();

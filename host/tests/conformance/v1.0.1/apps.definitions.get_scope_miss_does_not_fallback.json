@@ -1,0 +1,63 @@
+{
+  "id": "apps.definitions.get_scope_miss_does_not_fallback",
+  "caseId": "CONF-003",
+  "description": "同一 appId 存在其他 scope Definition 时，hub.apps.getDefinition 命中不到精确 scope 仍必须返回 app_definition_not_found。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.get.no-fallback.app--global.json",
+        "definition": {
+          "appId": "apps.get.no-fallback.app",
+          "scope": null,
+          "displayName": "Apps Get No Fallback Global"
+        }
+      },
+      {
+        "fileName": "apps.get.no-fallback.app--73636F70652D61.json",
+        "definition": {
+          "appId": "apps.get.no-fallback.app",
+          "scope": "scope-a",
+          "displayName": "Apps Get No Fallback Scope A"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000128"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-no-fallback",
+    "method": "hub.apps.getDefinition",
+    "params": {
+      "appId": "apps.get.no-fallback.app",
+      "scope": "scope-b"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-no-fallback",
+    "error": {
+      "code": -32014,
+      "message": "app_definition_not_found",
+      "data": {
+        "appId": "apps.get.no-fallback.app",
+        "scope": "scope-b"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "scope",
+    "error"
+  ]
+}

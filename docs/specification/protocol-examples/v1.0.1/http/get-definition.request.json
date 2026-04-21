@@ -4,6 +4,6 @@
   "method": "hub.apps.getDefinition",
   "params": {
     "appId": "sample.app",
-    "scope": null
+    "scope": "workspace-a"
   }
 }

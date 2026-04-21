@@ -41,12 +41,12 @@ public class DefinitionLoader
             {
                 _logger.LogWarning("应用程序定义目录不存在: {Path}", _definitionsPath);
                 _definitions = new List<AppDefinition>();
+                _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
                 return;
             }
 
             var files = Directory.GetFiles(_definitionsPath, "*.json");
             _logger.LogDebug("发现 {Count} 个应用程序定义文件", files.Length);
-            var definitions = new List<AppDefinition>();
             var definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
 
             foreach (var file in files)
@@ -71,7 +71,6 @@ public class DefinitionLoader
 
                     var identity = AppDefinitionIdentity.FromDefinition(definition!);
                     definitionsByIdentity[identity] = definition!;
-                    definitions.Add(definition!);
                     _logger.LogDebug("成功加载应用程序定义: {AppId} (文件: {File}, 详细信息: {DefinitionDetails})",
                         definition!.AppId, file, JsonSerializer.Serialize(definition));
                 }
@@ -85,9 +84,9 @@ public class DefinitionLoader
                 }
             }
 
-            _definitions = definitions;
+            _definitions = definitionsByIdentity.Values.ToList();
             _definitionsByIdentity = definitionsByIdentity;
-            _logger.LogInformation("成功加载 {Count} 个应用程序定义", definitions.Count);
+            _logger.LogInformation("成功加载 {Count} 个应用程序定义", _definitions.Count);
         }
         catch (Exception ex)
         {

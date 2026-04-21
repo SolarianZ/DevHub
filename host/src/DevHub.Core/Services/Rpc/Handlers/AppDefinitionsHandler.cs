@@ -127,7 +127,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetOptionalScope(
+            if (!RpcParamReader.TryGetOptionalDefinitionScope(
                     paramsElement,
                     "scope",
                     "invalid_scope",
@@ -259,7 +259,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetOptionalScope(
+            if (!RpcParamReader.TryGetOptionalDefinitionScope(
                     paramsElement,
                     "scope",
                     "invalid_scope",

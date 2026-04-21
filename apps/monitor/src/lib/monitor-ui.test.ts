@@ -1,8 +1,13 @@
 import type { AppDefinition } from "@devhub/sdk";
+import type { BootstrapSnapshot, MonitorRuntimeConnectionInfo } from "./models";
 import { describe, expect, it } from "vitest";
 import {
   createDefinitionIdentity,
   createMissingDefinitionForm,
+  definitionIdentityKey,
+  formatDefinitionScopeLabel,
+  getHomeWorkspaceMode,
+  getUnsupportedRuntimeMessage,
   removeDefinition,
   sortDefinitions,
   upsertDefinition,
@@ -13,6 +18,50 @@ function createDefinition(overrides: Partial<AppDefinition> = {}): AppDefinition
     appId: "demo.app",
     scope: null,
     displayName: "Demo App",
+    ...overrides,
+  };
+}
+
+function createConnection(overrides: Partial<MonitorRuntimeConnectionInfo> = {}): MonitorRuntimeConnectionInfo {
+  const runtimeOverrides = overrides.runtime ?? {};
+
+  return {
+    runtimeDirectory: overrides.runtimeDirectory ?? "/tmp/devhub/runtime",
+    token: overrides.token ?? "test-token",
+    rpcEndpoint: overrides.rpcEndpoint ?? "http://127.0.0.1:4123/rpc",
+    websocketEndpoint: overrides.websocketEndpoint ?? "ws://127.0.0.1:4123/ws",
+    runtime: {
+      protocolVersion: 1,
+      pid: 4321,
+      httpBaseUrl: "http://127.0.0.1:4123",
+      wsUrl: "ws://127.0.0.1:4123/ws",
+      tokenFile: "/tmp/devhub/runtime/token.txt",
+      startedAtUtc: "2026-04-12T02:03:04Z",
+      runtimeTuning: {
+        leaseSeconds: 30,
+        onlineThresholdSeconds: 15,
+        launchDedupeWindowSeconds: 5,
+      },
+      hubVersion: "0.7.0",
+      ...runtimeOverrides,
+    },
+  };
+}
+
+function createBootstrapSnapshot(overrides: Partial<BootstrapSnapshot> = {}): BootstrapSnapshot {
+  return {
+    generation: 1,
+    phase: "host_available",
+    effectiveDataDir: "/tmp/devhub",
+    dataDirSource: "settings_override",
+    settings: {
+      dataDirOverride: "/tmp/devhub",
+      hostExecutablePath: "/tmp/DevHub.Host",
+      hideHostCommandLineWindow: true,
+    },
+    hasConfiguredHostExecutable: true,
+    connection: createConnection(),
+    lastProblem: null,
     ...overrides,
   };
 }
@@ -71,5 +120,81 @@ describe("monitor-ui definition helpers", () => {
       scope: "",
       enableRpc: false,
     });
+  });
+
+  it("keeps Global and literal global as distinct identities", () => {
+    expect(definitionIdentityKey(createDefinitionIdentity("demo.app", null))).not.toBe(
+      definitionIdentityKey(createDefinitionIdentity("demo.app", "global")),
+    );
+    expect(formatDefinitionScopeLabel(null)).toBe("scope：Global");
+    expect(formatDefinitionScopeLabel("global")).toBe("scope：global");
+    expect(
+      sortDefinitions([
+        createDefinition({
+          scope: "global",
+          displayName: "Literal Global",
+        }),
+        createDefinition({
+          scope: null,
+          displayName: "Global",
+        }),
+      ]),
+    ).toEqual([
+      createDefinition({
+        scope: null,
+        displayName: "Global",
+      }),
+      createDefinition({
+        scope: "global",
+        displayName: "Literal Global",
+      }),
+    ]);
+  });
+
+  it("preserves non-empty scope text verbatim in definition identities", () => {
+    expect(createDefinitionIdentity("demo.app", "  workspace-a  ")).toEqual({
+      appId: "demo.app",
+      scope: "  workspace-a  ",
+    });
+  });
+
+  it("rejects unsupported host baselines before entering the status workspace", () => {
+    expect(getUnsupportedRuntimeMessage(createConnection())).toBeNull();
+    expect(
+      getUnsupportedRuntimeMessage(createConnection({
+        runtime: {
+          ...createConnection().runtime,
+          hubVersion: "0.6.9",
+        },
+      })),
+    ).toContain("0.7.0");
+    expect(
+      getUnsupportedRuntimeMessage(createConnection({
+        runtime: {
+          ...createConnection().runtime,
+          hubVersion: null,
+        },
+      })),
+    ).toContain("hubVersion");
+    expect(
+      getUnsupportedRuntimeMessage(createConnection({
+        runtime: {
+          ...createConnection().runtime,
+          protocolVersion: 2,
+        },
+      })),
+    ).toContain("protocolVersion=2");
+
+    expect(getHomeWorkspaceMode(createBootstrapSnapshot())).toBe("status");
+    expect(
+      getHomeWorkspaceMode(createBootstrapSnapshot({
+        connection: createConnection({
+          runtime: {
+            ...createConnection().runtime,
+            hubVersion: "0.6.9",
+          },
+        }),
+      })),
+    ).toBe("discovery");
   });
 });

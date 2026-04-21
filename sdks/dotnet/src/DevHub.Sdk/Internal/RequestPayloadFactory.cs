@@ -145,6 +145,7 @@ internal static class RequestPayloadFactory
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
+        var scope = NormalizeDefinitionScope(request.Scope, nameof(request.Scope));
 
         if (request.WaitForRegisterMs is { } waitForRegisterMs && waitForRegisterMs < 0)
         {
@@ -156,9 +157,9 @@ internal static class RequestPayloadFactory
             ["appId"] = request.AppId
         };
 
-        if (request.Scope is not null)
+        if (scope is not null)
         {
-            payload["scope"] = request.Scope;
+            payload["scope"] = scope;
         }
 
         if (request.DedupeKey is not null)
@@ -363,7 +364,7 @@ internal static class RequestPayloadFactory
 
     private static string? NormalizeDefinitionScope(string? scope, string paramName)
     {
-        if (scope is null || scope.Length == 0)
+        if (scope is null)
         {
             return null;
         }

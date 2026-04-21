@@ -15,6 +15,7 @@ import type { BootstrapSnapshot, FrontendLogInput } from "../lib/models";
 import {
   type HostSessionStatus,
   disposeSessionResources,
+  getUnsupportedRuntimeMessage,
   getRuntimePort,
   removeDefinition,
   shouldRecoverHostSession,
@@ -134,7 +135,35 @@ export function useHostSession(options: HostSessionOptions) {
   useEffect(() => {
     if (!bootstrap?.connection || bootstrap.phase !== "host_available") {
       startTransition(() => {
+        setDefinitions([]);
+        setInstances([]);
         setHostSessionStatus((current) => (current === "recovering" ? current : "idle"));
+        setSessionError(null);
+      });
+      void disposeHostSession();
+      return;
+    }
+
+    const unsupportedRuntimeMessage = getUnsupportedRuntimeMessage(bootstrap.connection);
+    if (unsupportedRuntimeMessage) {
+      recordFrontendLog({
+        level: "warn",
+        category: "frontend.connection",
+        action: "connect",
+        result: "unsupported_host",
+        message: unsupportedRuntimeMessage,
+        context: {
+          protocolVersion: bootstrap.connection.runtime.protocolVersion,
+          hubVersion: bootstrap.connection.runtime.hubVersion ?? null,
+        },
+      });
+
+      startTransition(() => {
+        setDefinitions([]);
+        setInstances([]);
+        setHostSessionStatus("idle");
+        setSessionError(unsupportedRuntimeMessage);
+        setSessionResetVersion((current) => current + 1);
       });
       void disposeHostSession();
       return;

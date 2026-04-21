@@ -3,6 +3,7 @@ namespace DevHub.Host.Tests;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -149,10 +150,11 @@ public class HttpNotificationSpecTests : IDisposable
     public async Task Spec_5_1_And_5_2_HttpResponses_ShouldOmitOptionalNullFields()
     {
         File.WriteAllText(
-            Path.Combine(_definitionsDirectory, "http-null-omit.app.json"),
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create("http-null-omit.app", null).GetFileName()),
             """
             {
               "appId": "http-null-omit.app",
+              "scope": null,
               "displayName": "HTTP Null Omit App"
             }
             """);

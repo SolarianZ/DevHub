@@ -45,6 +45,32 @@ public class LaunchSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.9")]
+    public async Task Spec_6_3_9_Launch_WhenScopeEmpty_ShouldReturnInvalidParams()
+    {
+        const string appId = "spec-6.3.9-empty-scope";
+        WriteDefinition(appId, includeLaunch: true);
+
+        var handler = CreateLaunchHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.9-empty-scope",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                scope = string.Empty,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.9")]
     public async Task Spec_6_3_9_Launch_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         var handler = CreateLaunchHandler();
@@ -302,7 +328,6 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = string.Empty,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);

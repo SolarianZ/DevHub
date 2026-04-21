@@ -20,6 +20,7 @@ import {
   formatDefinitionScopeLabel,
   formatHostLogDirectory,
   getSidebarWorkspace,
+  getUnsupportedRuntimeMessage,
 } from "../lib/monitor-ui";
 
 interface AppShellProps {
@@ -290,7 +291,7 @@ function HomeDiscoveryWorkspace(props: {
 
       <div className="discovery-view">
         <div className="loader" aria-hidden="true" />
-        <p className="status-title">{getDiscoveryTitle(bootstrap?.phase)}</p>
+        <p className="status-title">{getDiscoveryTitle(bootstrap)}</p>
         <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
 
         {showLaunchAction ? (
@@ -960,8 +961,12 @@ function EmptyState(props: {
   return <div className="empty-state">{props.title}</div>;
 }
 
-function getDiscoveryTitle(phase?: BootstrapSnapshot["phase"]): string {
-  switch (phase) {
+function getDiscoveryTitle(snapshot?: BootstrapSnapshot | null): string {
+  if (snapshot?.connection && getUnsupportedRuntimeMessage(snapshot.connection)) {
+    return "当前 Host 版本不受支持";
+  }
+
+  switch (snapshot?.phase) {
     case "settings_required":
       return "需要先补充 Host 设置";
     case "launch_available":

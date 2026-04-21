@@ -189,7 +189,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             return LaunchOperationResult.CreateSuccess("started", launchId, process.Id);
         }
 
-        var waitOutcome = await WaitForRegistrationAsync(launchId, appId, normalizedScope, waitForRegisterMs, cancellationToken);
+        var waitOutcome = await WaitForRegistrationAsync(launchId, waitForRegisterMs, cancellationToken);
         return waitOutcome switch
         {
             LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id),
@@ -306,8 +306,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
     private async Task<LaunchWaitOutcome> WaitForRegistrationAsync(
         string launchId,
-        string appId,
-        string? scope,
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
@@ -333,16 +331,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                         return LaunchWaitOutcome.Registered;
                     }
                 }
-            }
-
-            var hasOnline = _appRegistry
-                .ListInstances(appId, scope, includeAllScopes: false, includeOffline: false)
-                .Any();
-            if (hasOnline)
-            {
-                RecordObservedRegistration(launchId);
-                RemoveLaunchRecordById(launchId);
-                return LaunchWaitOutcome.Registered;
             }
 
             await Task.Delay(20, cancellationToken);
@@ -471,12 +459,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             return null;
         }
 
-        if (HasObservedRegistration(record))
-        {
-            RecordObservedRegistration(record.LaunchId);
-            return null;
-        }
-
         if (!IsLaunchStillInProgress(record))
         {
             RemoveLaunchRecordById(record.LaunchId);
@@ -484,25 +466,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
 
         return record;
-    }
-
-    private bool HasObservedRegistration(LaunchRecord record)
-    {
-        return _appRegistry
-            .ListInstances(record.AppId, record.Scope, includeAllScopes: false, includeOffline: true)
-            .Any(instance => instance.RegisteredAtUtc >= record.CreatedAtUtc);
-    }
-
-    private void RecordObservedRegistration(string launchId)
-    {
-        lock (_launchSyncRoot)
-        {
-            if (_launchRecordsById.TryGetValue(launchId, out var record) && record.State != LaunchRecordState.Failed)
-            {
-                record.State = LaunchRecordState.Registered;
-                DeactivateDedupeRecord(record);
-            }
-        }
     }
 
     private void RemoveLaunchRecordById(string launchId)

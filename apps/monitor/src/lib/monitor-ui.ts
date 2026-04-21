@@ -41,10 +41,29 @@ export interface SettingsFieldErrors {
   hostExecutablePath?: string | null;
 }
 
+interface SemanticVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: readonly (number | string)[];
+}
+
+const GLOBAL_SCOPE_LABEL = "Global";
+const MINIMUM_SUPPORTED_HUB_VERSION: SemanticVersion = {
+  major: 0,
+  minor: 7,
+  patch: 0,
+  prerelease: [],
+};
+
 export function getHomeWorkspaceMode(
   snapshot: BootstrapSnapshot | null,
 ): HomeWorkspaceMode {
-  return snapshot?.phase === "host_available" && snapshot.connection ? "status" : "discovery";
+  return snapshot?.phase === "host_available"
+      && snapshot.connection
+      && !getUnsupportedRuntimeMessage(snapshot.connection)
+    ? "status"
+    : "discovery";
 }
 
 export function getSidebarWorkspace(workspace: MonitorWorkspace): SidebarWorkspace {
@@ -81,6 +100,34 @@ export function validateSettingsDraft(settings: MonitorSettings): SettingsFieldE
 
 export function hasSettingsFieldErrors(errors: SettingsFieldErrors): boolean {
   return Object.values(errors).some((value) => Boolean(value));
+}
+
+export function getUnsupportedRuntimeMessage(
+  connection?: MonitorRuntimeConnectionInfo | null,
+): string | null {
+  if (!connection) {
+    return null;
+  }
+
+  const { protocolVersion, hubVersion } = connection.runtime;
+  if (protocolVersion !== 1) {
+    return `当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到 protocolVersion=${protocolVersion}。`;
+  }
+
+  if (typeof hubVersion !== "string" || hubVersion.trim() === "") {
+    return "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。当前 Host 缺少可解析的 hubVersion。";
+  }
+
+  const parsedVersion = parseSemanticVersion(hubVersion);
+  if (!parsedVersion) {
+    return `当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到不可解析的 hubVersion=${hubVersion}。`;
+  }
+
+  if (compareSemanticVersions(parsedVersion, MINIMUM_SUPPORTED_HUB_VERSION) < 0) {
+    return `当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到 hubVersion=${hubVersion}。`;
+  }
+
+  return null;
 }
 
 export function shouldRecoverHostSession(error: unknown): boolean {
@@ -127,7 +174,7 @@ export function sortDefinitions(definitions: readonly AppDefinition[]): AppDefin
       return appCompare;
     }
 
-    const scopeCompare = formatScope(left.scope).localeCompare(formatScope(right.scope), "zh-CN");
+    const scopeCompare = compareDefinitionScopes(left.scope, right.scope);
     if (scopeCompare !== 0) {
       return scopeCompare;
     }
@@ -143,7 +190,7 @@ export function sortInstances(instances: readonly AppInstance[]): AppInstance[] 
       return appCompare;
     }
 
-    const scopeCompare = formatScope(left.scope).localeCompare(formatScope(right.scope), "zh-CN");
+    const scopeCompare = compareDefinitionScopes(left.scope, right.scope);
     if (scopeCompare !== 0) {
       return scopeCompare;
     }
@@ -172,12 +219,12 @@ export function removeDefinition(
 export function createDefinitionIdentity(appId: string, scope?: string | null): AppDefinitionIdentity {
   return {
     appId,
-    scope: normalizeOptionalInput(scope),
+    scope: scope ?? null,
   };
 }
 
 export function definitionIdentityKey(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
-  return JSON.stringify([identity.appId, normalizeOptionalInput(identity.scope)]);
+  return JSON.stringify([identity.appId, identity.scope ?? null]);
 }
 
 export function isSameDefinitionIdentity(
@@ -208,7 +255,7 @@ export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null)
 }
 
 export function formatScope(scope?: string | null): string {
-  return scope && scope.trim() ? scope : "global";
+  return scope ?? GLOBAL_SCOPE_LABEL;
 }
 
 export function formatDefinitionScopeLabel(scope?: string | null): string {
@@ -245,4 +292,125 @@ function isAbsolutePath(value: string): boolean {
     || /^[A-Za-z]:[\\/]/.test(trimmed)
     || /^\\\\/.test(trimmed)
   );
+}
+
+function compareDefinitionScopes(left?: string | null, right?: string | null): number {
+  const leftScope = left ?? null;
+  const rightScope = right ?? null;
+  if (leftScope === rightScope) {
+    return 0;
+  }
+
+  if (leftScope === null) {
+    return -1;
+  }
+
+  if (rightScope === null) {
+    return 1;
+  }
+
+  return leftScope.localeCompare(rightScope, "zh-CN");
+}
+
+function parseSemanticVersion(value: string): SemanticVersion | null {
+  const match = value.trim().match(
+    /^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/,
+  );
+  if (!match?.groups) {
+    return null;
+  }
+
+  return {
+    major: Number(match.groups.major),
+    minor: Number(match.groups.minor),
+    patch: Number(match.groups.patch),
+    prerelease: parsePrereleaseIdentifiers(match.groups.prerelease),
+  };
+}
+
+function parsePrereleaseIdentifiers(value?: string): readonly (number | string)[] {
+  if (!value) {
+    return [];
+  }
+
+  return value.split(".").map((identifier) => {
+    if (/^(0|[1-9]\d*)$/.test(identifier)) {
+      return Number(identifier);
+    }
+
+    return identifier;
+  });
+}
+
+function compareSemanticVersions(left: SemanticVersion, right: SemanticVersion): number {
+  const majorCompare = compareNumber(left.major, right.major);
+  if (majorCompare !== 0) {
+    return majorCompare;
+  }
+
+  const minorCompare = compareNumber(left.minor, right.minor);
+  if (minorCompare !== 0) {
+    return minorCompare;
+  }
+
+  const patchCompare = compareNumber(left.patch, right.patch);
+  if (patchCompare !== 0) {
+    return patchCompare;
+  }
+
+  if (left.prerelease.length === 0 && right.prerelease.length === 0) {
+    return 0;
+  }
+
+  if (left.prerelease.length === 0) {
+    return 1;
+  }
+
+  if (right.prerelease.length === 0) {
+    return -1;
+  }
+
+  const maxLength = Math.max(left.prerelease.length, right.prerelease.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftIdentifier = left.prerelease[index];
+    const rightIdentifier = right.prerelease[index];
+
+    if (leftIdentifier === undefined) {
+      return -1;
+    }
+
+    if (rightIdentifier === undefined) {
+      return 1;
+    }
+
+    if (leftIdentifier === rightIdentifier) {
+      continue;
+    }
+
+    const leftIsNumber = typeof leftIdentifier === "number";
+    const rightIsNumber = typeof rightIdentifier === "number";
+    if (leftIsNumber && rightIsNumber) {
+      return compareNumber(leftIdentifier, rightIdentifier);
+    }
+
+    if (leftIsNumber) {
+      return -1;
+    }
+
+    if (rightIsNumber) {
+      return 1;
+    }
+
+    return leftIdentifier.localeCompare(rightIdentifier);
+  }
+
+  return 0;
+}
+
+function compareNumber(left: number, right: number): number {
+  if (left === right) {
+    return 0;
+  }
+
+  return left < right ? -1 : 1;
 }

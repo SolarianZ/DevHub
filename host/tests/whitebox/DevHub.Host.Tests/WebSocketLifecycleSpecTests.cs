@@ -1210,10 +1210,11 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     private void WriteDefinition(string appId)
     {
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
+            scope = (string?)null,
             displayName = appId,
             capabilities = new
             {

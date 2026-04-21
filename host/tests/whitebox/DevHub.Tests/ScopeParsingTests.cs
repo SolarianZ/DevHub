@@ -408,10 +408,11 @@ public class ScopeParsingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
+            scope = (string?)null,
             displayName = appId,
             capabilities = new
             {
@@ -421,6 +422,5 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
-
 
 

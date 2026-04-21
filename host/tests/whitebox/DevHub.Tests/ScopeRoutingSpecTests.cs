@@ -114,7 +114,7 @@ public class ScopeRoutingSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Launch_WhenScopeEmptyOrNull_ShouldResolveToSameEffectiveGlobalScope()
+    public async Task Spec_5_5_Launch_WhenScopeOmittedOrNull_ShouldResolveToSameEffectiveGlobalScope()
     {
         const string appId = "spec-5.5-launch-scope";
         WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
@@ -128,12 +128,11 @@ public class ScopeRoutingSpecTests : IDisposable
 
         var first = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "spec-5.5-launch-empty",
+            Id = "spec-5.5-launch-omitted",
             Method = "hub.apps.launch",
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = string.Empty,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -158,6 +157,30 @@ public class ScopeRoutingSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "5.5")]
+    public async Task Spec_5_5_Launch_WhenScopeEmpty_ShouldReturnInvalidParams()
+    {
+        const string appId = "spec-5.5-launch-empty";
+        WriteDefinition(appId, includeLaunch: true);
+
+        var response = await CreateLaunchHandler().HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-5.5-launch-empty-invalid",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                scope = string.Empty,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -559,6 +582,7 @@ public class ScopeRoutingSpecTests : IDisposable
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = (string?)null,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -583,7 +607,7 @@ public class ScopeRoutingSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
 

@@ -2,6 +2,7 @@ namespace DevHub.Tests;
 
 using System.Diagnostics;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
@@ -722,10 +723,11 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
-        var path = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = (string?)null,
             ["displayName"] = appId,
             ["capabilities"] = new
             {

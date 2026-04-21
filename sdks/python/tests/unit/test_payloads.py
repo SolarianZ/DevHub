@@ -177,8 +177,22 @@ def test_validate_definition_builder_when_app_id_violates_spec_should_raise() ->
 
 
 def test_validate_definition_builder_when_scope_is_blank_should_raise() -> None:
-    with pytest.raises(ValueError, match="definition.scope"):
+    with pytest.raises(ValueError, match="scope"):
         build_validate_definition_params(AppDefinition(app_id="test.app", display_name="Broken", scope=" "))
+
+
+def test_app_definition_should_preserve_existing_positional_description() -> None:
+    definition = AppDefinition("demo.app", "Demo App", "Description")
+
+    assert definition.description == "Description"
+    assert definition.scope is None
+
+
+def test_app_definition_should_preserve_keyword_scope() -> None:
+    definition = AppDefinition("demo.app", "Demo App", "Description", scope="workspace-a")
+
+    assert definition.description == "Description"
+    assert definition.scope == "workspace-a"
 
 
 def test_delete_definition_builder_should_validate_app_id() -> None:

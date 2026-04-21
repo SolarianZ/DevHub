@@ -385,7 +385,10 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       return false;
     }
 
-    const identity = createDefinitionIdentity(definitionWorkspace.form.appId, definitionWorkspace.form.scope);
+    const identity = createDefinitionIdentity(
+      definitionWorkspace.form.appId,
+      definitionWorkspace.form.scope === "" ? null : definitionWorkspace.form.scope,
+    );
     const confirmed = await confirmAction({
       message: `确认删除 App Definition “${formatDefinitionIdentity(identity)}” 吗？`,
       variant: "danger",

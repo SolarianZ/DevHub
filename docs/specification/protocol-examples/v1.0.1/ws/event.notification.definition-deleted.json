@@ -7,7 +7,7 @@
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
       "appId": "sample.app",
-      "scope": null
+      "scope": "workspace-a"
     }
   }
 }

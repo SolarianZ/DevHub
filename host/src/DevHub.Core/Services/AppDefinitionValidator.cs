@@ -51,15 +51,12 @@ public sealed class AppDefinitionValidator
             issues.Add(CreateIssue("definition.appId", "invalid_app_id", "appId must match ^[a-z0-9][a-z0-9.-]*$"));
         }
 
-        var allowLegacyGlobalScope = !string.IsNullOrWhiteSpace(actualFileName);
-        var scope = ReadRequiredScope(definitionElement, issues, allowLegacyGlobalScope);
+        var scope = ReadRequiredScope(definitionElement, issues);
 
         if (!string.IsNullOrWhiteSpace(actualFileName) && IsValidAppId(appId))
         {
             var expectedFileName = AppDefinitionIdentity.Create(appId!, scope).GetFileName();
-            var isLegacyGlobalFile = scope is null
-                && string.Equals(actualFileName, $"{appId}.json", StringComparison.Ordinal);
-            if (!isLegacyGlobalFile && !string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
+            if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
             {
                 issues.Add(CreateIssue("definition.appId", "file_name_mismatch", $"definition file name must be {expectedFileName}"));
             }
@@ -230,16 +227,10 @@ public sealed class AppDefinitionValidator
 
     private static string? ReadRequiredScope(
         JsonElement element,
-        ICollection<ValidationIssue> issues,
-        bool allowMissingScope)
+        ICollection<ValidationIssue> issues)
     {
         if (!element.TryGetProperty("scope", out var scopeProperty))
         {
-            if (allowMissingScope)
-            {
-                return null;
-            }
-
             issues.Add(CreateIssue("definition.scope", "missing_scope", "scope is required"));
             return null;
         }

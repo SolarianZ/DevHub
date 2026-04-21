@@ -8,10 +8,10 @@ import {
 } from "./definition-form";
 
 describe("definition-form helpers", () => {
-  it("omits empty optional fields when converting a form to a definition", () => {
+  it("converts an empty scope to the Global definition identity", () => {
     const form = createEmptyDefinitionForm();
     form.appId = " sample.app ";
-    form.scope = "   ";
+    form.scope = "";
     form.displayName = " Sample App ";
     form.description = "   ";
     form.enableEvents = true;
@@ -29,6 +29,22 @@ describe("definition-form helpers", () => {
       },
       launch: {
         exePath: "/tmp/devhub",
+      },
+    });
+  });
+
+  it("preserves a non-empty scope verbatim when converting a form", () => {
+    const form = createEmptyDefinitionForm();
+    form.appId = "sample.app";
+    form.scope = "  workspace-a  ";
+    form.displayName = "Sample App";
+
+    expect(definitionFormToModel(form)).toEqual<AppDefinition>({
+      appId: "sample.app",
+      scope: "  workspace-a  ",
+      displayName: "Sample App",
+      capabilities: {
+        rpc: true,
       },
     });
   });

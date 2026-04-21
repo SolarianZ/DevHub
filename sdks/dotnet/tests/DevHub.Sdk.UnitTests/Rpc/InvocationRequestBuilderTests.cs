@@ -144,16 +144,32 @@ public sealed class InvocationRequestBuilderTests
         var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
             AppId = "test.app",
-            Scope = string.Empty,
+            Scope = "scope-a",
             DedupeKey = "launch-key",
             WaitForRegisterMs = 0
         });
 
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
         Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
+        Assert.Equal("scope-a", document.RootElement.GetProperty("scope").GetString());
         Assert.Equal("launch-key", document.RootElement.GetProperty("dedupeKey").GetString());
         Assert.Equal(0, document.RootElement.GetProperty("waitForRegisterMs").GetInt32());
+    }
+
+    [Fact]
+    public void LaunchBuilder_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app",
+            Scope = string.Empty
+        }));
+
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app",
+            Scope = " "
+        }));
     }
 
     [Fact]
@@ -206,7 +222,7 @@ public sealed class InvocationRequestBuilderTests
 
         var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
         var upsertPayload = RequestPayloadFactory.BuildUpsertDefinitionParams(definition);
-        var getPayload = RequestPayloadFactory.BuildGetDefinitionParams("test.app", string.Empty);
+        var getPayload = RequestPayloadFactory.BuildGetDefinitionParams("test.app", null);
         var deletePayload = RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "scope-a");
 
         using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload, DevHubJson.SerializerOptions));
@@ -237,6 +253,14 @@ public sealed class InvocationRequestBuilderTests
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetDefinitionParams("test.app", " "));
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "\t"));
+    }
+
+    [Fact]
+    public void Impl_AppDefinition_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    {
+        var definition = new AppDefinition();
+        Assert.Throws<ArgumentException>(() => definition.Scope = string.Empty);
+        Assert.Throws<ArgumentException>(() => definition.Scope = " ");
     }
 
     [Fact]

@@ -136,6 +136,51 @@ internal static class RpcParamReader
     }
 
     /// <summary>
+    /// 尝试读取 Definition identity 使用的可选 scope 字段。
+    /// </summary>
+    /// <param name="element">参数对象。</param>
+    /// <param name="propertyName">字段名。</param>
+    /// <param name="invalidReason">非法时使用的 reason。</param>
+    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。</param>
+    /// <param name="errorData">解析失败时的错误附加数据。</param>
+    /// <returns>解析成功返回 true，否则返回 false。</returns>
+    public static bool TryGetOptionalDefinitionScope(
+        JsonElement element,
+        string propertyName,
+        string invalidReason,
+        out string? scope,
+        out object? errorData)
+    {
+        scope = null;
+        errorData = null;
+
+        if (!element.TryGetProperty(propertyName, out var scopeElement))
+        {
+            return true;
+        }
+
+        if (scopeElement.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (scopeElement.ValueKind != JsonValueKind.String)
+        {
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
+        }
+
+        scope = scopeElement.GetString();
+        if (scope is null || string.IsNullOrWhiteSpace(scope))
+        {
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// 构造 scope 非法时的统一错误数据。
     /// </summary>
     /// <param name="invalidReason">错误 reason。</param>

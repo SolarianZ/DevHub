@@ -39,7 +39,7 @@ public class LaunchHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!RpcParamReader.TryGetOptionalScope(
+        if (!RpcParamReader.TryGetOptionalDefinitionScope(
                 paramsElement,
                 "scope",
                 "invalid_scope",

@@ -329,6 +329,14 @@ export function ensureDefinitionScope(value: unknown, propertyName: string): str
   return value;
 }
 
+export function ensureOptionalDefinitionScope(value: unknown, propertyName: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return ensureDefinitionScope(value, propertyName);
+}
+
 export function ensureInstanceId(value: unknown, propertyName: string): string {
   const parsed = ensureRequiredInputString(value, propertyName);
   if (parsed.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(parsed)) {
