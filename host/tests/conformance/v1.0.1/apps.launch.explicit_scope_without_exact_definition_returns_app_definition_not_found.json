@@ -1,0 +1,56 @@
+{
+  "id": "apps.launch.explicit_scope_without_exact_definition_returns_app_definition_not_found",
+  "caseId": "CONF-004",
+  "description": "显式 launch scope 未命中精确 Definition 时，hub.apps.launch 必须返回 app_definition_not_found。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.launch.exact-scope.app--73636F70652D61.json",
+        "definition": {
+          "appId": "apps.launch.exact-scope.app",
+          "scope": "scope-a",
+          "displayName": "Apps Launch Exact Scope A"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceLaunch",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000126"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-launch-exact-scope-missing",
+    "method": "hub.apps.launch",
+    "params": {
+      "appId": "apps.launch.exact-scope.app",
+      "scope": "scope-b",
+      "waitForRegisterMs": 0
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-launch-exact-scope-missing",
+    "error": {
+      "code": -32014,
+      "message": "app_definition_not_found",
+      "data": {
+        "appId": "apps.launch.exact-scope.app",
+        "scope": "scope-b"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "launch",
+    "http",
+    "scope",
+    "error"
+  ]
+}

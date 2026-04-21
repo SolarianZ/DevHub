@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DevHub.Core.Models;
+using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -544,7 +545,11 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
     private static object BuildAppDefinitionNotFoundData(string appId, string? scope)
     {
-        return new { appId, scope };
+        return new AppDefinitionIdentityErrorData
+        {
+            AppId = appId,
+            Scope = scope
+        };
     }
 
     private static object BuildDefinitionScopeMismatchErrorData(

@@ -133,6 +133,43 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
         Assert.Equal("not_supported", error.GetProperty("message").GetString());
     }
 
+    [Fact]
+    public async Task Impl_RpcHttpEndpointHandler_AppDefinitionNotFoundError_ShouldPreserveNullScopeInJson()
+    {
+        using var harness = new HostTransportTestHarness(_tempRoot);
+
+        var httpContext = CreatePostContext(
+            harness.Token,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "definition-missing-null-scope",
+              "method": "hub.apps.getDefinition",
+              "params": {
+                "appId": "missing.definition",
+                "scope": null
+              }
+            }
+            """,
+            includeProtocolHeader: true);
+
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+
+        httpContext.Response.Body.Position = 0;
+        using var document = JsonDocument.Parse(httpContext.Response.Body);
+        var error = document.RootElement.GetProperty("error");
+        Assert.Equal(-32014, error.GetProperty("code").GetInt32());
+        Assert.Equal("app_definition_not_found", error.GetProperty("message").GetString());
+
+        var errorData = error.GetProperty("data");
+        Assert.Equal("missing.definition", errorData.GetProperty("appId").GetString());
+        Assert.True(errorData.TryGetProperty("scope", out var scopeProperty));
+        Assert.Equal(JsonValueKind.Null, scopeProperty.ValueKind);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

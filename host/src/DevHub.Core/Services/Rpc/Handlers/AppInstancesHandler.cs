@@ -566,7 +566,11 @@ public class AppInstancesHandler : IRpcHandler
 
     private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string? scope)
     {
-        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new { appId, scope });
+        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new AppDefinitionIdentityErrorData
+        {
+            AppId = appId,
+            Scope = scope
+        });
     }
 
     private sealed class EmptyDefinitionProvider : IDefinitionProvider

@@ -365,12 +365,94 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return result
 
+    def test_launch_should_require_exact_scoped_definition(self):
+        """LAUNCH-SCOPE-012: launch 仅按精确 appId + scope 选择 Definition"""
+        result = TestResult("LAUNCH-SCOPE-012 launch 精确 scoped Definition")
+        definition_paths = []
+        other_scope_instance = None
+
+        try:
+            app_id = self._new_app_id("launch-scope-exact")
+            definition_paths.append(self._create_definition(
+                app_id,
+                include_launch=True,
+                dedupe_key_template="{appId}:{scopeOrGlobal}",
+                scope="workspace-a",
+            ))
+            definition_paths.append(self._create_definition(
+                app_id,
+                include_launch=False,
+                scope="workspace-b",
+            ))
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            missing_scope_response = client.launch_app(
+                app_id=app_id,
+                scope="workspace-c",
+                wait_for_register_ms=0,
+                request_id="launch-scope-012-missing",
+            )
+            if not RpcAssertions.expect_error(result, missing_scope_response, -32014, "app_definition_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, missing_scope_response, {"appId": app_id, "scope": "workspace-c"}):
+                return result
+
+            missing_global_response = client.launch_app(
+                app_id=app_id,
+                scope=None,
+                wait_for_register_ms=0,
+                request_id="launch-scope-012-global-missing",
+            )
+            if not RpcAssertions.expect_error(result, missing_global_response, -32014, "app_definition_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, missing_global_response, {"appId": app_id, "scope": None}):
+                return result
+
+            other_scope_instance = self._instance_id("launch-scope-012-other")
+            register_other_scope = client.register_instance(
+                instance_id=other_scope_instance,
+                app_id=app_id,
+                scope="workspace-b",
+                poll=True,
+                respond=True,
+                pid=34001,
+            )
+            if not RpcAssertions.expect_success(result, register_other_scope, ["instance"]):
+                return result
+
+            exact_scope_response = client.launch_app(
+                app_id=app_id,
+                scope="workspace-a",
+                wait_for_register_ms=0,
+                request_id="launch-scope-012-exact",
+            )
+            if not RpcAssertions.expect_success(result, exact_scope_response, ["status", "launchId"]):
+                return result
+
+            status = exact_scope_response["result"].get("status")
+            if status == "already_running":
+                result.mark_failure(f"❌ 其他 scope 在线实例错误命中了 launch already_running: {exact_scope_response}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([other_scope_instance])
+            for definition_path in definition_paths:
+                safe_remove(definition_path)
+
+        return result
+
     def run_all_tests(self, full=False, fast=False):
         results = [
             self.test_notify_autolaunch_then_register_poll_success(),
             self.test_launch_invalid_wait_for_register_should_fail(),
             self.test_launch_missing_config_should_fail(),
             self.test_launch_missing_definition_should_return_app_definition_not_found(),
+            self.test_launch_should_require_exact_scoped_definition(),
             self.test_scope_011_launch_dedupe_should_isolate_by_scope(),
         ]
 

@@ -361,6 +361,97 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
+    def test_scoped_definitions_should_use_composite_identity(self):
+        """测试同一 appId 的多份 scoped Definition 可并存并按复合键读删"""
+        result = TestResult("测试 AppDefinition 复合身份读删")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = self._new_app_id("managed-scoped-app")
+
+            for scope, display_name, description in [
+                (None, "Managed Scoped App Global", "global-definition"),
+                ("workspace-a", "Managed Scoped App Workspace A", "workspace-a-definition"),
+            ]:
+                upsert_response = client.call("hub.apps.upsertDefinition", {
+                    "definition": {
+                        "appId": app_id,
+                        "scope": scope,
+                        "displayName": display_name,
+                        "description": description,
+                    }
+                })
+                if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                    return result
+
+            list_response = client.call("hub.apps.listDefinitions")
+            if not RpcAssertions.expect_success(result, list_response, ["definitions"]):
+                return result
+
+            matching_definitions = [
+                definition
+                for definition in list_response["result"]["definitions"]
+                if definition.get("appId") == app_id
+            ]
+            if len(matching_definitions) != 2:
+                result.mark_failure(f"❌ 同一 appId 的 scoped Definition 未全部返回: {matching_definitions}")
+                return result
+
+            scopes = {definition.get("scope") for definition in matching_definitions}
+            if scopes != {None, "workspace-a"}:
+                result.mark_failure(f"❌ Definition scope 集合不正确: {matching_definitions}")
+                return result
+
+            global_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, None))
+            if not RpcAssertions.expect_success(result, global_response, ["definition"]):
+                return result
+
+            scoped_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "workspace-a"))
+            if not RpcAssertions.expect_success(result, scoped_response, ["definition"]):
+                return result
+
+            global_definition = global_response["result"]["definition"]
+            scoped_definition = scoped_response["result"]["definition"]
+            if global_definition.get("description") != "global-definition":
+                result.mark_failure(f"❌ Global Definition 读取结果不正确: {global_definition}")
+                return result
+            if scoped_definition.get("description") != "workspace-a-definition":
+                result.mark_failure(f"❌ Scoped Definition 读取结果不正确: {scoped_definition}")
+                return result
+
+            delete_global_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, None))
+            if not RpcAssertions.expect_success(result, delete_global_response):
+                return result
+
+            get_deleted_global_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, None))
+            if not RpcAssertions.expect_error(result, get_deleted_global_response, -32014, "app_definition_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, get_deleted_global_response, {"appId": app_id, "scope": None}):
+                return result
+
+            scoped_after_delete_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "workspace-a"))
+            if not RpcAssertions.expect_success(result, scoped_after_delete_response, ["definition"]):
+                return result
+
+            remaining_definition = scoped_after_delete_response["result"]["definition"]
+            if remaining_definition.get("scope") != "workspace-a":
+                result.mark_failure(f"❌ 删除 Global Definition 后 scoped Definition 不应丢失: {remaining_definition}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, None))
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "workspace-a"))
+            except Exception:
+                pass
+
+        return result
+
     def test_upsert_invalid_definition(self):
         """测试 upsertDefinition 对非法定义返回 definition_invalid"""
         result = TestResult("测试 upsertDefinition 对非法定义返回 definition_invalid")
@@ -390,6 +481,50 @@ class TestAppDefinitions(unittest.TestCase):
 
         except Exception as e:
             result.mark_failure(str(e))
+
+        return result
+
+    def test_register_instance_should_reject_undeclared_scope_for_definition_managed_app(self):
+        """测试 Definition 管理下的 appId 不能注册到未声明 scope"""
+        result = TestResult("测试 Definition 管理 appId 拒绝未声明 scope 注册")
+        definition_path = None
+        instance_id = self._new_app_id("managed-scope-instance")
+
+        try:
+            app_id = self._new_app_id("managed-scope-app")
+            definition_path = write_app_definition(
+                app_id,
+                scope="workspace-a",
+                display_name="Managed Scope App",
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope="workspace-b",
+                poll=True,
+                respond=True,
+                pid=33001,
+            )
+
+            if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id, "scope": "workspace-b"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals():
+                    client.unregister_instance(instance_id)
+            except Exception:
+                pass
+
+            safe_remove(definition_path)
 
         return result
 
@@ -426,7 +561,9 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_definition_filename_must_match_appid(),
             self.test_validate_definition(),
             self.test_upsert_definition_and_delete_definition(),
+            self.test_scoped_definitions_should_use_composite_identity(),
             self.test_upsert_invalid_definition(),
+            self.test_register_instance_should_reject_undeclared_scope_for_definition_managed_app(),
             self.test_delete_nonexistent_definition()
         ]
 
