@@ -154,7 +154,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
     protocolVersion: 1,
     pid: 12345,
     startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-    hubVersion: "0.6.0-test"
+    hubVersion: "0.7.0-test"
   });
   expect((client.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
   expect((client.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
@@ -194,7 +194,7 @@ it("runtime 应返回脱敏快照", async () => {
     protocolVersion: 1,
     pid: 12345,
     startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-    hubVersion: "0.6.0-test"
+    hubVersion: "0.7.0-test"
   });
   expect((secondRuntime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
   expect((secondRuntime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
@@ -1711,7 +1711,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-      hubVersion: "0.6.0-test",
+      hubVersion: "0.7.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,

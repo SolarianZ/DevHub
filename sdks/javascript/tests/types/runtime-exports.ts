@@ -39,7 +39,7 @@ const runtimeView: DevHubRuntimeView = {
   protocolVersion: 1,
   pid: 12345,
   startedAtUtc: new Date("2026-03-15T00:00:00Z"),
-  hubVersion: "0.6.0-test"
+  hubVersion: "0.7.0-test"
 };
 const resolver: RuntimeResolver = new FileSystemRuntimeResolver();
 

@@ -103,7 +103,7 @@ function createConnection(): MonitorRuntimeConnectionInfo {
         onlineThresholdSeconds: 15,
         launchDedupeWindowSeconds: 5,
       },
-      hubVersion: "0.6.0",
+      hubVersion: "0.7.0",
     },
   };
 }

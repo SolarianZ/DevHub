@@ -37,7 +37,7 @@
 
 - `src/`：前端 WebView 工程；`App.tsx` 负责 `主页 / 帮助 / 设置 / Definition` 多工作区状态编排，bootstrap / Host 会话 / Definition 编辑分别落在独立 hooks，壳层通过侧边栏驱动切换。
 - `src-tauri/`：Rust 原生后端；Tauri command 只做参数校验与转发，设置、快照、discovery、Host 启动、日志写入与日志目录打开能力由独立服务协作。
-- `@devhub/sdk`：前端 Host 通信依赖，固定指向 `https://github.com/SolarianZ/DevHub/releases/download/preview-latest/devhub-sdk-javascript-0.6.0.tgz`。
+- `@devhub/sdk`：前端 Host 通信依赖，固定指向 `https://github.com/SolarianZ/DevHub/releases/download/preview-latest/devhub-sdk-javascript-0.7.0.tgz`。
 
 ## 运行方式
 

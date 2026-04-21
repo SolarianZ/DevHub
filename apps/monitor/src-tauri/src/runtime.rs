@@ -245,7 +245,7 @@ mod tests {
                 "onlineThresholdSeconds": 15,
                 "launchDedupeWindowSeconds": 5
             },
-            "hubVersion": "0.6.0"
+            "hubVersion": "0.7.0"
         }))
         .expect("failed to serialize hub.json");
         fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");

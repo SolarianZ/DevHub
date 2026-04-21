@@ -136,7 +136,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
     protocolVersion: 1,
     pid: 12345,
     startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-    hubVersion: "0.6.0-test"
+    hubVersion: "0.7.0-test"
   });
   expect((eventsClient.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
   expect((eventsClient.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
@@ -864,7 +864,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-      hubVersion: "0.6.0-test",
+      hubVersion: "0.7.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
