@@ -212,6 +212,18 @@ public sealed class InvocationFlowTests
             AppId = "invoke.scope.app",
             DisplayName = "invoke.scope.app"
         });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.scope.app",
+            Scope = "scope-a",
+            DisplayName = "invoke.scope.app.scope-a"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.scope.app",
+            Scope = "global",
+            DisplayName = "invoke.scope.app.literal-global"
+        });
 
         await using var client = await host.CreateClientAsync("invoke-scope-client");
         await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-global-inst", scope: null), InstancePassword);

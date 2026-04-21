@@ -70,6 +70,41 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   }
 }, 120_000);
 
+it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范化 scope", async () => {
+  const host = await DevHubHostFixture.start();
+
+  try {
+    await host.writeDefinition({
+      appId: "fixture.scope.app",
+      displayName: "fixture.scope.app.global"
+    });
+    await host.writeDefinition({
+      appId: "fixture.scope.app",
+      scope: "workspace-A",
+      displayName: "fixture.scope.app.workspace-A"
+    });
+
+    const fileNames = await fsPromises.readdir(host.definitionsDirectory);
+    expect(fileNames).toContain("fixture.scope.app--global.json");
+    expect(fileNames).toContain("fixture.scope.app--776F726B73706163652D41.json");
+
+    const globalDefinition = JSON.parse(
+      await fsPromises.readFile(
+        path.join(host.definitionsDirectory, "fixture.scope.app--global.json"),
+        "utf-8"
+      )
+    ) as { appId: string; scope: null };
+
+    expect(globalDefinition).toEqual({
+      appId: "fixture.scope.app",
+      scope: null,
+      displayName: "fixture.scope.app.global"
+    });
+  } finally {
+    await host.close();
+  }
+}, 120_000);
+
 it("共享预构建 Host 路径应可直接复用而不触发本地构建", async () => {
   const repoRoot = await createFakeRepositoryRoot();
 

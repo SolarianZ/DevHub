@@ -109,9 +109,11 @@ public class HubEventNotificationFactoryTests
             Payload = new
             {
                 appId = "definition.app",
+                scope = (string?)null,
                 definition = new
                 {
                     appId = "definition.app",
+                    scope = (string?)null,
                     displayName = "Definition App",
                     description = (string?)null
                 }
@@ -125,7 +127,41 @@ public class HubEventNotificationFactoryTests
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
-        var definition = json.GetProperty("params").GetProperty("payload").GetProperty("definition");
+        var payload = json.GetProperty("params").GetProperty("payload");
+        Assert.True(payload.TryGetProperty("scope", out var scope));
+        Assert.Equal(JsonValueKind.Null, scope.ValueKind);
+
+        var definition = payload.GetProperty("definition");
+        Assert.True(definition.TryGetProperty("scope", out var definitionScope));
+        Assert.Equal(JsonValueKind.Null, definitionScope.ValueKind);
         Assert.False(definition.TryGetProperty("description", out _));
+    }
+
+    [Fact]
+    public void Impl_HubEventNotification_WhenDefinitionDeletedPayloadContainsNullScope_ShouldPreserveScope()
+    {
+        var delivery = new HubEventDelivery
+        {
+            ConnectionId = "conn-5",
+            SubscriptionId = "sub-5",
+            Type = "app.definition.deleted",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "definition.app",
+                scope = (string?)null
+            }
+        };
+
+        var json = JsonSerializer.SerializeToElement(
+            HubEventNotificationFactory.Create(delivery),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+        var payload = json.GetProperty("params").GetProperty("payload");
+        Assert.True(payload.TryGetProperty("scope", out var scope));
+        Assert.Equal(JsonValueKind.Null, scope.ValueKind);
     }
 }

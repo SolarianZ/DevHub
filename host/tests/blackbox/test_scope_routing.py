@@ -28,7 +28,7 @@ from tests.blackbox.test_base import (
 class TestScopeRouting(unittest.TestCase):
     """作用域路由测试类"""
 
-    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=None):
         launch_config = None
         if include_launch:
             launch_config = {
@@ -40,6 +40,7 @@ class TestScopeRouting(unittest.TestCase):
 
         return write_app_definition(
             app_id,
+            scope=scope,
             rpc=True,
             events=False,
             launch=launch_config,
@@ -298,12 +299,13 @@ class TestScopeRouting(unittest.TestCase):
         """SCOPE-004: scope='global' 作为显式作用域，不回退默认 Global"""
         result = TestResult("SCOPE-004 scope='global' 显式作用域")
         app_id = self._app_id("004")
-        definition_path = None
+        definition_paths = []
         scoped_global_instance = None
         null_global_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=True)
+            definition_paths.append(self._create_definition(app_id, include_launch=True, scope=None))
+            definition_paths.append(self._create_definition(app_id, include_launch=True, scope="global"))
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -388,7 +390,8 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            for definition_path in definition_paths:
+                safe_remove(definition_path)
 
         return result
 
@@ -396,13 +399,11 @@ class TestScopeRouting(unittest.TestCase):
         """SCOPE-005: notify/request target.scope omitted/null 仅命中 Global"""
         result = TestResult("SCOPE-005 notify/request 默认 Global 路由")
         app_id = self._app_id("005")
-        definition_path = None
 
         global_instance = None
         scoped_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -547,8 +548,6 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
-
         return result
 
     def test_scope_006_explicit_scope_should_not_fallback_to_global(self):
@@ -691,13 +690,11 @@ class TestScopeRouting(unittest.TestCase):
         """SCOPE-008: case-sensitive 精确匹配"""
         result = TestResult("SCOPE-008 scope 大小写敏感")
         app_id = self._app_id("008")
-        definition_path = None
 
         upper_instance = None
         lower_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -783,21 +780,17 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
-
         return result
 
     def test_scope_008_ws_whitespace_scope_should_match_exactly_without_trim(self):
         """SCOPE-008-WS: 空白字符串 scope 按原值精确匹配（不 trim）"""
         result = TestResult("SCOPE-008-WS 空白 scope 精确匹配")
         app_id = self._app_id("008ws")
-        definition_path = None
 
         global_instance = None
         whitespace_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -961,20 +954,16 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
-
         return result
 
     def test_scope_009_target_instance_id_should_take_precedence(self):
         """SCOPE-009: target.instanceId 优先且不回退"""
         result = TestResult("SCOPE-009 target.instanceId 优先")
         app_id = self._app_id("009")
-        definition_path = None
 
         available_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -1043,8 +1032,6 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
-
         return result
 
     def test_scope_010_offline_matrix_should_be_consistent_across_scopes(self):
@@ -1065,7 +1052,6 @@ class TestScopeRouting(unittest.TestCase):
 
             for target_scope, scope_name, scope_tag in scope_cases:
                 queue_off_app = self._app_id(f"010-{scope_tag}-noqueue")
-                definition_paths.append(self._create_definition(queue_off_app, include_launch=False))
                 queue_off_resp = client.invoke_notify(
                     app_id=queue_off_app,
                     method="asset.rebuild",
@@ -1081,7 +1067,11 @@ class TestScopeRouting(unittest.TestCase):
                     return result
 
                 pending_app = self._app_id(f"010-{scope_tag}-pending")
-                definition_paths.append(self._create_definition(pending_app, include_launch=False))
+                definition_paths.append(self._create_definition(
+                    pending_app,
+                    include_launch=False,
+                    scope=target_scope,
+                ))
                 pending_resp = client.invoke_notify(
                     app_id=pending_app,
                     method="asset.rebuild",
@@ -1122,6 +1112,7 @@ class TestScopeRouting(unittest.TestCase):
                     autolaunch_app,
                     include_launch=True,
                     dedupe_key_template="{appId}:{scopeOrGlobal}",
+                    scope=target_scope,
                 ))
 
                 autolaunch_resp = client.invoke_notify(
@@ -1185,13 +1176,11 @@ class TestScopeRouting(unittest.TestCase):
         """SCOPE-012: poll 投递不跨 scope 泄漏"""
         result = TestResult("SCOPE-012 poll 不跨 scope 泄漏")
         app_id = self._app_id("012")
-        definition_path = None
 
         global_instance = None
         scoped_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -1262,15 +1251,12 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
-
         return result
 
     def test_scope_full_lease_redelivery_should_respect_scope(self):
         """full-only: lease 到期重投递后仍严格遵守 scope 过滤"""
         result = TestResult("SCOPE-FULL lease 重投递 scope 过滤")
         app_id = self._app_id("010-full-lease")
-        definition_path = None
 
         holder_instance = None
         same_scope_receiver = None
@@ -1278,7 +1264,6 @@ class TestScopeRouting(unittest.TestCase):
         other_scope_instance = None
 
         try:
-            definition_path = self._create_definition(app_id, include_launch=False)
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
@@ -1395,8 +1380,6 @@ class TestScopeRouting(unittest.TestCase):
                     cleanup_client.unregister_instance(other_scope_instance)
             except Exception:
                 pass
-
-            safe_remove(definition_path)
 
         return result
 

@@ -35,6 +35,16 @@ beforeAll(async () => {
     displayName: "invoke.scope.app"
   });
   await host.writeDefinition({
+    appId: "invoke.scope.app",
+    scope: "scope-a",
+    displayName: "invoke.scope.app.scope-a"
+  });
+  await host.writeDefinition({
+    appId: "invoke.scope.app",
+    scope: "global",
+    displayName: "invoke.scope.app.literal-global"
+  });
+  await host.writeDefinition({
     appId: "invoke.rpc-disabled.app",
     scope: null,
     displayName: "invoke.rpc-disabled.app",

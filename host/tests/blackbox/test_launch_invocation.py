@@ -30,7 +30,7 @@ class TestLaunchInvocation(unittest.TestCase):
     def _launch_script_path(self):
         return get_shared_test_asset_path("launch_noop.py")
 
-    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None):
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=None):
         launch_config = None
         if include_launch:
             launch_config = {
@@ -42,6 +42,7 @@ class TestLaunchInvocation(unittest.TestCase):
 
         return write_app_definition(
             app_id,
+            scope=scope,
             rpc=True,
             events=False,
             launch=launch_config,
@@ -279,15 +280,22 @@ class TestLaunchInvocation(unittest.TestCase):
     def test_scope_011_launch_dedupe_should_isolate_by_scope(self):
         """SCOPE-011: launch dedupe 在不同 scope 间隔离"""
         result = TestResult("SCOPE-011 launch dedupe scope 隔离")
-        definition_path = None
+        definition_paths = []
 
         try:
             app_id = f"launch-scope-dedupe-{uuid.uuid4().hex[:8]}"
-            definition_path = self._create_definition(
+            definition_paths.append(self._create_definition(
                 app_id,
                 include_launch=True,
                 dedupe_key_template="{appId}:{scopeOrGlobal}",
-            )
+                scope="workspace-A",
+            ))
+            definition_paths.append(self._create_definition(
+                app_id,
+                include_launch=True,
+                dedupe_key_template="{appId}:{scopeOrGlobal}",
+                scope="workspace-B",
+            ))
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -352,7 +360,8 @@ class TestLaunchInvocation(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            for definition_path in definition_paths:
+                safe_remove(definition_path)
 
         return result
 

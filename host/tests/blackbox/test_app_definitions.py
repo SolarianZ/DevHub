@@ -14,6 +14,9 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
+    build_app_definition,
+    build_definition_file_name,
+    build_definition_identity_params,
     get_definitions_dir,
     safe_remove,
     write_app_definition,
@@ -87,7 +90,7 @@ class TestAppDefinitions(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_success(result, response, ["definition"]):
                 return result
 
@@ -115,7 +118,7 @@ class TestAppDefinitions(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.getDefinition", {"appId": "non-existent-app"})
+            response = client.call("hub.apps.getDefinition", build_definition_identity_params("non-existent-app"))
             if not RpcAssertions.expect_error(
                 result,
                 response,
@@ -142,9 +145,9 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             definitions_dir = get_definitions_dir()
-            invalid_filename = f"invalid-app-{uuid.uuid4().hex[:8]}.json"
+            invalid_app_id = f"invalid-app-{uuid.uuid4().hex[:8]}"
+            invalid_filename = build_definition_file_name(invalid_app_id)
             invalid_app_path = os.path.join(definitions_dir, invalid_filename)
-            invalid_app_id = os.path.splitext(invalid_filename)[0]
 
             # 缺少 appId/displayName
             with open(invalid_app_path, "w", encoding="utf-8") as f:
@@ -179,12 +182,11 @@ class TestAppDefinitions(unittest.TestCase):
         try:
             definitions_dir = get_definitions_dir()
             invalid_app_id = f"invalid app id {uuid.uuid4().hex[:6]}"
-            invalid_app_path = os.path.join(definitions_dir, f"{invalid_app_id}.json")
-
-            invalid_app = {
-                "appId": invalid_app_id,
-                "displayName": "Invalid AppId Application"
-            }
+            invalid_app_path = os.path.join(definitions_dir, build_definition_file_name(invalid_app_id))
+            invalid_app = build_app_definition(
+                invalid_app_id,
+                display_name="Invalid AppId Application",
+            )
 
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 json.dump(invalid_app, f, ensure_ascii=False, indent=2)
@@ -219,11 +221,10 @@ class TestAppDefinitions(unittest.TestCase):
             definitions_dir = get_definitions_dir()
             mismatch_path = os.path.join(definitions_dir, f"mismatch-name-{uuid.uuid4().hex[:8]}.json")
             real_app_id = f"real-app-id-{uuid.uuid4().hex[:8]}"
-
-            mismatch_app = {
-                "appId": real_app_id,
-                "displayName": "Mismatch Name Application"
-            }
+            mismatch_app = build_app_definition(
+                real_app_id,
+                display_name="Mismatch Name Application",
+            )
 
             with open(mismatch_path, "w", encoding="utf-8") as f:
                 json.dump(mismatch_app, f, ensure_ascii=False, indent=2)
@@ -262,6 +263,7 @@ class TestAppDefinitions(unittest.TestCase):
             valid_response = client.call("hub.apps.validateDefinition", {
                 "definition": {
                     "appId": valid_app_id,
+                    "scope": None,
                     "displayName": "Validate App",
                     "launch": {
                         "exePath": "echo",
@@ -278,7 +280,8 @@ class TestAppDefinitions(unittest.TestCase):
 
             invalid_response = client.call("hub.apps.validateDefinition", {
                 "definition": {
-                    "appId": "Invalid App"
+                    "appId": "Invalid App",
+                    "scope": None,
                 }
             })
             if not RpcAssertions.expect_success(result, invalid_response, ["valid", "errors"]):
@@ -312,6 +315,7 @@ class TestAppDefinitions(unittest.TestCase):
             upsert_response = client.call("hub.apps.upsertDefinition", {
                 "definition": {
                     "appId": app_id,
+                    "scope": None,
                     "displayName": "Managed App",
                     "description": "Managed from blackbox test",
                     "launch": {
@@ -328,7 +332,7 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ upsert 返回定义 appId 不匹配: {definition}")
                 return result
 
-            get_response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_success(result, get_response, ["definition"]):
                 return result
 
@@ -336,11 +340,11 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ getDefinition 未返回最新定义: {get_response}")
                 return result
 
-            delete_response = client.call("hub.apps.deleteDefinition", {"appId": app_id})
+            delete_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_success(result, delete_response):
                 return result
 
-            get_missing_response = client.call("hub.apps.getDefinition", {"appId": app_id})
+            get_missing_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_error(result, get_missing_response, -32014, "app_definition_not_found"):
                 return result
 
@@ -351,7 +355,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", {"appId": app_id})
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
             except Exception:
                 pass
 
@@ -368,6 +372,7 @@ class TestAppDefinitions(unittest.TestCase):
             response = client.call("hub.apps.upsertDefinition", {
                 "definition": {
                     "appId": "Invalid App",
+                    "scope": None,
                     "displayName": ""
                 }
             })
@@ -397,7 +402,7 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("missing-delete-app")
 
-            response = client.call("hub.apps.deleteDefinition", {"appId": app_id})
+            response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
                 return result
             if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id}):

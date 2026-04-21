@@ -9,6 +9,7 @@ import unittest
 
 
 from tests.blackbox.test_base import (
+    build_definition_identity_params,
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -144,7 +145,12 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                response = self._ws_call(ws, "matrix-get-def-003", "hub.apps.getDefinition", {"appId": app_id})
+                response = self._ws_call(
+                    ws,
+                    "matrix-get-def-003",
+                    "hub.apps.getDefinition",
+                    build_definition_identity_params(app_id),
+                )
                 if not RpcAssertions.expect_success(result, response, ["definition"]):
                     return result
 
@@ -351,6 +357,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.validate",
+                                "scope": None,
                                 "displayName": "WS HTTP-only Validate",
                             }
                         },
@@ -361,6 +368,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.upsert",
+                                "scope": None,
                                 "displayName": "WS HTTP-only Upsert",
                             }
                         },
@@ -370,6 +378,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.apps.deleteDefinition",
                         {
                             "appId": "matrix.ws.http.only.delete",
+                            "scope": None,
                         },
                     ),
                 ]

@@ -666,7 +666,13 @@ def validate_current_user_only_file_access(path: str) -> Tuple[bool, str]:
 
 def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
     """写入测试 AppDefinition 并返回文件路径。"""
-    definition_path = os.path.join(get_definitions_dir(), f"{app_id}.json")
+    normalized_scope = normalize_definition_scope(payload.get("scope"))
+    payload = dict(payload)
+    payload["scope"] = normalized_scope
+    definition_path = os.path.join(
+        get_definitions_dir(),
+        build_definition_file_name(app_id, normalized_scope),
+    )
     with open(definition_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     return definition_path
@@ -677,6 +683,19 @@ def normalize_definition_scope(scope: Optional[str]) -> Optional[str]:
     if scope in (None, ""):
         return None
     return scope
+
+
+def encode_definition_scope_segment(scope: Optional[str]) -> str:
+    """把 Definition scope 编码为稳定文件名片段。"""
+    if scope is None:
+        return "global"
+
+    return scope.encode("utf-8").hex().upper()
+
+
+def build_definition_file_name(app_id: str, scope: Optional[str] = None) -> str:
+    """构造 Definition 复合键文件名。"""
+    return f"{app_id}--{encode_definition_scope_segment(normalize_definition_scope(scope))}.json"
 
 
 def build_definition_identity_params(app_id: str, scope: Optional[str] = None) -> Dict[str, Any]:

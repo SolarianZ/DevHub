@@ -236,6 +236,7 @@ class TestWsEvents:
     def _definition_payload(app_id, display_name=None):
         return {
             "appId": app_id,
+            "scope": None,
             "displayName": display_name or app_id,
         }
 
@@ -1180,6 +1181,10 @@ class TestWsEvents:
                     result.mark_failure(f"❌ upserted payload.appId 不匹配: {payload}")
                     return result
 
+                if "scope" not in payload or payload.get("scope") is not None:
+                    result.mark_failure(f"❌ upserted payload.scope 应为 null: {payload}")
+                    return result
+
                 event_definition = payload.get("definition")
                 if not isinstance(event_definition, dict):
                     result.mark_failure(f"❌ upserted payload.definition 非对象: {payload}")
@@ -1187,6 +1192,10 @@ class TestWsEvents:
 
                 if event_definition.get("appId") != app_id:
                     result.mark_failure(f"❌ upserted payload.definition.appId 不匹配: {payload}")
+                    return result
+
+                if "scope" not in event_definition or event_definition.get("scope") is not None:
+                    result.mark_failure(f"❌ upserted payload.definition.scope 应为 null: {payload}")
                     return result
 
                 if event_definition.get("displayName") != definition["displayName"]:
@@ -1199,7 +1208,11 @@ class TestWsEvents:
         finally:
             try:
                 http_base_url, _, token = self._runtime_hub_info()
-                RpcClient(http_base_url, token).call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="cleanup-12d")
+                RpcClient(http_base_url, token).call(
+                    "hub.apps.deleteDefinition",
+                    {"appId": app_id, "scope": None},
+                    request_id="cleanup-12d",
+                )
             except Exception:
                 pass
 
@@ -1237,7 +1250,11 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                delete_response = rpc_client.call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="delete-12e")
+                delete_response = rpc_client.call(
+                    "hub.apps.deleteDefinition",
+                    {"appId": app_id, "scope": None},
+                    request_id="delete-12e",
+                )
                 if not RpcAssertions.expect_success(result, delete_response):
                     return result
 
@@ -1254,6 +1271,10 @@ class TestWsEvents:
                 payload = event_params.get("payload", {})
                 if payload.get("appId") != app_id:
                     result.mark_failure(f"❌ deleted payload.appId 不匹配: {payload}")
+                    return result
+
+                if "scope" not in payload or payload.get("scope") is not None:
+                    result.mark_failure(f"❌ deleted payload.scope 应为 null: {payload}")
                     return result
 
             result.mark_success()

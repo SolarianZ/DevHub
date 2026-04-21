@@ -5,6 +5,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- SDK 集成测试会通过项目引用把 Host 带入同一构建图；若外部把 BaseIntermediateOutputPath 指到共享绝对路径，
+         Host 项目也必须按项目名切分外部 obj，并隔离 restore 资产，避免与 SDK 项目互相覆盖。 -->
+    <DevHubExternalIntermediateRoot Condition="$([System.IO.Path]::IsPathRooted('$(BaseIntermediateOutputPath)'))">$([MSBuild]::EnsureTrailingSlash('$(BaseIntermediateOutputPath)'))</DevHubExternalIntermediateRoot>
+    <DevHubExternalIntermediateProjectRoot Condition="'$(DevHubExternalIntermediateRoot)' != ''">$(DevHubExternalIntermediateRoot)$(MSBuildProjectName)\</DevHubExternalIntermediateProjectRoot>
+    <MSBuildProjectExtensionsPath Condition="'$(DevHubExternalIntermediateProjectRoot)' != ''">$(DevHubExternalIntermediateProjectRoot)</MSBuildProjectExtensionsPath>
+    <IntermediateOutputPath Condition="'$(DevHubExternalIntermediateProjectRoot)' != ''">$(DevHubExternalIntermediateProjectRoot)$(Configuration)\</IntermediateOutputPath>
+    <!-- 当项目把中间目录重定向到仓库外部时，仍需显式排除项目目录下残留的 obj/ 生成文件，
+         否则旧的 AssemblyInfo 可能被默认通配符再次编译。 -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'DevHub.Core' Or '$(MSBuildProjectName)' == 'DevHub.Host'">

@@ -151,12 +151,17 @@ export class DevHubHostFixture {
   }
 
   async writeDefinition(definition: Record<string, unknown>): Promise<void> {
-    const appId = definition.appId;
+    const payload = { ...definition };
+    const appId = payload.appId;
     if (typeof appId !== "string" || !appId.trim()) {
       throw new Error("appId 不能为空。");
     }
-    const target = path.join(this.definitionsDirectory, `${appId}.json`);
-    await fsPromises.writeFile(target, JSON.stringify(definition), "utf-8");
+
+    const scope = normalizeDefinitionScope(payload.scope);
+    payload.scope = scope;
+
+    const target = path.join(this.definitionsDirectory, buildDefinitionFileName(appId, scope));
+    await fsPromises.writeFile(target, JSON.stringify(payload), "utf-8");
   }
 
   async close(): Promise<void> {
@@ -369,6 +374,25 @@ function ensureTrailingSeparator(value: string): string {
   return value.endsWith(path.sep)
     ? value
     : `${value}${path.sep}`;
+}
+
+function normalizeDefinitionScope(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("definition.scope 必须为非空字符串或 null。");
+  }
+
+  return value;
+}
+
+function buildDefinitionFileName(appId: string, scope: string | null): string {
+  const scopeSegment = scope === null
+    ? "global"
+    : Buffer.from(scope, "utf-8").toString("hex").toUpperCase();
+  return `${appId}--${scopeSegment}.json`;
 }
 
 function registerSharedHostCleanup(): void {
