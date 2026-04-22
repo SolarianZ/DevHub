@@ -9,7 +9,7 @@
         "fileName": "invoke.request.scope--global.json",
         "definition": {
           "appId": "invoke.request.scope",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.request.scope"
         }
       },
@@ -31,7 +31,7 @@
         "instance": {
           "instanceId": "request-scope-global-inst",
           "appId": "invoke.request.scope",
-          "scope": null,
+          "scope": "",
           "pid": 32003,
           "invoke": {
             "poll": true,

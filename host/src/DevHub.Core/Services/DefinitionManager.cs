@@ -102,13 +102,7 @@ public sealed class DefinitionManager : IDefinitionManager
     }
 
     /// <inheritdoc />
-    public bool Delete(string appId)
-    {
-        return Delete(appId, scope: null);
-    }
-
-    /// <inheritdoc />
-    public bool Delete(string appId, string? scope)
+    public bool Delete(string appId, string scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         if (!AppDefinitionValidator.IsValidAppId(appId))
@@ -116,10 +110,7 @@ public sealed class DefinitionManager : IDefinitionManager
             throw new ArgumentException("appId format is invalid.", nameof(appId));
         }
 
-        if (scope is not null && string.IsNullOrWhiteSpace(scope))
-        {
-            throw new ArgumentException("scope must be null or a non-empty string.", nameof(scope));
-        }
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         var identity = AppDefinitionIdentity.Create(appId, scope);
         var path = Path.Combine(_definitionsPath, identity.GetFileName());

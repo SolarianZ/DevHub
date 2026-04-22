@@ -93,12 +93,12 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
     await Promise.all([
       firstHost.writeDefinition({
         appId: "parallel.flow.app",
-        scope: null,
+        scope: "",
         displayName: "parallel.flow.app"
       }),
       secondHost.writeDefinition({
         appId: "parallel.flow.app",
-        scope: null,
+        scope: "",
         displayName: "parallel.flow.app"
       })
     ]);
@@ -147,6 +147,7 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
       await firstClient.registerInstance({
         instanceId: "parallel-inst-1",
         appId: "parallel.flow.app",
+        scope: "",
         pid: process.pid,
         invoke: {
           poll: true,
@@ -159,13 +160,15 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
       expect(firstDelivered.value.payload?.instanceId).toBe("parallel-inst-1");
 
       const secondInstancesBefore = await secondClient.listInstances({
-        appId: "parallel.flow.app"
+        appId: "parallel.flow.app",
+        scope: null
       });
       expect(secondInstancesBefore).toHaveLength(0);
 
       await secondClient.registerInstance({
         instanceId: "parallel-inst-2",
         appId: "parallel.flow.app",
+        scope: "",
         pid: process.pid,
         invoke: {
           poll: true,
@@ -179,10 +182,12 @@ it("不同 dataDir 下的 Host 应并行隔离 HTTP 与 Events 链路", async ()
       await expect(nextWithTimeout(firstIterator, 600)).rejects.toThrow(/timeout/i);
 
       const firstInstances = await firstClient.listInstances({
-        appId: "parallel.flow.app"
+        appId: "parallel.flow.app",
+        scope: null
       });
       const secondInstances = await secondClient.listInstances({
-        appId: "parallel.flow.app"
+        appId: "parallel.flow.app",
+        scope: null
       });
 
       expect(firstInstances.map((item) => item.instanceId)).toEqual(["parallel-inst-1"]);

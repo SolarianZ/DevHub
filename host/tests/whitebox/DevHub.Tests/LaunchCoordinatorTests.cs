@@ -48,7 +48,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "missing.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -74,7 +74,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-missing.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -99,7 +99,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-started.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -125,7 +125,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-starting.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 120,
             CancellationToken.None);
@@ -186,14 +186,14 @@ public class LaunchCoordinatorTests : IDisposable
 
         var first = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
 
         var second = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -230,7 +230,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var second = await coordinator.LaunchAsync(
             appId: "launch-global-scope-dedupe.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -276,14 +276,14 @@ public class LaunchCoordinatorTests : IDisposable
 
         var first = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window-override.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
 
         var second = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window-override.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -298,7 +298,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var third = await coordinator.LaunchAsync(
             appId: "launch-dedupe-window-override.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -326,7 +326,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var first = await coordinator.LaunchAsync(
             appId: "launch-explicit-dedupe.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: "manual-key",
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -334,7 +334,7 @@ public class LaunchCoordinatorTests : IDisposable
         WriteHubRuntime("http://127.0.0.1:61002");
         var second = await coordinator.LaunchAsync(
             appId: "launch-explicit-dedupe.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: "manual-key",
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -364,7 +364,7 @@ public class LaunchCoordinatorTests : IDisposable
         WriteHubRuntime("http://127.0.0.1:62001");
         var first = await coordinator.LaunchAsync(
             appId: "launch-httpbaseurl-template.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -372,7 +372,7 @@ public class LaunchCoordinatorTests : IDisposable
         WriteHubRuntime("http://127.0.0.1:62002");
         var second = await coordinator.LaunchAsync(
             appId: "launch-httpbaseurl-template.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -440,7 +440,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-args-template-global.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -497,7 +497,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-null-process.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -523,7 +523,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-throws-process.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -537,33 +537,40 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchAsync_WhenWaitForRegisterAndInstanceAppears_ShouldReturnStarted()
+    public async Task Impl_LaunchAsync_WhenWaitForRegisterAndTrackedInstanceAppears_ShouldReturnStarted()
     {
         WriteDefinition("launch-wait-register.app", includeLaunch: true);
 
         var clock = new SystemClock();
         using var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        LaunchCoordinator? coordinator = null;
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
-            .Callback<LaunchConfiguration, string?>((_, _) =>
+            .Callback<LaunchConfiguration, string?>((launchConfiguration, _) =>
             {
-                appRegistry.RegisterInstance(new AppInstance
+                var launchId = launchConfiguration.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+                var validation = coordinator!.ValidateRegistration(launchId, "launch-wait-register.app", ScopeContract.Global);
+                Assert.Equal(LaunchRegistrationValidationStatus.Matched, validation.Status);
+
+                var instance = appRegistry.RegisterInstance(new AppInstance
                 {
                     InstanceId = "launch-wait-register-instance",
                     AppId = "launch-wait-register.app",
-                    Scope = null,
+                    Scope = ScopeContract.Global,
                     Pid = 6501,
                     Invoke = new InvokeCapability { Poll = true, Respond = true }
                 });
+
+                coordinator.RecordSuccessfulRegistration(launchId, instance);
             })
             .Returns(System.Diagnostics.Process.GetCurrentProcess());
 
-        var coordinator = CreateCoordinator(clock, processLauncher.Object, appRegistry);
+        coordinator = CreateCoordinator(clock, processLauncher.Object, appRegistry);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-wait-register.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 600,
             CancellationToken.None);
@@ -588,7 +595,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-null-args-template.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -663,12 +670,13 @@ public class LaunchCoordinatorTests : IDisposable
         string? dedupeKeyTemplate = null,
         string? argsTemplate = null,
         string? exePath = null,
-        string? definitionScope = null)
+        string? definitionScope = ScopeContract.Global)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = definitionScope,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -693,7 +701,7 @@ public class LaunchCoordinatorTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -702,7 +710,7 @@ public class LaunchCoordinatorTests : IDisposable
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = (string?)null,
+            ["scope"] = ScopeContract.Global,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -715,7 +723,7 @@ public class LaunchCoordinatorTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -734,3 +742,5 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
+
+

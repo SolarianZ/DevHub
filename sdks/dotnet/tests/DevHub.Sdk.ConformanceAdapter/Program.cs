@@ -674,7 +674,7 @@ InvokeRequest BuildInvokeRequest(JsonElement payload)
         {
             request.Target = new InvocationTarget
             {
-                Scope = ReadOptionalString(targetElement, "scope"),
+                Scope = ReadOptionalString(targetElement, "scope")!,
                 InstanceId = ReadOptionalString(targetElement, "instanceId")
             };
         }
@@ -728,7 +728,7 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
     {
         InstanceId = ReadString(payload, "instanceId"),
         AppId = ReadString(payload, "appId"),
-        Scope = ReadOptionalString(payload, "scope"),
+        Scope = ReadOptionalString(payload, "scope")!,
         Pid = ReadInt32(payload, "pid"),
         Invoke = new InvokeCapability
         {

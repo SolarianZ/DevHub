@@ -3,6 +3,7 @@ import type {
   AppDefinitionIdentity,
   AppInstanceRegistration,
   InvokeRequest,
+  ListDefinitionsRequest,
   LaunchRequest,
   ListInstancesRequest,
   PollRequest,
@@ -10,7 +11,7 @@ import type {
 } from "./models.js";
 import {
   ensureAppId,
-  ensureDefinitionScope,
+  ensureScopeFilter,
   ensureInputBoolean,
   ensureInstanceId,
   ensureInvocationId,
@@ -20,11 +21,10 @@ import {
   ensureOptionalInputIntegerAtLeast,
   ensureOptionalInputIntegerInRange,
   ensureOptionalInputRecord,
-  ensureOptionalDefinitionScope,
   ensureOptionalInputString,
-  ensureOptionalInputStringOrNull,
   ensureRequiredInputString,
-  ensureRequiredInputStringValue
+  ensureRequiredInputStringValue,
+  ensureScopedString
 } from "./validation.js";
 
 export function buildGetDefinitionParams(identity: AppDefinitionIdentity): Record<string, unknown> {
@@ -57,7 +57,7 @@ export function buildRegisterInstanceParams(
 
   const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
   const appId = ensureAppId(instance.appId, "appId");
-  const scope = ensureOptionalInputStringOrNull(instance.scope, "scope");
+  const scope = ensureScopedString(instance.scope, "scope");
   const normalizedPassword = ensureRequiredInputString(password, "password");
 
   if (!instance.invoke) {
@@ -76,6 +76,7 @@ export function buildRegisterInstanceParams(
     instance: {
       instanceId,
       appId,
+      scope,
       pid: instance.pid,
       invoke: {
         poll,
@@ -83,10 +84,6 @@ export function buildRegisterInstanceParams(
       }
     }
   };
-
-  if (scope !== undefined && scope !== null) {
-    (payload.instance as Record<string, unknown>).scope = scope;
-  }
 
   if (instance.meta !== undefined) {
     (payload.instance as Record<string, unknown>).meta = ensureJsonObject(instance.meta, "meta");
@@ -108,26 +105,35 @@ export function buildUnregisterParams(instanceId: string, password: string): Rec
   };
 }
 
-export function buildListInstancesParams(request?: ListInstancesRequest): Record<string, unknown> | undefined {
+export function buildListDefinitionsParams(request: ListDefinitionsRequest): Record<string, unknown> {
   if (!request) {
-    return undefined;
+    throw new Error("request cannot be empty.");
   }
 
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = {
+    scope: ensureScopeFilter(request.scope, "scope")
+  };
   const appIdRaw = ensureOptionalInputString(request.appId, "appId", false);
   const appId = appIdRaw === undefined ? undefined : ensureAppId(appIdRaw, "appId");
   if (appId !== undefined) {
     payload.appId = appId;
   }
 
-  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
-  if (scope !== undefined) {
-    payload.scope = scope;
+  return payload;
+}
+
+export function buildListInstancesParams(request: ListInstancesRequest): Record<string, unknown> {
+  if (!request) {
+    throw new Error("request cannot be empty.");
   }
 
-  const includeAllScopes = ensureOptionalInputBoolean(request.includeAllScopes, "includeAllScopes");
-  if (includeAllScopes !== undefined) {
-    payload.includeAllScopes = includeAllScopes;
+  const payload: Record<string, unknown> = {
+    scope: ensureScopeFilter(request.scope, "scope")
+  };
+  const appIdRaw = ensureOptionalInputString(request.appId, "appId", false);
+  const appId = appIdRaw === undefined ? undefined : ensureAppId(appIdRaw, "appId");
+  if (appId !== undefined) {
+    payload.appId = appId;
   }
 
   const includeOffline = ensureOptionalInputBoolean(request.includeOffline, "includeOffline");
@@ -135,7 +141,7 @@ export function buildListInstancesParams(request?: ListInstancesRequest): Record
     payload.includeOffline = includeOffline;
   }
 
-  return Object.keys(payload).length > 0 ? payload : undefined;
+  return payload;
 }
 
 export function buildLaunchParams(request: LaunchRequest): Record<string, unknown> {
@@ -144,7 +150,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
   }
 
   const appId = ensureAppId(request.appId, "appId");
-  const scope = ensureOptionalDefinitionScope(request.scope, "scope");
+  const scope = ensureScopedString(request.scope, "scope");
   const dedupeKey = ensureOptionalInputString(request.dedupeKey, "dedupeKey", false);
   const waitForRegisterMs = ensureOptionalInputIntegerAtLeast(
     request.waitForRegisterMs,
@@ -153,10 +159,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
     "waitForRegisterMs 必须为大于等于 0 的整数。"
   );
 
-  const payload: Record<string, unknown> = { appId };
-  if (scope !== undefined) {
-    payload.scope = scope;
-  }
+  const payload: Record<string, unknown> = { appId, scope };
 
   if (dedupeKey !== undefined && dedupeKey !== null) {
     payload.dedupeKey = dedupeKey;
@@ -178,7 +181,11 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
   const method = ensureRequiredInputString(request.method, "method");
   const target = ensureOptionalInputRecord(request.target, "target");
   const options = ensureOptionalInputRecord(request.options, "options");
-  const targetScope = ensureOptionalInputStringOrNull(target?.scope, "target.scope");
+  if (target === undefined) {
+    throw new Error("target cannot be empty.");
+  }
+
+  const targetScope = ensureScopedString(target.scope, "target.scope");
   const targetInstanceIdRaw = ensureOptionalInputString(
     target?.instanceId,
     "target.instanceId",
@@ -244,12 +251,10 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
     (payload.options as Record<string, unknown>).waitTimeoutMs = waitTimeoutMs;
   }
 
-  if (target !== undefined) {
-    payload.target = {
-      scope: targetScope ?? null,
-      instanceId: targetInstanceId ?? null
-    };
-  }
+  payload.target = {
+    scope: targetScope,
+    instanceId: targetInstanceId ?? null
+  };
 
   return payload;
 }
@@ -330,7 +335,7 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
 
   const payload: Record<string, unknown> = {
     appId: ensureAppId(definition.appId, "definition.appId"),
-    scope: ensureDefinitionScope(definition.scope, "definition.scope"),
+    scope: ensureScopedString(definition.scope, "definition.scope"),
     displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
   };
 
@@ -394,6 +399,6 @@ function buildDefinitionIdentityPayload(identity: AppDefinitionIdentity, propert
 
   return {
     appId: ensureAppId(identity.appId, `${propertyName}.appId`),
-    scope: ensureDefinitionScope(identity.scope, `${propertyName}.scope`)
+    scope: ensureScopedString(identity.scope, `${propertyName}.scope`)
   };
 }

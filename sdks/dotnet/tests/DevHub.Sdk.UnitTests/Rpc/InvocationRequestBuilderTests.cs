@@ -5,42 +5,68 @@ using DevHub.Sdk.Models;
 namespace DevHub.Sdk.UnitTests.Rpc;
 
 /// <summary>
-/// 调用请求构造白盒测试。
+/// 显式作用域契约下的请求构造白盒测试。
 /// </summary>
 public sealed class InvocationRequestBuilderTests
 {
     [Fact]
-    public void NotifyBuilder_ShouldApplyDefaultOptions()
+    public void NotifyBuilder_ShouldRequireExplicitTargetScopeAndApplyDefaultOptions()
     {
         var payload = RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {
             AppId = "test.app",
-            Method = "test.notify"
+            Method = "test.notify",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            }
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
+        using var document = Serialize(payload);
         var options = document.RootElement.GetProperty("options");
+        var target = document.RootElement.GetProperty("target");
+
         Assert.Equal(60000, options.GetProperty("ttlMs").GetInt32());
         Assert.True(options.GetProperty("queueIfOffline").GetBoolean());
         Assert.True(options.GetProperty("autoLaunch").GetBoolean());
-        Assert.False(document.RootElement.TryGetProperty("target", out _));
+        Assert.Equal(string.Empty, target.GetProperty("scope").GetString());
+        Assert.Equal(JsonValueKind.Null, target.GetProperty("instanceId").ValueKind);
     }
 
     [Fact]
-    public void RequestBuilder_ShouldApplyDefaultOptions()
+    public void RequestBuilder_ShouldPreserveExplicitScopeAndDefaults()
     {
         var payload = RequestPayloadFactory.BuildRequestParams(new InvokeRequest
         {
             AppId = "test.app",
-            Method = "test.request"
+            Method = "test.request",
+            Target = new InvocationTarget
+            {
+                Scope = "workspace-a"
+            }
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
+        using var document = Serialize(payload);
         var options = document.RootElement.GetProperty("options");
+        var target = document.RootElement.GetProperty("target");
+
         Assert.Equal(300000, options.GetProperty("ttlMs").GetInt32());
         Assert.Equal(120000, options.GetProperty("waitTimeoutMs").GetInt32());
         Assert.True(options.GetProperty("queueIfOffline").GetBoolean());
         Assert.True(options.GetProperty("autoLaunch").GetBoolean());
+        Assert.Equal("workspace-a", target.GetProperty("scope").GetString());
+    }
+
+    [Fact]
+    public void NotifyBuilder_WhenTargetMissing_ShouldThrowArgumentException()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
+        {
+            AppId = "test.app",
+            Method = "test.notify"
+        }));
+
+        Assert.Contains("Target", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -50,6 +76,10 @@ public sealed class InvocationRequestBuilderTests
         {
             AppId = "test.app",
             Method = "test.notify",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 WaitTimeoutMs = 1000
@@ -57,24 +87,6 @@ public sealed class InvocationRequestBuilderTests
         }));
 
         Assert.Contains("waitTimeoutMs", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RequestBuilder_ShouldPreserveExplicitEmptyScope()
-    {
-        var payload = RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
-        {
-            AppId = "test.app",
-            Method = "test.notify",
-            Target = new InvocationTarget
-            {
-                Scope = string.Empty,
-                InstanceId = null
-            }
-        });
-
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
-        Assert.Equal(string.Empty, document.RootElement.GetProperty("target").GetProperty("scope").GetString());
     }
 
     [Fact]
@@ -86,6 +98,7 @@ public sealed class InvocationRequestBuilderTests
             Method = "test.notify",
             Target = new InvocationTarget
             {
+                Scope = string.Empty,
                 InstanceId = "inst-1"
             },
             Options = new InvocationOptions
@@ -102,6 +115,10 @@ public sealed class InvocationRequestBuilderTests
         {
             AppId = "test.app",
             Method = "test.notify",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 AutoLaunch = true,
@@ -118,40 +135,25 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1"
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
+        using var document = Serialize(payload);
         Assert.Equal(10, document.RootElement.GetProperty("maxCount").GetInt32());
         Assert.Equal(25000, document.RootElement.GetProperty("waitMs").GetInt32());
     }
 
     [Fact]
-    public void LaunchBuilder_ShouldOmitOptionalFieldsByDefault()
-    {
-        var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
-        {
-            AppId = "test.app"
-        });
-
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
-        Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.False(document.RootElement.TryGetProperty("scope", out _));
-        Assert.False(document.RootElement.TryGetProperty("dedupeKey", out _));
-        Assert.False(document.RootElement.TryGetProperty("waitForRegisterMs", out _));
-    }
-
-    [Fact]
-    public void LaunchBuilder_ShouldPreserveOptionalFields()
+    public void LaunchBuilder_ShouldSerializeExplicitGlobalScopeAndOptionalFields()
     {
         var payload = RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
             AppId = "test.app",
-            Scope = "scope-a",
+            Scope = string.Empty,
             DedupeKey = "launch-key",
             WaitForRegisterMs = 0
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
+        using var document = Serialize(payload);
         Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
-        Assert.Equal("scope-a", document.RootElement.GetProperty("scope").GetString());
+        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
         Assert.Equal("launch-key", document.RootElement.GetProperty("dedupeKey").GetString());
         Assert.Equal(0, document.RootElement.GetProperty("waitForRegisterMs").GetInt32());
     }
@@ -159,17 +161,7 @@ public sealed class InvocationRequestBuilderTests
     [Fact]
     public void LaunchBuilder_WhenScopeIsWhitespace_ShouldThrowArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
-        {
-            AppId = "test.app",
-            Scope = string.Empty
-        }));
-
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
-        {
-            AppId = "test.app",
-            Scope = " "
-        }));
+        Assert.Throws<ArgumentException>(() => new LaunchRequest { Scope = " " });
     }
 
     [Fact]
@@ -178,6 +170,7 @@ public sealed class InvocationRequestBuilderTests
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
         {
             AppId = "test.app",
+            Scope = string.Empty,
             WaitForRegisterMs = -1
         }));
 
@@ -185,11 +178,13 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void ListInstancesBuilder_WhenNoFilterSpecified_ShouldReturnNull()
+    public void ListDefinitionsBuilder_ShouldSerializeExplicitNullScopeFilter()
     {
-        var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest());
+        var payload = RequestPayloadFactory.BuildListDefinitionsParams(new ListDefinitionsRequest());
 
-        Assert.Null(payload);
+        using var document = Serialize(payload);
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("scope").ValueKind);
+        Assert.False(document.RootElement.TryGetProperty("includeAllScopes", out _));
     }
 
     [Fact]
@@ -199,78 +194,94 @@ public sealed class InvocationRequestBuilderTests
         {
             AppId = "test.app",
             Scope = string.Empty,
-            IncludeAllScopes = true,
             IncludeOffline = true
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var document = Serialize(payload);
         Assert.Equal("test.app", document.RootElement.GetProperty("appId").GetString());
         Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
-        Assert.True(document.RootElement.GetProperty("includeAllScopes").GetBoolean());
         Assert.True(document.RootElement.GetProperty("includeOffline").GetBoolean());
+        Assert.False(document.RootElement.TryGetProperty("includeAllScopes", out _));
     }
 
     [Fact]
-    public void Impl_DefinitionBuilders_ShouldIncludeScopeInDefinitionAndIdentityPayloads()
+    public void ListScopeFilters_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => new ListDefinitionsRequest
+        {
+            Scope = " "
+        });
+
+        Assert.Throws<ArgumentException>(() => new ListInstancesRequest
+        {
+            Scope = "\t"
+        });
+    }
+
+    [Fact]
+    public void DefinitionBuilders_ShouldSerializeExplicitStringScope()
     {
         var definition = new AppDefinition
         {
-            AppId = string.Empty,
-            Scope = null,
-            DisplayName = string.Empty
+            AppId = "test.app",
+            Scope = string.Empty,
+            DisplayName = "Test App"
         };
 
         var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
         var upsertPayload = RequestPayloadFactory.BuildUpsertDefinitionParams(definition);
-        var getPayload = RequestPayloadFactory.BuildGetDefinitionParams("test.app", null);
+        var getPayload = RequestPayloadFactory.BuildGetDefinitionParams("test.app", string.Empty);
         var deletePayload = RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "scope-a");
 
-        using var validateDocument = JsonDocument.Parse(JsonSerializer.Serialize(validatePayload, DevHubJson.SerializerOptions));
-        using var upsertDocument = JsonDocument.Parse(JsonSerializer.Serialize(upsertPayload, DevHubJson.SerializerOptions));
-        using var getDocument = JsonDocument.Parse(JsonSerializer.Serialize(getPayload, DevHubJson.SerializerOptions));
-        using var deleteDocument = JsonDocument.Parse(JsonSerializer.Serialize(deletePayload, DevHubJson.SerializerOptions));
+        using var validateDocument = Serialize(validatePayload);
+        using var upsertDocument = Serialize(upsertPayload);
+        using var getDocument = Serialize(getPayload);
+        using var deleteDocument = Serialize(deletePayload);
 
-        Assert.True(validateDocument.RootElement.TryGetProperty("definition", out var validateDefinition));
-        Assert.Equal(JsonValueKind.Object, validateDefinition.ValueKind);
-        Assert.Equal(JsonValueKind.Null, validateDefinition.GetProperty("scope").ValueKind);
-        Assert.False(validateDefinition.TryGetProperty("description", out _));
-        Assert.False(validateDefinition.TryGetProperty("capabilities", out _));
-        Assert.False(validateDefinition.TryGetProperty("launch", out _));
-        Assert.True(upsertDocument.RootElement.TryGetProperty("definition", out var upsertDefinition));
-        Assert.Equal(JsonValueKind.Object, upsertDefinition.ValueKind);
-        Assert.Equal(JsonValueKind.Null, upsertDefinition.GetProperty("scope").ValueKind);
-        Assert.False(upsertDefinition.TryGetProperty("description", out _));
-        Assert.False(upsertDefinition.TryGetProperty("capabilities", out _));
-        Assert.False(upsertDefinition.TryGetProperty("launch", out _));
-        Assert.Equal("test.app", getDocument.RootElement.GetProperty("appId").GetString());
-        Assert.Equal(JsonValueKind.Null, getDocument.RootElement.GetProperty("scope").ValueKind);
-        Assert.Equal("test.app", deleteDocument.RootElement.GetProperty("appId").GetString());
+        var validateDefinition = validateDocument.RootElement.GetProperty("definition");
+        var upsertDefinition = upsertDocument.RootElement.GetProperty("definition");
+
+        Assert.Equal(string.Empty, validateDefinition.GetProperty("scope").GetString());
+        Assert.Equal(string.Empty, upsertDefinition.GetProperty("scope").GetString());
+        Assert.Equal(string.Empty, getDocument.RootElement.GetProperty("scope").GetString());
         Assert.Equal("scope-a", deleteDocument.RootElement.GetProperty("scope").GetString());
     }
 
     [Fact]
-    public void Impl_DefinitionIdentityBuilders_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    public void DefinitionIdentityBuilders_WhenScopeIsWhitespace_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetDefinitionParams("test.app", " "));
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "\t"));
     }
 
     [Fact]
-    public void Impl_AppDefinition_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    public void ScopeBearingModels_ShouldEnforceUpdatedContract()
     {
-        var definition = new AppDefinition();
-        Assert.Throws<ArgumentException>(() => definition.Scope = string.Empty);
-        Assert.Throws<ArgumentException>(() => definition.Scope = " ");
+        Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = null! });
+        Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = " " });
+
+        Assert.Throws<ArgumentException>(() => new AppInstance { Scope = null! });
+        Assert.Throws<ArgumentException>(() => new AppInstanceRegistration { Scope = null! });
+        Assert.Throws<ArgumentException>(() => new LaunchRequest { Scope = null! });
+        Assert.Throws<ArgumentException>(() => new InvocationTarget { Scope = null! });
+
+        var globalInstance = new AppInstanceRegistration
+        {
+            Scope = string.Empty
+        };
+
+        Assert.Equal(string.Empty, globalInstance.Scope);
     }
 
     [Fact]
-    public void Impl_InstanceBuilders_ShouldPlacePasswordAtTopLevel()
+    public void RegisterInstanceBuilder_ShouldPlacePasswordAtTopLevelAndPreserveGlobalScope()
     {
         var registerPayload = RequestPayloadFactory.BuildRegisterInstanceParams(
             new AppInstanceRegistration
             {
                 InstanceId = "inst-1",
                 AppId = "test.app",
+                Scope = string.Empty,
                 Pid = Environment.ProcessId,
                 Invoke = new InvokeCapability
                 {
@@ -281,12 +292,33 @@ public sealed class InvocationRequestBuilderTests
             "secret-1");
         var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "secret-1");
 
-        using var registerDocument = JsonDocument.Parse(JsonSerializer.Serialize(registerPayload, DevHubJson.SerializerOptions));
-        using var unregisterDocument = JsonDocument.Parse(JsonSerializer.Serialize(unregisterPayload, DevHubJson.SerializerOptions));
+        using var registerDocument = Serialize(registerPayload);
+        using var unregisterDocument = Serialize(unregisterPayload);
 
         Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
+        Assert.Equal(string.Empty, registerDocument.RootElement.GetProperty("instance").GetProperty("scope").GetString());
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
         Assert.Equal("secret-1", unregisterDocument.RootElement.GetProperty("password").GetString());
+    }
+
+    [Fact]
+    public void RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
+            {
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Scope = string.Empty,
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                },
+                Meta = new[] { 1, 2, 3 }
+            },
+            "secret-1"));
     }
 
     [Fact]
@@ -299,28 +331,9 @@ public sealed class InvocationRequestBuilderTests
             Value = null
         });
 
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
+        using var document = Serialize(payload);
         Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
         Assert.False(document.RootElement.TryGetProperty("error", out _));
-    }
-
-    [Fact]
-    public void RegisterInstanceBuilder_WhenMetaIsNotObject_ShouldThrowArgumentException()
-    {
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
-            new AppInstanceRegistration
-            {
-                InstanceId = "inst-1",
-                AppId = "test.app",
-                Pid = Environment.ProcessId,
-                Invoke = new InvokeCapability
-                {
-                    Poll = true,
-                    Respond = true
-                },
-                Meta = new[] { 1, 2, 3 }
-            },
-            "secret-1"));
     }
 
     [Fact]
@@ -354,5 +367,10 @@ public sealed class InvocationRequestBuilderTests
         }));
 
         Assert.Contains("Error.Data", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static JsonDocument Serialize(object payload)
+    {
+        return JsonDocument.Parse(JsonSerializer.Serialize(payload, DevHubJson.SerializerOptions));
     }
 }

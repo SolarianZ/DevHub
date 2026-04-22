@@ -42,12 +42,12 @@ export interface LaunchConfiguration {
 
 export interface AppDefinitionIdentity {
   appId: string;
-  scope: string | null;
+  scope: string;
 }
 
 export interface AppDefinition {
   appId: string;
-  scope: string | null;
+  scope: string;
   displayName: string;
   description?: string;
   capabilities?: AppCapabilities;
@@ -74,7 +74,7 @@ export interface InvokeCapability {
 export interface AppInstance {
   instanceId: string;
   appId: string;
-  scope?: string | null;
+  scope: string;
   pid: number;
   registeredAtUtc: Date;
   lastSeenUtc: Date;
@@ -85,7 +85,7 @@ export interface AppInstance {
 export interface AppInstanceRegistration {
   instanceId: string;
   appId: string;
-  scope?: string | null;
+  scope: string;
   pid: number;
   invoke: InvokeCapability;
   meta?: JsonObject;
@@ -93,9 +93,14 @@ export interface AppInstanceRegistration {
 
 export interface LaunchRequest {
   appId: string;
-  scope?: string | null;
+  scope: string;
   dedupeKey?: string | null;
   waitForRegisterMs?: number | null;
+}
+
+export interface ListDefinitionsRequest {
+  appId?: string;
+  scope: string | null;
 }
 
 export type LaunchStatus = "started" | "starting" | "already_running";
@@ -109,13 +114,12 @@ export interface LaunchResult {
 
 export interface ListInstancesRequest {
   appId?: string;
-  scope?: string | null;
+  scope: string | null;
   includeOffline?: boolean;
-  includeAllScopes?: boolean;
 }
 
 export interface InvocationTarget {
-  scope?: string | null;
+  scope: string;
   instanceId?: string | null;
 }
 

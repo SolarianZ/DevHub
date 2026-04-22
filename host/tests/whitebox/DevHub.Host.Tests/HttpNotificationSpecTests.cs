@@ -150,11 +150,11 @@ public class HttpNotificationSpecTests : IDisposable
     public async Task Spec_5_1_And_5_2_HttpResponses_ShouldOmitOptionalNullFields()
     {
         File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create("http-null-omit.app", null).GetFileName()),
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create("http-null-omit.app", ScopeContract.Global).GetFileName()),
             """
             {
               "appId": "http-null-omit.app",
-              "scope": null,
+              "scope": "",
               "displayName": "HTTP Null Omit App"
             }
             """);
@@ -173,6 +173,7 @@ public class HttpNotificationSpecTests : IDisposable
                 "instance": {
                   "instanceId": "http-null-omit-inst",
                   "appId": "http-null-omit.app",
+                  "scope": "",
                   "pid": 7001,
                   "invoke": {
                     "poll": true,
@@ -195,7 +196,8 @@ public class HttpNotificationSpecTests : IDisposable
               "id": "http-get-definition",
               "method": "hub.apps.getDefinition",
               "params": {
-                "appId": "http-null-omit.app"
+                "appId": "http-null-omit.app",
+                "scope": ""
               }
             }
             """);
@@ -215,8 +217,8 @@ public class HttpNotificationSpecTests : IDisposable
               "method": "hub.apps.listInstances",
               "params": {
                 "appId": "http-null-omit.app",
-                "includeOffline": true,
-                "includeAllScopes": true
+                "scope": null,
+                "includeOffline": true
               }
             }
             """);

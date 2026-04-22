@@ -15,11 +15,11 @@ public class AppDefinition
     public required string AppId { get; set; }
 
     /// <summary>
-    /// Definition 作用域（null 表示 Global Definition）。
+    /// Definition 作用域（空字符串表示 Global Definition）。
     /// </summary>
     [JsonPropertyName("scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    public string? Scope { get; set; }
+    public required string Scope { get; set; }
 
     /// <summary>
     /// 显示名称

@@ -9,7 +9,7 @@
         "fileName": "apps.get.exact-scope.app--global.json",
         "definition": {
           "appId": "apps.get.exact-scope.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps Get Exact Scope Global"
         }
       },

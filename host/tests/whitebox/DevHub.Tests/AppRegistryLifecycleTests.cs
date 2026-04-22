@@ -97,7 +97,7 @@ public sealed class AppRegistryLifecycleTests
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = scope,
+            Scope = scope ?? ScopeContract.Global,
             Pid = pid,
             Invoke = new InvokeCapability
             {
@@ -122,5 +122,4 @@ public sealed class AppRegistryLifecycleTests
         }
     }
 }
-
 

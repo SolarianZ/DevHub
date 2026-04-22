@@ -9,7 +9,7 @@
         "fileName": "invoke.notify.scope--global.json",
         "definition": {
           "appId": "invoke.notify.scope",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.notify.scope"
         }
       },
@@ -31,7 +31,7 @@
         "instance": {
           "instanceId": "notify-scope-global-inst",
           "appId": "invoke.notify.scope",
-          "scope": null,
+          "scope": "",
           "pid": 31003,
           "invoke": {
             "poll": true,

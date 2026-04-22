@@ -96,6 +96,7 @@ public class AppRegistry : IDisposable
     public AppInstance RegisterInstance(AppInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
+        ValidateInstance(instance);
         _logger.LogDebug("尝试注册/更新应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, 详细信息: {InstanceDetails}",
             instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, JsonSerializer.Serialize(instance));
 
@@ -120,6 +121,7 @@ public class AppRegistry : IDisposable
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ValidateInstance(instance);
 
         lock (_syncRoot)
         {
@@ -235,10 +237,17 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 列出应用程序实例
     /// </summary>
-    public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeAllScopes = false, bool includeOffline = false)
+    public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeOffline = false)
     {
-        _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}, IncludeOffline: {IncludeOffline}",
-            appId, scope, includeAllScopes, includeOffline);
+        if (appId is not null && string.IsNullOrWhiteSpace(appId))
+        {
+            throw new ArgumentException("appId 不能为空白字符串。", nameof(appId));
+        }
+
+        ScopeContract.EnsureListFilter(scope, nameof(scope));
+
+        _logger.LogDebug("尝试列出应用程序实例，AppId: {AppId}, Scope: {Scope}, IncludeOffline: {IncludeOffline}",
+            appId, scope, includeOffline);
 
         lock (_syncRoot)
         {
@@ -255,17 +264,9 @@ public class AppRegistry : IDisposable
                 instances = instances.Where(i => i.AppId == appId);
             }
 
-            if (!includeAllScopes)
+            if (scope is not null)
             {
-                if (scope == null)
-                {
-                    // 兼容历史数据：空字符串也视为 Global
-                    instances = instances.Where(i => i.Scope is null or "");
-                }
-                else
-                {
-                    instances = instances.Where(i => i.Scope == scope);
-                }
+                instances = instances.Where(i => i.Scope == scope);
             }
 
             var result = instances
@@ -338,7 +339,7 @@ public class AppRegistry : IDisposable
         if (_instances.TryGetValue(instance.InstanceId, out var existing))
         {
             existing.AppId = instance.AppId;
-            existing.Scope = NormalizeScope(instance.Scope);
+            existing.Scope = instance.Scope;
             existing.Pid = instance.Pid;
             existing.LastSeenUtc = now;
             existing.Invoke = CloneInvoke(instance.Invoke ?? new InvokeCapability());
@@ -354,7 +355,7 @@ public class AppRegistry : IDisposable
         {
             InstanceId = instance.InstanceId,
             AppId = instance.AppId,
-            Scope = NormalizeScope(instance.Scope),
+            Scope = instance.Scope,
             Pid = instance.Pid,
             RegisteredAtUtc = registeredAtUtc,
             LastSeenUtc = now,
@@ -363,11 +364,6 @@ public class AppRegistry : IDisposable
         };
         _instances[instance.InstanceId] = instanceToRegister;
         return instanceToRegister;
-    }
-
-    private static string? NormalizeScope(string? scope)
-    {
-        return scope == string.Empty ? null : scope;
     }
 
     private static AppInstance CloneInstance(AppInstance instance)
@@ -392,6 +388,14 @@ public class AppRegistry : IDisposable
             Poll = invoke.Poll,
             Respond = invoke.Respond
         };
+    }
+
+    private static void ValidateInstance(AppInstance instance)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
+        ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope));
+        ArgumentOutOfRangeException.ThrowIfLessThan(instance.Pid, 1, nameof(instance.Pid));
     }
 
     private static Dictionary<string, object?>? CloneMeta(Dictionary<string, object?>? meta)

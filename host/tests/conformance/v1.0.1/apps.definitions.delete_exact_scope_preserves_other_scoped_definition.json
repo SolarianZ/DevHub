@@ -9,7 +9,7 @@
         "fileName": "apps.delete.exact-scope.app--global.json",
         "definition": {
           "appId": "apps.delete.exact-scope.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps Delete Exact Scope Global"
         }
       },
@@ -31,14 +31,14 @@
         "requestId": "apps-definitions-delete-global-missing",
         "params": {
           "appId": "apps.delete.exact-scope.app",
-          "scope": null
+          "scope": ""
         },
         "expectedError": {
           "code": -32014,
           "message": "app_definition_not_found",
           "data": {
             "appId": "apps.delete.exact-scope.app",
-            "scope": null
+            "scope": ""
           }
         }
       },
@@ -75,7 +75,7 @@
     "method": "hub.apps.deleteDefinition",
     "params": {
       "appId": "apps.delete.exact-scope.app",
-      "scope": null
+      "scope": ""
     }
   },
   "expectedResponse": {

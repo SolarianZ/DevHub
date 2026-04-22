@@ -9,7 +9,7 @@
         "fileName": "apps.get.no-fallback.app--global.json",
         "definition": {
           "appId": "apps.get.no-fallback.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps Get No Fallback Global"
         }
       },

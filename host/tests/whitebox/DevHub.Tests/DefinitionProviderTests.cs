@@ -34,7 +34,7 @@ public class DefinitionProviderTests : IDisposable
         WriteDefinition("provider.app");
 
         provider.Refresh();
-        var definition = provider.GetDefinition("provider.app");
+        var definition = provider.GetDefinition("provider.app", ScopeContract.Global);
         Assert.NotNull(definition);
         Assert.Equal("provider.app", definition!.AppId);
         Assert.Single(provider.GetAllDefinitions());
@@ -47,7 +47,7 @@ public class DefinitionProviderTests : IDisposable
         var provider = new DefinitionProvider(loader);
         provider.Refresh();
 
-        var missing = provider.GetDefinition("missing.app");
+        var missing = provider.GetDefinition("missing.app", ScopeContract.Global);
         Assert.Null(missing);
     }
 
@@ -60,7 +60,7 @@ public class DefinitionProviderTests : IDisposable
         var payload = """
         {
           "appId": "broken.launch.app",
-          "scope": null,
+          "scope": "",
           "displayName": "broken.launch.app",
           "launch": {
             "argsTemplate": "--serve"
@@ -69,12 +69,12 @@ public class DefinitionProviderTests : IDisposable
         """;
 
         File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", null).GetFileName()),
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", ScopeContract.Global).GetFileName()),
             payload);
 
         provider.Refresh();
 
-        Assert.Null(provider.GetDefinition("broken.launch.app"));
+        Assert.Null(provider.GetDefinition("broken.launch.app", ScopeContract.Global));
         Assert.Empty(provider.GetAllDefinitions());
     }
 
@@ -93,7 +93,7 @@ public class DefinitionProviderTests : IDisposable
         provider.Refresh();
 
         Assert.Empty(provider.GetAllDefinitions());
-        Assert.Null(provider.GetDefinition("provider.app"));
+        Assert.Null(provider.GetDefinition("provider.app", ScopeContract.Global));
     }
 
     /// <inheritdoc />
@@ -116,7 +116,7 @@ public class DefinitionProviderTests : IDisposable
         var payload = $$"""
         {
           "appId": "{{appId}}",
-          "scope": null,
+          "scope": "",
           "displayName": "{{appId}}",
           "entry": {
             "type": "stdio"
@@ -125,7 +125,7 @@ public class DefinitionProviderTests : IDisposable
         """;
 
         File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName()),
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName()),
             payload);
     }
 }

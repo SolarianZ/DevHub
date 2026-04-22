@@ -1,6 +1,7 @@
 namespace DevHub.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
@@ -84,7 +85,7 @@ public class AppInstanceEventTests
     }
 
     [Fact]
-    public async Task Impl_RegisterGlobalInstance_ShouldPublishRegisteredEventWithNullScope()
+    public async Task Impl_RegisterGlobalInstance_ShouldPublishRegisteredEventWithExplicitGlobalScope()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var eventBus = new HubEventBus(_eventBusLogger.Object);
@@ -105,7 +106,7 @@ public class AppInstanceEventTests
                 {
                     instanceId = "inst-event-global",
                     appId = "event.global.app",
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     pid = 5012,
                     invoke = new { poll = true, respond = true }
                 }
@@ -121,7 +122,7 @@ public class AppInstanceEventTests
         var registeredPayload = JsonSerializer.SerializeToElement(registeredDelivery.Payload);
         Assert.Equal("event.global.app", registeredPayload.GetProperty("appId").GetString());
         Assert.Equal("inst-event-global", registeredPayload.GetProperty("instanceId").GetString());
-        Assert.Equal(JsonValueKind.Null, registeredPayload.GetProperty("scope").ValueKind);
+        Assert.Equal(ScopeContract.Global, registeredPayload.GetProperty("scope").GetString());
         Assert.False(registeredPayload.TryGetProperty("password", out _));
     }
 
@@ -153,3 +154,4 @@ public class AppInstanceEventTests
         Assert.Empty(deliveries);
     }
 }
+

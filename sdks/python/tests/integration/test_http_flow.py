@@ -14,6 +14,7 @@ from devhub_sdk import (
     DevHubRpcErrorCode,
     DevHubRpcException,
     InvokeCapability,
+    ListDefinitionsRequest,
     ListInstancesRequest,
 )
 from devhub_sdk.models import LaunchRequest
@@ -37,12 +38,12 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         assert ping.ok is True
         assert ping.echo["value"] == 1
 
-        definitions = client.list_definitions()
+        definitions = client.list_definitions(ListDefinitionsRequest(scope=None))
         assert any(definition.app_id == "http.flow.app" for definition in definitions)
 
-        definition = client.get_definition("http.flow.app", None)
+        definition = client.get_definition("http.flow.app", "")
         assert definition.display_name == "HTTP Flow App"
-        assert definition.scope is None
+        assert definition.scope == ""
 
         registered = client.register_instance(
             AppInstanceRegistration(
@@ -50,20 +51,21 @@ def test_ping_and_apps_flow_should_succeed() -> None:
                 app_id="http.flow.app",
                 pid=99999,
                 invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
                 meta={"source": "integration"},
             ),
             _instance_password("http-flow-inst-1"),
         )
         assert registered.instance_id == "http-flow-inst-1"
 
-        instances = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
+        instances = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert len(instances) == 1
 
         last_seen_utc = client.heartbeat("http-flow-inst-1")
         assert last_seen_utc is not None
 
         client.unregister_instance("http-flow-inst-1", _instance_password("http-flow-inst-1"))
-        instances_after_unregister = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
+        instances_after_unregister = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert instances_after_unregister == []
 
 
@@ -71,7 +73,7 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
     with DevHubHostFixture.start() as host:
         client = host.create_client("http-definition-client")
 
-        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ")
+        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ", scope="")
         invalid = client.validate_definition(invalid_definition)
         assert invalid.ok is True
         assert invalid.valid is False
@@ -81,6 +83,7 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         definition = AppDefinition(
             app_id="http.manage.app",
             display_name="Managed HTTP App",
+            scope="",
             description="通过 Python SDK 写入。",
         )
         valid = client.validate_definition(definition)
@@ -89,8 +92,8 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
 
         upserted = client.upsert_definition(definition)
         assert upserted.app_id == "http.manage.app"
-        assert upserted.scope is None
-        assert client.get_definition("http.manage.app", None).display_name == "Managed HTTP App"
+        assert upserted.scope == ""
+        assert client.get_definition("http.manage.app", "").display_name == "Managed HTTP App"
 
         with pytest.raises(DevHubRpcException) as upsert_error:
             client.upsert_definition(invalid_definition)
@@ -98,9 +101,9 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         assert upsert_error.value.reason == "definition_invalid"
         assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
 
-        client.delete_definition("http.manage.app", None)
+        client.delete_definition("http.manage.app", "")
         with pytest.raises(DevHubRpcException) as deleted_error:
-            client.get_definition("http.manage.app", None)
+            client.get_definition("http.manage.app", "")
         assert deleted_error.value.code == DevHubRpcErrorCode.APP_DEFINITION_NOT_FOUND
 
 
@@ -122,6 +125,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         first = client.launch(
             LaunchRequest(
                 app_id="http.launch.app",
+                scope="",
                 dedupe_key="python-sdk-launch-dedupe",
                 wait_for_register_ms=800,
             )
@@ -129,6 +133,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         second = client.launch(
             LaunchRequest(
                 app_id="http.launch.app",
+                scope="",
                 dedupe_key="python-sdk-launch-dedupe",
                 wait_for_register_ms=0,
             )
@@ -164,6 +169,7 @@ def test_host_fixture_close_should_cleanup_launch_process_tree_and_temp_dir() ->
         result = client.launch(
             LaunchRequest(
                 app_id="http.launch.cleanup.app",
+                scope="",
                 dedupe_key="python-sdk-launch-cleanup",
                 wait_for_register_ms=0,
             )
@@ -204,8 +210,8 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
         assert client_a.ping().ok is True
         assert client_b.ping().ok is True
-        assert client_a.get_definition("parallel.http.app", None).display_name == "Parallel HTTP App A"
-        assert client_b.get_definition("parallel.http.app", None).display_name == "Parallel HTTP App B"
+        assert client_a.get_definition("parallel.http.app", "").display_name == "Parallel HTTP App A"
+        assert client_b.get_definition("parallel.http.app", "").display_name == "Parallel HTTP App B"
 
         client_a.register_instance(
             AppInstanceRegistration(
@@ -213,12 +219,13 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
                 app_id="parallel.http.app",
                 pid=99994,
                 invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
             ),
             _instance_password("parallel-http-inst-a"),
         )
 
-        instances_a = client_a.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
-        instances_b = client_b.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
+        instances_a = client_a.list_instances(ListInstancesRequest(scope=None, app_id="parallel.http.app"))
+        instances_b = client_b.list_instances(ListInstancesRequest(scope=None, app_id="parallel.http.app"))
 
         assert [instance.instance_id for instance in instances_a] == ["parallel-http-inst-a"]
         assert instances_b == []

@@ -71,16 +71,16 @@ public sealed class EventsFlowTests
         Assert.Equal(subscriptionId, upsertedEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppDefinitionUpserted, upsertedEvent.Type);
         Assert.Equal(definition.AppId, upsertedEvent.Payload!.Value.GetProperty("appId").GetString());
-        Assert.Equal(JsonValueKind.Null, upsertedEvent.Payload!.Value.GetProperty("scope").ValueKind);
+        Assert.Equal(string.Empty, upsertedEvent.Payload!.Value.GetProperty("scope").GetString());
         Assert.Equal(definition.AppId, upsertedEvent.Payload!.Value.GetProperty("definition").GetProperty("appId").GetString());
-        Assert.Equal(JsonValueKind.Null, upsertedEvent.Payload!.Value.GetProperty("definition").GetProperty("scope").ValueKind);
+        Assert.Equal(string.Empty, upsertedEvent.Payload!.Value.GetProperty("definition").GetProperty("scope").GetString());
 
         await httpClient.DeleteDefinitionAsync(definition.AppId, definition.Scope);
         var deletedEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(subscriptionId, deletedEvent.SubscriptionId);
         Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, deletedEvent.Type);
         Assert.Equal(definition.AppId, deletedEvent.Payload!.Value.GetProperty("appId").GetString());
-        Assert.Equal(JsonValueKind.Null, deletedEvent.Payload!.Value.GetProperty("scope").ValueKind);
+        Assert.Equal(string.Empty, deletedEvent.Payload!.Value.GetProperty("scope").GetString());
     }
 
     [Fact]
@@ -151,16 +151,17 @@ public sealed class EventsFlowTests
         await eventsClient.AuthenticateAsync();
 
         var ping = await eventsClient.PingAsync(new { source = "ws" });
-        var definitions = await eventsClient.ListDefinitionsAsync();
-        var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app", null);
+        var definitions = await eventsClient.ListDefinitionsAsync(new ListDefinitionsRequest());
+        var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app", string.Empty);
         var instances = await eventsClient.ListInstancesAsync(new ListInstancesRequest
         {
-            AppId = "events.ws.read.app"
+            AppId = "events.ws.read.app",
+            Scope = null
         });
 
         Assert.True(ping.Ok);
         Assert.Equal("events.ws.read.app", definition.AppId);
-        Assert.Null(definition.Scope);
+        Assert.Equal(string.Empty, definition.Scope);
         Assert.Contains(definitions, item => item.AppId == "events.ws.read.app");
         Assert.Contains(instances, item => item.InstanceId == "events-ws-read-inst-1");
     }
@@ -171,6 +172,7 @@ public sealed class EventsFlowTests
         {
             InstanceId = instanceId,
             AppId = appId,
+            Scope = string.Empty,
             Pid = Environment.ProcessId,
             Invoke = new InvokeCapability
             {

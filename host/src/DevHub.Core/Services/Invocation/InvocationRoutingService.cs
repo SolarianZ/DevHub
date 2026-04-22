@@ -28,21 +28,18 @@ public class InvocationRoutingService
     /// <param name="target">目标约束。</param>
     public List<AppInstance> GetOnlineCandidates(string appId, InvocationTarget target)
     {
-        var allOnline = _appRegistry.ListInstances(appId, includeAllScopes: true, includeOffline: false).ToList();
+        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        ArgumentNullException.ThrowIfNull(target);
+        ScopeContract.EnsureScopedString(target.Scope, nameof(target.Scope));
 
+        var allOnline = _appRegistry.ListInstances(appId, target.Scope, includeOffline: false).ToList();
         if (target.InstanceId is not null)
         {
             var match = allOnline.FirstOrDefault(i => i.InstanceId == target.InstanceId);
             return match is null ? new List<AppInstance>() : [match];
         }
 
-        if (target.Scope is not null)
-        {
-            return allOnline.Where(i => i.Scope == target.Scope).ToList();
-        }
-
-        // 兼容历史数据：空字符串等价于 Global
-        return allOnline.Where(i => i.Scope is null or "").ToList();
+        return allOnline;
     }
 
     /// <summary>
@@ -59,15 +56,10 @@ public class InvocationRoutingService
 
         if (target.InstanceId is not null)
         {
-            return string.Equals(target.InstanceId, instance.InstanceId, StringComparison.Ordinal);
+            return string.Equals(target.Scope, instance.Scope, StringComparison.Ordinal)
+                && string.Equals(target.InstanceId, instance.InstanceId, StringComparison.Ordinal);
         }
 
-        if (target.Scope is not null)
-        {
-            return string.Equals(target.Scope, instance.Scope, StringComparison.Ordinal);
-        }
-
-        // 兼容历史数据：空字符串等价于 Global
-        return instance.Scope is null or "";
+        return string.Equals(target.Scope, instance.Scope, StringComparison.Ordinal);
     }
 }

@@ -106,29 +106,22 @@ public class DefinitionLoader
     }
 
     /// <summary>
-    /// 根据应用程序ID获取定义
-    /// </summary>
-    public AppDefinition? GetDefinition(string appId)
-    {
-        return GetDefinition(appId, scope: null);
-    }
-
-    /// <summary>
     /// 根据复合键获取定义。
     /// </summary>
-    public AppDefinition? GetDefinition(string appId, string? scope)
+    public AppDefinition? GetDefinition(string appId, string scope)
     {
-        var normalizedScope = AppDefinitionIdentity.NormalizeScope(scope);
-        _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, Scope: {Scope}", appId, normalizedScope);
-        var definition = _definitionsByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, normalizedScope));
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
+
+        _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, Scope: {Scope}", appId, scope);
+        var definition = _definitionsByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, scope));
 
         if (definition != null)
         {
-            _logger.LogDebug("成功获取应用程序定义: {AppId}, Scope: {Scope}", appId, normalizedScope);
+            _logger.LogDebug("成功获取应用程序定义: {AppId}, Scope: {Scope}", appId, scope);
         }
         else
         {
-            _logger.LogDebug("未找到应用程序定义: {AppId}, Scope: {Scope}", appId, normalizedScope);
+            _logger.LogDebug("未找到应用程序定义: {AppId}, Scope: {Scope}", appId, scope);
         }
 
         return definition;

@@ -16,6 +16,7 @@ from ._parsing import (
 )
 from ._payloads import (
     build_get_definition_params,
+    build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
     build_subscribe_params,
@@ -30,6 +31,7 @@ from .models import (
     DevHubClientOptions,
     DevHubEvent,
     HubRuntime,
+    ListDefinitionsRequest,
     ListInstancesRequest,
     PingResult,
     RuntimeConnectionInfo,
@@ -144,14 +146,18 @@ class DevHubEventsClient:
         result = await self._send_request("hub.ping", params, require_authenticated=True)
         return parse_ping_result(result, path="hub.ping.result")
 
-    async def list_definitions(self) -> list[AppDefinition]:
+    async def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """通过 WebSocket 调用 `hub.apps.listDefinitions`。"""
 
         self._ensure_authenticated()
-        result = await self._send_request("hub.apps.listDefinitions", None, require_authenticated=True)
+        result = await self._send_request(
+            "hub.apps.listDefinitions",
+            build_list_definitions_params(request),
+            require_authenticated=True,
+        )
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    async def get_definition(self, app_id: str, scope: str | None) -> AppDefinition:
+    async def get_definition(self, app_id: str, scope: str) -> AppDefinition:
         """通过 WebSocket 调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
         self._ensure_authenticated()
@@ -162,7 +168,7 @@ class DevHubEventsClient:
         )
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
 
-    async def list_instances(self, request: ListInstancesRequest | None = None) -> list[AppInstance]:
+    async def list_instances(self, request: ListInstancesRequest) -> list[AppInstance]:
         """通过 WebSocket 调用 `hub.apps.listInstances`。"""
 
         self._ensure_authenticated()

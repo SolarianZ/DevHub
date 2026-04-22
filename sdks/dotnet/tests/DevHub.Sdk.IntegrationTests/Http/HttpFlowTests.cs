@@ -29,17 +29,21 @@ public sealed class HttpFlowTests
         Assert.True(ping.Ok);
         Assert.Equal(1, ping.Echo!.Value.GetProperty("value").GetInt32());
 
-        var definitions = await client.ListDefinitionsAsync();
+        var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            Scope = null
+        });
         Assert.Contains(definitions, definition => definition.AppId == "http.flow.app");
 
-        var definitionResult = await client.GetDefinitionAsync("http.flow.app", null);
+        var definitionResult = await client.GetDefinitionAsync("http.flow.app", string.Empty);
         Assert.Equal("HTTP Flow App", definitionResult.DisplayName);
-        Assert.Null(definitionResult.Scope);
+        Assert.Equal(string.Empty, definitionResult.Scope);
 
         var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
         {
             InstanceId = "http-flow-inst-1",
             AppId = "http.flow.app",
+            Scope = string.Empty,
             Pid = Environment.ProcessId,
             Invoke = new InvokeCapability
             {
@@ -53,7 +57,8 @@ public sealed class HttpFlowTests
 
         var instances = await client.ListInstancesAsync(new ListInstancesRequest
         {
-            AppId = "http.flow.app"
+            AppId = "http.flow.app",
+            Scope = null
         });
         Assert.Single(instances);
 
@@ -63,9 +68,112 @@ public sealed class HttpFlowTests
         await client.UnregisterInstanceAsync("http-flow-inst-1", InstancePassword);
         var instancesAfterUnregister = await client.ListInstancesAsync(new ListInstancesRequest
         {
-            AppId = "http.flow.app"
+            AppId = "http.flow.app",
+            Scope = null
         });
         Assert.Empty(instancesAfterUnregister);
+    }
+
+    [Fact]
+    public async Task Impl_ListQueries_ShouldTreatNullAsNoFilterAndEmptyStringAsGlobalOnly()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "scope.filter.app",
+            Scope = string.Empty,
+            DisplayName = "scope.filter.app.global"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "scope.filter.app",
+            Scope = "scope-a",
+            DisplayName = "scope.filter.app.scope-a"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "scope.filter.app",
+            Scope = "global",
+            DisplayName = "scope.filter.app.literal-global"
+        });
+
+        await using var client = await host.CreateClientAsync("scope-filter-client");
+        await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "scope-filter-global-inst",
+            AppId = "scope.filter.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, InstancePassword);
+        await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "scope-filter-scope-a-inst",
+            AppId = "scope.filter.app",
+            Scope = "scope-a",
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, InstancePassword);
+        await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "scope-filter-literal-global-inst",
+            AppId = "scope.filter.app",
+            Scope = "global",
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, InstancePassword);
+
+        var unfilteredDefinitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = null
+        });
+        var globalDefinitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = string.Empty
+        });
+        var literalGlobalDefinitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = "global"
+        });
+
+        Assert.Equal(3, unfilteredDefinitions.Count);
+        Assert.Equal(string.Empty, Assert.Single(globalDefinitions).Scope);
+        Assert.Equal("global", Assert.Single(literalGlobalDefinitions).Scope);
+
+        var unfilteredInstances = await client.ListInstancesAsync(new ListInstancesRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = null
+        });
+        var globalInstances = await client.ListInstancesAsync(new ListInstancesRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = string.Empty
+        });
+        var scopeAInstances = await client.ListInstancesAsync(new ListInstancesRequest
+        {
+            AppId = "scope.filter.app",
+            Scope = "scope-a"
+        });
+
+        Assert.Equal(3, unfilteredInstances.Count);
+        Assert.Equal("scope-filter-global-inst", Assert.Single(globalInstances).InstanceId);
+        Assert.Equal("scope-filter-scope-a-inst", Assert.Single(scopeAInstances).InstanceId);
     }
 
     [Fact]
@@ -135,6 +243,7 @@ public sealed class HttpFlowTests
         {
             InstanceId = "password-flow-inst-1",
             AppId = "password.flow.app",
+            Scope = string.Empty,
             Pid = Environment.ProcessId,
             Invoke = new InvokeCapability
             {
@@ -150,6 +259,7 @@ public sealed class HttpFlowTests
             {
                 InstanceId = registration.InstanceId,
                 AppId = registration.AppId,
+                Scope = registration.Scope,
                 Pid = registration.Pid + 1,
                 Invoke = registration.Invoke
             },
@@ -250,8 +360,8 @@ public sealed class HttpFlowTests
         await using var firstClient = await firstHost.CreateClientAsync("parallel-client-1");
         await using var secondClient = await secondHost.CreateClientAsync("parallel-client-2");
 
-        var firstDefinitions = await firstClient.ListDefinitionsAsync();
-        var secondDefinitions = await secondClient.ListDefinitionsAsync();
+        var firstDefinitions = await firstClient.ListDefinitionsAsync(new ListDefinitionsRequest());
+        var secondDefinitions = await secondClient.ListDefinitionsAsync(new ListDefinitionsRequest());
 
         Assert.Contains(firstDefinitions, definition => definition.AppId == "parallel.first.app");
         Assert.DoesNotContain(firstDefinitions, definition => definition.AppId == "parallel.second.app");

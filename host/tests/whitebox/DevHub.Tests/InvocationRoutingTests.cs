@@ -59,7 +59,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "disabled-app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "disabled.call",
                 args = new { },
                 options = new { queueIfOffline = true, autoLaunch = false, ttlMs = 60000 }
@@ -90,7 +90,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3010,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -104,7 +104,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "lease.override",
                 args = new { ok = true },
                 options = new { queueIfOffline = false, autoLaunch = false, ttlMs = 60000 }
@@ -144,7 +144,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "poll-disabled",
             AppId = "poll.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3011,
             Invoke = new InvokeCapability { Poll = false, Respond = true }
         });
@@ -203,7 +203,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "respond-disabled",
             AppId = "respond.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3012,
             Invoke = new InvokeCapability { Poll = true, Respond = false }
         });
@@ -286,7 +286,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "test.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "test.m",
                 args = new { },
                 options = new
@@ -309,7 +309,7 @@ public class InvocationRoutingTests : IDisposable
         {
             Id = "launch-deferred",
             Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new { appId = "launch.app" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "launch.app", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.NotNull(launchResponse.Error);
@@ -342,7 +342,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "notify-launch-missing",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.sync",
                 args = new { },
                 options = new
@@ -375,7 +375,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "notify-ttl-below-min.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -404,7 +404,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-ttl-below-min.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -501,7 +501,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "respond-holder",
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3303,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -509,7 +509,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "respond-other",
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3304,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -523,7 +523,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = "respond-holder" },
+                target = new { scope = ScopeContract.Global, instanceId = "respond-holder" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -587,7 +587,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "notify-auto-launch.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -616,7 +616,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-auto-launch.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -646,7 +646,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "notify-target-instance.app",
-                target = new { scope = (string?)null, instanceId = "instance-001" },
+                target = new { scope = ScopeContract.Global, instanceId = "instance-001" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -675,7 +675,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-target-instance.app",
-                target = new { scope = (string?)null, instanceId = "instance-002" },
+                target = new { scope = ScopeContract.Global, instanceId = "instance-002" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -705,7 +705,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-target-instance-default-options.app",
-                target = new { scope = (string?)null, instanceId = "missing-instance" },
+                target = new { scope = ScopeContract.Global, instanceId = "missing-instance" },
                 method = "task.run",
                 args = new { }
             })
@@ -727,7 +727,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "poll-last-seen",
             AppId = "poll-last-seen.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3301,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -762,7 +762,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "poll-empty-wait",
             AppId = "poll-empty-wait.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3305,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -802,7 +802,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "respond-last-seen",
             AppId = "respond-last-seen.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3302,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -816,7 +816,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "respond-last-seen.app",
-                target = new { scope = (string?)null, instanceId = "respond-last-seen" },
+                target = new { scope = ScopeContract.Global, instanceId = "respond-last-seen" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -875,7 +875,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "scalar-args-inst",
             AppId = "scalar-args.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3621,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -889,7 +889,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scalar-args.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "scalar.echo",
                 args = "hello-scalar",
                 options = new { ttlMs = 60000, queueIfOffline = true, autoLaunch = false }
@@ -930,7 +930,7 @@ public class InvocationRoutingTests : IDisposable
         {
             InstanceId = "missing-args-inst",
             AppId = "missing-args.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 3622,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -944,7 +944,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "missing-args.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "missing.args",
                 options = new { ttlMs = 60000, queueIfOffline = true, autoLaunch = false }
             })
@@ -1032,11 +1032,11 @@ public class InvocationRoutingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = (string?)null,
+            ["scope"] = ScopeContract.Global,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {

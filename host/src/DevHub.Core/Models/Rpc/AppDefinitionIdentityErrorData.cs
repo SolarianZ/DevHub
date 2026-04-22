@@ -14,9 +14,9 @@ public sealed class AppDefinitionIdentityErrorData
     public required string AppId { get; init; }
 
     /// <summary>
-    /// Definition 作用域；<see langword="null"/> 表示 Global。
+    /// Definition 作用域；空字符串表示 Global。
     /// </summary>
     [JsonPropertyName("scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    public string? Scope { get; init; }
+    public required string Scope { get; init; }
 }

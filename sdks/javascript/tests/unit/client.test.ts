@@ -254,7 +254,10 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
 
   await expect(client.request({
     appId: "test.app",
-    method: "test.request"
+    method: "test.request",
+    target: {
+      scope: ""
+    }
   })).rejects.toThrow("hub.invoke.request.result.value.callback 包含不支持的 JSON 类型。");
 });
 
@@ -268,7 +271,10 @@ it("notify 应应用默认选项", async () => {
       queueIfOffline: true,
       autoLaunch: true
     });
-    expect(body.params.target).toBeUndefined();
+    expect(body.params.target).toEqual({
+      scope: "",
+      instanceId: null
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
@@ -284,7 +290,10 @@ it("notify 应应用默认选项", async () => {
 
   const result = await client.notify({
     appId: "test.app",
-    method: "test.notify"
+    method: "test.notify",
+    target: {
+      scope: ""
+    }
   });
 
   expect(result.ok).toBe(true);
@@ -337,23 +346,32 @@ it("request 应保留显式空 scope 并应用默认选项", async () => {
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
+it("listDefinitions 应显式发送请求对象并保留 Global、精确 scope 与字面值 global", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.listDefinitions");
+    expect(body.params).toEqual({
+      scope: null
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
       definitions: [
         {
           appId: "test.launch.app",
-          scope: null,
-          displayName: "Test Launch App",
-          description: null,
-          launch: {
-            exePath: process.execPath
-          }
+          scope: "",
+          displayName: "Test Launch App Global"
+        },
+        {
+          appId: "test.launch.app",
+          scope: "workspace-a",
+          displayName: "Test Launch App Workspace A"
+        },
+        {
+          appId: "test.launch.app",
+          scope: "global",
+          displayName: "Test Launch App Literal Global"
         }
       ]
     });
@@ -365,7 +383,15 @@ it("listDefinitions 应兼容 Host 返回的可选 null 字段", async () => {
     dataDir: runtimeDir
   });
 
-  await expect(client.listDefinitions()).rejects.toThrow(/description/i);
+  const definitions = await client.listDefinitions({
+    scope: null
+  });
+
+  expect(definitions.map((definition) => definition.scope)).toEqual([
+    "",
+    "workspace-a",
+    "global"
+  ]);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -376,14 +402,14 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
     expect(body.method).toBe("hub.apps.getDefinition");
     expect(body.params).toEqual({
       appId: "test.rpc-default.app",
-      scope: null
+      scope: ""
     });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.rpc-default.app",
-        scope: null,
+        scope: "",
         displayName: "RPC Default App",
         capabilities: {
           events: false
@@ -400,10 +426,10 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
 
   const definition = await client.getDefinition({
     appId: "test.rpc-default.app",
-    scope: null
+    scope: ""
   });
 
-  expect(definition.scope).toBeNull();
+  expect(definition.scope).toBe("");
   expect(definition.capabilities).toEqual({
     rpc: true,
     events: false
@@ -419,7 +445,7 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
     expect(body.params).toEqual({
       definition: {
         appId: "test.validate.app",
-        scope: null,
+        scope: "",
         displayName: ""
       }
     });
@@ -445,7 +471,7 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
 
   const result = await client.validateDefinition({
     appId: "test.validate.app",
-    scope: null,
+    scope: "",
     displayName: ""
   });
 
@@ -471,7 +497,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
     expect(body.params).toEqual({
       definition: {
         appId: "test.upsert.app",
-        scope: null,
+        scope: "",
         displayName: "Upsert App",
         capabilities: {
           rpc: true,
@@ -487,7 +513,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
       ok: true,
       definition: {
         appId: "test.upsert.app",
-        scope: null,
+        scope: "",
         displayName: "Upsert App",
         capabilities: {
           rpc: true,
@@ -508,7 +534,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
 
   const result = await client.upsertDefinition({
     appId: "test.upsert.app",
-    scope: null,
+    scope: "",
     displayName: "Upsert App",
     capabilities: {
       rpc: true,
@@ -521,7 +547,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
 
   expect(result).toEqual({
     appId: "test.upsert.app",
-    scope: null,
+    scope: "",
     displayName: "Upsert App",
     description: undefined,
     capabilities: {
@@ -545,7 +571,7 @@ it("deleteDefinition 应发送删除请求", async () => {
     expect(body.method).toBe("hub.apps.deleteDefinition");
     expect(body.params).toEqual({
       appId: "test.delete.app",
-      scope: null
+      scope: ""
     });
 
     return createJsonResponse(body.id, {
@@ -561,7 +587,7 @@ it("deleteDefinition 应发送删除请求", async () => {
 
   await expect(client.deleteDefinition({
     appId: "test.delete.app",
-    scope: null
+    scope: ""
   })).resolves.toBeUndefined();
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
@@ -577,6 +603,7 @@ it("registerInstance / unregisterInstance 应在顶层携带 password 参数", a
         instance: {
           instanceId: "inst-1",
           appId: "test.app",
+          scope: "",
           pid: 12345,
           invoke: {
             poll: true,
@@ -590,6 +617,7 @@ it("registerInstance / unregisterInstance 应在顶层携带 password 参数", a
         instance: {
           instanceId: "inst-1",
           appId: "test.app",
+          scope: "",
           pid: 12345,
           registeredAtUtc: "2026-03-09T00:00:00Z",
           lastSeenUtc: "2026-03-09T00:00:00Z",
@@ -620,6 +648,7 @@ it("registerInstance / unregisterInstance 应在顶层携带 password 参数", a
   const instance = await client.registerInstance({
     instanceId: "inst-1",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: true,
@@ -650,7 +679,7 @@ it("registerInstance 应拒绝返回包含 password 的实例结果", async () =
           instance: {
             instanceId: "inst-1",
             appId: "test.app",
-            scope: null,
+            scope: "",
             pid: 12345,
             registeredAtUtc: "2026-03-09T00:00:00Z",
             lastSeenUtc: "2026-03-09T00:00:01Z",
@@ -668,6 +697,7 @@ it("registerInstance 应拒绝返回包含 password 的实例结果", async () =
   await expect(client.registerInstance({
     instanceId: "inst-1",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: true,
@@ -829,6 +859,7 @@ it("registerInstance 应在本地校验 invoke 布尔字段", async () => {
   await expect(client.registerInstance({
     instanceId: "inst-1",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: "true" as unknown as boolean,
@@ -852,6 +883,7 @@ it("registerInstance 应在本地拒绝空 password", async () => {
   await expect(client.registerInstance({
     instanceId: "inst-1",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: true,
@@ -874,7 +906,7 @@ it("getDefinition should reject an invalid appId before sending the request", as
 
   await expect(client.getDefinition({
     appId: "Invalid.App",
-    scope: null
+    scope: ""
   })).rejects.toThrow(/appId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -893,6 +925,7 @@ it("registerInstance should reject an invalid instanceId before sending the requ
   await expect(client.registerInstance({
     instanceId: "bad id",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: true,
@@ -917,6 +950,7 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
     appId: "test.app",
     method: "test.notify",
     target: {
+      scope: "",
       instanceId: 123 as unknown as string
     }
   })).rejects.toThrow("target.instanceId 类型非法。");
@@ -936,13 +970,14 @@ it("launch should reject null waitForRegisterMs before sending the request", asy
 
   await expect(client.launch({
     appId: "test.app",
+    scope: "",
     waitForRegisterMs: null as unknown as number
   })).rejects.toThrow(/waitForRegisterMs/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("launch should reject a blank definition scope before sending the request", async () => {
+it("launch should reject a null scope before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
@@ -954,7 +989,7 @@ it("launch should reject a blank definition scope before sending the request", a
 
   await expect(client.launch({
     appId: "test.app",
-    scope: ""
+    scope: null as unknown as string
   })).rejects.toThrow(/scope/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -991,6 +1026,9 @@ it("request should reject null queueIfOffline before sending the request", async
   await expect(client.request({
     appId: "test.app",
     method: "test.request",
+    target: {
+      scope: ""
+    },
     options: {
       queueIfOffline: null as unknown as boolean
     }
@@ -1012,6 +1050,9 @@ it("notify 应在本地拒绝 waitTimeoutMs", async () => {
   await expect(client.notify({
     appId: "test.app",
     method: "test.notify",
+    target: {
+      scope: ""
+    },
     options: {
       waitTimeoutMs: 1_000
     }
@@ -1099,6 +1140,7 @@ it("registerInstance 应在本地拒绝会被静默丢弃的 meta 字段", async
   await expect(client.registerInstance({
     instanceId: "inst-1",
     appId: "test.app",
+    scope: "",
     pid: 12345,
     invoke: {
       poll: true,
@@ -1127,6 +1169,9 @@ it("notify 应在本地拒绝会被重写的空洞数组参数", async () => {
   await expect(client.notify({
     appId: "test.app",
     method: "test.notify",
+    target: {
+      scope: ""
+    },
     args: sparseArray as any
   })).rejects.toThrow("args[0] 不能为数组空洞。");
 
@@ -1154,7 +1199,10 @@ it("request should reject an invalid invocationId in a success payload", async (
 
   await expect(client.request({
     appId: "test.app",
-    method: "test.request"
+    method: "test.request",
+    target: {
+      scope: ""
+    }
   })).rejects.toThrow(/invocationId/);
 });
 
@@ -1246,7 +1294,8 @@ it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
   });
 
   await expect(client.launch({
-    appId: "test.app"
+    appId: "test.app",
+    scope: ""
   })).rejects.toThrow(/launchId/);
 });
 
@@ -1262,7 +1311,7 @@ it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
           invocationId: "invk-1",
           appId: "test.app",
           target: {
-            scope: null,
+            scope: "",
             instanceId: null
           },
           method: "test.notify",
@@ -1391,7 +1440,7 @@ it("notify should reject a non-object target before sending the request", async 
   await expect(client.notify({
     appId: "test.app",
     method: "test.notify",
-    target: "global" as unknown as { scope?: string | null; instanceId?: string | null }
+    target: "global" as unknown as { scope: string; instanceId?: string | null }
   })).rejects.toThrow("target must be an object.");
 
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -1410,6 +1459,9 @@ it("request should reject a non-object options payload before sending the reques
   await expect(client.request({
     appId: "test.app",
     method: "test.request",
+    target: {
+      scope: ""
+    },
     options: 1 as unknown as {
       ttlMs?: number | null;
       waitTimeoutMs?: number | null;
@@ -1433,7 +1485,7 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
           invocationId: "invk-1",
           appId: "test.app",
           target: {
-            scope: null,
+            scope: "",
             instanceId: null
           },
           method: "test.request",
@@ -1470,14 +1522,14 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
     expect(body.method).toBe("hub.apps.getDefinition");
     expect(body.params).toEqual({
       appId: "test.empty-fields.app",
-      scope: null
+      scope: ""
     });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.empty-fields.app",
-        scope: null,
+        scope: "",
         displayName: "",
         launch: {
           exePath: ""
@@ -1494,12 +1546,12 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
 
   const definition = await client.getDefinition({
     appId: "test.empty-fields.app",
-    scope: null
+    scope: ""
   });
 
   expect(definition).toEqual({
     appId: "test.empty-fields.app",
-    scope: null,
+    scope: "",
     displayName: "",
     description: undefined,
     capabilities: {
@@ -1522,14 +1574,14 @@ it("getDefinition should reject null capabilities flags", async () => {
     expect(body.method).toBe("hub.apps.getDefinition");
     expect(body.params).toEqual({
       appId: "test.invalid-capabilities.app",
-      scope: null
+      scope: ""
     });
 
     return createJsonResponse(body.id, {
       ok: true,
       definition: {
         appId: "test.invalid-capabilities.app",
-        scope: null,
+        scope: "",
         displayName: "Invalid Capabilities App",
         capabilities: {
           rpc: null
@@ -1546,7 +1598,7 @@ it("getDefinition should reject null capabilities flags", async () => {
 
   await expect(client.getDefinition({
     appId: "test.invalid-capabilities.app",
-    scope: null
+    scope: ""
   })).rejects.toThrow(/capabilities\.rpc/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
@@ -1556,6 +1608,9 @@ it("listInstances should reject a null meta object", async () => {
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     expect(body.method).toBe("hub.apps.listInstances");
+    expect(body.params).toEqual({
+      scope: ""
+    });
 
     return createJsonResponse(body.id, {
       ok: true,
@@ -1563,7 +1618,7 @@ it("listInstances should reject a null meta object", async () => {
         {
           instanceId: "inst-1",
           appId: "test.app",
-          scope: null,
+          scope: "",
           pid: 12345,
           registeredAtUtc: "2026-03-09T00:00:00Z",
           lastSeenUtc: "2026-03-09T00:00:01Z",
@@ -1583,7 +1638,9 @@ it("listInstances should reject a null meta object", async () => {
     dataDir: runtimeDir
   });
 
-  await expect(client.listInstances()).rejects.toThrow(/meta/i);
+  await expect(client.listInstances({
+    scope: ""
+  })).rejects.toThrow(/meta/i);
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -1606,7 +1663,7 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
             {
               instanceId: "inst-1",
               appId: "test.app",
-              scope: null,
+              scope: "",
               pid: 12345,
               registeredAtUtc: "2026-03-09T00:00:00Z",
               lastSeenUtc: "2026-03-09T00:00:01Z",
@@ -1624,7 +1681,9 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
     }
   );
 
-  await expect(client.listInstances()).rejects.toThrow(
+  await expect(client.listInstances({
+    scope: null
+  })).rejects.toThrow(
     "hub.apps.listInstances.result.instances[0].meta.callback 包含不支持的 JSON 类型。"
   );
 });
@@ -1641,7 +1700,7 @@ it("poll should reject null optional invocation booleans", async () => {
           invocationId: "invk-1",
           appId: "test.app",
           target: {
-            scope: null,
+            scope: "",
             instanceId: null
           },
           method: "test.request",
@@ -1693,7 +1752,7 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
               invocationId: "invk-1",
               appId: "test.app",
               target: {
-                scope: null,
+                scope: "",
                 instanceId: null
               },
               method: "test.notify",

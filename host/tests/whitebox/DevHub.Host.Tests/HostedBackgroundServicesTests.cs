@@ -25,7 +25,7 @@ public sealed class HostedBackgroundServicesTests
         {
             InstanceId = "inst-cleanup",
             AppId = "cleanup.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 1234,
             Invoke = new InvokeCapability
             {
@@ -57,7 +57,7 @@ public sealed class HostedBackgroundServicesTests
         {
             InvocationId = $"invk-{Guid.NewGuid():N}",
             AppId = "background.timeout.app",
-            Target = new InvocationTarget { Scope = null, InstanceId = null },
+            Target = new InvocationTarget { Scope = ScopeContract.Global, InstanceId = null },
             Method = "demo.request",
             Args = new Dictionary<string, object?>(),
             Kind = InvocationKind.Request,

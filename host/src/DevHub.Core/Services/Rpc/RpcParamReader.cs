@@ -86,32 +86,28 @@ internal static class RpcParamReader
     }
 
     /// <summary>
-    /// 尝试读取可选的 scope 字段。
+    /// 尝试读取必填的显式字符串 scope 字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
     /// <param name="propertyName">字段名。</param>
     /// <param name="invalidReason">非法时使用的 reason。</param>
-    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。空字符串会被归一化为 null。</param>
+    /// <param name="scope">解析成功时返回的 scope 值。</param>
     /// <param name="errorData">解析失败时的错误附加数据。</param>
     /// <returns>解析成功返回 true，否则返回 false。</returns>
-    public static bool TryGetOptionalScope(
+    public static bool TryGetRequiredScope(
         JsonElement element,
         string propertyName,
         string invalidReason,
-        out string? scope,
+        out string scope,
         out object? errorData)
     {
-        scope = null;
+        scope = string.Empty;
         errorData = null;
 
         if (!element.TryGetProperty(propertyName, out var scopeElement))
         {
-            return true;
-        }
-
-        if (scopeElement.ValueKind == JsonValueKind.Null)
-        {
-            return true;
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
         }
 
         if (scopeElement.ValueKind != JsonValueKind.String)
@@ -121,30 +117,25 @@ internal static class RpcParamReader
         }
 
         scope = scopeElement.GetString();
-        if (scope is null)
+        if (!ScopeContract.IsValidScopedString(scope))
         {
             errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
-        }
-
-        if (scope == string.Empty)
-        {
-            scope = null;
         }
 
         return true;
     }
 
     /// <summary>
-    /// 尝试读取 Definition identity 使用的可选 scope 字段。
+    /// 尝试读取仅用于列表过滤的 scope 字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
     /// <param name="propertyName">字段名。</param>
     /// <param name="invalidReason">非法时使用的 reason。</param>
-    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。</param>
+    /// <param name="scope">解析成功时的 scope 过滤值；<see langword="null"/> 表示不按 scope 过滤。</param>
     /// <param name="errorData">解析失败时的错误附加数据。</param>
     /// <returns>解析成功返回 true，否则返回 false。</returns>
-    public static bool TryGetOptionalDefinitionScope(
+    public static bool TryGetRequiredListScope(
         JsonElement element,
         string propertyName,
         string invalidReason,
@@ -156,7 +147,8 @@ internal static class RpcParamReader
 
         if (!element.TryGetProperty(propertyName, out var scopeElement))
         {
-            return true;
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
         }
 
         if (scopeElement.ValueKind == JsonValueKind.Null)
@@ -171,7 +163,7 @@ internal static class RpcParamReader
         }
 
         scope = scopeElement.GetString();
-        if (scope is null || string.IsNullOrWhiteSpace(scope))
+        if (!ScopeContract.IsValidScopedString(scope))
         {
             errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
@@ -199,21 +191,16 @@ internal static class RpcParamReader
     /// <returns>解析成功返回 true，否则返回 false。</returns>
     public static bool TryParseInvocationTarget(JsonElement paramsElement, out InvocationTarget target, out object? errorData)
     {
-        target = new InvocationTarget { Scope = null, InstanceId = null };
+        target = null!;
         errorData = null;
 
-        if (!paramsElement.TryGetProperty("target", out var targetElement))
-        {
-            return true;
-        }
-
-        if (targetElement.ValueKind != JsonValueKind.Object)
+        if (!paramsElement.TryGetProperty("target", out var targetElement) || targetElement.ValueKind != JsonValueKind.Object)
         {
             errorData = new { reason = "invalid_target" };
             return false;
         }
 
-        if (!TryGetOptionalScope(targetElement, "scope", "invalid_target_scope", out var scope, out errorData))
+        if (!TryGetRequiredScope(targetElement, "scope", "invalid_target_scope", out var scope, out errorData))
         {
             return false;
         }

@@ -50,7 +50,7 @@ public interface IDefinitionManager
     /// 删除指定定义。
     /// </summary>
     /// <param name="appId">应用标识。</param>
-    /// <param name="scope">Definition 作用域。</param>
+    /// <param name="scope">Definition 作用域；空字符串表示 Global。</param>
     /// <returns>删除成功返回 <c>true</c>；目标不存在返回 <c>false</c>。</returns>
-    bool Delete(string appId, string? scope);
+    bool Delete(string appId, string scope);
 }

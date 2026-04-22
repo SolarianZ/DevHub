@@ -32,7 +32,7 @@
         "client": "http",
         "definition": {
           "appId": "events.definition.upserted",
-          "scope": null,
+          "scope": "",
           "displayName": "Events Definition Upserted"
         }
       },
@@ -45,7 +45,7 @@
         "action": "delete_definition",
         "client": "http",
         "appId": "events.definition.upserted",
-        "scope": null
+        "scope": ""
       }
     ]
   },
@@ -59,10 +59,10 @@
         "type": "app.definition.upserted",
         "payload": {
           "appId": "events.definition.upserted",
-          "scope": null,
+          "scope": "",
           "definition": {
             "appId": "events.definition.upserted",
-            "scope": null,
+            "scope": "",
             "displayName": "Events Definition Upserted"
           }
         }

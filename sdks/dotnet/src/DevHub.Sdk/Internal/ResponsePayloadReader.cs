@@ -74,7 +74,7 @@ internal static class ResponsePayloadReader
     {
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "appId");
-        EnsureRequiredStringOrNullProperty(element, location, "scope");
+        EnsureScopeStringProperty(element, location, "scope");
         EnsureStringProperty(element, location, "displayName");
         EnsureOptionalStringProperty(element, location, "description");
 
@@ -102,7 +102,7 @@ internal static class ResponsePayloadReader
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "instanceId");
         EnsureStringProperty(element, location, "appId");
-        EnsureOptionalStringOrNullProperty(element, location, "scope");
+        EnsureScopeStringProperty(element, location, "scope");
         EnsurePositiveIntegerProperty(element, location, "pid");
         EnsureStringProperty(element, location, "registeredAtUtc");
         EnsureStringProperty(element, location, "lastSeenUtc");
@@ -162,10 +162,10 @@ internal static class ResponsePayloadReader
             case "app.definition.upserted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
-                var upsertedScope = EnsureRequiredStringOrNullProperty(payload, $"{location}.payload", "scope");
+                var upsertedScope = EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 var definitionElement = EnsurePropertyExists(payload, $"{location}.payload", "definition", JsonValueKind.Object);
                 ValidateAppDefinitionElement(definitionElement, $"{location}.payload.definition");
-                var definitionScope = EnsureRequiredStringOrNullProperty(definitionElement, $"{location}.payload.definition", "scope");
+                var definitionScope = EnsureScopeStringProperty(definitionElement, $"{location}.payload.definition", "scope");
                 if (!string.Equals(upsertedScope, definitionScope, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException($"{location}.payload 返回结果非法：scope 与 definition.scope 必须一致。");
@@ -175,14 +175,14 @@ internal static class ResponsePayloadReader
             case "app.definition.deleted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
-                EnsureRequiredStringOrNullProperty(payload, $"{location}.payload", "scope");
+                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 break;
             case "app.instance.registered":
             case "app.instance.unregistered":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
                 EnsureStringProperty(payload, $"{location}.payload", "instanceId");
-                EnsureOptionalStringOrNullProperty(payload, $"{location}.payload", "scope");
+                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (payload.TryGetProperty("password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");
@@ -198,7 +198,7 @@ internal static class ResponsePayloadReader
         EnsureStringProperty(element, location, "invocationId");
         EnsureStringProperty(element, location, "appId");
         var targetElement = EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "scope");
+        EnsureScopeStringProperty(targetElement, $"{location}.target", "scope");
         EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "instanceId");
         EnsureStringProperty(element, location, "method");
         EnsureStringProperty(element, location, "kind");
@@ -297,17 +297,15 @@ internal static class ResponsePayloadReader
         }
     }
 
-    private static string? EnsureRequiredStringOrNullProperty(JsonElement element, string location, string propertyName)
+    private static string EnsureScopeStringProperty(JsonElement element, string location, string propertyName)
     {
         var propertyValue = EnsurePropertyExists(element, location, propertyName);
-        return propertyValue.ValueKind switch
+        if (propertyValue.ValueKind != JsonValueKind.String || !ScopeContract.IsValidScopedString(propertyValue.GetString()))
         {
-            JsonValueKind.Null => null,
-            JsonValueKind.String => !string.IsNullOrWhiteSpace(propertyValue.GetString())
-                ? propertyValue.GetString()
-                : throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。"),
-            _ => throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。")
-        };
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+
+        return propertyValue.GetString()!;
     }
 
     private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)

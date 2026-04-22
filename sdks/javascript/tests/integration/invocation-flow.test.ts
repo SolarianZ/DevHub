@@ -11,27 +11,27 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: "invoke.notify.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.notify.app"
   });
   await host.writeDefinition({
     appId: "invoke.request.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.request.app"
   });
   await host.writeDefinition({
     appId: "invoke.error.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.error.app"
   });
   await host.writeDefinition({
     appId: "invoke.timeout.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.timeout.app"
   });
   await host.writeDefinition({
     appId: "invoke.scope.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.scope.app"
   });
   await host.writeDefinition({
@@ -46,7 +46,7 @@ beforeAll(async () => {
   });
   await host.writeDefinition({
     appId: "invoke.rpc-disabled.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.rpc-disabled.app",
     capabilities: {
       rpc: false
@@ -54,12 +54,12 @@ beforeAll(async () => {
   });
   await host.writeDefinition({
     appId: "invoke.poll-disabled.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.poll-disabled.app"
   });
   await host.writeDefinition({
     appId: "invoke.respond-disabled.app",
-    scope: null,
+    scope: "",
     displayName: "invoke.respond-disabled.app"
   });
 }, 120_000);
@@ -75,6 +75,9 @@ it("notify + poll 应完成调用往返", async () => {
   const notifyResult = await client.notify({
     appId: "invoke.notify.app",
     method: "test.notify",
+    target: {
+      scope: ""
+    },
     args: {
       message: "hello"
     }
@@ -97,6 +100,9 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
   const requestTask = client.request({
     appId: "invoke.request.app",
     method: "test.request",
+    target: {
+      scope: ""
+    },
     args: {
       input: 1
     },
@@ -144,6 +150,9 @@ it("request/respond 错误应映射为 invocation_failed", async () => {
   const requestTask = client.request({
     appId: "invoke.error.app",
     method: "test.request",
+    target: {
+      scope: ""
+    },
     options: {
       ttlMs: 5_000,
       waitTimeoutMs: 3_000
@@ -196,6 +205,9 @@ it("request 超时与过期应映射为预期错误", async () => {
   await expect(client.request({
     appId: "invoke.timeout.app",
     method: "test.timeout",
+    target: {
+      scope: ""
+    },
     options: {
       ttlMs: 1_500,
       waitTimeoutMs: 1_000
@@ -207,6 +219,9 @@ it("request 超时与过期应映射为预期错误", async () => {
   await expect(client.request({
     appId: "invoke.timeout.app",
     method: "test.expired",
+    target: {
+      scope: ""
+    },
     options: {
       ttlMs: 1_000,
       waitTimeoutMs: 1_000
@@ -224,7 +239,10 @@ it("notify/request 在 rpc_disabled 时应映射 forbidden", async () => {
   await expectRpcError(
     client.notify({
       appId: "invoke.rpc-disabled.app",
-      method: "test.notify"
+      method: "test.notify",
+      target: {
+        scope: ""
+      }
     }),
     DevHubRpcErrorCode.Forbidden,
     "rpc_disabled"
@@ -233,7 +251,10 @@ it("notify/request 在 rpc_disabled 时应映射 forbidden", async () => {
   await expectRpcError(
     client.request({
       appId: "invoke.rpc-disabled.app",
-      method: "test.request"
+      method: "test.request",
+      target: {
+        scope: ""
+      }
     }),
     DevHubRpcErrorCode.Forbidden,
     "rpc_disabled"
@@ -248,7 +269,7 @@ it("poll 在 poll_not_enabled 时应映射 forbidden", async () => {
     client,
     "invoke.poll-disabled.app",
     "poll-disabled-inst-1",
-    null,
+    "",
     {
       poll: false,
       respond: true
@@ -273,7 +294,7 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
     client,
     "invoke.respond-disabled.app",
     "respond-disabled-inst-1",
-    null,
+    "",
     {
       poll: true,
       respond: false
@@ -297,13 +318,16 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
 
 it("scope 路由规则应命中正确实例", async () => {
   const client = await createClient("invoke-scope-client");
-  await registerInstance(client, "invoke.scope.app", "scope-global-inst", null);
+  await registerInstance(client, "invoke.scope.app", "scope-global-inst", "");
   await registerInstance(client, "invoke.scope.app", "scope-a-inst", "scope-a");
   await registerInstance(client, "invoke.scope.app", "scope-literal-global-inst", "global");
 
   await client.notify({
     appId: "invoke.scope.app",
-    method: "test.default-global"
+    method: "test.default-global",
+    target: {
+      scope: ""
+    }
   });
   expect((await waitForSingleInvocation(client, "scope-global-inst")).method).toBe("test.default-global");
   expect((await client.poll({ instanceId: "scope-a-inst", waitMs: 0 })).items).toHaveLength(0);
@@ -349,7 +373,7 @@ async function registerInstance(
   client: DevHubClient,
   appId: string,
   instanceId: string,
-  scope?: string | null,
+  scope = "",
   invoke = {
     poll: true,
     respond: true

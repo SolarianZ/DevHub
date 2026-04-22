@@ -22,13 +22,17 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-notify-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.notify.app", "notify-inst-1", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.notify.app", "notify-inst-1", scope: string.Empty), InstancePassword);
 
         var notifyResult = await client.NotifyAsync(new InvokeRequest
         {
             AppId = "invoke.notify.app",
             Method = "test.notify",
-            Args = new { message = "hello" }
+            Args = new { message = "hello" },
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            }
         });
 
         Assert.True(notifyResult.Ok);
@@ -49,12 +53,16 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-request-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.request.app", "request-inst-1", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.request.app", "request-inst-1", scope: string.Empty), InstancePassword);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
             AppId = "invoke.request.app",
             Method = "test.request",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Args = new { input = 1 },
             Options = new InvocationOptions
             {
@@ -96,12 +104,16 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-request-null-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.request.null.app", "request-null-inst-1", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.request.null.app", "request-null-inst-1", scope: string.Empty), InstancePassword);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
             AppId = "invoke.request.null.app",
             Method = "test.request.null",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 TtlMs = 5000,
@@ -134,12 +146,16 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-error-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.error.app", "error-inst-1", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.error.app", "error-inst-1", scope: string.Empty), InstancePassword);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
             AppId = "invoke.error.app",
             Method = "test.request",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 TtlMs = 5000,
@@ -176,12 +192,16 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-timeout-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.timeout.app", "timeout-inst-1", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.timeout.app", "timeout-inst-1", scope: string.Empty), InstancePassword);
 
         var timeoutException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RequestAsync(new InvokeRequest
         {
             AppId = "invoke.timeout.app",
             Method = "test.timeout",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 TtlMs = 1500,
@@ -194,6 +214,10 @@ public sealed class InvocationFlowTests
         {
             AppId = "invoke.timeout.app",
             Method = "test.expired",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
             Options = new InvocationOptions
             {
                 TtlMs = 1000,
@@ -226,14 +250,15 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-scope-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-global-inst", scope: null), InstancePassword);
+        await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-global-inst", scope: string.Empty), InstancePassword);
         await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-a-inst", scope: "scope-a"), InstancePassword);
         await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-literal-global-inst", scope: "global"), InstancePassword);
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
             AppId = "invoke.scope.app",
-            Method = "test.default-global"
+            Method = "test.default-global",
+            Target = new InvocationTarget { Scope = string.Empty }
         });
         _ = await WaitForSingleInvocationAsync(client, "scope-global-inst");
         Assert.Empty((await client.PollAsync(new PollRequest { InstanceId = "scope-a-inst", WaitMs = 0 })).Items);
@@ -263,7 +288,7 @@ public sealed class InvocationFlowTests
         _ = await WaitForSingleInvocationAsync(client, "scope-literal-global-inst");
     }
 
-    private static AppInstanceRegistration CreateInstance(string appId, string instanceId, string? scope)
+    private static AppInstanceRegistration CreateInstance(string appId, string instanceId, string scope)
     {
         return new AppInstanceRegistration
         {

@@ -186,18 +186,14 @@ export function readOptionalStringOrNull(
   return value;
 }
 
-export function readDefinitionScope(payload: Record<string, unknown>, location: string, key: string): string | null {
+export function readScopeString(payload: Record<string, unknown>, location: string, key: string): string {
   if (!(key in payload)) {
     throw new Error(`${location}.${key} is required.`);
   }
 
   const value = payload[key];
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${location}.${key} must be null or a non-empty string.`);
+  if (!isValidScopeString(value)) {
+    throw new Error(`${location}.${key} must be "" or a non-empty string without leading or trailing whitespace.`);
   }
 
   return value;
@@ -317,24 +313,20 @@ export function ensureAppId(value: unknown, propertyName: string): string {
   return parsed;
 }
 
-export function ensureDefinitionScope(value: unknown, propertyName: string): string | null {
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${propertyName} 必须为 null 或非空字符串。`);
+export function ensureScopedString(value: unknown, propertyName: string): string {
+  if (!isValidScopeString(value)) {
+    throw new Error(`${propertyName} 必须为 "" 或首尾无空白的非空字符串。`);
   }
 
   return value;
 }
 
-export function ensureOptionalDefinitionScope(value: unknown, propertyName: string): string | null | undefined {
-  if (value === undefined) {
-    return undefined;
+export function ensureScopeFilter(value: unknown, propertyName: string): string | null {
+  if (value === null) {
+    return null;
   }
 
-  return ensureDefinitionScope(value, propertyName);
+  return ensureScopedString(value, propertyName);
 }
 
 export function ensureInstanceId(value: unknown, propertyName: string): string {
@@ -387,6 +379,11 @@ export function ensureOptionalInputString(
 
 export function ensureOptionalInputStringOrNull(value: unknown, propertyName: string): string | null | undefined {
   return ensureOptionalInputString(value, propertyName, true, `${propertyName} 不能为空。`, true);
+}
+
+function isValidScopeString(value: unknown): value is string {
+  return typeof value === "string"
+    && (value.length === 0 || value.trim() === value);
 }
 
 export function ensureOptionalInputRecord(

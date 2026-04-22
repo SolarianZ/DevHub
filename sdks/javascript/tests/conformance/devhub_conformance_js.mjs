@@ -317,7 +317,9 @@ async function runEvents(context) {
           rawRpcConnection,
           `sdk-events-list-definitions-${index}`,
           "hub.apps.listDefinitions",
-          {}
+          {
+            scope: null
+          }
         );
         const result = readRawResult(response, `request.steps[${index}]`);
         captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureArray(
@@ -517,7 +519,7 @@ function buildAppInstanceRegistration(payload) {
   return {
     instanceId: ensureString(payload.instanceId, "instance.instanceId"),
     appId: ensureString(payload.appId, "instance.appId"),
-    scope: payload.scope ?? undefined,
+    scope: ensureScopeString(payload.scope, "instance.scope"),
     pid: ensureInteger(payload.pid, "instance.pid"),
     invoke: {
       poll: ensureBoolean(invoke.poll, "instance.invoke.poll"),
@@ -530,7 +532,7 @@ function buildAppInstanceRegistration(payload) {
 function buildAppDefinition(payload) {
   const definition = {
     appId: ensureString(payload.appId, "definition.appId"),
-    scope: ensureDefinitionScope(payload.scope, "definition.scope"),
+    scope: ensureScopeString(payload.scope, "definition.scope"),
     displayName: ensureStringValue(payload.displayName, "definition.displayName")
   };
 
@@ -659,7 +661,7 @@ function buildDefinitionIdentityParams(step, captures, index) {
   const scope = resolveCaptureValue(step, captures, index, "scope");
   return {
     appId,
-    scope: scope === undefined ? null : ensureDefinitionScope(scope, `request.steps[${index}].scope`)
+    scope: ensureScopeString(scope, `request.steps[${index}].scope`)
   };
 }
 
@@ -729,12 +731,12 @@ function ensureStringValue(value, pathLabel) {
   return value;
 }
 
-function ensureDefinitionScope(value, pathLabel) {
-  if (value === undefined || value === null) {
-    return null;
+function ensureScopeString(value, pathLabel) {
+  if (typeof value !== "string" || (value.length > 0 && value.trim() !== value)) {
+    throw new Error(`${pathLabel} 必须为 "" 或首尾无空白的非空字符串。`);
   }
 
-  return ensureString(value, pathLabel);
+  return value;
 }
 
 function ensureInteger(value, pathLabel) {

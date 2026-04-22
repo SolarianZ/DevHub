@@ -359,12 +359,16 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "list_definitions":
+                params: dict[str, Any] = {"scope": resolve_capture_value(step, captures, index, "scope")}
+                app_id = resolve_capture_value(step, captures, index, "appId")
+                if app_id is not None:
+                    params["appId"] = require_string(app_id, f"request.steps[{index}].appId")
                 result = read_raw_result(
                     send_raw_rpc(
                         raw_rpc_connection,
                         request_id=f"sdk-events-list-definitions-{index}",
                         method="hub.apps.listDefinitions",
-                        params={},
+                        params=params,
                     ),
                     path=f"request.steps[{index}]",
                 )

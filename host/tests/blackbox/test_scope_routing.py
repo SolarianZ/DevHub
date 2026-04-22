@@ -28,7 +28,7 @@ from tests.blackbox.test_base import (
 class TestScopeRouting(unittest.TestCase):
     """作用域路由测试类"""
 
-    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=None):
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=""):
         launch_config = None
         if include_launch:
             launch_config = {
@@ -62,13 +62,10 @@ class TestScopeRouting(unittest.TestCase):
         poll_response = client.poll_once(instance_id, max_count=10, wait_ms=wait_ms)
         return poll_response, self._extract_invocation_ids(poll_response.get("result", {}).get("items", []))
 
-    def test_scope_001_register_omitted_and_null_should_both_be_global(self):
-        """SCOPE-001: register scope omitted/null => Global 生效"""
-        result = TestResult("SCOPE-001 register omitted/null => Global")
+    def test_scope_001_register_omitted_and_null_should_be_rejected(self):
+        """SCOPE-001: register scope omitted/null 必须返回 invalid_params"""
+        result = TestResult("SCOPE-001 register omitted/null rejected")
         app_id = self._app_id("001")
-
-        omitted_instance = None
-        null_instance = None
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -78,6 +75,7 @@ class TestScopeRouting(unittest.TestCase):
             null_instance = self._instance_id("scope-null")
 
             omitted_response = client.call("hub.apps.registerInstance", {
+                "password": "scope-001-password",
                 "instance": {
                     "instanceId": omitted_instance,
                     "appId": app_id,
@@ -85,7 +83,7 @@ class TestScopeRouting(unittest.TestCase):
                     "invoke": {"poll": True, "respond": True}
                 }
             }, request_id="scope-001-omitted")
-            if not RpcAssertions.expect_success(result, omitted_response, ["instance"]):
+            if not RpcAssertions.expect_error(result, omitted_response, -32602, "invalid_params"):
                 return result
 
             null_response = client.register_instance(
@@ -96,32 +94,26 @@ class TestScopeRouting(unittest.TestCase):
                 respond=True,
                 pid=31002,
             )
-            if not RpcAssertions.expect_success(result, null_response, ["instance"]):
+            if not RpcAssertions.expect_error(result, null_response, -32602, "invalid_params"):
                 return result
 
-            default_list = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-001-list-default")
-            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+            list_response = client.call(
+                "hub.apps.listInstances",
+                {"appId": app_id, "scope": None},
+                request_id="scope-001-list-unfiltered",
+            )
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
-            instances = default_list["result"].get("instances", [])
+            instances = list_response["result"].get("instances", [])
             ids = {item.get("instanceId") for item in instances}
-            if omitted_instance not in ids or null_instance not in ids:
-                result.mark_failure(f"❌ 默认 global 过滤未同时命中 omitted/null 实例: {ids}")
+            if omitted_instance in ids or null_instance in ids:
+                result.mark_failure(f"❌ 被拒绝的 register 请求仍然留下实例: {ids}")
                 return result
 
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
-        finally:
-            try:
-                base_url, token = DiscoveryService.get_hub_info()
-                cleanup_client = RpcClient(base_url, token)
-                if omitted_instance:
-                    cleanup_client.unregister_instance(omitted_instance)
-                if null_instance:
-                    cleanup_client.unregister_instance(null_instance)
-            except Exception:
-                pass
 
         return result
 
@@ -203,7 +195,7 @@ class TestScopeRouting(unittest.TestCase):
         app_id = self._app_id("003")
         definition_path = None
         empty_instance = None
-        null_instance = None
+        invalid_null_instance = None
 
         try:
             definition_path = self._create_definition(app_id, include_launch=True)
@@ -211,7 +203,7 @@ class TestScopeRouting(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             empty_instance = self._instance_id("scope-empty")
-            null_instance = self._instance_id("scope-null")
+            invalid_null_instance = self._instance_id("scope-null")
 
             register_empty_response = client.register_instance(
                 instance_id=empty_instance,
@@ -225,29 +217,19 @@ class TestScopeRouting(unittest.TestCase):
                 return result
 
             register_null_response = client.register_instance(
-                instance_id=null_instance,
+                instance_id=invalid_null_instance,
                 app_id=app_id,
                 scope=None,
                 poll=True,
                 respond=True,
                 pid=31202,
             )
-            if not RpcAssertions.expect_success(result, register_null_response, ["instance"]):
+            if not RpcAssertions.expect_error(result, register_null_response, -32602, "invalid_params"):
                 return result
 
-            empty_registered_scope = register_empty_response["result"]["instance"].get("scope", "unexpected-non-null")
-            if empty_registered_scope is not None:
-                result.add_detail(
-                    f"⚠️ scope='' 注册响应未回显为 null（非阻断，按行为校验通过即可）: scope={empty_registered_scope}"
-                )
-
-            list_default = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-003-list-default")
-            if not RpcAssertions.expect_success(result, list_default, ["instances"]):
-                return result
-
-            default_ids = {item.get("instanceId") for item in list_default["result"].get("instances", [])}
-            if empty_instance not in default_ids or null_instance not in default_ids:
-                result.mark_failure(f"❌ 默认 Global 过滤未命中 scope='' 与 scope=null 实例: {default_ids}")
+            empty_registered_scope = register_empty_response["result"]["instance"].get("scope")
+            if empty_registered_scope != "":
+                result.mark_failure(f"❌ scope='' 注册响应未保持空字符串: {register_empty_response}")
                 return result
 
             list_empty_scope = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="scope-003-list-empty")
@@ -255,8 +237,8 @@ class TestScopeRouting(unittest.TestCase):
                 return result
 
             empty_scope_ids = {item.get("instanceId") for item in list_empty_scope["result"].get("instances", [])}
-            if empty_instance not in empty_scope_ids or null_instance not in empty_scope_ids:
-                result.mark_failure(f"❌ scope='' 查询未按 Global 处理: {empty_scope_ids}")
+            if empty_instance not in empty_scope_ids or invalid_null_instance in empty_scope_ids:
+                result.mark_failure(f"❌ scope='' 查询未按新 Global 契约处理: {empty_scope_ids}")
                 return result
 
             launch_empty_scope = client.launch_app(
@@ -274,7 +256,7 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-003-launch-null",
             )
-            if not RpcAssertions.expect_success(result, launch_null_scope, ["status", "launchId"]):
+            if not RpcAssertions.expect_error(result, launch_null_scope, -32602, "invalid_params"):
                 return result
 
             result.mark_success()
@@ -286,8 +268,8 @@ class TestScopeRouting(unittest.TestCase):
                 cleanup_client = RpcClient(base_url, token)
                 if empty_instance:
                     cleanup_client.unregister_instance(empty_instance)
-                if null_instance:
-                    cleanup_client.unregister_instance(null_instance)
+                if invalid_null_instance:
+                    cleanup_client.unregister_instance(invalid_null_instance)
             except Exception:
                 pass
 
@@ -301,16 +283,16 @@ class TestScopeRouting(unittest.TestCase):
         app_id = self._app_id("004")
         definition_paths = []
         scoped_global_instance = None
-        null_global_instance = None
+        global_instance = None
 
         try:
-            definition_paths.append(self._create_definition(app_id, include_launch=True, scope=None))
+            definition_paths.append(self._create_definition(app_id, include_launch=True, scope=""))
             definition_paths.append(self._create_definition(app_id, include_launch=True, scope="global"))
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
             scoped_global_instance = self._instance_id("scope-global")
-            null_global_instance = self._instance_id("scope-null")
+            global_instance = self._instance_id("scope-global-default")
 
             register_global_literal = client.register_instance(
                 instance_id=scoped_global_instance,
@@ -323,15 +305,15 @@ class TestScopeRouting(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_global_literal, ["instance"]):
                 return result
 
-            register_null_global = client.register_instance(
-                instance_id=null_global_instance,
+            register_global = client.register_instance(
+                instance_id=global_instance,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=31302,
             )
-            if not RpcAssertions.expect_success(result, register_null_global, ["instance"]):
+            if not RpcAssertions.expect_success(result, register_global, ["instance"]):
                 return result
 
             list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"}, request_id="scope-004-list")
@@ -342,17 +324,17 @@ class TestScopeRouting(unittest.TestCase):
             if scoped_global_instance not in scoped_global_ids:
                 result.mark_failure(f"❌ scope='global' 查询未命中显式作用域实例: {scoped_global_ids}")
                 return result
-            if null_global_instance in scoped_global_ids:
+            if global_instance in scoped_global_ids:
                 result.mark_failure(f"❌ scope='global' 查询错误回退到默认 Global: {scoped_global_ids}")
                 return result
 
-            default_list_response = client.call("hub.apps.listInstances", {"appId": app_id}, request_id="scope-004-list-default")
+            default_list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""}, request_id="scope-004-list-default")
             if not RpcAssertions.expect_success(result, default_list_response, ["instances"]):
                 return result
 
             default_ids = {item.get("instanceId") for item in default_list_response["result"].get("instances", [])}
-            if null_global_instance not in default_ids:
-                result.mark_failure(f"❌ 默认 Global 查询未命中 null/global 实例: {default_ids}")
+            if global_instance not in default_ids:
+                result.mark_failure(f"❌ 默认 Global 查询未命中 Global 实例: {default_ids}")
                 return result
             if scoped_global_instance in default_ids:
                 result.mark_failure(f"❌ 默认 Global 查询错误命中 scope='global' 实例: {default_ids}")
@@ -369,7 +351,7 @@ class TestScopeRouting(unittest.TestCase):
 
             launch_global_default = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="scope-004-launch-default",
             )
@@ -385,8 +367,8 @@ class TestScopeRouting(unittest.TestCase):
                 cleanup_client = RpcClient(base_url, token)
                 if scoped_global_instance:
                     cleanup_client.unregister_instance(scoped_global_instance)
-                if null_global_instance:
-                    cleanup_client.unregister_instance(null_global_instance)
+                if global_instance:
+                    cleanup_client.unregister_instance(global_instance)
             except Exception:
                 pass
 
@@ -395,9 +377,9 @@ class TestScopeRouting(unittest.TestCase):
 
         return result
 
-    def test_scope_005_notify_request_default_scope_should_only_hit_global(self):
-        """SCOPE-005: notify/request target.scope omitted/null 仅命中 Global"""
-        result = TestResult("SCOPE-005 notify/request 默认 Global 路由")
+    def test_scope_005_notify_request_empty_scope_should_only_hit_global(self):
+        """SCOPE-005: notify/request target.scope='' 仅命中 Global"""
+        result = TestResult("SCOPE-005 notify/request empty-scope Global routing")
         app_id = self._app_id("005")
 
         global_instance = None
@@ -413,7 +395,7 @@ class TestScopeRouting(unittest.TestCase):
             register_global = client.register_instance(
                 instance_id=global_instance,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=31401,
@@ -435,8 +417,8 @@ class TestScopeRouting(unittest.TestCase):
             notify_response = client.invoke_notify(
                 app_id=app_id,
                 method="asset.rebuild",
-                args={"case": "default-global-notify"},
-                target_scope=None,
+                args={"case": "empty-global-notify"},
+                target_scope="",
                 queue_if_offline=False,
                 auto_launch=False,
                 request_id="scope-005-notify",
@@ -455,10 +437,10 @@ class TestScopeRouting(unittest.TestCase):
                 return result
 
             if notify_invocation_id not in global_ids:
-                result.mark_failure(f"❌ 默认 Global notify 未被 Global 实例拉取: {global_ids}")
+                result.mark_failure(f"❌ empty-scope Global notify 未被 Global 实例拉取: {global_ids}")
                 return result
             if notify_invocation_id in scoped_ids:
-                result.mark_failure(f"❌ 默认 Global notify 被 scoped 实例误拉取: {scoped_ids}")
+                result.mark_failure(f"❌ empty-scope Global notify 被 scoped 实例误拉取: {scoped_ids}")
                 return result
 
             request_holder = {}
@@ -502,8 +484,8 @@ class TestScopeRouting(unittest.TestCase):
             request_response = client.invoke_request(
                 app_id=app_id,
                 method="asset.build",
-                args={"case": "default-global-request"},
-                target_scope=None,
+                args={"case": "empty-global-request"},
+                target_scope="",
                 options={
                     "ttlMs": 4000,
                     "waitTimeoutMs": 3000,
@@ -521,17 +503,17 @@ class TestScopeRouting(unittest.TestCase):
 
             value = request_response.get("result", {}).get("value", {})
             if value.get("handledBy") != "global":
-                result.mark_failure(f"❌ 默认 Global request 未由 Global 实例处理: {request_response}")
+                result.mark_failure(f"❌ empty-scope Global request 未由 Global 实例处理: {request_response}")
                 return result
 
             global_request_invocation_id = request_holder.get("invocationId")
             if not global_request_invocation_id:
-                result.mark_failure(f"❌ 默认 Global request 未被 Global 实例 poll 到: {request_holder}")
+                result.mark_failure(f"❌ empty-scope Global request 未被 Global 实例 poll 到: {request_holder}")
                 return result
 
             scoped_request_ids = scoped_request_poll_holder.get("ids", [])
             if global_request_invocation_id in scoped_request_ids:
-                result.mark_failure(f"❌ 默认 Global request 被 scoped 实例误拉取: {scoped_request_ids}")
+                result.mark_failure(f"❌ empty-scope Global request 被 scoped 实例误拉取: {scoped_request_ids}")
                 return result
 
             result.mark_success()
@@ -566,7 +548,7 @@ class TestScopeRouting(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=global_instance,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=31501,
@@ -800,7 +782,7 @@ class TestScopeRouting(unittest.TestCase):
             register_global = client.register_instance(
                 instance_id=global_instance,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=31611,
@@ -1190,7 +1172,7 @@ class TestScopeRouting(unittest.TestCase):
             register_global = client.register_instance(
                 instance_id=global_instance,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=31801,
@@ -1275,7 +1257,7 @@ class TestScopeRouting(unittest.TestCase):
             for instance_id, scope, pid in [
                 (holder_instance, "workspace-A", 31911),
                 (same_scope_receiver, "workspace-A", 31912),
-                (global_instance, None, 31913),
+                (global_instance, "", 31913),
                 (other_scope_instance, "workspace-B", 31914),
             ]:
                 register_response = client.register_instance(
@@ -1386,11 +1368,11 @@ class TestScopeRouting(unittest.TestCase):
     def run_all_tests(self, full=False):
         """运行所有 scope 路由测试。"""
         results = [
-            self.test_scope_001_register_omitted_and_null_should_both_be_global(),
+            self.test_scope_001_register_omitted_and_null_should_be_rejected(),
             self.test_scope_002_register_scope_should_match_exactly(),
             self.test_scope_003_empty_scope_should_be_global_equivalent(),
             self.test_scope_004_global_literal_should_be_explicit_scope(),
-            self.test_scope_005_notify_request_default_scope_should_only_hit_global(),
+            self.test_scope_005_notify_request_empty_scope_should_only_hit_global(),
             self.test_scope_006_explicit_scope_should_not_fallback_to_global(),
             self.test_scope_007_invalid_target_scope_type_should_return_invalid_params(),
             self.test_scope_008_scope_match_should_be_case_sensitive(),

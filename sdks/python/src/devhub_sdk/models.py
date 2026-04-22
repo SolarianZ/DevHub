@@ -8,10 +8,11 @@ from uuid import uuid4
 
 from .constants import DevHubEventType
 from ._validation import (
-    require_definition_scope,
     require_non_empty_string,
     require_positive_number,
     require_protocol_version,
+    require_scope_filter,
+    require_scoped_string,
     require_uuid_string,
 )
 
@@ -76,12 +77,12 @@ class AppDefinition:
     description: str | None = None
     capabilities: AppCapabilities | None = None
     launch: LaunchConfiguration | None = None
-    scope: str | None = field(default=None, kw_only=True)
+    scope: str = field(kw_only=True)
 
     def __post_init__(self) -> None:
         """校验 Definition 复合身份中的 scope。"""
 
-        self.scope = require_definition_scope(self.scope, "scope")
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -116,12 +117,17 @@ class AppInstance:
 
     instance_id: str
     app_id: str
-    scope: str | None
+    scope: str
     pid: int
     registered_at_utc: datetime
     last_seen_utc: datetime
     invoke: InvokeCapability
     meta: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """校验实例中的 scope。"""
+
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -132,8 +138,13 @@ class AppInstanceRegistration:
     app_id: str
     pid: int
     invoke: InvokeCapability
-    scope: str | None = None
+    scope: str = field(kw_only=True)
     meta: Any = None
+
+    def __post_init__(self) -> None:
+        """校验实例注册中的 scope。"""
+
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -194,9 +205,27 @@ class LaunchRequest:
     """启动请求。"""
 
     app_id: str
-    scope: str | None = None
+    scope: str
     dedupe_key: str | None = None
     wait_for_register_ms: int | None = None
+
+    def __post_init__(self) -> None:
+        """校验启动请求中的 scope。"""
+
+        self.scope = require_scoped_string(self.scope, "scope")
+
+
+@dataclass(slots=True)
+class ListDefinitionsRequest:
+    """Definition 列表请求。"""
+
+    scope: str | None
+    app_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验 Definition 列表请求中的 scope 过滤器。"""
+
+        self.scope = require_scope_filter(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -213,18 +242,27 @@ class LaunchResult:
 class ListInstancesRequest:
     """实例列表请求。"""
 
+    scope: str | None
     app_id: str | None = None
-    scope: str | None = None
     include_offline: bool = False
-    include_all_scopes: bool = False
+
+    def __post_init__(self) -> None:
+        """校验实例列表请求中的 scope 过滤器。"""
+
+        self.scope = require_scope_filter(self.scope, "scope")
 
 
 @dataclass(slots=True)
 class InvocationTarget:
     """调用目标。"""
 
-    scope: str | None = None
+    scope: str
     instance_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验调用目标中的 scope。"""
+
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)

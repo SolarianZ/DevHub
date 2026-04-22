@@ -43,7 +43,7 @@ public class InvocationEventFlowTests : IDisposable
         {
             InstanceId = "inst-event-success",
             AppId = "event.invoke.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6101,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -60,7 +60,7 @@ public class InvocationEventFlowTests : IDisposable
                 appId = "event.invoke.app",
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     instanceId = "inst-event-success"
                 },
                 method = "demo.notify",
@@ -245,6 +245,7 @@ public class InvocationEventFlowTests : IDisposable
         Assert.True(eventBus.TrySubscribe(connectionId, null, out _));
     }
 }
+
 
 
 

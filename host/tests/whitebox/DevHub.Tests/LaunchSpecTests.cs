@@ -36,6 +36,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.9-negative-wait",
+                scope = ScopeContract.Global,
                 waitForRegisterMs = -1
             })
         }, CancellationToken.None);
@@ -45,7 +46,7 @@ public class LaunchSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.9")]
-    public async Task Spec_6_3_9_Launch_WhenScopeEmpty_ShouldReturnInvalidParams()
+    public async Task Spec_6_3_9_Launch_WhenScopeEmpty_ShouldResolveGlobalDefinition()
     {
         const string appId = "spec-6.3.9-empty-scope";
         WriteDefinition(appId, includeLaunch: true);
@@ -64,9 +65,9 @@ public class LaunchSpecTests : IDisposable
             })
         }, CancellationToken.None);
 
-        AssertError(response, -32602, "invalid_params");
-        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
-        Assert.Equal("invalid_scope", data.GetProperty("reason").GetString());
+        AssertSuccess(response);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.Equal("started", result.GetProperty("status").GetString());
     }
 
     [Fact]
@@ -81,7 +82,8 @@ public class LaunchSpecTests : IDisposable
             Method = "hub.apps.launch",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "spec-6.3.9-missing-definition"
+                appId = "spec-6.3.9-missing-definition",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
 
@@ -106,6 +108,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -136,6 +139,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -166,6 +170,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 80
             })
         }, CancellationToken.None);
@@ -197,6 +202,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -316,7 +322,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -328,6 +334,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -445,10 +452,11 @@ public class LaunchSpecTests : IDisposable
         string? argsTemplate = "--version",
         string? definitionScope = null)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = definitionScope,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -473,7 +481,7 @@ public class LaunchSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
 

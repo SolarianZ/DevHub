@@ -14,7 +14,7 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: "http.flow.app",
-    scope: null,
+    scope: "",
     displayName: "HTTP Flow App",
     description: "用于 SDK HTTP 链路测试。"
   });
@@ -37,7 +37,9 @@ it("HTTP 链路应可完成基础流程", async () => {
   expect(ping.ok).toBe(true);
   expect((ping.echo as { value: number }).value).toBe(1);
 
-  const definitions = await client.listDefinitions();
+  const definitions = await client.listDefinitions({
+    scope: null
+  });
   expect(definitions.some((definition) => definition.appId === "http.flow.app")).toBe(true);
   expect(definitions.find((definition) => definition.appId === "http.flow.app")?.capabilities).toEqual({
     rpc: true
@@ -45,17 +47,17 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   const definitionResult = await client.getDefinition({
     appId: "http.flow.app",
-    scope: null
+    scope: ""
   });
   expect(definitionResult.displayName).toBe("HTTP Flow App");
-  expect(definitionResult.scope).toBeNull();
+  expect(definitionResult.scope).toBe("");
   expect(definitionResult.capabilities).toEqual({
     rpc: true
   });
 
   const validation = await client.validateDefinition({
     appId: "http.managed.app",
-    scope: null,
+    scope: "",
     displayName: ""
   });
   expect(validation.ok).toBe(true);
@@ -67,7 +69,7 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   const upserted = await client.upsertDefinition({
     appId: "http.managed.app",
-    scope: null,
+    scope: "",
     displayName: "HTTP Managed App",
     description: "用于 HTTP upsert 集成测试。",
     capabilities: {
@@ -82,10 +84,10 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   const managedDefinition = await client.getDefinition({
     appId: "http.managed.app",
-    scope: null
+    scope: ""
   });
   expect(managedDefinition.displayName).toBe("HTTP Managed App");
-  expect(managedDefinition.scope).toBeNull();
+  expect(managedDefinition.scope).toBe("");
   expect(managedDefinition.capabilities).toEqual({
     rpc: true,
     events: false
@@ -93,11 +95,11 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   await client.deleteDefinition({
     appId: "http.managed.app",
-    scope: null
+    scope: ""
   });
   await expect(client.getDefinition({
     appId: "http.managed.app",
-    scope: null
+    scope: ""
   })).rejects.toMatchObject({
     code: DevHubRpcErrorCode.AppDefinitionNotFound
   });
@@ -105,6 +107,7 @@ it("HTTP 链路应可完成基础流程", async () => {
   const registered = await client.registerInstance({
     instanceId: "http-flow-inst-1",
     appId: "http.flow.app",
+    scope: "",
     pid: process.pid,
     invoke: {
       poll: true,
@@ -118,7 +121,8 @@ it("HTTP 链路应可完成基础流程", async () => {
   expect(registered.instanceId).toBe("http-flow-inst-1");
 
   const instances = await client.listInstances({
-    appId: "http.flow.app"
+    appId: "http.flow.app",
+    scope: ""
   });
   expect(instances.length).toBe(1);
 
@@ -127,7 +131,8 @@ it("HTTP 链路应可完成基础流程", async () => {
 
   await client.unregisterInstance("http-flow-inst-1", INSTANCE_PASSWORD);
   const instancesAfter = await client.listInstances({
-    appId: "http.flow.app"
+    appId: "http.flow.app",
+    scope: ""
   });
   expect(instancesAfter.length).toBe(0);
 
@@ -142,6 +147,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
 
   const started = await client.launch({
     appId: "http.launch.started.app",
+    scope: "",
     waitForRegisterMs: 0
   });
   expect(started.ok).toBe(true);
@@ -151,6 +157,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
 
   const starting = await client.launch({
     appId: "http.launch.starting.app",
+    scope: "",
     waitForRegisterMs: 200
   });
   expect(starting.ok).toBe(true);
@@ -161,6 +168,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   const registered = await client.registerInstance({
     instanceId: "http-launch-running-inst-1",
     appId: "http.launch.running.app",
+    scope: "",
     pid: process.pid,
     invoke: {
       poll: true,
@@ -169,7 +177,8 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   }, INSTANCE_PASSWORD);
 
   const alreadyRunning = await client.launch({
-    appId: "http.launch.running.app"
+    appId: "http.launch.running.app",
+    scope: ""
   });
   expect(alreadyRunning.ok).toBe(true);
   expect(alreadyRunning.status).toBe("already_running");
@@ -183,7 +192,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
 function createLaunchDefinition(appId: string): Record<string, unknown> {
   return {
     appId,
-    scope: null,
+    scope: "",
     displayName: appId,
     launch: {
       exePath: process.execPath,

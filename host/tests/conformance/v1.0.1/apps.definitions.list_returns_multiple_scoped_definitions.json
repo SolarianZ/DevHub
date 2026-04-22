@@ -9,7 +9,7 @@
         "fileName": "apps.list.multi-scope.app--global.json",
         "definition": {
           "appId": "apps.list.multi-scope.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps List Multi Scope Global"
         }
       },
@@ -36,7 +36,9 @@
     "jsonrpc": "2.0",
     "id": "apps-definitions-list-multi-scope",
     "method": "hub.apps.listDefinitions",
-    "params": {}
+    "params": {
+      "scope": null
+    }
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
@@ -51,7 +53,7 @@
         },
         {
           "appId": "apps.list.multi-scope.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps List Multi Scope Global"
         }
       ]

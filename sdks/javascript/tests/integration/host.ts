@@ -376,20 +376,20 @@ function ensureTrailingSeparator(value: string): string {
     : `${value}${path.sep}`;
 }
 
-function normalizeDefinitionScope(value: unknown): string | null {
-  if (value === undefined || value === null) {
-    return null;
+function normalizeDefinitionScope(value: unknown): string {
+  if (value === undefined) {
+    return "";
   }
 
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error("definition.scope 必须为非空字符串或 null。");
+  if (typeof value !== "string" || (value.length > 0 && value.trim() !== value)) {
+    throw new Error("definition.scope 必须为 \"\" 或首尾无空白的非空字符串。");
   }
 
   return value;
 }
 
-function buildDefinitionFileName(appId: string, scope: string | null): string {
-  const scopeSegment = scope === null
+function buildDefinitionFileName(appId: string, scope: string): string {
+  const scopeSegment = scope === ""
     ? "global"
     : Buffer.from(scope, "utf-8").toString("hex").toUpperCase();
   return `${appId}--${scopeSegment}.json`;

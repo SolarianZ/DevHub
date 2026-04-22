@@ -1,7 +1,7 @@
 {
-  "id": "apps.instances.list_include_all_scopes_ignores_scope_filter",
+  "id": "apps.instances.list_null_scope_returns_all_scopes",
   "caseId": "CONF-003",
-  "description": "includeAllScopes=true 时，hub.apps.listInstances 必须忽略 scope 参数并返回所有作用域。",
+  "description": "显式 scope=null 时，hub.apps.listInstances 必须返回所有作用域。",
   "transport": "http",
   "setup": {
     "instances": [
@@ -36,8 +36,7 @@
     "method": "hub.apps.listInstances",
     "params": {
       "appId": "apps.instance.list.all-scopes.app",
-      "scope": "workspace-b",
-      "includeAllScopes": true
+      "scope": null
     }
   },
   "expectedResponse": {

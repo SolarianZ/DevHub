@@ -76,25 +76,26 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     /// </summary>
     public async Task<LaunchOperationResult> LaunchAsync(
         string appId,
-        string? scope,
+        string scope,
         string? dedupeKey,
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
-        var normalizedScope = AppDefinitionIdentity.NormalizeScope(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         _definitionProvider.Refresh();
-        var definition = _definitionProvider.GetDefinition(appId, normalizedScope);
+        var definition = _definitionProvider.GetDefinition(appId, scope);
         if (definition is null)
         {
             return LaunchOperationResult.CreateError(
                 -32014,
                 "app_definition_not_found",
-                BuildAppDefinitionNotFoundData(appId, normalizedScope));
+                BuildAppDefinitionNotFoundData(appId, scope));
         }
 
         var onlineInstances = _appRegistry
-            .ListInstances(appId, normalizedScope, includeAllScopes: false, includeOffline: false)
+            .ListInstances(appId, scope, includeOffline: false)
             .ToList();
 
         if (onlineInstances.Count > 0)
@@ -111,7 +112,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
 
         var httpBaseUrl = _runtimeHttpBaseUrlProvider.GetHttpBaseUrl();
-        var resolvedDedupeKey = ResolveDedupeKey(definition, appId, normalizedScope, dedupeKey, httpBaseUrl);
+        var resolvedDedupeKey = ResolveDedupeKey(definition, appId, scope, dedupeKey, httpBaseUrl);
 
         var now = _clock.UtcNow;
         LaunchRecord? existingRecord;
@@ -145,7 +146,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                 LaunchId = launchId,
                 DedupeKey = resolvedDedupeKey,
                 AppId = appId,
-                Scope = normalizedScope,
+                Scope = scope,
                 CreatedAtUtc = nextNow,
                 State = LaunchRecordState.Starting
             };
@@ -156,7 +157,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         Process? process;
         try
         {
-            process = StartProcess(launchConfig!, appId, normalizedScope, httpBaseUrl, launchId);
+            process = StartProcess(launchConfig!, appId, scope, httpBaseUrl, launchId);
             if (process is null)
             {
                 RemoveLaunchRecordById(launchId);
@@ -172,7 +173,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         catch (Exception ex)
         {
             RemoveLaunchRecordById(launchId);
-            _logger.LogError(ex, "启动进程失败，AppId: {AppId}, Scope: {Scope}", appId, normalizedScope);
+            _logger.LogError(ex, "启动进程失败，AppId: {AppId}, Scope: {Scope}", appId, scope);
             return LaunchOperationResult.CreateError(
                 -32020,
                 "launch_failed",
@@ -202,14 +203,15 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     }
 
     /// <inheritdoc />
-    public LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string? scope)
+    public LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string scope)
     {
         if (string.IsNullOrWhiteSpace(launchId))
         {
             return new LaunchRegistrationValidationResult(LaunchRegistrationValidationStatus.NotTracked);
         }
 
-        var normalizedScope = AppDefinitionIdentity.NormalizeScope(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
         lock (_launchSyncRoot)
         {
             CleanupExpiredLaunchRecords(_clock.UtcNow);
@@ -220,7 +222,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             }
 
             if (!string.Equals(launchRecord.AppId, appId, StringComparison.Ordinal)
-                || !string.Equals(launchRecord.Scope, normalizedScope, StringComparison.Ordinal))
+                || !string.Equals(launchRecord.Scope, scope, StringComparison.Ordinal))
             {
                 launchRecord.State = LaunchRecordState.Failed;
                 launchRecord.FailureReason = "definition_scope_mismatch";
@@ -229,7 +231,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                     launchRecord.AppId,
                     launchRecord.Scope,
                     appId,
-                    normalizedScope);
+                    scope);
                 DeactivateDedupeRecord(launchRecord);
 
                 return new LaunchRegistrationValidationResult(
@@ -257,7 +259,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
             if (_launchRecordsById.TryGetValue(launchId, out var launchRecord)
                 && string.Equals(launchRecord.AppId, instance.AppId, StringComparison.Ordinal)
-                && string.Equals(launchRecord.Scope, AppDefinitionIdentity.NormalizeScope(instance.Scope), StringComparison.Ordinal))
+                && string.Equals(launchRecord.Scope, instance.Scope, StringComparison.Ordinal))
             {
                 launchRecord.State = LaunchRecordState.Registered;
                 launchRecord.RegisteredInstanceId = instance.InstanceId;
@@ -360,16 +362,18 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private static string? RenderTemplate(
         string? template,
         string appId,
-        string? scope,
+        string scope,
         string httpBaseUrl)
     {
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
+
         if (string.IsNullOrEmpty(template))
         {
             return template;
         }
 
-        var scopeValue = scope ?? string.Empty;
-        var scopeOrGlobal = string.IsNullOrEmpty(scope) ? "global" : scope;
+        var scopeValue = scope;
+        var scopeOrGlobal = ScopeContract.IsGlobal(scope) ? "global" : scope;
 
         return template
             .Replace("{appId}", appId, StringComparison.Ordinal)
@@ -381,7 +385,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private string ResolveDedupeKey(
         AppDefinition definition,
         string appId,
-        string? scope,
+        string scope,
         string? explicitDedupeKey,
         string httpBaseUrl)
     {
@@ -398,7 +402,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
         var rendered = RenderTemplate(template, appId, scope, httpBaseUrl);
         return string.IsNullOrWhiteSpace(rendered)
-            ? RenderTemplate(DefaultDedupeKeyTemplate, appId, scope, httpBaseUrl) ?? $"{appId}:{scope ?? "global"}"
+            ? RenderTemplate(DefaultDedupeKeyTemplate, appId, scope, httpBaseUrl) ?? $"{appId}:{(ScopeContract.IsGlobal(scope) ? "global" : scope)}"
             : rendered;
     }
 
@@ -506,7 +510,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
     }
 
-    private static object BuildAppDefinitionNotFoundData(string appId, string? scope)
+    private static object BuildAppDefinitionNotFoundData(string appId, string scope)
     {
         return new AppDefinitionIdentityErrorData
         {
@@ -518,9 +522,9 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private static object BuildDefinitionScopeMismatchErrorData(
         string launchId,
         string expectedAppId,
-        string? expectedScope,
+        string expectedScope,
         string actualAppId,
-        string? actualScope)
+        string actualScope)
     {
         return new
         {
@@ -541,7 +545,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
         public required string AppId { get; init; }
 
-        public required string? Scope { get; init; }
+        public required string Scope { get; init; }
 
         public required DateTime CreatedAtUtc { get; init; }
 

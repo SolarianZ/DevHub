@@ -94,22 +94,23 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <summary>
     /// 调用 <c>hub.apps.listDefinitions</c>。
     /// </summary>
+    /// <param name="request">过滤参数。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义列表。</returns>
-    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(ListDefinitionsRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken);
     }
 
     /// <summary>
     /// 调用 <c>hub.apps.getDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
-    /// <param name="scope">Definition 作用域。<see langword="null"/> 表示 Global Definition。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义。</returns>
-    public async Task<AppDefinition> GetDefinitionAsync(string appId, string? scope, CancellationToken cancellationToken = default)
+    public async Task<AppDefinition> GetDefinitionAsync(string appId, string scope, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken);
@@ -191,9 +192,9 @@ public sealed class DevHubClient : IAsyncDisposable
     /// 调用 <c>hub.apps.deleteDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
-    /// <param name="scope">Definition 作用域。<see langword="null"/> 表示 Global Definition。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task DeleteDefinitionAsync(string appId, string? scope, CancellationToken cancellationToken = default)
+    public async Task DeleteDefinitionAsync(string appId, string scope, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         var result = await _transport.SendAsync(
@@ -277,7 +278,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="request">过滤参数。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>实例列表。</returns>
-    public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         return await ReadOnlyRpcExecutor.ListInstancesAsync(_transport.SendAsync, request, cancellationToken);

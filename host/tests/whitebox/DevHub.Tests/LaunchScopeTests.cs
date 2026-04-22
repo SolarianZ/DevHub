@@ -74,7 +74,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldReturnInvalidParams()
+    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeTreatedAsGlobal()
     {
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -96,14 +96,14 @@ public class LaunchScopeTests : IDisposable
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
-        Assert.Equal(-32602, response.Error.Code);
-        Assert.Equal("invalid_params", response.Error.Message);
+        Assert.Equal(-32014, response.Error.Code);
+        Assert.Equal("app_definition_not_found", response.Error.Message);
         var emptyData = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("invalid_scope", emptyData.GetProperty("reason").GetString());
+        Assert.Equal(ScopeContract.Global, emptyData.GetProperty("scope").GetString());
     }
 
     [Fact]
-    public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
+    public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -136,15 +136,12 @@ public class LaunchScopeTests : IDisposable
 
         Assert.NotNull(omittedScopeResponse.Error);
         Assert.NotNull(nullScopeResponse.Error);
-        Assert.Equal(-32014, omittedScopeResponse.Error.Code);
-        Assert.Equal(-32014, nullScopeResponse.Error.Code);
-        Assert.Equal("app_definition_not_found", omittedScopeResponse.Error.Message);
-        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
-
-        var omittedData = JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data);
-        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
-        Assert.Equal("missing-scope-equivalent-app", omittedData.GetProperty("appId").GetString());
-        Assert.Equal("missing-scope-equivalent-app", nullData.GetProperty("appId").GetString());
+        Assert.Equal(-32602, omittedScopeResponse.Error.Code);
+        Assert.Equal(-32602, nullScopeResponse.Error.Code);
+        Assert.Equal("invalid_params", omittedScopeResponse.Error.Message);
+        Assert.Equal("invalid_params", nullScopeResponse.Error.Message);
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data).GetProperty("reason").GetString());
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data).GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -165,6 +162,7 @@ public class LaunchScopeTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scope-launch-app",
+                scope = ScopeContract.Global,
                 waitForRegisterMs = -1
             })
         }, CancellationToken.None);
@@ -198,6 +196,7 @@ public class LaunchScopeTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scope-launch-app",
+                scope = ScopeContract.Global,
                 dedupeKey = 123,
                 waitForRegisterMs = 0
             })
@@ -340,7 +339,7 @@ public class LaunchScopeTests : IDisposable
 
         var firstLaunch = await coordinator.LaunchAsync(
             appId: "launch-exit-retry.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -353,7 +352,7 @@ public class LaunchScopeTests : IDisposable
 
         var secondLaunch = await coordinator.LaunchAsync(
             appId: "launch-exit-retry.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -400,10 +399,11 @@ public class LaunchScopeTests : IDisposable
         string? argsTemplate = null,
         string? definitionScope = null)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = definitionScope,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -428,7 +428,7 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -456,5 +456,4 @@ public class LaunchScopeTests : IDisposable
         throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
-
 

@@ -192,22 +192,23 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <summary>
     /// 通过 WebSocket 调用 <c>hub.apps.listDefinitions</c>。
     /// </summary>
+    /// <param name="request">过滤参数。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义列表。</returns>
-    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(ListDefinitionsRequest request, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken);
     }
 
     /// <summary>
     /// 通过 WebSocket 调用 <c>hub.apps.getDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
-    /// <param name="scope">Definition 作用域。<see langword="null"/> 表示 Global Definition。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义。</returns>
-    public async Task<AppDefinition> GetDefinitionAsync(string appId, string? scope, CancellationToken cancellationToken = default)
+    public async Task<AppDefinition> GetDefinitionAsync(string appId, string scope, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
         return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken);
@@ -220,7 +221,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>实例列表。</returns>
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(
-        ListInstancesRequest? request = null,
+        ListInstancesRequest request,
         CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();

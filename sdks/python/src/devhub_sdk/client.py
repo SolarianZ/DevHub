@@ -26,6 +26,7 @@ from ._payloads import (
     build_get_definition_params,
     build_heartbeat_params,
     build_launch_params,
+    build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
     build_notify_params,
@@ -45,6 +46,7 @@ from .models import (
     DevHubClientOptions,
     HubRuntime,
     InvokeRequest,
+    ListDefinitionsRequest,
     LaunchRequest,
     LaunchResult,
     ListInstancesRequest,
@@ -136,13 +138,13 @@ class DevHubClient:
         result = self._send("hub.ping", params)
         return parse_ping_result(result, path="hub.ping.result")
 
-    def list_definitions(self) -> list[AppDefinition]:
+    def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """调用 `hub.apps.listDefinitions`。"""
 
-        result = self._send("hub.apps.listDefinitions", None)
+        result = self._send("hub.apps.listDefinitions", build_list_definitions_params(request))
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    def get_definition(self, app_id: str, scope: str | None) -> AppDefinition:
+    def get_definition(self, app_id: str, scope: str) -> AppDefinition:
         """调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
         result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id, scope))
@@ -160,7 +162,7 @@ class DevHubClient:
         result = self._send("hub.apps.upsertDefinition", build_upsert_definition_params(definition))
         return parse_definition_result(result, path="hub.apps.upsertDefinition.result")
 
-    def delete_definition(self, app_id: str, scope: str | None) -> None:
+    def delete_definition(self, app_id: str, scope: str) -> None:
         """调用 `hub.apps.deleteDefinition`，按 `appId + scope` 精确删除 Definition。"""
 
         result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id, scope))
@@ -197,7 +199,7 @@ class DevHubClient:
         if not require_bool(root, "ok", "hub.apps.unregisterInstance.result"):
             raise RuntimeError("hub.apps.unregisterInstance.result 返回结果非法。")
 
-    def list_instances(self, request: ListInstancesRequest | None = None) -> list[AppInstance]:
+    def list_instances(self, request: ListInstancesRequest) -> list[AppInstance]:
         """调用 `hub.apps.listInstances`。"""
 
         result = self._send("hub.apps.listInstances", build_list_instances_params(request))

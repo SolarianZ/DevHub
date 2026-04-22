@@ -29,19 +29,53 @@ public sealed class PingResult
 }
 
 /// <summary>
+/// Definition 列表请求。
+/// </summary>
+public sealed class ListDefinitionsRequest
+{
+    private string? _scope;
+
+    /// <summary>
+    /// 应用标识过滤。
+    /// </summary>
+    public string? AppId { get; set; }
+
+    /// <summary>
+    /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
+    /// </summary>
+    public string? Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopeFilter(value, nameof(Scope));
+        }
+    }
+}
+
+/// <summary>
 /// Launch 请求。
 /// </summary>
 public sealed class LaunchRequest
 {
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 应用标识。
     /// </summary>
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global Definition。
     /// </summary>
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
+        }
+    }
 
     /// <summary>
     /// 启动去重键。
@@ -89,25 +123,29 @@ public sealed class LaunchResult
 /// </summary>
 public sealed class ListInstancesRequest
 {
+    private string? _scope;
+
     /// <summary>
     /// 应用标识过滤。
     /// </summary>
     public string? AppId { get; set; }
 
     /// <summary>
-    /// 作用域过滤。
+    /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
     /// </summary>
-    public string? Scope { get; set; }
+    public string? Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopeFilter(value, nameof(Scope));
+        }
+    }
 
     /// <summary>
     /// 是否包含离线实例。
     /// </summary>
     public bool IncludeOffline { get; set; }
-
-    /// <summary>
-    /// 是否忽略当前作用域限制并返回所有作用域实例。
-    /// </summary>
-    public bool IncludeAllScopes { get; set; }
 }
 
 /// <summary>
@@ -336,12 +374,21 @@ public sealed class Invocation
 /// </summary>
 public sealed class InvocationTarget
 {
+    private string _scope = string.Empty;
+
     /// <summary>
-    /// 目标作用域。
+    /// 目标作用域。空字符串表示 Global。
     /// </summary>
     [JsonPropertyName("scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
+        }
+    }
 
     /// <summary>
     /// 目标实例标识。

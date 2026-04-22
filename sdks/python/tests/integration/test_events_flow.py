@@ -11,6 +11,8 @@ from devhub_sdk import (
     AppDefinition,
     AppInstanceRegistration,
     InvokeCapability,
+    ListDefinitionsRequest,
+    ListInstancesRequest,
 )
 
 from ._host import DevHubHostFixture
@@ -34,6 +36,7 @@ async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -
                     app_id="events.flow.app",
                     pid=99999,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("events-inst-1"),
             )
@@ -49,6 +52,7 @@ async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -
                     app_id="events.flow.app",
                     pid=99998,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("events-inst-2"),
             )
@@ -95,6 +99,7 @@ async def test_ws_disconnect_cleanup_should_require_resubscribe_after_reconnect(
                     app_id="events.reconnect.app",
                     pid=99997,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("events-reconnect-inst-1"),
             )
@@ -107,6 +112,7 @@ async def test_ws_disconnect_cleanup_should_require_resubscribe_after_reconnect(
                     app_id="events.reconnect.app",
                     pid=99996,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("events-reconnect-inst-2"),
             )
@@ -131,6 +137,7 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
                 app_id="events.ws.read.app",
                 pid=99995,
                 invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
             ),
             _instance_password("events-ws-read-inst-1"),
         )
@@ -139,16 +146,16 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
         try:
             await events_client.authenticate()
             ping = await events_client.ping({"source": "ws"})
-            definitions = await events_client.list_definitions()
-            definition = await events_client.get_definition("events.ws.read.app", None)
-            instances = await events_client.list_instances()
+            definitions = await events_client.list_definitions(ListDefinitionsRequest(scope=None))
+            definition = await events_client.get_definition("events.ws.read.app", "")
+            instances = await events_client.list_instances(ListInstancesRequest(scope=None))
         finally:
             await events_client.close()
 
     assert ping.ok is True
     assert any(item.app_id == "events.ws.read.app" for item in definitions)
     assert definition.app_id == "events.ws.read.app"
-    assert definition.scope is None
+    assert definition.scope == ""
     assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)
 
 
@@ -165,11 +172,12 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
                 AppDefinition(
                     app_id="events.definition.app",
                     display_name="Events Definition App",
+                    scope="",
                 )
             )
             upserted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
 
-            http_client.delete_definition("events.definition.app", None)
+            http_client.delete_definition("events.definition.app", "")
             deleted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
         finally:
             await events_client.close()
@@ -177,13 +185,13 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
     assert upserted.subscription_id == subscription_id
     assert upserted.type == APP_DEFINITION_UPSERTED
     assert upserted.payload["appId"] == "events.definition.app"
-    assert upserted.payload["scope"] is None
-    assert upserted.payload["definition"]["scope"] is None
+    assert upserted.payload["scope"] == ""
+    assert upserted.payload["definition"]["scope"] == ""
     assert upserted.payload["definition"]["displayName"] == "Events Definition App"
     assert deleted.subscription_id == subscription_id
     assert deleted.type == APP_DEFINITION_DELETED
     assert deleted.payload["appId"] == "events.definition.app"
-    assert deleted.payload["scope"] is None
+    assert deleted.payload["scope"] == ""
 
 
 @pytest.mark.asyncio
@@ -210,6 +218,7 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                     app_id="parallel.events.app",
                     pid=99994,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("parallel-events-inst-a"),
             )
@@ -225,6 +234,7 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                     app_id="parallel.events.app",
                     pid=99993,
                     invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
                 ),
                 _instance_password("parallel-events-inst-b"),
             )

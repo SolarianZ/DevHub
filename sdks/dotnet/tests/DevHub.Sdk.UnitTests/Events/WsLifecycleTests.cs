@@ -31,7 +31,11 @@ public sealed class WsLifecycleTests : IDisposable
             "scope"
         },
         {
-            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":null,"password":"secret-1"}}}""",
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":null}}}""",
+            "scope"
+        },
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":"","password":"secret-1"}}}""",
             "password"
         }
     };
@@ -78,9 +82,9 @@ public sealed class WsLifecycleTests : IDisposable
             new SequenceRequestIdFactory("ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app", null));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync(new ListDefinitionsRequest()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app", string.Empty));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(new ListInstancesRequest()));
         Assert.Empty(connection.SentTexts);
     }
 
@@ -210,7 +214,7 @@ public sealed class WsLifecycleTests : IDisposable
             {
                 return
                 [
-                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","scope":null,"displayName":"WS App"}]}}""")
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","scope":"","displayName":"WS App"}]}}""")
                 ];
             }
 
@@ -218,7 +222,7 @@ public sealed class WsLifecycleTests : IDisposable
             {
                 return
                 [
-                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getdef-1","result":{"ok":true,"definition":{"appId":"ws.app","scope":null,"displayName":"WS App"}}}""")
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getdef-1","result":{"ok":true,"definition":{"appId":"ws.app","scope":"","displayName":"WS App"}}}""")
                 ];
             }
 
@@ -226,7 +230,7 @@ public sealed class WsLifecycleTests : IDisposable
             {
                 return
                 [
-                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listinst-1","result":{"ok":true,"instances":[{"instanceId":"inst-1","appId":"ws.app","scope":null,"pid":12345,"registeredAtUtc":"2026-03-09T00:00:00Z","lastSeenUtc":"2026-03-09T00:00:01Z","invoke":{"poll":true,"respond":true}}]}}""")
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listinst-1","result":{"ok":true,"instances":[{"instanceId":"inst-1","appId":"ws.app","scope":"","pid":12345,"registeredAtUtc":"2026-03-09T00:00:00Z","lastSeenUtc":"2026-03-09T00:00:01Z","invoke":{"poll":true,"respond":true}}]}}""")
                 ];
             }
 
@@ -246,18 +250,19 @@ public sealed class WsLifecycleTests : IDisposable
         await client.AuthenticateAsync();
 
         var ping = await client.PingAsync(new { value = 1 });
-        var definitions = await client.ListDefinitionsAsync();
-        var definition = await client.GetDefinitionAsync("ws.app", null);
-        var instances = await client.ListInstancesAsync();
+        var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest());
+        var definition = await client.GetDefinitionAsync("ws.app", string.Empty);
+        var instances = await client.ListInstancesAsync(new ListInstancesRequest());
 
         Assert.True(ping.Ok);
         Assert.Equal("ws.app", definitions.Single().AppId);
         Assert.Equal("ws.app", definition.AppId);
-        Assert.Null(definition.Scope);
+        Assert.Equal(string.Empty, definition.Scope);
         Assert.Equal("inst-1", instances.Single().InstanceId);
 
         var listDefinitionsRequest = connection.SentTexts.Single(sent => sent.Contains("hub.apps.listDefinitions", StringComparison.Ordinal));
-        Assert.DoesNotContain("\"params\"", listDefinitionsRequest, StringComparison.Ordinal);
+        Assert.Contains("\"scope\":null", listDefinitionsRequest, StringComparison.Ordinal);
+        Assert.DoesNotContain("includeAllScopes", listDefinitionsRequest, StringComparison.Ordinal);
 
         Assert.Collection(connection.SentTexts,
             sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
@@ -266,9 +271,13 @@ public sealed class WsLifecycleTests : IDisposable
             sent =>
             {
                 Assert.Contains("hub.apps.getDefinition", sent, StringComparison.Ordinal);
-                Assert.Contains("\"scope\":null", sent, StringComparison.Ordinal);
+                Assert.Contains("\"scope\":\"\"", sent, StringComparison.Ordinal);
             },
-            sent => Assert.Contains("hub.apps.listInstances", sent, StringComparison.Ordinal));
+            sent =>
+            {
+                Assert.Contains("hub.apps.listInstances", sent, StringComparison.Ordinal);
+                Assert.Contains("\"scope\":null", sent, StringComparison.Ordinal);
+            });
     }
 
     [Fact]

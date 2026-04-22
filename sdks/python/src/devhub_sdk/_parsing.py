@@ -185,7 +185,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
         display_name=require_string_allow_empty(root, "displayName", path),
-        scope=require_nullable_definition_scope(root, "scope", path),
+        scope=require_scope_string(root, "scope", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
@@ -216,7 +216,7 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     return AppInstance(
         instance_id=require_validated_string(root, "instanceId", path, validate_instance_id),
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        scope=optional_str(root.get("scope"), f"{path}.scope"),
+        scope=require_scope_string(root, "scope", path),
         pid=require_positive_int(root, "pid", path),
         registered_at_utc=require_datetime(root, "registeredAtUtc", path),
         last_seen_utc=require_datetime(root, "lastSeenUtc", path),
@@ -316,7 +316,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     root = require_mapping(value, path)
     target_root = require_mapping(root.get("target"), f"{path}.target")
     target = InvocationTarget(
-        scope=optional_str(target_root.get("scope"), f"{path}.target.scope"),
+        scope=require_scope_string(target_root, "scope", f"{path}.target"),
         instance_id=optional_validated_string(
             target_root.get("instanceId"),
             f"{path}.target.instanceId",
@@ -452,7 +452,7 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
         payload_root = require_mapping(payload, path)
         if event_type == "app.definition.upserted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
-            payload_scope = require_nullable_definition_scope(payload_root, "scope", path)
+            payload_scope = require_scope_string(payload_root, "scope", path)
             definition = parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
             if definition.scope != payload_scope:
                 raise RuntimeError(f"{path}.definition.scope 必须与 {path}.scope 一致。")
@@ -460,12 +460,12 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
 
         if event_type == "app.definition.deleted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
-            require_nullable_definition_scope(payload_root, "scope", path)
+            require_scope_string(payload_root, "scope", path)
             return
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
         require_validated_string(payload_root, "instanceId", path, validate_instance_id)
-        optional_str(payload_root.get("scope"), f"{path}.scope")
+        require_scope_string(payload_root, "scope", path)
         if "password" in payload_root:
             raise RuntimeError(f"{path}.password 不得出现。")
 
@@ -502,12 +502,12 @@ def optional_property_int_at_least(
     return parsed
 
 
-def require_nullable_definition_scope(root: Mapping[str, Any], name: str, path: str) -> str | None:
-    """读取 Definition 上必须存在、且允许为 null 的 scope 属性。"""
+def require_scope_string(root: Mapping[str, Any], name: str, path: str) -> str:
+    """读取必须存在的显式字符串 scope 属性。"""
 
     if name not in root:
         raise RuntimeError(f"{path}.{name} 必须存在。")
-    return parse_definition_scope(root.get(name), f"{path}.{name}")
+    return parse_scope_string(root.get(name), f"{path}.{name}")
 
 
 def _require_json_value(value: Any, path: str) -> Any:
@@ -558,12 +558,12 @@ def optional_str(value: Any, path: str) -> str | None:
     return value
 
 
-def parse_definition_scope(value: Any, path: str) -> str | None:
-    """读取 Definition 复合身份中的 scope。"""
+def parse_scope_string(value: Any, path: str) -> str:
+    """读取显式字符串 scope。"""
 
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
+        raise RuntimeError(f"{path} 类型非法。")
+    if value and value != value.strip():
         raise RuntimeError(f"{path} 类型非法。")
     return value
 

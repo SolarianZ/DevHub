@@ -31,7 +31,7 @@ public class AppInstancesHeartbeatSpecTests
         {
             InstanceId = "heartbeat-spec-inst",
             AppId = "heartbeat-spec.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 7011,
             RegisteredAtUtc = clock.UtcNow.AddSeconds(-20),
             LastSeenUtc = initialLastSeen,
@@ -118,5 +118,6 @@ public class AppInstancesHeartbeatSpecTests
         }
     }
 }
+
 
 

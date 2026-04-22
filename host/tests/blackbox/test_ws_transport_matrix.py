@@ -115,7 +115,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                response = self._ws_call(ws, "matrix-list-def-002", "hub.apps.listDefinitions", {})
+                response = self._ws_call(ws, "matrix-list-def-002", "hub.apps.listDefinitions", {"scope": None})
                 if not RpcAssertions.expect_success(result, response, ["definitions"]):
                     return result
 
@@ -201,7 +201,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                     "hub.apps.listInstances",
                     {
                         "appId": app_id,
-                        "includeAllScopes": True,
+                        "scope": None,
                         "includeOffline": True,
                     },
                 )
@@ -277,7 +277,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                             "instance": {
                                 "instanceId": "matrix-ws-http-only-register-instance",
                                 "appId": "matrix-ws-http-only-register-app",
-                                "scope": None,
+                                "scope": "",
                                 "pid": 6311,
                                 "invoke": {"poll": True, "respond": True},
                             }
@@ -298,7 +298,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.apps.launch",
                         {
                             "appId": "matrix-ws-http-only-launch-app",
-                            "scope": None,
+                            "scope": "",
                             "waitForRegisterMs": 0,
                         },
                     ),
@@ -307,7 +307,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.invoke.notify",
                         {
                             "appId": "matrix-ws-http-only-notify-app",
-                            "target": {"scope": None, "instanceId": None},
+                            "target": {"scope": "", "instanceId": None},
                             "method": "test.ping",
                             "args": {"from": "ws"},
                             "options": {
@@ -322,7 +322,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.invoke.request",
                         {
                             "appId": "matrix-ws-http-only-request-app",
-                            "target": {"scope": None, "instanceId": None},
+                            "target": {"scope": "", "instanceId": None},
                             "method": "test.ping",
                             "args": {"from": "ws"},
                             "options": {
@@ -357,7 +357,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.validate",
-                                "scope": None,
+                                "scope": "",
                                 "displayName": "WS HTTP-only Validate",
                             }
                         },
@@ -368,7 +368,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.upsert",
-                                "scope": None,
+                                "scope": "",
                                 "displayName": "WS HTTP-only Upsert",
                             }
                         },
@@ -378,7 +378,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.apps.deleteDefinition",
                         {
                             "appId": "matrix.ws.http.only.delete",
-                            "scope": None,
+                            "scope": "",
                         },
                     ),
                 ]

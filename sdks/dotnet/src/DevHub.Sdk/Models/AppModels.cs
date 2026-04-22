@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk.Models;
 
@@ -8,7 +9,7 @@ namespace DevHub.Sdk.Models;
 /// </summary>
 public sealed class AppDefinition
 {
-    private string? _scope;
+    private string _scope = string.Empty;
 
     /// <summary>
     /// 应用标识。
@@ -17,21 +18,16 @@ public sealed class AppDefinition
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Definition 作用域。<see langword="null"/> 表示 Global Definition。
+    /// Definition 作用域。空字符串表示 Global Definition。
     /// </summary>
     [JsonPropertyName("scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
-    public string? Scope
+    public string Scope
     {
         get => _scope;
         set
         {
-            if (value is not null && string.IsNullOrWhiteSpace(value))
-            {
-                throw new ArgumentException("Scope 必须为 null 或非空字符串。", nameof(Scope));
-            }
-
-            _scope = value;
+            _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
         }
     }
 
@@ -170,6 +166,8 @@ public sealed class DefinitionValidationResult
 /// </summary>
 public sealed class AppInstance
 {
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
@@ -183,10 +181,17 @@ public sealed class AppInstance
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global 实例。
     /// </summary>
     [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
+        }
+    }
 
     /// <summary>
     /// 进程标识。
@@ -224,6 +229,8 @@ public sealed class AppInstance
 /// </summary>
 public sealed class AppInstanceRegistration
 {
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
@@ -237,10 +244,17 @@ public sealed class AppInstanceRegistration
     public string AppId { get; set; } = string.Empty;
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global 实例。
     /// </summary>
     [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set
+        {
+            _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
+        }
+    }
 
     /// <summary>
     /// 进程标识。

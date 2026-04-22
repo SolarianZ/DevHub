@@ -72,7 +72,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var instance = registerResult.GetProperty("instance");
         Assert.Equal("instance.registered", instance.GetProperty("instanceId").GetString());
         Assert.Equal("instance.app", instance.GetProperty("appId").GetString());
-        Assert.Null(instance.GetProperty("scope").GetString());
+        Assert.Equal(ScopeContract.Global, instance.GetProperty("scope").GetString());
         Assert.Equal("cn", instance.GetProperty("meta").GetProperty("region").GetString());
         Assert.False(instance.TryGetProperty("password", out _));
 
@@ -91,6 +91,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     {
                         instanceId = "instance.registered",
                         appId = "instance.app",
+                        scope = ScopeContract.Global,
                         pid = 7202,
                         invoke = new
                         {
@@ -322,7 +323,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorIncludeAllScopes()
+    public async Task Spec_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         RegisterInstance(appRegistry, "list.app", "global.instance");
@@ -335,8 +336,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 "list-invalid-scope",
                 new
                 {
-                    scope = 1,
-                    includeAllScopes = false
+                    scope = 1
                 }),
             CancellationToken.None);
 
@@ -350,8 +350,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "list.app",
-                    scope = 1,
-                    includeAllScopes = true,
+                    scope = (string?)null,
                     includeOffline = true
                 }),
             CancellationToken.None);
@@ -403,6 +402,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "notify.rpc-disabled",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.run"
                 }),
             CancellationToken.None);
@@ -417,6 +421,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "notify.route-errors",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.run",
                     options = new
                     {
@@ -439,6 +448,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     method = "task.run",
                     target = new
                     {
+                        scope = ScopeContract.Global,
                         instanceId = "missing.instance"
                     },
                     options = new
@@ -473,6 +483,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "notify.success",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.notify",
                     args = new
                     {
@@ -537,6 +552,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "request.success",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.request",
                     options = new
                     {
@@ -611,6 +631,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "request.failed",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.failed",
                     options = new
                     {
@@ -689,6 +714,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "request.timeout",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.timeout",
                     options = new
                     {
@@ -722,6 +752,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     appId = "request.expired",
+                    target = new
+                    {
+                        scope = ScopeContract.Global,
+                        instanceId = (string?)null
+                    },
                     method = "task.expired",
                     options = new
                     {
@@ -829,6 +864,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     method = "task.run",
                     target = new
                     {
+                        scope = ScopeContract.Global,
                         instanceId = "holder.instance"
                     },
                     options = new
@@ -967,10 +1003,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? definitionScope = null)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = definitionScope,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new
             {
@@ -989,7 +1026,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         }
 
         File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName()),
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName()),
             JsonSerializer.Serialize(payload));
     }
 
@@ -1002,11 +1039,12 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         string? scope = null,
         int pid = 7301)
     {
+        var normalizedScope = scope ?? ScopeContract.Global;
         var instance = new AppInstance
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = scope,
+            Scope = normalizedScope,
             Pid = pid,
             Invoke = new InvokeCapability
             {

@@ -87,7 +87,7 @@ public class CoreRpcSpecTests : IDisposable
         WriteDefinition(new
         {
             appId = "spec-6.3.3-target",
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = "Spec 6.3.3 Target"
         });
 
@@ -96,7 +96,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.3-list",
             Method = "hub.apps.listDefinitions",
-            Params = JsonSerializer.SerializeToElement(new { })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null })
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -113,7 +113,7 @@ public class CoreRpcSpecTests : IDisposable
         WriteDefinition(new
         {
             appId = "spec-6.3.4-target",
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = "Spec 6.3.4 Target"
         });
 
@@ -122,7 +122,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.4-get",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-target" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-target", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -140,7 +140,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.4-get-missing",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-missing" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-missing", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
@@ -165,7 +165,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-instance",
                 appId = "spec-6.3.5.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6101,
                 invoke = new
                 {
@@ -204,7 +204,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-refresh-instance",
                 appId = "spec-6.3.5.refresh.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6103,
                 invoke = new
                 {
@@ -231,7 +231,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-refresh-instance",
                 appId = "spec-6.3.5.refresh.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6103,
                 invoke = new
                 {
@@ -298,7 +298,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.7-instance",
                 appId = "spec-6.3.7.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6201,
                 invoke = new
                 {
@@ -330,7 +330,7 @@ public class CoreRpcSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_DefaultGlobalScopeAndIncludeOfflineFalse_ShouldApply()
+    public async Task Spec_6_3_8_ListInstances_GlobalScopeAndIncludeOfflineFalse_ShouldApply()
     {
         var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
@@ -350,7 +350,8 @@ public class CoreRpcSpecTests : IDisposable
             Method = "hub.apps.listInstances",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "spec-6.3.8.app"
+                appId = "spec-6.3.8.app",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
 
@@ -383,6 +384,7 @@ public class CoreRpcSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.8.app",
+                scope = ScopeContract.Global,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -394,7 +396,7 @@ public class CoreRpcSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScope()
+    public async Task Spec_6_3_8_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -409,8 +411,7 @@ public class CoreRpcSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.8.scope-all.app",
-                scope = "workspace-C",
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -439,6 +440,7 @@ public class CoreRpcSpecTests : IDisposable
 
     private async Task RegisterInstanceAsync(AppInstancesHandler handler, string instanceId, string appId, string? scope, int pid)
     {
+        var normalizedScope = scope ?? ScopeContract.Global;
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "register-" + instanceId,
@@ -447,7 +449,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId,
                 appId,
-                scope,
+                scope = normalizedScope,
                 pid,
                 invoke = new
                 {
@@ -514,8 +516,8 @@ public class CoreRpcSpecTests : IDisposable
         var appId = json.GetProperty("appId").GetString();
         var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
             ? scopeElement.GetString()
-            : null;
-        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId!, scope).GetFileName());
+            : ScopeContract.Global;
+        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName());
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }

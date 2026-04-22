@@ -375,16 +375,16 @@ def _ensure_trailing_separator(path_value: Path) -> str:
     return value if value.endswith(os.sep) else f"{value}{os.sep}"
 
 
-def _normalize_definition_scope(value: Any) -> str | None:
+def _normalize_definition_scope(value: Any) -> str:
     if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("definition.scope 必须为非空字符串或 None。")
+        return ""
+    if not isinstance(value, str) or (value and value != value.strip()):
+        raise ValueError("definition.scope 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。")
     return value
 
 
-def _build_definition_file_name(app_id: str, scope: str | None) -> str:
-    scope_segment = "global" if scope is None else scope.encode("utf-8").hex().upper()
+def _build_definition_file_name(app_id: str, scope: str) -> str:
+    scope_segment = "global" if scope == "" else scope.encode("utf-8").hex().upper()
     return f"{app_id}--{scope_segment}.json"
 
 

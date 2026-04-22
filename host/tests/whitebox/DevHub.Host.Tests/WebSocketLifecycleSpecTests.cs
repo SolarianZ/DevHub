@@ -334,7 +334,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-list-definitions",
             method = "hub.apps.listDefinitions",
-            @params = new { }
+            @params = new { scope = (string?)null }
         });
 
         var getDefinition = CreateJson(new
@@ -342,7 +342,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-get-definition",
             method = "hub.apps.getDefinition",
-            @params = new { appId = "ws-supported.app" }
+            @params = new { appId = "ws-supported.app", scope = ScopeContract.Global }
         });
 
         var listInstances = CreateJson(new
@@ -350,7 +350,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-list-instances",
             method = "hub.apps.listInstances",
-            @params = new { includeAllScopes = true, includeOffline = true }
+            @params = new { scope = (string?)null, includeOffline = true }
         });
 
         var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances]);
@@ -1210,11 +1210,11 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     private void WriteDefinition(string appId)
     {
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {

@@ -678,27 +678,27 @@ def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
     return definition_path
 
 
-def normalize_definition_scope(scope: Optional[str]) -> Optional[str]:
-    """规范化 Definition scope（空字符串视为 Global）。"""
+def normalize_definition_scope(scope: Optional[str]) -> str:
+    """规范化 Definition scope（Global 统一编码为空字符串）。"""
     if scope in (None, ""):
-        return None
+        return ""
     return scope
 
 
-def encode_definition_scope_segment(scope: Optional[str]) -> str:
+def encode_definition_scope_segment(scope: str) -> str:
     """把 Definition scope 编码为稳定文件名片段。"""
-    if scope is None:
+    if scope == "":
         return "global"
 
     return scope.encode("utf-8").hex().upper()
 
 
-def build_definition_file_name(app_id: str, scope: Optional[str] = None) -> str:
+def build_definition_file_name(app_id: str, scope: Optional[str] = "") -> str:
     """构造 Definition 复合键文件名。"""
     return f"{app_id}--{encode_definition_scope_segment(normalize_definition_scope(scope))}.json"
 
 
-def build_definition_identity_params(app_id: str, scope: Optional[str] = None) -> Dict[str, Any]:
+def build_definition_identity_params(app_id: str, scope: Optional[str] = "") -> Dict[str, Any]:
     """构造按 `appId + scope` 标识 Definition 的 RPC 参数。"""
     return {
         "appId": app_id,
@@ -709,7 +709,7 @@ def build_definition_identity_params(app_id: str, scope: Optional[str] = None) -
 def build_app_definition(
     app_id: str,
     *,
-    scope: Optional[str] = None,
+    scope: Optional[str] = "",
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     rpc: bool = True,
@@ -736,7 +736,7 @@ def build_app_definition(
 def write_app_definition(
     app_id: str,
     *,
-    scope: Optional[str] = None,
+    scope: Optional[str] = "",
     display_name: Optional[str] = None,
     description: Optional[str] = None,
     rpc: bool = True,
@@ -939,7 +939,7 @@ class RpcClient:
         self,
         instance_id,
         app_id,
-        scope=None,
+        scope="",
         poll=True,
         respond=True,
         pid=12345,
@@ -1004,7 +1004,7 @@ class RpcClient:
         app_id,
         method,
         args=_UNSET,
-        target_scope=None,
+        target_scope="",
         target_instance_id=None,
         ttl_ms=60000,
         queue_if_offline=True,
@@ -1038,7 +1038,7 @@ class RpcClient:
         app_id,
         method,
         args=_UNSET,
-        target_scope=None,
+        target_scope="",
         target_instance_id=None,
         ttl_ms=60000,
         queue_if_offline=True,
@@ -1063,7 +1063,7 @@ class RpcClient:
         app_id,
         method,
         args=_UNSET,
-        target_scope=None,
+        target_scope="",
         target_instance_id=None,
         options=None,
         request_id="1",
@@ -1093,7 +1093,7 @@ class RpcClient:
     def launch_app(
         self,
         app_id,
-        scope=None,
+        scope="",
         dedupe_key=None,
         wait_for_register_ms=0,
         request_id="1",

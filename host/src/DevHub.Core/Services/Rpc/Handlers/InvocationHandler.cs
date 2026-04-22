@@ -794,7 +794,7 @@ public class InvocationHandler : IRpcHandler
 
     private void LogRouteDecision(string methodName, string appId, InvocationTarget target, int candidateCount)
     {
-        var matchedScope = target.Scope is null ? "global" : "explicit";
+        var matchedScope = ScopeContract.IsGlobal(target.Scope) ? "global" : "explicit";
         _logger.LogInformation(
             "Invocation 路由决策: method={method}, appId={appId}, target.scope={targetScope}, target.instanceId={targetInstanceId}, candidateCount={candidateCount}, matchedScope={matchedScope}",
             methodName,

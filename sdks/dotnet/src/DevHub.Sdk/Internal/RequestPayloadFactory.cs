@@ -5,13 +5,13 @@ namespace DevHub.Sdk.Internal;
 
 internal static class RequestPayloadFactory
 {
-    internal static object BuildGetDefinitionParams(string appId, string? scope)
+    internal static object BuildGetDefinitionParams(string appId, string scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = NormalizeDefinitionScope(scope, nameof(scope))
+            ["scope"] = ScopeContract.EnsureScopedString(scope, nameof(scope))
         };
     }
 
@@ -33,13 +33,13 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildDeleteDefinitionParams(string appId, string? scope)
+    internal static object BuildDeleteDefinitionParams(string appId, string scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = NormalizeDefinitionScope(scope, nameof(scope))
+            ["scope"] = ScopeContract.EnsureScopedString(scope, nameof(scope))
         };
     }
 
@@ -73,10 +73,7 @@ internal static class RequestPayloadFactory
             }
         };
 
-        if (instance.Scope is not null)
-        {
-            instancePayload["scope"] = instance.Scope;
-        }
+        instancePayload["scope"] = ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope));
 
         if (instance.Meta is not null)
         {
@@ -110,27 +107,34 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object? BuildListInstancesParams(ListInstancesRequest? request)
+    internal static object BuildListDefinitionsParams(ListDefinitionsRequest request)
     {
-        if (request is null)
-        {
-            return null;
-        }
+        ArgumentNullException.ThrowIfNull(request);
 
-        var payload = new Dictionary<string, object?>();
+        var payload = new Dictionary<string, object?>
+        {
+            ["scope"] = ScopeContract.EnsureScopeFilter(request.Scope, nameof(request.Scope))
+        };
+
         if (request.AppId is not null)
         {
             payload["appId"] = request.AppId;
         }
 
-        if (request.Scope is not null)
-        {
-            payload["scope"] = request.Scope;
-        }
+        return payload;
+    }
 
-        if (request.IncludeAllScopes)
+    internal static object BuildListInstancesParams(ListInstancesRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var payload = new Dictionary<string, object?>
         {
-            payload["includeAllScopes"] = true;
+            ["scope"] = ScopeContract.EnsureScopeFilter(request.Scope, nameof(request.Scope))
+        };
+        if (request.AppId is not null)
+        {
+            payload["appId"] = request.AppId;
         }
 
         if (request.IncludeOffline)
@@ -138,14 +142,14 @@ internal static class RequestPayloadFactory
             payload["includeOffline"] = true;
         }
 
-        return payload.Count == 0 ? null : payload;
+        return payload;
     }
 
     internal static object BuildLaunchParams(LaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
-        var scope = NormalizeDefinitionScope(request.Scope, nameof(request.Scope));
+        var scope = ScopeContract.EnsureScopedString(request.Scope, nameof(request.Scope));
 
         if (request.WaitForRegisterMs is { } waitForRegisterMs && waitForRegisterMs < 0)
         {
@@ -154,13 +158,9 @@ internal static class RequestPayloadFactory
 
         var payload = new Dictionary<string, object?>
         {
-            ["appId"] = request.AppId
+            ["appId"] = request.AppId,
+            ["scope"] = scope
         };
-
-        if (scope is not null)
-        {
-            payload["scope"] = scope;
-        }
 
         if (request.DedupeKey is not null)
         {
@@ -248,11 +248,13 @@ internal static class RequestPayloadFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Method);
 
-        var target = request.Target ?? new InvocationTarget();
+        var target = request.Target ?? throw new ArgumentException("Target 不能为空。", nameof(request));
         if (target.InstanceId is not null && string.IsNullOrWhiteSpace(target.InstanceId))
         {
             throw new ArgumentException("Target.InstanceId 不能为空白字符串。", nameof(request));
         }
+
+        var targetScope = ScopeContract.EnsureScopedString(target.Scope, nameof(target.Scope));
 
         int? ttlMs = request.Options?.TtlMs ?? (isRequest ? 300000 : 60000);
         if (!isRequest && request.Options?.WaitTimeoutMs is not null)
@@ -307,14 +309,11 @@ internal static class RequestPayloadFactory
             ((Dictionary<string, object?>)payload["options"]!)["waitTimeoutMs"] = waitTimeoutMs;
         }
 
-        if (request.Target is not null)
+        payload["target"] = new Dictionary<string, object?>
         {
-            payload["target"] = new Dictionary<string, object?>
-            {
-                ["scope"] = request.Target.Scope,
-                ["instanceId"] = request.Target.InstanceId
-            };
-        }
+            ["scope"] = targetScope,
+            ["instanceId"] = target.InstanceId
+        };
 
         return payload;
     }
@@ -362,18 +361,4 @@ internal static class RequestPayloadFactory
         return payload;
     }
 
-    private static string? NormalizeDefinitionScope(string? scope, string paramName)
-    {
-        if (scope is null)
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(scope))
-        {
-            throw new ArgumentException("scope 不能为空白字符串。", paramName);
-        }
-
-        return scope;
-    }
 }

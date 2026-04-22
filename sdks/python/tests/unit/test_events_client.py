@@ -18,6 +18,7 @@ from devhub_sdk import (
     HubRuntime,
     HubRuntimeTuning,
     INVOCATION_COMPLETED,
+    ListDefinitionsRequest,
     ListInstancesRequest,
     RuntimeConnectionInfo,
 )
@@ -140,11 +141,11 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
             "hub.ping": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z", "echo": {"value": 1}},
             "hub.apps.listDefinitions": {
                 "ok": True,
-                "definitions": [{"appId": "ws.app", "scope": None, "displayName": "WS App"}],
+                "definitions": [{"appId": "ws.app", "scope": "", "displayName": "WS App"}],
             },
             "hub.apps.getDefinition": {
                 "ok": True,
-                "definition": {"appId": "ws.app", "scope": None, "displayName": "WS App"},
+                "definition": {"appId": "ws.app", "scope": "", "displayName": "WS App"},
             },
             "hub.apps.listInstances": {
                 "ok": True,
@@ -152,7 +153,7 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
                     {
                         "instanceId": "inst-1",
                         "appId": "ws.app",
-                        "scope": None,
+                        "scope": "",
                         "pid": 12345,
                         "registeredAtUtc": "2026-03-09T00:00:00Z",
                         "lastSeenUtc": "2026-03-09T00:00:01Z",
@@ -175,16 +176,19 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
     try:
         await client.authenticate()
         ping = await client.ping({"value": 1})
-        definitions = await client.list_definitions()
-        definition = await client.get_definition("ws.app", None)
-        instances = await client.list_instances()
+        definitions = await client.list_definitions(ListDefinitionsRequest(scope=None))
+        definition = await client.get_definition("ws.app", "")
+        instances = await client.list_instances(ListInstancesRequest(scope=None))
     finally:
         await client.close()
 
     assert ping.ok is True
     assert definitions[0].app_id == "ws.app"
+    assert definitions[0].scope == ""
     assert definition.app_id == "ws.app"
+    assert definition.scope == ""
     assert instances[0].instance_id == "inst-1"
+    assert instances[0].scope == ""
     assert [request["method"] for request in session.requests] == [
         "hub.ws.authenticate",
         "hub.ping",
@@ -192,7 +196,9 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
         "hub.apps.getDefinition",
         "hub.apps.listInstances",
     ]
-    assert session.requests[3]["params"] == {"appId": "ws.app", "scope": None}
+    assert session.requests[2]["params"] == {"scope": None}
+    assert session.requests[3]["params"] == {"appId": "ws.app", "scope": ""}
+    assert session.requests[4]["params"] == {"scope": None}
 
 
 @pytest.mark.asyncio
@@ -217,7 +223,7 @@ async def test_events_client_get_definition_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.get_definition("Test.App", None)
+            await client.get_definition("Test.App", "")
     finally:
         await client.close()
 
@@ -246,7 +252,7 @@ async def test_events_client_list_instances_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.list_instances(ListInstancesRequest(app_id="Test.App"))
+            await client.list_instances(ListInstancesRequest(scope=None, app_id="Test.App"))
     finally:
         await client.close()
 

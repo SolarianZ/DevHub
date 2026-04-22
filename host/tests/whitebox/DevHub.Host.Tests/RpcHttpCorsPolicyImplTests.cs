@@ -2,6 +2,7 @@ namespace DevHub.Host.Tests;
 
 using System.Text;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Host.Tests.TestHelpers;
 using DevHub.Host.Transport;
 using Microsoft.AspNetCore.Http;
@@ -134,7 +135,7 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_RpcHttpEndpointHandler_AppDefinitionNotFoundError_ShouldPreserveNullScopeInJson()
+    public async Task Impl_RpcHttpEndpointHandler_AppDefinitionNotFoundError_ShouldPreserveExplicitGlobalScopeInJson()
     {
         using var harness = new HostTransportTestHarness(_tempRoot);
 
@@ -144,12 +145,12 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
             {
               "jsonrpc": "2.0",
               "id": "definition-missing-null-scope",
-              "method": "hub.apps.getDefinition",
-              "params": {
-                "appId": "missing.definition",
-                "scope": null
+                "method": "hub.apps.getDefinition",
+                "params": {
+                  "appId": "missing.definition",
+                  "scope": ""
+                }
               }
-            }
             """,
             includeProtocolHeader: true);
 
@@ -167,7 +168,8 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
         var errorData = error.GetProperty("data");
         Assert.Equal("missing.definition", errorData.GetProperty("appId").GetString());
         Assert.True(errorData.TryGetProperty("scope", out var scopeProperty));
-        Assert.Equal(JsonValueKind.Null, scopeProperty.ValueKind);
+        Assert.Equal(JsonValueKind.String, scopeProperty.ValueKind);
+        Assert.Equal(ScopeContract.Global, scopeProperty.GetString());
     }
 
     /// <inheritdoc />

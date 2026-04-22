@@ -42,7 +42,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             launch_config["dedupeKeyTemplate"] = dedupe_key_template
         return launch_config
 
-    def _create_definition(self, app_id, launch_config, scope=None):
+    def _create_definition(self, app_id, launch_config, scope=""):
         return write_app_definition(
             app_id,
             scope=scope,
@@ -68,7 +68,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             first = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-001-first",
             )
@@ -77,7 +77,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             second = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-001-second",
             )
@@ -181,7 +181,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             start_ts = time.monotonic()
             response = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=1200,
                 request_id="launch-edge-003",
             )
@@ -218,7 +218,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             definition_paths.append(self._create_definition(
                 app_id,
                 self._build_launch_config("{appId}:{scope}:{scopeOrGlobal}"),
-                scope=None,
+                scope="",
             ))
             definition_paths.append(self._create_definition(
                 app_id,
@@ -231,7 +231,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             global_launch = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-004-global",
             )
@@ -313,7 +313,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             response = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 dedupe_key="manual-key",
                 wait_for_register_ms=0,
                 request_id="launch-edge-005",

@@ -14,7 +14,7 @@ public interface ILaunchRegistrationTracker
     /// <param name="appId">注册 appId。</param>
     /// <param name="scope">注册 scope。</param>
     /// <returns>校验结果。</returns>
-    LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string? scope);
+    LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string scope);
 
     /// <summary>
     /// 记录一次成功注册。
@@ -52,7 +52,7 @@ public sealed class NullLaunchRegistrationTracker : ILaunchRegistrationTracker
     public static NullLaunchRegistrationTracker Instance { get; } = new();
 
     /// <inheritdoc />
-    public LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string? scope)
+    public LaunchRegistrationValidationResult ValidateRegistration(string? launchId, string appId, string scope)
     {
         return new LaunchRegistrationValidationResult(LaunchRegistrationValidationStatus.NotTracked);
     }

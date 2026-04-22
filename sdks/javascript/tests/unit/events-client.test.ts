@@ -171,10 +171,12 @@ it("authenticate should support WS ping and apps queries", async () => {
     const ping = await client.ping({
       channel: "ws"
     });
-    const definitions = await client.listDefinitions();
+    const definitions = await client.listDefinitions({
+      scope: null
+    });
     const definition = await client.getDefinition({
       appId: "test.launch.app",
-      scope: null
+      scope: ""
     });
     const instances = await client.listInstances({
       appId: "test.launch.app",
@@ -204,7 +206,7 @@ it("authenticate should support WS ping and apps queries", async () => {
     });
     expect(session?.requests[3]?.params).toEqual({
       appId: "test.launch.app",
-      scope: null
+      scope: ""
     });
     expect(session?.requests[4]?.params).toEqual({
       appId: "test.launch.app",
@@ -305,7 +307,7 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
               timeUtc: "2026-03-09T00:00:00Z",
               payload: {
                 appId: "test.app",
-                scope: null
+                scope: ""
               }
             });
 
@@ -366,7 +368,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
               payload: {
                 appId: "test.app",
                 instanceId: "inst-1",
-                scope: null,
+                scope: "",
                 password: "secret-1"
               }
             });
@@ -449,12 +451,16 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
 
   await expect(client.subscribe()).rejects.toThrow();
   await expect(client.ping()).rejects.toThrow();
-  await expect(client.listDefinitions()).rejects.toThrow();
-  await expect(client.getDefinition({
-    appId: "test.app",
+  await expect(client.listDefinitions({
     scope: null
   })).rejects.toThrow();
-  await expect(client.listInstances()).rejects.toThrow();
+  await expect(client.getDefinition({
+    appId: "test.app",
+    scope: ""
+  })).rejects.toThrow();
+  await expect(client.listInstances({
+    scope: null
+  })).rejects.toThrow();
   expect(() => client.readEvents()).toThrow();
 });
 
@@ -968,7 +974,7 @@ class FakeInjectedWsSession {
         definitions: [
           {
             appId: "test.launch.app",
-            scope: null,
+            scope: "",
             displayName: "Test Launch App"
           }
         ]
@@ -980,7 +986,7 @@ class FakeInjectedWsSession {
         ok: true,
         definition: {
           appId: "test.launch.app",
-          scope: null,
+          scope: "",
           displayName: "Test Launch App",
           launch: {
             exePath: process.execPath
@@ -996,7 +1002,7 @@ class FakeInjectedWsSession {
           {
             instanceId: "inst-1",
             appId: "test.launch.app",
-            scope: null,
+            scope: "",
             pid: 12345,
             registeredAtUtc: "2026-03-09T00:00:00Z",
             lastSeenUtc: "2026-03-09T00:00:01Z",

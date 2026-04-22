@@ -334,78 +334,56 @@ public class AppInstancesHandler : IRpcHandler
 
             string? appId = null;
             string? scope = null;
-            var includeAllScopes = false;
             var includeOffline = false;
 
-            if (request.Params is JsonElement paramsElement)
+            if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {
-                if (paramsElement.ValueKind != JsonValueKind.Object)
+                _logger.LogWarning("hub.apps.listInstances参数无效: params 不是对象, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(invalidParams);
+            }
+
+            if (paramsElement.TryGetProperty("appId", out var appIdProperty))
+            {
+                if (appIdProperty.ValueKind != JsonValueKind.String)
                 {
-                    _logger.LogWarning("hub.apps.listInstances参数无效: params 不是对象, RequestId: {RequestId}", request.Id);
+                    _logger.LogWarning("hub.apps.listInstances参数无效: appId 不是字符串, RequestId: {RequestId}", request.Id);
                     return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
                 }
 
-                if (paramsElement.TryGetProperty("appId", out var appIdProperty))
+                appId = appIdProperty.GetString();
+                if (!AppDefinitionValidator.IsValidAppId(appId))
                 {
-                    if (appIdProperty.ValueKind != JsonValueKind.String)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: appId 不是字符串, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    appId = appIdProperty.GetString();
-                }
-
-                if (paramsElement.TryGetProperty("includeAllScopes", out var includeAllScopesProperty))
-                {
-                    if (includeAllScopesProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: includeAllScopes 必须为布尔值, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    includeAllScopes = includeAllScopesProperty.GetBoolean();
-                }
-
-                if (!RpcParamReader.TryGetOptionalScope(
-                        paramsElement,
-                        "scope",
-                        "invalid_scope",
-                        out scope,
-                        out var scopeErrorData))
-                {
-                    if (includeAllScopes)
-                    {
-                        scope = null;
-                    }
-                    else
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
-                    }
-                }
-
-                if (includeAllScopes)
-                {
-                    scope = null;
-                }
-
-                if (paramsElement.TryGetProperty("includeOffline", out var includeOfflineProperty))
-                {
-                    if (includeOfflineProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: includeOffline 必须为布尔值, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    includeOffline = includeOfflineProperty.GetBoolean();
+                    _logger.LogWarning("hub.apps.listInstances参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
                 }
             }
 
-            _logger.LogDebug("尝试获取应用程序实例列表，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}, IncludeOffline: {IncludeOffline}, RequestId: {RequestId}",
-                appId, scope, includeAllScopes, includeOffline, request.Id);
+            if (!RpcParamReader.TryGetRequiredListScope(
+                    paramsElement,
+                    "scope",
+                    "invalid_scope",
+                    out scope,
+                    out var scopeErrorData))
+            {
+                _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+            }
 
-            var instances = _appRegistry.ListInstances(appId, scope, includeAllScopes, includeOffline);
+            if (paramsElement.TryGetProperty("includeOffline", out var includeOfflineProperty))
+            {
+                if (includeOfflineProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                {
+                    _logger.LogWarning("hub.apps.listInstances参数无效: includeOffline 必须为布尔值, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+                }
+
+                includeOffline = includeOfflineProperty.GetBoolean();
+            }
+
+            _logger.LogDebug("尝试获取应用程序实例列表，AppId: {AppId}, Scope: {Scope}, IncludeOffline: {IncludeOffline}, RequestId: {RequestId}",
+                appId, scope, includeOffline, request.Id);
+
+            var instances = _appRegistry.ListInstances(appId, scope, includeOffline);
             var instancesList = instances.ToList();
 
             _logger.LogInformation("成功获取应用程序实例列表，数量: {Count}, RequestId: {RequestId}", instancesList.Count, request.Id);
@@ -474,7 +452,7 @@ public class AppInstancesHandler : IRpcHandler
             return false;
         }
 
-        if (!RpcParamReader.TryGetOptionalScope(
+        if (!RpcParamReader.TryGetRequiredScope(
                 instanceElement,
                 "scope",
                 "invalid_scope",
@@ -529,7 +507,7 @@ public class AppInstancesHandler : IRpcHandler
         return true;
     }
 
-    private void PublishInstanceEvent(string eventType, string appId, string instanceId, string? scope)
+    private void PublishInstanceEvent(string eventType, string appId, string instanceId, string scope)
     {
         if (_eventPublisher is null)
         {
@@ -564,7 +542,7 @@ public class AppInstancesHandler : IRpcHandler
         };
     }
 
-    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string? scope)
+    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string scope)
     {
         return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new AppDefinitionIdentityErrorData
         {
@@ -586,7 +564,7 @@ public class AppInstancesHandler : IRpcHandler
             return Array.Empty<AppDefinition>();
         }
 
-        public AppDefinition? GetDefinition(string appId, string? scope)
+        public AppDefinition? GetDefinition(string appId, string scope)
         {
             return null;
         }

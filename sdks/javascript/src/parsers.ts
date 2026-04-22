@@ -28,7 +28,7 @@ import {
   readArray,
   readBoolean,
   readDate,
-  readDefinitionScope,
+  readScopeString,
   readInstanceId,
   readInvocationId,
   readNumber,
@@ -38,7 +38,6 @@ import {
   readOptionalIntAtLeast,
   readOptionalObject,
   readOptionalString,
-  readOptionalStringOrNull,
   readPositiveInt,
   readStringValue,
   readString
@@ -248,7 +247,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
   return {
     appId,
-    scope: readDefinitionScope(record, location, "scope"),
+    scope: readScopeString(record, location, "scope"),
     displayName,
     description,
     capabilities,
@@ -264,7 +263,7 @@ export function parseAppInstance(payload: unknown, location: string): AppInstanc
   return {
     instanceId: readInstanceId(record, location, "instanceId"),
     appId: readAppId(record, location, "appId"),
-    scope: readOptionalStringOrNull(record, location, "scope"),
+    scope: readScopeString(record, location, "scope"),
     pid: readPositiveInt(record, location, "pid"),
     registeredAtUtc: readDate(record, location, "registeredAtUtc"),
     lastSeenUtc: readDate(record, location, "lastSeenUtc"),
@@ -321,7 +320,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
     invocationId: readInvocationId(record, location, "invocationId"),
     appId: readAppId(record, location, "appId"),
     target: {
-      scope: readOptionalStringOrNull(targetPayload, `${location}.target`, "scope"),
+      scope: readScopeString(targetPayload, `${location}.target`, "scope"),
       instanceId: readOptionalInstanceIdOrNull(targetPayload, `${location}.target`, "instanceId")
     },
     method: readString(record, location, "method"),
@@ -397,7 +396,7 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
 
   if (type === APP_DEFINITION_UPSERTED) {
     const appId = readAppId(payload, location, "appId");
-    const scope = readDefinitionScope(payload, location, "scope");
+    const scope = readScopeString(payload, location, "scope");
     const definition = parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
     if (definition.appId !== appId) {
       throw new Error(`${location}.definition.appId must match ${location}.appId.`);
@@ -410,14 +409,14 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
 
   if (type === APP_DEFINITION_DELETED) {
     readAppId(payload, location, "appId");
-    readDefinitionScope(payload, location, "scope");
+    readScopeString(payload, location, "scope");
     return;
   }
 
   if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
-    readOptionalStringOrNull(payload, location, "scope");
+    readScopeString(payload, location, "scope");
     ensureNoPasswordField(payload, location);
   }
 }

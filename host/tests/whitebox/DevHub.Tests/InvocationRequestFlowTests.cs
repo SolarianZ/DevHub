@@ -45,7 +45,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6101,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -59,7 +59,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { branch = "main" },
                 options = new
@@ -127,7 +127,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6109,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -141,7 +141,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.null-result",
                 options = new
                 {
@@ -202,7 +202,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6102,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -216,7 +216,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { branch = "dev" },
                 options = new
@@ -284,7 +284,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6103,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -298,7 +298,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.slow",
                 args = new { x = 1 },
                 options = new
@@ -360,7 +360,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6104,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -383,7 +383,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.cancel",
                 args = new { x = 2 },
                 options = new
@@ -449,7 +449,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-invalid.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { },
                 options = new
@@ -480,7 +480,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-offline.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { },
                 options = new
@@ -512,7 +512,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6110,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -535,7 +535,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.default",
                 args = new { x = 1 }
             })
@@ -585,11 +585,11 @@ public class InvocationRequestFlowTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {

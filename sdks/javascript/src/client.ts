@@ -20,6 +20,7 @@ import type {
   DevHubClientOptions,
   InvokeRequest,
   JsonValue,
+  ListDefinitionsRequest,
   LaunchRequest,
   LaunchResult,
   ListInstancesRequest,
@@ -52,6 +53,7 @@ import {
   buildHeartbeatParams,
   buildInvokeParams,
   buildLaunchParams,
+  buildListDefinitionsParams,
   buildListInstancesParams,
   buildPollParams,
   buildRegisterInstanceParams,
@@ -118,9 +120,11 @@ export class DevHubClient {
     return parsePingResult(await this.#transport.send("hub.ping", params));
   }
 
-  async listDefinitions(): Promise<AppDefinition[]> {
+  async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {
     this.throwIfDisposed();
-    return parseDefinitionsResult(await this.#transport.send("hub.apps.listDefinitions"));
+    return parseDefinitionsResult(
+      await this.#transport.send("hub.apps.listDefinitions", buildListDefinitionsParams(request))
+    );
   }
 
   async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
@@ -170,7 +174,7 @@ export class DevHubClient {
     );
   }
 
-  async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
+  async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
     this.throwIfDisposed();
     return parseInstancesResult(await this.#transport.send("hub.apps.listInstances", buildListInstancesParams(request)));
   }

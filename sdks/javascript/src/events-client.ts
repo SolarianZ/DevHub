@@ -14,6 +14,7 @@ import type {
   DevHubClientOptions,
   DevHubEvent,
   JsonValue,
+  ListDefinitionsRequest,
   ListInstancesRequest,
   PingResult,
   NormalizedDevHubClientOptions
@@ -30,6 +31,7 @@ import {
 } from "./parsers.js";
 import {
   buildGetDefinitionParams,
+  buildListDefinitionsParams,
   buildListInstancesParams
 } from "./payloads.js";
 import { getRuntimeResolver } from "./default-runtime-resolver.js";
@@ -141,9 +143,11 @@ export class DevHubEventsClient {
     return parsePingResult(await this.#session.sendRequest("hub.ping", params));
   }
 
-  async listDefinitions(): Promise<AppDefinition[]> {
+  async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {
     this.ensureAuthenticated();
-    return parseDefinitionsResult(await this.#session.sendRequest("hub.apps.listDefinitions"));
+    return parseDefinitionsResult(
+      await this.#session.sendRequest("hub.apps.listDefinitions", buildListDefinitionsParams(request))
+    );
   }
 
   async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
@@ -153,7 +157,7 @@ export class DevHubEventsClient {
     );
   }
 
-  async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
+  async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
     this.ensureAuthenticated();
     return parseInstancesResult(
       await this.#session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))

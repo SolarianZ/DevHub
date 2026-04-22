@@ -25,7 +25,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-a",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -33,7 +33,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-b",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5002,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -58,7 +58,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-owner",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5003,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -87,7 +87,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-requeue-a",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5004,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -95,7 +95,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-requeue-b",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5005,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -131,7 +131,7 @@ public class InvocationLeaseTests
         {
             InstanceId = "lease-expired-owner",
             AppId = "lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5006,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -176,7 +176,7 @@ public class InvocationLeaseTests
             AppId = appId,
             Target = new InvocationTarget
             {
-                Scope = null,
+                Scope = ScopeContract.Global,
                 InstanceId = null
             },
             Method = "demo.notify",
@@ -203,6 +203,7 @@ public class InvocationLeaseTests
         };
     }
 }
+
 
 
 

@@ -94,7 +94,7 @@ public class InvocationTimeoutWorkerTests
         {
             InvocationId = $"invk-{Guid.NewGuid():N}",
             AppId = appId,
-            Target = new InvocationTarget { Scope = null, InstanceId = null },
+            Target = new InvocationTarget { Scope = ScopeContract.Global, InstanceId = null },
             Method = "demo.request",
             Args = new Dictionary<string, object?>(),
             Kind = InvocationKind.Request,
@@ -122,7 +122,7 @@ public class InvocationTimeoutWorkerTests
         {
             InvocationId = $"invk-{Guid.NewGuid():N}",
             AppId = appId,
-            Target = new InvocationTarget { Scope = null, InstanceId = null },
+            Target = new InvocationTarget { Scope = ScopeContract.Global, InstanceId = null },
             Method = "demo.notify",
             Args = new Dictionary<string, object?>(),
             Kind = InvocationKind.Notify,
@@ -143,6 +143,7 @@ public class InvocationTimeoutWorkerTests
         };
     }
 }
+
 
 
 

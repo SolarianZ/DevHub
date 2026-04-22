@@ -176,6 +176,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-with-meta",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 102,
                 invoke = new { poll = true, respond = true },
                 meta = new
@@ -316,19 +317,19 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
         AssertError(invalidScope, -32602, "invalid_params");
 
-        var invalidIncludeAllScopes = await handler.HandleAsync(new JsonRpcRequest
+        var missingScope = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "list-invalid-include-all-scopes",
+            Id = "list-missing-scope",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeAllScopes = "yes" })
+            Params = JsonSerializer.SerializeToElement(new { includeOffline = true })
         }, CancellationToken.None);
-        AssertError(invalidIncludeAllScopes, -32602, "invalid_params");
+        AssertError(missingScope, -32602, "invalid_params");
 
         var invalidIncludeOffline = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "list-invalid-include-offline",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeOffline = "yes" })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = "yes" })
         }, CancellationToken.None);
         AssertError(invalidIncludeOffline, -32602, "invalid_params");
 
@@ -336,7 +337,7 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "list-invalid-appid",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { appId = 1 })
+            Params = JsonSerializer.SerializeToElement(new { appId = 1, scope = (string?)null })
         }, CancellationToken.None);
         AssertError(invalidAppId, -32602, "invalid_params");
     }
@@ -357,14 +358,14 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Impl_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreInvalidScopeType()
+    public async Task Impl_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-global",
             AppId = "app.validation.scope",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 2001,
             Invoke = new InvokeCapability
             {
@@ -389,12 +390,11 @@ public sealed class AppInstancesHandlerValidationTests
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "list-ignore-invalid-scope",
+            Id = "list-all-scopes",
             Method = HubRpcMethods.HubAppsListInstances,
             Params = JsonSerializer.SerializeToElement(new
             {
-                scope = 123,
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -419,6 +419,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-logger-throw",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 103,
                 invoke = new { poll = true, respond = true }
             }))
@@ -449,7 +450,7 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "list-logger-throw",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeOffline = true })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = true })
         }, CancellationToken.None);
         AssertError(list, -32603, "internal_error");
     }
@@ -468,6 +469,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-no-event-bus",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 103,
                 invoke = new { poll = true, respond = true }
             }))
@@ -504,6 +506,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-password-guard",
                 appId = "app.original",
+                scope = ScopeContract.Global,
                 pid = 201,
                 invoke = new { poll = true, respond = true }
             }, password: "correct-password"))
@@ -518,6 +521,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-password-guard",
                 appId = "app.updated",
+                scope = ScopeContract.Global,
                 pid = 202,
                 invoke = new { poll = true, respond = true }
             }, password: "wrong-password"))
@@ -547,6 +551,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-unregister-guard",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 301,
                 invoke = new { poll = true, respond = true }
             }, password: "correct-password"))
@@ -639,3 +644,4 @@ public sealed class AppInstancesHandlerValidationTests
         }
     }
 }
+

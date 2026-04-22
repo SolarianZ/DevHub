@@ -258,7 +258,29 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-get-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
+        Assert.Contains("scope", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetDefinitionResultScopeNull_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-get-definition\"," +
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":null,\"displayName\":\"Sample App\"}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
         Assert.Contains("scope", exception.Message, StringComparison.Ordinal);
     }
 
@@ -271,7 +293,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-get-definition\"," +
-                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":null}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":\"\"}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -280,7 +302,7 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-get-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
         Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
     }
 
@@ -293,7 +315,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-register\"," +
-                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -326,7 +348,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-register\"," +
-                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"password\":\"secret-1\"}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"password\":\"secret-1\"}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -371,7 +393,11 @@ public sealed class HttpTransportTests : IDisposable
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RequestAsync(new InvokeRequest
         {
             AppId = "sample.app",
-            Method = "sample.request"
+            Method = "sample.request",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            }
         }, CancellationToken.None));
 
         Assert.Contains("value", exception.Message, StringComparison.Ordinal);
@@ -386,7 +412,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-poll\"," +
-                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\"}}]}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\"}}]}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -412,7 +438,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-get-definition\"," +
-                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":null,\"displayName\":\"Sample App\",\"capabilities\":{\"rpc\":\"true\"}}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":\"\",\"displayName\":\"Sample App\",\"capabilities\":{\"rpc\":\"true\"}}}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -421,7 +447,7 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-get-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", null, CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
         Assert.Contains("definition.capabilities", exception.Message, StringComparison.Ordinal);
         Assert.Contains("rpc", exception.Message, StringComparison.Ordinal);
     }
@@ -435,7 +461,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-list-instances\"," +
-                "\"result\":{\"ok\":true,\"instances\":[{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"meta\":[1]}]}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"instances\":[{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"meta\":[1]}]}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -444,7 +470,7 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-list-instances");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(cancellationToken: CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(new ListInstancesRequest(), CancellationToken.None));
         Assert.Contains("meta", exception.Message, StringComparison.Ordinal);
     }
 
@@ -457,7 +483,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-poll\"," +
-                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":null,\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"},\"options\":{\"queueIfOffline\":\"true\"}}]}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"},\"options\":{\"queueIfOffline\":\"true\"}}]}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions

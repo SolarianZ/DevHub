@@ -105,7 +105,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
                 definition = new
                 {
                     appId = "managed.definition.app",
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     displayName = "Managed Definition App",
                     launch = new
                     {
@@ -122,13 +122,13 @@ public sealed class AppDefinitionManagementTests : IDisposable
         Assert.Equal("managed.definition.app", upsertResult.GetProperty("definition").GetProperty("appId").GetString());
         Assert.True(File.Exists(Path.Combine(
             context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.definition.app", null).GetFileName())));
+            AppDefinitionIdentity.Create("managed.definition.app", ScopeContract.Global).GetFileName())));
 
         var getResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
             Id = "get-managed-definition",
             Method = HubRpcMethods.HubAppsGetDefinition,
-            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = (string?)null })
+            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = ScopeContract.Global })
         }, CancellationToken.None);
         Assert.Null(getResponse.Error);
 
@@ -136,20 +136,20 @@ public sealed class AppDefinitionManagementTests : IDisposable
         {
             Id = "delete-managed-definition",
             Method = HubRpcMethods.HubAppsDeleteDefinition,
-            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = (string?)null })
+            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.Null(deleteResponse.Error);
         Assert.False(File.Exists(Path.Combine(
             context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.definition.app", null).GetFileName())));
-        Assert.Null(context.DefinitionProvider.GetDefinition("managed.definition.app", null));
+            AppDefinitionIdentity.Create("managed.definition.app", ScopeContract.Global).GetFileName())));
+        Assert.Null(context.DefinitionProvider.GetDefinition("managed.definition.app", ScopeContract.Global));
 
         var getMissingResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
             Id = "get-deleted-definition",
             Method = HubRpcMethods.HubAppsGetDefinition,
-            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = (string?)null })
+            Params = JsonSerializer.SerializeToElement(new { appId = "managed.definition.app", scope = ScopeContract.Global })
         }, CancellationToken.None);
         Assert.NotNull(getMissingResponse.Error);
         Assert.Equal("app_definition_not_found", getMissingResponse.Error!.Message);
@@ -161,13 +161,13 @@ public sealed class AppDefinitionManagementTests : IDisposable
 
         var upsertPayload = JsonSerializer.SerializeToElement(deliveries[0].Payload);
         Assert.Equal("managed.definition.app", upsertPayload.GetProperty("appId").GetString());
-        Assert.True(upsertPayload.GetProperty("scope").ValueKind == JsonValueKind.Null);
+        Assert.Equal(ScopeContract.Global, upsertPayload.GetProperty("scope").GetString());
         Assert.Equal("managed.definition.app", upsertPayload.GetProperty("definition").GetProperty("appId").GetString());
-        Assert.True(upsertPayload.GetProperty("definition").GetProperty("scope").ValueKind == JsonValueKind.Null);
+        Assert.Equal(ScopeContract.Global, upsertPayload.GetProperty("definition").GetProperty("scope").GetString());
 
         var deletePayload = JsonSerializer.SerializeToElement(deliveries[1].Payload);
         Assert.Equal("managed.definition.app", deletePayload.GetProperty("appId").GetString());
-        Assert.True(deletePayload.GetProperty("scope").ValueKind == JsonValueKind.Null);
+        Assert.Equal(ScopeContract.Global, deletePayload.GetProperty("scope").GetString());
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
         var definition = new DevHub.Core.Models.AppDefinition
         {
             AppId = "managed.nullable.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             DisplayName = "Managed Nullable App"
         };
 
@@ -193,12 +193,12 @@ public sealed class AppDefinitionManagementTests : IDisposable
 
         var path = Path.Combine(
             context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.nullable.app", null).GetFileName());
+            AppDefinitionIdentity.Create("managed.nullable.app", ScopeContract.Global).GetFileName());
         Assert.True(File.Exists(path));
 
         using var persisted = JsonDocument.Parse(File.ReadAllText(path));
         Assert.Equal("managed.nullable.app", persisted.RootElement.GetProperty("appId").GetString());
-        Assert.True(persisted.RootElement.GetProperty("scope").ValueKind == JsonValueKind.Null);
+        Assert.Equal(ScopeContract.Global, persisted.RootElement.GetProperty("scope").GetString());
         Assert.False(persisted.RootElement.TryGetProperty("description", out _));
         Assert.False(persisted.RootElement.TryGetProperty("launch", out _));
         Assert.False(persisted.RootElement.TryGetProperty("capabilities", out _));
@@ -218,7 +218,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
                 definition = new
                 {
                     appId = "managed.nullable.app",
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     displayName = "Managed Nullable App",
                     description = (string?)null,
                     launch = (object?)null,
@@ -249,7 +249,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
         {
             Id = "delete-missing-definition",
             Method = HubRpcMethods.HubAppsDeleteDefinition,
-            Params = JsonSerializer.SerializeToElement(new { appId = "missing.definition.app", scope = (string?)null })
+            Params = JsonSerializer.SerializeToElement(new { appId = "missing.definition.app", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
@@ -258,7 +258,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
 
         var errorData = JsonSerializer.SerializeToElement(response.Error.Data);
         Assert.Equal("missing.definition.app", errorData.GetProperty("appId").GetString());
-        Assert.True(errorData.GetProperty("scope").ValueKind == JsonValueKind.Null);
+        Assert.Equal(ScopeContract.Global, errorData.GetProperty("scope").GetString());
     }
 
     /// <inheritdoc />

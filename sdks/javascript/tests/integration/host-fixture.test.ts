@@ -23,7 +23,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   try {
     await host.writeDefinition({
       appId: "host.cleanup.app",
-      scope: null,
+      scope: "",
       displayName: "host.cleanup.app",
       launch: {
         exePath: process.execPath,
@@ -39,6 +39,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
     try {
       const launchResult = await client.launch({
         appId: "host.cleanup.app",
+        scope: "",
         waitForRegisterMs: 0
       });
 
@@ -76,6 +77,7 @@ it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范
   try {
     await host.writeDefinition({
       appId: "fixture.scope.app",
+      scope: "",
       displayName: "fixture.scope.app.global"
     });
     await host.writeDefinition({
@@ -93,11 +95,11 @@ it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范
         path.join(host.definitionsDirectory, "fixture.scope.app--global.json"),
         "utf-8"
       )
-    ) as { appId: string; scope: null };
+    ) as { appId: string; scope: string; displayName: string };
 
     expect(globalDefinition).toEqual({
       appId: "fixture.scope.app",
-      scope: null,
+      scope: "",
       displayName: "fixture.scope.app.global"
     });
   } finally {

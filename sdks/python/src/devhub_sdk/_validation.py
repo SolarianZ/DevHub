@@ -100,16 +100,22 @@ def require_optional_string(
     return value
 
 
-def require_definition_scope(value: Any, name: str) -> str | None:
-    """要求值必须为 AppDefinition 复合身份中的 scope。"""
+def require_scoped_string(value: Any, name: str) -> str:
+    """要求值必须为显式字符串 scope。"""
+
+    if not isinstance(value, str):
+        raise ValueError(f"{name} 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。")
+    if value and value != value.strip():
+        raise ValueError(f"{name} 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。")
+    return value
+
+
+def require_scope_filter(value: Any, name: str) -> str | None:
+    """要求值必须为列表查询中的 scope 过滤器。"""
 
     if value is None:
         return None
-    if not isinstance(value, str):
-        raise ValueError(f"{name} 类型非法。")
-    if not value.strip():
-        raise ValueError(f"{name} 必须为非空字符串或 None。")
-    return value
+    return require_scoped_string(value, name)
 
 
 def require_bool(value: Any, name: str) -> bool:

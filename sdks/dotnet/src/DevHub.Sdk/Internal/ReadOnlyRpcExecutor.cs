@@ -29,12 +29,13 @@ internal static class ReadOnlyRpcExecutor
 
     internal static Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(
         SendAsyncDelegate sendAsync,
+        ListDefinitionsRequest request,
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
             sendAsync,
             "hub.apps.listDefinitions",
-            parameters: null,
+            RequestPayloadFactory.BuildListDefinitionsParams(request),
             static result =>
             {
                 var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(
@@ -42,11 +43,6 @@ internal static class ReadOnlyRpcExecutor
                     "hub.apps.listDefinitions.result",
                     "definitions",
                     JsonValueKind.Array);
-                var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(
-                    result,
-                    "hub.apps.listDefinitions.result");
-                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
-                ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
 
                 var index = 0;
                 foreach (var definitionElement in definitionsElement.EnumerateArray())
@@ -57,6 +53,12 @@ internal static class ReadOnlyRpcExecutor
                     index++;
                 }
 
+                var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(
+                    result,
+                    "hub.apps.listDefinitions.result");
+                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
+                ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+
                 return (IReadOnlyList<AppDefinition>)payload.Definitions;
             },
             cancellationToken);
@@ -65,7 +67,7 @@ internal static class ReadOnlyRpcExecutor
     internal static Task<AppDefinition> GetDefinitionAsync(
         SendAsyncDelegate sendAsync,
         string appId,
-        string? scope,
+        string scope,
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
@@ -96,7 +98,7 @@ internal static class ReadOnlyRpcExecutor
 
     internal static Task<IReadOnlyList<AppInstance>> ListInstancesAsync(
         SendAsyncDelegate sendAsync,
-        ListInstancesRequest? request,
+        ListInstancesRequest request,
         CancellationToken cancellationToken)
     {
         return ExecuteAsync(
@@ -110,11 +112,6 @@ internal static class ReadOnlyRpcExecutor
                     "hub.apps.listInstances.result",
                     "instances",
                     JsonValueKind.Array);
-                var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(
-                    result,
-                    "hub.apps.listInstances.result");
-                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
-                ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
 
                 var index = 0;
                 foreach (var instanceElement in instancesElement.EnumerateArray())
@@ -124,6 +121,12 @@ internal static class ReadOnlyRpcExecutor
                         $"hub.apps.listInstances.result.instances[{index}]");
                     index++;
                 }
+
+                var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(
+                    result,
+                    "hub.apps.listInstances.result");
+                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
+                ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
 
                 return (IReadOnlyList<AppInstance>)payload.Instances;
             },

@@ -25,7 +25,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-lifecycle",
             AppId = "lifecycle.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -64,7 +64,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-pending",
             AppId = "pending.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4002,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -119,7 +119,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-failed",
             AppId = "failed.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4003,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -147,7 +147,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-timeout",
             AppId = "timeout.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4004,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -174,7 +174,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-expired",
             AppId = "expired.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4005,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -249,7 +249,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-sweep-lease",
             AppId = "sweep-lease.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4010,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -284,7 +284,7 @@ public class InvocationStoreTests
         {
             InstanceId = "inst-terminal-cleanup",
             AppId = "terminal-cleanup.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4011,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -326,7 +326,7 @@ public class InvocationStoreTests
             AppId = appId,
             Target = new InvocationTarget
             {
-                Scope = targetScope,
+                Scope = targetScope ?? ScopeContract.Global,
                 InstanceId = targetInstanceId
             },
             Method = "demo.notify",
@@ -361,7 +361,7 @@ public class InvocationStoreTests
             AppId = appId,
             Target = new InvocationTarget
             {
-                Scope = targetScope,
+                Scope = targetScope ?? ScopeContract.Global,
                 InstanceId = targetInstanceId
             },
             Method = "demo.request",
@@ -404,5 +404,6 @@ public class InvocationStoreTests
         }
     }
 }
+
 
 

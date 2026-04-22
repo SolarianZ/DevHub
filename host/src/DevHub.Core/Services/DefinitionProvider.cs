@@ -45,14 +45,10 @@ public sealed class DefinitionProvider : IDefinitionProvider
     }
 
     /// <inheritdoc />
-    public AppDefinition? GetDefinition(string appId)
+    public AppDefinition? GetDefinition(string appId, string scope)
     {
-        return GetDefinition(appId, scope: null);
-    }
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
 
-    /// <inheritdoc />
-    public AppDefinition? GetDefinition(string appId, string? scope)
-    {
         lock (_syncRoot)
         {
             return _snapshotByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, scope));

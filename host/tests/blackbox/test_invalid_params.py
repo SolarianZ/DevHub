@@ -601,9 +601,9 @@ class TestInvalidParams(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             cases = [
+                {"name": "缺少 scope", "payload": {}},
                 {"name": "appId 非字符串", "payload": {"appId": 123}},
                 {"name": "scope 非字符串/非null", "payload": {"scope": 123}},
-                {"name": "includeAllScopes 非布尔", "payload": {"includeAllScopes": "true"}},
                 {"name": "includeOffline 非布尔", "payload": {"includeOffline": "true"}},
             ]
 

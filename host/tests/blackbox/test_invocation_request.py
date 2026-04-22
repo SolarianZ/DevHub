@@ -53,7 +53,7 @@ class TestInvocationRequest(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24001,
@@ -137,7 +137,7 @@ class TestInvocationRequest(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24002,
@@ -264,7 +264,7 @@ class TestInvocationRequest(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24003,
@@ -279,7 +279,7 @@ class TestInvocationRequest(unittest.TestCase):
                 "params": {
                     "appId": app_id,
                     "target": {
-                        "scope": None,
+                        "scope": "",
                         "instanceId": None,
                     },
                     "method": "asset.cancel",
@@ -515,7 +515,7 @@ class TestInvocationRequest(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24004,
@@ -643,7 +643,7 @@ class TestInvocationRequest(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24011,
@@ -682,7 +682,7 @@ class TestInvocationRequest(unittest.TestCase):
                 "method": "hub.invoke.request",
                 "params": {
                     "appId": app_id,
-                    "target": {},
+                    "target": {"scope": ""},
                     "method": "asset.defaults.request",
                     "args": {"case": "no-options"}
                 }
@@ -722,6 +722,7 @@ class TestInvocationRequest(unittest.TestCase):
                 "params": {
                     "appId": app_id,
                     "target": {
+                        "scope": "",
                         "instanceId": missing_target_instance_id,
                     },
                     "method": "asset.defaults.target-instance",
@@ -754,6 +755,7 @@ class TestInvocationRequest(unittest.TestCase):
                 "params": {
                     "appId": app_id,
                     "target": {
+                        "scope": "",
                         "instanceId": missing_target_instance_id,
                     },
                     "method": "asset.defaults.target-instance-auto",

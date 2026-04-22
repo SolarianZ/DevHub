@@ -1,7 +1,7 @@
 {
   "id": "apps.instances.list_default_global_filters_scoped_and_offline",
   "caseId": "CONF-003",
-  "description": "默认 listInstances 必须仅返回 global 在线实例，过滤 scoped 与 offline。",
+  "description": "显式 scope=\"\" 的 listInstances 必须仅返回 Global 在线实例，过滤 scoped 与 offline。",
   "transport": "http",
   "setup": {
     "instances": [
@@ -12,7 +12,7 @@
         "instance": {
           "instanceId": "apps-instance-default-offline",
           "appId": "apps.instance.list.default.app",
-          "scope": null,
+          "scope": "",
           "pid": 32004,
           "invoke": {
             "poll": true,
@@ -26,7 +26,7 @@
         "instance": {
           "instanceId": "apps-instance-default-online",
           "appId": "apps.instance.list.default.app",
-          "scope": null,
+          "scope": "",
           "pid": 32005,
           "invoke": {
             "poll": true,
@@ -64,7 +64,8 @@
     "id": "apps-instances-list-default",
     "method": "hub.apps.listInstances",
     "params": {
-      "appId": "apps.instance.list.default.app"
+      "appId": "apps.instance.list.default.app",
+      "scope": ""
     }
   },
   "expectedResponse": {
@@ -76,6 +77,7 @@
         {
           "instanceId": "apps-instance-default-online",
           "appId": "apps.instance.list.default.app",
+          "scope": "",
           "pid": 32005,
           "registeredAtUtc": "${ANY_ISO_UTC}",
           "lastSeenUtc": "${ANY_ISO_UTC}",

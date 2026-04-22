@@ -235,21 +235,16 @@ public sealed class AppDefinitionValidator
             return null;
         }
 
-        if (scopeProperty.ValueKind == JsonValueKind.Null)
-        {
-            return null;
-        }
-
         if (scopeProperty.ValueKind != JsonValueKind.String)
         {
-            issues.Add(CreateIssue("definition.scope", "invalid_field_type", "scope must be a string or null"));
+            issues.Add(CreateIssue("definition.scope", "invalid_field_type", "scope must be a string"));
             return null;
         }
 
         var scope = scopeProperty.GetString();
-        if (string.IsNullOrWhiteSpace(scope))
+        if (!ScopeContract.IsValidScopedString(scope))
         {
-            issues.Add(CreateIssue("definition.scope", "invalid_scope", "scope must be null or a non-empty string"));
+            issues.Add(CreateIssue("definition.scope", "invalid_scope", "scope must be \"\" or a non-empty string without leading or trailing whitespace"));
             return null;
         }
 

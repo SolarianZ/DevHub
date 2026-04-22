@@ -71,10 +71,48 @@ public class AppDefinitionsHandler : IRpcHandler
         {
             _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
 
+            if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
+            {
+                _logger.LogWarning("hub.apps.listDefinitions方法参数无效: 缺少参数或参数不是对象, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(invalidParams);
+            }
+
+            string? appId = null;
+            if (paramsElement.TryGetProperty("appId", out var appIdProperty))
+            {
+                if (appIdProperty.ValueKind != JsonValueKind.String)
+                {
+                    _logger.LogWarning("hub.apps.listDefinitions方法参数无效: appId 不是字符串, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+                }
+
+                appId = appIdProperty.GetString();
+                if (!AppDefinitionValidator.IsValidAppId(appId))
+                {
+                    _logger.LogWarning("hub.apps.listDefinitions方法参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+                }
+            }
+
+            if (!RpcParamReader.TryGetRequiredListScope(
+                    paramsElement,
+                    "scope",
+                    "invalid_scope",
+                    out var scope,
+                    out var scopeErrorData))
+            {
+                _logger.LogWarning("hub.apps.listDefinitions方法参数无效: scope 非法, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+            }
+
             // 每次查询前重新加载，反映测试期间新增/修改的定义文件
             _definitionProvider.Refresh();
 
-            var definitions = _definitionProvider.GetAllDefinitions();
+            var definitions = _definitionProvider
+                .GetAllDefinitions()
+                .Where(definition => appId is null || string.Equals(definition.AppId, appId, StringComparison.Ordinal))
+                .Where(definition => scope is null || string.Equals(definition.Scope, scope, StringComparison.Ordinal))
+                .ToList();
             _logger.LogInformation("成功获取应用程序定义列表，数量: {Count}, RequestId: {RequestId}", definitions.Count, request.Id);
 
             var response = new JsonRpcResponse
@@ -127,7 +165,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetOptionalDefinitionScope(
+            if (!RpcParamReader.TryGetRequiredScope(
                     paramsElement,
                     "scope",
                     "invalid_scope",
@@ -259,7 +297,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetOptionalDefinitionScope(
+            if (!RpcParamReader.TryGetRequiredScope(
                     paramsElement,
                     "scope",
                     "invalid_scope",

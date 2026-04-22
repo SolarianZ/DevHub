@@ -21,10 +21,10 @@ public class AppInstance
     public required string AppId { get; set; }
 
     /// <summary>
-    /// 作用域（null 表示全局作用域，非空字符串表示显式作用域）
+    /// 作用域（空字符串表示全局作用域，非空字符串表示显式作用域）
     /// </summary>
     [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
+    public required string Scope { get; set; }
 
     /// <summary>
     /// 进程ID

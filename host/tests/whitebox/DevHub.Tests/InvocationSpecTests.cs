@@ -42,7 +42,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { },
+                target = new { scope = string.Empty },
                 method = "asset.notify.defaults.offline",
                 args = new { value = 1 }
             })
@@ -74,7 +74,7 @@ public class InvocationSpecTests : IDisposable
                 appId,
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = string.Empty,
                     instanceId = "spec-6.3.10-target-instance-missing"
                 },
                 method = "asset.notify.target",
@@ -94,7 +94,7 @@ public class InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_6_3_10_Notify_WhenOptionsOmitted_ShouldUseDefaultTtlAndRouteGlobal()
+    public async Task Spec_6_3_10_Notify_WhenOptionsOmittedWithExplicitGlobalScope_ShouldUseDefaultTtlAndRouteGlobal()
     {
         const string appId = "spec-6.3.10-default-options";
         WriteDefinition(appId, rpcEnabled: true);
@@ -112,7 +112,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { },
+                target = new { scope = string.Empty },
                 method = "asset.notify.defaults",
                 args = new { value = 1 }
             })
@@ -137,9 +137,9 @@ public class InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_6_3_10_Notify_WhenScopeOmittedNullOrEmpty_ShouldRouteOnlyToGlobal()
+    public async Task Spec_6_3_10_Notify_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
     {
-        const string appId = "spec-6.3.10-scope-normalization";
+        const string appId = "spec-6.3.10-explicit-global-scope";
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -150,9 +150,9 @@ public class InvocationSpecTests : IDisposable
 
         foreach (var testCase in new[]
                  {
-                     new { Name = "omitted", Target = (object)new { } },
-                     new { Name = "null", Target = (object)new { scope = (string?)null } },
-                     new { Name = "empty", Target = (object)new { scope = string.Empty } }
+                     new { Name = "omitted", Target = (object)new { }, ShouldReturnInvalidParams = true },
+                     new { Name = "null", Target = (object)new { scope = (string?)null }, ShouldReturnInvalidParams = true },
+                     new { Name = "empty", Target = (object)new { scope = string.Empty }, ShouldReturnInvalidParams = false }
                  })
         {
             var notify = await handler.HandleAsync(new JsonRpcRequest
@@ -173,6 +173,12 @@ public class InvocationSpecTests : IDisposable
                     }
                 })
             }, CancellationToken.None);
+
+            if (testCase.ShouldReturnInvalidParams)
+            {
+                AssertError(notify, -32602, "invalid_params");
+                continue;
+            }
 
             AssertSuccess(notify);
             var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
@@ -206,7 +212,7 @@ public class InvocationSpecTests : IDisposable
                 appId = "spec-6.3.10-invalid-target-instance",
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = string.Empty,
                     instanceId = "inst-target"
                 },
                 method = "asset.notify.invalid",
@@ -238,7 +244,7 @@ public class InvocationSpecTests : IDisposable
                 appId = "spec-6.3.10-invalid-auto-launch-queue",
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = string.Empty,
                     instanceId = (string?)null
                 },
                 method = "asset.notify.invalid",
@@ -273,7 +279,7 @@ public class InvocationSpecTests : IDisposable
                 appId,
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = string.Empty,
                     instanceId = (string?)null
                 },
                 method = "asset.notify.disabled",
@@ -305,7 +311,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.11-invalid-wait-timeout",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.invalid",
                 options = new
                 {
@@ -322,7 +328,7 @@ public class InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_Request_WhenOptionsOmitted_ShouldApplyDefaults()
+    public async Task Spec_6_3_11_Request_WhenOptionsOmittedWithExplicitGlobalScope_ShouldApplyDefaults()
     {
         const string onlineAppId = "spec-6.3.11-default-options-online";
         const string onlineInstanceId = "spec-6.3.11-default-options-online-instance";
@@ -342,7 +348,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = onlineAppId,
-                target = new { },
+                target = new { scope = string.Empty },
                 method = "asset.request.defaults",
                 args = new { value = 1 }
             })
@@ -384,7 +390,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = offlineAppId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.defaults.offline",
                 args = new { value = 2 }
             })
@@ -414,7 +420,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = "missing-instance" },
+                target = new { scope = string.Empty, instanceId = "missing-instance" },
                 method = "asset.request.target",
                 args = new { value = 3 },
                 options = new
@@ -451,7 +457,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.11-invalid-target-instance",
-                target = new { scope = (string?)null, instanceId = "inst-target" },
+                target = new { scope = string.Empty, instanceId = "inst-target" },
                 method = "asset.request.invalid",
                 options = new
                 {
@@ -480,7 +486,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.11-invalid-auto-launch-queue",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.invalid",
                 options = new
                 {
@@ -513,7 +519,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.expire",
                 options = new
                 {
@@ -550,7 +556,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.disabled",
                 options = new
                 {
@@ -586,7 +592,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.request.failed",
                 options = new
                 {
@@ -637,9 +643,9 @@ public class InvocationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_Request_WhenScopeOmittedNullOrEmpty_ShouldRouteOnlyToGlobal()
+    public async Task Spec_6_3_11_Request_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
     {
-        const string appId = "spec-6.3.11-scope-normalization";
+        const string appId = "spec-6.3.11-explicit-global-scope";
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -650,9 +656,9 @@ public class InvocationSpecTests : IDisposable
 
         foreach (var testCase in new[]
                  {
-                     new { Name = "omitted", Target = (object)new { } },
-                     new { Name = "null", Target = (object)new { scope = (string?)null } },
-                     new { Name = "empty", Target = (object)new { scope = string.Empty } }
+                     new { Name = "omitted", Target = (object)new { }, ShouldReturnInvalidParams = true },
+                     new { Name = "null", Target = (object)new { scope = (string?)null }, ShouldReturnInvalidParams = true },
+                     new { Name = "empty", Target = (object)new { scope = string.Empty }, ShouldReturnInvalidParams = false }
                  })
         {
             var requestTask = handler.HandleAsync(new JsonRpcRequest
@@ -674,6 +680,13 @@ public class InvocationSpecTests : IDisposable
                     }
                 })
             }, CancellationToken.None);
+
+            if (testCase.ShouldReturnInvalidParams)
+            {
+                var invalidResponse = await requestTask;
+                AssertError(invalidResponse, -32602, "invalid_params");
+                continue;
+            }
 
             var pollGlobal = await PollAsync(handler, "spec-6.3.11-global", maxCount: 1, waitMs: 800);
             AssertSuccess(pollGlobal);
@@ -779,7 +792,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.notify.poll",
                 options = new
                 {
@@ -955,7 +968,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = holderInstanceId },
+                target = new { scope = string.Empty, instanceId = holderInstanceId },
                 method = "asset.respond.conflict",
                 options = new
                 {
@@ -1033,7 +1046,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = timeoutAppId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.respond.timeout",
                 options = new
                 {
@@ -1081,7 +1094,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = expiredAppId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.respond.expired",
                 options = new
                 {
@@ -1132,7 +1145,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = string.Empty, instanceId = (string?)null },
                 method = "asset.respond.last-seen",
                 options = new
                 {
@@ -1230,11 +1243,12 @@ public class InvocationSpecTests : IDisposable
         bool respond,
         int pid)
     {
+        var normalizedScope = scope ?? ScopeContract.Global;
         return appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = scope,
+            Scope = normalizedScope,
             Pid = pid,
             Invoke = new InvokeCapability
             {
@@ -1246,11 +1260,11 @@ public class InvocationSpecTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new
         {
             appId,
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {

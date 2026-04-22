@@ -51,7 +51,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var tokenFilePath = Path.Combine(_runtimeDirectory, "token.txt");
         Assert.True(File.Exists(tokenFilePath));
 
-        var definition = context.DefinitionProvider.GetDefinition("bootstrap.init.app");
+        var definition = context.DefinitionProvider.GetDefinition("bootstrap.init.app", ScopeContract.Global);
         Assert.NotNull(definition);
     }
 
@@ -184,7 +184,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var payload = new
         {
             appId,
-            scope = (string?)null,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {
@@ -193,7 +193,7 @@ public sealed class HostBootstrapperTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 

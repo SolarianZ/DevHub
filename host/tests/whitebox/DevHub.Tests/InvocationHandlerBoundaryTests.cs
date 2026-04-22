@@ -81,7 +81,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-notify-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -99,7 +99,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-notify-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -125,7 +125,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-request-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = 1
             })
@@ -139,7 +139,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-request-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -272,7 +272,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         {
             InstanceId = "respond-missing-inst",
             AppId = "respond-missing-app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6001,
             Invoke = new DevHub.Core.Models.InvokeCapability
             {
@@ -321,7 +321,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -353,7 +353,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -386,7 +386,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -423,7 +423,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.queue.first",
                 options = new
                 {
@@ -442,7 +442,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.queue.second",
                 options = new
                 {
@@ -484,7 +484,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 Params = JsonSerializer.SerializeToElement(new
                 {
                     appId,
-                    target = new { scope = (string?)null, instanceId = (string?)null },
+                    target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                     method = methodName,
                     options = new
                     {
@@ -551,7 +551,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -577,7 +577,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         {
             InstanceId = "holder-instance",
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6002,
             Invoke = new DevHub.Core.Models.InvokeCapability
             {
@@ -590,7 +590,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         {
             InstanceId = "other-instance",
             AppId = appId,
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6003,
             Invoke = new DevHub.Core.Models.InvokeCapability
             {
@@ -608,7 +608,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = "holder-instance" },
+                target = new { scope = ScopeContract.Global, instanceId = "holder-instance" },
                 method = "task.run",
                 options = new
                 {
@@ -723,11 +723,11 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
-        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, null).GetFileName());
+        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
-            ["scope"] = (string?)null,
+            ["scope"] = ScopeContract.Global,
             ["displayName"] = appId,
             ["capabilities"] = new
             {
@@ -819,3 +819,4 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
     }
 }
+

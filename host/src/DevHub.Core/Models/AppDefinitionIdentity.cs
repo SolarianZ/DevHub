@@ -5,7 +5,7 @@ namespace DevHub.Core.Models;
 /// <summary>
 /// AppDefinition 复合身份。
 /// </summary>
-public readonly record struct AppDefinitionIdentity(string AppId, string? Scope)
+public readonly record struct AppDefinitionIdentity(string AppId, string Scope)
 {
     /// <summary>
     /// Global Definition 的文件名后缀。
@@ -15,10 +15,11 @@ public readonly record struct AppDefinitionIdentity(string AppId, string? Scope)
     /// <summary>
     /// 从 appId 与 scope 构造复合身份。
     /// </summary>
-    public static AppDefinitionIdentity Create(string appId, string? scope)
+    public static AppDefinitionIdentity Create(string appId, string scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
-        return new AppDefinitionIdentity(appId, NormalizeScope(scope));
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
+        return new AppDefinitionIdentity(appId, scope);
     }
 
     /// <summary>
@@ -28,14 +29,6 @@ public readonly record struct AppDefinitionIdentity(string AppId, string? Scope)
     {
         ArgumentNullException.ThrowIfNull(definition);
         return Create(definition.AppId, definition.Scope);
-    }
-
-    /// <summary>
-    /// 规范化 scope。
-    /// </summary>
-    public static string? NormalizeScope(string? scope)
-    {
-        return string.IsNullOrEmpty(scope) ? null : scope;
     }
 
     /// <summary>
@@ -49,9 +42,11 @@ public readonly record struct AppDefinitionIdentity(string AppId, string? Scope)
     /// <summary>
     /// 生成文件名安全的 scope 片段。
     /// </summary>
-    public static string EncodeScopeSegment(string? scope)
+    public static string EncodeScopeSegment(string scope)
     {
-        if (scope is null)
+        ScopeContract.EnsureScopedString(scope, nameof(scope));
+
+        if (ScopeContract.IsGlobal(scope))
         {
             return GlobalScopeFileSegment;
         }
