@@ -224,7 +224,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 ### 7.4 `hub.invoke.request` 请求体示例
 
 前提：目标 `appId` 有在线实例可 `poll/respond`；否则会返回 `-32010 instance_not_found`。
-下例显式请求 Global 作用域；如果希望不限作用域，可以省略 `target.scope` 或将其设为 `null`。
+下例显式请求 Global 作用域；`hub.invoke.request` 必须显式提供字符串 `target.scope`。如果需要跨全部作用域枚举，请改用 `hub.apps.listDefinitions` 或 `hub.apps.listInstances` 并显式传入 `scope: null`。
 
 ```json
 {

@@ -48,9 +48,9 @@ HTTP：
 - [`http/ping.request.json`](./http/ping.request.json)
 - [`http/ping.success.json`](./http/ping.success.json)
 - [`http/list-definitions.null-scope.request.json`](./http/list-definitions.null-scope.request.json)
-- [`http/list-definitions.omitted-scope.request.json`](./http/list-definitions.omitted-scope.request.json)
 - [`http/list-definitions.global.request.json`](./http/list-definitions.global.request.json)
 - [`http/list-definitions.success.json`](./http/list-definitions.success.json)
+- [`http/list-definitions.global.success.json`](./http/list-definitions.global.success.json)
 - [`http/get-definition.request.json`](./http/get-definition.request.json)
 - [`http/get-definition.success.json`](./http/get-definition.success.json)
 - [`http/validate-definition.valid.request.json`](./http/validate-definition.valid.request.json)
@@ -84,6 +84,6 @@ WebSocket：
 
 ## 5. 与 Schema / Conformance 的关系
 
-- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。`listDefinitions` 额外演示了 `scope = null` 或省略时的不按作用域过滤语义。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 legacy `{appId}.json` 持久化。
+- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。`listDefinitions` 演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅返回 Global Definition 的语义。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。
 - 如果你需要做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
 - 如果你需要验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。

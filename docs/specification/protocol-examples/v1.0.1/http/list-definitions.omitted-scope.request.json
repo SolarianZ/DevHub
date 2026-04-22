@@ -1,8 +1,0 @@
-{
-  "jsonrpc": "2.0",
-  "id": "apps-definitions-list-app",
-  "method": "hub.apps.listDefinitions",
-  "params": {
-    "appId": "sample.app"
-  }
-}

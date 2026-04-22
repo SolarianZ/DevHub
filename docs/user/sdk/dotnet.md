@@ -127,14 +127,16 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
     ClientId = "example-client"
 });
 
-var definitions = await client.ListDefinitionsAsync();
 var definition = await client.GetDefinitionAsync("sample.app", scope: "");
 var instances = await client.ListInstancesAsync(new ListInstancesRequest
 {
     AppId = "sample.app",
+    Scope = null,
     IncludeOffline = true
 });
 ```
+
+列表查询按当前协议必须显式提供 `scope`；如需跨全部作用域枚举，请对 `ListDefinitionsAsync(...)` / `ListInstancesAsync(...)` 显式传入 `null`，不要省略该字段。
 
 ### 6.2 校验与写入定义
 

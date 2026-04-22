@@ -119,7 +119,7 @@ const client = await DevHubClient.fromRuntime(
 
 ## 6. 常见交互场景
 
-定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
 
 ```ts
 const definition = {
