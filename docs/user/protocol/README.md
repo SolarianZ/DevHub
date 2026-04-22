@@ -45,7 +45,7 @@
 └── logs/
 ```
 
-其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: null` 与 `scopeKey = global`；显式作用域 Definition 使用原样保留、且至少包含一个非空白字符的 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、空字符串 `scope` 或纯空白 `scope` 都不属于合法 Definition 资产。
+其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: ""` 与 `scopeKey = global`；显式作用域 Definition 使用首尾均不含空白字符的非空 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、`scope: null` 或首尾包含空白字符的 `scope` 都不属于合法 Definition 资产。
 
 `hub.json` 至少需要读取这些字段：
 
@@ -85,6 +85,10 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 
 如果要接入定义管理、实例注册与调用链路，可继续参考：
 
+- [`list-definitions.null-scope.request.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.null-scope.request.json)
+- [`list-definitions.omitted-scope.request.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.omitted-scope.request.json)
+- [`list-definitions.global.request.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.global.request.json)
+- [`list-definitions.success.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.success.json)
 - [`get-definition.request.json`](../../specification/protocol-examples/v1.0.1/http/get-definition.request.json)
 - [`get-definition.success.json`](../../specification/protocol-examples/v1.0.1/http/get-definition.success.json)
 - [`validate-definition.valid.request.json`](../../specification/protocol-examples/v1.0.1/http/validate-definition.valid.request.json)
@@ -105,12 +109,13 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 
 其中：
 
-- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: null`。
+- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`。
 - `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
-- `hub.apps.listDefinitions` 可能返回同一 `appId` 的多条记录；调用方必须使用 `scope` 区分它们。
+- `hub.apps.listDefinitions` 支持可选 `appId` 与 `scope` 过滤；`scope` 省略或为 `null` 时不按作用域过滤，`scope: ""` 时仅返回 Global Definition，其他合法字符串按精确作用域过滤。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
-- `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，不再支持仅按 `appId` 定位 Definition。
-- `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中。
+- `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，并显式提供合法字符串 `scope`，不再支持仅按 `appId` 或 `scope: null` 定位 Definition。
+- `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；其中注册类 `scope` 必须显式给出合法字符串，`scope: ""` 表示 Global。
+- 对 `hub.apps.listInstances.scope`、`hub.apps.launch.scope` 与 `hub.invoke.*.target.scope`，`scope` 省略或为 `null` 表示“不限制作用域”，`scope: ""` 表示仅限 Global。
 - 浏览器 / WebView 预检成功仅代表 `/rpc` 可建立 HTTP 会话；WebSocket 连接与 `hub.ws.authenticate` 仍按协议规范单独处理。
 
 ## 4. WebSocket 鉴权与事件订阅
@@ -259,7 +264,7 @@ python host/tests/conformance/vector_runner.py \
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
 
-当前 v1.x 的 `AppDefinition` 基线已经固定为精确复合身份 `(appId, scope)`：持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，Definition CRUD 与 launch 绑定只按精确 `appId + scope` 工作。历史资产或旧实现如果仍接受 `{appId}.json`、缺失 `scope`、空白 `scope` 或仅按 `appId` 做 Definition CRUD，属于未收敛到当前 v1.x 基线，而不是 v1.x 允许保留的兼容分支。
+当前 v1.x 的 `AppDefinition` 基线已经固定为精确复合身份 `(appId, scope)`：持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，其中 `scope: ""` 是 Global 的唯一显式表示；Definition CRUD 与 launch 绑定只按精确 `appId + scope` 工作。历史资产或旧实现如果仍接受 `{appId}.json`、缺失 `scope`、`scope: null`、首尾包含空白字符的 `scope` 或仅按 `appId` 做 Definition CRUD，属于未收敛到当前 v1.x 基线，而不是 v1.x 允许保留的兼容分支。
 
 `Specification.md` §9 中允许的兼容扩展包括：
 

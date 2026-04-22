@@ -5,7 +5,7 @@
     "ok": true,
     "definition": {
       "appId": "sample.app",
-      "scope": "workspace-a",
+      "scope": "",
       "displayName": "Sample App",
       "capabilities": {
         "rpc": true

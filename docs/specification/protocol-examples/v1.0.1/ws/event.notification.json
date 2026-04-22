@@ -8,7 +8,7 @@
     "payload": {
       "appId": "sample.app",
       "instanceId": "sample-instance-1",
-      "scope": null
+      "scope": ""
     }
   }
 }

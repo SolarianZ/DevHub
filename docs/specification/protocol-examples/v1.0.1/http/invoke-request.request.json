@@ -5,7 +5,7 @@
   "params": {
     "appId": "sample.app",
     "target": {
-      "scope": null
+      "scope": ""
     },
     "method": "sample.request",
     "args": {

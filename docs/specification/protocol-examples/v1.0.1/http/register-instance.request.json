@@ -7,7 +7,7 @@
     "instance": {
       "instanceId": "sample-instance-1",
       "appId": "sample.app",
-      "scope": null,
+      "scope": "",
       "pid": 32001,
       "invoke": {
         "poll": true,

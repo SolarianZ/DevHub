@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://devhub.spec/v1/app-definition.json",
-  "description": "Canonical payload for one AppDefinition. Public identity is the exact composite key (appId, scope), where null scope means Global and non-null scope is preserved verbatim.",
+  "description": "Canonical payload for one AppDefinition. Public identity is the exact composite key (appId, scope), where the empty string means Global and any other legal string is preserved verbatim.",
   "type": "object",
   "required": [
     "appId",
@@ -15,17 +15,9 @@
       "pattern": "^[a-z0-9][a-z0-9.-]*$"
     },
     "scope": {
-      "description": "Definition scope. Use null for the Global Definition. Explicit scoped Definitions must use a string that contains at least one non-whitespace character.",
-      "anyOf": [
-        {
-          "type": "null"
-        },
-        {
-          "type": "string",
-          "minLength": 1,
-          "pattern": ".*\\S.*"
-        }
-      ]
+      "description": "Definition scope. Use the empty string for the Global Definition. Any other scope must be a string with no leading or trailing whitespace.",
+      "type": "string",
+      "pattern": "^$|^\\S(?:.*\\S)?$"
     },
     "displayName": {
       "type": "string"

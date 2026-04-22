@@ -24,9 +24,15 @@
       "type": "object",
       "properties": {
         "scope": {
-          "type": [
-            "string",
-            "null"
+          "description": "Target scope. Use the empty string to explicitly target Global. Use null or omit the field to leave the scope unrestricted.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^$|^\\S(?:.*\\S)?$"
+            }
           ]
         },
         "instanceId": {

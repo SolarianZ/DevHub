@@ -82,6 +82,7 @@ client = DevHubClient.from_runtime(DevHubClientOptions(client_id="admin-client")
 
 definition = AppDefinition(
     app_id="sample.app",
+    scope="",
     display_name="Sample App",
     launch=LaunchConfiguration(
         exe_path="python3",
@@ -97,6 +98,7 @@ instance = client.register_instance(
     AppInstanceRegistration(
         instance_id="sample-inst-1",
         app_id="sample.app",
+        scope="",
         pid=12345,
         invoke=InvokeCapability(poll=True, respond=True),
     ),
@@ -104,7 +106,7 @@ instance = client.register_instance(
 )
 
 client.unregister_instance(instance.instance_id, "sample-instance-secret")
-client.delete_definition(definition.app_id)
+client.delete_definition(definition.app_id, definition.scope)
 ```
 
 ## 7. 高级扩展

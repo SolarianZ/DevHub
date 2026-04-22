@@ -4,6 +4,6 @@
   "method": "hub.apps.deleteDefinition",
   "params": {
     "appId": "sample.app",
-    "scope": "workspace-a"
+    "scope": ""
   }
 }

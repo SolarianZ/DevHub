@@ -5,7 +5,7 @@
   "params": {
     "definition": {
       "appId": "sample.app",
-      "scope": "workspace-a",
+      "scope": "",
       "displayName": "Sample App"
     }
   }

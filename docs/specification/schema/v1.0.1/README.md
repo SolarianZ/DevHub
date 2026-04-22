@@ -48,10 +48,10 @@
 本目录可作为 DevHub v1.0.1 的版本化协议资产：
 
 - 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验。
-- 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `null`，显式作用域 Definition 使用至少包含一个非空白字符的字符串。
+- 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用首尾均不含空白字符的字符串。
 - 读取实例镜像或注册返回值时，用 `app-instance.json` 校验。
-- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验。
-- 处理轮询项或调用上下文时，用 `invocation.json` 校验。
+- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。
+- 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `target.scope = ""` 表示显式 Global，`target.scope = null` 或省略表示不限作用域。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
 - 发送或接收原始 JSON-RPC 报文时，用 `rpc-request.json`、`rpc-response.json`、`error-response.json` 校验信封。
 

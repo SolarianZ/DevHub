@@ -124,7 +124,7 @@ const client = await DevHubClient.fromRuntime(
 ```ts
 const definition = {
   appId: "sample.app",
-  scope: null,
+  scope: "",
   displayName: "Sample App",
   launch: {
     exePath: "python3",
@@ -140,6 +140,7 @@ if (validation.valid) {
 const instance = await client.registerInstance({
   instanceId: "sample-inst-1",
   appId: "sample.app",
+  scope: "",
   pid: process.pid,
   invoke: { poll: true, respond: true }
 }, "sample-instance-secret");

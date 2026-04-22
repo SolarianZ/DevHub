@@ -5,6 +5,7 @@
   "required": [
     "instanceId",
     "appId",
+    "scope",
     "pid",
     "registeredAtUtc",
     "lastSeenUtc",
@@ -20,10 +21,9 @@
       "type": "string"
     },
     "scope": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "description": "Instance scope. Use the empty string for the Global scope. Any other scope must be a string with no leading or trailing whitespace.",
+      "type": "string",
+      "pattern": "^$|^\\S(?:.*\\S)?$"
     },
     "pid": {
       "type": "integer",
