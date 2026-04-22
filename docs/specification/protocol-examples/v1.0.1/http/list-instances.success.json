@@ -1,0 +1,33 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-list-all-scopes",
+  "result": {
+    "ok": true,
+    "instances": [
+      {
+        "instanceId": "sample-instance-1",
+        "appId": "sample.app",
+        "scope": "",
+        "pid": 32001,
+        "registeredAtUtc": "${INSTANCE_REGISTERED_AT_UTC}",
+        "lastSeenUtc": "${INSTANCE_LAST_SEEN_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      },
+      {
+        "instanceId": "sample-instance-2",
+        "appId": "sample.app",
+        "scope": "workspace-a",
+        "pid": 32002,
+        "registeredAtUtc": "${INSTANCE_REGISTERED_AT_UTC}",
+        "lastSeenUtc": "${INSTANCE_LAST_SEEN_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    ]
+  }
+}

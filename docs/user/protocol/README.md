@@ -102,6 +102,10 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - [`delete-definition.success.json`](../../specification/protocol-examples/v1.0.1/http/delete-definition.success.json)
 - [`register-instance.request.json`](../../specification/protocol-examples/v1.0.1/http/register-instance.request.json)
 - [`register-instance.success.json`](../../specification/protocol-examples/v1.0.1/http/register-instance.success.json)
+- [`list-instances.null-scope.request.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.null-scope.request.json)
+- [`list-instances.global.request.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.global.request.json)
+- [`list-instances.success.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.success.json)
+- [`list-instances.global.success.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.global.success.json)
 - [`unregister-instance.request.json`](../../specification/protocol-examples/v1.0.1/http/unregister-instance.request.json)
 - [`unregister-instance.success.json`](../../specification/protocol-examples/v1.0.1/http/unregister-instance.success.json)
 - [`invoke-request.request.json`](../../specification/protocol-examples/v1.0.1/http/invoke-request.request.json)
@@ -115,6 +119,7 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，并显式提供合法字符串 `scope`；仅按 `appId` 或使用 `scope: null` 都不是合法的 Definition 定位方式。
 - `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；其中注册类 `scope` 必须显式给出合法字符串，`scope: ""` 表示 Global。
+- `hub.apps.listInstances` 支持可选 `appId` 与 `includeOffline`，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global 实例，其他合法字符串按精确作用域过滤。
 - 只有 `hub.apps.listDefinitions.scope` 与 `hub.apps.listInstances.scope` 接受 `scope: null` 表示“不限制作用域”，且这两个接口也必须显式携带 `scope` 字段。
 - `hub.apps.launch.scope` 与 `hub.invoke.*.target.scope` 都必须显式给出合法字符串；`scope: ""` 表示仅限 Global，缺失 `scope` 或使用 `scope: null` 都属于非法请求。
 - 浏览器 / WebView 预检成功仅代表 `/rpc` 可建立 HTTP 会话；WebSocket 连接与 `hub.ws.authenticate` 仍按协议规范单独处理。
@@ -181,8 +186,9 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 定义管理与实例密码场景还需要额外处理以下分支：
 
+- `hub.apps.validateDefinition` 中，`definition.scope` 缺失、为 `null` 或为非法字符串时，会进入定义校验失败结果，而不是 JSON-RPC `error`。
 - `hub.apps.upsertDefinition` 的业务校验失败走 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下携带 `errors: ValidationIssue[]`。
-- 除 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 外，任何带 `scope` / `target.scope` 的请求在缺失该字段或传入 `null` 时都返回 `-32602 invalid_params`。
+- 除 `hub.apps.listDefinitions`、`hub.apps.listInstances`、`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` 的 Definition 校验分支外，其余带 `scope` / `target.scope` 的请求在缺失该字段或传入 `null` 时都返回 `-32602 invalid_params`。
 - `hub.apps.unregisterInstance` 或同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 查找未知 Definition 时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 与 `error.data.scope` 中回传请求目标。
 

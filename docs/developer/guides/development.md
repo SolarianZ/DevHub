@@ -223,7 +223,7 @@ curl -sS -X POST "$DEVHUB_HTTP_BASE_URL/rpc" \
 
 ### 7.4 `hub.invoke.request` 请求体示例
 
-前提：目标 `appId` 有在线实例可 `poll/respond`；否则会返回 `-32010 instance_not_found`。
+前提：调用按精确 `appId + target.scope` 路由。若已有在线匹配实例且支持 `poll/respond`，Hub 会直接路由；若不存在在线匹配实例，但存在精确命中的可启动 Definition 且 `options.autoLaunch = true`，Hub 会先尝试 auto-launch；只有仍无法建立路由时才会返回 `-32010 instance_not_found`。
 下例显式请求 Global 作用域；`hub.invoke.request` 必须显式提供字符串 `target.scope`。如果需要跨全部作用域枚举，请改用 `hub.apps.listDefinitions` 或 `hub.apps.listInstances` 并显式传入 `scope: null`。
 
 ```json
