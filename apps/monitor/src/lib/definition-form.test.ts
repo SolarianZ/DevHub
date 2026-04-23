@@ -21,7 +21,7 @@ describe("definition-form helpers", () => {
 
     expect(definitionFormToModel(form)).toEqual<AppDefinition>({
       appId: "sample.app",
-      scope: null,
+      scope: "",
       displayName: "Sample App",
       capabilities: {
         rpc: true,

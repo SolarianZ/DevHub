@@ -38,7 +38,8 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 若通过 GitHub Actions 执行远端发布：
 
-- 自动发布由 `ci.yml` 的 `publish-release` job 触发；只有 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`monitor-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过后，才会调用可复用发布工作流。
+- 自动发布由 `ci.yml` 的 `publish-release` job 触发；只有 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过后，才会调用可复用发布工作流。
+- 独立的 `monitor.yml` 负责 Monitor 工作区验证；该 workflow 不属于 Host / SDK 发布门禁，`preview` 分支的 required check 配置也不应把它作为发布前置条件。
 - `workflow_dispatch` 只允许填写 `preview`、`main` 或 `v*` tag 作为 `target_ref`，且目标提交必须已有成功的 `ci`；若要通过 GitHub UI / CLI 手动触发，`release.yml` 必须存在于仓库默认分支。
 
 ### 1.3 资产检查

@@ -60,11 +60,12 @@
 - 仓库发布版本统一以 `eng/Version.props` 为唯一来源；Host 与 `.NET SDK` 直接消费该文件，`JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与之保持同步。
 - `scripts/release/package_release.py` 会在打包开始前执行版本一致性校验，发现 `package.json`、`package-lock.json` 或 `pyproject.toml` 与 `eng/Version.props` 漂移时直接失败。
 - 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产。
-- `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`monitor-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
+- `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
+- `.github/workflows/monitor.yml` 独立承担 Monitor 前端构建、前端测试、原生测试与打包验证；该 workflow 以 `local-src` 直连当前分支的 `sdks/javascript/src` 做仓库内联调门禁，不进入 `publish-release` 的 `needs`，也不通过 `workflow_run` 回串到发布链。
 - `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动重跑入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经通过 `ci`。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
 - `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、资产打包与 GitHub Release 发布，避免自动发布与手动重跑重复维护两套脚本。
 - 当前发布流程只生成并上传 GitHub Release 资产，不会同步把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，或把 `Python SDK` 发布到 PyPI。
-- `apps/monitor/` 当前使用独立的本地一键打包脚本 `python scripts/release/package_monitor.py --release-id <id>`；该脚本不接入本节描述的 GitHub Release / CI 自动发布链路。
+- `apps/monitor/` 使用独立的本地一键打包脚本 `python scripts/release/package_monitor.py --release-id <id>`；该脚本支持 `--sdk-source {release,local-src}`，默认正式来源为 `release`，`local-src` 仅用于本地 SDK / Monitor 联调包。该脚本不接入本节描述的 GitHub Release / CI 自动发布链路。
 
 ## 5. 发布说明与 TODO 占位
 

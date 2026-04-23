@@ -23,6 +23,12 @@ import {
   createMissingDefinitionForm,
   toErrorMessage,
 } from "../lib/monitor-ui";
+import {
+  deleteDefinitionCompat,
+  getDefinitionCompat,
+  upsertDefinitionCompat,
+  validateDefinitionCompat,
+} from "../lib/sdk-compat";
 import type { ConfirmDialogRequest } from "./useConfirmDialog";
 
 interface DefinitionEditorOptions {
@@ -150,7 +156,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       const definition = await runHostAction("open_edit_definition", (client) =>
-        client.getDefinition(identity),
+        getDefinitionCompat(client, identity),
       );
       const nextForm = definitionToForm(definition);
 
@@ -228,7 +234,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       const definition = await runHostAction("open_view_definition", (client) =>
-        client.getDefinition(identity),
+        getDefinitionCompat(client, identity),
       );
       const nextForm = definitionToForm(definition);
 
@@ -305,7 +311,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       const validation = await runHostAction("validate_definition", (client) =>
-        client.validateDefinition(candidateDefinition),
+        validateDefinitionCompat(client, candidateDefinition),
       );
 
       if (!validation.valid) {
@@ -327,7 +333,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       }
 
       const savedDefinition = await runHostAction("upsert_definition", (client) =>
-        client.upsertDefinition(candidateDefinition),
+        upsertDefinitionCompat(client, candidateDefinition),
       );
 
       onReplaceDefinition(savedDefinition);
@@ -423,7 +429,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       await runHostAction("delete_definition", (client) =>
-        client.deleteDefinition(identity),
+        deleteDefinitionCompat(client, identity),
       );
 
       onRemoveDefinition(identity);

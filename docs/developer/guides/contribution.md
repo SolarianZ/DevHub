@@ -24,7 +24,8 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖固定指向仓库 GitHub Release 中的 `devhub-sdk-javascript-0.7.0.tgz` 资产。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，默认来源是仓库 GitHub Release 中的 SDK tarball，本地联调时可显式设置 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 直连 `sdks/javascript/src`。
+- 独立 `monitor.yml` workflow 以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行仓库内 Monitor 验证，正式安装和本地默认命令仍以 `release` 为默认来源。
 
 `JS/TS SDK` 的额外开发约束：
 
@@ -67,7 +68,7 @@ npm --prefix apps/monitor run verify
 python scripts/release/package_monitor.py --release-id local-dry-run
 ```
 
-该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程。
+该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程；如需本地 SDK 联调包，可额外传入 `--sdk-source local-src`，但该产物不作为正式发布来源。
 
 ## 3. 外部协作者常用入口
 

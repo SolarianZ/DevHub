@@ -24,6 +24,7 @@ import {
   toErrorMessage,
   upsertDefinition,
 } from "../lib/monitor-ui";
+import { listAllDefinitions } from "../lib/sdk-compat";
 
 const HTTP_CLIENT_ID = "devhub-monitor-ui";
 const EVENTS_CLIENT_ID = "devhub-monitor-ui-events";
@@ -178,7 +179,7 @@ export function useHostSession(options: HostSessionOptions) {
 
     async function refreshDefinitions(trigger: string, hostClient: DevHubClient): Promise<void> {
       try {
-        const refreshedDefinitions = await hostClient.listDefinitions();
+        const refreshedDefinitions = await listAllDefinitions(hostClient);
         if (disposed) {
           return;
         }
@@ -210,7 +211,7 @@ export function useHostSession(options: HostSessionOptions) {
     async function refreshInstances(trigger: string, hostClient: DevHubClient): Promise<void> {
       try {
         const refreshedInstances = await hostClient.listInstances({
-          includeAllScopes: true,
+          scope: null,
           includeOffline: true,
         });
         if (disposed) {
@@ -284,9 +285,9 @@ export function useHostSession(options: HostSessionOptions) {
         ]);
 
         const [nextDefinitions, nextInstances] = await Promise.all([
-          hostClient.listDefinitions(),
+          listAllDefinitions(hostClient),
           hostClient.listInstances({
-            includeAllScopes: true,
+            scope: null,
             includeOffline: true,
           }),
         ]);

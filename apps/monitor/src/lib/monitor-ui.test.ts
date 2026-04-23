@@ -16,7 +16,7 @@ import {
 function createDefinition(overrides: Partial<AppDefinition> = {}): AppDefinition {
   return {
     appId: "demo.app",
-    scope: null,
+    scope: "",
     displayName: "Demo App",
     ...overrides,
   };
@@ -135,13 +135,13 @@ describe("monitor-ui definition helpers", () => {
           displayName: "Literal Global",
         }),
         createDefinition({
-          scope: null,
+          scope: "",
           displayName: "Global",
         }),
       ]),
     ).toEqual([
       createDefinition({
-        scope: null,
+        scope: "",
         displayName: "Global",
       }),
       createDefinition({
@@ -172,7 +172,7 @@ describe("monitor-ui definition helpers", () => {
       getUnsupportedRuntimeMessage(createConnection({
         runtime: {
           ...createConnection().runtime,
-          hubVersion: null,
+          hubVersion: undefined,
         },
       })),
     ).toContain("hubVersion");

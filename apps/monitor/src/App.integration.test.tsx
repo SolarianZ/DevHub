@@ -6,6 +6,7 @@ import { DevHubClient } from "@devhub/sdk";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
 import App from "./App";
+import { deleteDefinitionCompat, registerInstanceCompat } from "./lib/sdk-compat";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
@@ -47,7 +48,7 @@ const {
 }));
 
 function formatScopeLabel(scope?: string | null): string {
-  return `scope：${scope ?? "Global"}`;
+  return `scope：${scope && scope.length > 0 ? scope : "Global"}`;
 }
 
 function getDefinitionActionLabel(displayName: string, appId: string, scope?: string | null): string {
@@ -95,7 +96,7 @@ beforeAll(async () => {
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: PRIMARY_APP_ID,
-    scope: null,
+    scope: "",
     displayName: "Monitor Integration App",
     description: "用于 Monitor 真实 Host 集成回归。",
   });
@@ -107,7 +108,7 @@ beforeAll(async () => {
   });
   await host.writeDefinition({
     appId: MISSING_APP_ID,
-    scope: null,
+    scope: "",
     displayName: "Monitor Missing App",
     description: "用于缺失定义工作流。",
   });
@@ -121,10 +122,10 @@ beforeAll(async () => {
   });
 
   try {
-    await setupClient.registerInstance({
+    await registerInstanceCompat(setupClient, {
       instanceId: PRIMARY_INSTANCE_ID,
       appId: PRIMARY_APP_ID,
-      scope: null,
+      scope: "",
       pid: process.pid,
       invoke: {
         poll: true,
@@ -132,7 +133,7 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await setupClient.registerInstance({
+    await registerInstanceCompat(setupClient, {
       instanceId: PRIMARY_SCOPED_INSTANCE_ID,
       appId: PRIMARY_APP_ID,
       scope: PRIMARY_SCOPED_SCOPE,
@@ -143,10 +144,10 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await setupClient.registerInstance({
+    await registerInstanceCompat(setupClient, {
       instanceId: MISSING_INSTANCE_ID,
       appId: MISSING_APP_ID,
-      scope: null,
+      scope: "",
       pid: process.pid,
       invoke: {
         poll: true,
@@ -154,9 +155,9 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await setupClient.deleteDefinition({
+    await deleteDefinitionCompat(setupClient, {
       appId: MISSING_APP_ID,
-      scope: null,
+      scope: "",
     });
   } finally {
     await setupClient.dispose();
@@ -381,7 +382,7 @@ describe("Monitor App real-host integration", () => {
 
     await getHost().writeDefinition({
       appId: guardAppId,
-      scope: null,
+      scope: "",
       displayName: guardDisplayName,
       description: "用于验证未保存离开保护和返回主页路径。",
     });

@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "@devhub/sdk": ["../../sdks/javascript/src/index.ts"],
+      "@devhub/sdk/runtime": ["../../sdks/javascript/src/runtime.ts"]
+    }
+  }
+}

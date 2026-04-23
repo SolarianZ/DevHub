@@ -70,6 +70,7 @@ npm --prefix apps/monitor test
 npm --prefix apps/monitor run test:native
 npm --prefix apps/monitor run tauri:check
 npm --prefix apps/monitor run verify
+python3 scripts/release/package_monitor.py --release-id local-dry-run
 python3 host/tests/conformance/vector_runner.py
 python3 scripts/sdk/run_integration_full.py
 python3 scripts/docs/check_markdown_links.py
@@ -87,6 +88,8 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `npm --prefix apps/monitor run test:native` 用于执行 Monitor 原生后端单元测试。
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
+- `DEVHUB_MONITOR_SDK_SOURCE` 控制 Monitor 的 JS SDK 来源；默认 `release` 使用安装好的 SDK tarball，显式设置为 `local-src` 时会直连 `sdks/javascript/src`。独立 `monitor.yml` workflow 使用 `local-src` 作为仓库内 Monitor/SDK 联调门禁。
+- `python3 scripts/release/package_monitor.py --release-id local-dry-run` 用于执行 Monitor 本地打包校验；可通过 `--sdk-source local-src` 生成本地 SDK 联调用途的开发包。
 - Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
 - Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。
@@ -167,6 +170,8 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 ```bash
 npm --prefix apps/monitor run verify
 ```
+
+若改动同时涉及 `apps/monitor/` 与 `sdks/javascript/` 的联调链路，再额外以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 执行最小相关 Monitor 构建或验证。
 
 ## 7. 本地联调
 

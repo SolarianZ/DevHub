@@ -152,7 +152,7 @@ function createSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): Sett
 function createDefinition(overrides: Partial<AppDefinition> = {}): AppDefinition {
   return {
     appId: "demo.app",
-    scope: null,
+    scope: "",
     displayName: "Demo App",
     description: "Demo description",
     capabilities: {
@@ -167,7 +167,7 @@ function createInstance(overrides: Partial<AppInstance> = {}): AppInstance {
   return {
     instanceId: "instance-1",
     appId: "demo.app",
-    scope: null,
+    scope: "",
     pid: 1001,
     registeredAtUtc: new Date("2026-04-12T02:03:04Z"),
     lastSeenUtc: new Date(),
@@ -180,7 +180,7 @@ function createInstance(overrides: Partial<AppInstance> = {}): AppInstance {
 }
 
 function formatScopeLabel(scope?: string | null): string {
-  return `scope：${scope ?? "Global"}`;
+  return `scope：${scope && scope.length > 0 ? scope : "Global"}`;
 }
 
 function getDefinitionActionLabel(definition: Pick<AppDefinition, "appId" | "scope" | "displayName">): string {
@@ -368,7 +368,7 @@ describe("Monitor App", () => {
     await waitFor(() => {
       expect(hostClient.listDefinitions).toHaveBeenCalledTimes(1);
       expect(hostClient.listInstances).toHaveBeenCalledWith({
-        includeAllScopes: true,
+        scope: null,
         includeOffline: true,
       });
     });
@@ -476,7 +476,7 @@ describe("Monitor App", () => {
     const hostClient = {
       listDefinitions: vi.fn().mockResolvedValue([globalDefinition, scopedDefinition]),
       listInstances: vi.fn().mockResolvedValue([globalInstance, scopedInstance]),
-      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string | null }) => {
+      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string }) => {
         return identity.scope === "workspace-a" ? scopedDefinition : globalDefinition;
       }),
       validateDefinition: vi.fn(),
@@ -571,7 +571,7 @@ describe("Monitor App", () => {
     const hostClient = {
       listDefinitions: vi.fn().mockResolvedValue([globalDefinition, literalGlobalDefinition]),
       listInstances: vi.fn().mockResolvedValue([]),
-      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string | null }) => {
+      getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string }) => {
         return identity.scope === "global" ? literalGlobalDefinition : globalDefinition;
       }),
       validateDefinition: vi.fn(),

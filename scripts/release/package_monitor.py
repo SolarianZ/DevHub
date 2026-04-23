@@ -28,6 +28,8 @@ MONITOR_TAURI_CONFIG = MONITOR_TAURI_DIR / "tauri.conf.json"
 MONITOR_CARGO_TOML = MONITOR_TAURI_DIR / "Cargo.toml"
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
 SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
+MONITOR_SDK_SOURCE_ENV = "DEVHUB_MONITOR_SDK_SOURCE"
+MONITOR_SDK_SOURCE_CHOICES = ("release", "local-src")
 
 
 @dataclass
@@ -53,6 +55,12 @@ def parse_args() -> argparse.Namespace:
         help="Only run validation and version consistency checks without invoking tauri build.",
     )
     parser.add_argument(
+        "--sdk-source",
+        choices=MONITOR_SDK_SOURCE_CHOICES,
+        default="release",
+        help="JS SDK source for Monitor validation and packaging. Use local-src only for local development bundles.",
+    )
+    parser.add_argument(
         "tauri_args",
         nargs=argparse.REMAINDER,
         help="Additional arguments passed to `npm run tauri:build -- ...`.",
@@ -66,6 +74,7 @@ def main() -> int:
     release_id = validate_release_label(args.release_id, field_name="release-id")
     output_dir = resolve_release_output_dir(output_root, release_id)
     checks_dir = output_dir / "checks"
+    sdk_source = args.sdk_source
 
     if output_dir.exists():
         remove_tree(output_dir)
@@ -74,7 +83,7 @@ def main() -> int:
     validation_records: list[ValidationRecord] = []
     versions = ensure_monitor_version_consistency()
 
-    run_monitor_validation(checks_dir, validation_records)
+    run_monitor_validation(checks_dir, validation_records, sdk_source=sdk_source)
     write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
 
     if args.verify_only:
@@ -85,6 +94,7 @@ def main() -> int:
         output_dir=output_dir,
         checks_dir=checks_dir,
         validation_records=validation_records,
+        sdk_source=sdk_source,
         tauri_args=normalize_tauri_args(args.tauri_args),
     )
     manifest = build_manifest(
@@ -92,6 +102,7 @@ def main() -> int:
         release_id=release_id,
         versions=versions,
         asset_paths=asset_paths,
+        sdk_source=sdk_source,
     )
     write_json(output_dir / "release-manifest.json", manifest)
     write_release_notes(output_dir=output_dir, manifest=manifest)
@@ -170,7 +181,11 @@ def ensure_monitor_version_consistency() -> dict[str, str]:
     }
 
 
-def run_monitor_validation(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
+def run_monitor_validation(
+    checks_dir: Path,
+    validation_records: list[ValidationRecord],
+    sdk_source: str,
+) -> None:
     run_logged_command(
         name="Monitor install",
         command=[NPM_COMMAND, "ci"],
@@ -184,6 +199,7 @@ def run_monitor_validation(checks_dir: Path, validation_records: list[Validation
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-verify.log",
         validation_records=validation_records,
+        env_overrides={MONITOR_SDK_SOURCE_ENV: sdk_source},
     )
 
 
@@ -191,6 +207,7 @@ def build_monitor_assets(
     output_dir: Path,
     checks_dir: Path,
     validation_records: list[ValidationRecord],
+    sdk_source: str,
     tauri_args: Sequence[str],
 ) -> list[Path]:
     bundle_source_dir = MONITOR_TAURI_DIR / "target" / "release" / "bundle"
@@ -209,6 +226,7 @@ def build_monitor_assets(
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-bundle-build.log",
         validation_records=validation_records,
+        env_overrides={MONITOR_SDK_SOURCE_ENV: sdk_source},
     )
 
     if not bundle_source_dir.exists():
@@ -248,6 +266,7 @@ def build_manifest(
     release_id: str,
     versions: dict[str, str],
     asset_paths: Sequence[Path],
+    sdk_source: str,
 ) -> dict[str, object]:
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     assets: list[dict[str, object]] = []
@@ -271,6 +290,8 @@ def build_manifest(
         "generatedAtUtc": generated_at,
         "targetPlatform": current_platform_tag(),
         "versions": versions,
+        "sdkSource": sdk_source,
+        "developmentOnly": sdk_source != "release",
         "assets": assets,
         "validation": {
             "executed": True,
@@ -309,14 +330,28 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object]) -> None:
         "",
         f"- Release ID: `{manifest['releaseId']}`",
         f"- Version: `{manifest['versions']['monitor']}`",
+        f"- SDK Source: `{manifest['sdkSource']}`",
         f"- Target Platform: `{manifest['targetPlatform']}`",
         f"- Generated At (UTC): `{manifest['generatedAtUtc']}`",
-        "",
-        "## Assets",
-        "",
-        "| Name | Category | SHA256 |",
-        "| --- | --- | --- |",
     ]
+
+    if manifest["developmentOnly"]:
+        lines.extend(
+            [
+                "- Package Type: `development-only`",
+                "- This package was built against `local-src` for local SDK/Monitor integration work and is not a formal release candidate.",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Assets",
+            "",
+            "| Name | Category | SHA256 |",
+            "| --- | --- | --- |",
+        ]
+    )
 
     for asset in manifest["assets"]:
         lines.append(f"| `{asset['name']}` | `{asset['category']}` | `{asset['sha256']}` |")
@@ -381,12 +416,16 @@ def run_logged_command(
     cwd: Path,
     log_path: Path,
     validation_records: list[ValidationRecord],
+    env_overrides: dict[str, str] | None = None,
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"==> {name}")
     print(f"    {format_command(command)}")
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_handle:
+        command_env = os.environ.copy()
+        if env_overrides:
+            command_env.update(env_overrides)
         process = subprocess.Popen(
             list(command),
             cwd=cwd,
@@ -395,6 +434,7 @@ def run_logged_command(
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=command_env,
         )
         assert process.stdout is not None
         for line in process.stdout:

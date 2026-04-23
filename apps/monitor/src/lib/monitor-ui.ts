@@ -219,12 +219,12 @@ export function removeDefinition(
 export function createDefinitionIdentity(appId: string, scope?: string | null): AppDefinitionIdentity {
   return {
     appId,
-    scope: scope ?? null,
+    scope: scope ?? "",
   };
 }
 
 export function definitionIdentityKey(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
-  return JSON.stringify([identity.appId, identity.scope ?? null]);
+  return JSON.stringify([identity.appId, identity.scope ?? ""]);
 }
 
 export function isSameDefinitionIdentity(
@@ -255,7 +255,7 @@ export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null)
 }
 
 export function formatScope(scope?: string | null): string {
-  return scope ?? GLOBAL_SCOPE_LABEL;
+  return scope && scope.length > 0 ? scope : GLOBAL_SCOPE_LABEL;
 }
 
 export function formatDefinitionScopeLabel(scope?: string | null): string {
@@ -295,17 +295,17 @@ function isAbsolutePath(value: string): boolean {
 }
 
 function compareDefinitionScopes(left?: string | null, right?: string | null): number {
-  const leftScope = left ?? null;
-  const rightScope = right ?? null;
+  const leftScope = left ?? "";
+  const rightScope = right ?? "";
   if (leftScope === rightScope) {
     return 0;
   }
 
-  if (leftScope === null) {
+  if (leftScope === "") {
     return -1;
   }
 
-  if (rightScope === null) {
+  if (rightScope === "") {
     return 1;
   }
 
