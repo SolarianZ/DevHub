@@ -1,7 +1,7 @@
 {
   "id": "events.unsubscribe_unknown_subscription_is_idempotent",
   "caseId": "CONF-007",
-  "description": "对未知 subscriptionId 执行 unsubscribe 仍应成功，满足幂等语义。", 
+  "description": "对未知 subscriptionId 执行 unsubscribe 仍应成功，满足幂等语义。",
   "transport": "ws",
   "request": {
     "kind": "sdk.events",

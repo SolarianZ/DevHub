@@ -42,7 +42,7 @@
         "instance": {
           "instanceId": "events-fanout-inst-1",
           "appId": "events.fanout",
-          "scope": null,
+          "scope": "",
           "pid": 33103,
           "invoke": {
             "poll": true,
@@ -73,7 +73,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.fanout",
-          "instanceId": "events-fanout-inst-1"
+          "instanceId": "events-fanout-inst-1",
+          "scope": ""
         }
       },
       "secondEvent": {
@@ -81,7 +82,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.fanout",
-          "instanceId": "events-fanout-inst-1"
+          "instanceId": "events-fanout-inst-1",
+          "scope": ""
         }
       }
     }

@@ -9,7 +9,7 @@
         "fileName": "events.unsubscribe.existing--global.json",
         "definition": {
           "appId": "events.unsubscribe.existing",
-          "scope": null,
+          "scope": "",
           "displayName": "events.unsubscribe.existing"
         }
       }
@@ -52,7 +52,7 @@
         "instance": {
           "instanceId": "events-unsubscribe-existing-inst-1",
           "appId": "events.unsubscribe.existing",
-          "scope": null,
+          "scope": "",
           "pid": 33002,
           "invoke": {
             "poll": true,

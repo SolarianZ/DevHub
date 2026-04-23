@@ -79,7 +79,7 @@ class TestAppInstances(unittest.TestCase):
                 result.add_detail(f"WARN cleanup exception: {exc}")
 
     @staticmethod
-    def _register_payload(instance_id, app_id, pid, scope=None, poll=True, respond=True, password=DEFAULT_INSTANCE_PASSWORD, meta=None):
+    def _register_payload(instance_id, app_id, pid, scope="", poll=True, respond=True, password=DEFAULT_INSTANCE_PASSWORD, meta=None):
         payload = {
             "password": password,
             "instance": {
@@ -151,7 +151,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-core",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12345,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -164,7 +164,7 @@ class TestAppInstances(unittest.TestCase):
             if not self._validate_app_instance_fields(result, instance):
                 return result
 
-            list_response = client.call("hub.apps.listInstances")
+            list_response = client.call("hub.apps.listInstances", {"scope": ""})
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
@@ -197,7 +197,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": unknown_app_id,
-                    "scope": None,
+                    "scope": "",
                     "pid": 12346,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -232,7 +232,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-upsert",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12347,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -288,7 +288,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-heartbeat",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12349,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -362,7 +362,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-unregister",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12350,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -370,11 +370,11 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": DEFAULT_INSTANCE_PASSWORD})
             if not RpcAssertions.expect_success(result, unregister_response):
                 return result
 
-            list_response = client.call("hub.apps.listInstances", {"includeAllScopes": True, "includeOffline": True})
+            list_response = client.call("hub.apps.listInstances", {"scope": None, "includeOffline": True})
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
@@ -401,7 +401,7 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             nonexistent_id = f"nonexistent-{self.generate_unique_instance_id()}"
 
-            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_id})
+            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_id, "password": DEFAULT_INSTANCE_PASSWORD})
             if not RpcAssertions.expect_success(result, response):
                 return result
 
@@ -440,7 +440,7 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_error_data_fields(result, mismatch_response, {"reason": "instance_password_mismatch"}):
                 return result
 
-            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "includeAllScopes": True, "includeOffline": True})
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None, "includeOffline": True})
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
@@ -449,7 +449,7 @@ class TestAppInstances(unittest.TestCase):
             if target is None:
                 result.mark_failure("❌ 密码不匹配后原实例丢失")
                 return result
-            if target.get("appId") != app_id or target.get("pid") != 22345 or target.get("scope") is not None:
+            if target.get("appId") != app_id or target.get("pid") != 22345 or target.get("scope") != "":
                 result.mark_failure(f"❌ 密码不匹配后实例被错误更新: {target}")
                 return result
 
@@ -490,7 +490,7 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_error_data_fields(result, unregister_response, {"reason": "instance_password_mismatch"}):
                 return result
 
-            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "includeAllScopes": True, "includeOffline": True})
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None, "includeOffline": True})
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
                 return result
 
@@ -508,8 +508,8 @@ class TestAppInstances(unittest.TestCase):
         return result
 
     def test_list_instances_with_params(self):
-        """测试 listInstances 的 appId/scope/includeAllScopes 参数"""
-        result = TestResult("测试 listInstances 的 appId/scope/includeAllScopes 参数")
+        """测试 listInstances 的 appId/scope/null-all-scopes 参数"""
+        result = TestResult("测试 listInstances 的 appId/scope/null-all-scopes 参数")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -521,7 +521,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id_1,
                     "appId": "test-app-list-1",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12351,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -537,7 +537,7 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            response_by_app = client.call("hub.apps.listInstances", {"appId": "test-app-list-1"})
+            response_by_app = client.call("hub.apps.listInstances", {"appId": "test-app-list-1", "scope": None})
             if not RpcAssertions.expect_success(result, response_by_app, ["instances"]):
                 return result
 
@@ -558,32 +558,26 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ 按 scope 过滤未返回目标实例")
                 return result
 
-            response_all = client.call("hub.apps.listInstances", {"scope": "invalid", "includeAllScopes": True})
+            response_all = client.call("hub.apps.listInstances", {"scope": None})
             if not RpcAssertions.expect_success(result, response_all, ["instances"]):
                 return result
 
             all_instances = response_all["result"]["instances"]
             if not any(inst.get("instanceId") == instance_id_1 for inst in all_instances):
-                result.mark_failure("❌ includeAllScopes=true 未包含 global 实例")
+                result.mark_failure("❌ scope=null 未包含 global 实例")
                 return result
             if not any(inst.get("instanceId") == instance_id_2 for inst in all_instances):
-                result.mark_failure("❌ includeAllScopes=true 未包含 scoped 实例")
+                result.mark_failure("❌ scope=null 未包含 scoped 实例")
                 return result
 
             response_all_invalid_scope_type = client.call("hub.apps.listInstances", {
                 "scope": 123,
-                "includeAllScopes": True,
                 "includeOffline": True
             })
-            if not RpcAssertions.expect_success(result, response_all_invalid_scope_type, ["instances"]):
+            if not RpcAssertions.expect_error(result, response_all_invalid_scope_type, -32602, "invalid_params"):
                 return result
 
-            all_instances_invalid_scope_type = response_all_invalid_scope_type["result"]["instances"]
-            if not any(inst.get("instanceId") == instance_id_1 for inst in all_instances_invalid_scope_type):
-                result.mark_failure("❌ includeAllScopes=true + 非法 scope 类型 未包含 global 实例")
-                return result
-            if not any(inst.get("instanceId") == instance_id_2 for inst in all_instances_invalid_scope_type):
-                result.mark_failure("❌ includeAllScopes=true + 非法 scope 类型 未包含 scoped 实例")
+            if not RpcAssertions.expect_error_data_fields(result, response_all_invalid_scope_type, {"reason": "invalid_scope"}):
                 return result
 
             result.mark_success()
@@ -595,9 +589,9 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
-    def test_list_instances_default_global_scope(self):
-        """测试 listInstances 默认仅返回 global(scope=null)"""
-        result = TestResult("测试 listInstances 默认仅返回 global(scope=null)")
+    def test_list_instances_explicit_global_scope(self):
+        """测试 listInstances scope='' 仅返回 Global"""
+        result = TestResult("测试 listInstances scope='' 仅返回 Global")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -609,7 +603,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id_global,
                     "appId": "test-app-default-scope",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12353,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -625,7 +619,7 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            response = client.call("hub.apps.listInstances", {"appId": "test-app-default-scope"})
+            response = client.call("hub.apps.listInstances", {"appId": "test-app-default-scope", "scope": ""})
             if not RpcAssertions.expect_success(result, response, ["instances"]):
                 return result
 
@@ -657,7 +651,7 @@ class TestAppInstances(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             scoped_global_instance_id = self.generate_unique_instance_id()
-            null_global_instance_id = self.generate_unique_instance_id()
+            empty_global_instance_id = self.generate_unique_instance_id()
             app_id = "test-app-scope-global-explicit"
 
             scoped_global_response = client.call("hub.apps.registerInstance", {
@@ -672,28 +666,28 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, scoped_global_response, ["instance"]):
                 return result
 
-            null_global_response = client.call("hub.apps.registerInstance", {
+            empty_global_response = client.call("hub.apps.registerInstance", {
                 "instance": {
-                    "instanceId": null_global_instance_id,
+                    "instanceId": empty_global_instance_id,
                     "appId": app_id,
-                    "scope": None,
+                    "scope": "",
                     "pid": 12356,
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-            if not RpcAssertions.expect_success(result, null_global_response, ["instance"]):
+            if not RpcAssertions.expect_success(result, empty_global_response, ["instance"]):
                 return result
 
-            default_list = client.call("hub.apps.listInstances", {"appId": app_id})
-            if not RpcAssertions.expect_success(result, default_list, ["instances"]):
+            global_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""})
+            if not RpcAssertions.expect_success(result, global_list, ["instances"]):
                 return result
 
-            default_ids = {inst.get("instanceId") for inst in default_list["result"]["instances"]}
-            if null_global_instance_id not in default_ids:
-                result.mark_failure("❌ 默认 Global 过滤未返回 null/global 实例")
+            global_ids = {inst.get("instanceId") for inst in global_list["result"]["instances"]}
+            if empty_global_instance_id not in global_ids:
+                result.mark_failure("❌ scope='' 过滤未返回 Global 实例")
                 return result
-            if scoped_global_instance_id in default_ids:
-                result.mark_failure("❌ 默认 Global 过滤错误命中了 scope='global' 实例")
+            if scoped_global_instance_id in global_ids:
+                result.mark_failure("❌ scope='' 过滤错误命中了 scope='global' 实例")
                 return result
 
             scoped_global_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": "global"})
@@ -704,8 +698,8 @@ class TestAppInstances(unittest.TestCase):
             if scoped_global_instance_id not in scoped_global_ids:
                 result.mark_failure("❌ scope='global' 过滤未命中显式作用域实例")
                 return result
-            if null_global_instance_id in scoped_global_ids:
-                result.mark_failure("❌ scope='global' 过滤错误命中了默认 Global 实例")
+            if empty_global_instance_id in scoped_global_ids:
+                result.mark_failure("❌ scope='global' 过滤错误命中了 Global 实例")
                 return result
 
             result.mark_success()
@@ -713,7 +707,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances([locals().get("scoped_global_instance_id"), locals().get("null_global_instance_id")], result)
+            self._cleanup_test_instances([locals().get("scoped_global_instance_id"), locals().get("empty_global_instance_id")], result)
 
         return result
 
@@ -725,7 +719,6 @@ class TestAppInstances(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             empty_scope_instance_id = self.generate_unique_instance_id()
-            null_scope_instance_id = self.generate_unique_instance_id()
             scoped_instance_id = self.generate_unique_instance_id()
             app_id = "test-app-empty-scope-global"
             scoped_value = "workspace-empty-scope"
@@ -742,18 +735,6 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, empty_scope_response, ["instance"]):
                 return result
 
-            null_scope_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": null_scope_instance_id,
-                    "appId": app_id,
-                    "scope": None,
-                    "pid": 12358,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            if not RpcAssertions.expect_success(result, null_scope_response, ["instance"]):
-                return result
-
             scoped_response = client.call("hub.apps.registerInstance", {
                 "instance": {
                     "instanceId": scoped_instance_id,
@@ -766,23 +747,26 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, scoped_response, ["instance"]):
                 return result
 
-            global_query_params = [
-                {"appId": app_id},
-                {"appId": app_id, "scope": None},
-                {"appId": app_id, "scope": ""}
-            ]
-            for params in global_query_params:
-                response = client.call("hub.apps.listInstances", params)
-                if not RpcAssertions.expect_success(result, response, ["instances"]):
-                    return result
+            global_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": ""})
+            if not RpcAssertions.expect_success(result, global_response, ["instances"]):
+                return result
 
-                instance_ids = {inst.get("instanceId") for inst in response["result"]["instances"]}
-                if empty_scope_instance_id not in instance_ids or null_scope_instance_id not in instance_ids:
-                    result.mark_failure(f"❌ Global 查询未同时命中 scope='' 与 scope=null 实例: params={params}, ids={instance_ids}")
-                    return result
-                if scoped_instance_id in instance_ids:
-                    result.mark_failure(f"❌ Global 查询错误命中显式作用域实例: params={params}, ids={instance_ids}")
-                    return result
+            global_ids = {inst.get("instanceId") for inst in global_response["result"]["instances"]}
+            if empty_scope_instance_id not in global_ids:
+                result.mark_failure(f"❌ scope='' 查询未命中 Global 实例: ids={global_ids}")
+                return result
+            if scoped_instance_id in global_ids:
+                result.mark_failure(f"❌ scope='' 查询错误命中显式作用域实例: ids={global_ids}")
+                return result
+
+            all_scopes_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None})
+            if not RpcAssertions.expect_success(result, all_scopes_response, ["instances"]):
+                return result
+
+            all_scope_ids = {inst.get("instanceId") for inst in all_scopes_response["result"]["instances"]}
+            if empty_scope_instance_id not in all_scope_ids or scoped_instance_id not in all_scope_ids:
+                result.mark_failure(f"❌ scope=null 查询未覆盖全部作用域: ids={all_scope_ids}")
+                return result
 
             scoped_list = client.call("hub.apps.listInstances", {"appId": app_id, "scope": scoped_value})
             if not RpcAssertions.expect_success(result, scoped_list, ["instances"]):
@@ -792,7 +776,7 @@ class TestAppInstances(unittest.TestCase):
             if scoped_instance_id not in scoped_ids:
                 result.mark_failure(f"❌ 显式作用域查询未命中目标实例: {scoped_ids}")
                 return result
-            if empty_scope_instance_id in scoped_ids or null_scope_instance_id in scoped_ids:
+            if empty_scope_instance_id in scoped_ids:
                 result.mark_failure(f"❌ 显式作用域查询错误回退命中 Global 实例: {scoped_ids}")
                 return result
 
@@ -801,7 +785,7 @@ class TestAppInstances(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            self._cleanup_test_instances([locals().get("empty_scope_instance_id"), locals().get("null_scope_instance_id"), locals().get("scoped_instance_id")], result)
+            self._cleanup_test_instances([locals().get("empty_scope_instance_id"), locals().get("scoped_instance_id")], result)
 
         return result
 
@@ -828,7 +812,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id_2,
                     "appId": "test-app-scope-match",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12358,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -871,7 +855,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-invoke",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12359,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -905,7 +889,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-offline",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12360,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -913,7 +897,7 @@ class TestAppInstances(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            list_before = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
+            list_before = client.call("hub.apps.listInstances", {"appId": "test-app-offline", "scope": ""})
             if not RpcAssertions.expect_success(result, list_before, ["instances"]):
                 return result
             if not any(inst.get("instanceId") == instance_id for inst in list_before["result"]["instances"]):
@@ -925,7 +909,7 @@ class TestAppInstances(unittest.TestCase):
             result.add_detail(f"⏳ 读取 runtimeTuning.onlineThresholdSeconds={online_threshold_seconds}，等待 {wait_seconds}s 触发离线")
             self._wait_with_progress(wait_seconds, "离线判定等待中")
 
-            list_after = client.call("hub.apps.listInstances", {"appId": "test-app-offline"})
+            list_after = client.call("hub.apps.listInstances", {"appId": "test-app-offline", "scope": ""})
             if not RpcAssertions.expect_success(result, list_after, ["instances"]):
                 return result
 
@@ -935,6 +919,7 @@ class TestAppInstances(unittest.TestCase):
 
             list_after_explicit = client.call("hub.apps.listInstances", {
                 "appId": "test-app-offline",
+                "scope": "",
                 "includeOffline": False
             })
             if not RpcAssertions.expect_success(result, list_after_explicit, ["instances"]):
@@ -966,7 +951,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-offline-include",
-                    "scope": None,
+                    "scope": "",
                     "pid": 12361,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -979,7 +964,7 @@ class TestAppInstances(unittest.TestCase):
             result.add_detail(f"⏳ 读取 runtimeTuning.onlineThresholdSeconds={online_threshold_seconds}，等待 {wait_seconds}s 触发离线")
             self._wait_with_progress(wait_seconds, "离线实例等待中")
 
-            list_default = client.call("hub.apps.listInstances", {"appId": "test-app-offline-include"})
+            list_default = client.call("hub.apps.listInstances", {"appId": "test-app-offline-include", "scope": ""})
             if not RpcAssertions.expect_success(result, list_default, ["instances"]):
                 return result
             if any(inst.get("instanceId") == instance_id for inst in list_default["result"]["instances"]):
@@ -988,6 +973,7 @@ class TestAppInstances(unittest.TestCase):
 
             list_with_offline = client.call("hub.apps.listInstances", {
                 "appId": "test-app-offline-include",
+                "scope": "",
                 "includeOffline": True
             })
             if not RpcAssertions.expect_success(result, list_with_offline, ["instances"]):
@@ -1018,7 +1004,7 @@ class TestAppInstances(unittest.TestCase):
             self.test_register_instance_password_mismatch_rejected,
             self.test_unregister_instance_password_mismatch_rejected,
             self.test_list_instances_with_params,
-            self.test_list_instances_default_global_scope,
+            self.test_list_instances_explicit_global_scope,
             self.test_register_instance_with_global_scope,
             self.test_register_instance_empty_scope,
             self.test_list_instances_scope_strict_match,

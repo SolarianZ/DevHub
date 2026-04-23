@@ -9,7 +9,7 @@
         "fileName": "events.disconnect.cleanup--global.json",
         "definition": {
           "appId": "events.disconnect.cleanup",
-          "scope": null,
+          "scope": "",
           "displayName": "events.disconnect.cleanup"
         }
       }
@@ -58,7 +58,7 @@
         "instance": {
           "instanceId": "events-disconnect-window-inst-1",
           "appId": "events.disconnect.cleanup",
-          "scope": null,
+          "scope": "",
           "pid": 33003,
           "invoke": {
             "poll": true,
@@ -81,7 +81,7 @@
         "instance": {
           "instanceId": "events-disconnect-window-inst-2",
           "appId": "events.disconnect.cleanup",
-          "scope": null,
+          "scope": "",
           "pid": 33004,
           "invoke": {
             "poll": true,
@@ -107,7 +107,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.disconnect.cleanup",
-          "instanceId": "events-disconnect-window-inst-2"
+          "instanceId": "events-disconnect-window-inst-2",
+          "scope": ""
         }
       }
     }

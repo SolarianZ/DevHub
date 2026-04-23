@@ -11,13 +11,13 @@
         "requestId": "apps-definitions-upsert-get",
         "params": {
           "appId": "apps.upsert.persisted.app",
-          "scope": null
+          "scope": ""
         },
         "expectedResult": {
           "ok": true,
           "definition": {
             "appId": "apps.upsert.persisted.app",
-            "scope": null,
+            "scope": "",
             "displayName": "Apps Upsert Persisted",
             "description": "用于 conformance upsert 持久化验证。"
           }
@@ -29,7 +29,7 @@
         "requestId": "apps-definitions-upsert-cleanup",
         "params": {
           "appId": "apps.upsert.persisted.app",
-          "scope": null
+          "scope": ""
         },
         "expectedResult": {
           "ok": true
@@ -53,7 +53,7 @@
     "params": {
       "definition": {
         "appId": "apps.upsert.persisted.app",
-        "scope": null,
+        "scope": "",
         "displayName": "Apps Upsert Persisted",
         "description": "用于 conformance upsert 持久化验证。"
       }
@@ -66,7 +66,7 @@
       "ok": true,
       "definition": {
         "appId": "apps.upsert.persisted.app",
-        "scope": null,
+        "scope": "",
         "displayName": "Apps Upsert Persisted",
         "description": "用于 conformance upsert 持久化验证。"
       }

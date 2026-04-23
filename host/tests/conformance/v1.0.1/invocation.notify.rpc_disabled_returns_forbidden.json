@@ -9,7 +9,7 @@
         "fileName": "invoke.notify.rpc-disabled--global.json",
         "definition": {
           "appId": "invoke.notify.rpc-disabled",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.notify.rpc-disabled",
           "capabilities": {
             "rpc": false
@@ -23,7 +23,10 @@
     "clientId": "ConformanceNotifyRpcDisabled",
     "invokeRequest": {
       "appId": "invoke.notify.rpc-disabled",
-      "method": "demo.notify.rpc-disabled"
+      "method": "demo.notify.rpc-disabled",
+      "target": {
+        "scope": ""
+      }
     }
   },
   "expectedResponse": {

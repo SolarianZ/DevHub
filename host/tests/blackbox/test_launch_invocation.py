@@ -30,7 +30,7 @@ class TestLaunchInvocation(unittest.TestCase):
     def _launch_script_path(self):
         return get_shared_test_asset_path("launch_noop.py")
 
-    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=None):
+    def _create_definition(self, app_id, include_launch=True, dedupe_key_template=None, scope=""):
         launch_config = None
         if include_launch:
             launch_config = {
@@ -86,7 +86,7 @@ class TestLaunchInvocation(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=24001,
@@ -401,13 +401,13 @@ class TestLaunchInvocation(unittest.TestCase):
 
             missing_global_response = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-scope-012-global-missing",
             )
             if not RpcAssertions.expect_error(result, missing_global_response, -32014, "app_definition_not_found"):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, missing_global_response, {"appId": app_id, "scope": None}):
+            if not RpcAssertions.expect_error_data_fields(result, missing_global_response, {"appId": app_id, "scope": ""}):
                 return result
 
             other_scope_instance = self._instance_id("launch-scope-012-other")

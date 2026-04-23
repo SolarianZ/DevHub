@@ -18,7 +18,7 @@
     "method": "hub.apps.deleteDefinition",
     "params": {
       "appId": "apps.delete.missing.app",
-      "scope": null
+      "scope": ""
     }
   },
   "expectedResponse": {
@@ -29,7 +29,7 @@
       "message": "app_definition_not_found",
       "data": {
         "appId": "apps.delete.missing.app",
-        "scope": null
+        "scope": ""
       }
     }
   },

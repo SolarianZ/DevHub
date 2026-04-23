@@ -48,13 +48,13 @@
       "definitions": [
         {
           "appId": "apps.list.multi-scope.app",
-          "scope": "workspace-a",
-          "displayName": "Apps List Multi Scope Workspace A"
+          "scope": "",
+          "displayName": "Apps List Multi Scope Global"
         },
         {
           "appId": "apps.list.multi-scope.app",
-          "scope": "",
-          "displayName": "Apps List Multi Scope Global"
+          "scope": "workspace-a",
+          "displayName": "Apps List Multi Scope Workspace A"
         }
       ]
     }

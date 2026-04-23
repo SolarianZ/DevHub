@@ -9,7 +9,7 @@
         "fileName": "errors.invocation.expired--global.json",
         "definition": {
           "appId": "errors.invocation.expired",
-          "scope": null,
+          "scope": "",
           "displayName": "errors.invocation.expired"
         }
       }
@@ -31,7 +31,7 @@
     "params": {
       "appId": "errors.invocation.expired",
       "target": {
-        "scope": null,
+        "scope": "",
         "instanceId": null
       },
       "method": "demo.request.expired",

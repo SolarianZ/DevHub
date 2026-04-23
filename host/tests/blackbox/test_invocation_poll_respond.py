@@ -92,7 +92,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=False,
                 respond=True,
                 pid=23005,
@@ -132,7 +132,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=False,
                 pid=23006,
@@ -172,7 +172,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23001,
@@ -238,7 +238,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_a = client.register_instance(
                 instance_id=instance_a,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23011,
@@ -249,7 +249,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_b = client.register_instance(
                 instance_id=instance_b,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23012,
@@ -306,7 +306,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23031,
@@ -397,7 +397,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23020,
@@ -484,7 +484,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_a = client.register_instance(
                 instance_id=instance_a,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23021,
@@ -495,7 +495,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_b = client.register_instance(
                 instance_id=instance_b,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23022,

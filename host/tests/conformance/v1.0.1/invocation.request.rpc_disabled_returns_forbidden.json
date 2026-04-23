@@ -9,7 +9,7 @@
         "fileName": "invoke.request.rpc-disabled--global.json",
         "definition": {
           "appId": "invoke.request.rpc-disabled",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.request.rpc-disabled",
           "capabilities": {
             "rpc": false
@@ -23,7 +23,10 @@
     "clientId": "ConformanceRequestRpcDisabled",
     "invokeRequest": {
       "appId": "invoke.request.rpc-disabled",
-      "method": "demo.request.rpc-disabled"
+      "method": "demo.request.rpc-disabled",
+      "target": {
+        "scope": ""
+      }
     }
   },
   "expectedResponse": {

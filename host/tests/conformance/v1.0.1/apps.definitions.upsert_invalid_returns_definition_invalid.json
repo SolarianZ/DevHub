@@ -37,6 +37,11 @@
             "path": "definition.appId",
             "code": "invalid_app_id",
             "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+          },
+          {
+            "path": "definition.scope",
+            "code": "invalid_field_type",
+            "message": "scope must be a string"
           }
         ]
       }

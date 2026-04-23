@@ -12,7 +12,7 @@
         "instance": {
           "instanceId": "apps-instance-offline-only",
           "appId": "apps.instance.list.offline.app",
-          "scope": null,
+          "scope": "",
           "pid": 32008,
           "invoke": {
             "poll": true,
@@ -37,6 +37,7 @@
     "method": "hub.apps.listInstances",
     "params": {
       "appId": "apps.instance.list.offline.app",
+      "scope": "",
       "includeOffline": true
     }
   },
@@ -49,6 +50,7 @@
         {
           "instanceId": "apps-instance-offline-only",
           "appId": "apps.instance.list.offline.app",
+          "scope": "",
           "pid": 32008,
           "registeredAtUtc": "${ANY_ISO_UTC}",
           "lastSeenUtc": "${ANY_ISO_UTC}",

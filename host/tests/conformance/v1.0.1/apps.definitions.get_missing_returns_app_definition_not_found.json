@@ -18,7 +18,7 @@
     "method": "hub.apps.getDefinition",
     "params": {
       "appId": "apps.missing.app",
-      "scope": null
+      "scope": ""
     }
   },
   "expectedResponse": {
@@ -29,7 +29,7 @@
       "message": "app_definition_not_found",
       "data": {
         "appId": "apps.missing.app",
-        "scope": null
+        "scope": ""
       }
     }
   },

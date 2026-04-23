@@ -9,7 +9,7 @@
         "fileName": "invoke.request.no-queue--global.json",
         "definition": {
           "appId": "invoke.request.no-queue",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.request.no-queue"
         }
       }
@@ -24,6 +24,9 @@
       "options": {
         "queueIfOffline": false,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

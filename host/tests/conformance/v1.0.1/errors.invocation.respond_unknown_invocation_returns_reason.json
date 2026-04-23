@@ -11,7 +11,7 @@
         "instance": {
           "instanceId": "errors-respond-unknown-inst-1",
           "appId": "errors.respond.unknown",
-          "scope": null,
+          "scope": "",
           "pid": 33102,
           "invoke": {
             "poll": true,

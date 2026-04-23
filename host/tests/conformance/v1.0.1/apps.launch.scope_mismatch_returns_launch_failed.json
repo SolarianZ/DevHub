@@ -24,7 +24,7 @@
             "events": false
           },
           "launch": {
-            "exePath": "python",
+            "exePath": "${VECTOR_PYTHON_EXE}",
             "argsTemplate": "\"${VECTOR_DATA_DIR}/scripts/register_wrong_scope.py\" \"${VECTOR_DATA_DIR}\" \"apps.launch.bound-scope.app\" \"scope-b\" \"apps-launch-bound-scope-instance\""
           }
         }

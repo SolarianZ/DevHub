@@ -9,7 +9,7 @@
         "fileName": "invoke.request.callee-error--global.json",
         "definition": {
           "appId": "invoke.request.callee-error",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.request.callee-error"
         }
       }
@@ -23,7 +23,7 @@
         "instance": {
           "instanceId": "request-callee-error-inst",
           "appId": "invoke.request.callee-error",
-          "scope": null,
+          "scope": "",
           "pid": 32007,
           "invoke": {
             "poll": true,
@@ -67,6 +67,9 @@
         "waitTimeoutMs": 3000,
         "queueIfOffline": true,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

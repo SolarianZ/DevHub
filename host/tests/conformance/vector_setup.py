@@ -10,6 +10,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -253,6 +254,7 @@ def materialize_vector(
                 "VECTOR_DATA_DIR": str(data_dir),
                 "VECTOR_RUNTIME_DIR": str(runtime_dir),
                 "VECTOR_TOKEN_FILE": str(token_file),
+                "VECTOR_PYTHON_EXE": sys.executable or "python3",
             }
         )
 

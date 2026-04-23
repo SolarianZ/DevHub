@@ -231,7 +231,7 @@ class TestAppDefinitions(unittest.TestCase):
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            response = client.call("hub.apps.listDefinitions")
+            response = client.call("hub.apps.listDefinitions", {"scope": None})
             if not RpcAssertions.expect_success(result, response, ["definitions"]):
                 return result
 

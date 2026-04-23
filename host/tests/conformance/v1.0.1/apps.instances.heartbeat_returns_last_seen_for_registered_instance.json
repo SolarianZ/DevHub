@@ -11,7 +11,7 @@
         "instance": {
           "instanceId": "apps-instance-heartbeat-1",
           "appId": "apps.instance.heartbeat.app",
-          "scope": null,
+          "scope": "",
           "pid": 32003,
           "invoke": {
             "poll": true,

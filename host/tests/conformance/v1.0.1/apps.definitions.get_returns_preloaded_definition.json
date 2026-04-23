@@ -9,7 +9,7 @@
         "fileName": "apps.get.preloaded.app--global.json",
         "definition": {
           "appId": "apps.get.preloaded.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps Get Preloaded",
           "description": "用于 conformance AppDefinition 获取向量。"
         }
@@ -31,7 +31,7 @@
     "method": "hub.apps.getDefinition",
     "params": {
       "appId": "apps.get.preloaded.app",
-      "scope": null
+      "scope": ""
     }
   },
   "expectedResponse": {
@@ -41,7 +41,7 @@
       "ok": true,
       "definition": {
         "appId": "apps.get.preloaded.app",
-        "scope": null,
+        "scope": "",
         "displayName": "Apps Get Preloaded",
         "description": "用于 conformance AppDefinition 获取向量。"
       }

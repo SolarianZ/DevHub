@@ -236,7 +236,7 @@ class TestWsEvents:
     def _definition_payload(app_id, display_name=None):
         return {
             "appId": app_id,
-            "scope": None,
+            "scope": "",
             "displayName": display_name or app_id,
         }
 
@@ -581,7 +581,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=6201,
@@ -593,7 +593,7 @@ class TestWsEvents:
                     app_id=app_id,
                     method="demo.notify",
                     args={"k": 1},
-                    target_scope=None,
+                    target_scope="",
                     target_instance_id=instance_id,
                     ttl_ms=60000,
                     queue_if_offline=True,
@@ -719,7 +719,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=6203,
@@ -798,7 +798,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=62031,
@@ -831,8 +831,8 @@ class TestWsEvents:
                         result.mark_failure(f"❌ fan-out 事件 payload 不匹配: {payload}")
                         return result
 
-                    if payload.get("scope", "__missing__") is not None:
-                        result.mark_failure(f"❌ fan-out 事件 payload.scope 应为 null: {payload}")
+                    if payload.get("scope") != "":
+                        result.mark_failure(f"❌ fan-out 事件 payload.scope 应为 \"\": {payload}")
                         return result
 
                     received_subscription_ids.append(event_params.get("subscriptionId"))
@@ -1181,8 +1181,8 @@ class TestWsEvents:
                     result.mark_failure(f"❌ upserted payload.appId 不匹配: {payload}")
                     return result
 
-                if "scope" not in payload or payload.get("scope") is not None:
-                    result.mark_failure(f"❌ upserted payload.scope 应为 null: {payload}")
+                if payload.get("scope") != "":
+                    result.mark_failure(f"❌ upserted payload.scope 应为 \"\": {payload}")
                     return result
 
                 event_definition = payload.get("definition")
@@ -1194,8 +1194,8 @@ class TestWsEvents:
                     result.mark_failure(f"❌ upserted payload.definition.appId 不匹配: {payload}")
                     return result
 
-                if "scope" not in event_definition or event_definition.get("scope") is not None:
-                    result.mark_failure(f"❌ upserted payload.definition.scope 应为 null: {payload}")
+                if event_definition.get("scope") != "":
+                    result.mark_failure(f"❌ upserted payload.definition.scope 应为 \"\": {payload}")
                     return result
 
                 if event_definition.get("displayName") != definition["displayName"]:
@@ -1210,7 +1210,7 @@ class TestWsEvents:
                 http_base_url, _, token = self._runtime_hub_info()
                 RpcClient(http_base_url, token).call(
                     "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": None},
+                    {"appId": app_id, "scope": ""},
                     request_id="cleanup-12d",
                 )
             except Exception:
@@ -1252,7 +1252,7 @@ class TestWsEvents:
 
                 delete_response = rpc_client.call(
                     "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": None},
+                    {"appId": app_id, "scope": ""},
                     request_id="delete-12e",
                 )
                 if not RpcAssertions.expect_success(result, delete_response):
@@ -1273,8 +1273,8 @@ class TestWsEvents:
                     result.mark_failure(f"❌ deleted payload.appId 不匹配: {payload}")
                     return result
 
-                if "scope" not in payload or payload.get("scope") is not None:
-                    result.mark_failure(f"❌ deleted payload.scope 应为 null: {payload}")
+                if payload.get("scope") != "":
+                    result.mark_failure(f"❌ deleted payload.scope 应为 \"\": {payload}")
                     return result
 
             result.mark_success()

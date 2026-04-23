@@ -1,7 +1,7 @@
 {
   "id": "errors.http.method_not_found_returns_method_not_found",
   "caseId": "CONF-008",
-  "description": "HTTP 未知方法必须返回 method_not_found。", 
+  "description": "HTTP 未知方法必须返回 method_not_found。",
   "transport": "http",
   "http": {
     "headers": {

@@ -9,7 +9,7 @@
         "fileName": "events.subscribe.registered--global.json",
         "definition": {
           "appId": "events.subscribe.registered",
-          "scope": null,
+          "scope": "",
           "displayName": "events.subscribe.registered"
         }
       }
@@ -46,7 +46,7 @@
         "instance": {
           "instanceId": "events-register-inst-1",
           "appId": "events.subscribe.registered",
-          "scope": null,
+          "scope": "",
           "pid": 33001,
           "invoke": {
             "poll": true,
@@ -71,7 +71,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.subscribe.registered",
-          "instanceId": "events-register-inst-1"
+          "instanceId": "events-register-inst-1",
+          "scope": ""
         }
       }
     }

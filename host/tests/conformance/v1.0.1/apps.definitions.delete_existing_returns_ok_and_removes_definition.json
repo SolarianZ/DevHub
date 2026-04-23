@@ -9,7 +9,7 @@
         "fileName": "apps.delete.existing.app--global.json",
         "definition": {
           "appId": "apps.delete.existing.app",
-          "scope": null,
+          "scope": "",
           "displayName": "Apps Delete Existing"
         }
       }
@@ -23,14 +23,14 @@
         "requestId": "apps-definitions-delete-get-missing",
         "params": {
           "appId": "apps.delete.existing.app",
-          "scope": null
+          "scope": ""
         },
         "expectedError": {
           "code": -32014,
           "message": "app_definition_not_found",
           "data": {
             "appId": "apps.delete.existing.app",
-            "scope": null
+            "scope": ""
           }
         }
       }
@@ -51,7 +51,7 @@
     "method": "hub.apps.deleteDefinition",
     "params": {
       "appId": "apps.delete.existing.app",
-      "scope": null
+      "scope": ""
     }
   },
   "expectedResponse": {

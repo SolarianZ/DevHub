@@ -9,7 +9,7 @@
         "fileName": "invoke.request.expired--global.json",
         "definition": {
           "appId": "invoke.request.expired",
-          "scope": null,
+          "scope": "",
           "displayName": "invoke.request.expired"
         }
       }
@@ -26,6 +26,9 @@
         "waitTimeoutMs": 1000,
         "queueIfOffline": true,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },
