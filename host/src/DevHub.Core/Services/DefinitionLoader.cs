@@ -84,7 +84,11 @@ public class DefinitionLoader
                 }
             }
 
-            _definitions = definitionsByIdentity.Values.ToList();
+            _definitions = definitionsByIdentity.Values
+                .OrderBy(static definition => definition.AppId, StringComparer.Ordinal)
+                .ThenBy(static definition => ScopeContract.IsGlobal(definition.Scope) ? 0 : 1)
+                .ThenBy(static definition => definition.Scope, StringComparer.Ordinal)
+                .ToList();
             _definitionsByIdentity = definitionsByIdentity;
             _logger.LogInformation("成功加载 {Count} 个应用程序定义", _definitions.Count);
         }

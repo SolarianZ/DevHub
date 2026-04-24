@@ -96,6 +96,36 @@ public class DefinitionProviderTests : IDisposable
         Assert.Null(provider.GetDefinition("provider.app", ScopeContract.Global));
     }
 
+    [Fact]
+    public void Impl_Refresh_WithMixedAppIdsAndScopes_ShouldExposeStableOrderedSnapshot()
+    {
+        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        WriteDefinition("provider.zeta", "workspace-z");
+        WriteDefinition("provider.alpha", "workspace-z");
+        WriteDefinition("provider.zeta");
+        WriteDefinition("provider.zeta", "workspace-a");
+        WriteDefinition("provider.alpha");
+
+        provider.Refresh();
+
+        var orderedDefinitions = provider.GetAllDefinitions()
+            .Select(definition => $"{definition.AppId}|{definition.Scope}")
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "provider.alpha|",
+                "provider.alpha|workspace-z",
+                "provider.zeta|",
+                "provider.zeta|workspace-a",
+                "provider.zeta|workspace-z"
+            },
+            orderedDefinitions);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -111,13 +141,13 @@ public class DefinitionProviderTests : IDisposable
         }
     }
 
-    private void WriteDefinition(string appId)
+    private void WriteDefinition(string appId, string scope = ScopeContract.Global)
     {
         var payload = $$"""
         {
           "appId": "{{appId}}",
-          "scope": "",
-          "displayName": "{{appId}}",
+          "scope": "{{scope}}",
+          "displayName": "{{appId}} {{(scope.Length == 0 ? "global" : scope)}}",
           "entry": {
             "type": "stdio"
           }
@@ -125,7 +155,7 @@ public class DefinitionProviderTests : IDisposable
         """;
 
         File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName()),
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
             payload);
     }
 }

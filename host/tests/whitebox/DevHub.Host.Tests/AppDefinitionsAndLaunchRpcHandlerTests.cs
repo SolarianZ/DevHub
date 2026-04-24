@@ -65,8 +65,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 
         Assert.True(listResult.GetProperty("ok").GetBoolean());
         Assert.Equal(2, definitions.Length);
-        Assert.Contains(definitions, definition => definition.GetProperty("appId").GetString() == "adapter.alpha");
-        Assert.Contains(definitions, definition => definition.GetProperty("appId").GetString() == "adapter.beta");
+        Assert.Equal("adapter.alpha", definitions[0].GetProperty("appId").GetString());
+        Assert.Equal("adapter.beta", definitions[1].GetProperty("appId").GetString());
 
         var getResponse = await handler.HandleAsync(
             CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-definition", new { appId = "adapter.alpha", scope = ScopeContract.Global }),
@@ -207,11 +207,27 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.3")]
-    public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScope()
+    public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
+
+        var upsertScopedZ = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsUpsertDefinition,
+                "upsert-scoped-z",
+                new
+                {
+                    definition = new
+                    {
+                        appId = "managed.scoped.adapter",
+                        scope = "workspace-Z",
+                        displayName = "Managed Scoped Adapter Workspace Z"
+                    }
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(upsertScopedZ.Result).GetProperty("ok").GetBoolean());
 
         var upsertGlobal = await handler.HandleAsync(
             CreateRequest(
@@ -229,10 +245,10 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             CancellationToken.None);
         Assert.True(JsonSerializer.SerializeToElement(upsertGlobal.Result).GetProperty("ok").GetBoolean());
 
-        var upsertScoped = await handler.HandleAsync(
+        var upsertScopedA = await handler.HandleAsync(
             CreateRequest(
                 HubRpcMethods.HubAppsUpsertDefinition,
-                "upsert-scoped",
+                "upsert-scoped-a",
                 new
                 {
                     definition = new
@@ -243,7 +259,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
                     }
                 }),
             CancellationToken.None);
-        Assert.True(JsonSerializer.SerializeToElement(upsertScoped.Result).GetProperty("ok").GetBoolean());
+        Assert.True(JsonSerializer.SerializeToElement(upsertScopedA.Result).GetProperty("ok").GetBoolean());
 
         var listResponse = await handler.HandleAsync(
             CreateRequest(HubRpcMethods.HubAppsListDefinitions, "list-scoped", new { scope = (string?)null }),
@@ -253,9 +269,10 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             .EnumerateArray()
             .Where(definition => definition.GetProperty("appId").GetString() == "managed.scoped.adapter")
             .ToArray();
-        Assert.Equal(2, definitions.Length);
-        Assert.Contains(definitions, definition => definition.GetProperty("scope").GetString() == ScopeContract.Global);
-        Assert.Contains(definitions, definition => definition.GetProperty("scope").GetString() == "workspace-A");
+        Assert.Equal(3, definitions.Length);
+        Assert.Equal(ScopeContract.Global, definitions[0].GetProperty("scope").GetString());
+        Assert.Equal("workspace-A", definitions[1].GetProperty("scope").GetString());
+        Assert.Equal("workspace-Z", definitions[2].GetProperty("scope").GetString());
 
         var getScoped = await handler.HandleAsync(
             CreateRequest(
@@ -316,6 +333,11 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
                 message.Type == HubEventTypes.AppDefinitionUpserted
                 && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == "workspace-A")),
+            Times.Once);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
+                message.Type == HubEventTypes.AppDefinitionUpserted
+                && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == "workspace-Z")),
             Times.Once);
         eventPublisher.Verify(
             publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
