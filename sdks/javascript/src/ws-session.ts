@@ -235,6 +235,7 @@ interface WebSocketLike {
 
 type WebSocketConstructor = new (url: string) => WebSocketLike;
 const TEXT_DECODER = new TextDecoder();
+const WEB_SOCKET_MODULE_NAME = "ws";
 let webSocketConstructorPromise: Promise<WebSocketConstructor> | undefined;
 
 async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
@@ -249,7 +250,9 @@ async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
 
 async function loadWebSocketConstructor(): Promise<WebSocketConstructor> {
   try {
-    const wsModule = await import("ws");
+    const wsModule = await import(
+      /* @vite-ignore */ WEB_SOCKET_MODULE_NAME
+    );
     const ctor = (wsModule.WebSocket ?? wsModule.default ?? wsModule) as unknown;
     if (typeof ctor !== "function") {
       throw new Error("ws module did not export a WebSocket constructor.");

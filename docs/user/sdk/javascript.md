@@ -25,12 +25,16 @@ npm --prefix sdks/javascript run build
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 ```
 
+`DEVHUB_MONITOR_SDK_SOURCE=local-src` 是仓库内 `apps/monitor/` 与 `sdks/javascript/` 的源码联调机制，不属于外部调用方安装或消费 `JS/TS SDK` 的正式方式。面向发布包的调用方应优先使用已构建的 SDK 资产或 release tarball。
+
 ## 3. 入口分工
 
 - `@devhub/sdk-javascript`：浏览器安全的根入口，导出 `DevHubClient`、`DevHubEventsClient`、错误类型、模型类型、脱敏 `runtime` 视图，以及供高级接入使用的扩展 seam 类型。
 - `@devhub/sdk-javascript/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
 - 浏览器 / WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`；官方支持路径是前端直接访问 Host，而不是通过原生层代理 `/rpc`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
+- `DevHubEventsClient` / `JsonRpcWsSession` 会优先使用全局 `WebSocket`；仅当 Node 运行时缺少全局实现时，才会在运行时懒加载 `ws` 作为回退。该回退不会改变根入口的浏览器安全定位，也不应成为浏览器 / WebView 构建阶段的静态依赖。
+- 使用官方发布包时，Node 侧 `ws` 由 SDK 包依赖提供；若你以仓库源码直接消费 SDK 且运行环境没有全局 `WebSocket`，则需要自行提供兼容实现或安装 `ws`。
 
 Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript/runtime`。
 

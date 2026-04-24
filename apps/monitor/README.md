@@ -36,11 +36,14 @@
 
 仓库中的独立 `monitor.yml` workflow 会以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行上述验证，确保 Monitor 与当前分支的 JS SDK 源码保持一致。未设置环境变量时，本地命令仍默认使用 release SDK 包。
 
+`DEVHUB_MONITOR_SDK_SOURCE=local-src` 的验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该模式不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
+
 ## SDK 来源
 
 - 默认 `release`：`@devhub/sdk` 继续解析到 `package.json` 中声明的 GitHub Release tarball，适用于日常安装、CI 默认路径和正式打包。
 - 可选 `local-src`：显式设置 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 后，`@devhub/sdk` 与 `@devhub/sdk/runtime` 会分别解析到 `../../sdks/javascript/src/index.ts` 与 `../../sdks/javascript/src/runtime.ts`，适用于 Monitor 与 SDK 的本地联调。
 - `local-src` 只切换构建、测试、类型检查和本地打包时的模块解析来源，不修改 `package.json`、`package-lock.json` 或其他依赖声明文件。
+- `local-src` 仍要求 `@devhub/sdk` 根入口保持浏览器 / WebView 安全；仅供 Node 使用的 `ws` 回退必须停留在运行时路径，不能在 Monitor 前端构建或类型检查阶段变成静态依赖。
 
 ## 目录说明
 

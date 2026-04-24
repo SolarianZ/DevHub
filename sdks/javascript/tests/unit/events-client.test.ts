@@ -12,6 +12,7 @@ import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 const tempRoots: string[] = [];
 
 afterEach(async () => {
+  vi.unmock("ws");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 
@@ -795,6 +796,28 @@ it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
     }
   } finally {
     await closeWebSocketServer(server);
+  }
+});
+
+it("缺少全局 WebSocket 且 ws 不可用时 authenticate 应返回可读错误", async () => {
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+  vi.doMock("ws", () => {
+    throw new Error("Cannot find package 'ws'.");
+  });
+  vi.resetModules();
+
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-missing-ws-client",
+    dataDir: await createRuntime()
+  });
+
+  try {
+    await expect(client.authenticate())
+      .rejects
+      .toThrow("WebSocket 不可用。请安装 ws，或提供全局 WebSocket 实现。");
+  } finally {
+    await client.dispose();
   }
 });
 

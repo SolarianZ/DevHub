@@ -26,6 +26,50 @@ it("全局 WebSocket 应优先处理文本帧且不加载 ws", async () => {
   }
 });
 
+it("缺少全局 WebSocket 时应按需懒加载 ws 模块", async () => {
+  let loadCount = 0;
+  vi.doMock("ws", () => {
+    loadCount += 1;
+    return {
+      WebSocket: FakeWebSocket,
+      default: FakeWebSocket
+    };
+  });
+
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  });
+
+  expect(loadCount).toBe(0);
+
+  try {
+    await expect(session.sendRequest("hub.ping")).resolves.toEqual({ ok: true });
+    expect(loadCount).toBe(1);
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("缺少全局实现且无法加载 ws 时应返回可读错误", async () => {
+  vi.doMock("ws", () => {
+    throw new Error("Cannot find package 'ws'.");
+  });
+
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  });
+
+  await expect(session.ensureConnected())
+    .rejects
+    .toThrow("WebSocket 不可用。请安装 ws，或提供全局 WebSocket 实现。");
+});
+
 class FakeWebSocket {
   private readonly listeners = new Map<string, Set<(event: unknown, ...args: unknown[]) => void>>();
 

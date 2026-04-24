@@ -43,3 +43,12 @@ it("构建后的根入口应保持浏览器安全", async () => {
   expect(distIndex).not.toContain("./runtime.js");
   expect(distIndex).not.toMatch(/["']node:[^"']+["']/);
 });
+
+it("源码根入口不得静态解析 Node 专用 ws 依赖", async () => {
+  const wsSessionUrl = new URL("../../src/ws-session.ts", import.meta.url);
+  const wsSessionSource = await readFile(wsSessionUrl, "utf-8");
+
+  expect(wsSessionSource).not.toMatch(/import\s*\(\s*["']ws["']\s*\)/);
+  expect(wsSessionSource).not.toMatch(/from\s+["']ws["']/);
+  expect(wsSessionSource).not.toContain("@types/ws");
+});
