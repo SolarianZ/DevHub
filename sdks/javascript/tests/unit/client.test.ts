@@ -1226,7 +1226,7 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1"
-  })).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+  } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
 
   await expect(client.respond({
     instanceId: "inst-1",
@@ -1237,7 +1237,7 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
       code: 1001,
       message: "app_error"
     }
-  })).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+  } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });

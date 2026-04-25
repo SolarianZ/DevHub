@@ -199,6 +199,23 @@ export function readScopeString(payload: Record<string, unknown>, location: stri
   return value;
 }
 
+export function readOptionalScopeString(
+  payload: Record<string, unknown>,
+  location: string,
+  key: string
+): string | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+
+  const value = payload[key];
+  if (!isValidScopeString(value)) {
+    throw new Error(`${location}.${key} must be "" or a non-empty string without leading or trailing whitespace.`);
+  }
+
+  return value;
+}
+
 export function readBoolean(payload: Record<string, unknown>, location: string, key: string): boolean {
   if (!(key in payload)) {
     throw new Error(`${location}.${key} is required.`);

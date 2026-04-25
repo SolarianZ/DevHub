@@ -34,7 +34,7 @@ export interface AppCapabilities {
 }
 
 export interface LaunchConfiguration {
-  exePath?: string;
+  exePath: string;
   argsTemplate?: string;
   workingDirectory?: string;
   dedupeKeyTemplate?: string;
@@ -136,7 +136,7 @@ export interface InvocationOptions {
 
 export interface InvokeRequest {
   appId: string;
-  target?: InvocationTarget;
+  target: InvocationTarget;
   method: string;
   args?: JsonValue;
   options?: InvocationOptions;
@@ -178,7 +178,7 @@ export type InvocationKind = "request" | "notify";
 export interface Invocation {
   invocationId: string;
   appId: string;
-  target?: InvocationTarget;
+  target: InvocationTarget;
   method: string;
   args?: JsonValue;
   kind: InvocationKind;
@@ -194,11 +194,19 @@ export interface PollResult {
   items: Invocation[];
 }
 
-export interface RespondRequest extends InstanceOwnedRequest {
+export interface RespondValueRequest extends InstanceOwnedRequest {
   invocationId: string;
-  value?: JsonValue;
-  error?: DevHubCalleeError;
+  value: JsonValue;
+  error?: never;
 }
+
+export interface RespondErrorRequest extends InstanceOwnedRequest {
+  invocationId: string;
+  value?: never;
+  error: DevHubCalleeError;
+}
+
+export type RespondRequest = RespondValueRequest | RespondErrorRequest;
 
 export interface DevHubEvent {
   subscriptionId: string;

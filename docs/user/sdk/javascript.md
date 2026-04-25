@@ -123,6 +123,31 @@ const client = await DevHubClient.fromRuntime(
 
 ## 6. 常见交互场景
 
+### 6.1 事件流读取契约
+
+```ts
+import { APP_INSTANCE_REGISTERED } from "@devhub/sdk-javascript";
+
+await eventsClient.authenticate();
+const iterator = eventsClient.readEvents()[Symbol.asyncIterator]();
+const subscriptionId = await eventsClient.subscribe([APP_INSTANCE_REGISTERED]);
+
+try {
+  const first = await iterator.next();
+  if (!first.done) {
+    console.log(subscriptionId, first.value.type, first.value.payload);
+  }
+} finally {
+  await iterator.return?.();
+}
+```
+
+- 每个 `DevHubEventsClient` 实例同一时刻只允许一个活动中的 `readEvents()` 读取器；若业务需要多个消费者，应在调用方内部自行扇出。
+- 底层 WebSocket 终止或重新认证失败后，当前活动读取器仍可排空终止前已经进入缓冲的事件；后续新的 `readEvents()` 调用会在重新认证成功前直接失败。
+- 重新执行 `authenticate()` 只会建立新的事件流代次，不会恢复旧订阅；恢复事件交付时需要再次调用 `subscribe()`。
+
+### 6.2 定义与实例管理
+
 定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
 
 ```ts
@@ -155,6 +180,31 @@ await client.deleteDefinition({
   scope: definition.scope
 });
 ```
+
+### 6.3 调用与响应对象形状
+
+```ts
+await client.request({
+  appId: "sample.app",
+  method: "sample.request",
+  target: {
+    scope: ""
+  }
+});
+
+await client.respond({
+  instanceId: "sample-inst-1",
+  instanceSessionToken: "sample-session-token",
+  invocationId: "invk-1",
+  value: {
+    ok: true
+  }
+});
+```
+
+- `InvokeRequest.target` 与 SDK 解析得到的 `Invocation.target` 都是必填字段，调用方不需要再为缺省 `target` 编写分支。
+- `AppDefinition.launch` 只要存在，就必须显式提供 `launch.exePath`。
+- `RespondRequest` 只接受“携带 `value`”或“携带 `error`”两种互斥形状之一，不能同时省略，也不能同时提供。
 
 ## 7. 高级扩展
 

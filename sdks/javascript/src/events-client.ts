@@ -64,6 +64,8 @@ export class DevHubEventsClient {
   readonly #session: JsonRpcEventSession;
   #authenticated = false;
   #eventStreamAvailable = false;
+  #eventStreamInvalidated = false;
+  #activeReaderLease = false;
   #disposed = false;
 
   private constructor(
@@ -126,7 +128,11 @@ export class DevHubEventsClient {
       this.#eventQueue = new AsyncQueue<DevHubEvent>();
       this.#authenticated = true;
       this.#eventStreamAvailable = true;
+      this.#eventStreamInvalidated = false;
     } catch (error) {
+      this.#authenticated = false;
+      this.#eventStreamAvailable = false;
+      this.#eventStreamInvalidated = true;
       await this.#session.disconnect("authenticate_failed");
       throw error;
     }
@@ -175,7 +181,9 @@ export class DevHubEventsClient {
 
   readEvents(): AsyncIterable<DevHubEvent> {
     this.ensureEventStreamAvailable();
-    return this.#eventQueue;
+    return {
+      [Symbol.asyncIterator]: () => this.createEventIterator()
+    };
   }
 
   async dispose(): Promise<void> {
@@ -186,6 +194,7 @@ export class DevHubEventsClient {
     this.#disposed = true;
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
+    this.#eventStreamInvalidated = true;
     this.#eventQueue.close();
 
     await this.#session.dispose("client_dispose");
@@ -197,6 +206,8 @@ export class DevHubEventsClient {
     }
 
     this.#authenticated = false;
+    this.#eventStreamAvailable = false;
+    this.#eventStreamInvalidated = true;
     this.#eventQueue.close(error);
   }
 
@@ -210,6 +221,10 @@ export class DevHubEventsClient {
   private ensureEventStreamAvailable(): void {
     this.throwIfDisposed();
     if (!this.#eventStreamAvailable) {
+      if (this.#eventStreamInvalidated) {
+        throw new Error("The event stream is unavailable. Re-authenticate and subscribe again.");
+      }
+
       this.ensureAuthenticated();
     }
   }
@@ -218,6 +233,64 @@ export class DevHubEventsClient {
     if (this.#disposed) {
       throw new Error("The events client has been disposed.");
     }
+  }
+
+  private createEventIterator(): AsyncIterableIterator<DevHubEvent> {
+    this.ensureEventStreamAvailable();
+    this.acquireReaderLease();
+
+    const queueIterator = this.#eventQueue[Symbol.asyncIterator]();
+    let finished = false;
+    const releaseReaderLease = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      this.#activeReaderLease = false;
+    };
+
+    return {
+      next: async () => {
+        if (finished) {
+          return { value: undefined as unknown as DevHubEvent, done: true };
+        }
+
+        try {
+          const result = await queueIterator.next();
+          if (result.done) {
+            releaseReaderLease();
+          }
+
+          return result;
+        } catch (error) {
+          releaseReaderLease();
+          throw error;
+        }
+      },
+      return: async (value?: DevHubEvent) => {
+        releaseReaderLease();
+        return {
+          value: value as DevHubEvent,
+          done: true
+        };
+      },
+      throw: async (error?: unknown) => {
+        releaseReaderLease();
+        throw error;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      }
+    };
+  }
+
+  private acquireReaderLease(): void {
+    if (this.#activeReaderLease) {
+      throw new Error("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+    }
+
+    this.#activeReaderLease = true;
   }
 }
 

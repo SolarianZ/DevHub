@@ -73,6 +73,41 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   expect(session?.disposedReason).toBe("client_dispose");
 });
 
+it("同一个 events client 实例一次只允许一个活动中的 readEvents 读取器，return 后应释放租约", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-single-reader-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => new FakeInjectedWsSession(options)
+    }
+  );
+
+  try {
+    await client.authenticate();
+
+    const firstIterator = client.readEvents()[Symbol.asyncIterator]();
+    expect(() => client.readEvents()[Symbol.asyncIterator]())
+      .toThrow("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+
+    await firstIterator.return?.();
+
+    const secondIterator = client.readEvents()[Symbol.asyncIterator]();
+    await expect(secondIterator.return?.()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接上下文", async () => {
   const connection = createConnectionInfo();
   const resolvedOptions: Readonly<NormalizedDevHubClientOptions>[] = [];
@@ -400,6 +435,134 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   }
 });
 
+it("实例事件应接受省略 scope 的 payload", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-omitted-scope-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-instance-omitted-scope",
+              type: "app.instance.registered",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                instanceId: "inst-1"
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-instance-omitted-scope"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["app.instance.registered"]);
+
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value.type).toBe("app.instance.registered");
+    expect(first.value.payload).toEqual({
+      appId: "test.app",
+      instanceId: "inst-1"
+    });
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("实例事件应继续拒绝非法 scope", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-scope-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-instance-invalid-scope",
+              type: "app.instance.registered",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                instanceId: "inst-1",
+                scope: null
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-instance-invalid-scope"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["app.instance.registered"]))
+      .rejects
+      .toThrow(/scope/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
@@ -422,14 +585,14 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
 
   try {
     await client.authenticate();
+    const previousIterator = client.readEvents()[Symbol.asyncIterator]();
     await client.subscribe(["invocation.completed"]);
     session?.terminate(new Error("socket_closed"));
-
-    const previousIterator = client.readEvents()[Symbol.asyncIterator]();
     const buffered = await previousIterator.next();
     expect(buffered.done).toBe(false);
     expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
     await expect(previousIterator.next()).rejects.toThrow(/socket_closed/i);
+    expect(() => client.readEvents()).toThrow("The event stream is unavailable. Re-authenticate and subscribe again.");
 
     await client.authenticate();
     await client.subscribe(["invocation.completed"]);
@@ -510,11 +673,11 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   const subscriptionId = await client.subscribe(["invocation.completed"]);
   expect(sockets).toHaveLength(1);
   await sockets[0].waitForClose();
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   const first = await iterator.next();
   expect(first.done).toBe(false);
   expect(first.value.subscriptionId).toBe(subscriptionId);
@@ -541,9 +704,9 @@ it("事件通知携带 id 时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
 });
 
@@ -561,9 +724,9 @@ it("收到空白文本消息时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/blank/i);
 });
 
@@ -598,9 +761,9 @@ it("收到未知 WS 通知方法时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/supported response or hub\.event/i);
 });
 
@@ -618,9 +781,9 @@ it("收到未知事件类型时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/supported DevHub event type/i);
 });
 
@@ -684,8 +847,8 @@ it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async 
 
     try {
       await client.authenticate();
-      await client.subscribe(["invocation.completed"]);
       const iterator = client.readEvents()[Symbol.asyncIterator]();
+      await client.subscribe(["invocation.completed"]);
       await expect(iterator.next()).rejects.toThrow(/text frame/i);
     } finally {
       await client.dispose();
@@ -841,9 +1004,9 @@ it("event notifications should reject a null payload object", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/payload/i);
 });
 
