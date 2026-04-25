@@ -573,6 +573,7 @@ function createBootstrapSnapshot(
 
 function createSettingsSnapshot(): SettingsSnapshot {
   return {
+    revision: 0,
     settings: {
       dataDirOverride: getHost().dataDirectory,
       hostExecutablePath: absoluteHostPlaceholder(),

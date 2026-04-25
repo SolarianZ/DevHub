@@ -1,6 +1,6 @@
 use crate::backend_support::{json_map, problem, record_backend_log};
 use crate::discovery::{build_snapshot, DiscoveryCoordinator};
-use crate::launch::HostLaunchService;
+use crate::launch::{HostLaunchAttemptStatus, HostLaunchService};
 use crate::logging::{
     open_log_directory as open_log_directory_in_shell, resolve_log_directory, MonitorLogService,
 };
@@ -53,6 +53,37 @@ impl MonitorCore {
     }
 
     pub fn initialize(&self, app: AppHandle) -> Result<()> {
+        let settings_snapshot = self.settings_service.snapshot();
+        if let Some(load_warning) = settings_snapshot.load_warning.as_ref() {
+            record_backend_log(
+                &self.log_service,
+                settings_snapshot.effective_data_dir.clone(),
+                MonitorLogLevel::Warn,
+                "settings",
+                "load",
+                "recovered",
+                Some(&load_warning.message),
+                Some(json_map(vec![
+                    (
+                        "settingsFilePath",
+                        Value::String(load_warning.settings_file_path.clone()),
+                    ),
+                    (
+                        "backupFilePath",
+                        load_warning
+                            .backup_file_path
+                            .clone()
+                            .map(Value::String)
+                            .unwrap_or(Value::Null),
+                    ),
+                    (
+                        "settingsRevision",
+                        Value::from(settings_snapshot.revision),
+                    ),
+                ])),
+            )?;
+        }
+
         record_backend_log(
             &self.log_service,
             self.snapshot_publisher.current().effective_data_dir,
@@ -89,7 +120,6 @@ impl MonitorCore {
         settings: MonitorSettings,
     ) -> Result<SettingsSnapshot> {
         let snapshot = self.settings_service.save(settings)?;
-        self.launch_service.finish_launch_attempt();
         record_backend_log(
             &self.log_service,
             self.snapshot_publisher.current().effective_data_dir,
@@ -116,6 +146,15 @@ impl MonitorCore {
                     "hideHostCommandLineWindow",
                     Value::Bool(snapshot.settings.hide_host_command_line_window),
                 ),
+                ("settingsRevision", Value::from(snapshot.revision)),
+                (
+                    "settingsLoadWarning",
+                    snapshot
+                        .load_warning
+                        .as_ref()
+                        .map(|warning| Value::String(warning.code.clone()))
+                        .unwrap_or(Value::Null),
+                ),
             ])),
         )?;
         let _ = app.emit(EVENT_SETTINGS_CHANGED, snapshot.clone());
@@ -124,32 +163,11 @@ impl MonitorCore {
     }
 
     pub fn request_host_launch(&self, app: AppHandle) -> Result<LaunchHostResult> {
-        if !self.launch_service.begin_launch() {
-            self.snapshot_publisher.update_current(&app, |snapshot| {
-                snapshot.last_problem = Some(problem(
-                    "launch_in_progress",
-                    "当前已有 Host 启动流程在进行中。",
-                ));
-            });
-            record_backend_log(
-                &self.log_service,
-                self.snapshot_publisher.current().effective_data_dir,
-                MonitorLogLevel::Warn,
-                "host",
-                "launch",
-                "launch_in_progress",
-                Some("Host launch is already in progress."),
-                None,
-            )?;
-            anyhow::bail!("当前已有 Host 启动流程在进行中。");
-        }
-
         let settings = self.settings_service.current();
         let resolved = self.settings_service.resolve_effective_data_dir();
         let hide_host_command_line_window = settings.hide_host_command_line_window;
 
         let Some(host_path) = settings.host_executable_path.clone() else {
-            self.launch_service.finish_launch_attempt();
             let generation = self.snapshot_publisher.advance_generation();
             let snapshot = build_snapshot(
                 generation,
@@ -185,8 +203,43 @@ impl MonitorCore {
             });
         };
 
-        self.discovery
-            .restart(app.clone(), "launch_requested", None)?;
+        if !self.launch_service.begin_launch(&resolved.path) {
+            self.snapshot_publisher.update_current(&app, |snapshot| {
+                snapshot.last_problem = Some(problem(
+                    "launch_in_progress",
+                    "当前已有 Host 启动流程在进行中。",
+                ));
+            });
+            record_backend_log(
+                &self.log_service,
+                self.snapshot_publisher.current().effective_data_dir,
+                MonitorLogLevel::Warn,
+                "host",
+                "launch",
+                "launch_in_progress",
+                Some("Host launch is already in progress."),
+                Some(json_map(vec![(
+                    "dataDir",
+                    Value::String(resolved.path.clone()),
+                )])),
+            )?;
+            anyhow::bail!("当前已有 Host 启动流程在进行中。");
+        }
+
+        let generation = match self
+            .discovery
+            .restart(app.clone(), "launch_requested", None)
+        {
+            Ok(generation) => generation,
+            Err(error) => {
+                self.launch_service.finish_launch_attempt(
+                    &resolved.path,
+                    HostLaunchAttemptStatus::SpawnFailed,
+                );
+                return Err(error);
+            }
+        };
+        self.launch_service.assign_generation(&resolved.path, generation);
 
         let host_path = PathBuf::from(host_path);
         let pid = match self.launch_service.spawn_host(
@@ -196,7 +249,10 @@ impl MonitorCore {
         ) {
             Ok(pid) => pid,
             Err(error) => {
-                self.launch_service.finish_launch_attempt();
+                self.launch_service.finish_launch_attempt(
+                    &resolved.path,
+                    HostLaunchAttemptStatus::SpawnFailed,
+                );
                 record_backend_log(
                     &self.log_service,
                     self.snapshot_publisher.current().effective_data_dir,
@@ -263,7 +319,6 @@ impl MonitorCore {
             )
         });
 
-        self.launch_service.finish_launch_attempt();
         self.discovery.restart(app, "manual_resume", last_problem)?;
         Ok(self.get_bootstrap_state())
     }

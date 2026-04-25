@@ -271,6 +271,25 @@ svg {
   color: var(--danger);
 }
 
+.warning-banner {
+  margin: 16px 16px 0;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #fffaeb;
+  border: 1px solid #fedf89;
+  color: #92400e;
+}
+
+.warning-banner p {
+  margin: 0;
+}
+
+.warning-banner p + p {
+  margin-top: 4px;
+  font-size: 13px;
+  word-break: break-all;
+}
+
 .inline-error {
   margin: 0 0 16px;
 }
@@ -311,6 +330,12 @@ svg {
   color: var(--text-sub);
   font-size: 13px;
   word-break: break-all;
+}
+
+.status-detail {
+  margin: 0 0 24px;
+  max-width: 560px;
+  color: var(--text-sub);
 }
 
 .status-actions,

@@ -1,5 +1,9 @@
 import { Mutex } from "./async-utils.js";
 import {
+  DevHubConnectionError,
+  normalizeConnectionError,
+} from "./errors.js";
+import {
   buildRpcError,
   createPendingRequest,
   createWebSocketRequestId,
@@ -58,7 +62,10 @@ export class JsonRpcWsSession {
     await this.ensureConnected();
     const socket = this.socket;
     if (!socket || !this.socketOpen) {
-      throw new Error("WebSocket connection is not established.");
+      throw new DevHubConnectionError({
+        kind: "session_terminated",
+        message: "WebSocket connection is not established."
+      });
     }
 
     const requestId = createWebSocketRequestId();
@@ -92,7 +99,7 @@ export class JsonRpcWsSession {
   }
 
   async disconnect(reason: string): Promise<void> {
-    this.rejectPending(new Error("WebSocket connection closed."));
+    this.rejectPending(createSessionTerminatedError("WebSocket connection closed."));
     this.abandonedRequests.clear();
     await this.closeSocket(reason);
   }
@@ -128,7 +135,7 @@ export class JsonRpcWsSession {
       if (this.socket === socket) {
         this.socketOpen = false;
       }
-      const error = event instanceof Error ? event : new Error("WebSocket error.");
+      const error = createTransportError("WebSocket transport failed.", event);
       this.terminate(error);
     }));
   }
@@ -158,7 +165,10 @@ export class JsonRpcWsSession {
 
       throw new Error("WebSocket JSON-RPC message is not a supported response or hub.event notification.");
     } catch (error) {
-      this.terminate(error instanceof Error ? error : new Error("WebSocket message handling failed."));
+      this.terminate(normalizeConnectionError(error, {
+        kind: "invalid_response",
+        message: error instanceof Error ? error.message : "WebSocket message handling failed."
+      }));
     }
   }
 
@@ -173,7 +183,10 @@ export class JsonRpcWsSession {
         return;
       }
 
-      this.terminate(new Error("WebSocket JSON-RPC response id does not match any pending request."));
+      this.terminate(new DevHubConnectionError({
+        kind: "invalid_response",
+        message: "WebSocket JSON-RPC response id does not match any pending request."
+      }));
       return;
     }
 
@@ -193,14 +206,17 @@ export class JsonRpcWsSession {
   private terminate(error?: Error): void {
     const hadSocket = this.socket !== null;
     const hadPending = this.pendingRequests.size > 0;
-    const rejectionError = error ?? new Error("WebSocket connection closed.");
+    const rejectionError = normalizeConnectionError(error, {
+      kind: "session_terminated",
+      message: "WebSocket connection closed."
+    });
 
     this.rejectPending(rejectionError);
     this.abandonedRequests.clear();
     void this.closeSocket("connection_closed");
 
     if (hadSocket || hadPending) {
-      this.options.onTerminate?.(error);
+      this.options.onTerminate?.(rejectionError);
     }
   }
 
@@ -254,7 +270,10 @@ export class JsonRpcWsSession {
     try {
       await waitForWebSocketOpen(socket, this.options.requestTimeoutMs);
       if (this.socket !== socket || !this.socketOpen) {
-        throw new Error("WebSocket connection is not established.");
+        throw new DevHubConnectionError({
+          kind: "transport",
+          message: "WebSocket connection is not established."
+        });
       }
     } catch (error) {
       this.connectPromise = null;
@@ -343,7 +362,7 @@ function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promis
   return new Promise((resolve, reject) => {
     const cleanup: Array<() => void> = [];
 
-    const finish = (error?: Error) => {
+    const finish = (error?: unknown) => {
       for (const item of cleanup) {
         item();
       }
@@ -357,15 +376,18 @@ function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promis
 
     cleanup.push(addSocketListener(socket, "open", () => finish()));
     cleanup.push(addSocketListener(socket, "error", (event) => {
-      finish(event instanceof Error ? event : new Error("WebSocket connection failed."));
+      finish(createTransportError("WebSocket connection failed.", event));
     }));
     cleanup.push(addSocketListener(socket, "close", () => {
-      finish(new Error("WebSocket connection closed."));
+      finish(createSessionTerminatedError("WebSocket connection closed."));
     }));
 
     if (timeoutMs && timeoutMs > 0) {
       const timeoutId = setTimeout(() => {
-        finish(new Error("WebSocket connection timed out."));
+        finish(new DevHubConnectionError({
+          kind: "timeout",
+          message: "WebSocket connection timed out."
+        }));
       }, timeoutMs);
       cleanup.push(() => clearTimeout(timeoutId));
     }
@@ -405,9 +427,9 @@ function readMessageText(event: unknown, args: readonly unknown[] = []): string 
   throw new Error("WebSocket JSON-RPC message must be a text frame.");
 }
 
-function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
+function resolveCloseError(event: unknown, args: unknown[]): DevHubConnectionError | undefined {
   if (typeof event === "number") {
-    return event === 1000 ? undefined : new Error("WebSocket connection closed.");
+    return event === 1000 ? undefined : createSessionTerminatedError("WebSocket connection closed.");
   }
 
   if (isRecord(event)) {
@@ -416,7 +438,7 @@ function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
     }
 
     if (typeof event.code === "number") {
-      return event.code === 1000 ? undefined : new Error("WebSocket connection closed.");
+      return event.code === 1000 ? undefined : createSessionTerminatedError("WebSocket connection closed.");
     }
   }
 
@@ -424,5 +446,19 @@ function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
     return undefined;
   }
 
-  return new Error("WebSocket connection closed.");
+  return createSessionTerminatedError("WebSocket connection closed.");
+}
+
+function createTransportError(message: string, cause?: unknown): DevHubConnectionError {
+  return normalizeConnectionError(cause, {
+    kind: "transport",
+    message
+  });
+}
+
+function createSessionTerminatedError(message: string, cause?: unknown): DevHubConnectionError {
+  return normalizeConnectionError(cause, {
+    kind: "session_terminated",
+    message
+  });
 }

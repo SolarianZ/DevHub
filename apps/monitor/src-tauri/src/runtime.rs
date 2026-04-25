@@ -139,7 +139,7 @@ fn reject_legacy_layout(data_directory: &Path) -> Result<()> {
 }
 
 fn validate_runtime(runtime: &MonitorHubRuntime, source: &Path) -> Result<()> {
-    if runtime.protocol_version != 1 {
+    if runtime.protocol_version == 0 {
         anyhow::bail!("hub.json.protocolVersion 非法：{}", source.display());
     }
 

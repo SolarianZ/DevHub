@@ -4,6 +4,23 @@ export interface DevHubCalleeError {
   data?: Record<string, unknown>;
 }
 
+export type DevHubConnectionErrorKind =
+  | "timeout"
+  | "transport"
+  | "http_status"
+  | "invalid_response"
+  | "session_terminated";
+
+export interface DevHubConnectionErrorInit {
+  kind: DevHubConnectionErrorKind;
+  message: string;
+  cause?: unknown;
+  requestId?: string;
+  status?: number;
+  statusText?: string;
+  responseBody?: string;
+}
+
 export enum DevHubRpcErrorCode {
   ParseError = -32700,
   InvalidRequest = -32600,
@@ -107,6 +124,47 @@ export class DevHubRpcError extends Error {
     const value = this.tryGetDataProperty(propertyName);
     return typeof value === "string" ? value : null;
   }
+}
+
+export class DevHubConnectionError extends Error {
+  readonly kind: DevHubConnectionErrorKind;
+  readonly cause?: unknown;
+  readonly requestId?: string;
+  readonly status?: number;
+  readonly statusText?: string;
+  readonly responseBody?: string;
+
+  constructor(init: DevHubConnectionErrorInit) {
+    super(init.message);
+    this.name = "DevHubConnectionError";
+    this.kind = init.kind;
+    this.cause = init.cause;
+    this.requestId = init.requestId;
+    this.status = init.status;
+    this.statusText = init.statusText;
+    this.responseBody = init.responseBody;
+  }
+}
+
+export function normalizeConnectionError(
+  error: unknown,
+  fallback: DevHubConnectionErrorInit,
+): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError) {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    ...fallback,
+    cause: fallback.cause ?? error,
+  });
+}
+
+export function isAbortError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "name" in error
+    && error.name === "AbortError";
 }
 
 const KNOWN_CODES = new Set<number>([

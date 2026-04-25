@@ -6,7 +6,7 @@ import {
   type AppInstance,
   type DevHubClient,
 } from "@devhub/sdk";
-import { startTransition, useEffect, useEffectEvent, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   areDefinitionFormsEqual,
   createEmptyDefinitionForm,
@@ -46,6 +46,9 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const [definitionWorkspace, setDefinitionWorkspace] = useState<DefinitionWorkspaceState | null>(null);
   const [definitionBaseline, setDefinitionBaseline] = useState<DefinitionFormState | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
+  const latestWorkspaceRequestIdRef = useRef(0);
+  const sessionResetVersionRef = useRef(sessionResetVersion);
+  sessionResetVersionRef.current = sessionResetVersion;
   const definitionDirty = definitionWorkspace !== null
     && !definitionWorkspace.readOnly
     && !definitionWorkspace.loading
@@ -53,7 +56,31 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     && definitionBaseline !== null
     && !areDefinitionFormsEqual(definitionWorkspace.form, definitionBaseline);
 
+  function invalidateWorkspaceRequest(): void {
+    latestWorkspaceRequestIdRef.current += 1;
+  }
+
+  function beginWorkspaceRequest(): {
+    requestId: number;
+    sessionResetVersion: number;
+  } {
+    latestWorkspaceRequestIdRef.current += 1;
+    return {
+      requestId: latestWorkspaceRequestIdRef.current,
+      sessionResetVersion: sessionResetVersionRef.current,
+    };
+  }
+
+  function isWorkspaceRequestCurrent(request: {
+    requestId: number;
+    sessionResetVersion: number;
+  }): boolean {
+    return latestWorkspaceRequestIdRef.current === request.requestId
+      && sessionResetVersionRef.current === request.sessionResetVersion;
+  }
+
   useEffect(() => {
+    invalidateWorkspaceRequest();
     startTransition(() => {
       setDefinitionWorkspace(null);
       setDefinitionBaseline(null);
@@ -61,6 +88,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   }, [sessionResetVersion]);
 
   const closeDefinitionWorkspace = useEffectEvent(() => {
+    invalidateWorkspaceRequest();
     startTransition(() => {
       setDefinitionWorkspace(null);
       setDefinitionBaseline(null);
@@ -99,6 +127,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const openCreateDefinitionWorkspace = useEffectEvent(async () => {
     setDefinitionError(null);
     const initialForm = createEmptyDefinitionForm();
+    invalidateWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -126,6 +155,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
   const openEditDefinitionWorkspace = useEffectEvent(async (identity: AppDefinitionIdentity) => {
     setDefinitionError(null);
+    const request = beginWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -158,6 +188,10 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       const definition = await runHostAction("open_edit_definition", (client) =>
         getDefinitionCompat(client, identity),
       );
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       const nextForm = definitionToForm(definition);
 
       startTransition(() => {
@@ -176,6 +210,10 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         setDefinitionBaseline(nextForm);
       });
     } catch (dialogError) {
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
           setDefinitionBaseline(null);
@@ -203,6 +241,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const openInstanceDefinitionWorkspace = useEffectEvent(async (instance: AppInstance) => {
     setDefinitionError(null);
     const identity = createDefinitionIdentity(instance.appId, instance.scope);
+    const request = beginWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -236,6 +275,10 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       const definition = await runHostAction("open_view_definition", (client) =>
         getDefinitionCompat(client, identity),
       );
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       const nextForm = definitionToForm(definition);
 
       startTransition(() => {
@@ -253,6 +296,10 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         });
       });
     } catch (dialogError) {
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
           setDefinitionBaseline(null);

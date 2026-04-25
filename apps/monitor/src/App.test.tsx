@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  APP_DEFINITION_UPSERTED,
   DevHubRpcError,
   DevHubRpcErrorCode,
   type AppDefinition,
@@ -135,6 +136,7 @@ function createBootstrapSnapshot(
 
 function createSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
   return {
+    revision: overrides.revision ?? 0,
     settings: {
       dataDirOverride: "/tmp/devhub",
       hostExecutablePath: "/tmp/DevHub.Host",
@@ -211,6 +213,48 @@ function createFailingEventStream(error: Error): AsyncIterable<unknown> {
       throw error;
     },
   };
+}
+
+function createSingleEventThenPendingStream(event: unknown): AsyncIterable<unknown> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield event;
+      await new Promise<never>(() => {
+        // 保持事件流挂起，避免因为自然结束而触发额外恢复。
+      });
+    },
+  };
+}
+
+function createTriggeredFailingEventStream(signal: Promise<unknown>, error: Error): AsyncIterable<unknown> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      await signal;
+      throw error;
+    },
+  };
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}
+
+function createConnectionError(kind: "transport" | "timeout" | "http_status" | "invalid_response" | "session_terminated", message: string): Error {
+  const error = new Error(message);
+  error.name = "DevHubConnectionError";
+  Object.assign(error, { kind });
+  return error;
 }
 
 async function respondToConfirmDialog(
@@ -621,23 +665,25 @@ describe("Monitor App", () => {
     expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("global");
   });
 
-  it("rejects unsupported hosts before opening the connected inventory workflow", async () => {
+  it("renders backend-reported incompatible hosts in discovery mode", async () => {
     getBootstrapStateMock.mockResolvedValue(
       createBootstrapSnapshot({
-        connection: createConnection({
-          runtime: {
-            ...createConnection().runtime,
-            hubVersion: "0.6.9",
-          },
-        }),
+        phase: "host_incompatible",
+        connection: null,
+        lastProblem: {
+          code: "host_incompatible",
+          message: "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到 hubVersion=0.6.9。",
+        },
       }),
     );
 
     render(<App />);
 
     await screen.findByRole("heading", { name: "主页" });
-    await screen.findByText("当前 Host 版本不受支持");
+    await screen.findAllByText("当前 Host 版本不受支持");
     await screen.findByText(/hubVersion=0\.6\.9/);
+    screen.getByRole("button", { name: "重新扫描" });
+    screen.getByRole("button", { name: "前往设置" });
 
     expect(hostClientFromRuntimeMock).not.toHaveBeenCalled();
     expect(eventsClientFromRuntimeMock).not.toHaveBeenCalled();
@@ -675,6 +721,209 @@ describe("Monitor App", () => {
     await screen.findByRole("heading", { name: "主页" });
     screen.getByText("正在搜索 DevHub Host");
     expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
+  });
+
+  it("initializes from subscriptions first and ignores stale bootstrap/settings fetches", async () => {
+    let bootstrapListener:
+      | ((event: { payload: BootstrapSnapshot }) => void)
+      | undefined;
+    let settingsListener:
+      | ((event: { payload: SettingsSnapshot }) => void)
+      | undefined;
+    const bootstrapDeferred = createDeferred<BootstrapSnapshot>();
+    const settingsDeferred = createDeferred<SettingsSnapshot>();
+
+    listenMock.mockImplementation(async (eventName, callback) => {
+      if (eventName === "devhub://bootstrap-state-changed") {
+        bootstrapListener = callback as (event: { payload: BootstrapSnapshot }) => void;
+      }
+
+      if (eventName === "devhub://settings-changed") {
+        settingsListener = callback as (event: { payload: SettingsSnapshot }) => void;
+      }
+
+      return () => {};
+    });
+    getBootstrapStateMock.mockReturnValue(bootstrapDeferred.promise);
+    getSettingsSnapshotMock.mockReturnValue(settingsDeferred.promise);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(bootstrapListener).toBeDefined();
+      expect(settingsListener).toBeDefined();
+    });
+
+    act(() => {
+      bootstrapListener?.({
+        payload: createBootstrapSnapshot({
+          generation: 2,
+          phase: "host_incompatible",
+          connection: null,
+          effectiveDataDir: "/tmp/devhub-new",
+          lastProblem: {
+            code: "host_incompatible",
+            message: "当前 Host 版本不受支持",
+          },
+        }),
+      });
+      settingsListener?.({
+        payload: createSettingsSnapshot({
+          revision: 2,
+          effectiveDataDir: "/tmp/devhub-new",
+          settings: {
+            dataDirOverride: "/tmp/devhub-new",
+            hostExecutablePath: "/tmp/DevHub.Host",
+            hideHostCommandLineWindow: true,
+          },
+        }),
+      });
+      bootstrapDeferred.resolve(
+        createBootstrapSnapshot({
+          generation: 1,
+          phase: "scanning",
+          connection: null,
+          effectiveDataDir: "/tmp/devhub-old",
+        }),
+      );
+      settingsDeferred.resolve(
+        createSettingsSnapshot({
+          revision: 1,
+          effectiveDataDir: "/tmp/devhub-old",
+          settings: {
+            dataDirOverride: "/tmp/devhub-old",
+            hostExecutablePath: "/tmp/DevHub.Host",
+            hideHostCommandLineWindow: true,
+          },
+        }),
+      );
+    });
+
+    await screen.findAllByText("当前 Host 版本不受支持");
+    screen.getByText("目标位置：/tmp/devhub-new");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    await screen.findByRole("heading", { name: "设置" });
+    expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/devhub-new");
+  });
+
+  it("treats typed connection errors as rediscovery triggers during inventory refresh", async () => {
+    let bootstrapListener:
+      | ((event: { payload: BootstrapSnapshot }) => void)
+      | undefined;
+    listenMock.mockImplementation(async (eventName, callback) => {
+      if (eventName === "devhub://bootstrap-state-changed") {
+        bootstrapListener = callback as (event: { payload: BootstrapSnapshot }) => void;
+      }
+
+      return () => {};
+    });
+
+    const definition = createDefinition();
+    const hostClient = {
+      listDefinitions: vi.fn()
+        .mockResolvedValueOnce([definition])
+        .mockRejectedValueOnce(createConnectionError("transport", "socket lost")),
+      listInstances: vi.fn().mockResolvedValue([]),
+      getDefinition: vi.fn(),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createSingleEventThenPendingStream({
+        type: APP_DEFINITION_UPSERTED,
+      })),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(hostClient.listDefinitions).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(resumeDiscoveryMock).toHaveBeenCalledWith("refresh_definitions_app.definition.upserted");
+    });
+
+    act(() => {
+      bootstrapListener?.({
+        payload: createBootstrapSnapshot({
+          generation: 2,
+          phase: "scanning",
+          connection: null,
+        }),
+      });
+    });
+
+    await screen.findByText("正在搜索 DevHub Host");
+  });
+
+  it("ignores stale definition responses after the host session resets", async () => {
+    const definition = createDefinition();
+    const getDefinitionDeferred = createDeferred<AppDefinition>();
+    const disconnectSignal = createDeferred<void>();
+
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([definition]),
+      listInstances: vi.fn().mockResolvedValue([]),
+      getDefinition: vi.fn().mockReturnValue(getDefinitionDeferred.promise),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(
+        createTriggeredFailingEventStream(
+          disconnectSignal.promise,
+          createConnectionError("session_terminated", "socket closed"),
+        ),
+      ),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findByText("Demo App");
+
+    const user = userEvent.setup();
+    const definitionRow = getInventoryRowByActionLabel(
+      getInventorySection("App 定义"),
+      getDefinitionActionLabel(definition),
+    );
+    await user.click(within(definitionRow).getByRole("button", {
+      name: getDefinitionActionLabel(definition),
+    }));
+
+    await screen.findByRole("heading", { name: "编辑 App Definition" });
+
+    disconnectSignal.resolve();
+
+    await waitFor(() => {
+      expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
+    });
+    await screen.findByRole("heading", { name: "主页" });
+
+    getDefinitionDeferred.resolve(definition);
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "编辑 App Definition" })).toBeNull();
+    });
   });
 
   it("keeps the searching copy in launch-available mode and only then shows the launch action", async () => {

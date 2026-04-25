@@ -7,7 +7,6 @@ import {
   definitionIdentityKey,
   formatDefinitionScopeLabel,
   getHomeWorkspaceMode,
-  getUnsupportedRuntimeMessage,
   removeDefinition,
   sortDefinitions,
   upsertDefinition,
@@ -158,42 +157,21 @@ describe("monitor-ui definition helpers", () => {
     });
   });
 
-  it("rejects unsupported host baselines before entering the status workspace", () => {
-    expect(getUnsupportedRuntimeMessage(createConnection())).toBeNull();
-    expect(
-      getUnsupportedRuntimeMessage(createConnection({
-        runtime: {
-          ...createConnection().runtime,
-          hubVersion: "0.6.9",
-        },
-      })),
-    ).toContain("0.7.0");
-    expect(
-      getUnsupportedRuntimeMessage(createConnection({
-        runtime: {
-          ...createConnection().runtime,
-          hubVersion: undefined,
-        },
-      })),
-    ).toContain("hubVersion");
-    expect(
-      getUnsupportedRuntimeMessage(createConnection({
-        runtime: {
-          ...createConnection().runtime,
-          protocolVersion: 2,
-        },
-      })),
-    ).toContain("protocolVersion=2");
-
+  it("uses the backend bootstrap phase as the single source of truth for home mode", () => {
     expect(getHomeWorkspaceMode(createBootstrapSnapshot())).toBe("status");
     expect(
       getHomeWorkspaceMode(createBootstrapSnapshot({
-        connection: createConnection({
-          runtime: {
-            ...createConnection().runtime,
-            hubVersion: "0.6.9",
-          },
-        }),
+        phase: "host_incompatible",
+        connection: null,
+        lastProblem: {
+          code: "host_incompatible",
+          message: "当前 Host 版本不受支持",
+        },
+      })),
+    ).toBe("discovery");
+    expect(
+      getHomeWorkspaceMode(createBootstrapSnapshot({
+        connection: null,
       })),
     ).toBe("discovery");
   });

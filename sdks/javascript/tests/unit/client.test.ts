@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevHubClient } from "../../src/client.js";
-import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
+import {
+  DevHubConnectionError,
+  DevHubRpcError,
+  DevHubRpcErrorCode,
+} from "../../src/errors.js";
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 
 const tempRoots: string[] = [];
@@ -259,6 +263,98 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
       scope: ""
     }
   })).rejects.toThrow("hub.invoke.request.result.value.callback 包含不支持的 JSON 类型。");
+});
+
+it("HTTP 请求超时应抛出 typed connection error", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("fetch", vi.fn(async (_input: unknown, init?: RequestInit) => {
+    await new Promise((_, reject) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      signal?.addEventListener("abort", () => {
+        const abortError = new Error("aborted");
+        abortError.name = "AbortError";
+        reject(abortError);
+      }, { once: true });
+    });
+    return createJsonResponse("unused", { ok: true });
+  }));
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-http-timeout-client",
+    dataDir: runtimeDir,
+    requestTimeoutMs: 10,
+  });
+
+  let captured: unknown;
+  try {
+    await client.ping();
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("timeout");
+});
+
+it("非 200 HTTP 响应应抛出 typed connection error", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("fetch", vi.fn(async () => ({
+    ok: false,
+    status: 503,
+    statusText: "Service Unavailable",
+    text: async () => "gateway down",
+  } as Response)));
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-http-status-client",
+    dataDir: runtimeDir,
+  });
+
+  let captured: unknown;
+  try {
+    await client.ping();
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect(captured).toMatchObject({
+    kind: "http_status",
+    status: 503,
+    statusText: "Service Unavailable",
+    responseBody: "gateway down",
+  });
+});
+
+it("非法 JSON-RPC 响应应抛出 typed connection error", async () => {
+  const runtimeDir = await createRuntime();
+  vi.stubGlobal("fetch", vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    text: async () => JSON.stringify({
+      jsonrpc: "1.0",
+      id: "unexpected",
+      result: {
+        ok: true,
+      },
+    }),
+  } as Response)));
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-invalid-response-client",
+    dataDir: runtimeDir,
+  });
+
+  let captured: unknown;
+  try {
+    await client.ping();
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
 });
 
 it("notify 应应用默认选项", async () => {

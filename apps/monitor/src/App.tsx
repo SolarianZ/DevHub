@@ -34,6 +34,7 @@ function App() {
     bootstrapError,
     discardSettingsChanges,
     handleLaunchHost,
+    handleResumeDiscovery,
     handleSaveSettings: handleSaveSettingsRequest,
     replaceBootstrap,
     settings,
@@ -317,6 +318,9 @@ function App() {
         }}
         onLaunchHost={() => {
           void handleLaunch();
+        }}
+        onResumeDiscovery={() => {
+          void handleResumeDiscovery();
         }}
         onChangeSettingsField={updateSettingsDraftField}
         onSelectHostExecutablePath={() => {

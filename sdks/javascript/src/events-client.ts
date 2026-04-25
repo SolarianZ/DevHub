@@ -1,4 +1,5 @@
 import { AsyncQueue } from "./async-utils.js";
+import { DevHubConnectionError } from "./errors.js";
 import {
   ensureSupportedEventType,
   type DevHubEventType
@@ -67,6 +68,7 @@ export class DevHubEventsClient {
   #eventStreamInvalidated = false;
   #activeReaderLease: EventReaderLease | null = null;
   #disposed = false;
+  #terminationError: DevHubConnectionError | null = null;
 
   private constructor(
     options: NormalizedDevHubClientOptions,
@@ -130,11 +132,13 @@ export class DevHubEventsClient {
       this.#authenticated = true;
       this.#eventStreamAvailable = true;
       this.#eventStreamInvalidated = false;
+      this.#terminationError = null;
     } catch (error) {
       this.invalidateReaderLease();
       this.#authenticated = false;
       this.#eventStreamAvailable = false;
       this.#eventStreamInvalidated = true;
+      this.#terminationError = createEventStreamTerminationError(error);
       await this.#session.disconnect("authenticate_failed");
       throw error;
     }
@@ -198,6 +202,7 @@ export class DevHubEventsClient {
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
     this.#eventStreamInvalidated = true;
+    this.#terminationError = createEventStreamTerminationError();
     this.#eventStream.queue.close();
 
     await this.#session.dispose("client_dispose");
@@ -211,8 +216,14 @@ export class DevHubEventsClient {
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
     this.#eventStreamInvalidated = true;
+    this.#terminationError = createEventStreamTerminationError(error);
     this.invalidateReaderLease();
-    this.#eventStream.queue.close(error);
+    if (error instanceof DevHubConnectionError && error.kind === "invalid_response") {
+      this.#eventStream.queue.close(error);
+      return;
+    }
+
+    this.#eventStream.queue.close();
   }
 
   private ensureAuthenticated(): void {
@@ -226,7 +237,7 @@ export class DevHubEventsClient {
     this.throwIfDisposed();
     if (!this.#eventStreamAvailable) {
       if (this.#eventStreamInvalidated) {
-        throw new Error("The event stream is unavailable. Re-authenticate and subscribe again.");
+        throw this.#terminationError ?? createEventStreamTerminationError();
       }
 
       this.ensureAuthenticated();
@@ -362,4 +373,16 @@ function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string
   }
 
   return { types: normalizedTypes };
+}
+
+function createEventStreamTerminationError(error?: unknown): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError && error.kind === "invalid_response") {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    kind: "session_terminated",
+    message: "The event stream is unavailable. Re-authenticate and subscribe again.",
+    cause: error
+  });
 }

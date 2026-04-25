@@ -43,7 +43,39 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
 
   const settingsDirty = !areMonitorSettingsEqual(settingsDraft, settings?.settings);
   const settingsDirtyRef = useRef(false);
+  const bootstrapGenerationRef = useRef(-1);
+  const settingsRevisionRef = useRef(-1);
   settingsDirtyRef.current = settingsDirty;
+
+  const applyBootstrapSnapshot = useEffectEvent((snapshot: BootstrapSnapshot) => {
+    if (snapshot.generation < bootstrapGenerationRef.current) {
+      return;
+    }
+
+    bootstrapGenerationRef.current = snapshot.generation;
+    startTransition(() => {
+      setBootstrap(snapshot);
+    });
+  });
+
+  const applySettingsSnapshot = useEffectEvent((
+    snapshot: SettingsSnapshot,
+    options?: { resetDraft?: boolean },
+  ) => {
+    if (snapshot.revision < settingsRevisionRef.current) {
+      return;
+    }
+
+    settingsRevisionRef.current = snapshot.revision;
+    startTransition(() => {
+      setSettings(snapshot);
+
+      if (options?.resetDraft || !settingsDirtyRef.current) {
+        setSettingsDraft(snapshot.settings);
+        setSettingsFieldErrors({});
+      }
+    });
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -51,6 +83,29 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
 
     async function initialize() {
       try {
+        const [offBootstrap, offSettings] = await Promise.all([
+          listen<BootstrapSnapshot>(
+            BOOTSTRAP_STATE_CHANGED_EVENT,
+            (event) => {
+              applyBootstrapSnapshot(event.payload);
+            },
+          ),
+          listen<SettingsSnapshot>(
+            SETTINGS_CHANGED_EVENT,
+            (event) => {
+              applySettingsSnapshot(event.payload);
+            },
+          ),
+        ]);
+
+        if (disposed) {
+          offBootstrap();
+          offSettings();
+          return;
+        }
+
+        unlistenCallbacks.push(offBootstrap, offSettings);
+
         const [bootstrapSnapshot, settingsSnapshot] = await Promise.all([
           getBootstrapState(),
           getSettingsSnapshot(),
@@ -60,42 +115,8 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
           return;
         }
 
-        startTransition(() => {
-          setBootstrap(bootstrapSnapshot);
-          setSettings(settingsSnapshot);
-          setSettingsDraft(settingsSnapshot.settings);
-          setSettingsFieldErrors({});
-        });
-
-        const offBootstrap = await listen<BootstrapSnapshot>(
-          BOOTSTRAP_STATE_CHANGED_EVENT,
-          (event) => {
-            startTransition(() => {
-              setBootstrap(event.payload);
-            });
-          },
-        );
-        const offSettings = await listen<SettingsSnapshot>(
-          SETTINGS_CHANGED_EVENT,
-          (event) => {
-            startTransition(() => {
-              setSettings(event.payload);
-
-              if (!settingsDirtyRef.current) {
-                setSettingsDraft(event.payload.settings);
-                setSettingsFieldErrors({});
-              }
-            });
-          },
-        );
-
-        if (disposed) {
-          offBootstrap();
-          offSettings();
-          return;
-        }
-
-        unlistenCallbacks.push(offBootstrap, offSettings);
+        applyBootstrapSnapshot(bootstrapSnapshot);
+        applySettingsSnapshot(settingsSnapshot, { resetDraft: true });
         setBootstrapError(null);
 
         recordFrontendLog({
@@ -123,9 +144,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
   }, []);
 
   const replaceBootstrap = useEffectEvent((snapshot: BootstrapSnapshot) => {
-    startTransition(() => {
-      setBootstrap(snapshot);
-    });
+    applyBootstrapSnapshot(snapshot);
   });
 
   const handleResumeDiscovery = useEffectEvent(async () => {
@@ -134,9 +153,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
 
     try {
       const snapshot = await resumeDiscovery("frontend_manual_retry");
-      startTransition(() => {
-        setBootstrap(snapshot);
-      });
+      applyBootstrapSnapshot(snapshot);
 
       recordFrontendLog({
         level: "info",
@@ -247,12 +264,7 @@ export function useBootstrapFlow(options: BootstrapFlowOptions) {
 
     try {
       const snapshot = await saveSettings(payload);
-
-      startTransition(() => {
-        setSettings(snapshot);
-        setSettingsDraft(snapshot.settings);
-        setSettingsFieldErrors({});
-      });
+      applySettingsSnapshot(snapshot, { resetDraft: true });
 
       recordFrontendLog({
         level: "info",

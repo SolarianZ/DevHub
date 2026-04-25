@@ -13,6 +13,7 @@ import { JsonRpcWsSession } from "../../src/ws-session.js";
 it("顶层入口应导出高级扩展点", () => {
   expect(sdk.JsonRpcHttpTransport).toBe(JsonRpcHttpTransport);
   expect(sdk.JsonRpcWsSession).toBe(JsonRpcWsSession);
+  expect(sdk.DevHubConnectionError).toBeTypeOf("function");
   expect((sdk as Record<string, unknown>).FileSystemRuntimeResolver).toBeUndefined();
   expect(sdk.SUPPORTED_EVENT_TYPES).toBe(SUPPORTED_EVENT_TYPES);
   expect(sdk.APP_INSTANCE_REGISTERED).toBe(APP_INSTANCE_REGISTERED);

@@ -4,6 +4,7 @@ export type BootstrapPhase =
   | "scanning"
   | "launch_available"
   | "settings_required"
+  | "host_incompatible"
   | "host_available";
 
 export type HostLaunchStatus = "started" | "settings_required";
@@ -61,12 +62,21 @@ export interface BootstrapSnapshot {
 }
 
 export interface SettingsSnapshot {
+  revision: number;
   settings: MonitorSettings;
   platform: MonitorPlatform;
   effectiveDataDir: string;
   dataDirSource: DataDirSource;
   settingsFilePath: string;
   monitorLogDirectory: string;
+  loadWarning?: SettingsLoadWarning | null;
+}
+
+export interface SettingsLoadWarning {
+  code: string;
+  message: string;
+  settingsFilePath: string;
+  backupFilePath?: string | null;
 }
 
 export interface LaunchHostResult {

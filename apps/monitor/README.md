@@ -64,7 +64,9 @@
 
 当前 Monitor 的 CI 验证由独立的 `.github/workflows/monitor.yml` 承担；该 workflow 与 `package_monitor.py` 一样只服务于 Monitor 工作区验证，不接入 Host / SDK GitHub Release 自动发布链路。
 
-Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜索可用 Host。只有在真实 `hub.ping` 校验成功且前端 Host session 已完成连接后，`主页` 才会显示运行态摘要和库存列表。若自动搜索约 3 秒后仍未发现可用 Host，`主页` 才会显示 `启动 Host`；若未配置 Host 可执行文件路径，则会引导用户进入 `设置` 工作区补全配置。
+Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜索可用 Host。只有在原生后端确认运行时协议与 Host 版本兼容、真实 `hub.ping` 校验成功且前端 Host session 已完成连接后，`主页` 才会显示运行态摘要和库存列表。若自动搜索约 3 秒后仍未发现可用 Host，`主页` 才会显示 `启动 Host`；若未配置 Host 可执行文件路径，则会引导用户进入 `设置` 工作区补全配置；若发现不兼容 Host，则保留发现态并提供 `重新扫描` 与 `前往设置` 恢复动作。
+
+读取 `settings.json` 时若发现损坏内容，Monitor 会先把原文件隔离为 `settings.json.corrupt-<timestamp>-<uuid>.bak`，随后回退默认设置继续启动，并在窗口顶部展示恢复告警。
 
 ## 日志与能力边界
 

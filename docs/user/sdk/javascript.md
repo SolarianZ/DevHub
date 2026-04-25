@@ -42,7 +42,7 @@ Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript
 
 - HTTP JSON-RPC：覆盖 `ping`、应用定义管理、实例管理、`launch`、`notify`、`request`、`poll`、`respond`。
 - WebSocket 事件：覆盖鉴权、订阅、取消订阅与 `hub.event` 事件流。
-- 统一错误模型：`DevHubRpcError` 以及 `reason`、`invocationId`、`calleeError` 等辅助属性。
+- 统一错误模型：`DevHubRpcError` 用于 JSON-RPC `error` 响应；`DevHubConnectionError` 用于超时、传输故障、非 `200` HTTP、非法响应和事件流终止等连接级失败。
 - 本地参数校验：对 `echo`、`args`、`meta`、`error.data` 等 JSON 载荷执行严格校验。
 - 闭集事件类型：公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供编译期约束。
 - 运行时上下文：当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
@@ -144,6 +144,7 @@ try {
 
 - 每个 `DevHubEventsClient` 实例同一时刻只允许一个活动中的 `readEvents()` 读取器；若业务需要多个消费者，应在调用方内部自行扇出。
 - 底层 WebSocket 终止或重新认证失败后，当前活动读取器仍可排空终止前已经进入缓冲的事件；后续新的 `readEvents()` 调用会在重新认证成功前直接失败。
+- 上述“直接失败”对外表现为 `DevHubConnectionError`；连接正常终止时 `kind === "session_terminated"`，若事件流或响应包本身不合法，则返回 `kind === "invalid_response"`。
 - 重新执行 `authenticate()` 只会建立新的事件流代次，不会恢复旧订阅；恢复事件交付时需要再次调用 `subscribe()`。
 
 ### 6.2 定义与实例管理
@@ -205,6 +206,37 @@ await client.respond({
 - `InvokeRequest.target` 与 SDK 解析得到的 `Invocation.target` 都是必填字段，调用方不需要再为缺省 `target` 编写分支。
 - `AppDefinition.launch` 只要存在，就必须显式提供 `launch.exePath`。
 - `RespondRequest` 只接受“携带 `value`”或“携带 `error`”两种互斥形状之一，不能同时省略，也不能同时提供。
+
+### 6.4 错误处理约定
+
+```ts
+import {
+  DevHubConnectionError,
+  DevHubRpcError,
+} from "@devhub/sdk-javascript";
+
+try {
+  await client.ping();
+} catch (error) {
+  if (error instanceof DevHubConnectionError) {
+    console.error("connection failure", error.kind, error.status, error.responseBody);
+    return;
+  }
+
+  if (error instanceof DevHubRpcError) {
+    console.error("rpc failure", error.code, error.reason, error.invocationId);
+    return;
+  }
+
+  throw error;
+}
+```
+
+- `DevHubRpcError` 表示 Host 已成功返回 JSON-RPC `error` 对象；调用方可继续读取 `code`、`knownCode`、`reason`、`invocationId`、`calleeError` 与 `tryGetDataProperty(...)`。
+- `DevHubConnectionError` 表示请求尚未进入有效业务结果阶段，或连接/会话已经失效。当前公开的 `kind` 包括：`timeout`、`transport`、`http_status`、`invalid_response`、`session_terminated`。
+- `timeout` 表示请求超时；`transport` 表示底层 `fetch`/WebSocket/网络栈失败；`http_status` 表示收到非 `200` HTTP 响应，并可结合 `status`、`statusText`、`responseBody` 诊断。
+- `invalid_response` 表示收到的 HTTP JSON-RPC 包、WebSocket 响应或事件通知不符合协议形状；此类错误通常意味着上游实现或中间链路返回了非法载荷。
+- `session_terminated` 表示事件流或 WebSocket 会话已经终止；对 `DevHubEventsClient` 而言，需要重新执行 `authenticate()`，并重新调用 `subscribe()` 恢复事件消费。
 
 ## 7. 高级扩展
 

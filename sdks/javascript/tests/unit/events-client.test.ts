@@ -5,7 +5,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
-import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
+import {
+  DevHubConnectionError,
+  DevHubRpcError,
+  DevHubRpcErrorCode,
+} from "../../src/errors.js";
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 
@@ -591,7 +595,10 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
     const buffered = await previousIterator.next();
     expect(buffered.done).toBe(false);
     expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
-    await expect(previousIterator.next()).rejects.toThrow(/socket_closed/i);
+    await expect(previousIterator.next()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
     expect(() => client.readEvents()).toThrow("The event stream is unavailable. Re-authenticate and subscribe again.");
 
     await client.authenticate();
@@ -782,6 +789,54 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
   expect(second.done).toBe(true);
 });
 
+it("连接终止后新的 readEvents 应抛出 session_terminated typed connection error", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-terminated-stream-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+
+    const buffered = await iterator.next();
+    expect(buffered.done).toBe(false);
+    expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
+    await expect(iterator.next()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+
+    let captured: unknown;
+    try {
+      client.readEvents();
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(captured).toBeInstanceOf(DevHubConnectionError);
+    expect((captured as DevHubConnectionError).kind).toBe("session_terminated");
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("事件通知携带 id 时应使事件流报错", async () => {
   const runtimeDir = await createRuntime();
   vi.stubGlobal("WebSocket", class extends FakeWebSocket {
@@ -799,7 +854,25 @@ it("事件通知携带 id 时应使事件流报错", async () => {
   const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
+  let captured: unknown;
+  try {
+    await iterator.next();
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+  expect((captured as Error).message).toMatch(/hub\.event/i);
+
+  let streamError: unknown;
+  try {
+    client.readEvents();
+  } catch (error) {
+    streamError = error;
+  }
+
+  expect(streamError).toBe(captured);
 });
 
 it("收到空白文本消息时应使事件流报错", async () => {

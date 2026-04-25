@@ -20,7 +20,6 @@ import {
   formatDefinitionScopeLabel,
   formatHostLogDirectory,
   getSidebarWorkspace,
-  getUnsupportedRuntimeMessage,
 } from "../lib/monitor-ui";
 
 interface AppShellProps {
@@ -42,6 +41,7 @@ interface AppShellProps {
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onLaunchHost: () => void;
+  onResumeDiscovery: () => void;
   onChangeSettingsField: (
     field: keyof MonitorSettings,
     value: MonitorSettings[keyof MonitorSettings],
@@ -93,6 +93,7 @@ export function AppShell(props: AppShellProps) {
     onNavigateWorkspace,
     onOpenLogDirectory,
     onLaunchHost,
+    onResumeDiscovery,
     onChangeSettingsField,
     onSelectHostExecutablePath,
     onSelectDataDirectory,
@@ -125,6 +126,15 @@ export function AppShell(props: AppShellProps) {
           </div>
         ) : null}
 
+        {settings?.loadWarning ? (
+          <div className="warning-banner" role="status">
+            <p>{settings.loadWarning.message}</p>
+            {settings.loadWarning.backupFilePath ? (
+              <p>备份文件：{settings.loadWarning.backupFilePath}</p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="workspace-scroll">
           {activeWorkspace === "home" ? (
             <HomeWorkspace
@@ -139,6 +149,7 @@ export function AppShell(props: AppShellProps) {
               onEditDefinition={onEditDefinition}
               onLaunchHost={onLaunchHost}
               onOpenSettings={() => onNavigateWorkspace("settings")}
+              onResumeDiscovery={onResumeDiscovery}
               onViewInstanceDefinition={onViewInstanceDefinition}
             />
           ) : null}
@@ -266,6 +277,7 @@ function HomeWorkspace(props: {
   onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
 }) {
   const { homeWorkspaceMode, ...rest } = props;
@@ -280,10 +292,14 @@ function HomeDiscoveryWorkspace(props: {
   busy: boolean;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
 }) {
-  const { bootstrap, busy, onLaunchHost, onOpenSettings } = props;
+  const { bootstrap, busy, onLaunchHost, onOpenSettings, onResumeDiscovery } = props;
   const requiresSettings = bootstrap?.phase === "settings_required" || !bootstrap?.hasConfiguredHostExecutable;
-  const showLaunchAction = bootstrap !== null && (requiresSettings || bootstrap.phase === "launch_available");
+  const showLaunchAction = bootstrap !== null
+    && bootstrap.phase !== "host_incompatible"
+    && (requiresSettings || bootstrap.phase === "launch_available");
+  const showRecoveryActions = bootstrap?.phase === "host_incompatible";
 
   return (
     <section className="workspace-view">
@@ -293,16 +309,31 @@ function HomeDiscoveryWorkspace(props: {
         <div className="loader" aria-hidden="true" />
         <p className="status-title">{getDiscoveryTitle(bootstrap)}</p>
         <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
+        {bootstrap?.lastProblem?.message ? (
+          <p className="status-detail">{bootstrap.lastProblem.message}</p>
+        ) : null}
 
-        {showLaunchAction ? (
+        {showLaunchAction || showRecoveryActions ? (
           <div className="status-actions">
-            <button
-              type="button"
-              onClick={requiresSettings ? onOpenSettings : onLaunchHost}
-              disabled={busy && !requiresSettings}
-            >
-              {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
-            </button>
+            {showLaunchAction ? (
+              <button
+                type="button"
+                onClick={requiresSettings ? onOpenSettings : onLaunchHost}
+                disabled={busy && !requiresSettings}
+              >
+                {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
+              </button>
+            ) : null}
+            {showRecoveryActions ? (
+              <>
+                <button type="button" onClick={onResumeDiscovery} disabled={busy}>
+                  {busy ? "正在重新扫描..." : "重新扫描"}
+                </button>
+                <button type="button" onClick={onOpenSettings}>
+                  前往设置
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -962,13 +993,11 @@ function EmptyState(props: {
 }
 
 function getDiscoveryTitle(snapshot?: BootstrapSnapshot | null): string {
-  if (snapshot?.connection && getUnsupportedRuntimeMessage(snapshot.connection)) {
-    return "当前 Host 版本不受支持";
-  }
-
   switch (snapshot?.phase) {
     case "settings_required":
       return "需要先补充 Host 设置";
+    case "host_incompatible":
+      return "当前 Host 版本不受支持";
     case "launch_available":
     case "scanning":
       return "正在搜索 DevHub Host";
