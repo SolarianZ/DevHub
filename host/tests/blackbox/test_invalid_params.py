@@ -771,12 +771,40 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_apps_get_instance_invalid_params(self):
+        """测试 hub.apps.getInstance 关键参数类型校验"""
+        result = TestResult("测试 hub.apps.getInstance 关键参数类型校验")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "缺少 instanceId", "payload": {}},
+                {"name": "instanceId 非字符串", "payload": {"instanceId": 123}},
+                {"name": "instanceId 格式非法", "payload": {"instanceId": "invalid instance id"}},
+            ]
+
+            for case in cases:
+                response = client.call("hub.apps.getInstance", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有 invalid_params 测试"""
         return [
             self.test_params_as_array(),
             self.test_hub_apps_get_definition_missing_appid(),
             self.test_hub_apps_get_definition_empty_appid(),
+            self.test_hub_apps_get_instance_invalid_params(),
             self.test_hub_apps_register_instance_missing_instance(),
             self.test_hub_apps_register_instance_missing_password(),
             self.test_hub_apps_register_instance_missing_required_fields(),

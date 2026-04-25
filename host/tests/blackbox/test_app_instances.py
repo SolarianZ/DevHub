@@ -952,6 +952,90 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def test_get_instance_by_exact_instance_id(self):
+        """测试 hub.apps.getInstance 返回精确实例快照且不刷新 lastSeenUtc"""
+        result = TestResult("测试 hub.apps.getInstance 返回精确实例快照且不刷新 lastSeenUtc")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+
+            register_response = client.call("hub.apps.registerInstance", self._register_payload(
+                instance_id,
+                "test-app-get-instance",
+                12362,
+                scope="workspace-get",
+            ))
+            if not self._validate_register_result(result, register_response):
+                return result
+
+            registered_instance = register_response["result"]["instance"]
+            registered_last_seen = registered_instance["lastSeenUtc"]
+            time.sleep(1)
+
+            get_response = client.call("hub.apps.getInstance", {"instanceId": instance_id})
+            if not RpcAssertions.expect_success(result, get_response, ["instance"]):
+                return result
+
+            get_result = get_response["result"]
+            if "instanceSessionToken" in get_result:
+                result.mark_failure("❌ getInstance 顶层结果不应泄漏 instanceSessionToken")
+                return result
+
+            instance = get_result["instance"]
+            if not self._validate_app_instance_fields(result, instance):
+                return result
+
+            if instance.get("instanceId") != instance_id:
+                result.mark_failure(f"❌ getInstance 返回了错误的 instanceId: {instance}")
+                return result
+
+            if instance.get("scope") != "workspace-get":
+                result.mark_failure(f"❌ getInstance 返回了错误的 scope: {instance}")
+                return result
+
+            if "instanceSessionToken" in instance:
+                result.mark_failure("❌ getInstance.instance 不应泄漏 instanceSessionToken")
+                return result
+
+            if instance.get("lastSeenUtc") != registered_last_seen:
+                result.mark_failure("❌ getInstance 不应刷新 lastSeenUtc")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances([locals().get("instance_id")], result)
+
+        return result
+
+    def test_get_instance_unknown_instance_returns_instance_not_found(self):
+        """测试 hub.apps.getInstance 读取未知实例时返回 instance_not_found"""
+        result = TestResult("测试 hub.apps.getInstance 读取未知实例时返回 instance_not_found")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call("hub.apps.getInstance", {"instanceId": "missing-instance-for-get"})
+            if not RpcAssertions.expect_error(result, response, -32010, "instance_not_found"):
+                return result
+
+            error_data = response.get("error", {}).get("data", {})
+            if error_data.get("instanceId") != "missing-instance-for-get":
+                result.mark_failure(f"❌ instance_not_found 未回传原始 instanceId: {response}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_instance_offline_after_30s_no_heartbeat(self):
         """测试 30s 无心跳后实例离线"""
         result = TestResult("测试 30s 无心跳后实例离线")
@@ -1085,7 +1169,9 @@ class TestAppInstances(unittest.TestCase):
             self.test_register_instance_with_global_scope,
             self.test_register_instance_empty_scope,
             self.test_list_instances_scope_strict_match,
-            self.test_register_instance_invoke_field_validation
+            self.test_register_instance_invoke_field_validation,
+            self.test_get_instance_by_exact_instance_id,
+            self.test_get_instance_unknown_instance_returns_instance_not_found
         ]
 
         if run_timeout_tests:

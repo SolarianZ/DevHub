@@ -457,7 +457,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `hub.apps.registerInstance` 的 `params.instance.scope` **必须**存在且为合法字符串；省略、`null` 与首尾包含空白字符的字符串都**必须**被拒绝。
 - `AppInstance` 与 `AppInstanceRegistration` 的 `appId` **必须**满足 `^[a-z0-9][a-z0-9.-]*$`。
 - `AppInstanceRegistration` 只描述 `params.instance`；`hub.apps.registerInstance` 的顶层 `password` **不属于** `AppInstanceRegistration`。
-- `password` 与 `instanceSessionToken` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
+- `password` 与 `instanceSessionToken` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.getInstance`、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
 - `instanceSessionToken` 只属于 `hub.apps.registerInstance` 成功结果顶层字段，以及 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的顶层 `params`。
 
 ---
@@ -597,6 +597,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 | `hub.apps.heartbeat`          | ✓    | ✗                | ✓         | 更新 `lastSeenUtc`                |
 | `hub.apps.unregisterInstance` | ✓    | ✗                | ✓         | 移除实例                          |
 | `hub.apps.listInstances`      | ✓    | ✓                | ✓         | 无                                |
+| `hub.apps.getInstance`        | ✓    | ✓                | ✓         | 无                                |
 | `hub.apps.launch`             | ✓    | ✗                | ✗         | 启动进程（若未运行）              |
 | `hub.invoke.notify`           | ✓    | ✗                | ✗         | 将调用入队                        |
 | `hub.invoke.request`          | ✓    | ✗                | ✗         | 入队并等待响应                    |
@@ -780,7 +781,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 若该启动绑定注册的 `appId + scope` 与发起启动的 Definition 不一致，Hub **必须**拒绝本次注册，并返回 `-32002 forbidden` 且 `error.data.reason="definition_scope_mismatch"`；Hub **不得**让同 `appId` 的其他作用域 Definition 吸收该进程。
 - 发生上述启动绑定冲突时，任何等待该启动完成的 `hub.apps.launch` **必须**以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；相关 `error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope` 以便诊断。
 - Hub **不得**在成功结果或任何 `app.instance.*` 事件载荷中回传 `password`。
-- Hub **不得**在 `AppInstance`、`hub.apps.listInstances` 结果或任何 `app.instance.*` 事件载荷中回传 `instanceSessionToken`。
+- Hub **不得**在 `AppInstance`、`hub.apps.getInstance`、`hub.apps.listInstances` 结果或任何 `app.instance.*` 事件载荷中回传 `instanceSessionToken`。
 
 **结果**：
 ```json
@@ -840,6 +841,26 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `scope = ""`，Hub **必须**只返回 Global 作用域实例；如果 `scope` 为其他合法字符串，Hub **必须**只返回该精确作用域实例。
 - 若提供了 `scope` 字段，Hub **必须**先按 `string|null` 校验其类型与规范化规则；非法值（包括对象、数组、布尔值，以及首尾包含空白字符的字符串）**必须**返回 `-32602 invalid_params`，并使用 `error.data.reason="invalid_scope"`。
 - `includeOffline` 默认为 `false`。
+
+#### 6.3.11A `hub.apps.getInstance`
+**参数**：
+```json
+{ "instanceId": "inst-123" }
+```
+**结果**：
+```json
+{ "ok": true, "instance": { /* AppInstance */ } }
+```
+**错误**：`-32602 invalid_params`、`-32010 instance_not_found`
+
+规范性行为：
+- `params` **必须**是对象。
+- `params.instanceId` **必须**是非空字符串，并满足 `AppInstance.instanceId` 的格式约束；省略、为空字符串、类型非法或未通过 `^[a-zA-Z0-9._:-]+$` 校验时，Hub **必须**返回 `-32602 invalid_params`。
+- Hub **必须**只按请求中的 `instanceId` 做精确匹配；命中时 **必须**返回当前仍保留在注册表中的 `AppInstance` 快照。
+- 对于已经离线但尚未被显式注销或过期清理移除的实例，Hub **必须**继续返回该保留快照。
+- `hub.apps.getInstance` **不得**刷新 `lastSeenUtc`，也**不得**要求 `instanceSessionToken`。
+- 当目标实例不存在、已注销或已被过期清理移除时，Hub **必须**返回 `-32010 instance_not_found`，并在 `error.data` 中至少包含 `instanceId` 与 `reason="unknown_instance"`。
+- 成功结果中的 `instance` 与错误结果都**不得**泄漏 `password` 或 `instanceSessionToken`。
 
 #### 6.3.12 `hub.apps.launch` (仅限 HTTP)
 **参数**：
@@ -1190,7 +1211,7 @@ stateDiagram-v2
 | ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
 | -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`, `"instance_session_token_mismatch"`；若某次已跟踪 launch 的注册尝试绑定到另一作用域，**必须**使用 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
-| -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`; 在 auto-launch 未命中请求的精确 Definition 时**可以**附带 `appId?`: string, `scope?`: string |
+| -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 / 精确实例查询未命中 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`; 对于 `hub.apps.getInstance` 精确未命中，**必须**附带 `instanceId`: string；在 auto-launch 未命中请求的精确 Definition 时**可以**附带 `appId?`: string, `scope?`: string |
 | -32011 | `invocation_expired`       | TTL 耗尽 / 调用已过期 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
 | -32014 | `app_definition_not_found` | 定义文件缺失 / 启动所需定义缺失     | `appId?`: string; `scope?`: string                                                                                    |

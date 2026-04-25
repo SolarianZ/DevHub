@@ -1,5 +1,6 @@
 namespace DevHub.Host.Tests.TestHelpers;
 
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 
@@ -47,6 +48,14 @@ internal sealed class HostTestContext : IDisposable
     internal Task InvokeWebSocketConnectionAsync(ScriptedWebSocket socket, CancellationToken cancellationToken = default)
     {
         return _harness.InvokeWebSocketConnectionAsync(socket, cancellationToken);
+    }
+
+    /// <summary>
+    /// 直接向测试 Host 注册实例。
+    /// </summary>
+    internal string RegisterInstance(AppInstance instance, string password)
+    {
+        return _harness.RegisterInstance(instance, password);
     }
 
     /// <inheritdoc />

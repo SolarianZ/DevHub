@@ -55,6 +55,8 @@ public static class HubRpcMethods
 
     public const string HubAppsListInstances = "hub.apps.listInstances";
 
+    public const string HubAppsGetInstance = "hub.apps.getInstance";
+
     public const string HubAppsLaunch = "hub.apps.launch";
 
     public const string HubInvokeNotify = "hub.invoke.notify";

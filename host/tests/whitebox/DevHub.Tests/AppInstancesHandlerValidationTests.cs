@@ -309,6 +309,62 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_GetInstance_WhenParamsInvalid_ShouldReturnInvalidParams()
+    {
+        var handler = CreateHandler();
+
+        var invalidRoot = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-invalid-root",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement("bad")
+        }, CancellationToken.None);
+        AssertError(invalidRoot, -32602, "invalid_params");
+
+        var missingInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-missing-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { })
+        }, CancellationToken.None);
+        AssertError(missingInstanceId, -32602, "invalid_params");
+
+        var emptyInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-empty-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "" })
+        }, CancellationToken.None);
+        AssertError(emptyInstanceId, -32602, "invalid_params");
+
+        var malformedInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-malformed-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "invalid instance id" })
+        }, CancellationToken.None);
+        AssertError(malformedInstanceId, -32602, "invalid_params");
+    }
+
+    [Fact]
+    public async Task Impl_GetInstance_WhenUnknown_ShouldReturnInstanceNotFoundWithInstanceId()
+    {
+        var handler = CreateHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-unknown-instance",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance" })
+        }, CancellationToken.None);
+
+        AssertError(response, -32010, "instance_not_found");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("unknown_instance", errorData.GetProperty("reason").GetString());
+        Assert.Equal("missing-instance", errorData.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
     public async Task Impl_ListInstances_WhenScopeAndFlagsInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
@@ -457,6 +513,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = true })
         }, CancellationToken.None);
         AssertError(list, -32603, "internal_error");
+
+        var getInstance = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-instance-logger-throw",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
+        }, CancellationToken.None);
+        AssertError(getInstance, -32603, "internal_error");
     }
 
     [Fact]

@@ -208,6 +208,27 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.False(definition.TryGetProperty("launch", out _));
         Assert.False(definition.TryGetProperty("capabilities", out _));
 
+        using var getInstanceResponse = await ExecuteJsonRequestAsync(
+            harness,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "http-get-instance",
+              "method": "hub.apps.getInstance",
+              "params": {
+                "instanceId": "http-null-omit-inst"
+              }
+            }
+            """);
+
+        var getInstanceResult = getInstanceResponse.RootElement.GetProperty("result");
+        Assert.True(getInstanceResult.GetProperty("ok").GetBoolean());
+        Assert.False(getInstanceResult.TryGetProperty("instanceSessionToken", out _));
+        var exactInstance = getInstanceResult.GetProperty("instance");
+        Assert.Equal("http-null-omit-inst", exactInstance.GetProperty("instanceId").GetString());
+        Assert.False(exactInstance.TryGetProperty("meta", out _));
+        Assert.False(exactInstance.TryGetProperty("endpoints", out _));
+
         using var listInstancesResponse = await ExecuteJsonRequestAsync(
             harness,
             """

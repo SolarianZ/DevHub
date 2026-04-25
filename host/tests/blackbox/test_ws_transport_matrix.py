@@ -4,6 +4,7 @@ DevHub WebSocket 传输矩阵补充测试
 """
 
 import os
+import time
 import uuid
 import unittest
 
@@ -221,6 +222,74 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
+    def test_ws_matrix_004a_get_instance_should_work_after_auth(self):
+        """WS-MATRIX-004A: 鉴权后 hub.apps.getInstance 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-004A 鉴权后 WS hub.apps.getInstance")
+        instance_id = None
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            http_client = RpcClient(http_base_url, token)
+
+            app_id = self._new_app_id("get-instance")
+            instance_id = self._new_instance_id("get-instance")
+
+            register_response = http_client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope="workspace-ws-get",
+                poll=True,
+                respond=True,
+                pid=6302,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            registered_last_seen = register_response.get("result", {}).get("instance", {}).get("lastSeenUtc")
+            time.sleep(1)
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-004a")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                response = self._ws_call(
+                    ws,
+                    "matrix-get-inst-004a",
+                    "hub.apps.getInstance",
+                    {
+                        "instanceId": instance_id,
+                    },
+                )
+                if not RpcAssertions.expect_success(result, response, ["instance"]):
+                    return result
+
+                response_result = response.get("result", {})
+                if "instanceSessionToken" in response_result:
+                    result.mark_failure(f"❌ WS getInstance 顶层结果不应泄漏 instanceSessionToken: {response_result}")
+                    return result
+
+                instance = response_result.get("instance", {})
+                if instance.get("instanceId") != instance_id:
+                    result.mark_failure(f"❌ WS getInstance 返回了错误实例: {instance}")
+                    return result
+
+                if instance.get("lastSeenUtc") != registered_last_seen:
+                    result.mark_failure("❌ WS getInstance 不应刷新 lastSeenUtc")
+                    return result
+
+                if "instanceSessionToken" in instance:
+                    result.mark_failure(f"❌ WS getInstance.instance 不应泄漏 instanceSessionToken: {instance}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+
+        return result
+
     def test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(self):
         """WS-MATRIX-005: 鉴权后方法参数仍必须遵循 Spec 参数校验。"""
         result = TestResult("WS-MATRIX-005 鉴权后 WS 参数校验")
@@ -237,6 +306,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                     ("matrix-invalid-list-def-array", "hub.apps.listDefinitions"),
                     ("matrix-invalid-get-def-array", "hub.apps.getDefinition"),
                     ("matrix-invalid-list-instances-array", "hub.apps.listInstances"),
+                    ("matrix-invalid-get-instance-array", "hub.apps.getInstance"),
                     ("matrix-invalid-subscribe-array", "hub.events.subscribe"),
                     ("matrix-invalid-unsubscribe-array", "hub.events.unsubscribe"),
                 ]
@@ -443,6 +513,7 @@ class TestWsTransportMatrix(unittest.TestCase):
             self.test_ws_matrix_002_list_definitions_should_work_after_auth(),
             self.test_ws_matrix_003_get_definition_should_work_after_auth(),
             self.test_ws_matrix_004_list_instances_should_work_after_auth(),
+            self.test_ws_matrix_004a_get_instance_should_work_after_auth(),
             self.test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
             self.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
             self.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),

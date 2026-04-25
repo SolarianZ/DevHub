@@ -332,6 +332,44 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.11")]
+    public async Task Spec_6_3_11_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
+    {
+        var clock = new SequenceClock(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            TimeSpan.FromMinutes(1));
+        using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, "get.instance.app", "get.instance.target", scope: "tenant-a");
+        var lastSeenBefore = appRegistry.GetInstance("get.instance.target")!.LastSeenUtc;
+        var handler = CreateAppInstancesHandler(appRegistry, clock: clock);
+
+        var response = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsGetInstance,
+                "get-instance",
+                new
+                {
+                    instanceId = "get.instance.target"
+                }),
+            CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.False(result.TryGetProperty("instanceSessionToken", out _));
+
+        var instance = result.GetProperty("instance");
+        Assert.Equal("get.instance.target", instance.GetProperty("instanceId").GetString());
+        Assert.Equal("get.instance.app", instance.GetProperty("appId").GetString());
+        Assert.Equal("tenant-a", instance.GetProperty("scope").GetString());
+        Assert.False(instance.TryGetProperty("password", out _));
+        Assert.False(instance.TryGetProperty("instanceSessionToken", out _));
+        Assert.Equal(lastSeenBefore, instance.GetProperty("lastSeenUtc").GetDateTime());
+        Assert.Equal(lastSeenBefore, appRegistry.GetInstance("get.instance.target")!.LastSeenUtc);
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.11")]
     public async Task Spec_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());

@@ -306,6 +306,18 @@ public class WebSocketLifecycleSpecTests : IDisposable
     {
         WriteDefinition("ws-supported.app");
         var context = CreateHostContext();
+        context.RegisterInstance(new AppInstance
+        {
+            InstanceId = "ws-supported.instance",
+            AppId = "ws-supported.app",
+            Scope = ScopeContract.Global,
+            Pid = 7101,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "ws-supported-password");
 
         var auth = CreateJson(new
         {
@@ -353,7 +365,15 @@ public class WebSocketLifecycleSpecTests : IDisposable
             @params = new { scope = (string?)null, includeOffline = true }
         });
 
-        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances]);
+        var getInstance = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ws-get-instance",
+            method = "hub.apps.getInstance",
+            @params = new { instanceId = "ws-supported.instance" }
+        });
+
+        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances, getInstance]);
         await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
@@ -383,6 +403,14 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(listInstancesResponse.TryGetProperty("result", out var listInstancesResult));
         Assert.True(listInstancesResult.GetProperty("ok").GetBoolean());
         Assert.True(listInstancesResult.TryGetProperty("instances", out _));
+
+        var getInstanceResponse = FindResponseById(responses, "ws-get-instance");
+        Assert.True(getInstanceResponse.TryGetProperty("result", out var getInstanceResult));
+        Assert.True(getInstanceResult.GetProperty("ok").GetBoolean());
+        Assert.False(getInstanceResult.TryGetProperty("instanceSessionToken", out _));
+        var instance = getInstanceResult.GetProperty("instance");
+        Assert.Equal("ws-supported.instance", instance.GetProperty("instanceId").GetString());
+        Assert.False(instance.TryGetProperty("meta", out _));
     }
 
     [Fact]
