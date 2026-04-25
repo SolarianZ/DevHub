@@ -5,23 +5,34 @@
       <!-- 这个空标签用于清空工作区 Directory.Build.props 继承的单目标框架配置，避免与当前项目的多目标配置冲突。 -->
     </TargetFramework>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <RootNamespace>DevHub.Sdk</RootNamespace>
-    <AssemblyName>DevHub.Sdk</AssemblyName>
-    <PackageId>DevHub.Sdk.DotNet</PackageId>
-    <Description>DevHub 协议的 .NET SDK，提供 runtime discovery、HTTP JSON-RPC 与 WebSocket events 客户端。</Description>
+    <RootNamespace>DevHub.Sdk.DependencyInjection</RootNamespace>
+    <AssemblyName>DevHub.Sdk.DependencyInjection</AssemblyName>
+    <PackageId>DevHub.Sdk.DotNet.DependencyInjection</PackageId>
+    <Description>DevHub .NET SDK 的依赖注入扩展，提供 AddDevHubSdk 与客户端工厂。</Description>
     <Authors>DevHub Contributors</Authors>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/SolarianZ/DevHub</PackageProjectUrl>
     <RepositoryUrl>https://github.com/SolarianZ/DevHub.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>DevHub;SDK;JSON-RPC;WebSocket;RPC</PackageTags>
+    <PackageTags>DevHub;SDK;DependencyInjection;HttpClient</PackageTags>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DevHub.Sdk\DevHub.Sdk.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />

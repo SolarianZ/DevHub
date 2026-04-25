@@ -2,20 +2,21 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <RootNamespace>DevHub.Sdk.UnitTests</RootNamespace>
-    <AssemblyName>DevHub.Sdk.UnitTests</AssemblyName>
+    <RootNamespace>DevHub.Sdk.DependencyInjection.UnitTests</RootNamespace>
+    <AssemblyName>DevHub.Sdk.DependencyInjection.UnitTests</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <PackageReference Include="Moq" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" />
   </ItemGroup>
 
   <ItemGroup>

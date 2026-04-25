@@ -16,6 +16,7 @@
 
 ```xml
 <ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+<ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" /> <!-- 仅在使用 AddDevHubSdk / 工厂时需要 -->
 ```
 
 ### 2.2 使用本地打包产物
@@ -24,18 +25,20 @@
 
 ```powershell
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
 
-然后在消费项目中引用输出目录里的 `.nupkg`。正式发布后的主包 `PackageId` 为 `DevHub.Sdk.DotNet`。
+然后在消费项目中引用输出目录里的 `.nupkg`。正式发布后的核心包 `PackageId` 为 `DevHub.Sdk.DotNet`，依赖注入 companion package 为 `DevHub.Sdk.DotNet.DependencyInjection`。
 
 ## 3. 能力概览
 
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`。
 - HTTP JSON-RPC：覆盖 `hub.ping`、`hub.apps.*` 与 `hub.invoke.*`。
 - WebSocket Events：覆盖 `hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe` 与 `hub.event`。
-- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam、依赖注入工厂。
+- 单读取器事件契约：每个 `DevHubEventsClient` 同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。
+- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam；`AddDevHubSdk` 与客户端工厂位于 companion package。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
-- 统一错误模型：`DevHubRpcException`；协议要求 `error.data` 为对象，非对象响应会被视为非法 JSON-RPC 包。
+- 统一错误模型：`DevHubRpcException`；协议 `error.data` 通过 `ErrorData` 暴露，非对象响应会被视为非法 JSON-RPC 包。
 
 ## 4. 运行时发现
 
@@ -94,6 +97,8 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 ```
 
 ### 5.3 使用依赖注入工厂
+
+依赖注入扩展由 companion package `DevHub.Sdk.DotNet.DependencyInjection` 提供，公开类型仍位于 `DevHub.Sdk` 命名空间。
 
 ```csharp
 using DevHub.Sdk;
@@ -168,6 +173,8 @@ if (validation.Valid)
 }
 ```
 
+所有会序列化 `scope` 的出站模型都必须显式赋值 `Scope`。Global 作用域使用 `string.Empty`，未赋值状态会在本地直接失败。
+
 ### 6.3 事件订阅
 
 ```csharp
@@ -193,6 +200,8 @@ await foreach (var evt in eventsClient.ReadEventsAsync())
 
 await eventsClient.UnsubscribeAsync(subscriptionId);
 ```
+
+`DevHubEventsClient` 在同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
 
 ## 7. 高级扩展
 
@@ -242,6 +251,7 @@ dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 
 ```powershell
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
 
 - 若要查看工作区构建、集成测试隔离或仓库级联调要求，请阅读 [`../../developer/guides/development.md`](../../developer/guides/development.md)。

@@ -276,6 +276,46 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void ScopeBearingBuilders_WhenScopeOmitted_ShouldFailLocally()
+    {
+        var launchException = Assert.Throws<InvalidOperationException>(() => RequestPayloadFactory.BuildLaunchParams(new LaunchRequest
+        {
+            AppId = "test.app"
+        }));
+        Assert.Contains("LaunchRequest.Scope", launchException.Message, StringComparison.Ordinal);
+
+        var definitionException = Assert.Throws<InvalidOperationException>(() => RequestPayloadFactory.BuildValidateDefinitionParams(new AppDefinition
+        {
+            AppId = "test.app",
+            DisplayName = "Test App"
+        }));
+        Assert.Contains("AppDefinition.Scope", definitionException.Message, StringComparison.Ordinal);
+
+        var invokeException = Assert.Throws<InvalidOperationException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
+        {
+            AppId = "test.app",
+            Method = "test.notify",
+            Target = new InvocationTarget()
+        }));
+        Assert.Contains("InvocationTarget.Scope", invokeException.Message, StringComparison.Ordinal);
+
+        var registerException = Assert.Throws<InvalidOperationException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
+            {
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            "secret-1"));
+        Assert.Contains("AppInstanceRegistration.Scope", registerException.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RegisterInstanceBuilder_ShouldPlacePasswordAtTopLevelAndPreserveGlobalScope()
     {
         var registerPayload = RequestPayloadFactory.BuildRegisterInstanceParams(

@@ -229,6 +229,7 @@ public sealed class DevHubHostFixtureTests
             var launchResult = await client.LaunchAsync(new LaunchRequest
             {
                 AppId = "host.cleanup.app",
+                Scope = string.Empty,
                 WaitForRegisterMs = 0
             });
 
@@ -292,6 +293,7 @@ public sealed class DevHubHostFixtureTests
             return new AppDefinition
             {
                 AppId = appId,
+                Scope = string.Empty,
                 DisplayName = appId,
                 Launch = new LaunchConfiguration
                 {
@@ -304,6 +306,7 @@ public sealed class DevHubHostFixtureTests
         return new AppDefinition
         {
             AppId = appId,
+            Scope = string.Empty,
             DisplayName = appId,
             Launch = new LaunchConfiguration
             {

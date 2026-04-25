@@ -58,7 +58,7 @@ public sealed class ListDefinitionsRequest
 /// </summary>
 public sealed class LaunchRequest
 {
-    private string _scope = string.Empty;
+    private string? _scope;
 
     /// <summary>
     /// 应用标识。
@@ -70,7 +70,7 @@ public sealed class LaunchRequest
     /// </summary>
     public string Scope
     {
-        get => _scope;
+        get => ScopeContract.EnsureAssignedScope(_scope, nameof(LaunchRequest));
         set
         {
             _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
@@ -385,7 +385,7 @@ public sealed class Invocation
 /// </summary>
 public sealed class InvocationTarget
 {
-    private string _scope = string.Empty;
+    private string? _scope;
 
     /// <summary>
     /// 目标作用域。空字符串表示 Global。
@@ -394,7 +394,7 @@ public sealed class InvocationTarget
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string Scope
     {
-        get => _scope;
+        get => ScopeContract.EnsureAssignedScope(_scope, nameof(InvocationTarget));
         set
         {
             _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));

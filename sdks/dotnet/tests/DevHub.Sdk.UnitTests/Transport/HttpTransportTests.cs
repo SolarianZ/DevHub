@@ -150,7 +150,8 @@ public sealed class HttpTransportTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.LaunchAsync(new LaunchRequest
         {
-            AppId = "sample.app"
+            AppId = "sample.app",
+            Scope = string.Empty
         }, CancellationToken.None));
         Assert.Contains("launchId", exception.Message, StringComparison.Ordinal);
     }
@@ -328,6 +329,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             InstanceId = "inst-1",
             AppId = "sample.app",
+            Scope = string.Empty,
             Pid = 12345,
             Invoke = new InvokeCapability
             {
@@ -361,6 +363,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             InstanceId = "inst-1",
             AppId = "sample.app",
+            Scope = string.Empty,
             Pid = 12345,
             Invoke = new InvokeCapability
             {
@@ -394,6 +397,7 @@ public sealed class HttpTransportTests : IDisposable
         {
             InstanceId = "inst-1",
             AppId = "sample.app",
+            Scope = string.Empty,
             Pid = 12345,
             Invoke = new InvokeCapability
             {
@@ -554,7 +558,12 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-validate-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ValidateDefinitionAsync(new AppDefinition(), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ValidateDefinitionAsync(new AppDefinition
+        {
+            AppId = "sample.app",
+            Scope = string.Empty,
+            DisplayName = "Sample App"
+        }, CancellationToken.None));
         Assert.Contains("valid=false", exception.Message, StringComparison.Ordinal);
     }
 
@@ -576,7 +585,12 @@ public sealed class HttpTransportTests : IDisposable
             DataDir = dataDir
         }, handler, () => "req-validate-definition");
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ValidateDefinitionAsync(new AppDefinition(), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ValidateDefinitionAsync(new AppDefinition
+        {
+            AppId = "sample.app",
+            Scope = string.Empty,
+            DisplayName = "Sample App"
+        }, CancellationToken.None));
         Assert.Contains("errors[0]", exception.Message, StringComparison.Ordinal);
         Assert.Contains("message", exception.Message, StringComparison.Ordinal);
     }

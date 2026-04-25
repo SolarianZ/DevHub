@@ -32,11 +32,6 @@ public sealed class DevHubRpcException : Exception
     public int Code { get; }
 
     /// <summary>
-    /// 错误扩展数据。
-    /// </summary>
-    public new JsonElement? Data => _data;
-
-    /// <summary>
     /// 错误扩展数据的显式别名。
     /// </summary>
     public JsonElement? ErrorData => _data;

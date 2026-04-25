@@ -724,11 +724,17 @@ InvokeRequest BuildInvokeRequest(JsonElement payload)
         }
         else
         {
-            request.Target = new InvocationTarget
+            var target = new InvocationTarget
             {
-                Scope = ReadOptionalString(targetElement, "scope")!,
                 InstanceId = ReadOptionalString(targetElement, "instanceId")
             };
+
+            if (targetElement.TryGetProperty("scope", out _))
+            {
+                target.Scope = ReadOptionalString(targetElement, "scope")!;
+            }
+
+            request.Target = target;
         }
     }
 
@@ -776,11 +782,10 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
         throw new InvalidOperationException("instance.invoke 必须为对象。");
     }
 
-    return new AppInstanceRegistration
+    var instance = new AppInstanceRegistration
     {
         InstanceId = ReadString(payload, "instanceId"),
         AppId = ReadString(payload, "appId"),
-        Scope = ReadOptionalString(payload, "scope")!,
         Pid = ReadInt32(payload, "pid"),
         Invoke = new InvokeCapability
         {
@@ -791,6 +796,13 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
             ? DeserializeToObject(metaElement)
             : null
     };
+
+    if (payload.TryGetProperty("scope", out _))
+    {
+        instance.Scope = ReadOptionalString(payload, "scope")!;
+    }
+
+    return instance;
 }
 
 IAsyncEnumerator<DevHubEvent> GetOrCreateEventEnumerator(

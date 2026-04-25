@@ -23,7 +23,10 @@ import tomllib
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSION_SYNC_SCRIPT = REPO_ROOT / "scripts" / "release" / "sync_versions.py"
 HOST_PROJECT = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
-DOTNET_SDK_PROJECT = REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj"
+DOTNET_SDK_PROJECTS = (
+    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj",
+    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk.DependencyInjection" / "DevHub.Sdk.DependencyInjection.csproj",
+)
 JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
 PYTHON_SDK_DIR = REPO_ROOT / "sdks" / "python"
 DEFAULT_HOST_RIDS = ("win-x64", "linux-x64", "osx-arm64")
@@ -87,7 +90,8 @@ def main() -> int:
 
     versions = {
         "host": read_msbuild_version(HOST_PROJECT),
-        "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECT),
+        "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECTS[0]),
+        "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_PROJECTS[1]),
         "javascriptSdk": read_json_version(JS_SDK_DIR / "package.json"),
         "pythonSdk": read_toml_version(PYTHON_SDK_DIR / "pyproject.toml"),
     }
@@ -293,20 +297,24 @@ def build_release_assets(
         create_zip_archive(source_dir=publish_dir, archive_path=archive_path, root_name=f"devhub-host-{rid}")
         asset_paths.append(archive_path)
 
-    run_logged_command(
-        name=".NET SDK pack",
-        command=[
-            "dotnet",
-            "pack",
-            str(DOTNET_SDK_PROJECT),
-            "-c",
-            "Release",
-            f"-p:PackageOutputPath={dotnet_dir}",
-        ],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "dotnet-sdk-pack.log",
-        validation_records=validation_records,
-    )
+    for name, project, log_name in (
+        (".NET SDK core pack", DOTNET_SDK_PROJECTS[0], "dotnet-sdk-core-pack.log"),
+        (".NET SDK DI pack", DOTNET_SDK_PROJECTS[1], "dotnet-sdk-dependency-injection-pack.log"),
+    ):
+        run_logged_command(
+            name=name,
+            command=[
+                "dotnet",
+                "pack",
+                str(project),
+                "-c",
+                "Release",
+                f"-p:PackageOutputPath={dotnet_dir}",
+            ],
+            cwd=REPO_ROOT,
+            log_path=checks_dir / log_name,
+            validation_records=validation_records,
+        )
     asset_paths.extend(sorted(dotnet_dir.glob("*")))
 
     run_logged_command(

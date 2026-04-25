@@ -18,6 +18,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.notify.app",
+            Scope = string.Empty,
             DisplayName = "invoke.notify.app"
         });
 
@@ -49,6 +50,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.request.app",
+            Scope = string.Empty,
             DisplayName = "invoke.request.app"
         });
 
@@ -102,6 +104,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.request.null.app",
+            Scope = string.Empty,
             DisplayName = "invoke.request.null.app"
         });
 
@@ -145,6 +148,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.error.app",
+            Scope = string.Empty,
             DisplayName = "invoke.error.app"
         });
 
@@ -182,7 +186,7 @@ public sealed class InvocationFlowTests
         Assert.NotNull(exception.CalleeError);
         Assert.Equal(1001, exception.CalleeError!.Code);
         Assert.Equal("app_error", exception.CalleeError.Message);
-        Assert.Equal(1001, exception.Data!.Value.GetProperty("calleeError").GetProperty("code").GetInt32());
+        Assert.Equal(1001, exception.ErrorData!.Value.GetProperty("calleeError").GetProperty("code").GetInt32());
     }
 
     [Fact]
@@ -192,6 +196,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.timeout.app",
+            Scope = string.Empty,
             DisplayName = "invoke.timeout.app"
         });
 
@@ -238,6 +243,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.scope.app",
+            Scope = string.Empty,
             DisplayName = "invoke.scope.app"
         });
         await host.WriteDefinitionAsync(new AppDefinition
@@ -304,6 +310,7 @@ public sealed class InvocationFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "invoke.token.guard.app",
+            Scope = string.Empty,
             DisplayName = "invoke.token.guard.app"
         });
 

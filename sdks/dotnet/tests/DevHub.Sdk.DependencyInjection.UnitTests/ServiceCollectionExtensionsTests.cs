@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace DevHub.Sdk.UnitTests.DependencyInjection;
+namespace DevHub.Sdk.DependencyInjection.UnitTests;
 
 /// <summary>
 /// 依赖注入注册测试。

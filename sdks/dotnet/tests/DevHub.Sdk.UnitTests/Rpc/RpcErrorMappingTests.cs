@@ -44,9 +44,8 @@ public sealed class RpcErrorMappingTests : IDisposable
         Assert.Equal("req-fixed", exception.RequestId);
         Assert.Equal(DevHubRpcErrorCode.InvocationFailed, exception.KnownCode);
         Assert.True(exception.Is(DevHubRpcErrorCode.InvocationFailed));
-        Assert.True(exception.Data.HasValue);
-        var errorData = exception.Data ?? throw new InvalidOperationException("缺少 error.data。");
-        Assert.Equal(errorData.GetRawText(), exception.ErrorData?.GetRawText());
+        Assert.True(exception.ErrorData.HasValue);
+        var errorData = exception.ErrorData ?? throw new InvalidOperationException("缺少 error.data。");
         Assert.Equal("invk-1", exception.InvocationId);
         Assert.Equal("invk-1", errorData.GetProperty("invocationId").GetString());
         Assert.Equal(1001, errorData.GetProperty("calleeError").GetProperty("code").GetInt32());

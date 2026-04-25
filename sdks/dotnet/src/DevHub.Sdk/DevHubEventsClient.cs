@@ -16,9 +16,10 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     private readonly DevHubRuntimeConnectionInfo _connectionInfo;
     private readonly JsonRpcWebSocketSession _session;
     private Channel<DevHubEvent> _eventChannel;
-    private bool _authenticated;
-    private bool _eventStreamAvailable;
-    private bool _disposed;
+    private volatile bool _authenticated;
+    private volatile bool _eventStreamAvailable;
+    private volatile bool _disposed;
+    private int _activeReaderLease;
 
     private DevHubEventsClient(
         DevHubClientOptions options,
@@ -165,6 +166,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
         catch
         {
+            _authenticated = false;
+            _eventStreamAvailable = false;
+
             try
             {
                 await _session.DisconnectAsync("authenticate_failed", CancellationToken.None);
@@ -300,10 +304,26 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>事件异步序列。</returns>
-    public IAsyncEnumerable<DevHubEvent> ReadEventsAsync(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<DevHubEvent> ReadEventsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         EnsureEventStreamAvailable();
-        return ReadEventsCore(_eventChannel, cancellationToken);
+        AcquireReaderLease();
+        var eventChannel = _eventChannel;
+
+        try
+        {
+            while (await eventChannel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (eventChannel.Reader.TryRead(out var evt))
+                {
+                    yield return evt;
+                }
+            }
+        }
+        finally
+        {
+            ReleaseReaderLease();
+        }
     }
 
     /// <inheritdoc />
@@ -341,20 +361,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         _authenticated = false;
+        _eventStreamAvailable = false;
         _eventChannel.Writer.TryComplete(terminalException);
-    }
-
-    private static async IAsyncEnumerable<DevHubEvent> ReadEventsCore(
-        Channel<DevHubEvent> eventChannel,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        while (await eventChannel.Reader.WaitToReadAsync(cancellationToken))
-        {
-            while (eventChannel.Reader.TryRead(out var evt))
-            {
-                yield return evt;
-            }
-        }
     }
 
     private static void ValidateEvent(DevHubEvent evt)
@@ -391,8 +399,21 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         ThrowIfDisposed();
         if (!_eventStreamAvailable)
         {
-            EnsureAuthenticated();
+            throw new InvalidOperationException("当前事件流不可用；请先完成认证，若连接已终止则需重新认证并重新订阅。");
         }
+    }
+
+    private void AcquireReaderLease()
+    {
+        if (Interlocked.CompareExchange(ref _activeReaderLease, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("同一个 DevHubEventsClient 实例一次只允许一个活动中的 ReadEventsAsync 读取器。");
+        }
+    }
+
+    private void ReleaseReaderLease()
+    {
+        Volatile.Write(ref _activeReaderLease, 0);
     }
 
     private void ThrowIfDisposed()
@@ -402,7 +423,11 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
     private static Channel<DevHubEvent> CreateEventChannel()
     {
-        return Channel.CreateUnbounded<DevHubEvent>();
+        return Channel.CreateUnbounded<DevHubEvent>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
     }
 
     private sealed class AuthenticateResultContract

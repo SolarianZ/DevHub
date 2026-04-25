@@ -18,6 +18,7 @@ internal static class RequestPayloadFactory
     internal static object BuildValidateDefinitionParams(AppDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        _ = definition.Scope;
         return new Dictionary<string, object?>
         {
             ["definition"] = definition
@@ -27,6 +28,7 @@ internal static class RequestPayloadFactory
     internal static object BuildUpsertDefinitionParams(AppDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        _ = definition.Scope;
         return new Dictionary<string, object?>
         {
             ["definition"] = definition
@@ -50,6 +52,7 @@ internal static class RequestPayloadFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
         ArgumentNullException.ThrowIfNull(instance.Invoke);
+        var scope = instance.Scope;
 
         if (instance.Pid < 1)
         {
@@ -73,7 +76,7 @@ internal static class RequestPayloadFactory
             }
         };
 
-        instancePayload["scope"] = ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope));
+        instancePayload["scope"] = ScopeContract.EnsureScopedString(scope, nameof(instance.Scope));
 
         if (instance.Meta is not null)
         {

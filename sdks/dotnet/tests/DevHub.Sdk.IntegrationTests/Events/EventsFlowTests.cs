@@ -21,6 +21,7 @@ public sealed class EventsFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "events.flow.app",
+            Scope = string.Empty,
             DisplayName = "events.flow.app"
         });
 
@@ -63,6 +64,7 @@ public sealed class EventsFlowTests
         var definition = new AppDefinition
         {
             AppId = "events.definition.app",
+            Scope = string.Empty,
             DisplayName = "Events Definition App"
         };
 
@@ -90,6 +92,7 @@ public sealed class EventsFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "events.reconnect.app",
+            Scope = string.Empty,
             DisplayName = "events.reconnect.app"
         });
 
@@ -141,6 +144,7 @@ public sealed class EventsFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "events.ws.read.app",
+            Scope = string.Empty,
             DisplayName = "events.ws.read.app"
         });
 

@@ -19,6 +19,7 @@ public sealed class HttpFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "http.flow.app",
+            Scope = string.Empty,
             DisplayName = "HTTP Flow App",
             Description = "用于 SDK HTTP 链路测试。"
         });
@@ -186,6 +187,7 @@ public sealed class HttpFlowTests
         var invalid = await client.ValidateDefinitionAsync(new AppDefinition
         {
             AppId = "Invalid App Id",
+            Scope = string.Empty,
             DisplayName = "Broken Definition"
         });
 
@@ -197,6 +199,7 @@ public sealed class HttpFlowTests
         var validDefinition = new AppDefinition
         {
             AppId = "definition.http.app",
+            Scope = string.Empty,
             DisplayName = "Definition HTTP App",
             Description = "definition integration test"
         };
@@ -215,6 +218,7 @@ public sealed class HttpFlowTests
         var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
         {
             AppId = "Invalid App Id",
+            Scope = string.Empty,
             DisplayName = "Broken Definition"
         }));
         Assert.Equal(-32602, invalidException.Code);
@@ -236,6 +240,7 @@ public sealed class HttpFlowTests
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "password.flow.app",
+            Scope = string.Empty,
             DisplayName = "Password Flow App"
         });
 
@@ -296,8 +301,8 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32600, exception.Code);
         Assert.Equal("invalid_request", exception.Message);
-        Assert.Equal("missing_header", exception.Data!.Value.GetProperty("reason").GetString());
-        Assert.Equal("X-DevHub-ClientId", exception.Data!.Value.GetProperty("header").GetString());
+        Assert.Equal("missing_header", exception.ErrorData!.Value.GetProperty("reason").GetString());
+        Assert.Equal("X-DevHub-ClientId", exception.ErrorData!.Value.GetProperty("header").GetString());
     }
 
     [Fact]
@@ -313,7 +318,7 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32001, exception.Code);
         Assert.Equal("unauthorized", exception.Message);
-        Assert.Equal("invalid_token", exception.Data!.Value.GetProperty("reason").GetString());
+        Assert.Equal("invalid_token", exception.ErrorData!.Value.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -330,8 +335,8 @@ public sealed class HttpFlowTests
 
         Assert.Equal(-32099, exception.Code);
         Assert.Equal("not_supported", exception.Message);
-        Assert.Equal("mismatch", exception.Data!.Value.GetProperty("reason").GetString());
-        Assert.Equal("2", exception.Data!.Value.GetProperty("received").GetString());
+        Assert.Equal("mismatch", exception.ErrorData!.Value.GetProperty("reason").GetString());
+        Assert.Equal("2", exception.ErrorData!.Value.GetProperty("received").GetString());
     }
 
     [Fact]
@@ -357,12 +362,14 @@ public sealed class HttpFlowTests
         await firstHost.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "parallel.first.app",
+            Scope = string.Empty,
             DisplayName = "Parallel First App"
         });
 
         await secondHost.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "parallel.second.app",
+            Scope = string.Empty,
             DisplayName = "Parallel Second App"
         });
 

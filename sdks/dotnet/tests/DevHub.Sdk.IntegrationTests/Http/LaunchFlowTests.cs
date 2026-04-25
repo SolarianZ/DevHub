@@ -24,6 +24,7 @@ public sealed class LaunchFlowTests
         var started = await client.LaunchAsync(new LaunchRequest
         {
             AppId = "launch.started.app",
+            Scope = string.Empty,
             WaitForRegisterMs = 0
         });
         Assert.Equal("started", started.Status);
@@ -32,6 +33,7 @@ public sealed class LaunchFlowTests
         var starting = await client.LaunchAsync(new LaunchRequest
         {
             AppId = "launch.starting.app",
+            Scope = string.Empty,
             WaitForRegisterMs = 200
         });
         Assert.Equal("starting", starting.Status);
@@ -41,6 +43,7 @@ public sealed class LaunchFlowTests
         {
             InstanceId = "launch-running-inst-1",
             AppId = "launch.running.app",
+            Scope = string.Empty,
             Pid = Environment.ProcessId,
             Invoke = new InvokeCapability
             {
@@ -51,7 +54,8 @@ public sealed class LaunchFlowTests
 
         var alreadyRunning = await client.LaunchAsync(new LaunchRequest
         {
-            AppId = "launch.running.app"
+            AppId = "launch.running.app",
+            Scope = string.Empty
         });
         Assert.Equal("already_running", alreadyRunning.Status);
         Assert.Equal(registered.Pid, alreadyRunning.Pid);
@@ -59,12 +63,14 @@ public sealed class LaunchFlowTests
         var firstDedupeLaunch = await client.LaunchAsync(new LaunchRequest
         {
             AppId = "launch.dedupe.app",
+            Scope = string.Empty,
             DedupeKey = "launch-dedupe-key",
             WaitForRegisterMs = 0
         });
         var secondDedupeLaunch = await client.LaunchAsync(new LaunchRequest
         {
             AppId = "launch.dedupe.app",
+            Scope = string.Empty,
             DedupeKey = "launch-dedupe-key",
             WaitForRegisterMs = 0
         });
@@ -83,6 +89,7 @@ public sealed class LaunchFlowTests
             return new AppDefinition
             {
                 AppId = appId,
+                Scope = string.Empty,
                 DisplayName = appId,
                 Launch = new LaunchConfiguration
                 {
@@ -95,6 +102,7 @@ public sealed class LaunchFlowTests
         return new AppDefinition
         {
             AppId = appId,
+            Scope = string.Empty,
             DisplayName = appId,
             Launch = new LaunchConfiguration
             {

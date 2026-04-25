@@ -2,6 +2,16 @@ namespace DevHub.Sdk.Internal;
 
 internal static class ScopeContract
 {
+    internal static string EnsureAssignedScope(string? scope, string ownerTypeName)
+    {
+        if (scope is null)
+        {
+            throw new InvalidOperationException($"{ownerTypeName}.Scope 必须显式设置；Global 作用域请传入空字符串。");
+        }
+
+        return scope;
+    }
+
     internal static string EnsureScopedString(string? scope, string paramName)
     {
         if (!IsValidScopedString(scope))

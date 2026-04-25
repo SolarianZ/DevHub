@@ -16,6 +16,8 @@ artifacts/release/<release-id>/
 │   ├── dotnet/
 │   │   ├── DevHub.Sdk.DotNet.<version>.nupkg
 │   │   └── DevHub.Sdk.DotNet.<version>.snupkg
+│   │   ├── DevHub.Sdk.DotNet.DependencyInjection.<version>.nupkg
+│   │   └── DevHub.Sdk.DotNet.DependencyInjection.<version>.snupkg
 │   ├── javascript/
 │   │   └── devhub-sdk-javascript-<version>.tgz
 │   └── python/

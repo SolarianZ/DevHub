@@ -9,7 +9,7 @@ namespace DevHub.Sdk.Models;
 /// </summary>
 public sealed class AppDefinition
 {
-    private string _scope = string.Empty;
+    private string? _scope;
 
     /// <summary>
     /// 应用标识。
@@ -24,7 +24,7 @@ public sealed class AppDefinition
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string Scope
     {
-        get => _scope;
+        get => ScopeContract.EnsureAssignedScope(_scope, nameof(AppDefinition));
         set
         {
             _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));
@@ -248,7 +248,7 @@ public sealed class AppInstance
 /// </summary>
 public sealed class AppInstanceRegistration
 {
-    private string _scope = string.Empty;
+    private string? _scope;
 
     /// <summary>
     /// 实例标识。
@@ -268,7 +268,7 @@ public sealed class AppInstanceRegistration
     [JsonPropertyName("scope")]
     public string Scope
     {
-        get => _scope;
+        get => ScopeContract.EnsureAssignedScope(_scope, nameof(AppInstanceRegistration));
         set
         {
             _scope = ScopeContract.EnsureScopedString(value, nameof(Scope));

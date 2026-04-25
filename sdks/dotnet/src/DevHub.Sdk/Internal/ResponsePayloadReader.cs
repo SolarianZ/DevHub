@@ -182,7 +182,7 @@ internal static class ResponsePayloadReader
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureStringProperty(payload, $"{location}.payload", "appId");
                 EnsureStringProperty(payload, $"{location}.payload", "instanceId");
-                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
+                EnsureOptionalScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (payload.TryGetProperty("password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");
@@ -306,6 +306,19 @@ internal static class ResponsePayloadReader
         }
 
         return propertyValue.GetString()!;
+    }
+
+    private static void EnsureOptionalScopeStringProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.String || !ScopeContract.IsValidScopedString(propertyValue.GetString()))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
     }
 
     private static void EnsurePositiveIntegerProperty(JsonElement element, string location, string propertyName)
