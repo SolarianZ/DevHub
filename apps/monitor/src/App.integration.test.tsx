@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DevHubClient } from "@devhub/sdk";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
 import App from "./App";
-import { deleteDefinitionCompat, registerInstanceCompat } from "./lib/sdk-compat";
+import { registerInstanceCompat } from "./lib/sdk-compat";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
@@ -59,6 +59,21 @@ function getInstanceActionLabel(instanceId: string, appId: string, scope?: strin
   return `查看定义：${instanceId}（${appId}，${formatScopeLabel(scope)}）`;
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: listenMock,
 }));
@@ -87,12 +102,13 @@ let originalFetch: typeof globalThis.fetch | undefined;
 beforeAll(async () => {
   originalWebSocket = globalThis.WebSocket;
   originalFetch = globalThis.fetch;
+  const wsModule = await import("ws");
+  const webSocketConstructor = (wsModule.WebSocket ?? wsModule.default ?? wsModule) as typeof globalThis.WebSocket;
   Object.defineProperty(globalThis, "WebSocket", {
     configurable: true,
-    value: undefined,
+    value: webSocketConstructor,
     writable: true,
   });
-
   host = await DevHubHostFixture.start();
   await host.writeDefinition({
     appId: PRIMARY_APP_ID,
@@ -155,9 +171,8 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await deleteDefinitionCompat(setupClient, {
-      appId: MISSING_APP_ID,
-      scope: "",
+    await fs.rm(join(getHost().definitionsDirectory, `${MISSING_APP_ID}--global.json`), {
+      force: true,
     });
   } finally {
     await setupClient.dispose();
@@ -468,6 +483,116 @@ describe("Monitor App real-host integration", () => {
       restoreFetch();
     }
   }, 120_000);
+
+  it("sends raw RPC requests in the test workspace, renders replies, and discards late replies after cancellation", async () => {
+    const connection = await createConnection(getHost());
+    const delayedRequest = createDeferred<{
+      body: string;
+      headers: Headers;
+      delegatedFetch: typeof fetch;
+    }>();
+    const delayedResponse = createDeferred<Response>();
+    let delayNextCancelRequest = false;
+    const restoreFetch = installBrowserStyleRpcFetch(
+      connection.rpcEndpoint,
+      "tauri://monitor-integration",
+      async ({ delegatedFetch, requestBody, requestHeaders }) => {
+        if (!delayNextCancelRequest || !requestBody.includes("\"id\":\"rpc-cancel-late\"")) {
+          return null;
+        }
+
+        delayNextCancelRequest = false;
+        delayedRequest.resolve({
+          body: requestBody,
+          headers: new Headers(requestHeaders),
+          delegatedFetch,
+        });
+
+        return delayedResponse.promise;
+      },
+    );
+
+    try {
+      render(<App />);
+
+      await screen.findByRole("heading", { name: "主页" }, { timeout: 15_000 });
+
+      const user = userEvent.setup();
+      await openTestWorkspace(user);
+
+      const requestInput = await findRpcTestRequestInput();
+      await replaceRpcTestRequest(user, requestInput, JSON.stringify({
+        jsonrpc: "2.0",
+        id: "rpc-success",
+        method: "hub.ping",
+        params: {
+          echo: {
+            source: "monitor-integration",
+          },
+        },
+      }, null, 2));
+      await user.click(screen.getByRole("button", { name: "校验" }));
+      await screen.findByText("当前请求文本已通过校验。", {}, { timeout: 15_000 });
+      await user.click(screen.getByRole("button", { name: "发送请求" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("收到回复")).toBeTruthy();
+        expect(getRpcTestResultText()).toContain("\"serverTimeUtc\"");
+      }, { timeout: 15_000 });
+
+      await replaceRpcTestRequest(user, requestInput, JSON.stringify({
+        jsonrpc: "2.0",
+        id: "rpc-error",
+        method: "hub.unknown",
+        params: {},
+      }, null, 2));
+      await user.click(screen.getByRole("button", { name: "校验" }));
+      await screen.findByText("当前请求文本已通过校验。", {}, { timeout: 15_000 });
+      await user.click(screen.getByRole("button", { name: "发送请求" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("收到回复")).toBeTruthy();
+        expect(getRpcTestResultText()).toContain("\"error\"");
+        expect(getRpcTestResultText()).toContain("\"code\":-32601");
+      }, { timeout: 15_000 });
+
+      await replaceRpcTestRequest(user, requestInput, JSON.stringify({
+        jsonrpc: "2.0",
+        id: "rpc-cancel-late",
+        method: "hub.ping",
+        params: {},
+      }, null, 2));
+      await user.click(screen.getByRole("button", { name: "校验" }));
+      await screen.findByText("当前请求文本已通过校验。", {}, { timeout: 15_000 });
+      delayNextCancelRequest = true;
+      await user.click(screen.getByRole("button", { name: "发送请求" }));
+
+      await screen.findByText("等待 Host 回复：hub.ping", {}, { timeout: 15_000 });
+      const capturedRequest = await delayedRequest.promise;
+
+      await user.click(screen.getByRole("button", { name: "取消等待" }));
+      await screen.findByText("已取消等待当前请求，后续迟到回复将被丢弃。", {}, { timeout: 15_000 });
+
+      const lateResponse = await performBrowserStyleRpcPost(
+        capturedRequest.delegatedFetch,
+        connection.rpcEndpoint,
+        "tauri://monitor-integration",
+        capturedRequest.headers,
+        capturedRequest.body,
+      );
+      await act(async () => {
+        delayedResponse.resolve(lateResponse);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("已取消")).toBeTruthy();
+      }, { timeout: 15_000 });
+      expect(getRpcTestResultText()).toBe("当前没有可展示的响应。");
+    } finally {
+      restoreFetch();
+    }
+  }, 120_000);
 });
 
 function getInventorySection(title: "App 实例" | "App 定义"): HTMLElement {
@@ -521,6 +646,40 @@ async function findDefinitionInput(label: "App ID" | "scope" | "显示名称" | 
     throw new Error(`Field ${label} is not an input control.`);
   }
   return field;
+}
+
+async function openTestWorkspace(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "测试" }));
+  await screen.findByRole("heading", { name: "测试" }, { timeout: 15_000 });
+}
+
+async function findRpcTestRequestInput(): Promise<HTMLTextAreaElement> {
+  const input = await screen.findByRole("textbox", { name: "JSON-RPC 请求文本" }, { timeout: 15_000 });
+  if (!(input instanceof HTMLTextAreaElement)) {
+    throw new Error("RPC 测试输入框不是 textarea。");
+  }
+
+  return input;
+}
+
+async function replaceRpcTestRequest(
+  user: ReturnType<typeof userEvent.setup>,
+  input: HTMLTextAreaElement,
+  value: string,
+) {
+  await user.click(input);
+  fireEvent.input(input, {
+    target: {
+      value,
+    },
+  });
+  await waitFor(() => {
+    expect(input.value).toBe(value);
+  }, { timeout: 15_000 });
+}
+
+function getRpcTestResultText(): string {
+  return document.getElementById("rpc-test-result")?.textContent ?? "";
 }
 
 async function createConnection(activeHost: DevHubHostFixture): Promise<MonitorRuntimeConnectionInfo> {
@@ -620,7 +779,15 @@ function createSdkRuntimeResolver(connection: MonitorRuntimeConnectionInfo) {
   };
 }
 
-function installBrowserStyleRpcFetch(rpcEndpoint: string, origin: string): () => void {
+function installBrowserStyleRpcFetch(
+  rpcEndpoint: string,
+  origin: string,
+  overridePostResponse?: (context: {
+    delegatedFetch: typeof fetch;
+    requestBody: string;
+    requestHeaders: Headers;
+  }) => Promise<Response | null> | Response | null,
+): () => void {
   if (!globalThis.fetch) {
     throw new Error("global fetch is unavailable.");
   }
@@ -632,47 +799,85 @@ function installBrowserStyleRpcFetch(rpcEndpoint: string, origin: string): () =>
 
     if (requestUrl === rpcEndpoint && requestMethod === "POST") {
       const requestHeaders = new Headers(resolveRequestHeaders(input, init));
-      const requestedHeaderNames = Array.from(requestHeaders.keys())
-        .filter((name) => name.toLowerCase() !== "origin")
-        .sort((left, right) => left.localeCompare(right));
-
-      const preflightResponse = await delegatedFetch(rpcEndpoint, {
-        method: "OPTIONS",
-        headers: {
-          Origin: origin,
-          "Access-Control-Request-Method": "POST",
-          "Access-Control-Request-Headers": requestedHeaderNames.join(", "),
-        },
-      });
-
-      expect(preflightResponse.status).toBe(204);
-      expect(preflightResponse.headers.get("access-control-allow-origin")).toBe(origin);
-      expect((preflightResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
-      expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("POST");
-      expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("OPTIONS");
-
-      const allowHeaders = (preflightResponse.headers.get("access-control-allow-headers") ?? "").toLowerCase();
-      for (const headerName of requestedHeaderNames) {
-        expect(allowHeaders).toContain(headerName.toLowerCase());
+      const requestBody = resolveRequestBody(input, init);
+      const overrideResponse = overridePostResponse
+        ? await overridePostResponse({
+          delegatedFetch,
+          requestBody,
+          requestHeaders,
+        })
+        : null;
+      if (overrideResponse) {
+        await verifyBrowserStylePreflight(delegatedFetch, rpcEndpoint, origin, requestHeaders);
+        return overrideResponse;
       }
 
-      const postHeaders = new Headers(requestHeaders);
-      postHeaders.set("Origin", origin);
-      const postResponse = await delegatedFetch(rpcEndpoint, {
-        ...init,
-        method: "POST",
-        headers: postHeaders,
-      });
-
-      expect(postResponse.headers.get("access-control-allow-origin")).toBe(origin);
-      expect((postResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
-      return postResponse;
+      return performBrowserStyleRpcPost(
+        delegatedFetch,
+        rpcEndpoint,
+        origin,
+        requestHeaders,
+        requestBody,
+      );
     }
 
     return delegatedFetch(input, init);
   });
 
   return () => fetchMock.mockRestore();
+}
+
+async function verifyBrowserStylePreflight(
+  delegatedFetch: typeof fetch,
+  rpcEndpoint: string,
+  origin: string,
+  requestHeaders: Headers,
+) {
+  const requestedHeaderNames = Array.from(requestHeaders.keys())
+    .filter((name) => name.toLowerCase() !== "origin")
+    .sort((left, right) => left.localeCompare(right));
+
+  const preflightResponse = await delegatedFetch(rpcEndpoint, {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": requestedHeaderNames.join(", "),
+    },
+  });
+
+  expect(preflightResponse.status).toBe(204);
+  expect(preflightResponse.headers.get("access-control-allow-origin")).toBe(origin);
+  expect((preflightResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
+  expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("POST");
+  expect((preflightResponse.headers.get("access-control-allow-methods") ?? "").toUpperCase()).toContain("OPTIONS");
+
+  const allowHeaders = (preflightResponse.headers.get("access-control-allow-headers") ?? "").toLowerCase();
+  for (const headerName of requestedHeaderNames) {
+    expect(allowHeaders).toContain(headerName.toLowerCase());
+  }
+}
+
+async function performBrowserStyleRpcPost(
+  delegatedFetch: typeof fetch,
+  rpcEndpoint: string,
+  origin: string,
+  requestHeaders: Headers,
+  requestBody: string,
+): Promise<Response> {
+  await verifyBrowserStylePreflight(delegatedFetch, rpcEndpoint, origin, requestHeaders);
+
+  const postHeaders = new Headers(requestHeaders);
+  postHeaders.set("Origin", origin);
+  const postResponse = await delegatedFetch(rpcEndpoint, {
+    method: "POST",
+    headers: postHeaders,
+    body: requestBody,
+  });
+
+  expect(postResponse.headers.get("access-control-allow-origin")).toBe(origin);
+  expect((postResponse.headers.get("vary") ?? "").toLowerCase()).toContain("origin");
+  return postResponse;
 }
 
 function resolveRequestUrl(input: RequestInfo | URL): string {
@@ -709,4 +914,16 @@ function resolveRequestHeaders(input: RequestInfo | URL, init?: RequestInit): He
   }
 
   return undefined;
+}
+
+function resolveRequestBody(input: RequestInfo | URL, init?: RequestInit): string {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    throw new Error("Request body extraction is not supported in this test path.");
+  }
+
+  return "";
 }

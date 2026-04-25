@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   APP_DEFINITION_UPSERTED,
@@ -257,6 +257,52 @@ function createConnectionError(kind: "transport" | "timeout" | "http_status" | "
   return error;
 }
 
+function replaceGlobalFetch(
+  implementation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+): () => void {
+  const originalFetch = globalThis.fetch;
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: implementation,
+  });
+
+  return () => {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: originalFetch,
+    });
+  };
+}
+
+async function openTestWorkspace(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "测试" }));
+  await screen.findByRole("heading", { name: "测试" });
+}
+
+async function findRpcTestRequestInput(): Promise<HTMLTextAreaElement> {
+  const input = await screen.findByRole("textbox", { name: "JSON-RPC 请求文本" });
+  if (!(input instanceof HTMLTextAreaElement)) {
+    throw new Error("RPC 测试输入框不是 textarea。");
+  }
+
+  return input;
+}
+
+async function replaceRpcTestRequest(
+  user: ReturnType<typeof userEvent.setup>,
+  input: HTMLTextAreaElement,
+  value: string,
+) {
+  await user.click(input);
+  fireEvent.change(input, {
+    target: {
+      value,
+    },
+  });
+}
+
 async function respondToConfirmDialog(
   user: ReturnType<typeof userEvent.setup>,
   action: "confirm" | "cancel",
@@ -416,6 +462,63 @@ describe("Monitor App", () => {
         includeOffline: true,
       });
     });
+  });
+
+  it("shows the test workspace between home and help, validates without sending, and revalidates before dispatch", async () => {
+    const hostClient = {
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn().mockResolvedValue([createInstance()]),
+      getDefinition: vi.fn(),
+      validateDefinition: vi.fn(),
+      upsertDefinition: vi.fn(),
+      deleteDefinition: vi.fn(),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const eventsClient = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn().mockResolvedValue("sub-1"),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+    const restoreFetch = replaceGlobalFetch(fetchMock);
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    try {
+      render(<App />);
+
+      await screen.findByRole("heading", { name: "主页" });
+      const sidebarButtons = within(screen.getByRole("navigation", { name: "Monitor 工作区" }))
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"));
+      expect(sidebarButtons).toEqual(["主页", "测试", "帮助", "设置"]);
+
+      const user = userEvent.setup();
+      await openTestWorkspace(user);
+
+      const input = await findRpcTestRequestInput();
+      await replaceRpcTestRequest(user, input, JSON.stringify({
+        jsonrpc: "2.0",
+        id: "validate-only",
+        method: "hub.ping",
+        params: {},
+      }, null, 2));
+      await user.click(screen.getByRole("button", { name: "校验" }));
+
+      await screen.findByText("当前请求文本已通过校验。");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await replaceRpcTestRequest(user, input, "{\"jsonrpc\":\"2.0\"");
+      await user.click(screen.getByRole("button", { name: "发送请求" }));
+
+      await screen.findByText("请求文本不是合法 JSON。");
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      restoreFetch();
+    }
   });
 
   it("renders shared inventory metadata rows with tooltip titles and missing-definition fallback", async () => {

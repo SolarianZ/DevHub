@@ -17,11 +17,39 @@ import type {
   MonitorRuntimeConnectionInfo,
   MonitorSettings,
 } from "./models";
-export type MonitorWorkspace = "home" | "help" | "settings" | "definition";
+export type MonitorWorkspace = "home" | "test" | "help" | "settings" | "definition";
 export type SidebarWorkspace = Exclude<MonitorWorkspace, "definition">;
 export type HomeWorkspaceMode = "discovery" | "status";
 export type HostSessionStatus = "idle" | "connecting" | "connected" | "recovering";
 export type DefinitionWorkspaceMode = "view" | "create" | "edit";
+export type RpcTestRequestStatus =
+  | "idle"
+  | "validation_failed"
+  | "waiting"
+  | "received"
+  | "request_failed"
+  | "cancelled";
+
+export interface RpcTestValidationFeedback {
+  kind: "success" | "error";
+  message: string;
+}
+
+export interface RpcTestWorkspaceViewModel {
+  available: boolean;
+  rpcEndpoint: string | null;
+  draft: string;
+  draftPlaceholder: string;
+  validationFeedback: RpcTestValidationFeedback | null;
+  requestStatus: RpcTestRequestStatus;
+  requestStatusLabel: string;
+  requestStatusDetail: string;
+  requestError: string | null;
+  resultText: string | null;
+  canValidate: boolean;
+  canSend: boolean;
+  canCancel: boolean;
+}
 
 export interface DefinitionWorkspaceState {
   mode: DefinitionWorkspaceMode;
@@ -54,6 +82,25 @@ export function getHomeWorkspaceMode(
 
 export function getSidebarWorkspace(workspace: MonitorWorkspace): SidebarWorkspace {
   return workspace === "definition" ? "home" : workspace;
+}
+
+export function getRpcTestStatusLabel(status: RpcTestRequestStatus): string {
+  switch (status) {
+    case "idle":
+      return "尚未发送";
+    case "validation_failed":
+      return "校验失败";
+    case "waiting":
+      return "等待回复";
+    case "received":
+      return "收到回复";
+    case "request_failed":
+      return "请求失败";
+    case "cancelled":
+      return "已取消";
+    default:
+      return "未知状态";
+  }
 }
 
 export function normalizeOptionalInput(value?: string | null): string | null {

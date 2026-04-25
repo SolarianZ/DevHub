@@ -13,6 +13,7 @@ import {
   type HomeWorkspaceMode,
   type HostSessionStatus,
   type MonitorWorkspace,
+  type RpcTestWorkspaceViewModel,
   type SettingsFieldErrors,
   type SidebarWorkspace,
   createDefinitionIdentity,
@@ -38,6 +39,7 @@ interface AppShellProps {
   definitions: AppDefinition[];
   instances: AppInstance[];
   definitionWorkspace: DefinitionWorkspaceState | null;
+  rpcTestWorkspace: RpcTestWorkspaceViewModel;
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onLaunchHost: () => void;
@@ -52,6 +54,10 @@ interface AppShellProps {
   onAddDefinition: () => void;
   onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
+  onChangeRpcTestDraft: (value: string) => void;
+  onValidateRpcTestRequest: () => void;
+  onSendRpcTestRequest: () => void;
+  onCancelRpcTestRequest: () => void;
   onChangeDefinitionField: (field: keyof DefinitionFormState, value: string | boolean) => void;
   onCloseDefinitionWorkspace: () => void;
   onDeleteDefinition: () => void;
@@ -90,6 +96,7 @@ export function AppShell(props: AppShellProps) {
     definitions,
     instances,
     definitionWorkspace,
+    rpcTestWorkspace,
     onNavigateWorkspace,
     onOpenLogDirectory,
     onLaunchHost,
@@ -101,6 +108,10 @@ export function AppShell(props: AppShellProps) {
     onAddDefinition,
     onEditDefinition,
     onViewInstanceDefinition,
+    onChangeRpcTestDraft,
+    onValidateRpcTestRequest,
+    onSendRpcTestRequest,
+    onCancelRpcTestRequest,
     onChangeDefinitionField,
     onCloseDefinitionWorkspace,
     onDeleteDefinition,
@@ -164,6 +175,16 @@ export function AppShell(props: AppShellProps) {
             />
           ) : null}
 
+          {activeWorkspace === "test" ? (
+            <TestWorkspace
+              workspace={rpcTestWorkspace}
+              onCancel={onCancelRpcTestRequest}
+              onChangeDraft={onChangeRpcTestDraft}
+              onSend={onSendRpcTestRequest}
+              onValidate={onValidateRpcTestRequest}
+            />
+          ) : null}
+
           {activeWorkspace === "settings" ? (
             <SettingsWorkspace
               busy={settingsBusy}
@@ -219,6 +240,13 @@ function MonitorSidebar(props: {
           icon={<HomeIcon />}
           label="主页"
           onClick={() => onNavigate("home")}
+        />
+        <SidebarButton
+          active={activeWorkspace === "test"}
+          collapsed={collapsed}
+          icon={<TestIcon />}
+          label="测试"
+          onClick={() => onNavigate("test")}
         />
         <SidebarButton
           active={activeWorkspace === "help"}
@@ -615,6 +643,115 @@ function HelpWorkspace(props: {
           <label className="form-label">版本</label>
           <div className="version-text">{versionText}</div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TestWorkspace(props: {
+  workspace: RpcTestWorkspaceViewModel;
+  onChangeDraft: (value: string) => void;
+  onValidate: () => void;
+  onSend: () => void;
+  onCancel: () => void;
+}) {
+  const { workspace, onChangeDraft, onValidate, onSend, onCancel } = props;
+
+  return (
+    <section className="workspace-view test-workspace">
+      <h1 className="view-title">测试</h1>
+
+      <div className="support-group">
+        <div className="form-group">
+          <label className="form-label" htmlFor="rpc-test-endpoint">
+            RPC 地址
+          </label>
+          <div id="rpc-test-endpoint" className="path-box">
+            {workspace.rpcEndpoint ?? "未连接"}
+          </div>
+        </div>
+
+        {!workspace.available ? (
+          <div className="empty-state" role="status">
+            当前没有可用 Host 连接，发送请求前请等待主页恢复连接状态。
+          </div>
+        ) : null}
+
+        <section className="test-panel">
+          <label className="field">
+            <span>JSON-RPC 请求文本</span>
+            <textarea
+              className="test-request-text"
+              value={workspace.draft}
+              placeholder={workspace.draftPlaceholder}
+              spellCheck={false}
+              onChange={(event) => onChangeDraft(event.target.value)}
+              disabled={workspace.requestStatus === "waiting"}
+            />
+          </label>
+
+          <div className="test-toolbar">
+            <div className="button-row test-toolbar-actions">
+              <button type="button" onClick={onValidate} disabled={!workspace.canValidate}>
+                校验
+              </button>
+              <button type="button" onClick={onSend} disabled={!workspace.canSend}>
+                发送请求
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={onCancel}
+                disabled={!workspace.canCancel}
+              >
+                取消等待
+              </button>
+            </div>
+
+            <span className={`test-status-pill status-${workspace.requestStatus}`}>
+              {workspace.requestStatusLabel}
+            </span>
+          </div>
+
+          {workspace.validationFeedback ? (
+            <div
+              className={`feedback-banner ${
+                workspace.validationFeedback.kind === "success"
+                  ? "feedback-success"
+                  : "feedback-error"
+              }`}
+              role={workspace.validationFeedback.kind === "success" ? "status" : "alert"}
+            >
+              {workspace.validationFeedback.message}
+            </div>
+          ) : null}
+
+          {workspace.requestError ? (
+            <div className="inline-error" role="alert">
+              {workspace.requestError}
+            </div>
+          ) : null}
+
+          <div className="test-status-grid">
+            <div className="form-group">
+              <label className="form-label" htmlFor="rpc-test-status">
+                请求状态
+              </label>
+              <div id="rpc-test-status" className="path-box">
+                {workspace.requestStatusDetail}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="rpc-test-result">
+                结果文本
+              </label>
+              <pre id="rpc-test-result" className="test-result-box">
+                {workspace.resultText ?? "当前没有可展示的响应。"}
+              </pre>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   );
@@ -1020,6 +1157,16 @@ function HomeIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
+function TestIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 3h6" />
+      <path d="M10 3v5.2a3 3 0 0 1-.63 1.84L6.7 13.5A4.5 4.5 0 0 0 10.2 21h3.6a4.5 4.5 0 0 0 3.5-7.5l-2.67-3.46A3 3 0 0 1 14 8.2V3" />
+      <path d="M8 15h8" />
     </svg>
   );
 }

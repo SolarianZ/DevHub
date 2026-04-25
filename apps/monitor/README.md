@@ -36,6 +36,10 @@
 
 仓库中的独立 `monitor.yml` workflow 会以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行上述验证，确保 Monitor 与当前分支的 JS SDK 源码保持一致。未设置环境变量时，本地命令仍默认使用 release SDK 包。
 
+对齐该 workflow 的本地验收入口：
+
+- `DEVHUB_MONITOR_SDK_SOURCE=local-src npm run verify`
+
 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 的验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该模式不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
 
 ## SDK 来源
@@ -47,9 +51,17 @@
 
 ## 目录说明
 
-- `src/`：前端 WebView 工程；`App.tsx` 负责 `主页 / 帮助 / 设置 / Definition` 多工作区状态编排，bootstrap / Host 会话 / Definition 编辑分别落在独立 hooks，壳层通过侧边栏驱动切换。
+- `src/`：前端 WebView 工程；`App.tsx` 负责 `主页 / 测试 / 帮助 / 设置 / Definition` 多工作区状态编排，bootstrap / Host 会话 / 测试页状态 / Definition 编辑分别落在独立 hooks，壳层通过侧边栏驱动切换。
 - `src-tauri/`：Rust 原生后端；Tauri command 只做参数校验与转发，设置、快照、discovery、Host 启动、日志写入与日志目录打开能力由独立服务协作。
 - `@devhub/sdk`：前端 Host 通信依赖；默认来源是 `package.json` 中声明的 GitHub Release tarball，本地联调时可显式切到 `local-src`。
+
+## 工作区概览
+
+- `主页`：展示 Host 搜索状态、运行态摘要、App Definition 与 App 实例库存。
+- `测试`：显示当前 Host 的 RPC 地址，支持录入原始 JSON-RPC 文本、执行本地校验、发送请求、取消等待，并展示 Host 返回的原始响应文本；没有可用 Host 连接时仅展示不可用提示并禁用发送。
+- `帮助`：展示版本信息、日志目录与运行时路径辅助信息。
+- `设置`：管理数据目录、Host 可执行文件路径与平台相关设置。
+- `Definition`：承载新增、编辑、只读查看和缺失定义恢复等 Definition 工作流。
 
 ## 运行方式
 

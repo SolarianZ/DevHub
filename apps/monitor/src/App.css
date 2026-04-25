@@ -598,6 +598,105 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   gap: 24px;
 }
 
+.test-workspace .support-group {
+  gap: 20px;
+}
+
+.test-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.test-request-text {
+  min-height: 280px;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  line-height: 1.6;
+}
+
+.test-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.test-toolbar-actions {
+  justify-content: flex-start;
+}
+
+.test-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.test-status-pill.status-validation_failed,
+.test-status-pill.status-request_failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.test-status-pill.status-cancelled {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.test-status-pill.status-received {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.feedback-banner {
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.feedback-success {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  color: #027a48;
+}
+
+.feedback-error {
+  background: var(--danger-bg);
+  border: 1px solid #fecdca;
+  color: var(--danger);
+}
+
+.test-status-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.test-result-box {
+  min-height: 180px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-main);
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
 .form-group {
   display: grid;
   gap: 8px;
@@ -825,6 +924,7 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   .status-actions,
   .definition-actions,
   .button-row,
+  .test-toolbar,
   .confirm-dialog-actions,
   .form-section-header,
   .form-value-row,
@@ -835,6 +935,10 @@ button:not(.sidebar-toggle):not(.sidebar-button):not(.section-trigger):hover:not
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .test-status-grid {
     grid-template-columns: 1fr;
   }
 
