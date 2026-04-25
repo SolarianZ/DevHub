@@ -57,16 +57,54 @@ def test_ping_and_apps_flow_should_succeed() -> None:
             _instance_password("http-flow-inst-1"),
         )
         assert registered.instance_id == "http-flow-inst-1"
+        instance_session_token = registered.instance_session_token
+        assert instance_session_token is not None
 
         instances = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert len(instances) == 1
 
-        last_seen_utc = client.heartbeat("http-flow-inst-1")
+        last_seen_utc = client.heartbeat("http-flow-inst-1", instance_session_token)
         assert last_seen_utc is not None
 
-        client.unregister_instance("http-flow-inst-1", _instance_password("http-flow-inst-1"))
+        client.unregister_instance("http-flow-inst-1", instance_session_token)
         instances_after_unregister = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert instances_after_unregister == []
+
+
+def test_instance_session_token_mismatch_should_surface_forbidden_reason() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition(
+            {
+                "appId": "http.token.app",
+                "displayName": "HTTP Token App",
+            }
+        )
+
+        client = host.create_client("http-token-client")
+        registered = client.register_instance(
+            AppInstanceRegistration(
+                instance_id="http-token-inst-1",
+                app_id="http.token.app",
+                pid=99998,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            _instance_password("http-token-inst-1"),
+        )
+
+        with pytest.raises(DevHubRpcException) as heartbeat_error:
+            client.heartbeat("http-token-inst-1", "wrong-token")
+        assert heartbeat_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+        assert heartbeat_error.value.reason == "instance_session_token_mismatch"
+
+        with pytest.raises(DevHubRpcException) as unregister_error:
+            client.unregister_instance("http-token-inst-1", "wrong-token")
+        assert unregister_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+        assert unregister_error.value.reason == "instance_session_token_mismatch"
+
+        instance_session_token = registered.instance_session_token
+        assert instance_session_token is not None
+        client.unregister_instance("http-token-inst-1", instance_session_token)
 
 
 def test_definition_management_should_round_trip_and_surface_host_validation() -> None:

@@ -509,6 +509,7 @@ def run_vector(
                 execution_name=adapter.name,
             )
             adapter_result = execute_adapter_vector(adapter, execution, host_context)
+            maybe_track_registered_instance_session_token(execution, adapter_result)
             expected = (
                 execution.resolved_vector["expectedDiscovery"]
                 if is_discovery
@@ -874,6 +875,45 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
         return comparable
 
     return result.get("actual")
+
+
+def maybe_track_registered_instance_session_token(execution: VectorExecutionContext, result: dict[str, Any]) -> None:
+    """当主请求成功注册实例时，把最新 instanceSessionToken 同步到 cleanup ledger。"""
+    request = execution.resolved_vector.get("request")
+    if not isinstance(request, dict) or request.get("method") != "hub.apps.registerInstance":
+        return
+
+    params = request.get("params")
+    if not isinstance(params, dict):
+        return
+
+    instance = params.get("instance")
+    if not isinstance(instance, dict):
+        return
+
+    instance_id = instance.get("instanceId")
+    if not isinstance(instance_id, str) or not instance_id:
+        return
+
+    actual = result.get("actual")
+    if not isinstance(actual, dict):
+        return
+
+    response_result = actual.get("result")
+    if not isinstance(response_result, dict) or response_result.get("ok") is not True:
+        return
+
+    instance_session_token = response_result.get("instanceSessionToken")
+    if not isinstance(instance_session_token, str) or not instance_session_token:
+        return
+
+    execution.cleanup_ledger.instance_session_tokens[instance_id] = instance_session_token
+    for index, (registered_instance_id, _) in enumerate(execution.cleanup_ledger.registered_instances):
+        if registered_instance_id == instance_id:
+            execution.cleanup_ledger.registered_instances[index] = (instance_id, instance_session_token)
+            break
+    else:
+        execution.cleanup_ledger.registered_instances.append((instance_id, instance_session_token))
 
 
 def validate_adapter_result_contract(vector: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:

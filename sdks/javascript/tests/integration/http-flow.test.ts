@@ -119,6 +119,7 @@ it("HTTP 链路应可完成基础流程", async () => {
   }, INSTANCE_PASSWORD);
 
   expect(registered.instanceId).toBe("http-flow-inst-1");
+  expect(registered.instanceSessionToken).toEqual(expect.any(String));
 
   const instances = await client.listInstances({
     appId: "http.flow.app",
@@ -126,16 +127,49 @@ it("HTTP 链路应可完成基础流程", async () => {
   });
   expect(instances.length).toBe(1);
 
-  const lastSeenUtc = await client.heartbeat("http-flow-inst-1");
+  const lastSeenUtc = await client.heartbeat("http-flow-inst-1", registered.instanceSessionToken);
   expect(lastSeenUtc.getTime()).toBeGreaterThan(0);
 
-  await client.unregisterInstance("http-flow-inst-1", INSTANCE_PASSWORD);
+  await client.unregisterInstance("http-flow-inst-1", registered.instanceSessionToken);
   const instancesAfter = await client.listInstances({
     appId: "http.flow.app",
     scope: ""
   });
   expect(instancesAfter.length).toBe(0);
 
+  await client.dispose();
+});
+
+it("heartbeat / unregisterInstance 使用错误 instanceSessionToken 时应映射 forbidden", async () => {
+  const client = await DevHubClient.fromRuntime({
+    clientId: "http-flow-mismatch-client",
+    dataDir: getHost().dataDirectory
+  });
+
+  const registered = await client.registerInstance({
+    instanceId: "http-flow-mismatch-inst-1",
+    appId: "http.flow.app",
+    scope: "",
+    pid: process.pid,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, INSTANCE_PASSWORD);
+
+  const mismatchedToken = `wrong-${registered.instanceSessionToken}`;
+
+  await expect(client.heartbeat("http-flow-mismatch-inst-1", mismatchedToken)).rejects.toMatchObject({
+    code: DevHubRpcErrorCode.Forbidden,
+    reason: "instance_session_token_mismatch"
+  });
+
+  await expect(client.unregisterInstance("http-flow-mismatch-inst-1", mismatchedToken)).rejects.toMatchObject({
+    code: DevHubRpcErrorCode.Forbidden,
+    reason: "instance_session_token_mismatch"
+  });
+
+  await client.unregisterInstance("http-flow-mismatch-inst-1", registered.instanceSessionToken);
   await client.dispose();
 });
 
@@ -185,7 +219,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(alreadyRunning.pid).toBe(registered.pid);
   expect(alreadyRunning.launchId).toMatch(/^launch-/);
 
-  await client.unregisterInstance("http-launch-running-inst-1", INSTANCE_PASSWORD);
+  await client.unregisterInstance("http-launch-running-inst-1", registered.instanceSessionToken);
   await client.dispose();
 });
 

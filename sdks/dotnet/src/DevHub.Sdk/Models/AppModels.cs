@@ -167,6 +167,7 @@ public sealed class DefinitionValidationResult
 public sealed class AppInstance
 {
     private string _scope = string.Empty;
+    private string? _instanceSessionToken;
 
     /// <summary>
     /// 实例标识。
@@ -222,6 +223,24 @@ public sealed class AppInstance
     /// </summary>
     [JsonPropertyName("meta")]
     public JsonElement? Meta { get; set; }
+
+    /// <summary>
+    /// 实例会话令牌。仅 <see cref="DevHubClient.RegisterInstanceAsync(AppInstanceRegistration, string, CancellationToken)"/> 的返回值会填充该字段。
+    /// </summary>
+    [JsonPropertyName("instanceSessionToken")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InstanceSessionToken
+    {
+        get => _instanceSessionToken;
+        set
+        {
+            _instanceSessionToken = value is null
+                ? null
+                : string.IsNullOrWhiteSpace(value)
+                    ? throw new ArgumentException("InstanceSessionToken 不能为空白字符串。", nameof(InstanceSessionToken))
+                    : value;
+        }
+    }
 }
 
 /// <summary>

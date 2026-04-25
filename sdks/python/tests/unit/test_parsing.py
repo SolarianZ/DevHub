@@ -15,6 +15,7 @@ from devhub_sdk._parsing import (
     parse_launch_result,
     parse_notify_result,
     parse_ping_result,
+    parse_register_instance_result,
     parse_request_result,
 )
 
@@ -299,6 +300,28 @@ def test_parse_app_instance_when_password_present_should_raise() -> None:
 
     with pytest.raises(RuntimeError, match=r"password"):
         parse_app_instance(payload, path="hub.apps.registerInstance.result.instance")
+
+
+def test_parse_app_instance_when_instance_session_token_present_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["instanceSessionToken"] = "token-1"
+
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_app_instance(payload, path="hub.apps.registerInstance.result.instance")
+
+
+def test_parse_register_instance_result_should_attach_instance_session_token() -> None:
+    instance = parse_register_instance_result(
+        {
+            "ok": True,
+            "instance": _app_instance_payload(),
+            "instanceSessionToken": "token-1",
+        },
+        path="hub.apps.registerInstance.result",
+    )
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token == "token-1"
 
 
 def test_parse_app_instance_when_scope_is_null_should_raise() -> None:

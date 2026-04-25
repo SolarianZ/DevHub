@@ -248,9 +248,9 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
-    def test_request_client_cancel_then_late_respond_expired(self):
-        """REQ-004: caller 中断后 request 收口且迟到 respond 被拒绝"""
-        result = TestResult("REQ-004 caller 中断后 request 收口")
+    def test_request_client_cancel_then_respond_can_still_succeed(self):
+        """REQ-004: caller 中断后 request 收口，但 invocation 仍可在预算内完成"""
+        result = TestResult("REQ-004 caller 中断后 invocation 仍可完成")
         definition_path = None
         callee_instance_id = None
 
@@ -347,6 +347,119 @@ class TestInvocationRequest(unittest.TestCase):
                 return result
 
             time.sleep(0.35)
+
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            if not RpcAssertions.expect_success(result, late_respond):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([callee_instance_id])
+            safe_remove(definition_path)
+
+        return result
+
+    def test_request_client_cancel_then_timeout_still_expires(self):
+        """REQ-004-REG: caller 中断后 waitTimeout 仍独立生效"""
+        result = TestResult("REQ-004-REG caller 中断后 waitTimeout 仍生效")
+        definition_path = None
+        callee_instance_id = None
+
+        try:
+            app_id = self._new_app_id("request-cancel-timeout-app")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            callee_instance_id = self._instance_id("request-cancel-timeout")
+            register_response = client.register_instance(
+                instance_id=callee_instance_id,
+                app_id=app_id,
+                scope="",
+                poll=True,
+                respond=True,
+                pid=24004,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            request_payload = {
+                "jsonrpc": "2.0",
+                "id": "request-cancel-timeout",
+                "method": "hub.invoke.request",
+                "params": {
+                    "appId": app_id,
+                    "target": {
+                        "scope": "",
+                        "instanceId": None,
+                    },
+                    "method": "asset.cancel-timeout",
+                    "args": {"x": 3},
+                    "options": {
+                        "ttlMs": 5000,
+                        "waitTimeoutMs": 300,
+                        "queueIfOffline": True,
+                        "autoLaunch": False,
+                    },
+                },
+            }
+
+            request_error_holder = {}
+            poll_holder = {}
+
+            def callee_poll_worker():
+                poll_client = RpcClient(base_url, token)
+                poll_response = poll_client.poll_once(callee_instance_id, max_count=1, wait_ms=1500)
+                poll_holder["poll"] = poll_response
+                if "error" in poll_response:
+                    return
+
+                items = poll_response.get("result", {}).get("items", [])
+                if len(items) == 1:
+                    poll_holder["invocationId"] = items[0].get("invocationId")
+
+            def caller_worker():
+                try:
+                    _, response = client.post_json(request_payload, timeout=0.15)
+                    request_error_holder["response"] = response
+                except Exception as exc:
+                    request_error_holder["error"] = str(exc)
+
+            poll_thread = threading.Thread(target=callee_poll_worker, daemon=True)
+            caller_thread = threading.Thread(target=caller_worker, daemon=True)
+            poll_thread.start()
+            caller_thread.start()
+            caller_thread.join(timeout=2)
+            poll_thread.join(timeout=3)
+
+            if "response" in request_error_holder:
+                result.mark_failure(f"❌ caller 中断场景不应收到同步响应: {request_error_holder['response']}")
+                return result
+
+            if "error" not in request_error_holder:
+                result.mark_failure(f"❌ caller 中断场景未出现超时类异常: {request_error_holder}")
+                return result
+
+            poll_response = poll_holder.get("poll")
+            if not isinstance(poll_response, dict):
+                result.mark_failure(f"❌ callee poll 未返回有效响应: {poll_holder}")
+                return result
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+
+            items = poll_response.get("result", {}).get("items", [])
+            if len(items) != 1:
+                result.mark_failure(f"❌ caller 中断后未稳定拉取到唯一 invocation: {poll_response}")
+                return result
+
+            invocation_id = items[0].get("invocationId")
+            if not invocation_id:
+                result.mark_failure(f"❌ poll 返回缺少 invocationId: {poll_response}")
+                return result
+
+            time.sleep(0.45)
 
             late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
             if not RpcAssertions.expect_error(result, late_respond, -32011, "invocation_expired"):
@@ -784,7 +897,8 @@ class TestInvocationRequest(unittest.TestCase):
             self.test_request_roundtrip_success(),
             self.test_request_timeout_then_late_respond_expired(),
             self.test_request_ttl_expired_should_return_invocation_expired(),
-            self.test_request_client_cancel_then_late_respond_expired(),
+            self.test_request_client_cancel_then_respond_can_still_succeed(),
+            self.test_request_client_cancel_then_timeout_still_expires(),
             self.test_request_callee_error_should_return_invocation_failed(),
             self.test_request_rpc_disabled_should_forbidden(),
             self.test_request_defaults_should_follow_spec_when_options_omitted(),

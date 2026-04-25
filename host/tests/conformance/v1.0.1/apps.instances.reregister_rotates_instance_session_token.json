@@ -1,0 +1,123 @@
+{
+  "id": "apps.instances.reregister_rotates_instance_session_token",
+  "caseId": "CONF-003",
+  "description": "同一 instanceId 以相同 password 再次注册时，hub.apps.registerInstance 必须轮换 instanceSessionToken，并使旧 token 失效。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "password": "rotate-password",
+        "instance": {
+          "instanceId": "apps-instance-reregister-1",
+          "appId": "apps.instance.reregister.app",
+          "scope": "",
+          "pid": 32016,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.heartbeat",
+        "requestId": "apps-instances-reregister-old-token-heartbeat",
+        "params": {
+          "instanceId": "apps-instance-reregister-1",
+          "instanceSessionToken": "${REGISTERED_INSTANCE_SESSION_TOKEN}"
+        },
+        "expectedError": {
+          "code": -32002,
+          "message": "forbidden",
+          "data": {
+            "reason": "instance_session_token_mismatch",
+            "instanceId": "apps-instance-reregister-1"
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.listInstances",
+        "requestId": "apps-instances-reregister-list",
+        "params": {
+          "appId": "apps.instance.reregister.app",
+          "includeOffline": true,
+          "scope": null
+        },
+        "expectedResult": {
+          "ok": true,
+          "instances": [
+            {
+              "instanceId": "apps-instance-reregister-1",
+              "appId": "apps.instance.reregister.app",
+              "scope": "workspace-reregister",
+              "pid": 32017,
+              "invoke": {
+                "poll": true,
+                "respond": true
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000042"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-reregister",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "password": "rotate-password",
+      "instance": {
+        "instanceId": "apps-instance-reregister-1",
+        "appId": "apps.instance.reregister.app",
+        "scope": "workspace-reregister",
+        "pid": 32017,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-reregister",
+    "result": {
+      "ok": true,
+      "instanceSessionToken": "${ANY_NON_EMPTY_STRING}",
+      "instance": {
+        "instanceId": "apps-instance-reregister-1",
+        "appId": "apps.instance.reregister.app",
+        "scope": "workspace-reregister",
+        "pid": 32017,
+        "registeredAtUtc": "${ANY_ISO_UTC}",
+        "lastSeenUtc": "${ANY_ISO_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "success"
+  ]
+}

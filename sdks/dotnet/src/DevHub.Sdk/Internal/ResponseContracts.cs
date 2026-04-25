@@ -35,6 +35,8 @@ internal sealed class RegisterInstanceContract
     public bool Ok { get; set; }
 
     public AppInstance Instance { get; set; } = new();
+
+    public string InstanceSessionToken { get; set; } = string.Empty;
 }
 
 internal sealed class HeartbeatContract

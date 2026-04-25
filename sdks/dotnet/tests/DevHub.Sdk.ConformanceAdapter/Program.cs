@@ -180,7 +180,7 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
     var eventEnumerators = new Dictionary<string, IAsyncEnumerator<DevHubEvent>>(StringComparer.Ordinal);
     var httpClients = new Dictionary<string, DevHubClient>(StringComparer.Ordinal);
     var captures = new Dictionary<string, object?>(StringComparer.Ordinal);
-    var registeredInstances = new List<(string ClientName, string InstanceId, string Password)>();
+    var registeredInstances = new List<(string ClientName, string InstanceId, string InstanceSessionToken)>();
 
     try
     {
@@ -249,18 +249,25 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var instance = BuildAppInstanceRegistration(step.GetProperty("instance"));
                     var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
-                    await client.RegisterInstanceAsync(instance, password);
-                    registeredInstances.Add((clientName, instance.InstanceId, password));
+                    var registered = await client.RegisterInstanceAsync(instance, password);
+                    var instanceSessionToken = registered.InstanceSessionToken
+                        ?? throw new InvalidOperationException($"request.steps[{index}] 注册结果缺少 instanceSessionToken。");
+                    registeredInstances.Add((clientName, registered.InstanceId, instanceSessionToken));
+                    if (step.TryGetProperty("captureAs", out var captureElement))
+                    {
+                        captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] = instanceSessionToken;
+                    }
                     break;
                 }
                 case "unregister_instance":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var clientName = ReadString(step, "client");
+                    var client = RequireValue(httpClients, clientName, index, "http client");
                     var instanceId = Convert.ToString(ResolveCaptureValue(step, captures, index, "instanceId"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].instanceId 不能为空。");
-                    var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
-                        ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
-                    await client.UnregisterInstanceAsync(instanceId, password);
+                    var instanceSessionToken = ResolveInstanceSessionToken(step, captures, registeredInstances, index, clientName, instanceId);
+                    await client.UnregisterInstanceAsync(instanceId, instanceSessionToken);
+                    RemoveRegisteredInstance(registeredInstances, clientName, instanceId);
                     break;
                 }
                 case "validate_definition":
@@ -423,7 +430,7 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
 
             try
             {
-                await client.UnregisterInstanceAsync(registered.InstanceId, registered.Password);
+                await client.UnregisterInstanceAsync(registered.InstanceId, registered.InstanceSessionToken);
             }
             catch
             {
@@ -644,6 +651,51 @@ Dictionary<string, object?> BuildDefinitionIdentityParams(
         ["appId"] = appId,
         ["scope"] = ResolveCaptureValue(step, captures, stepIndex, "scope")
     };
+}
+
+string ResolveInstanceSessionToken(
+    JsonElement step,
+    IReadOnlyDictionary<string, object?> captures,
+    IReadOnlyList<(string ClientName, string InstanceId, string InstanceSessionToken)> registeredInstances,
+    int stepIndex,
+    string clientName,
+    string instanceId)
+{
+    var explicitToken = TryResolveCapturedString(step, captures, stepIndex, "instanceSessionToken")
+        ?? TryResolveCapturedString(step, captures, stepIndex, "password");
+    if (!string.IsNullOrWhiteSpace(explicitToken))
+    {
+        return explicitToken;
+    }
+
+    for (var index = registeredInstances.Count - 1; index >= 0; index--)
+    {
+        var registered = registeredInstances[index];
+        if (string.Equals(registered.ClientName, clientName, StringComparison.Ordinal) &&
+            string.Equals(registered.InstanceId, instanceId, StringComparison.Ordinal))
+        {
+            return registered.InstanceSessionToken;
+        }
+    }
+
+    throw new InvalidOperationException($"request.steps[{stepIndex}].instanceSessionToken 不能为空。");
+}
+
+void RemoveRegisteredInstance(
+    List<(string ClientName, string InstanceId, string InstanceSessionToken)> registeredInstances,
+    string clientName,
+    string instanceId)
+{
+    for (var index = registeredInstances.Count - 1; index >= 0; index--)
+    {
+        var registered = registeredInstances[index];
+        if (string.Equals(registered.ClientName, clientName, StringComparison.Ordinal) &&
+            string.Equals(registered.InstanceId, instanceId, StringComparison.Ordinal))
+        {
+            registeredInstances.RemoveAt(index);
+            return;
+        }
+    }
 }
 
 InvokeRequest BuildInvokeRequest(JsonElement payload)
@@ -931,6 +983,12 @@ object? ResolveCaptureValue(JsonElement step, IReadOnlyDictionary<string, object
     return step.TryGetProperty(fieldName, out var fieldElement)
         ? DeserializeToObject(fieldElement)
         : null;
+}
+
+string? TryResolveCapturedString(JsonElement step, IReadOnlyDictionary<string, object?> captures, int stepIndex, string fieldName)
+{
+    var value = ResolveCaptureValue(step, captures, stepIndex, fieldName);
+    return value is null ? null : Convert.ToString(value);
 }
 
 object? ParseWsPayload(string payload)

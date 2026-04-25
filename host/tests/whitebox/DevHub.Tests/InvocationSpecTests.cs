@@ -86,7 +86,7 @@ public class InvocationSpecTests : IDisposable
         var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
-        var onlinePoll = await PollAsync(handler, "spec-6.3.10-target-instance-online", maxCount: 1, waitMs: 0);
+        var onlinePoll = await PollAsync(handler, appRegistry, "spec-6.3.10-target-instance-online", maxCount: 1, waitMs: 0);
         AssertSuccess(onlinePoll);
         var onlineItems = JsonSerializer.SerializeToElement(onlinePoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(onlineItems);
@@ -122,14 +122,14 @@ public class InvocationSpecTests : IDisposable
         var notifyResult = JsonSerializer.SerializeToElement(notify.Result);
         var invocationId = notifyResult.GetProperty("invocationId").GetString();
 
-        var pollGlobal = await PollAsync(handler, "spec-6.3.10-global", maxCount: 1, waitMs: 100);
+        var pollGlobal = await PollAsync(handler, appRegistry, "spec-6.3.10-global", maxCount: 1, waitMs: 100);
         AssertSuccess(pollGlobal);
         var globalItems = JsonSerializer.SerializeToElement(pollGlobal.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(globalItems);
         Assert.Equal(invocationId, globalItems[0].GetProperty("invocationId").GetString());
         Assert.Equal(60000, globalItems[0].GetProperty("options").GetProperty("ttlMs").GetInt32());
 
-        var pollScoped = await PollAsync(handler, "spec-6.3.10-scoped", maxCount: 1, waitMs: 0);
+        var pollScoped = await PollAsync(handler, appRegistry, "spec-6.3.10-scoped", maxCount: 1, waitMs: 0);
         AssertSuccess(pollScoped);
         var scopedItems = JsonSerializer.SerializeToElement(pollScoped.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(scopedItems);
@@ -183,13 +183,13 @@ public class InvocationSpecTests : IDisposable
             AssertSuccess(notify);
             var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
 
-            var pollGlobal = await PollAsync(handler, "spec-6.3.10-scope-global", maxCount: 1, waitMs: 100);
+            var pollGlobal = await PollAsync(handler, appRegistry, "spec-6.3.10-scope-global", maxCount: 1, waitMs: 100);
             AssertSuccess(pollGlobal);
             var globalItems = JsonSerializer.SerializeToElement(pollGlobal.Result).GetProperty("items").EnumerateArray().ToList();
             Assert.Single(globalItems);
             Assert.Equal(invocationId, globalItems[0].GetProperty("invocationId").GetString());
 
-            var pollScoped = await PollAsync(handler, "spec-6.3.10-scope-scoped", maxCount: 1, waitMs: 0);
+            var pollScoped = await PollAsync(handler, appRegistry, "spec-6.3.10-scope-scoped", maxCount: 1, waitMs: 0);
             AssertSuccess(pollScoped);
             var scopedItems = JsonSerializer.SerializeToElement(pollScoped.Result).GetProperty("items").EnumerateArray().ToList();
             Assert.Empty(scopedItems);
@@ -354,27 +354,23 @@ public class InvocationSpecTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var poll = await PollAsync(handler, onlineInstanceId, maxCount: 1, waitMs: 800);
+        var poll = await PollAsync(handler, appRegistry, onlineInstanceId, maxCount: 1, waitMs: 800);
         AssertSuccess(poll);
         var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(pollItems);
         var invocationId = pollItems[0].GetProperty("invocationId").GetString();
         Assert.Equal(300000, pollItems[0].GetProperty("options").GetProperty("ttlMs").GetInt32());
 
-        var respond = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.11-default-options-online-respond",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
+        var respond = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.11-default-options-online-respond",
+            onlineInstanceId,
+            invocationId!,
+            new
             {
-                instanceId = onlineInstanceId,
-                invocationId,
-                value = new
-                {
-                    ok = true
-                }
-            })
-        }, CancellationToken.None);
+                ok = true
+            });
         AssertSuccess(respond);
 
         var requestResponse = await requestTask;
@@ -437,7 +433,7 @@ public class InvocationSpecTests : IDisposable
         Assert.True(data.TryGetProperty("invocationId", out var invocationId));
         Assert.False(string.IsNullOrWhiteSpace(invocationId.GetString()));
 
-        var observerPoll = await PollAsync(handler, observerInstanceId, maxCount: 1, waitMs: 0);
+        var observerPoll = await PollAsync(handler, appRegistry, observerInstanceId, maxCount: 1, waitMs: 0);
         AssertSuccess(observerPoll);
         var observerItems = JsonSerializer.SerializeToElement(observerPoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(observerItems);
@@ -604,31 +600,27 @@ public class InvocationSpecTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var poll = await PollAsync(handler, instanceId, maxCount: 1, waitMs: 800);
+        var poll = await PollAsync(handler, appRegistry, instanceId, maxCount: 1, waitMs: 800);
         AssertSuccess(poll);
         var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(pollItems);
         var invocationId = pollItems[0].GetProperty("invocationId").GetString();
 
-        var respond = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.11-invocation-failed-respond",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
+        var respond = await RespondErrorAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.11-invocation-failed-respond",
+            instanceId,
+            invocationId!,
+            new
             {
-                instanceId,
-                invocationId,
-                error = new
+                code = 1001,
+                message = "callee_error",
+                data = new
                 {
-                    code = 1001,
-                    message = "callee_error",
-                    data = new
-                    {
-                        reason = "bad_input"
-                    }
+                    reason = "bad_input"
                 }
-            })
-        }, CancellationToken.None);
+            });
         AssertSuccess(respond);
 
         var requestResponse = await requestTask;
@@ -688,28 +680,24 @@ public class InvocationSpecTests : IDisposable
                 continue;
             }
 
-            var pollGlobal = await PollAsync(handler, "spec-6.3.11-global", maxCount: 1, waitMs: 800);
+            var pollGlobal = await PollAsync(handler, appRegistry, "spec-6.3.11-global", maxCount: 1, waitMs: 800);
             AssertSuccess(pollGlobal);
             var globalItems = JsonSerializer.SerializeToElement(pollGlobal.Result).GetProperty("items").EnumerateArray().ToList();
             Assert.Single(globalItems);
             var invocationId = globalItems[0].GetProperty("invocationId").GetString();
 
-            var pollScoped = await PollAsync(handler, "spec-6.3.11-scoped", maxCount: 1, waitMs: 0);
+            var pollScoped = await PollAsync(handler, appRegistry, "spec-6.3.11-scoped", maxCount: 1, waitMs: 0);
             AssertSuccess(pollScoped);
             var scopedItems = JsonSerializer.SerializeToElement(pollScoped.Result).GetProperty("items").EnumerateArray().ToList();
             Assert.Empty(scopedItems);
 
-            var respond = await handler.HandleAsync(new JsonRpcRequest
-            {
-                Id = $"spec-6.3.11-respond-{testCase.Name}",
-                Method = "hub.invoke.respond",
-                Params = JsonSerializer.SerializeToElement(new
-                {
-                    instanceId = "spec-6.3.11-global",
-                    invocationId,
-                    value = new { caseName = testCase.Name }
-                })
-            }, CancellationToken.None);
+            var respond = await RespondValueAsync(
+                handler,
+                appRegistry,
+                $"spec-6.3.11-respond-{testCase.Name}",
+                "spec-6.3.11-global",
+                invocationId!,
+                new { caseName = testCase.Name });
             AssertSuccess(respond);
 
             var requestResponse = await requestTask;
@@ -727,7 +715,13 @@ public class InvocationSpecTests : IDisposable
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
 
-        var response = await PollAsync(handler, "spec-6.3.12-missing-instance", maxCount: 1, waitMs: 0);
+        var response = await PollAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.12-missing-instance",
+            maxCount: 1,
+            waitMs: 0,
+            instanceSessionToken: "missing-instance-token");
 
         AssertError(response, -32010, "instance_not_found");
     }
@@ -743,7 +737,7 @@ public class InvocationSpecTests : IDisposable
         RegisterInstance(appRegistry, "spec-6.3.12-poll-disabled", appId, scope: null, poll: false, respond: true, pid: 7301);
 
         var handler = CreateInvocationHandler(appRegistry);
-        var response = await PollAsync(handler, "spec-6.3.12-poll-disabled", maxCount: 1, waitMs: 0);
+        var response = await PollAsync(handler, appRegistry, "spec-6.3.12-poll-disabled", maxCount: 1, waitMs: 0);
 
         AssertError(response, -32002, "forbidden");
         var data = JsonSerializer.SerializeToElement(response.Error!.Data);
@@ -763,7 +757,7 @@ public class InvocationSpecTests : IDisposable
         var handler = CreateInvocationHandler(appRegistry);
 
         var stopwatch = Stopwatch.StartNew();
-        var response = await PollAsync(handler, "spec-6.3.12-long-poll", maxCount: 1, waitMs: 140);
+        var response = await PollAsync(handler, appRegistry, "spec-6.3.12-long-poll", maxCount: 1, waitMs: 140);
         stopwatch.Stop();
 
         AssertSuccess(response);
@@ -804,7 +798,7 @@ public class InvocationSpecTests : IDisposable
         }, CancellationToken.None);
         AssertSuccess(notify);
 
-        var poll = await PollAsync(handler, instanceId, maxCount: 1, waitMs: 200);
+        var poll = await PollAsync(handler, appRegistry, instanceId, maxCount: 1, waitMs: 200);
         AssertSuccess(poll);
 
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
@@ -827,6 +821,7 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "spec-6.3.13-unknown-instance",
+                instanceSessionToken = "missing-instance-token",
                 invocationId = "invk-missing",
                 value = new { ok = true }
             })
@@ -848,17 +843,13 @@ public class InvocationSpecTests : IDisposable
         RegisterInstance(appRegistry, "spec-6.3.13-respond-disabled", appId, scope: null, poll: true, respond: false, pid: 7401);
 
         var handler = CreateInvocationHandler(appRegistry);
-        var response = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-respond-disabled",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "spec-6.3.13-respond-disabled",
-                invocationId = "invk-missing",
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var response = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.13-respond-disabled",
+            "spec-6.3.13-respond-disabled",
+            "invk-missing",
+            new { ok = true });
 
         AssertError(response, -32002, "forbidden");
         var data = JsonSerializer.SerializeToElement(response.Error!.Data);
@@ -980,49 +971,37 @@ public class InvocationSpecTests : IDisposable
         }, CancellationToken.None);
         AssertSuccess(notify);
 
-        var poll = await PollAsync(handler, holderInstanceId, maxCount: 1, waitMs: 800);
+        var poll = await PollAsync(handler, appRegistry, holderInstanceId, maxCount: 1, waitMs: 800);
         AssertSuccess(poll);
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var invocationId = items[0].GetProperty("invocationId").GetString();
 
-        var nonHolder = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-delivery-conflict-non-holder",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = otherInstanceId,
-                invocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var nonHolder = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.13-delivery-conflict-non-holder",
+            otherInstanceId,
+            invocationId!,
+            new { ok = true });
         AssertError(nonHolder, -32030, "delivery_conflict");
 
-        var first = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-delivery-conflict-first",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = holderInstanceId,
-                invocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var first = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.13-delivery-conflict-first",
+            holderInstanceId,
+            invocationId!,
+            new { ok = true });
         AssertSuccess(first);
 
-        var duplicate = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-delivery-conflict-duplicate",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = holderInstanceId,
-                invocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var duplicate = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.13-delivery-conflict-duplicate",
+            holderInstanceId,
+            invocationId!,
+            new { ok = true });
         AssertError(duplicate, -32030, "delivery_conflict");
     }
 
@@ -1058,7 +1037,7 @@ public class InvocationSpecTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var timeoutPoll = await PollAsync(timeoutHandler, timeoutInstanceId, maxCount: 1, waitMs: 800);
+        var timeoutPoll = await PollAsync(timeoutHandler, timeoutRegistry, timeoutInstanceId, maxCount: 1, waitMs: 800);
         AssertSuccess(timeoutPoll);
         var timeoutItems = JsonSerializer.SerializeToElement(timeoutPoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(timeoutItems);
@@ -1067,17 +1046,13 @@ public class InvocationSpecTests : IDisposable
         var timeoutResponse = await timeoutRequestTask;
         AssertError(timeoutResponse, -32012, "invocation_timeout");
 
-        var lateTimeoutRespond = await timeoutHandler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-timeout-late-respond",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = timeoutInstanceId,
-                invocationId = timeoutInvocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var lateTimeoutRespond = await RespondValueAsync(
+            timeoutHandler,
+            timeoutRegistry,
+            "spec-6.3.13-timeout-late-respond",
+            timeoutInstanceId,
+            timeoutInvocationId!,
+            new { ok = true });
         AssertError(lateTimeoutRespond, -32011, "invocation_expired");
 
         const string expiredAppId = "spec-6.3.13-expired";
@@ -1110,17 +1085,13 @@ public class InvocationSpecTests : IDisposable
         var expiredData = JsonSerializer.SerializeToElement(expiredResponse.Error!.Data);
         var expiredInvocationId = expiredData.GetProperty("invocationId").GetString();
 
-        var lateExpiredRespond = await expiredHandler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-expired-late-respond",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "spec-6.3.13-expired-helper",
-                invocationId = expiredInvocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var lateExpiredRespond = await RespondValueAsync(
+            expiredHandler,
+            expiredRegistry,
+            "spec-6.3.13-expired-late-respond",
+            "spec-6.3.13-expired-helper",
+            expiredInvocationId!,
+            new { ok = true });
 
         AssertError(lateExpiredRespond, -32011, "invocation_expired");
     }
@@ -1157,23 +1128,19 @@ public class InvocationSpecTests : IDisposable
         }, CancellationToken.None);
         AssertSuccess(notify);
 
-        var poll = await PollAsync(handler, instanceId, maxCount: 1, waitMs: 800);
+        var poll = await PollAsync(handler, appRegistry, instanceId, maxCount: 1, waitMs: 800);
         AssertSuccess(poll);
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var invocationId = items[0].GetProperty("invocationId").GetString();
 
-        var respond = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "spec-6.3.13-last-seen-respond",
-            Method = "hub.invoke.respond",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId,
-                invocationId,
-                value = new { ok = true }
-            })
-        }, CancellationToken.None);
+        var respond = await RespondValueAsync(
+            handler,
+            appRegistry,
+            "spec-6.3.13-last-seen-respond",
+            instanceId,
+            invocationId!,
+            new { ok = true });
 
         AssertSuccess(respond);
     }
@@ -1219,7 +1186,13 @@ public class InvocationSpecTests : IDisposable
             Mock.Of<ILogger<InvocationHandler>>());
     }
 
-    private static async Task<JsonRpcResponse> PollAsync(InvocationHandler handler, string instanceId, int maxCount, int waitMs)
+    private static async Task<JsonRpcResponse> PollAsync(
+        InvocationHandler handler,
+        AppRegistry appRegistry,
+        string instanceId,
+        int maxCount,
+        int waitMs,
+        string? instanceSessionToken = null)
     {
         return await handler.HandleAsync(new JsonRpcRequest
         {
@@ -1228,10 +1201,61 @@ public class InvocationSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceSessionToken ?? GetInstanceSessionToken(appRegistry, instanceId),
                 maxCount,
                 waitMs
             })
         }, CancellationToken.None);
+    }
+
+    private static async Task<JsonRpcResponse> RespondValueAsync(
+        InvocationHandler handler,
+        AppRegistry appRegistry,
+        string requestId,
+        string instanceId,
+        string invocationId,
+        object value)
+    {
+        return await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = requestId,
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
+                invocationId,
+                value
+            })
+        }, CancellationToken.None);
+    }
+
+    private static async Task<JsonRpcResponse> RespondErrorAsync(
+        InvocationHandler handler,
+        AppRegistry appRegistry,
+        string requestId,
+        string instanceId,
+        string invocationId,
+        object error)
+    {
+        return await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = requestId,
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
+                invocationId,
+                error
+            })
+        }, CancellationToken.None);
+    }
+
+    private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)
+    {
+        return appRegistry.GetCurrentInstanceSessionToken(instanceId)
+               ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 
     private static AppInstance RegisterInstance(

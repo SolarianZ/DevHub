@@ -229,20 +229,22 @@ async function runEvents(context) {
         const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
         const instance = buildAppInstanceRegistration(ensureRecord(step.instance, `request.steps[${index}].instance`));
         const password = ensureString(step.password, `request.steps[${index}].password`);
-        await client.registerInstance(instance, password);
+        const registered = await client.registerInstance(instance, password);
         registeredInstances.push({
           clientName: ensureString(step.client, `request.steps[${index}].client`),
           instanceId: instance.instanceId,
-          password
+          instanceSessionToken: registered.instanceSessionToken
         });
         continue;
       }
 
       if (action === "unregister_instance") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const clientName = ensureString(step.client, `request.steps[${index}].client`);
+        const client = requireMapValue(httpClients, clientName, index, "http client");
         const instanceId = String(resolveCaptureValue(step, captures, index, "instanceId"));
-        const password = ensureString(step.password, `request.steps[${index}].password`);
-        await client.unregisterInstance(instanceId, password);
+        const instanceSessionToken = findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index);
+        await client.unregisterInstance(instanceId, instanceSessionToken);
+        removeRegisteredInstance(registeredInstances, clientName, instanceId);
         continue;
       }
 
@@ -413,7 +415,7 @@ async function runEvents(context) {
         continue;
       }
       try {
-        await client.unregisterInstance(registered.instanceId, registered.password);
+        await client.unregisterInstance(registered.instanceId, registered.instanceSessionToken);
       } catch {
       }
     }
@@ -609,6 +611,27 @@ function normalizeEvent(event) {
     type: event.type,
     payload: event.payload
   };
+}
+
+function findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index) {
+  for (let registeredIndex = registeredInstances.length - 1; registeredIndex >= 0; registeredIndex -= 1) {
+    const registered = registeredInstances[registeredIndex];
+    if (registered.clientName === clientName && registered.instanceId === instanceId) {
+      return registered.instanceSessionToken;
+    }
+  }
+
+  throw new Error(`request.steps[${index}] 未找到实例会话凭据：${clientName}/${instanceId}`);
+}
+
+function removeRegisteredInstance(registeredInstances, clientName, instanceId) {
+  for (let index = registeredInstances.length - 1; index >= 0; index -= 1) {
+    const registered = registeredInstances[index];
+    if (registered.clientName === clientName && registered.instanceId === instanceId) {
+      registeredInstances.splice(index, 1);
+      return;
+    }
+  }
 }
 
 function normalizeDefinitionValidationResult(result) {

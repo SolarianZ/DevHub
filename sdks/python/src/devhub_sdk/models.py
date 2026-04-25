@@ -123,6 +123,7 @@ class AppInstance:
     last_seen_utc: datetime
     invoke: InvokeCapability
     meta: dict[str, Any] | None = None
+    instance_session_token: str | None = None
 
     def __post_init__(self) -> None:
         """校验实例中的 scope。"""
@@ -327,6 +328,7 @@ class PollRequest:
     """轮询请求。"""
 
     instance_id: str
+    instance_session_token: str
     max_count: int | None = None
     wait_ms: int | None = None
 
@@ -402,6 +404,7 @@ class RespondRequest:
     """响应请求。"""
 
     instance_id: str
+    instance_session_token: str
     invocation_id: str
     value: Any = None
     error: DevHubCalleeError | None = None
@@ -410,11 +413,13 @@ class RespondRequest:
     def __init__(
         self,
         instance_id: str,
+        instance_session_token: str,
         invocation_id: str,
         value: Any = _RESPOND_VALUE_UNSET,
         error: DevHubCalleeError | None = None,
     ) -> None:
         self.instance_id = instance_id
+        self.instance_session_token = instance_session_token
         self.invocation_id = invocation_id
         self.value = None if value is _RESPOND_VALUE_UNSET else value
         self.error = error

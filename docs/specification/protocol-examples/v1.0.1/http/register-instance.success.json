@@ -3,6 +3,7 @@
   "id": "apps-instances-register",
   "result": {
     "ok": true,
+    "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}",
     "instance": {
       "instanceId": "sample-instance-1",
       "appId": "sample.app",

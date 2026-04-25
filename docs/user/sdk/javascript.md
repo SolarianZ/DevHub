@@ -141,7 +141,7 @@ if (validation.valid) {
   await client.upsertDefinition(definition);
 }
 
-const instance = await client.registerInstance({
+const registered = await client.registerInstance({
   instanceId: "sample-inst-1",
   appId: "sample.app",
   scope: "",
@@ -149,7 +149,7 @@ const instance = await client.registerInstance({
   invoke: { poll: true, respond: true }
 }, "sample-instance-secret");
 
-await client.unregisterInstance(instance.instanceId, "sample-instance-secret");
+await client.unregisterInstance(registered.instanceId, registered.instanceSessionToken);
 await client.deleteDefinition({
   appId: definition.appId,
   scope: definition.scope

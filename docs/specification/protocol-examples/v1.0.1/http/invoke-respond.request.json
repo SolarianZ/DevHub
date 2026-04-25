@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-respond",
+  "method": "hub.invoke.respond",
+  "params": {
+    "instanceId": "sample-instance-1",
+    "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}",
+    "invocationId": "${INVOCATION_ID}",
+    "value": {
+      "ok": true
+    }
+  }
+}

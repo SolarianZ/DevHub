@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-heartbeat",
+  "result": {
+    "ok": true,
+    "lastSeenUtc": "${INSTANCE_LAST_SEEN_UTC}"
+  }
+}

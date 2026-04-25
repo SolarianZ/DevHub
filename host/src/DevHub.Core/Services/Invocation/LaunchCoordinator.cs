@@ -438,7 +438,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private void CleanupExpiredLaunchRecords(DateTime now)
     {
         var expiredLaunchIds = _launchRecordsById.Values
-            .Where(record => now > record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds))
+            .Where(record => ShouldRemoveLaunchRecord(record, now))
             .Select(record => record.LaunchId)
             .ToList();
 
@@ -517,6 +517,16 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             AppId = appId,
             Scope = scope
         };
+    }
+
+    private bool ShouldRemoveLaunchRecord(LaunchRecord record, DateTime now)
+    {
+        if (record.State == LaunchRecordState.Starting)
+        {
+            return !IsLaunchStillInProgress(record);
+        }
+
+        return now > record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds);
     }
 
     private static object BuildDefinitionScopeMismatchErrorData(

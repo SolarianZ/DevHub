@@ -289,13 +289,15 @@ public class SpecConformanceTests : IDisposable
             }))
         };
 
-        await handler.HandleAsync(registerRequest, CancellationToken.None);
+        var registerResponse = await handler.HandleAsync(registerRequest, CancellationToken.None);
+        Assert.Null(registerResponse.Error);
+        var instanceSessionToken = ExtractInstanceSessionToken(registerResponse);
 
         var unregisterRequest = new JsonRpcRequest
         {
             Id = "req-unregister-1",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("test-instance-unregister"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("test-instance-unregister", instanceSessionToken))
         };
 
         var firstResponse = await handler.HandleAsync(unregisterRequest, CancellationToken.None);
@@ -480,12 +482,17 @@ public class SpecConformanceTests : IDisposable
         };
     }
 
-    private static object CreateUnregisterParams(string instanceId)
+    private static string ExtractInstanceSessionToken(JsonRpcResponse response)
+    {
+        return JsonSerializer.SerializeToElement(response.Result).GetProperty("instanceSessionToken").GetString()!;
+    }
+
+    private static object CreateUnregisterParams(string instanceId, string instanceSessionToken)
     {
         return new
         {
             instanceId,
-            password = InstancePassword
+            instanceSessionToken
         };
     }
 }

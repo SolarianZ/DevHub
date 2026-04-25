@@ -166,17 +166,25 @@ public class InvocationHandler : IRpcHandler
                 waiterTask,
                 Task.CompletedTask,
                 timeoutWindowMs,
-                waitBudget.TimeoutResolution,
-                cancellationToken);
+                waitBudget.TimeoutResolution);
         }
 
-        var timeoutTask = Task.Delay(timeoutWindowMs, cancellationToken);
-        var completionTask = await Task.WhenAny(waiterTask, timeoutTask);
+        var timeoutTask = Task.Delay(timeoutWindowMs);
+        var cancellationTask = cancellationToken.CanBeCanceled
+            ? Task.Delay(Timeout.Infinite, cancellationToken)
+            : Task.Delay(Timeout.Infinite);
+        var completionTask = await Task.WhenAny(waiterTask, timeoutTask, cancellationTask);
 
         if (completionTask == waiterTask)
         {
             var completion = await waiterTask;
             return BuildRequestCompletionResponse(request.Id, invocation.InvocationId, completion);
+        }
+
+        if (completionTask == cancellationTask)
+        {
+            _requestWaiter.Cleanup(invocation.InvocationId);
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         return await HandleRequestTimeoutAsync(
@@ -185,8 +193,7 @@ public class InvocationHandler : IRpcHandler
             waiterTask,
             timeoutTask,
             timeoutWindowMs,
-            waitBudget.TimeoutResolution,
-            cancellationToken);
+            waitBudget.TimeoutResolution);
     }
 
     private async Task<JsonRpcResponse> HandleRequestTimeoutAsync(
@@ -195,39 +202,12 @@ public class InvocationHandler : IRpcHandler
         Task<InvocationRequestCompletion> waiterTask,
         Task timeoutTask,
         int timeoutWindowMs,
-        RequestTimeoutResolution timeoutResolution,
-        CancellationToken cancellationToken)
+        RequestTimeoutResolution timeoutResolution)
     {
         var elapsedMs = (int)Math.Max(0, (_clock.UtcNow - invocation.CreatedAtUtc).TotalMilliseconds);
         var timeoutElapsedMs = timeoutTask.IsCanceled ? elapsedMs : Math.Max(elapsedMs, timeoutWindowMs);
         var ttlReached = elapsedMs >= invocation.Options.TtlMs;
         var preferExpired = timeoutResolution == RequestTimeoutResolution.Expired;
-
-        if (cancellationToken.IsCancellationRequested)
-        {
-            if (ttlReached)
-            {
-                _store.MarkExpired(invocation.InvocationId, _clock.UtcNow);
-                _requestWaiter.CompleteExpired(invocation.InvocationId, elapsedMs);
-                _requestWaiter.Cleanup(invocation.InvocationId);
-
-                return RpcErrorFactory.Create(request.Id, -32011, "invocation_expired", new
-                {
-                    invocationId = invocation.InvocationId,
-                    elapsedMs
-                });
-            }
-
-            _store.MarkTimeout(invocation.InvocationId, _clock.UtcNow);
-            _requestWaiter.CompleteTimeout(invocation.InvocationId, elapsedMs);
-            _requestWaiter.Cleanup(invocation.InvocationId);
-
-            return RpcErrorFactory.Create(request.Id, -32012, "invocation_timeout", new
-            {
-                invocationId = invocation.InvocationId,
-                elapsedMs
-            });
-        }
 
         if (ttlReached || preferExpired)
         {
@@ -484,6 +464,11 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
+        {
+            return RpcErrorFactory.InvalidParams(request.Id);
+        }
+
         var maxCount = 10;
         if (paramsElement.TryGetProperty("maxCount", out var maxCountElement))
         {
@@ -502,18 +487,20 @@ public class InvocationHandler : IRpcHandler
             }
         }
 
-        var instance = _appRegistry.GetInstance(instanceId);
-        if (instance is null)
+        if (!_appRegistry.TryTouchOwnedInstance(instanceId, instanceSessionToken, out var instance, out var validationStatus))
         {
+            if (validationStatus == InstanceSessionValidationStatus.TokenMismatch)
+            {
+                return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "instance_session_token_mismatch", instanceId });
+            }
+
             return RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId });
         }
 
-        if (!instance.Invoke.Poll)
+        if (!instance!.Invoke.Poll)
         {
             return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
         }
-
-        _appRegistry.Heartbeat(instanceId, out _);
 
         var items = await _store.PollAsync(instance, maxCount, waitMs, cancellationToken);
         return new JsonRpcResponse
@@ -556,6 +543,11 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
+        {
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+        }
+
         var hasValue = paramsElement.TryGetProperty("value", out var valueElement);
         var hasError = paramsElement.TryGetProperty("error", out var errorElement);
         if (hasValue == hasError)
@@ -579,18 +571,20 @@ public class InvocationHandler : IRpcHandler
             }
         }
 
-        var instance = _appRegistry.GetInstance(instanceId);
-        if (instance is null)
+        if (!_appRegistry.TryTouchOwnedInstance(instanceId, instanceSessionToken, out var instance, out var validationStatus))
         {
+            if (validationStatus == InstanceSessionValidationStatus.TokenMismatch)
+            {
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "instance_session_token_mismatch", instanceId }));
+            }
+
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32010, "instance_not_found", new { reason = "unknown_instance", instanceId }));
         }
 
-        if (!instance.Invoke.Respond)
+        if (!instance!.Invoke.Respond)
         {
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
         }
-
-        _appRegistry.Heartbeat(instanceId, out _);
 
         var status = _store.Respond(instanceId, invocationId, value, error);
 

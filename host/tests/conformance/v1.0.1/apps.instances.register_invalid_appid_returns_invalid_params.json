@@ -1,0 +1,47 @@
+{
+  "id": "apps.instances.register_invalid_appid_returns_invalid_params",
+  "caseId": "CONF-003",
+  "description": "注册实例时 appId 不符合规范时，hub.apps.registerInstance 必须返回 invalid_params。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000041"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-invalid-appid",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "password": "conformance-password",
+      "instance": {
+        "instanceId": "apps-instance-invalid-appid-1",
+        "appId": "Invalid.App",
+        "scope": "",
+        "pid": 32015,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-invalid-appid",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params"
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "error"
+  ]
+}

@@ -281,16 +281,28 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                     index,
                     default=_default_instance_password(instance.instance_id),
                 )
-                require_http_client(http_clients, client_name, index).register_instance(instance, password)
-                registered_instances[instance.instance_id] = (client_name, password)
+                registered = require_http_client(http_clients, client_name, index).register_instance(instance, password)
+                instance_session_token = require_string(
+                    registered.instance_session_token,
+                    f"request.steps[{index}].registerInstance.instanceSessionToken",
+                )
+                registered_instances[instance.instance_id] = (client_name, instance_session_token)
                 continue
 
             if action == "unregister_instance":
                 client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 instance_id = resolve_capture_value(step, captures, index, "instanceId")
-                registered_password = registered_instances.get(str(instance_id), (client_name, _default_instance_password(str(instance_id))))[1]
-                password = resolve_password(step, captures, index, default=registered_password)
-                require_http_client(http_clients, client_name, index).unregister_instance(str(instance_id), password)
+                registered_token = registered_instances.get(str(instance_id), (client_name, ""))[1]
+                instance_session_token = resolve_instance_session_token(
+                    step,
+                    captures,
+                    index,
+                    default=registered_token,
+                )
+                require_http_client(http_clients, client_name, index).unregister_instance(
+                    str(instance_id),
+                    instance_session_token,
+                )
                 registered_instances.pop(str(instance_id), None)
                 continue
 
@@ -437,9 +449,9 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
             "error": None,
         }
     finally:
-        for instance_id, (client_name, password) in reversed(list(registered_instances.items())):
+        for instance_id, (client_name, instance_session_token) in reversed(list(registered_instances.items())):
             try:
-                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id, password)
+                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id, instance_session_token)
             except Exception:
                 pass
         for client in http_clients.values():
@@ -768,6 +780,21 @@ def resolve_password(
     if value is None:
         return default
     return require_string(value, f"request.steps[{index}].password")
+
+
+def resolve_instance_session_token(
+    step: dict[str, Any],
+    captures: dict[str, Any],
+    index: int,
+    *,
+    default: str,
+) -> str:
+    value = resolve_capture_value(step, captures, index, "instanceSessionToken")
+    if value is None:
+        if not default:
+            raise ValueError(f"request.steps[{index}].instanceSessionToken 不能为空。")
+        return default
+    return require_string(value, f"request.steps[{index}].instanceSessionToken")
 
 
 def _default_instance_password(instance_id: str) -> str:

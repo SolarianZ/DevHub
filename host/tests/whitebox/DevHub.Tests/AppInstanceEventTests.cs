@@ -50,6 +50,7 @@ public class AppInstanceEventTests
         }, CancellationToken.None);
 
         Assert.Null(registerResponse.Error);
+        var instanceSessionToken = JsonSerializer.SerializeToElement(registerResponse.Result).GetProperty("instanceSessionToken").GetString();
 
         var unregisterResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -58,7 +59,7 @@ public class AppInstanceEventTests
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-event-001",
-                password = InstancePassword
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -144,7 +145,7 @@ public class AppInstanceEventTests
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-not-found",
-                password = InstancePassword
+                instanceSessionToken = "inst-not-found-token"
             })
         }, CancellationToken.None);
 
@@ -154,4 +155,3 @@ public class AppInstanceEventTests
         Assert.Empty(deliveries);
     }
 }
-

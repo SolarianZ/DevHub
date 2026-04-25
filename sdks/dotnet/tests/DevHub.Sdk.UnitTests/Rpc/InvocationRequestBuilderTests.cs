@@ -132,10 +132,12 @@ public sealed class InvocationRequestBuilderTests
     {
         var payload = RequestPayloadFactory.BuildPollParams(new PollRequest
         {
-            InstanceId = "inst-1"
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
         });
 
         using var document = Serialize(payload);
+        Assert.Equal("session-1", document.RootElement.GetProperty("instanceSessionToken").GetString());
         Assert.Equal(10, document.RootElement.GetProperty("maxCount").GetInt32());
         Assert.Equal(25000, document.RootElement.GetProperty("waitMs").GetInt32());
     }
@@ -290,15 +292,18 @@ public sealed class InvocationRequestBuilderTests
                 }
             },
             "secret-1");
-        var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "secret-1");
+        var heartbeatPayload = RequestPayloadFactory.BuildHeartbeatParams("inst-1", "session-1");
+        var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "session-1");
 
         using var registerDocument = Serialize(registerPayload);
+        using var heartbeatDocument = Serialize(heartbeatPayload);
         using var unregisterDocument = Serialize(unregisterPayload);
 
         Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
         Assert.Equal(string.Empty, registerDocument.RootElement.GetProperty("instance").GetProperty("scope").GetString());
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
-        Assert.Equal("secret-1", unregisterDocument.RootElement.GetProperty("password").GetString());
+        Assert.Equal("session-1", heartbeatDocument.RootElement.GetProperty("instanceSessionToken").GetString());
+        Assert.Equal("session-1", unregisterDocument.RootElement.GetProperty("instanceSessionToken").GetString());
     }
 
     [Fact]
@@ -327,11 +332,13 @@ public sealed class InvocationRequestBuilderTests
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Value = null
         });
 
         using var document = Serialize(payload);
+        Assert.Equal("session-1", document.RootElement.GetProperty("instanceSessionToken").GetString());
         Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
         Assert.False(document.RootElement.TryGetProperty("error", out _));
     }
@@ -342,6 +349,7 @@ public sealed class InvocationRequestBuilderTests
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Error = new DevHubCalleeError
             {
@@ -357,6 +365,7 @@ public sealed class InvocationRequestBuilderTests
         var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Error = new DevHubCalleeError
             {
@@ -367,6 +376,25 @@ public sealed class InvocationRequestBuilderTests
         }));
 
         Assert.Contains("Error.Data", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InstanceLifecycleBuilders_WhenSessionTokenMissing_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildHeartbeatParams("inst-1", string.Empty));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildUnregisterParams("inst-1", " "));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildPollParams(new PollRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = ""
+        }));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "",
+            InvocationId = "invk-1",
+            Value = new { ok = true }
+        }));
     }
 
     private static JsonDocument Serialize(object payload)

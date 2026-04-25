@@ -116,18 +116,21 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     }
 
 
-def build_heartbeat_params(instance_id: str) -> dict[str, Any]:
+def build_heartbeat_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:
     """构造 `hub.apps.heartbeat` 参数。"""
 
-    return {"instanceId": require_instance_id(instance_id, "instance_id")}
+    return {
+        "instanceId": require_instance_id(instance_id, "instance_id"),
+        "instanceSessionToken": require_non_empty_string(instance_session_token, "instance_session_token"),
+    }
 
 
-def build_unregister_params(instance_id: str, password: str) -> dict[str, Any]:
+def build_unregister_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:
     """构造 `hub.apps.unregisterInstance` 参数。"""
 
     return {
         "instanceId": require_instance_id(instance_id, "instance_id"),
-        "password": require_non_empty_string(password, "password"),
+        "instanceSessionToken": require_non_empty_string(instance_session_token, "instance_session_token"),
     }
 
 
@@ -262,6 +265,10 @@ def build_poll_params(request: PollRequest) -> dict[str, Any]:
 
     return {
         "instanceId": instance_id,
+        "instanceSessionToken": require_non_empty_string(
+            request.instance_session_token,
+            "request.instance_session_token",
+        ),
         "maxCount": 10 if max_count is None else max_count,
         "waitMs": 25000 if wait_ms is None else wait_ms,
     }
@@ -283,6 +290,10 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
 
     payload: dict[str, Any] = {
         "instanceId": instance_id,
+        "instanceSessionToken": require_non_empty_string(
+            request.instance_session_token,
+            "request.instance_session_token",
+        ),
         "invocationId": invocation_id,
     }
     if has_error:

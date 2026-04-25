@@ -94,7 +94,7 @@ validation = client.validate_definition(definition)
 if validation.valid:
     client.upsert_definition(definition)
 
-instance = client.register_instance(
+registered = client.register_instance(
     AppInstanceRegistration(
         instance_id="sample-inst-1",
         app_id="sample.app",
@@ -105,7 +105,7 @@ instance = client.register_instance(
     password="sample-instance-secret",
 )
 
-client.unregister_instance(instance.instance_id, "sample-instance-secret")
+client.unregister_instance(registered.instance_id, registered.instance_session_token)
 client.delete_definition(definition.app_id, definition.scope)
 ```
 

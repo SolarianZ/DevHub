@@ -209,6 +209,8 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     root = require_mapping(value, path)
     if "password" in root:
         raise RuntimeError(f"{path}.password 不得出现。")
+    if "instanceSessionToken" in root:
+        raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
     invoke_root = require_mapping(root.get("invoke"), f"{path}.invoke")
     meta = None
     if "meta" in root:
@@ -226,6 +228,18 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
         ),
         meta=meta,
     )
+
+
+def parse_register_instance_result(value: Any, *, path: str) -> AppInstance:
+    """解析实例注册结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    instance = parse_app_instance(root.get("instance"), path=f"{path}.instance")
+    instance.instance_session_token = require_non_empty_string(root, "instanceSessionToken", path)
+    return instance
 
 
 def parse_instances_result(value: Any, *, path: str) -> list[AppInstance]:

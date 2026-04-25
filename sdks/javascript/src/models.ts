@@ -82,6 +82,10 @@ export interface AppInstance {
   meta?: JsonObject;
 }
 
+export interface RegisteredAppInstance extends AppInstance {
+  instanceSessionToken: string;
+}
+
 export interface AppInstanceRegistration {
   instanceId: string;
   appId: string;
@@ -149,8 +153,12 @@ export interface RequestResult {
   value: JsonValue;
 }
 
-export interface PollRequest {
+export interface InstanceOwnedRequest {
   instanceId: string;
+  instanceSessionToken: string;
+}
+
+export interface PollRequest extends InstanceOwnedRequest {
   maxCount?: number | null;
   waitMs?: number | null;
 }
@@ -186,8 +194,7 @@ export interface PollResult {
   items: Invocation[];
 }
 
-export interface RespondRequest {
-  instanceId: string;
+export interface RespondRequest extends InstanceOwnedRequest {
   invocationId: string;
   value?: JsonValue;
   error?: DevHubCalleeError;

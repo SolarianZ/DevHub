@@ -228,7 +228,11 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "heartbeat-unknown",
             Method = HubRpcMethods.HubAppsHeartbeat,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance" })
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "missing-instance",
+                instanceSessionToken = "missing-instance-token"
+            })
         }, CancellationToken.None);
 
         AssertError(response, -32010, "instance_not_found");
@@ -476,6 +480,7 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
 
         Assert.Null(register.Error);
+        var instanceSessionToken = ExtractInstanceSessionToken(register);
 
         var unregister = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -484,7 +489,7 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-no-event-bus",
-                password = InstancePassword
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -558,21 +563,22 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
         Assert.Null(register.Error);
 
+        var currentToken = ExtractInstanceSessionToken(register);
         var unregister = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "unregister-password-mismatch",
             Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("inst-unregister-guard", password: "wrong-password"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("inst-unregister-guard", instanceSessionToken: $"wrong-{currentToken}"))
         }, CancellationToken.None);
 
         AssertError(unregister, -32002, "forbidden");
         var errorData = JsonSerializer.SerializeToElement(unregister.Error!.Data);
-        Assert.Equal("instance_password_mismatch", errorData.GetProperty("reason").GetString());
+        Assert.Equal("instance_session_token_mismatch", errorData.GetProperty("reason").GetString());
         Assert.NotNull(appRegistry.GetInstance("inst-unregister-guard"));
     }
 
     [Fact]
-    public async Task Impl_Unregister_WhenUnknownInstanceAndPasswordPresent_ShouldReturnOk()
+    public async Task Impl_Unregister_WhenUnknownInstanceAndTokenPresent_ShouldReturnOk()
     {
         var handler = CreateHandler();
 
@@ -580,7 +586,7 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "unregister-unknown-with-password",
             Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("missing-instance", password: "any-password"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("missing-instance", instanceSessionToken: "missing-instance-token"))
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -609,12 +615,17 @@ public sealed class AppInstancesHandlerValidationTests
         };
     }
 
-    private static object CreateUnregisterParams(string instanceId, string? password = null)
+    private static string ExtractInstanceSessionToken(JsonRpcResponse response)
+    {
+        return JsonSerializer.SerializeToElement(response.Result).GetProperty("instanceSessionToken").GetString()!;
+    }
+
+    private static object CreateUnregisterParams(string instanceId, string? instanceSessionToken = null)
     {
         return new
         {
             instanceId,
-            password = password ?? InstancePassword
+            instanceSessionToken = instanceSessionToken ?? "validation-instance-token"
         };
     }
 
@@ -644,4 +655,3 @@ public sealed class AppInstancesHandlerValidationTests
         }
     }
 }
-

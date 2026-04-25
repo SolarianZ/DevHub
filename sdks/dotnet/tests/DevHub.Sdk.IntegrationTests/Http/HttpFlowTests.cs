@@ -54,6 +54,7 @@ public sealed class HttpFlowTests
         }, InstancePassword);
 
         Assert.Equal("http-flow-inst-1", registered.InstanceId);
+        Assert.False(string.IsNullOrWhiteSpace(registered.InstanceSessionToken));
 
         var instances = await client.ListInstancesAsync(new ListInstancesRequest
         {
@@ -62,10 +63,10 @@ public sealed class HttpFlowTests
         });
         Assert.Single(instances);
 
-        var lastSeenUtc = await client.HeartbeatAsync("http-flow-inst-1");
+        var lastSeenUtc = await client.HeartbeatAsync("http-flow-inst-1", registered.InstanceSessionToken!);
         Assert.NotEqual(default, lastSeenUtc);
 
-        await client.UnregisterInstanceAsync("http-flow-inst-1", InstancePassword);
+        await client.UnregisterInstanceAsync("http-flow-inst-1", registered.InstanceSessionToken!);
         var instancesAfterUnregister = await client.ListInstancesAsync(new ListInstancesRequest
         {
             AppId = "http.flow.app",
@@ -229,7 +230,7 @@ public sealed class HttpFlowTests
     }
 
     [Fact]
-    public async Task Impl_RegisterUnregister_WithPasswordMismatch_ShouldMapForbidden()
+    public async Task Impl_Register_WithPasswordMismatch_AndLifecycleCalls_WithSessionTokenMismatch_ShouldMapForbidden()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(new AppDefinition
@@ -252,7 +253,7 @@ public sealed class HttpFlowTests
             }
         };
 
-        _ = await client.RegisterInstanceAsync(registration, InstancePassword);
+        var registered = await client.RegisterInstanceAsync(registration, InstancePassword);
 
         var registerException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RegisterInstanceAsync(
             new AppInstanceRegistration
@@ -267,11 +268,19 @@ public sealed class HttpFlowTests
         Assert.Equal(-32002, registerException.Code);
         Assert.Equal("instance_password_mismatch", registerException.Reason);
 
-        var unregisterException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UnregisterInstanceAsync(registration.InstanceId, "wrong-password"));
-        Assert.Equal(-32002, unregisterException.Code);
-        Assert.Equal("instance_password_mismatch", unregisterException.Reason);
+        var heartbeatException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.HeartbeatAsync(
+            registration.InstanceId,
+            $"wrong-{registered.InstanceSessionToken}"));
+        Assert.Equal(-32002, heartbeatException.Code);
+        Assert.Equal("instance_session_token_mismatch", heartbeatException.Reason);
 
-        await client.UnregisterInstanceAsync(registration.InstanceId, InstancePassword);
+        var unregisterException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UnregisterInstanceAsync(
+            registration.InstanceId,
+            $"wrong-{registered.InstanceSessionToken}"));
+        Assert.Equal(-32002, unregisterException.Code);
+        Assert.Equal("instance_session_token_mismatch", unregisterException.Reason);
+
+        await client.UnregisterInstanceAsync(registration.InstanceId, registered.InstanceSessionToken!);
     }
 
     [Fact]

@@ -50,10 +50,12 @@
 - 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验。
 - 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用首尾均不含空白字符的字符串。
 - 读取实例镜像或注册返回值时，用 `app-instance.json` 校验。
-- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。
+- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
 - 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `target.scope` 必须显式出现，`target.scope = ""` 表示显式 Global，其他合法字符串表示精确作用域。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
 - 发送或接收原始 JSON-RPC 报文时，用 `rpc-request.json`、`rpc-response.json`、`error-response.json` 校验信封。
+
+实例所有权相关的 `instanceSessionToken` 还适用于 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 的顶层 `params`，这些字段属于方法级参数而不是通用数据模型，因此未单独收敛到 `app-instance*.json` 中。
 
 `app-definition.json` 只描述单个 Definition payload 的结构；持久化文件名与 Definition 公开身份仍以 [`Specification.md`](../../protocol/Specification.md) §4.1.4 / §5.1.1 为准，即精确 `(appId, scope)` 复合身份与 `{appId}--{scopeKey}.json` 的 canonical 存储形状。
 

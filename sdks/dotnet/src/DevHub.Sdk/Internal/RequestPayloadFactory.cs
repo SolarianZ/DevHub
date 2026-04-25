@@ -87,23 +87,25 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildHeartbeatParams(string instanceId)
+    internal static object BuildHeartbeatParams(string instanceId, string instanceSessionToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
-        return new Dictionary<string, object?>
-        {
-            ["instanceId"] = instanceId
-        };
-    }
-
-    internal static object BuildUnregisterParams(string instanceId, string password)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
         return new Dictionary<string, object?>
         {
             ["instanceId"] = instanceId,
-            ["password"] = password
+            ["instanceSessionToken"] = instanceSessionToken
+        };
+    }
+
+    internal static object BuildUnregisterParams(string instanceId, string instanceSessionToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
+        return new Dictionary<string, object?>
+        {
+            ["instanceId"] = instanceId,
+            ["instanceSessionToken"] = instanceSessionToken
         };
     }
 
@@ -189,6 +191,7 @@ internal static class RequestPayloadFactory
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
 
         var maxCount = request.MaxCount ?? 10;
         var waitMs = request.WaitMs ?? 25000;
@@ -206,6 +209,7 @@ internal static class RequestPayloadFactory
         return new Dictionary<string, object?>
         {
             ["instanceId"] = request.InstanceId,
+            ["instanceSessionToken"] = request.InstanceSessionToken,
             ["maxCount"] = maxCount,
             ["waitMs"] = waitMs
         };
@@ -215,6 +219,7 @@ internal static class RequestPayloadFactory
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
 
         var hasValue = request.HasValue;
@@ -227,6 +232,7 @@ internal static class RequestPayloadFactory
         var payload = new Dictionary<string, object?>
         {
             ["instanceId"] = request.InstanceId,
+            ["instanceSessionToken"] = request.InstanceSessionToken,
             ["invocationId"] = request.InvocationId
         };
 

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-poll",
+  "method": "hub.invoke.poll",
+  "params": {
+    "instanceId": "sample-instance-1",
+    "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}",
+    "maxCount": 10,
+    "waitMs": 25000
+  }
+}

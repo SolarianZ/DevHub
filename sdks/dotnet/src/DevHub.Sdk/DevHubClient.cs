@@ -211,13 +211,15 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="instance">实例注册载荷。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>注册后的实例。</returns>
+    /// <returns>注册后的实例。返回值中的 <see cref="AppInstance.InstanceSessionToken"/> 可用于后续心跳、反注册与调用处理。</returns>
     public async Task<AppInstance> RegisterInstanceAsync(
         AppInstanceRegistration instance,
         string password,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
         var result = await _transport.SendAsync(
             "hub.apps.registerInstance",
             RequestPayloadFactory.BuildRegisterInstanceParams(instance, password),
@@ -225,14 +227,21 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
             "hub.apps.registerInstance.result.instance");
+        ResponsePayloadReader.EnsurePropertyExists(
+            result,
+            "hub.apps.registerInstance.result",
+            "instanceSessionToken",
+            JsonValueKind.String);
 
         var payload = ResponsePayloadReader.DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
         ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
+        ResponsePayloadReader.EnsureNotEmpty(payload.InstanceSessionToken, "hub.apps.registerInstance.result", "instanceSessionToken");
         ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
         ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
+        payload.Instance.InstanceSessionToken = payload.InstanceSessionToken;
         return payload.Instance;
     }
 
@@ -240,12 +249,21 @@ public sealed class DevHubClient : IAsyncDisposable
     /// 调用 <c>hub.apps.heartbeat</c>。
     /// </summary>
     /// <param name="instanceId">实例标识。</param>
+    /// <param name="instanceSessionToken">实例会话令牌。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>服务端返回的最后在线时间。</returns>
-    public async Task<DateTimeOffset> HeartbeatAsync(string instanceId, CancellationToken cancellationToken = default)
+    public async Task<DateTimeOffset> HeartbeatAsync(
+        string instanceId,
+        string instanceSessionToken,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.heartbeat", RequestPayloadFactory.BuildHeartbeatParams(instanceId), cancellationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
+        var result = await _transport.SendAsync(
+            "hub.apps.heartbeat",
+            RequestPayloadFactory.BuildHeartbeatParams(instanceId, instanceSessionToken),
+            cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
@@ -256,17 +274,19 @@ public sealed class DevHubClient : IAsyncDisposable
     /// 调用 <c>hub.apps.unregisterInstance</c>。
     /// </summary>
     /// <param name="instanceId">实例标识。</param>
-    /// <param name="password">实例密码。</param>
+    /// <param name="instanceSessionToken">实例会话令牌。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task UnregisterInstanceAsync(
         string instanceId,
-        string password,
+        string instanceSessionToken,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
         var result = await _transport.SendAsync(
             "hub.apps.unregisterInstance",
-            RequestPayloadFactory.BuildUnregisterParams(instanceId, password),
+            RequestPayloadFactory.BuildUnregisterParams(instanceId, instanceSessionToken),
             cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
@@ -350,6 +370,9 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
         var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
 
@@ -375,6 +398,10 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task RespondAsync(RespondRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");

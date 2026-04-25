@@ -470,7 +470,7 @@ def test_http_client_list_instances_should_send_explicit_scope_filter() -> None:
     }
 
 
-def test_http_client_register_and_unregister_should_send_password_at_top_level() -> None:
+def test_http_client_instance_lifecycle_methods_should_forward_instance_session_token() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -485,6 +485,7 @@ def test_http_client_register_and_unregister_should_send_password_at_top_level()
                 "lastSeenUtc": "2026-03-09T00:00:01Z",
                 "invoke": {"poll": True, "respond": True},
             },
+            "instanceSessionToken": "token-1",
         }
     )
     transport_factory = FakeHttpTransportFactory(transport)
@@ -493,7 +494,7 @@ def test_http_client_register_and_unregister_should_send_password_at_top_level()
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    client.register_instance(
+    registered = client.register_instance(
         AppInstanceRegistration(
             instance_id="inst-1",
             app_id="test.app",
@@ -503,16 +504,29 @@ def test_http_client_register_and_unregister_should_send_password_at_top_level()
         ),
         "secret-1",
     )
+    transport.response = {
+        "ok": True,
+        "lastSeenUtc": "2026-03-09T00:00:02Z",
+    }
+    client.heartbeat("inst-1", "token-1")
     transport.response = {"ok": True}
-    client.unregister_instance("inst-1", "secret-1")
+    client.unregister_instance("inst-1", "token-1")
 
+    assert registered.instance_session_token == "token-1"
     assert transport.calls[0]["params"]["password"] == "secret-1"
     assert "password" not in transport.calls[0]["params"]["instance"]
     assert transport.calls[1] == {
+        "method": "hub.apps.heartbeat",
+        "params": {
+            "instanceId": "inst-1",
+            "instanceSessionToken": "token-1",
+        },
+    }
+    assert transport.calls[2] == {
         "method": "hub.apps.unregisterInstance",
         "params": {
             "instanceId": "inst-1",
-            "password": "secret-1",
+            "instanceSessionToken": "token-1",
         },
     }
 

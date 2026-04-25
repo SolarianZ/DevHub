@@ -29,7 +29,7 @@ public sealed class EventsFlowTests
         var subscriptionId = await eventsClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
 
         await using var client = await host.CreateClientAsync("events-http-client");
-        await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-1"), InstancePassword);
+        var registered = await client.RegisterInstanceAsync(CreateInstance("events.flow.app", "events-inst-1"), InstancePassword);
 
         var registeredEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
         Assert.Equal(subscriptionId, registeredEvent.SubscriptionId);
@@ -37,7 +37,7 @@ public sealed class EventsFlowTests
         Assert.Equal("events-inst-1", registeredEvent.Payload!.Value.GetProperty("instanceId").GetString());
         Assert.False(registeredEvent.Payload!.Value.TryGetProperty("password", out _));
 
-        await client.UnregisterInstanceAsync("events-inst-1", InstancePassword);
+        await client.UnregisterInstanceAsync("events-inst-1", registered.InstanceSessionToken!);
         await AssertNoEventWithinAsync(eventsClient, TimeSpan.FromMilliseconds(600));
 
         await eventsClient.UnsubscribeAsync(subscriptionId);

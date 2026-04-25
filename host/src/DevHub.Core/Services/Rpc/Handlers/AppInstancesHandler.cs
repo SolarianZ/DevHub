@@ -144,7 +144,12 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(AppDefinitionNotFound(request.Id, instance.AppId, instance.Scope));
             }
 
-            if (!_appRegistry.TryRegisterInstance(instance, password, out var registeredInstance, out var passwordMismatch))
+            if (!_appRegistry.TryRegisterInstance(
+                    instance,
+                    password,
+                    out var registeredInstance,
+                    out var instanceSessionToken,
+                    out var passwordMismatch))
             {
                 if (passwordMismatch)
                 {
@@ -171,7 +176,8 @@ public class AppInstancesHandler : IRpcHandler
                 Result = new
                 {
                     ok = true,
-                    instance = registeredInstance
+                    instance = registeredInstance,
+                    instanceSessionToken
                 }
             };
 
@@ -206,6 +212,12 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
+            {
+                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceSessionToken 或非字符串, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+            }
+
             var instanceId = instanceIdProperty.GetString();
             if (string.IsNullOrWhiteSpace(instanceId))
             {
@@ -214,8 +226,18 @@ public class AppInstancesHandler : IRpcHandler
             }
 
             _logger.LogDebug("尝试更新实例心跳，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            if (!_appRegistry.Heartbeat(instanceId, out var lastSeenUtc))
+            if (!_appRegistry.TryHeartbeat(instanceId, instanceSessionToken, out var lastSeenUtc, out var validationStatus))
             {
+                if (validationStatus == InstanceSessionValidationStatus.TokenMismatch)
+                {
+                    _logger.LogWarning("实例心跳更新失败: 实例会话凭据不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_session_token_mismatch",
+                        instanceId
+                    }));
+                }
+
                 _logger.LogWarning("实例心跳更新失败: 未找到实例 {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
@@ -275,26 +297,21 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "password", out var password))
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
             {
-                _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 password 或非字符串, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 instanceSessionToken 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             _logger.LogDebug("尝试注销应用程序实例，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            if (!_appRegistry.TryUnregisterInstance(instanceId, password, out var removedInstance, out var passwordMismatch))
+            if (!_appRegistry.TryUnregisterInstance(instanceId, instanceSessionToken, out var removedInstance, out var validationStatus))
             {
-                if (passwordMismatch)
+                _logger.LogWarning("注销应用程序实例失败: 实例会话凭据不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
                 {
-                    _logger.LogWarning("注销应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
-                    {
-                        reason = "instance_password_mismatch",
-                        instanceId
-                    }));
-                }
-
-                return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
+                    reason = "instance_session_token_mismatch",
+                    instanceId
+                }));
             }
 
             if (removedInstance is not null)
@@ -440,9 +457,9 @@ public class AppInstancesHandler : IRpcHandler
         }
 
         var appId = appIdProperty.GetString();
-        if (string.IsNullOrWhiteSpace(appId))
+        if (!AppDefinitionValidator.IsValidAppId(appId))
         {
-            _logger.LogWarning("hub.apps.registerInstance参数无效: appId 为空, RequestId: {RequestId}", requestId);
+            _logger.LogWarning("hub.apps.registerInstance参数无效: appId 不符合格式要求, RequestId: {RequestId}", requestId);
             return false;
         }
 

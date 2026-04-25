@@ -10,6 +10,7 @@ import type {
   NotifyResult,
   PingResult,
   PollResult,
+  RegisteredAppInstance,
   RequestResult,
   ValidationIssue
 } from "./models.js";
@@ -91,13 +92,16 @@ export function parseUpsertDefinitionResult(payload: unknown): AppDefinition {
   return parseDefinitionEnvelope(payload, "hub.apps.upsertDefinition.result");
 }
 
-export function parseRegisterInstanceResult(payload: unknown): AppInstance {
+export function parseRegisterInstanceResult(payload: unknown): RegisteredAppInstance {
   const record = ensureRecord(payload, "hub.apps.registerInstance.result");
   ensureOk(record, "hub.apps.registerInstance.result");
-  return parseAppInstance(
-    readObject(record, "hub.apps.registerInstance.result", "instance"),
-    "hub.apps.registerInstance.result.instance"
-  );
+  return {
+    ...parseAppInstance(
+      readObject(record, "hub.apps.registerInstance.result", "instance"),
+      "hub.apps.registerInstance.result.instance"
+    ),
+    instanceSessionToken: readString(record, "hub.apps.registerInstance.result", "instanceSessionToken")
+  };
 }
 
 function parseDefinitionEnvelope(payload: unknown, location: string): AppDefinition {

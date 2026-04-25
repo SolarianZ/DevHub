@@ -17,7 +17,8 @@
     "id": "apps-instances-heartbeat-missing",
     "method": "hub.apps.heartbeat",
     "params": {
-      "instanceId": "apps-instance-heartbeat-missing"
+      "instanceId": "apps-instance-heartbeat-missing",
+      "instanceSessionToken": "unknown-instance-session-token"
     }
   },
   "expectedResponse": {

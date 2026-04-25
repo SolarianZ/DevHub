@@ -64,13 +64,15 @@
 
 ### 3.3 `hub.apps.heartbeat`
 
-| 参数         | 用途                           |
-| ------------ | ------------------------------ |
-| `instanceId` | 指定要刷新在线时间的实例标识。 |
+| 参数                   | 用途                                   |
+| ---------------------- | -------------------------------------- |
+| `instanceId`           | 指定要刷新在线时间的实例标识。         |
+| `instanceSessionToken` | 当前实例会话凭据，用于校验实例所有权。 |
 
 约束：
 
-- `instanceId` 必须是非空字符串。
+- `instanceId` 与 `instanceSessionToken` 都必须是非空字符串。
+- 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
 ### 3.4 `hub.apps.listDefinitions`
 
@@ -158,7 +160,7 @@
 
 | 参数                      | 用途                                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `password`                | 当前 `instanceId` 的注册口令；首次注册时会与实例绑定，后续更新或注销同一实例时仍需使用。             |
+| `password`                | 当前 `instanceId` 的注册口令；首次注册时会与实例绑定，后续同一实例的再次注册仍需使用。               |
 | `instance`                | 待注册实例的公开信息。                                                                               |
 | `instance.instanceId`     | 当前实例的稳定唯一标识，用于心跳、调用投递、注销和回包。                                             |
 | `instance.appId`          | 指明该实例属于哪个应用。                                                                             |
@@ -173,21 +175,29 @@
 
 - `password` 必须是非空字符串。
 - `instance.instanceId` 最大长度为 `256`，并且必须匹配 `^[a-zA-Z0-9._:-]+$`。
+- `instance.appId` 必须匹配 `^[a-z0-9][a-z0-9.-]*$`。
 - `instance.scope` 必须是显式字符串，不能传 `null`。
 - `instance.pid` 必须是大于等于 `1` 的整数。
 - `instance.invoke.poll` 与 `instance.invoke.respond` 都必须显式提供布尔值。
 - `instance.meta` 如果出现，必须是对象。
 
+返回说明：
+
+- 成功结果顶层会返回新的 `instanceSessionToken`。
+- 每次成功的 re-register 都会轮换 `instanceSessionToken`；旧 token 随即失效。
+- `instanceSessionToken` 不会出现在 `AppInstance`、`hub.apps.listInstances` 或 `app.instance.*` 事件载荷中。
+
 ### 3.10 `hub.apps.unregisterInstance`
 
-| 参数         | 用途                                                   |
-| ------------ | ------------------------------------------------------ |
-| `instanceId` | 指定要注销的实例标识。                                 |
-| `password`   | 与注册时绑定到该实例的口令，用于确认调用方有权注销它。 |
+| 参数                   | 用途                               |
+| ---------------------- | ---------------------------------- |
+| `instanceId`           | 指定要注销的实例标识。             |
+| `instanceSessionToken` | 当前实例会话凭据，用于校验所有权。 |
 
 约束：
 
-- `instanceId` 与 `password` 都必须是非空字符串。
+- `instanceId` 与 `instanceSessionToken` 都必须是非空字符串。
+- 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
 ### 3.11 `hub.apps.listInstances`
 
@@ -217,6 +227,7 @@
 - `scope` 必须是显式字符串。
 - `dedupeKey` 如果出现，必须是字符串或 `null`。
 - `waitForRegisterMs` 如果出现，必须是大于等于 `0` 的整数。
+- 对同一解析后 `dedupeKey`，只要已有启动记录对应的进程仍存活且尚未完成注册绑定，Host 都会继续返回 `already_running`，不会因为超过去重窗口就放行第二次启动。
 
 ### 3.13 `hub.invoke.notify`
 
@@ -241,6 +252,7 @@
 - `options.ttlMs` 如果出现，必须是大于等于 `1000` 的整数。
 - 指定 `target.instanceId` 时，当前 Host 不允许显式传 `options.autoLaunch = true`。
 - 当前 Host 要求 `options.autoLaunch = true` 时同时满足 `options.queueIfOffline = true`。
+- 如果以 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；需要读取成功结果或错误时，必须改为发送带 `id` 的普通 request。
 
 ### 3.14 `hub.invoke.request`
 
@@ -265,20 +277,23 @@
 - `options.waitTimeoutMs` 如果出现，必须是大于等于 `1` 的整数，并且必须小于等于 `ttlMs`。
 - 指定 `target.instanceId` 时，当前 Host 不允许显式传 `options.autoLaunch = true`。
 - 当前 Host 要求 `options.autoLaunch = true` 时同时满足 `options.queueIfOffline = true`。
+- 当前 Host 在 HTTP caller 主动断连后只会结束当前等待，不会仅因断连把 invocation 推进到 timeout / expired；后续实例侧 `poll/respond` 仍按原始 `ttlMs` / `waitTimeoutMs` 预算继续生效。
 
 ### 3.15 `hub.invoke.poll`
 
-| 参数               | 用途                                                               |
-| ------------------ | ------------------------------------------------------------------ |
-| `instanceId`       | 指定由哪个已注册实例来领取待处理调用。                             |
-| `maxCount`（可选） | 一次最多领取多少条调用；省略时默认 `10`。                          |
-| `waitMs`（可选）   | 长轮询等待时间；省略时默认 `25000`，`0` 表示立即返回当前可用结果。 |
+| 参数                   | 用途                                                               |
+| ---------------------- | ------------------------------------------------------------------ |
+| `instanceId`           | 指定由哪个已注册实例来领取待处理调用。                             |
+| `instanceSessionToken` | 当前实例会话凭据，用于校验实例所有权。                             |
+| `maxCount`（可选）     | 一次最多领取多少条调用；省略时默认 `10`。                          |
+| `waitMs`（可选）       | 长轮询等待时间；省略时默认 `25000`，`0` 表示立即返回当前可用结果。 |
 
 约束：
 
-- `instanceId` 必须是非空字符串。
+- `instanceId` 与 `instanceSessionToken` 都必须是非空字符串。
 - `maxCount` 如果出现，当前 Host 只接受 `1` 到 `100` 之间的整数。
 - `waitMs` 如果出现，必须是大于等于 `0` 的整数。
+- 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
 ### 3.16 `hub.invoke.respond`
 
@@ -287,6 +302,7 @@
 | 参数                 | 用途                               |
 | -------------------- | ---------------------------------- |
 | `instanceId`         | 指定当前由哪个实例回传处理结果。   |
+| `instanceSessionToken` | 当前实例会话凭据，用于校验实例所有权。 |
 | `invocationId`       | 指定要完成的调用标识。             |
 | `value`              | 成功结果负载，与 `error` 二选一。  |
 | `error`              | 业务错误负载，与 `value` 二选一。  |
@@ -296,8 +312,9 @@
 
 约束：
 
-- `instanceId` 与 `invocationId` 都必须是非空字符串。
+- `instanceId`、`instanceSessionToken` 与 `invocationId` 都必须是非空字符串。
 - `error` 如果出现，必须是对象，并且至少包含整数 `code` 与非空字符串 `message`。
+- 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
 ### 3.17 `hub.events.subscribe`
 
@@ -355,12 +372,7 @@
 
 ## 4. 核对结果
 
-### 4.1 接口遗漏检查
-
-- 对照 [`host/src/DevHub.Core/Services/HubConstants.cs`](../../../host/src/DevHub.Core/Services/HubConstants.cs) 中的 `HubRpcMethods`，当前文档未遗漏任何已公开的 `hub.*` 方法。
-- 对照 [`host/src/DevHub.Host/Program.cs`](../../../host/src/DevHub.Host/Program.cs) 与各 RPC / WS 处理器，当前文档覆盖了 `POST /rpc`、`OPTIONS /rpc`、`hub.json.wsUrl`、全部客户端可调用方法和 `hub.event` 服务端通知。
-
-### 4.2 Specification 与 Host 实现未完全对齐的点
+### 4.1 Specification 与 Host 实现未完全对齐的点
 
 - `hub.ws.authenticate.clientSessionId`
   Specification 的方法参数表（`§6.3.2`）只写为 `string`；当前 Host 实现在 [`host/src/DevHub.Host/Transport/WebSocketAuthenticationProcessor.cs`](../../../host/src/DevHub.Host/Transport/WebSocketAuthenticationProcessor.cs) 中要求带连字符的 UUID 字符串（`D` 格式），不满足时返回 `-32602 invalid_params`。

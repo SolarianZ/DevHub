@@ -14,7 +14,8 @@ namespace DevHub.Core.Services;
 public class AppRegistry : IDisposable
 {
     private readonly ConcurrentDictionary<string, AppInstance> _instances = new();
-    private readonly ConcurrentDictionary<string, InstancePasswordState> _passwordStates = new();
+    private readonly ConcurrentDictionary<string, SecretState> _passwordStates = new();
+    private readonly ConcurrentDictionary<string, SecretState> _sessionStates = new();
     private readonly TimeSpan _onlineThreshold;
     private readonly TimeSpan _cleanupThreshold = TimeSpan.FromHours(1);
     private readonly IClock _clock;
@@ -69,6 +70,7 @@ public class AppRegistry : IDisposable
                 if (_instances.TryRemove(instanceId, out var removedInstance))
                 {
                     _passwordStates.TryRemove(instanceId, out _);
+                    _sessionStates.TryRemove(instanceId, out _);
                     _logger.LogInformation("已清理过期应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID}, LastSeen: {LastSeen})",
                         instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid, removedInstance.LastSeenUtc);
                 }
@@ -103,6 +105,7 @@ public class AppRegistry : IDisposable
         lock (_syncRoot)
         {
             var storedInstance = RegisterOrUpdateInstance(instance);
+            RotateSessionTokenState(instance.InstanceId);
             _logger.LogInformation("已注册应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
                 storedInstance.InstanceId, storedInstance.AppId, storedInstance.Scope, storedInstance.Pid);
             return CloneInstance(storedInstance);
@@ -117,17 +120,23 @@ public class AppRegistry : IDisposable
     /// <param name="registeredInstance">成功时返回最新实例快照。</param>
     /// <param name="passwordMismatch">密码不匹配时返回 <c>true</c>。</param>
     /// <returns>成功注册或更新返回 <c>true</c>。</returns>
-    public bool TryRegisterInstance(AppInstance instance, string password, out AppInstance registeredInstance, out bool passwordMismatch)
+    public bool TryRegisterInstance(
+        AppInstance instance,
+        string password,
+        out AppInstance registeredInstance,
+        out string instanceSessionToken,
+        out bool passwordMismatch)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
         ValidateInstance(instance);
+        instanceSessionToken = string.Empty;
 
         lock (_syncRoot)
         {
             if (_instances.TryGetValue(instance.InstanceId, out var existing))
             {
-                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState) && !MatchesPassword(passwordState, password))
+                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState) && !MatchesSecret(passwordState, password))
                 {
                     registeredInstance = CloneInstance(existing);
                     passwordMismatch = true;
@@ -136,15 +145,16 @@ public class AppRegistry : IDisposable
 
                 if (!_passwordStates.ContainsKey(instance.InstanceId))
                 {
-                    _passwordStates[instance.InstanceId] = CreatePasswordState(password);
+                    _passwordStates[instance.InstanceId] = CreateSecretState(password);
                 }
             }
             else
             {
-                _passwordStates[instance.InstanceId] = CreatePasswordState(password);
+                _passwordStates[instance.InstanceId] = CreateSecretState(password);
             }
 
             var storedInstance = RegisterOrUpdateInstance(instance);
+            instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
             registeredInstance = CloneInstance(storedInstance);
             passwordMismatch = false;
             return true;
@@ -156,6 +166,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         _logger.LogDebug("尝试更新实例心跳: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -180,6 +191,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool UnregisterInstance(string instanceId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         _logger.LogDebug("尝试注销应用程序实例: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -187,6 +199,7 @@ public class AppRegistry : IDisposable
             if (_instances.TryRemove(instanceId, out var removedInstance))
             {
                 _passwordStates.TryRemove(instanceId, out _);
+                _sessionStates.TryRemove(instanceId, out _);
                 _logger.LogInformation("已成功注销应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
                     instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid);
                 return true;
@@ -198,38 +211,139 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 使用实例密码注销应用程序实例。
+    /// 使用实例会话凭据刷新实例在线时间。
     /// </summary>
     /// <param name="instanceId">实例标识。</param>
-    /// <param name="password">实例密码。</param>
-    /// <param name="removedInstance">成功移除时返回被删除的实例快照；目标不存在时返回 <c>null</c>。</param>
-    /// <param name="passwordMismatch">密码不匹配时返回 <c>true</c>。</param>
-    /// <returns>成功注销或目标不存在时返回 <c>true</c>。</returns>
-    public bool TryUnregisterInstance(string instanceId, string password, out AppInstance? removedInstance, out bool passwordMismatch)
+    /// <param name="instanceSessionToken">实例当前持有的会话凭据。</param>
+    /// <param name="lastSeenUtc">成功时返回最新在线时间。</param>
+    /// <param name="validationStatus">所有权校验结果。</param>
+    /// <returns>校验通过并完成刷新时返回 <c>true</c>。</returns>
+    public bool TryHeartbeat(
+        string instanceId,
+        string instanceSessionToken,
+        out DateTime lastSeenUtc,
+        out InstanceSessionValidationStatus validationStatus)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
 
         lock (_syncRoot)
         {
-            if (!_instances.TryGetValue(instanceId, out var existing))
+            validationStatus = ValidateInstanceSessionTokenUnsafe(instanceId, instanceSessionToken, out var existing);
+            if (validationStatus != InstanceSessionValidationStatus.Matched)
+            {
+                lastSeenUtc = DateTime.MinValue;
+                return false;
+            }
+
+            var now = _clock.UtcNow;
+            existing!.LastSeenUtc = now;
+            lastSeenUtc = now;
+            _logger.LogDebug("成功更新实例心跳: {InstanceId}", instanceId);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 使用实例会话凭据读取实例快照。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="instanceSessionToken">实例当前持有的会话凭据。</param>
+    /// <param name="instance">成功时返回实例快照。</param>
+    /// <param name="validationStatus">所有权校验结果。</param>
+    /// <returns>校验通过并获取实例快照时返回 <c>true</c>。</returns>
+    public bool TryGetOwnedInstance(
+        string instanceId,
+        string instanceSessionToken,
+        out AppInstance? instance,
+        out InstanceSessionValidationStatus validationStatus)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
+
+        lock (_syncRoot)
+        {
+            validationStatus = ValidateInstanceSessionTokenUnsafe(instanceId, instanceSessionToken, out var existing);
+            if (validationStatus != InstanceSessionValidationStatus.Matched)
+            {
+                instance = null;
+                return false;
+            }
+
+            instance = CloneInstance(existing!);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 使用实例会话凭据刷新在线时间并返回实例快照。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="instanceSessionToken">实例当前持有的会话凭据。</param>
+    /// <param name="instance">成功时返回刷新后的实例快照。</param>
+    /// <param name="validationStatus">所有权校验结果。</param>
+    /// <returns>校验通过并完成刷新时返回 <c>true</c>。</returns>
+    public bool TryTouchOwnedInstance(
+        string instanceId,
+        string instanceSessionToken,
+        out AppInstance? instance,
+        out InstanceSessionValidationStatus validationStatus)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
+
+        lock (_syncRoot)
+        {
+            validationStatus = ValidateInstanceSessionTokenUnsafe(instanceId, instanceSessionToken, out var existing);
+            if (validationStatus != InstanceSessionValidationStatus.Matched)
+            {
+                instance = null;
+                return false;
+            }
+
+            existing!.LastSeenUtc = _clock.UtcNow;
+            instance = CloneInstance(existing);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 使用实例会话凭据注销应用程序实例。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="instanceSessionToken">实例当前持有的会话凭据。</param>
+    /// <param name="removedInstance">成功移除时返回被删除的实例快照；目标不存在时返回 <c>null</c>。</param>
+    /// <param name="validationStatus">所有权校验结果。</param>
+    /// <returns>成功注销或目标不存在时返回 <c>true</c>。</returns>
+    public bool TryUnregisterInstance(
+        string instanceId,
+        string instanceSessionToken,
+        out AppInstance? removedInstance,
+        out InstanceSessionValidationStatus validationStatus)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
+
+        lock (_syncRoot)
+        {
+            validationStatus = ValidateInstanceSessionTokenUnsafe(instanceId, instanceSessionToken, out var existing);
+            if (validationStatus == InstanceSessionValidationStatus.UnknownInstance)
             {
                 removedInstance = null;
-                passwordMismatch = false;
                 return true;
             }
 
-            if (_passwordStates.TryGetValue(instanceId, out var passwordState) && !MatchesPassword(passwordState, password))
+            if (validationStatus == InstanceSessionValidationStatus.TokenMismatch)
             {
-                removedInstance = CloneInstance(existing);
-                passwordMismatch = true;
+                removedInstance = CloneInstance(existing!);
                 return false;
             }
 
             _instances.TryRemove(instanceId, out var removed);
             _passwordStates.TryRemove(instanceId, out _);
+            _sessionStates.TryRemove(instanceId, out _);
             removedInstance = removed is null ? null : CloneInstance(removed);
-            passwordMismatch = false;
+            validationStatus = InstanceSessionValidationStatus.Matched;
             return true;
         }
     }
@@ -282,6 +396,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public AppInstance? GetInstance(string instanceId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         _logger.LogDebug("尝试获取应用程序实例: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -295,6 +410,21 @@ public class AppRegistry : IDisposable
         }
 
         _logger.LogDebug("未找到应用程序实例: {InstanceId}", instanceId);
+        return null;
+    }
+
+    internal string? GetCurrentInstanceSessionToken(string instanceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+
+        lock (_syncRoot)
+        {
+            if (_sessionStates.TryGetValue(instanceId, out var state))
+            {
+                return state.CurrentSecret;
+            }
+        }
+
         return null;
     }
 
@@ -409,35 +539,90 @@ public class AppRegistry : IDisposable
             JsonSerializer.Serialize(meta));
     }
 
-    private static InstancePasswordState CreatePasswordState(string password)
+    private InstanceSessionValidationStatus ValidateInstanceSessionTokenUnsafe(
+        string instanceId,
+        string instanceSessionToken,
+        out AppInstance? instance)
+    {
+        if (!_instances.TryGetValue(instanceId, out instance))
+        {
+            return InstanceSessionValidationStatus.UnknownInstance;
+        }
+
+        return _sessionStates.TryGetValue(instanceId, out var sessionState) && MatchesSecret(sessionState, instanceSessionToken)
+            ? InstanceSessionValidationStatus.Matched
+            : InstanceSessionValidationStatus.TokenMismatch;
+    }
+
+    private string RotateSessionTokenState(string instanceId)
+    {
+        var token = GenerateSessionToken();
+        _sessionStates[instanceId] = CreateSecretState(token);
+        return token;
+    }
+
+    private static SecretState CreateSecretState(string secret)
     {
         var salt = RandomNumberGenerator.GetBytes(16);
-        var passwordBytes = Encoding.UTF8.GetBytes(password);
-        var saltedBytes = new byte[salt.Length + passwordBytes.Length];
+        var secretBytes = Encoding.UTF8.GetBytes(secret);
+        var saltedBytes = new byte[salt.Length + secretBytes.Length];
         Buffer.BlockCopy(salt, 0, saltedBytes, 0, salt.Length);
-        Buffer.BlockCopy(passwordBytes, 0, saltedBytes, salt.Length, passwordBytes.Length);
+        Buffer.BlockCopy(secretBytes, 0, saltedBytes, salt.Length, secretBytes.Length);
 
-        return new InstancePasswordState
+        return new SecretState
         {
             Salt = salt,
-            Hash = SHA256.HashData(saltedBytes)
+            Hash = SHA256.HashData(saltedBytes),
+            CurrentSecret = secret
         };
     }
 
-    private static bool MatchesPassword(InstancePasswordState state, string password)
+    private static bool MatchesSecret(SecretState state, string candidate)
     {
-        var passwordBytes = Encoding.UTF8.GetBytes(password);
-        var saltedBytes = new byte[state.Salt.Length + passwordBytes.Length];
+        var candidateBytes = Encoding.UTF8.GetBytes(candidate);
+        var saltedBytes = new byte[state.Salt.Length + candidateBytes.Length];
         Buffer.BlockCopy(state.Salt, 0, saltedBytes, 0, state.Salt.Length);
-        Buffer.BlockCopy(passwordBytes, 0, saltedBytes, state.Salt.Length, passwordBytes.Length);
+        Buffer.BlockCopy(candidateBytes, 0, saltedBytes, state.Salt.Length, candidateBytes.Length);
         var candidateHash = SHA256.HashData(saltedBytes);
         return CryptographicOperations.FixedTimeEquals(state.Hash, candidateHash);
     }
 
-    private sealed class InstancePasswordState
+    private static string GenerateSessionToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private sealed class SecretState
     {
         public required byte[] Salt { get; init; }
 
         public required byte[] Hash { get; init; }
+
+        public required string CurrentSecret { get; init; }
     }
+}
+
+/// <summary>
+/// 实例会话凭据校验结果。
+/// </summary>
+public enum InstanceSessionValidationStatus
+{
+    /// <summary>
+    /// 凭据匹配。
+    /// </summary>
+    Matched,
+
+    /// <summary>
+    /// 实例不存在。
+    /// </summary>
+    UnknownInstance,
+
+    /// <summary>
+    /// 凭据不匹配。
+    /// </summary>
+    TokenMismatch
 }

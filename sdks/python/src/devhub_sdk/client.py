@@ -7,7 +7,6 @@ from typing import Any
 
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
 from ._parsing import (
-    parse_app_instance,
     parse_datetime,
     parse_definition_validation_result,
     parse_definition_result,
@@ -17,6 +16,7 @@ from ._parsing import (
     parse_notify_result,
     parse_ping_result,
     parse_poll_result,
+    parse_register_instance_result,
     parse_request_result,
     require_bool,
     require_mapping,
@@ -174,15 +174,12 @@ class DevHubClient:
         """调用 `hub.apps.registerInstance`。"""
 
         result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password))
-        root = require_mapping(result, "hub.apps.registerInstance.result")
-        if not require_bool(root, "ok", "hub.apps.registerInstance.result"):
-            raise RuntimeError("hub.apps.registerInstance.result 返回结果非法。")
-        return parse_app_instance(root.get("instance"), path="hub.apps.registerInstance.result.instance")
+        return parse_register_instance_result(result, path="hub.apps.registerInstance.result")
 
-    def heartbeat(self, instance_id: str) -> datetime:
+    def heartbeat(self, instance_id: str, instance_session_token: str) -> datetime:
         """调用 `hub.apps.heartbeat`。"""
 
-        result = self._send("hub.apps.heartbeat", build_heartbeat_params(instance_id))
+        result = self._send("hub.apps.heartbeat", build_heartbeat_params(instance_id, instance_session_token))
         root = require_mapping(result, "hub.apps.heartbeat.result")
         if not require_bool(root, "ok", "hub.apps.heartbeat.result"):
             raise RuntimeError("hub.apps.heartbeat.result 返回结果非法。")
@@ -191,10 +188,13 @@ class DevHubClient:
             raise RuntimeError("hub.apps.heartbeat.result.lastSeenUtc 类型非法。")
         return parse_datetime(last_seen, "hub.apps.heartbeat.result.lastSeenUtc")
 
-    def unregister_instance(self, instance_id: str, password: str) -> None:
+    def unregister_instance(self, instance_id: str, instance_session_token: str) -> None:
         """调用 `hub.apps.unregisterInstance`。"""
 
-        result = self._send("hub.apps.unregisterInstance", build_unregister_params(instance_id, password))
+        result = self._send(
+            "hub.apps.unregisterInstance",
+            build_unregister_params(instance_id, instance_session_token),
+        )
         root = require_mapping(result, "hub.apps.unregisterInstance.result")
         if not require_bool(root, "ok", "hub.apps.unregisterInstance.result"):
             raise RuntimeError("hub.apps.unregisterInstance.result 返回结果非法。")

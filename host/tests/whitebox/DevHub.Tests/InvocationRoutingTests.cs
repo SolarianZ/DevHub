@@ -123,6 +123,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -163,7 +164,13 @@ public class InvocationRoutingTests : IDisposable
         {
             Id = "poll-disabled",
             Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "poll-disabled", maxCount = 10, waitMs = 0 })
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "poll-disabled",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "poll-disabled"),
+                maxCount = 10,
+                waitMs = 0
+            })
         };
 
         var response = await handler.HandleAsync(request, CancellationToken.None);
@@ -184,7 +191,7 @@ public class InvocationRoutingTests : IDisposable
         {
             Id = "poll-unknown-instance",
             Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance", maxCount = 1, waitMs = 0 })
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance", instanceSessionToken = "missing-instance-token", maxCount = 1, waitMs = 0 })
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
@@ -225,6 +232,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-disabled",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-disabled"),
                 invocationId = "invk-non-existent",
                 value = new { ok = true }
             })
@@ -251,6 +259,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "missing-instance",
+                instanceSessionToken = "missing-instance-token",
                 invocationId = "invk-missing",
                 value = new { ok = true }
             })
@@ -544,6 +553,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-holder",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-holder"),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -561,6 +571,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-other",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-other"),
                 invocationId,
                 value = new { ok = true }
             })
@@ -744,6 +755,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "poll-last-seen",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "poll-last-seen"),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -777,6 +789,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "poll-empty-wait",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "poll-empty-wait"),
                 maxCount = 1,
                 waitMs = 150
             })
@@ -837,6 +850,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-last-seen",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-last-seen"),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -857,6 +871,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-last-seen",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-last-seen"),
                 invocationId,
                 value = new { ok = true }
             })
@@ -908,6 +923,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "scalar-args-inst",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "scalar-args-inst"),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -959,6 +975,7 @@ public class InvocationRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "missing-args-inst",
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, "missing-args-inst"),
                 maxCount = 1,
                 waitMs = 0
             })
@@ -1063,6 +1080,10 @@ public class InvocationRoutingTests : IDisposable
 
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
+
+    private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)
+    {
+        return appRegistry.GetCurrentInstanceSessionToken(instanceId)
+            ?? throw new InvalidOperationException($"Missing instance session token for {instanceId}.");
+    }
 }
-
-

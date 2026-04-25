@@ -31,10 +31,40 @@ SHARED_ASSETS_ROOT = TESTS_ROOT / "assets"
 _UNSET = object()
 PENDING_WAIT_STATUS = object()
 DEFAULT_INSTANCE_PASSWORD = "test-instance-password"
+DEFAULT_INSTANCE_SESSION_TOKEN = "test-instance-session-token"
 _DEFAULT_TEST_HOST_BUILD_COMPLETED = False
 LONG_WAIT_STATUS_THRESHOLD_SECONDS = 8
 _LONG_WAIT_STATUS_RENDER_INTERVAL_SECONDS = 1.0
 _WaitStatusResult = TypeVar("_WaitStatusResult")
+_KNOWN_INSTANCE_SESSION_TOKENS: Dict[str, str] = {}
+_KNOWN_INSTANCE_SESSION_TOKENS_LOCK = threading.Lock()
+
+
+def remember_instance_session_token(instance_id: str, instance_session_token: str) -> None:
+    """记录实例当前持有的会话凭据，供后续 helper 自动注入。"""
+    if not instance_id or not instance_session_token:
+        return
+
+    with _KNOWN_INSTANCE_SESSION_TOKENS_LOCK:
+        _KNOWN_INSTANCE_SESSION_TOKENS[instance_id] = instance_session_token
+
+
+def forget_instance_session_token(instance_id: str) -> None:
+    """移除实例的会话凭据缓存。"""
+    if not instance_id:
+        return
+
+    with _KNOWN_INSTANCE_SESSION_TOKENS_LOCK:
+        _KNOWN_INSTANCE_SESSION_TOKENS.pop(instance_id, None)
+
+
+def resolve_instance_session_token(instance_id: Optional[str]) -> str:
+    """按实例 ID 解析当前会话凭据；未知实例返回占位 token。"""
+    if not instance_id:
+        return DEFAULT_INSTANCE_SESSION_TOKEN
+
+    with _KNOWN_INSTANCE_SESSION_TOKENS_LOCK:
+        return _KNOWN_INSTANCE_SESSION_TOKENS.get(instance_id, DEFAULT_INSTANCE_SESSION_TOKEN)
 
 
 @contextmanager
@@ -786,7 +816,7 @@ def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]
                 continue
             registrations.append(item)
         else:
-            registrations.append((item, DEFAULT_INSTANCE_PASSWORD))
+            registrations.append((item, resolve_instance_session_token(item)))
 
     if not registrations:
         return
@@ -794,8 +824,8 @@ def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]
     try:
         base_url, token = DiscoveryService.get_hub_info()
         client = RpcClient(base_url, token)
-        for instance_id, password in registrations:
-            client.unregister_instance(instance_id, password=password)
+        for instance_id, instance_session_token in registrations:
+            client.unregister_instance(instance_id, instance_session_token=instance_session_token)
     except Exception:
         pass
 
@@ -873,7 +903,7 @@ class RpcClient:
         :return: 响应字典
         """
         if isinstance(params, dict):
-            params = self._with_default_instance_password(method, params)
+            params = self._with_default_instance_credentials(method, params)
 
         payload = {
             "jsonrpc": "2.0",
@@ -883,21 +913,43 @@ class RpcClient:
         }
 
         _, response = self.post_json(payload, headers=self.headers, timeout=30)
+        if isinstance(params, dict) and isinstance(response, dict):
+            self._record_instance_session_state(method, params, response)
         return response
 
     @staticmethod
-    def _with_default_instance_password(method, params):
+    def _with_default_instance_credentials(method, params):
         if method == "hub.apps.registerInstance" and "password" not in params and isinstance(params.get("instance"), dict):
             enriched = dict(params)
             enriched["password"] = DEFAULT_INSTANCE_PASSWORD
             return enriched
 
-        if method == "hub.apps.unregisterInstance" and "password" not in params and "instanceId" in params:
+        if (
+            method in {"hub.apps.heartbeat", "hub.apps.unregisterInstance", "hub.invoke.poll", "hub.invoke.respond"}
+            and "instanceSessionToken" not in params
+            and isinstance(params.get("instanceId"), str)
+        ):
             enriched = dict(params)
-            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
+            enriched["instanceSessionToken"] = resolve_instance_session_token(params.get("instanceId"))
             return enriched
 
         return params
+
+    @staticmethod
+    def _record_instance_session_state(method, params, response):
+        result = response.get("result")
+        if method == "hub.apps.registerInstance" and isinstance(result, dict) and result.get("ok") is True:
+            instance = result.get("instance")
+            instance_id = instance.get("instanceId") if isinstance(instance, dict) else None
+            instance_session_token = result.get("instanceSessionToken")
+            if isinstance(instance_id, str) and isinstance(instance_session_token, str):
+                remember_instance_session_token(instance_id, instance_session_token)
+            return
+
+        if method == "hub.apps.unregisterInstance" and isinstance(result, dict) and result.get("ok") is True:
+            instance_id = params.get("instanceId")
+            if isinstance(instance_id, str):
+                forget_instance_session_token(instance_id)
 
     def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
         """
@@ -925,6 +977,9 @@ class RpcClient:
 
     def call_with_timeout(self, method, params=None, timeout_sec=30, request_id="1"):
         """带超时的 JSON-RPC 调用。"""
+        if isinstance(params, dict):
+            params = self._with_default_instance_credentials(method, params)
+
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -933,6 +988,8 @@ class RpcClient:
         }
 
         _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
+        if isinstance(params, dict) and isinstance(response, dict):
+            self._record_instance_session_state(method, params, response)
         return response
 
     def register_instance(
@@ -964,40 +1021,58 @@ class RpcClient:
             params["instance"]["meta"] = meta
         return self.call("hub.apps.registerInstance", params)
 
-    def heartbeat_instance(self, instance_id):
+    def heartbeat_instance(self, instance_id, instance_session_token=None):
         """发送实例心跳。"""
-        return self.call("hub.apps.heartbeat", {"instanceId": instance_id})
+        params = {"instanceId": instance_id}
+        if instance_session_token is not None:
+            params["instanceSessionToken"] = instance_session_token
+        return self.call("hub.apps.heartbeat", params)
 
-    def unregister_instance(self, instance_id, password=DEFAULT_INSTANCE_PASSWORD):
+    def unregister_instance(self, instance_id, instance_session_token=None):
         """注销实例。"""
-        return self.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": password})
+        params = {"instanceId": instance_id}
+        if instance_session_token is not None:
+            params["instanceSessionToken"] = instance_session_token
+        return self.call("hub.apps.unregisterInstance", params)
 
-    def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None):
+    def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None, instance_session_token=None):
         """执行一次 poll。"""
         if timeout_sec is None:
             timeout_sec = max(30, wait_ms / 1000 + 5)
 
-        return self.call_with_timeout("hub.invoke.poll", {
+        params = {
             "instanceId": instance_id,
             "maxCount": max_count,
             "waitMs": wait_ms
-        }, timeout_sec=timeout_sec)
+        }
+        if instance_session_token is not None:
+            params["instanceSessionToken"] = instance_session_token
 
-    def respond_value(self, instance_id, invocation_id, value):
+        return self.call_with_timeout("hub.invoke.poll", params, timeout_sec=timeout_sec)
+
+    def respond_value(self, instance_id, invocation_id, value, instance_session_token=None):
         """回传 value。"""
-        return self.call("hub.invoke.respond", {
+        params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
             "value": value
-        })
+        }
+        if instance_session_token is not None:
+            params["instanceSessionToken"] = instance_session_token
 
-    def respond_error(self, instance_id, invocation_id, error):
+        return self.call("hub.invoke.respond", params)
+
+    def respond_error(self, instance_id, invocation_id, error, instance_session_token=None):
         """回传 error。"""
-        return self.call("hub.invoke.respond", {
+        params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
             "error": error
-        })
+        }
+        if instance_session_token is not None:
+            params["instanceSessionToken"] = instance_session_token
+
+        return self.call("hub.invoke.respond", params)
 
     def build_invoke_notify_params(
         self,

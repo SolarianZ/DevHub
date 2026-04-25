@@ -16,6 +16,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
+    resolve_instance_session_token,
     sleep_with_long_wait_status,
 )
 
@@ -59,9 +60,9 @@ class TestAppInstances(unittest.TestCase):
             if isinstance(item, tuple):
                 if not item[0]:
                     continue
-                targets.append(item)
+                targets.append((item[0], resolve_instance_session_token(item[0])))
             else:
-                targets.append((item, DEFAULT_INSTANCE_PASSWORD))
+                targets.append((item, resolve_instance_session_token(item)))
 
         if not targets:
             return
@@ -69,8 +70,11 @@ class TestAppInstances(unittest.TestCase):
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
-            for instance_id, password in targets:
-                response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": password})
+            for instance_id, instance_session_token in targets:
+                response = client.call(
+                    "hub.apps.unregisterInstance",
+                    {"instanceId": instance_id, "instanceSessionToken": instance_session_token},
+                )
                 error = response.get("error") if isinstance(response, dict) else None
                 if error and error.get("message") != "instance_not_found" and result is not None:
                     result.add_detail(f"WARN cleanup instance failed: instanceId={instance_id}, error={error}")
@@ -95,10 +99,10 @@ class TestAppInstances(unittest.TestCase):
         return payload
 
     @staticmethod
-    def _unregister_payload(instance_id, password=DEFAULT_INSTANCE_PASSWORD):
+    def _unregister_payload(instance_id, instance_session_token=None):
         return {
             "instanceId": instance_id,
-            "password": password
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
 
     def _validate_app_instance_fields(self, result, instance):
@@ -138,6 +142,23 @@ class TestAppInstances(unittest.TestCase):
 
         return True
 
+    @staticmethod
+    def _validate_register_result(result, response):
+        """验证注册结果包含实例会话凭据。"""
+        if not RpcAssertions.expect_success(result, response, ["instance", "instanceSessionToken"]):
+            return False
+
+        instance_session_token = response["result"].get("instanceSessionToken")
+        if not isinstance(instance_session_token, str) or not instance_session_token.strip():
+            result.mark_failure(f"❌ instanceSessionToken 非法: {response['result']}")
+            return False
+
+        if "instanceSessionToken" in response["result"]["instance"]:
+            result.mark_failure("❌ 注册结果不应在 instance 载荷中泄漏 instanceSessionToken")
+            return False
+
+        return True
+
     def test_register_and_list_instances(self):
         """测试注册实例并列出实例"""
         result = TestResult("测试注册实例并列出实例")
@@ -157,7 +178,7 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+            if not self._validate_register_result(result, register_response):
                 return result
 
             instance = register_response["result"]["instance"]
@@ -203,7 +224,7 @@ class TestAppInstances(unittest.TestCase):
                 }
             })
 
-            if not RpcAssertions.expect_success(result, response, ["instance"]):
+            if not self._validate_register_result(result, response):
                 return result
 
             if response["result"]["instance"].get("appId") != unknown_app_id:
@@ -237,10 +258,11 @@ class TestAppInstances(unittest.TestCase):
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-            if not RpcAssertions.expect_success(result, response1, ["instance"]):
+            if not self._validate_register_result(result, response1):
                 return result
 
             last_seen_1 = response1["result"]["instance"]["lastSeenUtc"]
+            token_1 = response1["result"]["instanceSessionToken"]
             time.sleep(1)
 
             response2 = client.call("hub.apps.registerInstance", {
@@ -252,11 +274,12 @@ class TestAppInstances(unittest.TestCase):
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-            if not RpcAssertions.expect_success(result, response2, ["instance"]):
+            if not self._validate_register_result(result, response2):
                 return result
 
             instance2 = response2["result"]["instance"]
             last_seen_2 = instance2["lastSeenUtc"]
+            token_2 = response2["result"]["instanceSessionToken"]
 
             if last_seen_2 <= last_seen_1:
                 result.mark_failure("❌ 二次注册未更新 lastSeenUtc")
@@ -264,6 +287,10 @@ class TestAppInstances(unittest.TestCase):
 
             if instance2.get("scope") != "scope-upsert":
                 result.mark_failure("❌ upsert 后 scope 未更新")
+                return result
+
+            if token_2 == token_1:
+                result.mark_failure("❌ 二次注册未轮换 instanceSessionToken")
                 return result
 
             result.mark_success()
@@ -293,7 +320,7 @@ class TestAppInstances(unittest.TestCase):
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+            if not self._validate_register_result(result, register_response):
                 return result
 
             heartbeat1_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
@@ -367,10 +394,10 @@ class TestAppInstances(unittest.TestCase):
                     "invoke": {"poll": True, "respond": True}
                 }
             })
-            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+            if not self._validate_register_result(result, register_response):
                 return result
 
-            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id, "password": DEFAULT_INSTANCE_PASSWORD})
+            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
             if not RpcAssertions.expect_success(result, unregister_response):
                 return result
 
@@ -401,7 +428,7 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             nonexistent_id = f"nonexistent-{self.generate_unique_instance_id()}"
 
-            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_id, "password": DEFAULT_INSTANCE_PASSWORD})
+            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_id})
             if not RpcAssertions.expect_success(result, response):
                 return result
 
@@ -428,7 +455,7 @@ class TestAppInstances(unittest.TestCase):
                 "hub.apps.registerInstance",
                 self._register_payload(instance_id, app_id, 22345, password=correct_password),
             )
-            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+            if not self._validate_register_result(result, register_response):
                 return result
 
             mismatch_response = client.call(
@@ -462,32 +489,34 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
-    def test_unregister_instance_password_mismatch_rejected(self):
-        """测试注销时密码不匹配会被拒绝且实例保持存在"""
-        result = TestResult("测试注销时密码不匹配会被拒绝且实例保持存在")
+    def test_heartbeat_instance_session_token_mismatch_rejected(self):
+        """测试心跳时 instanceSessionToken 不匹配会被拒绝"""
+        result = TestResult("测试心跳时 instanceSessionToken 不匹配会被拒绝")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
-            app_id = "test-app-unregister-password-guard"
+            app_id = "test-app-heartbeat-token-guard"
             correct_password = "correct-password"
-            wrong_password = "wrong-password"
 
             register_response = client.call(
                 "hub.apps.registerInstance",
                 self._register_payload(instance_id, app_id, 22347, password=correct_password),
             )
-            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+            if not self._validate_register_result(result, register_response):
                 return result
 
-            unregister_response = client.call(
-                "hub.apps.unregisterInstance",
-                self._unregister_payload(instance_id, password=wrong_password),
+            heartbeat_response = client.call(
+                "hub.apps.heartbeat",
+                {
+                    "instanceId": instance_id,
+                    "instanceSessionToken": "wrong-instance-session-token",
+                },
             )
-            if not RpcAssertions.expect_error(result, unregister_response, -32002, "forbidden"):
+            if not RpcAssertions.expect_error(result, heartbeat_response, -32002, "forbidden"):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, unregister_response, {"reason": "instance_password_mismatch"}):
+            if not RpcAssertions.expect_error_data_fields(result, heartbeat_response, {"reason": "instance_session_token_mismatch"}):
                 return result
 
             list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None, "includeOffline": True})
@@ -495,7 +524,54 @@ class TestAppInstances(unittest.TestCase):
                 return result
 
             if not any(inst.get("instanceId") == instance_id for inst in list_response["result"]["instances"]):
-                result.mark_failure("❌ 注销密码不匹配后实例不应被删除")
+                result.mark_failure("❌ 心跳 token 不匹配后实例不应被删除")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances([(locals().get("instance_id"), locals().get("correct_password"))], result)
+
+        return result
+
+    def test_unregister_instance_session_token_mismatch_rejected(self):
+        """测试注销时 instanceSessionToken 不匹配会被拒绝且实例保持存在"""
+        result = TestResult("测试注销时 instanceSessionToken 不匹配会被拒绝且实例保持存在")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-unregister-token-guard"
+            correct_password = "correct-password"
+
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, app_id, 22348, password=correct_password),
+            )
+            if not self._validate_register_result(result, register_response):
+                return result
+
+            unregister_response = client.call(
+                "hub.apps.unregisterInstance",
+                {
+                    "instanceId": instance_id,
+                    "instanceSessionToken": "wrong-instance-session-token",
+                },
+            )
+            if not RpcAssertions.expect_error(result, unregister_response, -32002, "forbidden"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, unregister_response, {"reason": "instance_session_token_mismatch"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None, "includeOffline": True})
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            if not any(inst.get("instanceId") == instance_id for inst in list_response["result"]["instances"]):
+                result.mark_failure("❌ 注销 token 不匹配后实例不应被删除")
                 return result
 
             result.mark_success()
@@ -1002,7 +1078,8 @@ class TestAppInstances(unittest.TestCase):
             self.test_unregister_instance,
             self.test_unregister_nonexistent_instance,
             self.test_register_instance_password_mismatch_rejected,
-            self.test_unregister_instance_password_mismatch_rejected,
+            self.test_heartbeat_instance_session_token_mismatch_rejected,
+            self.test_unregister_instance_session_token_mismatch_rejected,
             self.test_list_instances_with_params,
             self.test_list_instances_explicit_global_scope,
             self.test_register_instance_with_global_scope,

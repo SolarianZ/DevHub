@@ -1,7 +1,7 @@
 {
   "jsonrpc": "2.0",
-  "id": "apps-instances-unregister",
-  "method": "hub.apps.unregisterInstance",
+  "id": "apps-instances-heartbeat",
+  "method": "hub.apps.heartbeat",
   "params": {
     "instanceId": "sample-instance-1",
     "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}"

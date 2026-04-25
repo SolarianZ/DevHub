@@ -315,7 +315,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-register\"," +
-                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"invoke\":{\"poll\":true,\"respond\":true}},\"instanceSessionToken\":\"session-1\"}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -348,7 +348,7 @@ public sealed class HttpTransportTests : IDisposable
             Content = new StringContent("{" +
                 "\"jsonrpc\":\"2.0\"," +
                 "\"id\":\"req-register\"," +
-                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"password\":\"secret-1\"}}}", Encoding.UTF8, "application/json")
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"password\":\"secret-1\"},\"instanceSessionToken\":\"session-1\"}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -370,6 +370,39 @@ public sealed class HttpTransportTests : IDisposable
         }, "secret-1", CancellationToken.None));
 
         Assert.Contains("password", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenRegisterInstanceResultMissingInstanceSessionToken_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-register\"," +
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-register");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "sample.app",
+            Pid = 12345,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "secret-1", CancellationToken.None));
+
+        Assert.Contains("instanceSessionToken", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -423,7 +456,8 @@ public sealed class HttpTransportTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
         {
-            InstanceId = "inst-1"
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
         }, CancellationToken.None));
 
         Assert.Contains("clientSessionId", exception.Message, StringComparison.Ordinal);
@@ -494,7 +528,8 @@ public sealed class HttpTransportTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
         {
-            InstanceId = "inst-1"
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
         }, CancellationToken.None));
 
         Assert.Contains("items[0].options", exception.Message, StringComparison.Ordinal);

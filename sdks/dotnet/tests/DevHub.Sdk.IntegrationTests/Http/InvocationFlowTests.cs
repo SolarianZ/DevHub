@@ -22,7 +22,7 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-notify-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.notify.app", "notify-inst-1", scope: string.Empty), InstancePassword);
+        var registered = await RegisterInstanceAsync(client, "invoke.notify.app", "notify-inst-1", scope: string.Empty);
 
         var notifyResult = await client.NotifyAsync(new InvokeRequest
         {
@@ -36,7 +36,7 @@ public sealed class InvocationFlowTests
         });
 
         Assert.True(notifyResult.Ok);
-        var invocation = await WaitForSingleInvocationAsync(client, "notify-inst-1");
+        var invocation = await WaitForSingleInvocationAsync(client, registered.InstanceId, registered.InstanceSessionToken!);
         Assert.Equal(notifyResult.InvocationId, invocation.InvocationId);
         Assert.Equal(InvocationKind.Notify, invocation.Kind);
         Assert.Equal("hello", invocation.Args!.Value.GetProperty("message").GetString());
@@ -53,7 +53,7 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-request-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.request.app", "request-inst-1", scope: string.Empty), InstancePassword);
+        var registered = await RegisterInstanceAsync(client, "invoke.request.app", "request-inst-1", scope: string.Empty);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
@@ -71,11 +71,12 @@ public sealed class InvocationFlowTests
             }
         });
 
-        var invocation = await WaitForSingleInvocationAsync(client, "request-inst-1");
+        var invocation = await WaitForSingleInvocationAsync(client, registered.InstanceId, registered.InstanceSessionToken!);
 
         await client.RespondAsync(new RespondRequest
         {
-            InstanceId = "request-inst-1",
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken!,
             InvocationId = invocation.InvocationId,
             Value = new { ok = true, value = 2 }
         });
@@ -86,7 +87,8 @@ public sealed class InvocationFlowTests
 
         var conflict = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RespondAsync(new RespondRequest
         {
-            InstanceId = "request-inst-1",
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken!,
             InvocationId = invocation.InvocationId,
             Value = new { ok = true }
         }));
@@ -104,7 +106,7 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-request-null-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.request.null.app", "request-null-inst-1", scope: string.Empty), InstancePassword);
+        var registered = await RegisterInstanceAsync(client, "invoke.request.null.app", "request-null-inst-1", scope: string.Empty);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
@@ -121,11 +123,12 @@ public sealed class InvocationFlowTests
             }
         });
 
-        var invocation = await WaitForSingleInvocationAsync(client, "request-null-inst-1");
+        var invocation = await WaitForSingleInvocationAsync(client, registered.InstanceId, registered.InstanceSessionToken!);
 
         await client.RespondAsync(new RespondRequest
         {
-            InstanceId = "request-null-inst-1",
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken!,
             InvocationId = invocation.InvocationId,
             Value = null
         });
@@ -146,7 +149,7 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-error-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.error.app", "error-inst-1", scope: string.Empty), InstancePassword);
+        var registered = await RegisterInstanceAsync(client, "invoke.error.app", "error-inst-1", scope: string.Empty);
 
         var requestTask = client.RequestAsync(new InvokeRequest
         {
@@ -163,11 +166,12 @@ public sealed class InvocationFlowTests
             }
         });
 
-        var invocation = await WaitForSingleInvocationAsync(client, "error-inst-1");
+        var invocation = await WaitForSingleInvocationAsync(client, registered.InstanceId, registered.InstanceSessionToken!);
 
         await client.RespondAsync(new RespondRequest
         {
-            InstanceId = "error-inst-1",
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken!,
             InvocationId = invocation.InvocationId,
             Error = DevHubCalleeError.Create(1001, "app_error", new { reason = "boom" })
         });
@@ -192,7 +196,7 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-timeout-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.timeout.app", "timeout-inst-1", scope: string.Empty), InstancePassword);
+        _ = await RegisterInstanceAsync(client, "invoke.timeout.app", "timeout-inst-1", scope: string.Empty);
 
         var timeoutException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RequestAsync(new InvokeRequest
         {
@@ -250,9 +254,9 @@ public sealed class InvocationFlowTests
         });
 
         await using var client = await host.CreateClientAsync("invoke-scope-client");
-        await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-global-inst", scope: string.Empty), InstancePassword);
-        await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-a-inst", scope: "scope-a"), InstancePassword);
-        await client.RegisterInstanceAsync(CreateInstance("invoke.scope.app", "scope-literal-global-inst", scope: "global"), InstancePassword);
+        var globalInstance = await RegisterInstanceAsync(client, "invoke.scope.app", "scope-global-inst", scope: string.Empty);
+        var scopeAInstance = await RegisterInstanceAsync(client, "invoke.scope.app", "scope-a-inst", scope: "scope-a");
+        var literalGlobalInstance = await RegisterInstanceAsync(client, "invoke.scope.app", "scope-literal-global-inst", scope: "global");
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -260,8 +264,13 @@ public sealed class InvocationFlowTests
             Method = "test.default-global",
             Target = new InvocationTarget { Scope = string.Empty }
         });
-        _ = await WaitForSingleInvocationAsync(client, "scope-global-inst");
-        Assert.Empty((await client.PollAsync(new PollRequest { InstanceId = "scope-a-inst", WaitMs = 0 })).Items);
+        _ = await WaitForSingleInvocationAsync(client, globalInstance.InstanceId, globalInstance.InstanceSessionToken!);
+        Assert.Empty((await client.PollAsync(new PollRequest
+        {
+            InstanceId = scopeAInstance.InstanceId,
+            InstanceSessionToken = scopeAInstance.InstanceSessionToken!,
+            WaitMs = 0
+        })).Items);
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -269,7 +278,7 @@ public sealed class InvocationFlowTests
             Method = "test.scope-a",
             Target = new InvocationTarget { Scope = "scope-a" }
         });
-        _ = await WaitForSingleInvocationAsync(client, "scope-a-inst");
+        _ = await WaitForSingleInvocationAsync(client, scopeAInstance.InstanceId, scopeAInstance.InstanceSessionToken!);
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -277,7 +286,7 @@ public sealed class InvocationFlowTests
             Method = "test.empty-scope",
             Target = new InvocationTarget { Scope = string.Empty }
         });
-        _ = await WaitForSingleInvocationAsync(client, "scope-global-inst");
+        _ = await WaitForSingleInvocationAsync(client, globalInstance.InstanceId, globalInstance.InstanceSessionToken!);
 
         _ = await client.NotifyAsync(new InvokeRequest
         {
@@ -285,7 +294,69 @@ public sealed class InvocationFlowTests
             Method = "test.literal-global",
             Target = new InvocationTarget { Scope = "global" }
         });
-        _ = await WaitForSingleInvocationAsync(client, "scope-literal-global-inst");
+        _ = await WaitForSingleInvocationAsync(client, literalGlobalInstance.InstanceId, literalGlobalInstance.InstanceSessionToken!);
+    }
+
+    [Fact]
+    public async Task PollAndRespond_WithSessionTokenMismatch_ShouldMapForbidden()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.token.guard.app",
+            DisplayName = "invoke.token.guard.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-token-guard-client");
+        var registered = await RegisterInstanceAsync(client, "invoke.token.guard.app", "token-guard-inst-1", scope: string.Empty);
+
+        var pollException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = $"wrong-{registered.InstanceSessionToken}",
+            WaitMs = 0
+        }));
+        Assert.Equal(-32002, pollException.Code);
+        Assert.Equal("instance_session_token_mismatch", pollException.Reason);
+
+        var requestTask = client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.token.guard.app",
+            Method = "test.guard",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        var invocation = await WaitForSingleInvocationAsync(client, registered.InstanceId, registered.InstanceSessionToken!);
+
+        var respondException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = $"wrong-{registered.InstanceSessionToken}",
+            InvocationId = invocation.InvocationId,
+            Value = new { ok = true }
+        }));
+        Assert.Equal(-32002, respondException.Code);
+        Assert.Equal("instance_session_token_mismatch", respondException.Reason);
+
+        await client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken!,
+            InvocationId = invocation.InvocationId,
+            Value = new { ok = true, value = 1 }
+        });
+
+        var requestResult = await requestTask;
+        Assert.True(requestResult.Ok);
+        Assert.Equal(1, requestResult.Value!.Value.GetProperty("value").GetInt32());
     }
 
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId, string scope)
@@ -304,7 +375,16 @@ public sealed class InvocationFlowTests
         };
     }
 
-    private static async Task<Invocation> WaitForSingleInvocationAsync(DevHubClient client, string instanceId, int timeoutMs = 3000)
+    private static Task<AppInstance> RegisterInstanceAsync(DevHubClient client, string appId, string instanceId, string scope)
+    {
+        return client.RegisterInstanceAsync(CreateInstance(appId, instanceId, scope), InstancePassword);
+    }
+
+    private static async Task<Invocation> WaitForSingleInvocationAsync(
+        DevHubClient client,
+        string instanceId,
+        string instanceSessionToken,
+        int timeoutMs = 3000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         var lastCount = 0;
@@ -319,6 +399,7 @@ public sealed class InvocationFlowTests
             var pollResult = await client.PollAsync(new PollRequest
             {
                 InstanceId = instanceId,
+                InstanceSessionToken = instanceSessionToken,
                 WaitMs = waitMs
             });
 

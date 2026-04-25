@@ -259,8 +259,8 @@ public class ScopeRoutingSpecTests : IDisposable
         AssertSuccess(withEmpty);
         var invocationId = JsonSerializer.SerializeToElement(withEmpty.Result).GetProperty("invocationId").GetString();
 
-        var globalPoll = await PollAsync(handler, "spec-5.5-target-global", maxCount: 1, waitMs: 120);
-        var scopedPoll = await PollAsync(handler, "spec-5.5-target-scoped", maxCount: 1, waitMs: 0);
+        var globalPoll = await PollAsync(handler, appRegistry, "spec-5.5-target-global", maxCount: 1, waitMs: 120);
+        var scopedPoll = await PollAsync(handler, appRegistry, "spec-5.5-target-scoped", maxCount: 1, waitMs: 0);
 
         AssertSuccess(globalPoll);
         AssertSuccess(scopedPoll);
@@ -404,8 +404,8 @@ public class ScopeRoutingSpecTests : IDisposable
             AssertSuccess(notify);
             var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
 
-            var expectedPoll = await PollAsync(handler, testCase.ExpectedInstance, maxCount: 1, waitMs: 120);
-            var unexpectedPoll = await PollAsync(handler, testCase.UnexpectedInstance, maxCount: 1, waitMs: 0);
+            var expectedPoll = await PollAsync(handler, appRegistry, testCase.ExpectedInstance, maxCount: 1, waitMs: 120);
+            var unexpectedPoll = await PollAsync(handler, appRegistry, testCase.UnexpectedInstance, maxCount: 1, waitMs: 0);
 
             AssertSuccess(expectedPoll);
             AssertSuccess(unexpectedPoll);
@@ -451,7 +451,7 @@ public class ScopeRoutingSpecTests : IDisposable
 
         AssertError(notify, -32010, "instance_not_found");
 
-        var globalPoll = await PollAsync(handler, "spec-5.5-no-fallback-global-inst", maxCount: 1, waitMs: 0);
+        var globalPoll = await PollAsync(handler, appRegistry, "spec-5.5-no-fallback-global-inst", maxCount: 1, waitMs: 0);
         AssertSuccess(globalPoll);
         var globalItems = JsonSerializer.SerializeToElement(globalPoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(globalItems);
@@ -495,8 +495,8 @@ public class ScopeRoutingSpecTests : IDisposable
         AssertSuccess(notify);
         var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
 
-        var targetPoll = await PollAsync(handler, "spec-7.1-target-instance", maxCount: 1, waitMs: 120);
-        var otherPoll = await PollAsync(handler, "spec-7.1-other-instance", maxCount: 1, waitMs: 0);
+        var targetPoll = await PollAsync(handler, appRegistry, "spec-7.1-target-instance", maxCount: 1, waitMs: 120);
+        var otherPoll = await PollAsync(handler, appRegistry, "spec-7.1-other-instance", maxCount: 1, waitMs: 0);
 
         AssertSuccess(targetPoll);
         AssertSuccess(otherPoll);
@@ -704,7 +704,7 @@ public class ScopeRoutingSpecTests : IDisposable
         });
     }
 
-    private static async Task<JsonRpcResponse> PollAsync(InvocationHandler handler, string instanceId, int maxCount, int waitMs)
+    private static async Task<JsonRpcResponse> PollAsync(InvocationHandler handler, AppRegistry appRegistry, string instanceId, int maxCount, int waitMs)
     {
         return await handler.HandleAsync(new JsonRpcRequest
         {
@@ -713,10 +713,17 @@ public class ScopeRoutingSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
                 maxCount,
                 waitMs
             })
         }, CancellationToken.None);
+    }
+
+    private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)
+    {
+        return appRegistry.GetCurrentInstanceSessionToken(instanceId)
+               ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 
     private static HashSet<string?> ExtractInstanceIds(JsonRpcResponse response)

@@ -304,8 +304,8 @@ public class LaunchCoordinatorTests : IDisposable
             CancellationToken.None);
 
         Assert.True(third.Ok);
-        Assert.Equal("started", third.Status);
-        Assert.NotEqual(first.LaunchId, third.LaunchId);
+        Assert.Equal("already_running", third.Status);
+        Assert.Equal(first.LaunchId, third.LaunchId);
     }
 
     [Fact]
@@ -742,5 +742,4 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
-
 

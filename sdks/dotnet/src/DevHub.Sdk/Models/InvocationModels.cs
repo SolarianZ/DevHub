@@ -232,6 +232,11 @@ public sealed class PollRequest
     public string InstanceId { get; set; } = string.Empty;
 
     /// <summary>
+    /// 实例会话令牌。
+    /// </summary>
+    public string InstanceSessionToken { get; set; } = string.Empty;
+
+    /// <summary>
     /// 单次最多拉取条数。
     /// </summary>
     public int? MaxCount { get; set; }
@@ -272,10 +277,16 @@ public sealed class PollResult
 public sealed class RespondRequest
 {
     private object? _value;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
     public string InstanceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 实例会话令牌。
+    /// </summary>
+    public string InstanceSessionToken { get; set; } = string.Empty;
 
     /// <summary>
     /// 调用标识。

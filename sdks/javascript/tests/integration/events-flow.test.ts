@@ -175,7 +175,7 @@ it("authenticated WS should support ping and apps queries", async () => {
     expect(definition.displayName).toBe("events.flow.app");
     expect(definition.scope).toBe("");
 
-    await httpClient.registerInstance({
+    const registered = await httpClient.registerInstance({
       instanceId: "events-query-inst-1",
       appId: "events.flow.app",
       scope: "",
@@ -192,7 +192,7 @@ it("authenticated WS should support ping and apps queries", async () => {
     });
     expect(instances.some((instance) => instance.instanceId === "events-query-inst-1")).toBe(true);
 
-    await httpClient.unregisterInstance("events-query-inst-1", INSTANCE_PASSWORD);
+    await httpClient.unregisterInstance("events-query-inst-1", registered.instanceSessionToken);
   } finally {
     await httpClient.dispose();
     await eventsClient.dispose();

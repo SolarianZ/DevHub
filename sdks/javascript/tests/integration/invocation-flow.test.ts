@@ -70,7 +70,7 @@ afterAll(async () => {
 
 it("notify + poll 应完成调用往返", async () => {
   const client = await createClient("invoke-notify-client");
-  await registerInstance(client, "invoke.notify.app", "notify-inst-1");
+  const instanceSessionToken = await registerInstance(client, "invoke.notify.app", "notify-inst-1");
 
   const notifyResult = await client.notify({
     appId: "invoke.notify.app",
@@ -85,7 +85,7 @@ it("notify + poll 应完成调用往返", async () => {
 
   expect(notifyResult.ok).toBe(true);
 
-  const invocation = await waitForSingleInvocation(client, "notify-inst-1");
+  const invocation = await waitForSingleInvocation(client, "notify-inst-1", instanceSessionToken);
   expect(invocation.invocationId).toBe(notifyResult.invocationId);
   expect(invocation.kind).toBe("notify");
   expect((invocation.args as { message: string }).message).toBe("hello");
@@ -95,7 +95,7 @@ it("notify + poll 应完成调用往返", async () => {
 
 it("request/respond 成功后再次 respond 应返回 delivery_conflict", async () => {
   const client = await createClient("invoke-request-client");
-  await registerInstance(client, "invoke.request.app", "request-inst-1");
+  const instanceSessionToken = await registerInstance(client, "invoke.request.app", "request-inst-1");
 
   const requestTask = client.request({
     appId: "invoke.request.app",
@@ -112,10 +112,11 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
     }
   });
 
-  const invocation = await waitForSingleInvocation(client, "request-inst-1");
+  const invocation = await waitForSingleInvocation(client, "request-inst-1", instanceSessionToken);
 
   await client.respond({
     instanceId: "request-inst-1",
+    instanceSessionToken,
     invocationId: invocation.invocationId,
     value: {
       ok: true,
@@ -132,6 +133,7 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
 
   await expect(client.respond({
     instanceId: "request-inst-1",
+    instanceSessionToken,
     invocationId: invocation.invocationId,
     value: {
       ok: true
@@ -145,7 +147,7 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
 
 it("request/respond 错误应映射为 invocation_failed", async () => {
   const client = await createClient("invoke-error-client");
-  await registerInstance(client, "invoke.error.app", "error-inst-1");
+  const instanceSessionToken = await registerInstance(client, "invoke.error.app", "error-inst-1");
 
   const requestTask = client.request({
     appId: "invoke.error.app",
@@ -162,10 +164,11 @@ it("request/respond 错误应映射为 invocation_failed", async () => {
     (error) => ({ ok: false as const, error })
   );
 
-  const invocation = await waitForSingleInvocation(client, "error-inst-1");
+  const invocation = await waitForSingleInvocation(client, "error-inst-1", instanceSessionToken);
 
   await client.respond({
     instanceId: "error-inst-1",
+    instanceSessionToken,
     invocationId: invocation.invocationId,
     error: {
       code: 1001,
@@ -265,7 +268,7 @@ it("notify/request 在 rpc_disabled 时应映射 forbidden", async () => {
 
 it("poll 在 poll_not_enabled 时应映射 forbidden", async () => {
   const client = await createClient("invoke-poll-disabled-client");
-  await registerInstance(
+  const instanceSessionToken = await registerInstance(
     client,
     "invoke.poll-disabled.app",
     "poll-disabled-inst-1",
@@ -279,6 +282,7 @@ it("poll 在 poll_not_enabled 时应映射 forbidden", async () => {
   await expectRpcError(
     client.poll({
       instanceId: "poll-disabled-inst-1",
+      instanceSessionToken,
       waitMs: 0
     }),
     DevHubRpcErrorCode.Forbidden,
@@ -290,7 +294,7 @@ it("poll 在 poll_not_enabled 时应映射 forbidden", async () => {
 
 it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
   const client = await createClient("invoke-respond-disabled-client");
-  await registerInstance(
+  const instanceSessionToken = await registerInstance(
     client,
     "invoke.respond-disabled.app",
     "respond-disabled-inst-1",
@@ -304,6 +308,7 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
   await expectRpcError(
     client.respond({
       instanceId: "respond-disabled-inst-1",
+      instanceSessionToken,
       invocationId: "invk-missing",
       value: {
         ok: true
@@ -316,11 +321,41 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
   await client.dispose();
 });
 
+it("poll / respond 使用错误 instanceSessionToken 时应映射 forbidden", async () => {
+  const client = await createClient("invoke-token-mismatch-client");
+  const instanceSessionToken = await registerInstance(client, "invoke.request.app", "token-mismatch-inst-1");
+
+  await expectRpcError(
+    client.poll({
+      instanceId: "token-mismatch-inst-1",
+      instanceSessionToken: `wrong-${instanceSessionToken}`,
+      waitMs: 0
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "instance_session_token_mismatch"
+  );
+
+  await expectRpcError(
+    client.respond({
+      instanceId: "token-mismatch-inst-1",
+      instanceSessionToken: `wrong-${instanceSessionToken}`,
+      invocationId: "invk-missing",
+      value: {
+        ok: true
+      }
+    }),
+    DevHubRpcErrorCode.Forbidden,
+    "instance_session_token_mismatch"
+  );
+
+  await client.dispose();
+});
+
 it("scope 路由规则应命中正确实例", async () => {
   const client = await createClient("invoke-scope-client");
-  await registerInstance(client, "invoke.scope.app", "scope-global-inst", "");
-  await registerInstance(client, "invoke.scope.app", "scope-a-inst", "scope-a");
-  await registerInstance(client, "invoke.scope.app", "scope-literal-global-inst", "global");
+  const globalToken = await registerInstance(client, "invoke.scope.app", "scope-global-inst", "");
+  const scopeAToken = await registerInstance(client, "invoke.scope.app", "scope-a-inst", "scope-a");
+  const literalGlobalToken = await registerInstance(client, "invoke.scope.app", "scope-literal-global-inst", "global");
 
   await client.notify({
     appId: "invoke.scope.app",
@@ -329,8 +364,8 @@ it("scope 路由规则应命中正确实例", async () => {
       scope: ""
     }
   });
-  expect((await waitForSingleInvocation(client, "scope-global-inst")).method).toBe("test.default-global");
-  expect((await client.poll({ instanceId: "scope-a-inst", waitMs: 0 })).items).toHaveLength(0);
+  expect((await waitForSingleInvocation(client, "scope-global-inst", globalToken)).method).toBe("test.default-global");
+  expect((await client.poll({ instanceId: "scope-a-inst", instanceSessionToken: scopeAToken, waitMs: 0 })).items).toHaveLength(0);
 
   await client.notify({
     appId: "invoke.scope.app",
@@ -339,7 +374,7 @@ it("scope 路由规则应命中正确实例", async () => {
       scope: "scope-a"
     }
   });
-  expect((await waitForSingleInvocation(client, "scope-a-inst")).method).toBe("test.scope-a");
+  expect((await waitForSingleInvocation(client, "scope-a-inst", scopeAToken)).method).toBe("test.scope-a");
 
   await client.notify({
     appId: "invoke.scope.app",
@@ -348,7 +383,7 @@ it("scope 路由规则应命中正确实例", async () => {
       scope: ""
     }
   });
-  expect((await waitForSingleInvocation(client, "scope-global-inst")).method).toBe("test.empty-scope");
+  expect((await waitForSingleInvocation(client, "scope-global-inst", globalToken)).method).toBe("test.empty-scope");
 
   await client.notify({
     appId: "invoke.scope.app",
@@ -357,7 +392,7 @@ it("scope 路由规则应命中正确实例", async () => {
       scope: "global"
     }
   });
-  expect((await waitForSingleInvocation(client, "scope-literal-global-inst")).method).toBe("test.literal-global");
+  expect((await waitForSingleInvocation(client, "scope-literal-global-inst", literalGlobalToken)).method).toBe("test.literal-global");
 
   await client.dispose();
 });
@@ -378,19 +413,22 @@ async function registerInstance(
     poll: true,
     respond: true
   }
-): Promise<void> {
-  await client.registerInstance({
+): Promise<string> {
+  const registered = await client.registerInstance({
     instanceId,
     appId,
     scope,
     pid: process.pid,
     invoke
   }, INSTANCE_PASSWORD);
+
+  return registered.instanceSessionToken;
 }
 
-async function waitForSingleInvocation(client: DevHubClient, instanceId: string) {
+async function waitForSingleInvocation(client: DevHubClient, instanceId: string, instanceSessionToken: string) {
   const result = await client.poll({
     instanceId,
+    instanceSessionToken,
     maxCount: 1,
     waitMs: 5_000
   });

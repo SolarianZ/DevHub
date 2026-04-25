@@ -30,7 +30,10 @@ public sealed class DefinitionProvider : IDefinitionProvider
         lock (_syncRoot)
         {
             _definitionLoader.Load();
-            _snapshot = _definitionLoader.GetAllDefinitions().ToArray();
+            _snapshot = _definitionLoader
+                .GetAllDefinitions()
+                .Select(CloneDefinition)
+                .ToArray();
             _snapshotByIdentity = _snapshot.ToDictionary(AppDefinitionIdentity.FromDefinition);
         }
     }
@@ -40,7 +43,7 @@ public sealed class DefinitionProvider : IDefinitionProvider
     {
         lock (_syncRoot)
         {
-            return _snapshot;
+            return _snapshot.Select(CloneDefinition).ToArray();
         }
     }
 
@@ -51,7 +54,9 @@ public sealed class DefinitionProvider : IDefinitionProvider
 
         lock (_syncRoot)
         {
-            return _snapshotByIdentity.GetValueOrDefault(AppDefinitionIdentity.Create(appId, scope));
+            return _snapshotByIdentity.TryGetValue(AppDefinitionIdentity.Create(appId, scope), out var definition)
+                ? CloneDefinition(definition)
+                : null;
         }
     }
 
@@ -62,5 +67,51 @@ public sealed class DefinitionProvider : IDefinitionProvider
         {
             return _snapshot.Any(definition => definition.AppId == appId);
         }
+    }
+
+    private static AppDefinition CloneDefinition(AppDefinition definition)
+    {
+        return new AppDefinition
+        {
+            AppId = definition.AppId,
+            Scope = definition.Scope,
+            DisplayName = definition.DisplayName,
+            Description = definition.Description,
+            Launch = CloneLaunch(definition.Launch),
+            Capabilities = CloneCapabilities(definition.Capabilities)
+        };
+    }
+
+    private static LaunchConfiguration? CloneLaunch(LaunchConfiguration? launch)
+    {
+        if (launch is null)
+        {
+            return null;
+        }
+
+        return new LaunchConfiguration
+        {
+            ExePath = launch.ExePath,
+            ArgsTemplate = launch.ArgsTemplate,
+            WorkingDirectory = launch.WorkingDirectory,
+            DedupeKeyTemplate = launch.DedupeKeyTemplate,
+            EnvironmentVariables = launch.EnvironmentVariables is null
+                ? null
+                : new Dictionary<string, string?>(launch.EnvironmentVariables, StringComparer.Ordinal)
+        };
+    }
+
+    private static AppCapabilities? CloneCapabilities(AppCapabilities? capabilities)
+    {
+        if (capabilities is null)
+        {
+            return null;
+        }
+
+        return new AppCapabilities
+        {
+            Rpc = capabilities.Rpc,
+            Events = capabilities.Events
+        };
     }
 }

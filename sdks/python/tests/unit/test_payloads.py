@@ -12,6 +12,7 @@ from devhub_sdk import (
     LaunchConfiguration,
 )
 from devhub_sdk._payloads import (
+    build_heartbeat_params,
     build_get_definition_params,
     build_list_definitions_params,
     build_list_instances_params,
@@ -173,8 +174,9 @@ def test_request_builder_when_auto_launch_requires_queue_if_offline_true_should_
 
 
 def test_poll_builder_should_apply_defaults() -> None:
-    payload = build_poll_params(PollRequest(instance_id="inst-1"))
+    payload = build_poll_params(PollRequest(instance_id="inst-1", instance_session_token="token-1"))
 
+    assert payload["instanceSessionToken"] == "token-1"
     assert payload["maxCount"] == 10
     assert payload["waitMs"] == 25000
 
@@ -371,9 +373,23 @@ def test_register_instance_builder_when_instance_id_violates_spec_should_raise()
         )
 
 
-def test_unregister_builder_when_password_missing_should_raise() -> None:
+def test_heartbeat_builder_should_include_instance_session_token() -> None:
+    assert build_heartbeat_params("inst-1", "token-1") == {
+        "instanceId": "inst-1",
+        "instanceSessionToken": "token-1",
+    }
+
+
+def test_unregister_builder_when_instance_session_token_missing_should_raise() -> None:
     with pytest.raises(ValueError):
         build_unregister_params("inst-1", "  ")
+
+
+def test_unregister_builder_should_include_instance_session_token() -> None:
+    assert build_unregister_params("inst-1", "token-1") == {
+        "instanceId": "inst-1",
+        "instanceSessionToken": "token-1",
+    }
 
 
 def test_respond_builder_when_error_message_missing_should_raise() -> None:
@@ -381,6 +397,7 @@ def test_respond_builder_when_error_message_missing_should_raise() -> None:
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="invk-1",
                 error=DevHubCalleeError(code=1001, message=""),
             )
@@ -415,6 +432,7 @@ def test_poll_builder_when_wait_ms_is_not_integer_should_raise() -> None:
         build_poll_params(
             PollRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 wait_ms=1.5,  # type: ignore[arg-type]
             )
         )
@@ -424,11 +442,13 @@ def test_respond_builder_should_allow_null_value() -> None:
     payload = build_respond_params(
         RespondRequest(
             instance_id="inst-1",
+            instance_session_token="token-1",
             invocation_id="invk-1",
             value=None,
         )
     )
 
+    assert payload["instanceSessionToken"] == "token-1"
     assert payload["value"] is None
     assert "error" not in payload
 
@@ -438,6 +458,7 @@ def test_respond_builder_when_value_and_error_both_missing_should_raise() -> Non
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="invk-1",
             )
         )
@@ -448,6 +469,7 @@ def test_respond_builder_when_invocation_id_violates_spec_should_raise() -> None
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="request-1",
                 value={"ok": True},
             )
@@ -459,6 +481,7 @@ def test_respond_builder_when_value_and_error_present_should_raise() -> None:
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="invk-1",
                 value={"ok": True},
                 error=DevHubCalleeError(code=1001, message="app_error"),
@@ -471,6 +494,7 @@ def test_respond_builder_when_value_contains_unsupported_json_type_should_raise(
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="invk-1",
                 value={"callback": lambda: "ignored"},
             )
@@ -482,6 +506,7 @@ def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> No
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
+                instance_session_token="token-1",
                 invocation_id="invk-1",
                 error=DevHubCalleeError(
                     code=1001,

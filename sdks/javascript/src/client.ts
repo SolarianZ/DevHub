@@ -28,6 +28,7 @@ import type {
   PingResult,
   PollRequest,
   PollResult,
+  RegisteredAppInstance,
   RequestResult,
   RespondRequest,
   NormalizedDevHubClientOptions
@@ -154,22 +155,24 @@ export class DevHubClient {
     );
   }
 
-  async registerInstance(instance: AppInstanceRegistration, password: string): Promise<AppInstance> {
+  async registerInstance(instance: AppInstanceRegistration, password: string): Promise<RegisteredAppInstance> {
     this.throwIfDisposed();
     return parseRegisterInstanceResult(
       await this.#transport.send("hub.apps.registerInstance", buildRegisterInstanceParams(instance, password))
     );
   }
 
-  async heartbeat(instanceId: string): Promise<Date> {
+  async heartbeat(instanceId: string, instanceSessionToken: string): Promise<Date> {
     this.throwIfDisposed();
-    return parseHeartbeatResult(await this.#transport.send("hub.apps.heartbeat", buildHeartbeatParams(instanceId)));
+    return parseHeartbeatResult(
+      await this.#transport.send("hub.apps.heartbeat", buildHeartbeatParams(instanceId, instanceSessionToken))
+    );
   }
 
-  async unregisterInstance(instanceId: string, password: string): Promise<void> {
+  async unregisterInstance(instanceId: string, instanceSessionToken: string): Promise<void> {
     this.throwIfDisposed();
     parseVoidOkResult(
-      await this.#transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId, password)),
+      await this.#transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId, instanceSessionToken)),
       "hub.apps.unregisterInstance.result"
     );
   }

@@ -92,16 +92,17 @@ export function buildRegisterInstanceParams(
   return payload;
 }
 
-export function buildHeartbeatParams(instanceId: string): Record<string, unknown> {
+export function buildHeartbeatParams(instanceId: string, instanceSessionToken: string): Record<string, unknown> {
   return {
-    instanceId: ensureInstanceId(instanceId, "instanceId")
+    instanceId: ensureInstanceId(instanceId, "instanceId"),
+    instanceSessionToken: ensureRequiredInputString(instanceSessionToken, "instanceSessionToken")
   };
 }
 
-export function buildUnregisterParams(instanceId: string, password: string): Record<string, unknown> {
+export function buildUnregisterParams(instanceId: string, instanceSessionToken: string): Record<string, unknown> {
   return {
     instanceId: ensureInstanceId(instanceId, "instanceId"),
-    password: ensureRequiredInputString(password, "password")
+    instanceSessionToken: ensureRequiredInputString(instanceSessionToken, "instanceSessionToken")
   };
 }
 
@@ -265,6 +266,7 @@ export function buildPollParams(request: PollRequest): Record<string, unknown> {
   }
 
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
+  const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const maxCount = ensureOptionalInputIntegerInRange(
     request.maxCount,
     "maxCount",
@@ -281,6 +283,7 @@ export function buildPollParams(request: PollRequest): Record<string, unknown> {
 
   return {
     instanceId,
+    instanceSessionToken,
     maxCount,
     waitMs
   };
@@ -292,6 +295,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   }
 
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
+  const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const invocationId = ensureInvocationId(request.invocationId, "invocationId");
 
   const hasValue = request.value !== undefined;
@@ -302,6 +306,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
 
   const payload: Record<string, unknown> = {
     instanceId,
+    instanceSessionToken,
     invocationId
   };
 

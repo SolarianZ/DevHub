@@ -126,6 +126,8 @@
 | 错误信号        | `POST /rpc` **必须**使用 JSON-RPC 的 `error` 字段；`OPTIONS /rpc` **不得**返回 JSON-RPC 响应体           |
 
 规范性要求：
+- 当 `POST /rpc` 承载**带 `id`** 的 JSON-RPC request 时，Host **必须**返回 JSON-RPC `result` 或 JSON-RPC `error`。
+- 当 `POST /rpc` 承载**省略 `id`** 的 JSON-RPC notification 时，Host **必须**返回空的 `200 OK` 响应体，**不得**返回 JSON-RPC `result` 或 `error`；若调用方需要错误反馈，**必须**改为发送带 `id` 的普通 request。
 - `OPTIONS /rpc` **必须**作为浏览器 / WebView 直连 Host 的预检入口单独处理，**不得**进入 JSON-RPC 请求体验证、协议头校验或 Bearer Token 鉴权链路。
 - 当 `OPTIONS /rpc` 请求同时携带 `Origin` 和 `Access-Control-Request-Method: POST` 时，Host **必须**将其视为有效预检，并在响应中声明允许的方法 `POST`、`OPTIONS`。
 - 上述预检成功响应 **必须**返回与请求 `Origin` 完全一致的 `Access-Control-Allow-Origin`，并 **必须**返回 `Vary: Origin`。
@@ -395,7 +397,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       "maxLength": 256,
       "pattern": "^[a-zA-Z0-9._:-]+$"
     },
-    "appId": { "type": "string" },
+    "appId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
     "scope": {
       "type": "string",
       "pattern": "^$|^\\S(?:.*\\S)?$"
@@ -431,7 +433,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       "maxLength": 256,
       "pattern": "^[a-zA-Z0-9._:-]+$"
     },
-    "appId": { "type": "string" },
+    "appId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
     "scope": {
       "type": "string",
       "pattern": "^$|^\\S(?:.*\\S)?$"
@@ -453,8 +455,10 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 规范性语义：
 - `AppInstance` 与 `AppInstanceRegistration` **必须**使用显式字符串 `scope`；其中 `scope = ""` 表示 Global，其他合法非空字符串表示显式作用域。
 - `hub.apps.registerInstance` 的 `params.instance.scope` **必须**存在且为合法字符串；省略、`null` 与首尾包含空白字符的字符串都**必须**被拒绝。
+- `AppInstance` 与 `AppInstanceRegistration` 的 `appId` **必须**满足 `^[a-z0-9][a-z0-9.-]*$`。
 - `AppInstanceRegistration` 只描述 `params.instance`；`hub.apps.registerInstance` 的顶层 `password` **不属于** `AppInstanceRegistration`。
-- `password` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.registerInstance` 的成功结果、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
+- `password` 与 `instanceSessionToken` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
+- `instanceSessionToken` 只属于 `hub.apps.registerInstance` 成功结果顶层字段，以及 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的顶层 `params`。
 
 ---
 
@@ -763,39 +767,47 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 规范性要求：
 - `params.password` **必须**是非空字符串。
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
+- `params.instance.appId` **必须**满足 `^[a-z0-9][a-z0-9.-]*$`。
 - Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
+- Hub **必须**在每次成功的 `registerInstance` / re-register 时生成新的、不透明的 `instanceSessionToken`，并立即使该 `instanceId` 先前持有的旧 token 失效。
 - Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 缺失、为 `null`、类型非法或未通过字符串验证，**必须**返回 `-32602 invalid_params`。
 - 如果某个 `appId` 已存在至少一份 Definition，Hub **必须**只接受与现有 `appId + scope` 精确匹配的实例注册；当该 `appId` 下不存在对应 `scope` 的 Definition 时，Hub **必须**返回 `-32014 app_definition_not_found`，并在 `error.data` 中至少包含 `appId` 与规范化 `scope`。
 - 当某个 `instanceId` 首次成功注册时，Hub **必须**把该次请求中的 `password` 与该 `instanceId` 绑定。
 - 当某个 `instanceId` 已存在时，Hub **必须**只在 `password` 匹配时允许更新该实例；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
+- `instanceSessionToken` **必须**作为该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权凭据使用。
 - 当某次注册可被 Hub 关联到一条尚未完成的启动记录时，该注册**必须**通过被跟踪的 `launchId` 绑定回对应启动记录；仅凭“已有同 `appId + scope` 实例在线”**不得**视为该次启动已完成。
 - 若该启动绑定注册的 `appId + scope` 与发起启动的 Definition 不一致，Hub **必须**拒绝本次注册，并返回 `-32002 forbidden` 且 `error.data.reason="definition_scope_mismatch"`；Hub **不得**让同 `appId` 的其他作用域 Definition 吸收该进程。
 - 发生上述启动绑定冲突时，任何等待该启动完成的 `hub.apps.launch` **必须**以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；相关 `error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope` 以便诊断。
 - Hub **不得**在成功结果或任何 `app.instance.*` 事件载荷中回传 `password`。
+- Hub **不得**在 `AppInstance`、`hub.apps.listInstances` 结果或任何 `app.instance.*` 事件载荷中回传 `instanceSessionToken`。
 
 **结果**：
 ```json
-{ "ok": true, "instance": { /* AppInstance */ } }
+{ "ok": true, "instance": { /* AppInstance */ }, "instanceSessionToken": "opaque-token" }
 ```
 
 #### 6.3.9 `hub.apps.heartbeat` (仅限 HTTP)
 **参数**：
 ```json
-{ "instanceId": "inst-123" }
+{ "instanceId": "inst-123", "instanceSessionToken": "opaque-token" }
 ```
 **结果**：
 ```json
 { "ok": true, "lastSeenUtc": "2026-01-30T12:34:56Z" }
 ```
-**错误**：`-32010 instance_not_found`
+**错误**：`-32010 instance_not_found`、`-32002 forbidden`
+
+规范性行为：
+- `params.instanceId` 与 `params.instanceSessionToken` **必须**都是非空字符串。
+- 当 `instanceId` 存在但 `instanceSessionToken` 不匹配时，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
 
 #### 6.3.10 `hub.apps.unregisterInstance` (仅限 HTTP)
 **参数**：
 ```json
 {
   "instanceId": "inst-123",
-  "password": "sample-password-1"
+  "instanceSessionToken": "opaque-token"
 }
 ```
 **结果**：
@@ -805,8 +817,8 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 幂等性：如果实例不存在，Hub 仍**必须**返回 `{ "ok": true }`。
 
 规范性行为：
-- `params.password` **必须**是非空字符串。
-- 当 `instanceId` 存在时，Hub **必须**只在 `password` 匹配时允许注销；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
+- `params.instanceId` 与 `params.instanceSessionToken` **必须**都是非空字符串。
+- 当 `instanceId` 存在时，Hub **必须**只在 `instanceSessionToken` 匹配时允许注销；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
 - 当 `instanceId` 不存在且请求结构合法时，Hub **必须**继续返回 `{ "ok": true }`。
 
 #### 6.3.11 `hub.apps.listInstances`
@@ -858,6 +870,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - Hub **必须**要求请求显式提供合法字符串 `scope`；若 `scope` 缺失、为 `null`、类型非法或未通过 §5.5 字符串验证，**必须**返回 `-32602 invalid_params`。
 - 完成 `scope` 校验后，Hub **必须**按精确 `appId + scope` 解析要启动的 Definition；**不得**从其他显式 scope 或 Global Definition 回退匹配。
 - Hub **必须**为 `dedupeKey` 维护一个去重窗口（默认 30 秒）。在此窗口内，具有相同 key 的并发启动**必须**返回 `already_running`。
+- 对于已经启动进程且该进程仍存活、但尚未完成注册绑定的启动记录，Hub **必须**持续返回 `already_running`，即使已超过 `LaunchDedupeWindowSeconds`；去重窗口只控制已完成或已失败记录的保留时间，**不得**让仍在进行中的同 key 启动脱离 dedupe。
 - 如果省略 `dedupeKey`，Hub **必须**使用 `AppDefinition.launch.dedupeKeyTemplate` 生成它。
 - **模板替换**：Hub **必须**只支持 `dedupeKeyTemplate` 和 `argsTemplate` 中的以下占位符：
   - `{appId}`: 应用程序 ID。
@@ -940,12 +953,14 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
 - 当 auto-launch 因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
+- 当 HTTP caller 在 `hub.invoke.request` 完成前主动断连或取消请求时，Hub **必须**终止当前 HTTP 等待流程，但**不得**仅因 caller 断连而把该 invocation 推进到 `invocation_timeout` 或 `invocation_expired`；原有 `ttlMs` / `waitTimeoutMs` 预算 **必须**继续独立生效，因此后续 `poll/respond` 在预算仍有效时**可以**成功，在预算真正耗尽后仍**必须**按既有超时/过期语义拒绝迟到响应。
 
 #### 6.3.15 `hub.invoke.poll` (仅限 HTTP)
 **参数**：
 ```json
 {
   "instanceId": "inst-123",
+  "instanceSessionToken": "opaque-token",
   "maxCount": 10,
   "waitMs": 25000
 }
@@ -975,6 +990,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 规范性行为：
 - Hub **必须**要求实例在轮询前已注册（`hub.apps.registerInstance`）；否则返回 `-32010 instance_not_found`。
+- Hub **必须**要求 `params.instanceSessionToken` 为非空字符串，并校验其与 `instanceId` 当前持有的 token 匹配；不匹配时 **必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
 - Hub **必须**强制要求实例具有 `invoke.poll==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="poll_not_enabled"`。
 - `waitMs` 若省略则默认为 `25000`，且**必须**为大于等于 `0` 的整数（非法值 => `-32602 invalid_params`）。
 - `waitMs = 0` **必须**表示“立即返回当前可用项或空列表”，不得进入长轮询等待。
@@ -987,6 +1003,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```json
 {
   "instanceId": "inst-123",
+  "instanceSessionToken": "opaque-token",
   "invocationId": "invk-...",
   "value": {}
 }
@@ -996,6 +1013,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```json
 {
   "instanceId": "inst-123",
+  "instanceSessionToken": "opaque-token",
   "invocationId": "invk-...",
   "error": { "code": 1001, "message": "app_error", "data": {} }
 }
@@ -1008,6 +1026,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 规范性行为：
 - Hub **必须**要求实例已注册；否则返回 `-32010 instance_not_found`。
+- Hub **必须**要求 `params.instanceSessionToken` 为非空字符串，并校验其与 `instanceId` 当前持有的 token 匹配；不匹配时 **必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
 - Hub **必须**强制要求实例具有 `invoke.respond==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="respond_not_enabled"`。
 - 成功的 `respond` **必须**更新实例的 `lastSeenUtc`。
 
@@ -1170,9 +1189,9 @@ stateDiagram-v2
 | 代码   | 名称                       | 何时返回                            | `error.data` (对象)                                                                                                   |
 | ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
-| -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`；若某次已跟踪 launch 的注册尝试绑定到另一作用域，**必须**使用 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
+| -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`, `"instance_session_token_mismatch"`；若某次已跟踪 launch 的注册尝试绑定到另一作用域，**必须**使用 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
 | -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`; 在 auto-launch 未命中请求的精确 Definition 时**可以**附带 `appId?`: string, `scope?`: string |
-| -32011 | `invocation_expired`       | TTL 耗尽 / 使用了已取消的调用 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
+| -32011 | `invocation_expired`       | TTL 耗尽 / 调用已过期 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
 | -32014 | `app_definition_not_found` | 定义文件缺失 / 启动所需定义缺失     | `appId?`: string; `scope?`: string                                                                                    |
 | -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string; 若等待中的 launch 因作用域回绑冲突失败，`reason` **必须**为 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |

@@ -75,6 +75,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         Assert.Equal(ScopeContract.Global, instance.GetProperty("scope").GetString());
         Assert.Equal("cn", instance.GetProperty("meta").GetProperty("region").GetString());
         Assert.False(instance.TryGetProperty("password", out _));
+        var currentToken = registerResult.GetProperty("instanceSessionToken").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(currentToken));
 
         eventPublisher.Verify(
             publisher => publisher.Publish(It.Is<HubEventMessage>(message => message.Type == HubEventTypes.AppInstanceRegistered)),
@@ -255,7 +257,14 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var handler = CreateAppInstancesHandler(appRegistry);
 
         var response = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsHeartbeat, "heartbeat-unknown", new { instanceId = "missing.instance" }),
+            CreateRequest(
+                HubRpcMethods.HubAppsHeartbeat,
+                "heartbeat-unknown",
+                new
+                {
+                    instanceId = "missing.instance",
+                    instanceSessionToken = "missing-instance-token"
+                }),
             CancellationToken.None);
 
         AssertError(response, -32010, "instance_not_found", "heartbeat-unknown");
@@ -267,11 +276,11 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardPassword()
+    public async Task Spec_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardOwnershipToken()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "instance.app", "instance.unregister");
+        var currentToken = RegisterInstance(appRegistry, "instance.app", "instance.unregister");
         var handler = CreateAppInstancesHandler(appRegistry, eventPublisher: eventPublisher.Object);
 
         var forbiddenResponse = await handler.HandleAsync(
@@ -281,13 +290,13 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "instance.unregister",
-                    password = "wrong-password"
+                    instanceSessionToken = "wrong-token"
                 }),
             CancellationToken.None);
 
         AssertError(forbiddenResponse, -32002, "forbidden", "unregister-forbidden");
         Assert.Equal(
-            "instance_password_mismatch",
+            "instance_session_token_mismatch",
             JsonSerializer.SerializeToElement(forbiddenResponse.Error!.Data).GetProperty("reason").GetString());
 
         var okResponse = await handler.HandleAsync(
@@ -297,7 +306,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "instance.unregister",
-                    password = "instance.unregister-password"
+                    instanceSessionToken = currentToken
                 }),
             CancellationToken.None);
 
@@ -313,7 +322,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "instance.unregister",
-                    password = "instance.unregister-password"
+                    instanceSessionToken = currentToken
                 }),
             CancellationToken.None);
 
@@ -473,7 +482,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "notify.success", "notify.instance");
+        var notifyToken = RegisterInstance(appRegistry, "notify.success", "notify.instance");
         using var context = CreateInvocationHandlerContext(appRegistry, eventPublisher: eventPublisher.Object);
 
         var notifyResponse = await context.Handler.HandleAsync(
@@ -510,6 +519,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "notify.instance",
+                    instanceSessionToken = notifyToken,
                     maxCount = 1,
                     waitMs = 200
                 }),
@@ -542,7 +552,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "request.success", "request.instance");
+        var requestToken = RegisterInstance(appRegistry, "request.success", "request.instance");
         using var context = CreateInvocationHandlerContext(appRegistry, eventPublisher: eventPublisher.Object);
 
         var requestTask = context.Handler.HandleAsync(
@@ -575,6 +585,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "request.instance",
+                    instanceSessionToken = requestToken,
                     maxCount = 1,
                     waitMs = 200
                 }),
@@ -590,6 +601,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "request.instance",
+                    instanceSessionToken = requestToken,
                     invocationId,
                     value = new
                     {
@@ -621,7 +633,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "request.failed", "request.failed.instance");
+        var requestFailedToken = RegisterInstance(appRegistry, "request.failed", "request.failed.instance");
         using var context = CreateInvocationHandlerContext(appRegistry, eventPublisher: eventPublisher.Object);
 
         var requestTask = context.Handler.HandleAsync(
@@ -654,6 +666,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "request.failed.instance",
+                    instanceSessionToken = requestFailedToken,
                     maxCount = 1,
                     waitMs = 200
                 }),
@@ -670,6 +683,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "request.failed.instance",
+                    instanceSessionToken = requestFailedToken,
                     invocationId,
                     error = new
                     {
@@ -777,17 +791,33 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     public async Task Spec_6_3_15_InvocationRpcHandler_Poll_ShouldRejectUnknownOrUnauthorizedInstances()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "poll.app", "poll.disabled", poll: false);
+        var pollDisabledToken = RegisterInstance(appRegistry, "poll.app", "poll.disabled", poll: false);
         using var context = CreateInvocationHandlerContext(appRegistry);
 
         var unknownResponse = await context.Handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubInvokePoll, "poll-unknown", new { instanceId = "missing.poll", waitMs = 0 }),
+            CreateRequest(
+                HubRpcMethods.HubInvokePoll,
+                "poll-unknown",
+                new
+                {
+                    instanceId = "missing.poll",
+                    instanceSessionToken = "missing-poll-token",
+                    waitMs = 0
+                }),
             CancellationToken.None);
 
         AssertError(unknownResponse, -32010, "instance_not_found", "poll-unknown");
 
         var forbiddenResponse = await context.Handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubInvokePoll, "poll-forbidden", new { instanceId = "poll.disabled", waitMs = 0 }),
+            CreateRequest(
+                HubRpcMethods.HubInvokePoll,
+                "poll-forbidden",
+                new
+                {
+                    instanceId = "poll.disabled",
+                    instanceSessionToken = pollDisabledToken,
+                    waitMs = 0
+                }),
             CancellationToken.None);
 
         AssertError(forbiddenResponse, -32002, "forbidden", "poll-forbidden");
@@ -802,9 +832,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         WriteDefinition("respond.conflict", rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        RegisterInstance(appRegistry, "respond.conflict", "holder.instance");
-        RegisterInstance(appRegistry, "respond.conflict", "other.instance");
-        RegisterInstance(appRegistry, "respond.conflict", "respond.disabled", respond: false);
+        var holderToken = RegisterInstance(appRegistry, "respond.conflict", "holder.instance");
+        var otherToken = RegisterInstance(appRegistry, "respond.conflict", "other.instance");
+        var respondDisabledToken = RegisterInstance(appRegistry, "respond.conflict", "respond.disabled", respond: false);
         using var context = CreateInvocationHandlerContext(appRegistry);
 
         var invalidPayloadResponse = await context.Handler.HandleAsync(
@@ -814,6 +844,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "holder.instance",
+                    instanceSessionToken = holderToken,
                     invocationId = "invk-invalid",
                     value = new { ok = true },
                     error = new { code = 1, message = "bad" }
@@ -829,6 +860,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "respond.disabled",
+                    instanceSessionToken = respondDisabledToken,
                     invocationId = "invk-any",
                     value = new { ok = true }
                 }),
@@ -844,6 +876,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "holder.instance",
+                    instanceSessionToken = holderToken,
                     invocationId = "invk-unknown",
                     value = new { ok = true }
                 }),
@@ -885,6 +918,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "holder.instance",
+                    instanceSessionToken = holderToken,
                     maxCount = 1,
                     waitMs = 0
                 }),
@@ -897,6 +931,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     instanceId = "other.instance",
+                    instanceSessionToken = otherToken,
                     invocationId,
                     value = new { ok = true }
                 }),
@@ -1030,7 +1065,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             JsonSerializer.Serialize(payload));
     }
 
-    private static void RegisterInstance(
+    private static string RegisterInstance(
         AppRegistry appRegistry,
         string appId,
         string instanceId,
@@ -1053,7 +1088,14 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             }
         };
 
-        appRegistry.TryRegisterInstance(instance, $"{instanceId}-password", out _, out _);
+        var registered = appRegistry.TryRegisterInstance(
+            instance,
+            $"{instanceId}-password",
+            out _,
+            out var instanceSessionToken,
+            out _);
+        Assert.True(registered);
+        return instanceSessionToken;
     }
 
     private static JsonRpcRequest CreateRequest(
