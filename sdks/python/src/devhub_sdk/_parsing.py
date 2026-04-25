@@ -479,7 +479,8 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
         require_validated_string(payload_root, "instanceId", path, validate_instance_id)
-        require_scope_string(payload_root, "scope", path)
+        if "scope" in payload_root:
+            require_scope_string(payload_root, "scope", path)
         if "password" in payload_root:
             raise RuntimeError(f"{path}.password 不得出现。")
 

@@ -62,9 +62,14 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._options = options.clone()
         self._connect = connect or websockets.connect
         self._websocket = None
+        self._connect_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._abandoned_request_ids: dict[str, float] = {}
+        self._abandoned_request_ttl_seconds = max(float(self._options.request_timeout or 0.0), 30.0)
         self._stream = _EventStreamState()
+        self._event_reader_lock = asyncio.Lock()
+        self._event_reader_active = False
         self._receiver_task: asyncio.Task[None] | None = None
         self._terminated = False
         self._closed = False
@@ -72,6 +77,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
         self._ensure_open()
         self._ensure_stream_available()
+        self._prune_abandoned_request_ids()
         await self._ensure_connected()
         self._ensure_stream_available()
 
@@ -91,6 +97,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             async with self._send_lock:
                 await self._websocket.send(json.dumps(payload_dict, allow_nan=False))
         except Exception as exc:
+            self._pending.pop(request_id, None)
             await self._abort_connection(exc)
             raise RuntimeError("事件流已终止。") from exc
 
@@ -98,22 +105,38 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             if self._options.request_timeout is None:
                 envelope = await future
             else:
-                envelope = await asyncio.wait_for(future, timeout=self._options.request_timeout)
-        finally:
+                envelope = await asyncio.wait_for(
+                    asyncio.shield(future),
+                    timeout=self._options.request_timeout,
+                )
+        except asyncio.TimeoutError:
             self._pending.pop(request_id, None)
+            self._mark_request_abandoned(request_id)
+            future.cancel()
+            raise
+        except BaseException:
+            self._pending.pop(request_id, None)
+            raise
+        else:
+            self._pending.pop(request_id, None)
+            self._abandoned_request_ids.pop(request_id, None)
 
         return validate_response_envelope(envelope, request_id)
 
     async def read_events(self) -> AsyncIterator[dict[str, Any]]:
+        await self._acquire_event_reader()
         stream = self._stream
-        while True:
-            item = await stream.queue.get()
-            if item is _SENTINEL:
-                stream.queue.put_nowait(_SENTINEL)
-                if stream.terminal_error is not None:
-                    raise stream.terminal_error
-                return
-            yield item
+        try:
+            while True:
+                item = await stream.queue.get()
+                if item is _SENTINEL:
+                    stream.queue.put_nowait(_SENTINEL)
+                    if stream.terminal_error is not None:
+                        raise stream.terminal_error
+                    return
+                yield item
+        finally:
+            await self._release_event_reader()
 
     async def disconnect(self, reason: str) -> None:
         self._ensure_open()
@@ -130,12 +153,17 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         if self._websocket is not None:
             return
 
-        self._websocket = await self._connect(
-            self._connection_info.websocket_endpoint,
-            open_timeout=self._options.request_timeout,
-            close_timeout=self._options.request_timeout,
-        )
-        self._receiver_task = asyncio.create_task(self._run_receive_loop())
+        async with self._connect_lock:
+            if self._websocket is not None:
+                return
+
+            self._websocket = await self._connect(
+                self._connection_info.websocket_endpoint,
+                open_timeout=self._options.request_timeout,
+                close_timeout=self._options.request_timeout,
+            )
+            self._clear_abandoned_request_ids()
+            self._receiver_task = asyncio.create_task(self._run_receive_loop())
 
     async def _run_receive_loop(self) -> None:
         terminal_error: BaseException | None = None
@@ -151,6 +179,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             if self._pending:
                 error = terminal_error or RuntimeError("WebSocket 连接已关闭。")
                 self._fail_pending(error)
+            self._clear_abandoned_request_ids()
             self._websocket = None
             if self._receiver_task is current_task:
                 self._receiver_task = None
@@ -189,8 +218,16 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         if not isinstance(request_id, str):
             raise RuntimeError("WebSocket JSON-RPC 响应缺少有效 id。")
 
+        self._prune_abandoned_request_ids()
         future = self._pending.get(request_id)
-        if future is None or future.done():
+        if future is None:
+            if self._consume_abandoned_request(request_id):
+                return
+            raise RuntimeError("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。")
+        if future.done():
+            self._pending.pop(request_id, None)
+            if self._consume_abandoned_request(request_id):
+                return
             raise RuntimeError("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。")
         future.set_result(root)
 
@@ -217,6 +254,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             raise RuntimeError("当前 WebSocket 连接仍处于活动状态。")
         if not self._terminated:
             return
+        self._clear_abandoned_request_ids()
         self._stream = _EventStreamState()
         self._terminated = False
 
@@ -226,14 +264,57 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
     async def _abort_connection(self, error: BaseException) -> None:
         self._terminated = True
         self._fail_pending(error)
+        self._clear_abandoned_request_ids()
         await self._shutdown_connection()
         self._complete_event_stream(self._stream, error)
 
     async def _disconnect_current_connection(self, reason: str) -> None:
         self._terminated = True
         self._fail_pending(RuntimeError("WebSocket 连接已关闭。"))
+        self._clear_abandoned_request_ids()
         await self._shutdown_connection(reason)
         self._complete_event_stream(self._stream)
+
+    async def _acquire_event_reader(self) -> None:
+        async with self._event_reader_lock:
+            if self._event_reader_active:
+                raise RuntimeError("当前事件流已存在活动读取器。")
+            self._event_reader_active = True
+
+    async def _release_event_reader(self) -> None:
+        async with self._event_reader_lock:
+            self._event_reader_active = False
+
+    def _mark_request_abandoned(self, request_id: str) -> None:
+        self._abandoned_request_ids[request_id] = (
+            asyncio.get_running_loop().time() + self._abandoned_request_ttl_seconds
+        )
+
+    def _consume_abandoned_request(self, request_id: str) -> bool:
+        expiration = self._abandoned_request_ids.get(request_id)
+        if expiration is None:
+            return False
+        if expiration <= asyncio.get_running_loop().time():
+            self._abandoned_request_ids.pop(request_id, None)
+            return False
+        self._abandoned_request_ids.pop(request_id, None)
+        return True
+
+    def _prune_abandoned_request_ids(self) -> None:
+        if not self._abandoned_request_ids:
+            return
+
+        now = asyncio.get_running_loop().time()
+        expired_request_ids = [
+            request_id
+            for request_id, expiration in self._abandoned_request_ids.items()
+            if expiration <= now
+        ]
+        for request_id in expired_request_ids:
+            self._abandoned_request_ids.pop(request_id, None)
+
+    def _clear_abandoned_request_ids(self) -> None:
+        self._abandoned_request_ids.clear()
 
     async def _shutdown_connection(self, reason: str | None = None) -> None:
         websocket = self._websocket

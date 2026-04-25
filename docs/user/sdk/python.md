@@ -46,6 +46,8 @@ SDK 固定从以下位置发现运行时信息：
 - `<dataDir>/runtime/hub.json`
 - `hub.json.tokenFile` 指向的令牌文件
 
+`discover_runtime(...)` 返回的 `RuntimeConnectionInfo` 以及 `DevHubClient.runtime`、`DevHubEventsClient.runtime` 暴露的 `HubRuntime` 都是不可变 dataclass。公开运行时视图用于读取连接信息；字段赋值会触发 `FrozenInstanceError`，后续 HTTP / WebSocket 连接端点与令牌保持稳定。
+
 不支持以下输入：
 
 - 直接传入 `runtime` 子目录
@@ -109,7 +111,33 @@ client.unregister_instance(registered.instance_id, registered.instance_session_t
 client.delete_definition(definition.app_id, definition.scope)
 ```
 
-## 7. 高级扩展
+## 7. WebSocket 事件流约定
+
+```python
+from devhub_sdk import APP_INSTANCE_REGISTERED, DevHubClientOptions, DevHubEventsClient
+
+events_client = await DevHubEventsClient.from_runtime(
+    DevHubClientOptions(client_id="events-client")
+)
+
+await events_client.authenticate()
+subscription_id = await events_client.subscribe([APP_INSTANCE_REGISTERED])
+
+reader = events_client.read_events()
+try:
+    event = await anext(reader)
+    print(event.type, event.payload)
+finally:
+    await reader.aclose()
+
+await events_client.unsubscribe(subscription_id)
+```
+
+`DevHubEventsClient` 同一时刻只允许一个活动中的 `read_events()` 读取器。若业务需要多个消费者，应在调用方内部对读取到的事件做扇出。
+
+底层 WebSocket 终止时，当前活动读取器只排空终止前已经进入本地缓冲的事件，然后结束。后续新的读取前需要重新执行 `authenticate()`，并重新执行 `subscribe()` 恢复订阅；旧订阅不会自动恢复。
+
+## 8. 高级扩展
 
 默认情况下，推荐使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
 
@@ -146,7 +174,7 @@ events_client = await DevHubEventsClient.from_runtime(
 - `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session。
 - `DevHubEventsClient` 负责把原始 `hub.event.params` 解析为 `DevHubEvent`，并复用与 HTTP 客户端相同的参数 builder。
 
-## 8. 最小验证方式
+## 9. 最小验证方式
 
 - 直接运行上面的 `client.ping(...)` 示例，确认返回 `ok=True`。
 - 若要验证 `Python SDK` 工作区自身的测试基线，可执行：
@@ -164,7 +192,7 @@ python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 
 - 若要查看工作区安装、集成测试隔离或仓库级联调要求，请阅读 [`../../developer/guides/development.md`](../../developer/guides/development.md)。
 
-## 9. 相关文档
+## 10. 相关文档
 
 - [`./README.md`](./README.md)
 - [`../../../sdks/python/README.md`](../../../sdks/python/README.md)

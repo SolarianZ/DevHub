@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import FrozenInstanceError, dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -171,6 +171,25 @@ def test_http_client_context_manager_should_close_transport_on_exit() -> None:
         assert client.runtime.http_base_url == "http://127.0.0.1:57231"
 
     assert transport.close_calls == 1
+
+
+def test_http_client_runtime_view_should_be_immutable_and_keep_original_endpoint(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_ping_success_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+
+        with pytest.raises(FrozenInstanceError):
+            client.runtime.http_base_url = "http://127.0.0.1:1"  # type: ignore[misc]
+
+        ping = client.ping({"source": "immutable-runtime"})
+
+        assert ping.ok is True
+        assert scenario.requests[0]["method"] == "hub.ping"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 def test_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:

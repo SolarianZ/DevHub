@@ -218,6 +218,7 @@ class DevHubEventsClient:
             aclose = getattr(iterator, "aclose", None)
             if aclose is not None:
                 await aclose()
+            self._refresh_session_state()
 
     async def close(self) -> None:
         """关闭 WebSocket 客户端。"""
@@ -274,6 +275,7 @@ class DevHubEventsClient:
         is_terminated = getattr(self._session, "is_terminated", None)
         if callable(is_terminated) and is_terminated():
             self._authenticated = False
+            self._event_stream_available = False
 
     def _reopen_session(self) -> None:
         reopen = getattr(self._session, "reopen", None)

@@ -148,7 +148,7 @@ class AppInstanceRegistration:
         self.scope = require_scoped_string(self.scope, "scope")
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class HubRuntimeTuning:
     """Hub 运行时调优参数。"""
 
@@ -157,7 +157,7 @@ class HubRuntimeTuning:
     launch_dedupe_window_seconds: int
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class HubRuntime:
     """Hub 运行时发现文件模型。"""
 
@@ -171,7 +171,7 @@ class HubRuntime:
     hub_version: str | None = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class RuntimeConnectionInfo:
     """运行时连接信息。"""
 

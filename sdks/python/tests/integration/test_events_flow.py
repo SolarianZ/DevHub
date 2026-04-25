@@ -27,7 +27,8 @@ async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -
         try:
             await events_client.authenticate()
             subscription_id = await events_client.subscribe([APP_INSTANCE_REGISTERED])
-            event_task = asyncio.create_task(anext(events_client.read_events()))
+            reader = events_client.read_events()
+            event_task = asyncio.create_task(anext(reader))
 
             client = host.create_client("events-http-client")
             client.register_instance(
@@ -58,9 +59,68 @@ async def test_ws_authenticate_subscribe_unsubscribe_should_control_delivery() -
             )
 
             with pytest.raises(asyncio.TimeoutError):
-                await asyncio.wait_for(anext(events_client.read_events()), timeout=0.6)
+                await asyncio.wait_for(anext(reader), timeout=0.6)
+            await reader.aclose()
         finally:
             await events_client.close()
+
+
+@pytest.mark.asyncio
+async def test_ws_read_events_should_reject_concurrent_reader_and_allow_new_reader_after_close() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "events.concurrent-reader.app", "displayName": "events.concurrent-reader.app"})
+
+        events_client = await host.create_events_client("events-concurrent-reader-client")
+        try:
+            await events_client.authenticate()
+            await events_client.subscribe([APP_INSTANCE_REGISTERED])
+
+            first_reader = events_client.read_events()
+            first_event_task = asyncio.create_task(anext(first_reader))
+            await asyncio.sleep(0)
+
+            with pytest.raises(RuntimeError, match="活动读取器"):
+                await anext(events_client.read_events())
+
+            http_client = host.create_client("events-concurrent-reader-http-client")
+            http_client.register_instance(
+                AppInstanceRegistration(
+                    instance_id="events-concurrent-reader-inst-1",
+                    app_id="events.concurrent-reader.app",
+                    pid=99992,
+                    invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
+                ),
+                _instance_password("events-concurrent-reader-inst-1"),
+            )
+
+            first_event = await asyncio.wait_for(first_event_task, timeout=3)
+            await first_reader.aclose()
+
+            second_reader = events_client.read_events()
+            second_event_task = asyncio.create_task(anext(second_reader))
+            await asyncio.sleep(0)
+
+            http_client.register_instance(
+                AppInstanceRegistration(
+                    instance_id="events-concurrent-reader-inst-2",
+                    app_id="events.concurrent-reader.app",
+                    pid=99991,
+                    invoke=InvokeCapability(poll=True, respond=True),
+                    scope="",
+                ),
+                _instance_password("events-concurrent-reader-inst-2"),
+            )
+
+            second_event = await asyncio.wait_for(second_event_task, timeout=3)
+            await second_reader.aclose()
+        finally:
+            await events_client.close()
+
+    assert first_event.type == APP_INSTANCE_REGISTERED
+    assert first_event.payload["instanceId"] == "events-concurrent-reader-inst-1"
+    assert second_event.type == APP_INSTANCE_REGISTERED
+    assert second_event.payload["instanceId"] == "events-concurrent-reader-inst-2"
 
 
 @pytest.mark.asyncio
@@ -166,6 +226,7 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
         try:
             await events_client.authenticate()
             subscription_id = await events_client.subscribe([APP_DEFINITION_UPSERTED, APP_DEFINITION_DELETED])
+            reader = events_client.read_events()
 
             http_client = host.create_client("events-definition-http-client")
             http_client.upsert_definition(
@@ -175,10 +236,11 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
                     scope="",
                 )
             )
-            upserted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
+            upserted = await asyncio.wait_for(anext(reader), timeout=3)
 
             http_client.delete_definition("events.definition.app", "")
-            deleted = await asyncio.wait_for(anext(events_client.read_events()), timeout=3)
+            deleted = await asyncio.wait_for(anext(reader), timeout=3)
+            await reader.aclose()
         finally:
             await events_client.close()
 
@@ -205,9 +267,11 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
         try:
             await events_client_a.authenticate()
             subscription_id_a = await events_client_a.subscribe([APP_INSTANCE_REGISTERED])
+            reader_a = events_client_a.read_events()
 
             await events_client_b.authenticate()
             subscription_id_b = await events_client_b.subscribe([APP_INSTANCE_REGISTERED])
+            reader_b = events_client_b.read_events()
 
             http_client_a = host_a.create_client("parallel-events-http-a")
             http_client_b = host_b.create_client("parallel-events-http-b")
@@ -223,10 +287,11 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                 _instance_password("parallel-events-inst-a"),
             )
 
-            event_a = await asyncio.wait_for(anext(events_client_a.read_events()), timeout=3)
+            event_a = await asyncio.wait_for(anext(reader_a), timeout=3)
 
+            pending_event_b = asyncio.create_task(anext(reader_b))
             with pytest.raises(asyncio.TimeoutError):
-                await asyncio.wait_for(anext(events_client_b.read_events()), timeout=0.6)
+                await asyncio.wait_for(asyncio.shield(pending_event_b), timeout=0.6)
 
             http_client_b.register_instance(
                 AppInstanceRegistration(
@@ -239,7 +304,9 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
                 _instance_password("parallel-events-inst-b"),
             )
 
-            event_b = await asyncio.wait_for(anext(events_client_b.read_events()), timeout=3)
+            event_b = await asyncio.wait_for(pending_event_b, timeout=3)
+            await reader_a.aclose()
+            await reader_b.aclose()
         finally:
             await events_client_a.close()
             await events_client_b.close()

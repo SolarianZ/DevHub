@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import FrozenInstanceError, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -399,6 +399,42 @@ async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_events_client_runtime_view_should_be_immutable_and_keep_original_endpoint(tmp_path: Path) -> None:
+    authenticate_calls = 0
+
+    async def handler(websocket) -> None:
+        nonlocal authenticate_calls
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        authenticate_calls += 1
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            )
+        )
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        data_dir = _write_data_directory(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
+        try:
+            with pytest.raises(FrozenInstanceError):
+                client.runtime.ws_url = "ws://127.0.0.1:1/ws"  # type: ignore[misc]
+
+            await client.authenticate()
+        finally:
+            await client.close()
+
+    assert authenticate_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_events_client_when_unknown_notification_received_should_fail_stream(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
@@ -441,9 +477,11 @@ async def test_events_client_when_unknown_notification_received_should_fail_stre
         client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
+            iterator = client.read_events()
+            event_task = asyncio.create_task(anext(iterator))
             await client.subscribe([INVOCATION_COMPLETED])
             with pytest.raises(RuntimeError, match="hub.event|响应"):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
+                await asyncio.wait_for(event_task, timeout=2)
 
             with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await client.subscribe([INVOCATION_COMPLETED])
@@ -452,7 +490,9 @@ async def test_events_client_when_unknown_notification_received_should_fail_stre
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_connection_closes_after_queued_event_should_end_stream_repeatedly(tmp_path: Path) -> None:
+async def test_events_client_when_connection_closes_after_buffered_event_should_end_active_reader_and_reject_new_reads(
+    tmp_path: Path,
+) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -501,15 +541,16 @@ async def test_events_client_when_connection_closes_after_queued_event_should_en
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
+            iterator = client.read_events()
 
-            event = await asyncio.wait_for(anext(client.read_events()), timeout=2)
+            event = await asyncio.wait_for(anext(iterator), timeout=2)
 
             assert event.type == INVOCATION_COMPLETED
             assert event.subscription_id == "sub-1"
 
             with pytest.raises(StopAsyncIteration):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
-            with pytest.raises(StopAsyncIteration):
+                await asyncio.wait_for(anext(iterator), timeout=2)
+            with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await asyncio.wait_for(anext(client.read_events()), timeout=2)
         finally:
             await client.close()
@@ -575,9 +616,10 @@ async def test_events_client_when_connection_terminated_should_allow_reauthentic
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
+            iterator = client.read_events()
 
             with pytest.raises(StopAsyncIteration):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
+                await asyncio.wait_for(anext(iterator), timeout=2)
 
             with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await client.subscribe([INVOCATION_COMPLETED])

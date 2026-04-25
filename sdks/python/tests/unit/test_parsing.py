@@ -542,6 +542,44 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
         )
 
 
+def test_parse_event_when_instance_payload_omits_scope_should_accept() -> None:
+    event = parse_event(
+        {
+            "subscriptionId": "sub-1",
+            "type": "app.instance.registered",
+            "timeUtc": "2026-03-09T00:00:00Z",
+            "payload": {
+                "appId": "test.app",
+                "instanceId": "inst-1",
+            },
+        },
+        path="hub.event.params",
+    )
+
+    assert event.type is DevHubEventType.APP_INSTANCE_REGISTERED
+    assert event.payload == {
+        "appId": "test.app",
+        "instanceId": "inst-1",
+    }
+
+
+def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.unregistered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                    "scope": None,
+                },
+            },
+            path="hub.event.params",
+        )
+
+
 @pytest.mark.parametrize(
     ("mutator",),
     [
