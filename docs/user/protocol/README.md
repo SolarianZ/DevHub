@@ -2,7 +2,7 @@
 
 本文面向不准备直接使用仓库内 `.NET` / `JS/TS` / `Python` SDK 的第三方开发者，说明如何仅基于公开协议资料完成 DevHub Hub v1.x 的原始接入与自测。
 
-如果你只是需要先启动 Host 或对照官方 SDK 的最小上手路径，可先阅读：
+仅需先启动 Host 或对照官方 SDK 的最小上手路径时，可先阅读：
 
 - [`../host/quickstart.md`](../host/quickstart.md)
 - [`../sdk/README.md`](../sdk/README.md)
@@ -13,7 +13,7 @@
 - 本文只整理“不依赖 SDK 源代码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
 
-如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需组合下列公开资料即可完成接入：
+已具备自有 HTTP、WebSocket 与 JSON 处理栈时，只需组合下列公开资料即可完成接入：
 
 - [`Specification.md`](../../specification/protocol/Specification.md)
 - [`docs/specification/schema/v1.0.1/README.md`](../../specification/schema/v1.0.1/README.md)
@@ -200,7 +200,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 ## 6. Schema 与原始协议示例
 
-如果你需要做严格输入输出校验，可直接消费仓库内发布的 v1.0.1 Schema：
+如需做严格输入输出校验，可直接消费仓库内发布的 v1.0.1 Schema：
 
 - [`docs/specification/schema/v1.0.1/README.md`](../../specification/schema/v1.0.1/README.md)
 
@@ -214,28 +214,28 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - `rpc-response.json`
 - `error-response.json`
 
-如果你需要快速拼接请求或对照消息形态，请优先使用：
+如需快速拼接请求或对照消息形态，请优先使用：
 
 - [`docs/specification/protocol-examples/v1.0.1/README.md`](../../specification/protocol-examples/v1.0.1/README.md)
 
 ## 7. Conformance 自测入口
 
-仓库内的 conformance 向量面向 Spec v1.0.1 协议基线。你可以用它验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
+仓库内的 conformance 向量面向 Spec v1.0.1 协议基线，可用于验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
 
 使用说明见：
 
 - [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)
 
-如果你只是要复用官方向量与 runner 来验证“自研 adapter / 自研客户端”，最小前提是先构建 Host，并准备一个外部 adapter manifest：
+如仅需复用官方向量与 runner 来验证“自研 adapter / 自研客户端”，最小前提是先构建 Host，并准备一个外部 adapter manifest：
 
 ```bash
 dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 python host/tests/conformance/vector_runner.py --adapter-manifest path/to/devhub.adapter.json
 ```
 
-manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源代码或参考官方适配器实现细节。
+manifest 需要声明 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源代码或参考官方适配器实现细节。
 
-如果你只想聚焦某条向量，可运行：
+如只想聚焦某条向量，可运行：
 
 ```bash
 python host/tests/conformance/vector_runner.py \
@@ -243,7 +243,7 @@ python host/tests/conformance/vector_runner.py \
   --vector-id auth.valid_credentials_ping_success
 ```
 
-如果你想按签名案例分组过滤，可运行：
+如需按签名案例分组过滤，可运行：
 
 ```bash
 python host/tests/conformance/vector_runner.py \
@@ -251,7 +251,7 @@ python host/tests/conformance/vector_runner.py \
   --case-id CONF-001
 ```
 
-如果你想把第三方实现与仓库内官方适配器一起对照跑，再额外准备官方 SDK 产物，并显式传入：
+如需将第三方实现与仓库内官方适配器一起对照运行，再额外准备官方 SDK 产物，并显式传入：
 
 ```bash
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release

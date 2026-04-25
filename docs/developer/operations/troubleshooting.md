@@ -30,7 +30,7 @@
 └── logs/
 ```
 
-补充说明：
+说明：
 
 - 单实例粒度为“同一 OS 用户 + 同一数据根目录”；不同 `DEVHUB_DATA_DIR` 可并行运行。
 - 并行排障、并行测试或多 Host 联调时，必须为每个 Host 使用独立数据根目录。
@@ -158,7 +158,7 @@ npm --prefix apps/monitor run verify
 4. 必要时重启 Hub，并再次执行 smoke 校验：
    `python3 host/tests/blackbox/test_runner.py --smoke --no-header`
 
-## 6. 升级路径与补充说明
+## 6. 升级路径与相关说明
 
 - 协议兼容边界请参考 [`docs/specification/protocol/Specification.md`](../../specification/protocol/Specification.md) §9.2。
 - 发布、启动与回滚校验请参考 [`docs/developer/operations/deployment.md`](./deployment.md)。

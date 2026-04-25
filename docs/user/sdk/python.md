@@ -16,7 +16,7 @@
 python -m pip install -e "./sdks/python[test]"
 ```
 
-如果你希望更贴近“发布资产消费”，可先准备 wheel 和 sdist：
+如需更贴近“发布资产消费”，可先准备 wheel 和 sdist：
 
 ```bash
 python -m pip install build

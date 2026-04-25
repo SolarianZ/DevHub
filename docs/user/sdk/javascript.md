@@ -19,7 +19,7 @@ npm --prefix sdks/javascript ci
 npm --prefix sdks/javascript run build
 ```
 
-如果你希望模拟“发布资产消费”，可进一步执行：
+如需模拟“发布资产消费”，可进一步执行：
 
 ```bash
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
@@ -34,7 +34,7 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 - 浏览器 / WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`；官方支持路径是前端直接访问 Host，而不是通过原生层代理 `/rpc`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
 - `DevHubEventsClient` / `JsonRpcWsSession` 会优先使用全局 `WebSocket`；仅当 Node 运行时缺少全局实现时，才会在运行时懒加载 `ws` 作为回退。该回退不会改变根入口的浏览器安全定位，也不应成为浏览器 / WebView 构建阶段的静态依赖。
-- 使用官方发布包时，Node 侧 `ws` 由 SDK 包依赖提供；若你以仓库源码直接消费 SDK 且运行环境没有全局 `WebSocket`，则需要自行提供兼容实现或安装 `ws`。
+- 使用官方发布包时，Node 侧 `ws` 由 SDK 包依赖提供；若以仓库源码直接消费 SDK 且运行环境没有全局 `WebSocket`，则需要自行提供兼容实现或安装 `ws`。
 
 Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript/runtime`。
 

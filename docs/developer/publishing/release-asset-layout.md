@@ -81,7 +81,7 @@ artifacts/release/<release-id>/
 }
 ```
 
-补充约束：
+约束：
 
 - `assets[].path` 使用相对 `artifacts/release/<release-id>/` 的相对路径。
 - `assets[].sha256` 用于发布后人工核对或自动校验。

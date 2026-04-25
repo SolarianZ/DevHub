@@ -164,7 +164,7 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 2. 执行 `dotnet build host/DevHub.slnx -c Release`，确保当前工作区基础可构建。
 3. 使用 `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release` 启动本地 Hub。
 4. 从数据根目录下的 `<dataDir>/runtime/hub.json` 动态读取 `httpBaseUrl`、`wsUrl` 与 `tokenFile`，禁止硬编码端口或地址。
-5. 完成改动后，至少执行单元测试与 smoke 集成测试；若涉及官方 SDK 集成测试夹具、SDK 维护脚本或多语言一致性，再补充 `python3 scripts/sdk/run_integration_full.py` 或最小相关 SDK 测试。
+5. 完成改动后，至少执行单元测试与 smoke 集成测试；若涉及官方 SDK 集成测试夹具、SDK 维护脚本或多语言一致性，再执行 `python3 scripts/sdk/run_integration_full.py` 或最小相关 SDK 测试。
 
 涉及 `apps/monitor/` 的改动时，额外执行：
 

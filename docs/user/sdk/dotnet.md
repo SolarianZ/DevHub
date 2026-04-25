@@ -20,7 +20,7 @@
 
 ### 2.2 使用本地打包产物
 
-如果你希望更贴近“发布包消费”的形式，可先执行：
+如需更贴近“发布包消费”的形式，可先执行：
 
 ```powershell
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack

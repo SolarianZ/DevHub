@@ -1162,7 +1162,7 @@ stateDiagram-v2
 | -32602 | `invalid_params`   | 缺失/无效的参数                 |
 | -32603 | `internal_error`   | 服务端内部错误                  |
 
-补充约束：
+约束：
 - 当 `hub.apps.upsertDefinition` 因定义业务校验失败被拒绝时，Hub **必须**使用 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下附带 `errors: ValidationIssue[]`。
 
 ### 8.2 DevHub 特定错误

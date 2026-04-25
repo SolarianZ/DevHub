@@ -57,7 +57,7 @@
 | `clientId`        | 标识调用方应用或组件，便于 Hub 记录调用来源和后续审计。               |
 | `clientSessionId` | 标识本次客户端会话实例，用于区分同一 `clientId` 下的不同连接。        |
 
-补充约束：
+约束：
 
 - `protocolVersion` 当前只接受 `1`。
 - `clientSessionId` 当前 Host 实现要求带连字符的 UUID 字符串（`D` 格式）。
@@ -68,7 +68,7 @@
 | ------------ | ------------------------------ |
 | `instanceId` | 指定要刷新在线时间的实例标识。 |
 
-补充约束：
+约束：
 
 - `instanceId` 必须是非空字符串。
 
@@ -79,7 +79,7 @@
 | `appId`（可选） | 只查询指定应用的 Definition；省略时遍历全部应用。                                                                  |
 | `scope`         | 控制作用域过滤方式：`null` 表示不过滤作用域，`""` 表示只看 Global Definition，其他合法字符串表示只看该精确作用域。 |
 
-补充约束：
+约束：
 
 - `scope` 必须显式出现；`null` 与 `""` 语义不同。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
@@ -91,7 +91,7 @@
 | `appId` | 指定要读取的应用标识。                                                   |
 | `scope` | 指定要读取的精确作用域；`""` 表示 Global，其他合法字符串表示显式作用域。 |
 
-补充约束：
+约束：
 
 - `scope` 必须是显式字符串，不能传 `null`。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
@@ -104,7 +104,7 @@
 | `definition.appId`                            | 定义所属应用的稳定标识，用于持久化命名和后续路由。                                             |
 | `definition.scope`                            | 定义所属作用域；`""` 表示 Global，其他合法字符串表示显式作用域。                               |
 | `definition.displayName`                      | 面向用户展示的应用名称。                                                                       |
-| `definition.description`（可选）              | 面向用户或维护者展示的补充说明。                                                               |
+| `definition.description`（可选）              | 面向用户或维护者展示的说明文字。                                                               |
 | `definition.capabilities`（可选）             | 定义该应用公开能力开关的集合。                                                                 |
 | `definition.capabilities.rpc`（可选）         | 控制 Host 是否允许把 `hub.invoke.notify` / `hub.invoke.request` 路由到该应用；省略时默认允许。 |
 | `definition.capabilities.events`（可选）      | 预留事件能力声明；v1 中 Host 会忽略该字段。                                                    |
@@ -114,7 +114,7 @@
 | `definition.launch.workingDirectory`（可选）  | 启动进程时使用的工作目录。                                                                     |
 | `definition.launch.dedupeKeyTemplate`（可选） | 启动去重键模板，用于合并去重窗口内的重复启动请求。                                             |
 
-补充约束：
+约束：
 
 - `definition`、`definition.capabilities`、`definition.launch` 如果出现，都必须是对象，不能是 `null`。
 - `definition.displayName`、`definition.launch.exePath` 在当前 Host 中都要求非空字符串。
@@ -127,7 +127,7 @@
 | `definition.appId`                            | 定义所属应用的稳定标识，用于决定落盘身份和后续查找键。                           |
 | `definition.scope`                            | 定义所属作用域；`""` 表示 Global，其他合法字符串表示显式作用域。                 |
 | `definition.displayName`                      | 面向用户展示的应用名称。                                                         |
-| `definition.description`（可选）              | 面向用户或维护者展示的补充说明。                                                 |
+| `definition.description`（可选）              | 面向用户或维护者展示的说明文字。                                                 |
 | `definition.capabilities`（可选）             | 定义该应用公开能力开关的集合。                                                   |
 | `definition.capabilities.rpc`（可选）         | 控制 Host 是否允许该应用接收 `hub.invoke.notify` / `hub.invoke.request`。        |
 | `definition.capabilities.events`（可选）      | 预留事件能力声明；v1 中 Host 会忽略该字段。                                      |
@@ -137,7 +137,7 @@
 | `definition.launch.workingDirectory`（可选）  | 启动进程时使用的工作目录。                                                       |
 | `definition.launch.dedupeKeyTemplate`（可选） | 启动去重键模板，用于识别相同启动请求。                                           |
 
-补充约束：
+约束：
 
 - 参数结构和 `hub.apps.validateDefinition` 完全一致。
 - 当前 Host 对 `definition` 应用与 `validateDefinition` 相同的校验规则后才允许写入。
@@ -149,7 +149,7 @@
 | `appId` | 指定要删除的应用标识。                                                   |
 | `scope` | 指定要删除的精确作用域；`""` 表示 Global，其他合法字符串表示显式作用域。 |
 
-补充约束：
+约束：
 
 - `scope` 必须是显式字符串，不能传 `null`。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
@@ -167,9 +167,9 @@
 | `instance.invoke`         | 声明该实例支持的调用能力。                                                                           |
 | `instance.invoke.poll`    | 表示实例是否允许通过 `hub.invoke.poll` 领取待处理调用。                                              |
 | `instance.invoke.respond` | 表示实例是否允许通过 `hub.invoke.respond` 回传调用结果。                                             |
-| `instance.meta`（可选）   | 附加元数据字典，可携带实例侧的补充信息；如果实例要回绑启动记录，也可在此放入与启动过程关联的元数据。 |
+| `instance.meta`（可选）   | 附加元数据字典，可携带实例侧的附加信息；如果实例要回绑启动记录，也可在此放入与启动过程关联的元数据。 |
 
-补充约束：
+约束：
 
 - `password` 必须是非空字符串。
 - `instance.instanceId` 最大长度为 `256`，并且必须匹配 `^[a-zA-Z0-9._:-]+$`。
@@ -185,7 +185,7 @@
 | `instanceId` | 指定要注销的实例标识。                                 |
 | `password`   | 与注册时绑定到该实例的口令，用于确认调用方有权注销它。 |
 
-补充约束：
+约束：
 
 - `instanceId` 与 `password` 都必须是非空字符串。
 
@@ -197,7 +197,7 @@
 | `scope`                  | 控制作用域过滤方式：`null` 表示不过滤作用域，`""` 表示只看 Global 实例，其他合法字符串表示只看该精确作用域。 |
 | `includeOffline`（可选） | 是否把离线实例也包含在返回结果中；省略时默认 `false`。                                                       |
 
-补充约束：
+约束：
 
 - `scope` 必须显式出现；`null` 与 `""` 语义不同。
 - `includeOffline` 如果出现，必须是布尔值。
@@ -212,7 +212,7 @@
 | `dedupeKey`（可选）         | 显式给出本次启动请求的去重键；省略时由 Host 根据 Definition 模板生成。   |
 | `waitForRegisterMs`（可选） | 指定启动后等待实例完成注册的毫秒数；省略时默认 `0`，即不等待注册结果。   |
 
-补充约束：
+约束：
 
 - `scope` 必须是显式字符串。
 - `dedupeKey` 如果出现，必须是字符串或 `null`。
@@ -233,7 +233,7 @@
 | `options.queueIfOffline`（可选） | 当前没有在线实例时，是否允许调用先进入挂起队列；省略时默认 `true`。                                                                     |
 | `options.autoLaunch`（可选）     | 当前没有在线实例时，是否允许 Host 自动拉起目标应用；未指定 `target.instanceId` 时默认 `true`，指定 `target.instanceId` 时默认 `false`。 |
 
-补充约束：
+约束：
 
 - `target` 必须是对象。
 - `target.scope` 必须是显式字符串。
@@ -258,7 +258,7 @@
 | `options.queueIfOffline`（可选） | 当前没有在线实例时，是否允许调用先进入挂起队列；省略时默认 `true`。                                                                     |
 | `options.autoLaunch`（可选）     | 当前没有在线实例时，是否允许 Host 自动拉起目标应用；未指定 `target.instanceId` 时默认 `true`，指定 `target.instanceId` 时默认 `false`。 |
 
-补充约束：
+约束：
 
 - `target`、`target.scope`、`target.instanceId` 的约束与 `hub.invoke.notify` 相同。
 - `options.ttlMs` 如果出现，必须是大于等于 `1000` 的整数。
@@ -274,7 +274,7 @@
 | `maxCount`（可选） | 一次最多领取多少条调用；省略时默认 `10`。                          |
 | `waitMs`（可选）   | 长轮询等待时间；省略时默认 `25000`，`0` 表示立即返回当前可用结果。 |
 
-补充约束：
+约束：
 
 - `instanceId` 必须是非空字符串。
 - `maxCount` 如果出现，当前 Host 只接受 `1` 到 `100` 之间的整数。
@@ -294,7 +294,7 @@
 | `error.message`      | 目标应用定义的业务错误名称或说明。 |
 | `error.data`（可选） | 目标应用附带的结构化错误上下文。   |
 
-补充约束：
+约束：
 
 - `instanceId` 与 `invocationId` 都必须是非空字符串。
 - `error` 如果出现，必须是对象，并且至少包含整数 `code` 与非空字符串 `message`。
@@ -316,7 +316,7 @@
 - `invocation.completed`
 - `invocation.failed`
 
-补充约束：
+约束：
 
 - `types` 如果出现，必须是由非空字符串组成的数组。
 - 当前 Host 会拒绝未知事件类型，并返回 `reason = "unsupported_event_type"`。
@@ -327,7 +327,7 @@
 | ---------------- | ---------------------- |
 | `subscriptionId` | 指定要取消的订阅标识。 |
 
-补充约束：
+约束：
 
 - `subscriptionId` 必须是非空字符串。
 - 取消未知 `subscriptionId` 仍会返回 `{ "ok": true }`。

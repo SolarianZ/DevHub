@@ -32,7 +32,7 @@
 └── logs/
 ```
 
-补充说明：
+说明：
 
 - `prev_hub.json` 不是客户端发现入口；客户端始终只应读取 `<dataDir>/runtime/hub.json`。
 - Host 正常退出时，会将当前 `hub.json` 迁移为 `<dataDir>/runtime/prev_hub.json`（覆盖已有文件），用于保留上一次会话的运行时快照。

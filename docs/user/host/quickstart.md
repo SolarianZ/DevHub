@@ -5,7 +5,7 @@
 ## 1. 前置条件
 
 - 仓库内最直接的上手路径依赖 `.NET 10 SDK`，用于从源代码运行或发布 Host。
-- 如果你准备把 Host 放到独立数据目录运行，请先决定 `DEVHUB_DATA_DIR` 的值，并确保当前用户对该目录有读写权限。
+- 使用独立数据目录运行 Host 时，需先确定 `DEVHUB_DATA_DIR` 的值，并确保当前用户对该目录有读写权限。
 - 若当前分发渠道尚未提供正式下载资产，请沿用 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 如需了解部署与运行边界，请先阅读 [`../../developer/operations/deployment.md`](../../developer/operations/deployment.md)。
@@ -20,7 +20,7 @@
 dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 ```
 
-如果你希望把运行时文件写入独立目录，可以先设置 `DEVHUB_DATA_DIR`：
+如需将运行时文件写入独立目录，可先设置 `DEVHUB_DATA_DIR`：
 
 ```bash
 export DEVHUB_DATA_DIR=/path/to/devhub
@@ -36,7 +36,7 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 
 ### 2.2 使用发布输出启动
 
-如果你需要按仓库统一发布流程生成完整发布候选资产，优先执行：
+如需按仓库统一发布流程生成完整发布候选资产，优先执行：
 
 ```bash
 python scripts/release/package_release.py --release-id local-dry-run --channel local
@@ -44,7 +44,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 该命令会在 `artifacts/release/local-dry-run/` 下生成 Host 压缩包、SDK 包、manifest 和 release notes。
 
-如果你只需要一个当前机器可直接启动的 Host 固定产物目录，也可以单独发布 Host 再运行：
+如只需要一个当前机器可直接启动的 Host 固定产物目录，也可以单独发布 Host 再运行：
 
 ```bash
 dotnet publish host/src/DevHub.Host/DevHub.Host.csproj -c Release -o ./artifacts/devhub
@@ -151,9 +151,9 @@ Invoke-RestMethod -Method Post -Uri "$($hub.httpBaseUrl)/rpc" -Headers $headers 
 
 ## 5. 下一步
 
-- 如果你的宿主应用需要把前端运行在浏览器 / WebView 中，可直接把 `hub.json` 中的 `httpBaseUrl`、`wsUrl` 与 `tokenFile` 中的 Bearer Token 安全传给前端；前端会直接访问 Host，而不是要求原生层代理 `/rpc`。
+- 宿主应用需要将前端运行在浏览器 / WebView 中时，可直接把 `hub.json` 中的 `httpBaseUrl`、`wsUrl` 与 `tokenFile` 中的 Bearer Token 安全传给前端；前端会直接访问 Host，而不是要求原生层代理 `/rpc`。
 - 浏览器 / WebView 首次访问 `POST {httpBaseUrl}/rpc` 前，通常会先向 `OPTIONS {httpBaseUrl}/rpc` 发送预检；正式调用仍然需要 `Authorization`、`X-DevHub-Protocol`、`X-DevHub-ClientId` 与 `X-DevHub-ClientSessionId`。
-- 如果你需要按接口维度查看 Host 的公开方法、传输方式和参数说明，请阅读 [`api-reference.md`](./api-reference.md)。
-- 如果你准备使用官方 SDK，请阅读 [`../sdk/README.md`](../sdk/README.md) 并选择对应语言的接入文档。
-- 如果你计划直接对接协议，请阅读 [`../protocol/README.md`](../protocol/README.md)。
-- 如果你需要排查启动失败、运行时文件缺失或 `hub.ping` 返回错误，请阅读 [`../../developer/operations/troubleshooting.md`](../../developer/operations/troubleshooting.md)。
+- 需要按接口维度查看 Host 的公开方法、传输方式和参数说明时，请阅读 [`api-reference.md`](./api-reference.md)。
+- 准备使用官方 SDK 时，请阅读 [`../sdk/README.md`](../sdk/README.md) 并选择对应语言的接入文档。
+- 计划直接对接协议时，请阅读 [`../protocol/README.md`](../protocol/README.md)。
+- 需要排查启动失败、运行时文件缺失或 `hub.ping` 返回错误时，请阅读 [`../../developer/operations/troubleshooting.md`](../../developer/operations/troubleshooting.md)。

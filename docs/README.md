@@ -12,7 +12,7 @@
 | [`developer/`](./developer/README.md) | 仓库开发者、维护者、发布负责人 | [`developer/guides/development.md`](./developer/guides/development.md) | 架构、开发协作、部署排障、发布维护 |
 | [`specification/`](./specification/README.md) | 需要核对公开契约的所有读者 | [`specification/protocol/Specification.md`](./specification/protocol/Specification.md) | 唯一权威规范、版本化 Schema 与原始协议示例 |
 
-补充入口：
+相关入口：
 
 - [`../host/tests/README.md`](../host/tests/README.md)：仓库级测试分层、验证入口与执行说明。
 - [`../host/tests/conformance/README.md`](../host/tests/conformance/README.md)：符合性向量、adapter manifest 与向量运行说明。
@@ -58,7 +58,7 @@
 当文档需要引用尚未生成的正式发布资产、下载链接或安装命令时，统一使用以下占位写法：
 
 ```text
-TODO(devhub-release): 正式发布资产可用后，在此补充 <资产名称 / 版本号 / 下载链接 / 安装命令>；当前不要填写未生成的版本号、下载地址或仓库外安装命令。
+TODO(devhub-release): 正式发布资产可用后，填写 <资产名称 / 版本号 / 下载链接 / 安装命令>；当前不要填写未生成的版本号、下载地址或仓库外安装命令。
 ```
 
 使用规则：

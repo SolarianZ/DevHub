@@ -90,5 +90,5 @@ WebSocket：
 
 - Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。
 - `listDefinitions` 与 `listInstances` 都演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅匹配 Global 的语义。除这两个列表查询外，本目录不会用 `scope: null` 表示 Global，也不会省略必须显式存在的 `scope` 字段。
-- 如果你需要做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
-- 如果你需要验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。
+- 如需做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
+- 如需验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。
