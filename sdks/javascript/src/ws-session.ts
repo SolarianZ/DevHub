@@ -18,13 +18,11 @@ export interface JsonRpcWsSessionOptions {
 }
 
 export class JsonRpcWsSession {
-  private static readonly ABANDONED_REQUEST_RETENTION_MS = 5 * 60_000;
-
   private socket: WebSocketLike | null = null;
   private socketCleanup: Array<() => void> = [];
   private connectPromise: Promise<void> | null = null;
   private readonly pendingRequests = new Map<string, PendingRequest>();
-  private readonly abandonedRequests = new Map<string, number>();
+  private readonly abandonedRequests = new Set<string>();
   private readonly sendLock = new Mutex();
   private socketOpen = false;
   private disposed = false;
@@ -57,7 +55,6 @@ export class JsonRpcWsSession {
       throw new Error("method cannot be empty.");
     }
 
-    this.cleanupExpiredAbandonedRequests();
     await this.ensureConnected();
     const socket = this.socket;
     if (!socket || !this.socketOpen) {
@@ -170,10 +167,9 @@ export class JsonRpcWsSession {
     result: Record<string, unknown>,
     error?: Record<string, unknown>
   ): void {
-    this.cleanupExpiredAbandonedRequests();
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
-      if (this.abandonedRequests.delete(requestId)) {
+      if (this.abandonedRequests.has(requestId)) {
         return;
       }
 
@@ -271,23 +267,7 @@ export class JsonRpcWsSession {
 
   private markPendingRequestAsAbandoned(requestId: string): void {
     if (this.pendingRequests.delete(requestId)) {
-      this.abandonedRequests.set(
-        requestId,
-        Date.now() + JsonRpcWsSession.ABANDONED_REQUEST_RETENTION_MS
-      );
-    }
-  }
-
-  private cleanupExpiredAbandonedRequests(): void {
-    if (this.abandonedRequests.size === 0) {
-      return;
-    }
-
-    const now = Date.now();
-    for (const [requestId, expiresAt] of this.abandonedRequests) {
-      if (expiresAt <= now) {
-        this.abandonedRequests.delete(requestId);
-      }
+      this.abandonedRequests.add(requestId);
     }
   }
 }

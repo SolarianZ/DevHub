@@ -59,13 +59,13 @@ export interface DevHubEventsClientDependencies {
 
 export class DevHubEventsClient {
   readonly options: NormalizedDevHubClientOptions;
-  #eventQueue = new AsyncQueue<DevHubEvent>();
+  #eventStream = createEventStreamGeneration();
   readonly #connection: RuntimeConnectionInfo;
   readonly #session: JsonRpcEventSession;
   #authenticated = false;
   #eventStreamAvailable = false;
   #eventStreamInvalidated = false;
-  #activeReaderLease = false;
+  #activeReaderLease: EventReaderLease | null = null;
   #disposed = false;
 
   private constructor(
@@ -96,7 +96,7 @@ export class DevHubEventsClient {
       requestTimeoutMs: normalized.requestTimeoutMs,
       onEvent: (params) => {
         if (client) {
-          client.#eventQueue.push(parseEvent(params, "hub.event.params"));
+          client.#eventStream.queue.push(parseEvent(params, "hub.event.params"));
         }
       },
       onTerminate: (error) => {
@@ -125,11 +125,13 @@ export class DevHubEventsClient {
       });
 
       parseAuthenticateResult(result);
-      this.#eventQueue = new AsyncQueue<DevHubEvent>();
+      this.invalidateReaderLease();
+      this.#eventStream = createEventStreamGeneration();
       this.#authenticated = true;
       this.#eventStreamAvailable = true;
       this.#eventStreamInvalidated = false;
     } catch (error) {
+      this.invalidateReaderLease();
       this.#authenticated = false;
       this.#eventStreamAvailable = false;
       this.#eventStreamInvalidated = true;
@@ -192,10 +194,11 @@ export class DevHubEventsClient {
     }
 
     this.#disposed = true;
+    this.invalidateReaderLease();
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
     this.#eventStreamInvalidated = true;
-    this.#eventQueue.close();
+    this.#eventStream.queue.close();
 
     await this.#session.dispose("client_dispose");
   }
@@ -208,7 +211,8 @@ export class DevHubEventsClient {
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
     this.#eventStreamInvalidated = true;
-    this.#eventQueue.close(error);
+    this.invalidateReaderLease();
+    this.#eventStream.queue.close(error);
   }
 
   private ensureAuthenticated(): void {
@@ -237,9 +241,10 @@ export class DevHubEventsClient {
 
   private createEventIterator(): AsyncIterableIterator<DevHubEvent> {
     this.ensureEventStreamAvailable();
-    this.acquireReaderLease();
+    const eventStream = this.#eventStream;
+    const readerLease = this.acquireReaderLease(eventStream.generationToken);
 
-    const queueIterator = this.#eventQueue[Symbol.asyncIterator]();
+    const queueIterator = eventStream.queue[Symbol.asyncIterator]();
     let finished = false;
     const releaseReaderLease = () => {
       if (finished) {
@@ -247,7 +252,7 @@ export class DevHubEventsClient {
       }
 
       finished = true;
-      this.#activeReaderLease = false;
+      this.releaseReaderLease(readerLease);
     };
 
     return {
@@ -285,13 +290,48 @@ export class DevHubEventsClient {
     };
   }
 
-  private acquireReaderLease(): void {
+  private acquireReaderLease(generationToken: symbol): EventReaderLease {
     if (this.#activeReaderLease) {
       throw new Error("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
     }
 
-    this.#activeReaderLease = true;
+    const lease = {
+      generationToken,
+      leaseToken: Symbol("event_reader_lease")
+    };
+    this.#activeReaderLease = lease;
+    return lease;
   }
+
+  private releaseReaderLease(lease: EventReaderLease): void {
+    if (
+      this.#activeReaderLease?.generationToken === lease.generationToken
+      && this.#activeReaderLease.leaseToken === lease.leaseToken
+    ) {
+      this.#activeReaderLease = null;
+    }
+  }
+
+  private invalidateReaderLease(): void {
+    this.#activeReaderLease = null;
+  }
+}
+
+interface EventStreamGeneration {
+  queue: AsyncQueue<DevHubEvent>;
+  generationToken: symbol;
+}
+
+interface EventReaderLease {
+  generationToken: symbol;
+  leaseToken: symbol;
+}
+
+function createEventStreamGeneration(): EventStreamGeneration {
+  return {
+    queue: new AsyncQueue<DevHubEvent>(),
+    generationToken: Symbol("event_stream_generation")
+  };
 }
 
 function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string, unknown> | undefined {

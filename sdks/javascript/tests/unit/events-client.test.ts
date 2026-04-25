@@ -606,6 +606,98 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   }
 });
 
+it("断线后即使不继续消费旧 iterator 也应允许重新认证恢复", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-reconnect-with-abandoned-iterator-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const abandonedIterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+
+    expect(() => client.readEvents()).toThrow("The event stream is unavailable. Re-authenticate and subscribe again.");
+
+    await client.authenticate();
+    const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
+    const recoveredEventTask = recoveredIterator.next();
+    await client.subscribe(["invocation.completed"]);
+
+    const recovered = await recoveredEventTask;
+    expect(recovered.done).toBe(false);
+    expect(recovered.value.type).toBe("invocation.completed");
+    expect(recovered.value.payload?.invocationId).toBe("invk-fake-2");
+
+    await recoveredIterator.return?.();
+    await abandonedIterator.return?.();
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("旧 iterator 的收尾动作不应释放新 reader 租约", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-stale-iterator-cleanup-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const abandonedIterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+    await client.authenticate();
+
+    const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
+    await expect(abandonedIterator.return?.()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+    expect(() => client.readEvents()[Symbol.asyncIterator]())
+      .toThrow("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+
+    const recoveredEventTask = recoveredIterator.next();
+    await client.subscribe(["invocation.completed"]);
+
+    const recovered = await recoveredEventTask;
+    expect(recovered.done).toBe(false);
+    expect(recovered.value.payload?.invocationId).toBe("invk-fake-2");
+    await recoveredIterator.return?.();
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   const runtimeDir = await createRuntime();
   const client = await DevHubEventsClient.fromRuntime({

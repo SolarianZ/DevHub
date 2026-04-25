@@ -5,6 +5,8 @@ import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { DevHubEventsClient, INVOCATION_COMPLETED } from "../../src/events.js";
 
+type WebSocketServerInstance = InstanceType<typeof WebSocketServer>;
+
 const tempRoots: string[] = [];
 
 afterEach(async () => {
@@ -178,7 +180,111 @@ it("真实 WS 连接下断线后活动 reader 应排空缓冲并在重新认证�
   }
 });
 
-async function createRuntimeForServer(server: WebSocketServer): Promise<string> {
+it("真实 WS 连接下旧 iterator 未显式关闭时也应允许重新认证恢复", async () => {
+  const server = new WebSocketServer({
+    host: "127.0.0.1",
+    port: 0,
+    path: "/ws"
+  });
+  const requestsByConnection: Array<Array<string>> = [];
+
+  try {
+    await waitForWebSocketServer(server);
+    const runtimeDir = await createRuntimeForServer(server);
+
+    server.on("connection", (socket: any) => {
+      const connectionIndex = requestsByConnection.length;
+      requestsByConnection.push([]);
+
+      socket.on("message", (data: Buffer) => {
+        const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
+        const method = String(request.method);
+        requestsByConnection[connectionIndex]!.push(method);
+
+        if (method === "hub.ws.authenticate") {
+          socket.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: String(request.id),
+            result: {
+              ok: true,
+              protocolVersion: 1
+            }
+          }));
+          return;
+        }
+
+        if (method !== "hub.events.subscribe") {
+          return;
+        }
+
+        const subscriptionId = connectionIndex === 0 ? "sub-1" : "sub-2";
+        const invocationId = connectionIndex === 0 ? "invk-1" : "invk-2";
+        socket.send(JSON.stringify({
+          jsonrpc: "2.0",
+          id: String(request.id),
+          result: {
+            ok: true,
+            subscriptionId
+          }
+        }));
+        socket.send(JSON.stringify({
+          jsonrpc: "2.0",
+          method: "hub.event",
+          params: {
+            subscriptionId,
+            type: INVOCATION_COMPLETED,
+            timeUtc: "2026-03-09T00:00:00Z",
+            payload: {
+              invocationId
+            }
+          }
+        }));
+
+        if (connectionIndex === 0) {
+          socket.close(1000, "reconnect_required");
+        }
+      });
+    });
+
+    const client = await DevHubEventsClient.fromRuntime({
+      clientId: "events-ws-abandoned-iterator-reconnect-client",
+      dataDir: runtimeDir
+    });
+
+    try {
+      await client.authenticate();
+      const abandonedIterator = client.readEvents()[Symbol.asyncIterator]();
+      await client.subscribe([INVOCATION_COMPLETED]);
+      await waitForCondition(() => isEventStreamUnavailable(client));
+
+      await client.authenticate();
+      await waitForCondition(() => requestsByConnection.length === 2);
+      expect(requestsByConnection[1]).toEqual(["hub.ws.authenticate"]);
+
+      const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
+      const recoveredEventTask = recoveredIterator.next();
+      await client.subscribe([INVOCATION_COMPLETED]);
+
+      const recovered = await recoveredEventTask;
+      expect(recovered.done).toBe(false);
+      expect(recovered.value.type).toBe(INVOCATION_COMPLETED);
+      expect(recovered.value.payload?.invocationId).toBe("invk-2");
+      expect(requestsByConnection[1]).toEqual([
+        "hub.ws.authenticate",
+        "hub.events.subscribe"
+      ]);
+
+      await recoveredIterator.return?.();
+      await abandonedIterator.return?.();
+    } finally {
+      await client.dispose();
+    }
+  } finally {
+    await closeWebSocketServer(server);
+  }
+});
+
+async function createRuntimeForServer(server: WebSocketServerInstance): Promise<string> {
   const address = server.address();
   if (!address || typeof address === "string") {
     throw new Error("无法获取测试 WebSocket 端口。");
@@ -215,7 +321,7 @@ async function createRuntimeForServer(server: WebSocketServer): Promise<string> 
   return dataDir;
 }
 
-async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
+async function waitForWebSocketServer(server: WebSocketServerInstance): Promise<void> {
   if (server.address()) {
     return;
   }
@@ -239,7 +345,7 @@ async function waitForWebSocketServer(server: WebSocketServer): Promise<void> {
   });
 }
 
-async function closeWebSocketServer(server: WebSocketServer): Promise<void> {
+async function closeWebSocketServer(server: WebSocketServerInstance): Promise<void> {
   for (const client of server.clients) {
     client.terminate();
   }
@@ -266,4 +372,14 @@ async function waitForCondition(condition: () => boolean): Promise<void> {
   }
 
   throw new Error("condition not met in time");
+}
+
+function isEventStreamUnavailable(client: DevHubEventsClient): boolean {
+  try {
+    client.readEvents();
+    return false;
+  } catch (error) {
+    return error instanceof Error
+      && error.message === "The event stream is unavailable. Re-authenticate and subscribe again.";
+  }
 }

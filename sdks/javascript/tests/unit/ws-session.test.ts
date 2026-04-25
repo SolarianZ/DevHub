@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unmock("ws");
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -125,6 +126,42 @@ it("本地超时请求的迟到响应应被忽略且会话保持可用", async (
 
     socket.respondWithResult(timedOutRequestId, { ok: true, late: true });
     await flushMicrotasks();
+
+    const secondRequest = session.sendRequest("hub.ping");
+    await waitForSentRequestCount(socket, 2);
+    socket.respondWithResult(socket.sentRequests[1]!.id, { ok: true, seq: 2 });
+
+    await expect(secondRequest).resolves.toEqual({ ok: true, seq: 2 });
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("超时很久后的迟到响应仍应被忽略且会话保持可用", async () => {
+  vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws",
+    requestTimeoutMs: 20
+  });
+
+  try {
+    const firstRequest = session.sendRequest("hub.timeout");
+    await flushMicrotasks();
+
+    const socket = ControlledWebSocket.instances[0]!;
+    socket.emitOpen();
+    await waitForSentRequestCount(socket, 1);
+    const timedOutRequestId = socket.sentRequests[0]!.id;
+
+    await expect(firstRequest).rejects.toThrow("WebSocket request timed out.");
+
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValue(Date.now() + 10 * 60_000);
+    socket.respondWithResult(timedOutRequestId, { ok: true, late: true });
+    await flushMicrotasks();
+    dateNowSpy.mockRestore();
 
     const secondRequest = session.sendRequest("hub.ping");
     await waitForSentRequestCount(socket, 2);
