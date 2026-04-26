@@ -17,7 +17,7 @@ import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 const tempRoots: string[] = [];
 
 afterEach(async () => {
-  vi.unmock("ws");
+  vi.doUnmock("ws");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 

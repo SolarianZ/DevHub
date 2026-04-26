@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { RuntimeConnectionInfo } from "../../src/runtime.js";
 
 afterEach(() => {
-  vi.unmock("../../src/runtime.js");
+  vi.doUnmock("../../src/runtime.js");
   vi.resetModules();
   vi.restoreAllMocks();
 });

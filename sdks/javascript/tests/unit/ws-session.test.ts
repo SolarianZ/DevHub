@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.unmock("ws");
+  vi.doUnmock("ws");
   vi.unstubAllGlobals();
   vi.resetModules();
   vi.restoreAllMocks();
