@@ -256,12 +256,13 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 | `Authorization`            | `Bearer {token}` | 从 `hub.json.tokenFile`（或默认的 `${dataDir}/runtime/token.txt`）读取的令牌 |
 | `X-DevHub-Protocol`        | `"1"`            | 协议版本；HTTP 请求头值为字符串；**必须**精确为 `"1"`                   |
 | `X-DevHub-ClientId`        | string           | 逻辑客户端身份（如 `DevHubUI`, `VSPlugin` 等）                          |
-| `X-DevHub-ClientSessionId` | UUID string      | RFC 4122 UUID；**必须**在客户端重启时更改                               |
+| `X-DevHub-ClientSessionId` | UUID string      | canonical UUID 文本格式（`8-4-4-4-12`）；**必须**在客户端重启时更改     |
 
 缺失/无效请求头的处理方式：
 - 缺失/无效 `Authorization`：返回 `-32001 unauthorized`
 - 缺失/无效 `X-DevHub-Protocol`：返回 `-32099 not_supported`
 - 缺失 `X-DevHub-ClientId` 或 `X-DevHub-ClientSessionId`：返回 `-32600 invalid_request` 且 `error.data.reason="missing_header"`
+- `X-DevHub-ClientSessionId` 存在但不是合法 UUID string：返回 `-32600 invalid_request` 且 `error.data.reason="invalid_header"`、`error.data.header="X-DevHub-ClientSessionId"`
 
 浏览器 / WebView 的 `OPTIONS /rpc` 预检请求不适用本节要求；其行为由 §3.2 的 HTTP 传输规则定义。
 
@@ -522,7 +523,10 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       "required": ["clientId", "clientSessionId"],
       "properties": {
         "clientId": { "type": "string" },
-        "clientSessionId": { "type": "string" }
+        "clientSessionId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
       }
     }
   }
@@ -652,13 +656,16 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
   "token": "string",
   "protocolVersion": 1,
   "clientId": "string",
-  "clientSessionId": "string"
+  "clientSessionId": "uuid-string"
 }
 ```
 **结果**：
 ```json
 { "ok": true, "protocolVersion": 1 }
 ```
+
+规范性行为：
+- `clientSessionId` **必须**是合法 canonical UUID string；否则 Hub **必须**返回 `-32602 invalid_params`，并在返回响应后关闭连接。
 
 #### 6.3.3 `hub.apps.listDefinitions`
 **参数**：
@@ -1040,6 +1047,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - Hub **必须**要求实例在轮询前已注册（`hub.apps.registerInstance`）；否则返回 `-32010 instance_not_found`。
 - Hub **必须**要求 `params.instanceSessionToken` 为非空字符串，并校验其与 `instanceId` 当前持有的 token 匹配；不匹配时 **必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
 - Hub **必须**强制要求实例具有 `invoke.poll==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="poll_not_enabled"`。
+- `maxCount` 若省略则默认为 `10`，且**必须**为 `1..100` 的整数（非法值 => `-32602 invalid_params`）。
 - `waitMs` 若省略则默认为 `25000`，且**必须**为大于等于 `0` 的整数（非法值 => `-32602 invalid_params`）。
 - `waitMs = 0` **必须**表示“立即返回当前可用项或空列表”，不得进入长轮询等待。
 - 当 `waitMs > 0` 且没有可用项时，Hub **必须**支持长轮询 (Long Polling)：等待最长 `waitMs` 时长后返回当前可用项或空列表。
@@ -1180,7 +1188,7 @@ flowchart TD
 stateDiagram-v2
     [*] --> Created
     Created --> Queued: 已接受
-    Created --> Rejected: 验证/禁止/无路由且 !queueIfOffline
+    Created --> Rejected: 验证/禁止/无路由且 !queueIfOffline / 缺少精确 Definition
 
     Queued --> Pending: 无在线实例
     Queued --> Delivered: 被调用方轮询 (租约开始)

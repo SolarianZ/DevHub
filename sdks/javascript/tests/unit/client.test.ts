@@ -1700,6 +1700,45 @@ it("poll 应拒绝缺少 caller.clientSessionId 的调用项", async () => {
   })).rejects.toThrow(/clientSessionId/);
 });
 
+it("poll 应拒绝非法 caller.clientSessionId 的调用项", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    return createJsonResponse(body.id, {
+      ok: true,
+      serverTimeUtc: "2026-03-09T00:00:00Z",
+      items: [
+        {
+          invocationId: "invk-1",
+          appId: "test.app",
+          target: {
+            scope: "",
+            instanceId: null
+          },
+          method: "test.notify",
+          kind: "notify",
+          createdAtUtc: "2026-03-09T00:00:00Z",
+          caller: {
+            clientId: "caller-a",
+            clientSessionId: "bad-client-session-id"
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-poll-invalid-client-session-id-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.poll({
+    instanceId: "inst-1",
+    instanceSessionToken: "session-1"
+  })).rejects.toThrow(/clientSessionId/);
+});
+
 it("ping 应拒绝非法 JSON-RPC 版本的响应", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (input: unknown, init?: RequestInit) => {

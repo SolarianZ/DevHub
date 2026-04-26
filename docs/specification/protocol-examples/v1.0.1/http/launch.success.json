@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-launch-global",
+  "result": {
+    "ok": true,
+    "status": "started",
+    "pid": 32001,
+    "launchId": "${LAUNCH_ID}"
+  }
+}

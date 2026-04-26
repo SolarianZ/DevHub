@@ -42,7 +42,8 @@ import {
   readOptionalString,
   readPositiveInt,
   readStringValue,
-  readString
+  readString,
+  readUuidString
 } from "./validation.js";
 
 export function parsePingResult(payload: unknown): PingResult {
@@ -351,7 +352,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
     delivery,
     caller: {
       clientId: readString(callerPayload, `${location}.caller`, "clientId"),
-      clientSessionId: readString(callerPayload, `${location}.caller`, "clientSessionId")
+      clientSessionId: readUuidString(callerPayload, `${location}.caller`, "clientSessionId")
     }
   };
 }

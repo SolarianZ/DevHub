@@ -237,7 +237,7 @@ internal static class ResponsePayloadReader
 
         var callerElement = EnsurePropertyExists(element, location, "caller", JsonValueKind.Object);
         EnsureStringProperty(callerElement, $"{location}.caller", "clientId");
-        EnsureStringProperty(callerElement, $"{location}.caller", "clientSessionId");
+        EnsureGuidStringProperty(callerElement, $"{location}.caller", "clientSessionId");
 
         if (element.TryGetProperty("delivery", out var deliveryElement) &&
             deliveryElement.ValueKind != JsonValueKind.Null)
@@ -262,6 +262,21 @@ internal static class ResponsePayloadReader
         if (string.IsNullOrWhiteSpace(propertyValue.GetString()))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void EnsureGuidStringProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
+        var value = propertyValue.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+
+        if (!Guid.TryParseExact(value, "D", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须为 UUID 字符串。");
         }
     }
 

@@ -5,6 +5,7 @@ export const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Z
 const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 const INVOCATION_ID_REGEX = /^invk-[a-zA-Z0-9._:-]+$/;
 const RFC3339_DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
+const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const IDENTIFIER_MAX_LENGTH = 256;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -117,6 +118,15 @@ export function readInvocationId(payload: Record<string, unknown>, location: str
   const value = readString(payload, location, key);
   if (value.length > IDENTIFIER_MAX_LENGTH || !INVOCATION_ID_REGEX.test(value)) {
     throw new Error(`${location}.${key} must be a valid invocation id.`);
+  }
+
+  return value;
+}
+
+export function readUuidString(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readString(payload, location, key);
+  if (!UUID_REGEX.test(value)) {
+    throw new Error(`${location}.${key} must be a valid UUID string.`);
   }
 
   return value;

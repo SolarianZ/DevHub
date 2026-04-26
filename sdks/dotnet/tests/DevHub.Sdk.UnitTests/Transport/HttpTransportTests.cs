@@ -864,6 +864,33 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenPollResultCallerClientSessionIdIsNotUuid_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-poll\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"bad-client-session-id\"}}]}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-poll");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
+        }, CancellationToken.None));
+
+        Assert.Contains("clientSessionId", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Impl_HttpTransport_WhenValidateDefinitionResultInvalidWithoutErrors_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();

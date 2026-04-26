@@ -17,6 +17,7 @@
 - `${HOST_VERSION}`：`hub.getVersion` 返回的 Host 版本字符串
 - `${SUBSCRIPTION_ID}`：订阅成功后返回的 `subscriptionId`
 - `${INVOCATION_ID}`：调用成功或错误响应中的 `invocationId`
+- `${LAUNCH_ID}`：`hub.apps.launch` 成功结果中的 `launchId`
 - `${INSTANCE_SESSION_TOKEN}`：`hub.apps.registerInstance` 成功结果返回的实例会话凭据，供 `heartbeat` / `unregisterInstance` / `hub.invoke.poll` / `hub.invoke.respond` 复用
 - `${SERVER_TIME_UTC}`：服务端返回的 UTC 时间戳
 - `${INSTANCE_REGISTERED_AT_UTC}` / `${INSTANCE_LAST_SEEN_UTC}`：服务端管理的实例时间戳
@@ -81,8 +82,12 @@ HTTP：
 - [`http/list-instances.global.request.json`](./http/list-instances.global.request.json)
 - [`http/list-instances.success.json`](./http/list-instances.success.json)
 - [`http/list-instances.global.success.json`](./http/list-instances.global.success.json)
+- [`http/get-instance.request.json`](./http/get-instance.request.json)
+- [`http/get-instance.success.json`](./http/get-instance.success.json)
 - [`http/unregister-instance.request.json`](./http/unregister-instance.request.json)
 - [`http/unregister-instance.success.json`](./http/unregister-instance.success.json)
+- [`http/launch.request.json`](./http/launch.request.json)
+- [`http/launch.success.json`](./http/launch.success.json)
 - [`http/invoke-notify.notification.request.json`](./http/invoke-notify.notification.request.json)
 - [`http/invoke-request.request.json`](./http/invoke-request.request.json)
 - [`http/invoke-request.success.json`](./http/invoke-request.success.json)
@@ -111,6 +116,7 @@ WebSocket：
 - 所有 `*.success.json` 响应示例对应 [`rpc-response.json`](../../schema/v1.0.1/rpc-response.json)。
 - 所有 `*.error.json` 错误示例对应 [`error-response.json`](../../schema/v1.0.1/error-response.json)。
 - 所有 `ws/event.notification*.json` 事件示例对应 [`event-notification.json`](../../schema/v1.0.1/event-notification.json)。
+- `get-instance.*.json` 演示 `hub.apps.getInstance` 的精确实例查询语义；`launch.*.json` 演示 `hub.apps.launch` 的显式 `appId + scope` 启动语义。
 - Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。
 - `listDefinitions` 与 `listInstances` 都演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅匹配 Global 的语义。除这两个列表查询外，本目录不会用 `scope: null` 表示 Global，也不会省略必须显式存在的 `scope` 字段。
 - `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。
