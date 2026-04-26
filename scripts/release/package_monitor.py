@@ -26,6 +26,7 @@ MONITOR_PACKAGE_JSON = MONITOR_DIR / "package.json"
 MONITOR_PACKAGE_LOCK = MONITOR_DIR / "package-lock.json"
 MONITOR_TAURI_CONFIG = MONITOR_TAURI_DIR / "tauri.conf.json"
 MONITOR_CARGO_TOML = MONITOR_TAURI_DIR / "Cargo.toml"
+MONITOR_VERSION_METADATA = MONITOR_DIR / "src" / "generated" / "version-metadata.json"
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
 SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
 MONITOR_SDK_SOURCE_ENV = "DEVHUB_MONITOR_SDK_SOURCE"
@@ -84,6 +85,7 @@ def main() -> int:
     versions = ensure_monitor_version_consistency()
 
     run_monitor_validation(checks_dir, validation_records, sdk_source=sdk_source)
+    versions.update(read_monitor_version_metadata(expected_monitor_version=versions["monitor"]))
     write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
 
     if args.verify_only:
@@ -178,6 +180,28 @@ def ensure_monitor_version_consistency() -> dict[str, str]:
     return {
         "monitor": distinct_versions[0],
         **normalized_versions,
+    }
+
+
+def read_monitor_version_metadata(expected_monitor_version: str) -> dict[str, str]:
+    if not MONITOR_VERSION_METADATA.is_file():
+        raise RuntimeError(f"未找到 Monitor 共享版本元数据：{MONITOR_VERSION_METADATA}")
+
+    payload = json.loads(MONITOR_VERSION_METADATA.read_text(encoding="utf-8"))
+    monitor_version = payload.get("monitorVersion")
+    sdk_version = payload.get("sdkVersion")
+    if not isinstance(monitor_version, str) or not monitor_version.strip():
+        raise RuntimeError(f"Monitor 共享版本元数据缺少有效 monitorVersion：{MONITOR_VERSION_METADATA}")
+    if not isinstance(sdk_version, str) or not sdk_version.strip():
+        raise RuntimeError(f"Monitor 共享版本元数据缺少有效 sdkVersion：{MONITOR_VERSION_METADATA}")
+    if monitor_version.strip() != expected_monitor_version:
+        raise RuntimeError(
+            "Monitor 共享版本元数据与 package.json/tauri/Cargo 版本不一致："
+            f" metadata={monitor_version!r}, expected={expected_monitor_version!r}"
+        )
+
+    return {
+        "sdk": sdk_version.strip(),
     }
 
 
@@ -330,6 +354,7 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object]) -> None:
         "",
         f"- Release ID: `{manifest['releaseId']}`",
         f"- Version: `{manifest['versions']['monitor']}`",
+        f"- JS SDK Version: `{manifest['versions']['sdk']}`",
         f"- SDK Source: `{manifest['sdkSource']}`",
         f"- Target Platform: `{manifest['targetPlatform']}`",
         f"- Generated At (UTC): `{manifest['generatedAtUtc']}`",

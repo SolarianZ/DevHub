@@ -1,7 +1,6 @@
 use crate::models::{
     DataDirSource, MonitorPlatform, MonitorSettings, ResolvedDataDir, SettingsLoadWarning,
-    SettingsSnapshot,
-    DEVHUB_DATA_DIR_ENV,
+    SettingsSnapshot, DEVHUB_DATA_DIR_ENV,
 };
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -534,11 +533,7 @@ mod tests {
             "hostExecutablePath": host_path,
         }))
         .expect("failed to serialize settings file");
-        fs::write(
-            &settings_file,
-            settings_payload,
-        )
-        .expect("failed to write settings file");
+        fs::write(&settings_file, settings_payload).expect("failed to write settings file");
 
         let store = SettingsStore::load(settings_file).expect("failed to load store");
         let current = store.current();
@@ -577,13 +572,13 @@ mod tests {
 
         let warning = snapshot.load_warning.expect("expected load warning");
         assert_eq!(warning.code, "settings_recovered");
-        assert_eq!(warning.settings_file_path, settings_file.display().to_string());
-
-        let backup_path = PathBuf::from(
-            warning
-                .backup_file_path
-                .expect("expected backup file path"),
+        assert_eq!(
+            warning.settings_file_path,
+            settings_file.display().to_string()
         );
+
+        let backup_path =
+            PathBuf::from(warning.backup_file_path.expect("expected backup file path"));
         assert!(backup_path.exists());
         assert!(!settings_file.exists());
         assert_eq!(

@@ -8,6 +8,10 @@ use crate::models::{
 use crate::runtime::{discover_runtime, port_from_runtime, verify_runtime};
 use crate::settings::SettingsService;
 use crate::snapshot::SnapshotPublisher;
+use crate::versioning::{
+    create_version_compatibility_result, VersionCompatibilityResult, VersionCompatibilityStatus,
+    MONITOR_VERSION, SDK_VERSION,
+};
 use anyhow::Result;
 use serde_json::Value;
 use std::path::Path;
@@ -132,19 +136,24 @@ impl DiscoveryCoordinator {
 
             let discovery_result = match discover_runtime(Path::new(&resolved.path)) {
                 Ok(connection) => match verify_runtime(&connection).await {
-                    Ok(()) => Ok(connection),
+                    Ok(verification) => Ok((connection, verification)),
                     Err(error) => Err(error),
                 },
                 Err(error) => Err(error),
             };
 
             match discovery_result {
-                Ok(connection) => {
+                Ok((connection, verification)) => {
                     if !self.snapshot_publisher.is_current_generation(generation) {
                         return Ok(());
                     }
 
-                    if let Some(incompatible_problem) = assess_runtime_compatibility(&connection) {
+                    let compatibility = assess_runtime_compatibility_with_host_version(
+                        &connection,
+                        verification.host_version.as_deref(),
+                    );
+
+                    if let Some(incompatible_problem) = compatibility.problem.clone() {
                         let incompatible_message = incompatible_problem.message.clone();
                         if last_incompatible_message.as_deref()
                             != Some(incompatible_message.as_str())
@@ -180,12 +189,18 @@ impl DiscoveryCoordinator {
                                     ),
                                     (
                                         "hubVersion",
-                                        connection
-                                            .runtime
-                                            .hub_version
+                                        compatibility
+                                            .result
+                                            .host_version
                                             .clone()
                                             .map(Value::String)
                                             .unwrap_or(Value::Null),
+                                    ),
+                                    (
+                                        "compatibilityStatus",
+                                        Value::String(
+                                            compatibility.result.status.as_str().to_string(),
+                                        ),
                                     ),
                                 ])),
                             )?;
@@ -228,6 +243,19 @@ impl DiscoveryCoordinator {
                             ("dataDir", Value::String(resolved.path)),
                             ("hostPid", Value::from(connection.runtime.pid)),
                             ("port", port.map(Value::from).unwrap_or(Value::Null)),
+                            (
+                                "hubVersion",
+                                compatibility
+                                    .result
+                                    .host_version
+                                    .clone()
+                                    .map(Value::String)
+                                    .unwrap_or(Value::Null),
+                            ),
+                            (
+                                "compatibilityStatus",
+                                Value::String(compatibility.result.status.as_str().to_string()),
+                            ),
                         ])),
                     )?;
                     return Ok(());
@@ -334,186 +362,72 @@ fn should_transition_to_launch_available(elapsed: Duration, announced_launch_act
     !announced_launch_action && elapsed >= LAUNCH_ACTION_DELAY
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeCompatibilityAssessment {
+    result: VersionCompatibilityResult,
+    problem: Option<MonitorProblem>,
+}
+
+#[cfg(test)]
 fn assess_runtime_compatibility(
     connection: &MonitorRuntimeConnectionInfo,
-) -> Option<MonitorProblem> {
+) -> RuntimeCompatibilityAssessment {
+    assess_runtime_compatibility_with_host_version(
+        connection,
+        connection.runtime.hub_version.as_deref(),
+    )
+}
+
+fn assess_runtime_compatibility_with_host_version(
+    connection: &MonitorRuntimeConnectionInfo,
+    host_version: Option<&str>,
+) -> RuntimeCompatibilityAssessment {
     if connection.runtime.protocol_version != 1 {
-        return Some(problem(
+        return RuntimeCompatibilityAssessment {
+            result: VersionCompatibilityResult {
+                sdk_version: SDK_VERSION.to_string(),
+                host_version: host_version.map(str::to_string),
+                status: VersionCompatibilityStatus::Incompatible,
+            },
+            problem: Some(problem(
+                "host_incompatible",
+                format!(
+                    "当前 Monitor 仅支持 protocolVersion=1 的 DevHub Host。检测到 protocolVersion={}。",
+                    connection.runtime.protocol_version
+                ),
+            )),
+        };
+    }
+
+    let result = create_version_compatibility_result(host_version);
+    let problem = if matches!(result.status, VersionCompatibilityStatus::Incompatible) {
+        Some(problem(
             "host_incompatible",
             format!(
-                "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到 protocolVersion={}。",
-                connection.runtime.protocol_version
+                "当前 Monitor v{} 内置的 JS SDK 与 DevHub Host 版本不兼容。JS SDK={}; Host={}。",
+                MONITOR_VERSION,
+                result.sdk_version,
+                result.host_version.as_deref().unwrap_or("未知")
             ),
-        ));
-    }
-
-    let Some(hub_version) = connection.runtime.hub_version.as_deref() else {
-        return Some(problem(
-            "host_incompatible",
-            "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。当前 Host 缺少可解析的 hubVersion。",
-        ));
+        ))
+    } else {
+        None
     };
 
-    let Some(parsed_hub_version) = parse_semantic_version(hub_version) else {
-        return Some(problem(
-            "host_incompatible",
-            format!(
-                "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到不可解析的 hubVersion={hub_version}。"
-            ),
-        ));
-    };
-
-    let minimum_supported = SemanticVersion {
-        major: 0,
-        minor: 7,
-        patch: 0,
-        prerelease: Vec::new(),
-    };
-    if compare_semantic_versions(&parsed_hub_version, &minimum_supported) < 0 {
-        return Some(problem(
-            "host_incompatible",
-            format!(
-                "当前 Monitor 仅支持 protocolVersion=1 且 hubVersion >= 0.7.0 的 DevHub Host。检测到 hubVersion={hub_version}。"
-            ),
-        ));
-    }
-
-    None
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SemanticVersion {
-    major: u32,
-    minor: u32,
-    patch: u32,
-    prerelease: Vec<SemanticVersionIdentifier>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum SemanticVersionIdentifier {
-    Numeric(u32),
-    Text(String),
-}
-
-fn parse_semantic_version(value: &str) -> Option<SemanticVersion> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let without_build = trimmed.split_once('+').map(|(head, _)| head).unwrap_or(trimmed);
-    let (core, prerelease) = without_build
-        .split_once('-')
-        .map(|(head, tail)| (head, Some(tail)))
-        .unwrap_or((without_build, None));
-
-    let mut parts = core.split('.');
-    let major = parts.next()?.parse::<u32>().ok()?;
-    let minor = parts.next()?.parse::<u32>().ok()?;
-    let patch = parts.next()?.parse::<u32>().ok()?;
-    if parts.next().is_some() {
-        return None;
-    }
-
-    let prerelease = match prerelease {
-        Some(value) => value
-            .split('.')
-            .map(|identifier| {
-                if identifier.is_empty() {
-                    return None;
-                }
-
-                Some(
-                    identifier
-                        .parse::<u32>()
-                        .map(SemanticVersionIdentifier::Numeric)
-                        .unwrap_or_else(|_| SemanticVersionIdentifier::Text(identifier.to_string())),
-                )
-            })
-            .collect::<Option<Vec<_>>>()?,
-        None => Vec::new(),
-    };
-
-    Some(SemanticVersion {
-        major,
-        minor,
-        patch,
-        prerelease,
-    })
-}
-
-fn compare_semantic_versions(left: &SemanticVersion, right: &SemanticVersion) -> i32 {
-    match left.major.cmp(&right.major) {
-        std::cmp::Ordering::Less => return -1,
-        std::cmp::Ordering::Greater => return 1,
-        std::cmp::Ordering::Equal => {}
-    }
-
-    match left.minor.cmp(&right.minor) {
-        std::cmp::Ordering::Less => return -1,
-        std::cmp::Ordering::Greater => return 1,
-        std::cmp::Ordering::Equal => {}
-    }
-
-    match left.patch.cmp(&right.patch) {
-        std::cmp::Ordering::Less => return -1,
-        std::cmp::Ordering::Greater => return 1,
-        std::cmp::Ordering::Equal => {}
-    }
-
-    if left.prerelease.is_empty() && right.prerelease.is_empty() {
-        return 0;
-    }
-
-    if left.prerelease.is_empty() {
-        return 1;
-    }
-
-    if right.prerelease.is_empty() {
-        return -1;
-    }
-
-    let max_length = left.prerelease.len().max(right.prerelease.len());
-    for index in 0..max_length {
-        let left_identifier = left.prerelease.get(index);
-        let right_identifier = right.prerelease.get(index);
-
-        match (left_identifier, right_identifier) {
-            (None, Some(_)) => return -1,
-            (Some(_), None) => return 1,
-            (None, None) => return 0,
-            (Some(SemanticVersionIdentifier::Numeric(left_value)), Some(SemanticVersionIdentifier::Numeric(right_value))) => {
-                match left_value.cmp(right_value) {
-                    std::cmp::Ordering::Less => return -1,
-                    std::cmp::Ordering::Greater => return 1,
-                    std::cmp::Ordering::Equal => {}
-                }
-            }
-            (Some(SemanticVersionIdentifier::Numeric(_)), Some(SemanticVersionIdentifier::Text(_))) => return -1,
-            (Some(SemanticVersionIdentifier::Text(_)), Some(SemanticVersionIdentifier::Numeric(_))) => return 1,
-            (Some(SemanticVersionIdentifier::Text(left_value)), Some(SemanticVersionIdentifier::Text(right_value))) => {
-                match left_value.cmp(right_value) {
-                    std::cmp::Ordering::Less => return -1,
-                    std::cmp::Ordering::Greater => return 1,
-                    std::cmp::Ordering::Equal => {}
-                }
-            }
-        }
-    }
-
-    0
+    RuntimeCompatibilityAssessment { result, problem }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        assess_runtime_compatibility, build_launch_available_snapshot, compare_semantic_versions,
-        parse_semantic_version, should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
+        assess_runtime_compatibility, build_launch_available_snapshot,
+        should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
     };
     use crate::models::{
         BootstrapPhase, DataDirSource, MonitorRuntimeConnectionInfo, MonitorRuntimeTuning,
         MonitorSettings, ResolvedDataDir,
     };
+    use crate::versioning::VersionCompatibilityStatus;
     use std::time::Duration;
 
     #[test]
@@ -556,7 +470,10 @@ mod tests {
         assert_eq!(problem.message, "hub.ping failed");
     }
 
-    fn create_connection(protocol_version: u32, hub_version: Option<&str>) -> MonitorRuntimeConnectionInfo {
+    fn create_connection(
+        protocol_version: u32,
+        hub_version: Option<&str>,
+    ) -> MonitorRuntimeConnectionInfo {
         MonitorRuntimeConnectionInfo {
             runtime_directory: "/tmp/devhub/runtime".to_string(),
             token: "secret".to_string(),
@@ -580,36 +497,38 @@ mod tests {
     }
 
     #[test]
-    fn compatibility_check_rejects_unsupported_protocol_or_hub_version() {
-        let unsupported_protocol = assess_runtime_compatibility(&create_connection(2, Some("0.7.0")))
-            .expect("expected protocol mismatch");
+    fn compatibility_check_rejects_unsupported_protocol_or_major_mismatch() {
+        let unsupported_protocol =
+            assess_runtime_compatibility(&create_connection(2, Some("0.7.0")))
+                .problem
+                .expect("expected protocol mismatch");
         assert!(unsupported_protocol.message.contains("protocolVersion=2"));
 
-        let unsupported_hub = assess_runtime_compatibility(&create_connection(1, Some("0.6.9")))
-            .expect("expected unsupported hub version");
-        assert!(unsupported_hub.message.contains("hubVersion=0.6.9"));
-
-        let missing_hub = assess_runtime_compatibility(&create_connection(1, None))
-            .expect("expected missing hub version");
-        assert!(missing_hub.message.contains("hubVersion"));
+        let unsupported_hub = assess_runtime_compatibility(&create_connection(1, Some("1.0.0")))
+            .problem
+            .expect("expected incompatible hub version");
+        assert!(unsupported_hub.message.contains("JS SDK="));
+        assert!(unsupported_hub.message.contains("Host=1.0.0"));
     }
 
     #[test]
-    fn compatibility_check_accepts_supported_runtime() {
-        assert!(assess_runtime_compatibility(&create_connection(1, Some("0.7.0"))).is_none());
-        assert!(assess_runtime_compatibility(&create_connection(1, Some("0.7.0-rc.1"))).is_some());
-    }
+    fn compatibility_check_allows_unknown_and_update_recommended_hosts() {
+        let unknown = assess_runtime_compatibility(&create_connection(1, None));
+        assert!(unknown.problem.is_none());
+        assert_eq!(unknown.result.status, VersionCompatibilityStatus::Unknown);
 
-    #[test]
-    fn semantic_version_parser_supports_prerelease_comparison() {
-        let release = parse_semantic_version("0.7.0").expect("expected release version");
-        let prerelease =
-            parse_semantic_version("0.7.0-rc.1").expect("expected prerelease version");
-        let newer = parse_semantic_version("0.7.1").expect("expected newer version");
+        let update_recommended = assess_runtime_compatibility(&create_connection(1, Some("0.8.1")));
+        assert!(update_recommended.problem.is_none());
+        assert_eq!(
+            update_recommended.result.status,
+            VersionCompatibilityStatus::UpdateRecommended
+        );
 
-        assert_eq!(compare_semantic_versions(&release, &prerelease), 1);
-        assert_eq!(compare_semantic_versions(&prerelease, &release), -1);
-        assert_eq!(compare_semantic_versions(&newer, &release), 1);
-        assert!(parse_semantic_version("0.7").is_none());
+        let compatible = assess_runtime_compatibility(&create_connection(1, Some("0.7.0-rc.1")));
+        assert!(compatible.problem.is_none());
+        assert_eq!(
+            compatible.result.status,
+            VersionCompatibilityStatus::Compatible
+        );
     }
 }

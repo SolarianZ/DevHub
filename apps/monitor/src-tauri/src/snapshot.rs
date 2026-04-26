@@ -127,6 +127,9 @@ mod tests {
 
         let accepted = publisher.try_replace_current(generation, snapshot.clone());
         assert!(accepted);
-        assert!(matches!(publisher.current().phase, BootstrapPhase::LaunchAvailable));
+        assert!(matches!(
+            publisher.current().phase,
+            BootstrapPhase::LaunchAvailable
+        ));
     }
 }

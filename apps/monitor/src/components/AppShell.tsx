@@ -1,5 +1,9 @@
-import packageManifest from "../../package.json";
-import type { AppDefinition, AppDefinitionIdentity, AppInstance } from "@devhub/sdk";
+import type {
+  AppDefinition,
+  AppDefinitionIdentity,
+  AppInstance,
+  VersionCompatibilityResult,
+} from "@devhub/sdk";
 import { type ReactNode, useState } from "react";
 import type { DefinitionFormState } from "../lib/definition-form";
 import type {
@@ -22,6 +26,13 @@ import {
   formatHostLogDirectory,
   getSidebarWorkspace,
 } from "../lib/monitor-ui";
+import {
+  formatVersionCompatibilityHostVersion,
+  formatVersionCompatibilityStatusLabel,
+  formatVersionGuidanceMessage,
+  getVersionGuidanceTitle,
+} from "../lib/version-guidance";
+import { MONITOR_VERSION_METADATA } from "../lib/version-metadata";
 
 interface AppShellProps {
   activeWorkspace: MonitorWorkspace;
@@ -38,6 +49,7 @@ interface AppShellProps {
   hostSessionStatus: HostSessionStatus;
   definitions: AppDefinition[];
   instances: AppInstance[];
+  versionCompatibility: VersionCompatibilityResult | null;
   definitionWorkspace: DefinitionWorkspaceState | null;
   rpcTestWorkspace: RpcTestWorkspaceViewModel;
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
@@ -64,7 +76,8 @@ interface AppShellProps {
   onSubmitDefinition: () => void;
 }
 
-const MONITOR_VERSION_TEXT = `Monitor v${packageManifest.version}`;
+const MONITOR_VERSION_TEXT = MONITOR_VERSION_METADATA.monitorVersion;
+const SDK_VERSION_TEXT = MONITOR_VERSION_METADATA.sdkVersion;
 const INVENTORY_DESCRIPTION_FALLBACK = "未提供 App 描述";
 
 interface InventoryItemViewModel {
@@ -95,6 +108,7 @@ export function AppShell(props: AppShellProps) {
     hostSessionStatus,
     definitions,
     instances,
+    versionCompatibility,
     definitionWorkspace,
     rpcTestWorkspace,
     onNavigateWorkspace,
@@ -156,6 +170,7 @@ export function AppShell(props: AppShellProps) {
               hostSessionStatus={hostSessionStatus}
               instances={instances}
               settings={settings}
+              versionCompatibility={versionCompatibility}
               onAddDefinition={onAddDefinition}
               onEditDefinition={onEditDefinition}
               onLaunchHost={onLaunchHost}
@@ -168,9 +183,12 @@ export function AppShell(props: AppShellProps) {
           {activeWorkspace === "help" ? (
             <HelpWorkspace
               bootstrap={bootstrap}
+              hostSessionStatus={hostSessionStatus}
               openingLogKind={openingLogKind}
               settings={settings}
-              versionText={MONITOR_VERSION_TEXT}
+              monitorVersionText={MONITOR_VERSION_TEXT}
+              sdkVersionText={SDK_VERSION_TEXT}
+              versionCompatibility={versionCompatibility}
               onOpenLogDirectory={onOpenLogDirectory}
             />
           ) : null}
@@ -301,6 +319,7 @@ function HomeWorkspace(props: {
   hostSessionStatus: HostSessionStatus;
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
+  versionCompatibility: VersionCompatibilityResult | null;
   onAddDefinition: () => void;
   onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onLaunchHost: () => void;
@@ -375,6 +394,7 @@ function HomeStatusWorkspace(props: {
   hostSessionStatus: HostSessionStatus;
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
+  versionCompatibility: VersionCompatibilityResult | null;
   onAddDefinition: () => void;
   onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
@@ -385,6 +405,7 @@ function HomeStatusWorkspace(props: {
     hostSessionStatus,
     instances,
     settings,
+    versionCompatibility,
     onAddDefinition,
     onEditDefinition,
     onViewInstanceDefinition,
@@ -393,6 +414,9 @@ function HomeStatusWorkspace(props: {
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
   const showInventories = hostSessionStatus === "connected";
+  const versionNotice = versionCompatibility && versionCompatibility.status !== "compatible"
+    ? versionCompatibility
+    : null;
   const definitionIndex = new Map(definitions.map((definition) => [definitionIdentityKey(definition), definition]));
   const instanceItems = instances.map((instance) =>
     createInstanceInventoryItem(
@@ -417,6 +441,13 @@ function HomeStatusWorkspace(props: {
           数据目录：{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}
         </p>
       </header>
+
+      {versionNotice ? (
+        <div className="warning-banner" role="status">
+          <p>{getVersionGuidanceTitle(versionNotice.status)}</p>
+          <p>{formatVersionGuidanceMessage(versionNotice)}</p>
+        </div>
+      ) : null}
 
       {showInventories ? (
         <>
@@ -592,13 +623,36 @@ function normalizeInventoryText(value: string | undefined, fallback: string): st
 
 function HelpWorkspace(props: {
   bootstrap: BootstrapSnapshot | null;
+  hostSessionStatus: HostSessionStatus;
   openingLogKind: LogKind | null;
   settings: SettingsSnapshot | null;
-  versionText: string;
+  monitorVersionText: string;
+  sdkVersionText: string;
+  versionCompatibility: VersionCompatibilityResult | null;
   onOpenLogDirectory: (kind: LogKind) => void;
 }) {
-  const { bootstrap, openingLogKind, settings, versionText, onOpenLogDirectory } = props;
+  const {
+    bootstrap,
+    hostSessionStatus,
+    openingLogKind,
+    settings,
+    monitorVersionText,
+    sdkVersionText,
+    versionCompatibility,
+    onOpenLogDirectory,
+  } = props;
   const hostLogDirectory = formatHostLogDirectory(bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir);
+  const hasActiveHostSession = bootstrap?.phase === "host_available" && hostSessionStatus !== "idle";
+  const hostVersionText = versionCompatibility
+    ? formatVersionCompatibilityHostVersion(versionCompatibility.hostVersion)
+    : hasActiveHostSession
+      ? "检查中"
+      : "未连接";
+  const compatibilityText = versionCompatibility
+    ? formatVersionCompatibilityStatusLabel(versionCompatibility.status)
+    : hasActiveHostSession
+      ? "检查中"
+      : "未知";
 
   return (
     <section className="workspace-view">
@@ -640,8 +694,23 @@ function HelpWorkspace(props: {
         </div>
 
         <div className="form-group">
-          <label className="form-label">版本</label>
-          <div className="version-text">{versionText}</div>
+          <label className="form-label">Monitor 版本</label>
+          <div className="version-text">{monitorVersionText}</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">内置 JS SDK 版本</label>
+          <div className="version-text">{sdkVersionText}</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">当前 Host 版本</label>
+          <div className="version-text">{hostVersionText}</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">兼容状态</label>
+          <div className="version-text">{compatibilityText}</div>
         </div>
       </div>
     </section>

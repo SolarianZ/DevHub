@@ -24,8 +24,8 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，默认来源是仓库 GitHub Release 中的 SDK tarball，本地联调时可显式设置 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 直连 `sdks/javascript/src`。
-- 独立 `monitor.yml` workflow 以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行仓库内 Monitor 验证，正式安装和本地默认命令仍以 `release` 为默认来源；该验证必须在只安装 `apps/monitor` 依赖的前提下成立，不得依赖 `sdks/javascript/node_modules`。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入。依赖声明保持 release tarball 形式，但 `apps/monitor/` 内的本地开发与验证命令默认解析 `sdks/javascript/src`，需要核对正式 SDK 包路径时再显式设置 `DEVHUB_MONITOR_SDK_SOURCE=release`。
+- 独立 `monitor.yml` workflow 以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行仓库内 Monitor 验证；该验证必须在只安装 `apps/monitor` 依赖的前提下成立，不得依赖 `sdks/javascript/node_modules`。`package_monitor.py` 仍通过 `--sdk-source` 明确区分正式打包路径与源码联调包。
 
 `JS/TS SDK` 的额外开发约束：
 
@@ -54,7 +54,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 - Host 白盒测试与最小 smoke 验证
 - `.NET SDK`、`JS/TS SDK`、`Python SDK` 测试
-- Host 多平台发布包、三套 SDK 包、manifest 与发布说明生成
+- Host 双变体多平台发布包、三套 SDK 包、manifest 与发布说明生成
 - 资产完整性检查
 
 若改动涉及 `apps/monitor/`，在运行该打包入口前额外执行：

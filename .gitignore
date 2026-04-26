@@ -123,6 +123,7 @@ secrets.json
 # Node.js
 node_modules/
 sdks/javascript/dist/
+apps/monitor/src/generated/version-metadata.json
 
 # Python packaging artifacts
 sdks/python/dist/

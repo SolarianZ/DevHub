@@ -5,6 +5,7 @@
 ## 1. 前置条件
 
 - 仓库内最直接的上手路径依赖 `.NET 10 SDK`，用于从源代码运行或发布 Host。
+- 使用发布资产运行 Host 时，目标机器需预装匹配的 `.NET 10` 与 `ASP.NET Core Runtime`；Host ZIP 资产均为 framework-dependent。
 - 使用独立数据目录运行 Host 时，需先确定 `DEVHUB_DATA_DIR` 的值，并确保当前用户对该目录有读写权限。
 - 若当前分发渠道尚未提供正式下载资产，请沿用 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
@@ -43,6 +44,16 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 ```
 
 该命令会在 `artifacts/release/local-dry-run/` 下生成 Host 压缩包、SDK 包、manifest 和 release notes。
+
+`artifacts/release/local-dry-run/host/` 对每个默认 RID 都提供两类 Host ZIP：
+
+- `devhub-host-<rid>.zip`：framework-dependent multi-file 版。解压后保留 `DevHub.Host.dll`、`DevHub.Core.dll` 与依赖侧车文件，使用时必须保留整目录。
+- `devhub-host-<rid>-single-file.zip`：framework-dependent single-file compression 版。解压后以平台启动文件为中心，保留必要配置侧车文件，不提供多文件 DLL 图。
+
+使用下载或 dry-run 产物时，先选择与当前机器一致的 RID，再按变体选择启动方式：
+
+- multi-file 版：在解压目录内执行 `dotnet ./DevHub.Host.dll`。
+- single-file 版：在解压目录内直接执行平台启动文件，例如 Windows 的 `DevHub.Host.exe`，或 macOS / Linux 的 `./DevHub.Host`。
 
 如只需要一个当前机器可直接启动的 Host 固定产物目录，也可以单独发布 Host 再运行：
 

@@ -94,11 +94,13 @@ impl HostLaunchService {
         status: HostLaunchAttemptStatus,
     ) -> Option<HostLaunchAttemptOutcome> {
         let mut attempts = self.attempts.lock().expect("launch attempts lock poisoned");
-        attempts.remove(data_dir).map(|attempt| HostLaunchAttemptOutcome {
-            data_dir: data_dir.to_string(),
-            requested_by_generation: attempt.requested_by_generation,
-            status,
-        })
+        attempts
+            .remove(data_dir)
+            .map(|attempt| HostLaunchAttemptOutcome {
+                data_dir: data_dir.to_string(),
+                requested_by_generation: attempt.requested_by_generation,
+                status,
+            })
     }
 
     pub fn take_timed_out_attempts(&self) -> Vec<HostLaunchAttemptOutcome> {
@@ -142,10 +144,7 @@ fn apply_host_launch_options(command: &mut Command, hide_host_command_line_windo
 #[cfg(not(windows))]
 fn apply_host_launch_options(_command: &mut Command, _hide_host_command_line_window: bool) {}
 
-fn prune_timed_out_attempts(
-    attempts: &mut HashMap<String, HostLaunchAttempt>,
-    timeout: Duration,
-) {
+fn prune_timed_out_attempts(attempts: &mut HashMap<String, HostLaunchAttempt>, timeout: Duration) {
     attempts.retain(|_, attempt| attempt.started_at.elapsed() < timeout);
 }
 
@@ -162,11 +161,13 @@ fn take_timed_out_attempts(
     expired_data_dirs
         .into_iter()
         .filter_map(|data_dir| {
-            attempts.remove(&data_dir).map(|attempt| HostLaunchAttemptOutcome {
-                data_dir,
-                requested_by_generation: attempt.requested_by_generation,
-                status: HostLaunchAttemptStatus::TimedOut,
-            })
+            attempts
+                .remove(&data_dir)
+                .map(|attempt| HostLaunchAttemptOutcome {
+                    data_dir,
+                    requested_by_generation: attempt.requested_by_generation,
+                    status: HostLaunchAttemptStatus::TimedOut,
+                })
         })
         .collect()
 }
@@ -184,10 +185,8 @@ mod tests {
         assert!(!service.begin_launch("/tmp/devhub-a"));
         assert!(service.begin_launch("/tmp/devhub-b"));
 
-        let outcome = service.finish_launch_attempt(
-            "/tmp/devhub-a",
-            HostLaunchAttemptStatus::HostAvailable,
-        );
+        let outcome =
+            service.finish_launch_attempt("/tmp/devhub-a", HostLaunchAttemptStatus::HostAvailable);
 
         assert_eq!(outcome.expect("expected outcome").data_dir, "/tmp/devhub-a");
         assert!(service.begin_launch("/tmp/devhub-a"));
@@ -202,7 +201,10 @@ mod tests {
 
         let outcomes = service.take_timed_out_attempts();
         assert_eq!(outcomes.len(), 1);
-        assert!(matches!(outcomes[0].status, HostLaunchAttemptStatus::TimedOut));
+        assert!(matches!(
+            outcomes[0].status,
+            HostLaunchAttemptStatus::TimedOut
+        ));
         assert!(service.begin_launch("/tmp/devhub-a"));
     }
 }

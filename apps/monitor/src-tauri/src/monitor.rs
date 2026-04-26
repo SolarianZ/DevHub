@@ -76,10 +76,7 @@ impl MonitorCore {
                             .map(Value::String)
                             .unwrap_or(Value::Null),
                     ),
-                    (
-                        "settingsRevision",
-                        Value::from(settings_snapshot.revision),
-                    ),
+                    ("settingsRevision", Value::from(settings_snapshot.revision)),
                 ])),
             )?;
         }
@@ -232,14 +229,13 @@ impl MonitorCore {
         {
             Ok(generation) => generation,
             Err(error) => {
-                self.launch_service.finish_launch_attempt(
-                    &resolved.path,
-                    HostLaunchAttemptStatus::SpawnFailed,
-                );
+                self.launch_service
+                    .finish_launch_attempt(&resolved.path, HostLaunchAttemptStatus::SpawnFailed);
                 return Err(error);
             }
         };
-        self.launch_service.assign_generation(&resolved.path, generation);
+        self.launch_service
+            .assign_generation(&resolved.path, generation);
 
         let host_path = PathBuf::from(host_path);
         let pid = match self.launch_service.spawn_host(
@@ -249,10 +245,8 @@ impl MonitorCore {
         ) {
             Ok(pid) => pid,
             Err(error) => {
-                self.launch_service.finish_launch_attempt(
-                    &resolved.path,
-                    HostLaunchAttemptStatus::SpawnFailed,
-                );
+                self.launch_service
+                    .finish_launch_attempt(&resolved.path, HostLaunchAttemptStatus::SpawnFailed);
                 record_backend_log(
                     &self.log_service,
                     self.snapshot_publisher.current().effective_data_dir,

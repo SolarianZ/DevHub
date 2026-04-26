@@ -68,7 +68,9 @@
 python scripts/release/package_release.py --release-id local-dry-run --channel local
 ```
 
-该入口会先执行发布门禁，再在 `artifacts/release/<release-id>/` 下生成 Host 多平台压缩包、SDK 包、`release-manifest.json` 与 `release-notes.md`。正式对外交付、发布候选验证和维护者本地打包都应优先使用这一入口。
+该入口会先执行发布门禁，再在 `artifacts/release/<release-id>/` 下生成 Host 双变体多平台压缩包、SDK 包、`release-manifest.json` 与 `release-notes.md`。正式对外交付、发布候选验证和维护者本地打包都应优先使用这一入口。
+
+`artifacts/release/<release-id>/host/` 下会为每个默认 RID 同时生成 `devhub-host-<rid>.zip` 与 `devhub-host-<rid>-single-file.zip`。两类 Host ZIP 都保持 framework-dependent；multi-file 版解压后需保留整目录，single-file 版启用 single-file compression，不生成 trimmed 变体。
 
 如果只需要为当前机器准备一个固定的 Host 运行目录，而不需要整套发布资产，也可以单独执行：
 

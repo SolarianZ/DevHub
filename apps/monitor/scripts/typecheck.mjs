@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const sdkSource = process.env.DEVHUB_MONITOR_SDK_SOURCE?.trim() || "release";
+const sdkSource = process.env.DEVHUB_MONITOR_SDK_SOURCE?.trim() || "local-src";
 const tscEntrypoint = fileURLToPath(new URL("../node_modules/typescript/bin/tsc", import.meta.url));
 
 if (sdkSource !== "release" && sdkSource !== "local-src") {

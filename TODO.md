@@ -7,31 +7,24 @@
 #### 其他
 
 - 用了内存明文密码
-- 一些无 id 请求在失败路径上失败路径上会得到空 200 响应，请求方有办法判断发生错误了吗？有没有错误码等信息？
-- `queueIfOffline` 似乎没必要存在？
-- 现在做不到在已有 app definition （appid+scope) 的情况下，注册一个相同 appid 但 scope 不同的 app instance
+- 没有限制 `queueIfOffline` 的最大等待时间
 
 ### .NET SDK
 
+- 各个 SDK 发布后，包里带 README.md ，使用的仍是仓库里的相对路径，发布后会失效，应该改成 url 路径（需要等合并 main 之后）。
+
 ### JS/TS SDK
 
-- abandonedRequests 会保留到 session 结束，如果单个长连接上持续产生大量超时且始终不重连，这个集合会增长。
+- sdks/javascript 当前依赖树里有 6 个已知的 moderate 级别安全通告，来源是 npm audit，升级 vitest 到 4.1.5 能解决这个问题吗？影响范围有多大？（Monitor依赖JS SDK）
 
 ### Python SDK
 
 ### Monitor
 
+- 【测试】页面的请求文本输入框每次输入文本后，光标都会自动跳到最后一个字符后面，影响正常输入
 
 ## 待实现功能
 
 ### Host
 
-- 获取 host 的版本
-- hub.apps.getInstance 获取 app 实例的详细信息？
-
 ### Monitor
-
-#### 增加【测试】页面
-
-- 发送请求
-- 显示回报内容

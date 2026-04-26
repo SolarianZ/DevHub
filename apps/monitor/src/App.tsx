@@ -63,6 +63,7 @@ function App() {
     runHostAction,
     sessionError,
     sessionResetVersion,
+    versionCompatibility,
   } = useHostSession({
     bootstrap,
     onReplaceBootstrap: replaceBootstrap,
@@ -326,6 +327,7 @@ function App() {
         hostSessionStatus={hostSessionStatus}
         definitions={definitions}
         instances={instances}
+        versionCompatibility={versionCompatibility}
         definitionWorkspace={definitionWorkspace}
         rpcTestWorkspace={rpcTestWorkspace}
         onNavigateWorkspace={(workspace) => {

@@ -7,17 +7,19 @@ import {
   type AppDefinition,
   type AppInstance,
   type DefinitionValidationResult,
+  type VersionCompatibilityResult,
 } from "@devhub/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import packageManifest from "../package.json";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
   LogKind,
+  MonitorHubRuntime,
   MonitorRuntimeConnectionInfo,
   SettingsSnapshot,
 } from "./lib/models";
+import { MONITOR_VERSION_METADATA } from "./lib/version-metadata";
 
 const {
   listenMock,
@@ -86,7 +88,11 @@ vi.mock("@devhub/sdk", async () => {
   };
 });
 
-function createConnection(overrides: Partial<MonitorRuntimeConnectionInfo> = {}): MonitorRuntimeConnectionInfo {
+function createConnection(
+  overrides: Omit<Partial<MonitorRuntimeConnectionInfo>, "runtime"> & {
+    runtime?: Partial<MonitorHubRuntime>;
+  } = {},
+): MonitorRuntimeConnectionInfo {
   const runtimeOverrides = overrides.runtime ?? {};
 
   return {
@@ -177,6 +183,42 @@ function createInstance(overrides: Partial<AppInstance> = {}): AppInstance {
       poll: true,
       respond: true,
     },
+    ...overrides,
+  };
+}
+
+function createVersionCompatibilityResult(
+  overrides: Partial<VersionCompatibilityResult> = {},
+): VersionCompatibilityResult {
+  return {
+    sdkVersion: MONITOR_VERSION_METADATA.sdkVersion,
+    hostVersion: "0.7.0",
+    status: "compatible",
+    ...overrides,
+  };
+}
+
+function createHostClient(overrides: Record<string, unknown> = {}) {
+  return {
+    listDefinitions: vi.fn().mockResolvedValue([]),
+    listInstances: vi.fn().mockResolvedValue([]),
+    checkVersionCompatibility: vi.fn().mockResolvedValue(createVersionCompatibilityResult()),
+    getDefinition: vi.fn(),
+    validateDefinition: vi.fn(),
+    upsertDefinition: vi.fn(),
+    deleteDefinition: vi.fn(),
+    dispose: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function createEventsClient(overrides: Record<string, unknown> = {}) {
+  return {
+    authenticate: vi.fn().mockResolvedValue(undefined),
+    subscribe: vi.fn().mockResolvedValue("sub-1"),
+    unsubscribe: vi.fn().mockResolvedValue(undefined),
+    readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
+    dispose: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -346,6 +388,8 @@ beforeEach(() => {
   );
   saveSettingsMock.mockResolvedValue(createSettingsSnapshot());
   writeFrontendLogMock.mockResolvedValue(undefined);
+  hostClientFromRuntimeMock.mockResolvedValue(createHostClient());
+  eventsClientFromRuntimeMock.mockResolvedValue(createEventsClient());
 });
 
 describe("Monitor App", () => {
@@ -370,22 +414,11 @@ describe("Monitor App", () => {
 
     const definition = createDefinition();
     const instance = createInstance();
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([definition]),
       listInstances: vi.fn().mockResolvedValue([instance]),
-      getDefinition: vi.fn(),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -436,7 +469,8 @@ describe("Monitor App", () => {
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
     screen.getByRole("button", { name: "打开 Host 日志" });
-    screen.getByText(`Monitor v${packageManifest.version}`);
+    expect(getHelpValue("Monitor 版本")).toBe(MONITOR_VERSION_METADATA.monitorVersion);
+    expect(getHelpValue("内置 JS SDK 版本")).toBe(MONITOR_VERSION_METADATA.sdkVersion);
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     await screen.findByRole("heading", { name: "设置" });
@@ -465,22 +499,11 @@ describe("Monitor App", () => {
   });
 
   it("shows the test workspace between home and help, validates without sending, and revalidates before dispatch", async () => {
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
       listInstances: vi.fn().mockResolvedValue([createInstance()]),
-      getDefinition: vi.fn(),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
     const restoreFetch = replaceGlobalFetch(fetchMock);
 
@@ -527,7 +550,7 @@ describe("Monitor App", () => {
     const longDescription = "用于验证库存条目长文本悬停全文展示和单行布局。";
     const orphanAppId = "monitor.inventory.orphan";
     const orphanInstanceId = "orphan-instance";
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([
         createDefinition({
           appId: longAppId,
@@ -545,19 +568,8 @@ describe("Monitor App", () => {
           appId: orphanAppId,
         }),
       ]),
-      getDefinition: vi.fn(),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -620,24 +632,15 @@ describe("Monitor App", () => {
       instanceId: "instance-workspace-a",
       scope: "workspace-a",
     });
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([globalDefinition, scopedDefinition]),
       listInstances: vi.fn().mockResolvedValue([globalInstance, scopedInstance]),
       getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string }) => {
         return identity.scope === "workspace-a" ? scopedDefinition : globalDefinition;
       }),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
       deleteDefinition: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -715,24 +718,14 @@ describe("Monitor App", () => {
       displayName: "Demo App Literal Global",
       description: "Literal global definition",
     });
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([globalDefinition, literalGlobalDefinition]),
       listInstances: vi.fn().mockResolvedValue([]),
       getDefinition: vi.fn().mockImplementation(async (identity: { appId: string; scope: string }) => {
         return identity.scope === "global" ? literalGlobalDefinition : globalDefinition;
       }),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -794,23 +787,97 @@ describe("Monitor App", () => {
     expect(screen.queryByText("App 实例")).toBeNull();
   });
 
+  it("shows update recommended guidance on home and exposes version diagnostics in help", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn().mockResolvedValue([createInstance()]),
+      checkVersionCompatibility: vi.fn().mockResolvedValue(
+        createVersionCompatibilityResult({
+          hostVersion: "0.8.1",
+          status: "updateRecommended",
+        }),
+      ),
+    });
+    const eventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText("Demo App");
+    screen.getByText("建议升级 Host");
+    screen.getByText(/Host 版本为 0\.8\.1/);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    await screen.findByRole("heading", { name: "帮助" });
+    expect(getHelpValue("Monitor 版本")).toBe(MONITOR_VERSION_METADATA.monitorVersion);
+    expect(getHelpValue("内置 JS SDK 版本")).toBe(MONITOR_VERSION_METADATA.sdkVersion);
+    expect(getHelpValue("当前 Host 版本")).toBe("0.8.1");
+    expect(getHelpValue("兼容状态")).toBe("建议升级");
+  });
+
+  it("keeps inventories available when compatibility is unknown", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn().mockResolvedValue([createInstance()]),
+      checkVersionCompatibility: vi.fn().mockResolvedValue(
+        createVersionCompatibilityResult({
+          hostVersion: null,
+          status: "unknown",
+        }),
+      ),
+    });
+    const eventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText("Demo App");
+    screen.getByText("Host 兼容性未知");
+    screen.getByText(/Monitor 无法确认这组版本是否完全兼容/);
+    screen.getByText("App 实例");
+    screen.getByText("App 定义");
+  });
+
+  it("releases the active session when the compatibility result is incompatible", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn().mockResolvedValue([createInstance()]),
+      checkVersionCompatibility: vi.fn().mockResolvedValue(
+        createVersionCompatibilityResult({
+          hostVersion: "1.0.0",
+          status: "incompatible",
+        }),
+      ),
+    });
+    const eventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findAllByText("当前 Host 版本不受支持");
+    await screen.findByText(/Host=1\.0\.0/);
+    expect(screen.queryByText("App 定义")).toBeNull();
+    expect(screen.queryByText("App 实例")).toBeNull();
+    expect(hostClient.dispose).toHaveBeenCalled();
+    expect(eventsClient.dispose).toHaveBeenCalled();
+    expect(resumeDiscoveryMock).not.toHaveBeenCalled();
+  });
+
   it("returns home to discovery when the host event stream terminates", async () => {
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([]),
       listInstances: vi.fn().mockResolvedValue([]),
-      getDefinition: vi.fn(),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
+    });
+    const eventsClient = createEventsClient({
       readEvents: vi.fn().mockReturnValue(createFailingEventStream(new Error("socket closed"))),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -825,6 +892,102 @@ describe("Monitor App", () => {
     screen.getByText("正在搜索 DevHub Host");
     expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
   });
+
+  it("ignores stale compatibility results after a newer session becomes active", async () => {
+    let bootstrapListener:
+      | ((event: { payload: BootstrapSnapshot }) => void)
+      | undefined;
+    listenMock.mockImplementation(async (eventName, callback) => {
+      if (eventName === "devhub://bootstrap-state-changed") {
+        bootstrapListener = callback as (event: { payload: BootstrapSnapshot }) => void;
+      }
+
+      return () => {};
+    });
+
+    const staleCompatibility = createDeferred<VersionCompatibilityResult>();
+    const firstHostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition({
+        displayName: "Old Session App",
+      })]),
+      listInstances: vi.fn().mockResolvedValue([]),
+      checkVersionCompatibility: vi.fn().mockReturnValue(staleCompatibility.promise),
+    });
+    const firstEventsClient = createEventsClient();
+
+    const nextConnection = createConnection({
+      rpcEndpoint: "http://127.0.0.1:4222/rpc",
+      websocketEndpoint: "ws://127.0.0.1:4222/ws",
+      runtime: {
+        pid: 9876,
+        httpBaseUrl: "http://127.0.0.1:4222",
+        wsUrl: "ws://127.0.0.1:4222/ws",
+        hubVersion: "0.8.1",
+      },
+    });
+    const secondHostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition({
+        displayName: "New Session App",
+      })]),
+      listInstances: vi.fn().mockResolvedValue([]),
+      checkVersionCompatibility: vi.fn().mockResolvedValue(
+        createVersionCompatibilityResult({
+          hostVersion: "0.8.1",
+          status: "updateRecommended",
+        }),
+      ),
+    });
+    const secondEventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock
+      .mockResolvedValueOnce(firstHostClient)
+      .mockResolvedValueOnce(secondHostClient);
+    eventsClientFromRuntimeMock
+      .mockResolvedValueOnce(firstEventsClient)
+      .mockResolvedValueOnce(secondEventsClient);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(bootstrapListener).toBeDefined();
+    });
+    await waitFor(() => {
+      expect(firstHostClient.checkVersionCompatibility).toHaveBeenCalledTimes(1);
+    }, { timeout: 5_000 });
+
+    act(() => {
+      bootstrapListener?.({
+        payload: createBootstrapSnapshot({
+          generation: 2,
+          connection: nextConnection,
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(secondHostClient.checkVersionCompatibility).toHaveBeenCalledTimes(1);
+    }, { timeout: 5_000 });
+
+    staleCompatibility.resolve(
+      createVersionCompatibilityResult({
+        hostVersion: null,
+        status: "unknown",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("New Session App").length).toBeGreaterThan(0);
+      expect(screen.getByText("建议升级 Host")).not.toBeNull();
+    }, { timeout: 10_000 });
+    expect(screen.queryByText("Host 兼容性未知")).toBeNull();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    await screen.findByRole("heading", { name: "帮助" });
+    screen.getByText("0.8.1");
+    screen.getByText("建议升级");
+    expect(screen.queryByText("兼容性未知")).toBeNull();
+  }, 15_000);
 
   it("initializes from subscriptions first and ignores stale bootstrap/settings fetches", async () => {
     let bootstrapListener:
@@ -912,38 +1075,18 @@ describe("Monitor App", () => {
   });
 
   it("treats typed connection errors as rediscovery triggers during inventory refresh", async () => {
-    let bootstrapListener:
-      | ((event: { payload: BootstrapSnapshot }) => void)
-      | undefined;
-    listenMock.mockImplementation(async (eventName, callback) => {
-      if (eventName === "devhub://bootstrap-state-changed") {
-        bootstrapListener = callback as (event: { payload: BootstrapSnapshot }) => void;
-      }
-
-      return () => {};
-    });
-
     const definition = createDefinition();
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn()
         .mockResolvedValueOnce([definition])
         .mockRejectedValueOnce(createConnectionError("transport", "socket lost")),
       listInstances: vi.fn().mockResolvedValue([]),
-      getDefinition: vi.fn(),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
+    });
+    const eventsClient = createEventsClient({
       readEvents: vi.fn().mockReturnValue(createSingleEventThenPendingStream({
         type: APP_DEFINITION_UPSERTED,
       })),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -951,52 +1094,35 @@ describe("Monitor App", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(hostClient.listDefinitions).toHaveBeenCalled();
-    });
+      expect(hostClient.checkVersionCompatibility).toHaveBeenCalledTimes(1);
+      expect(eventsClient.readEvents).toHaveBeenCalledTimes(1);
+    }, { timeout: 5_000 });
 
     await waitFor(() => {
       expect(resumeDiscoveryMock).toHaveBeenCalledWith("refresh_definitions_app.definition.upserted");
-    });
-
-    act(() => {
-      bootstrapListener?.({
-        payload: createBootstrapSnapshot({
-          generation: 2,
-          phase: "scanning",
-          connection: null,
-        }),
-      });
-    });
+    }, { timeout: 5_000 });
 
     await screen.findByText("正在搜索 DevHub Host");
-  });
+  }, 10_000);
 
   it("ignores stale definition responses after the host session resets", async () => {
     const definition = createDefinition();
     const getDefinitionDeferred = createDeferred<AppDefinition>();
     const disconnectSignal = createDeferred<void>();
 
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([definition]),
       listInstances: vi.fn().mockResolvedValue([]),
       getDefinition: vi.fn().mockReturnValue(getDefinitionDeferred.promise),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
+    });
+    const eventsClient = createEventsClient({
       readEvents: vi.fn().mockReturnValue(
         createTriggeredFailingEventStream(
           disconnectSignal.promise,
           createConnectionError("session_terminated", "socket closed"),
         ),
       ),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -1061,7 +1187,10 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
-    screen.getByText(`Monitor v${packageManifest.version}`);
+    screen.getByText(MONITOR_VERSION_METADATA.monitorVersion);
+    screen.getByText(MONITOR_VERSION_METADATA.sdkVersion);
+    screen.getByText("未连接");
+    screen.getByText("未知");
 
     await user.click(screen.getByRole("button", { name: "打开 Host 日志" }));
     await waitFor(() => {
@@ -1261,22 +1390,12 @@ describe("Monitor App", () => {
         },
       ],
     };
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([]),
       listInstances: vi.fn().mockResolvedValue([]),
-      getDefinition: vi.fn(),
       validateDefinition: vi.fn().mockResolvedValue(invalidValidation),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -1304,22 +1423,13 @@ describe("Monitor App", () => {
 
   it("keeps delete failures inside the definition workspace", async () => {
     const definition = createDefinition();
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([definition]),
       listInstances: vi.fn().mockResolvedValue([]),
       getDefinition: vi.fn().mockResolvedValue(definition),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
       deleteDefinition: vi.fn().mockRejectedValue(new Error("delete failed")),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -1341,7 +1451,7 @@ describe("Monitor App", () => {
   });
 
   it("keeps missing definitions in read-only mode when an instance link is stale", async () => {
-    const hostClient = {
+    const hostClient = createHostClient({
       listDefinitions: vi.fn().mockResolvedValue([]),
       listInstances: vi.fn().mockResolvedValue([createInstance()]),
       getDefinition: vi
@@ -1353,18 +1463,8 @@ describe("Monitor App", () => {
             requestId: "get-definition-1",
           }),
         ),
-      validateDefinition: vi.fn(),
-      upsertDefinition: vi.fn(),
-      deleteDefinition: vi.fn(),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
-    const eventsClient = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      subscribe: vi.fn().mockResolvedValue("sub-1"),
-      unsubscribe: vi.fn().mockResolvedValue(undefined),
-      readEvents: vi.fn().mockReturnValue(createPendingEventStream()),
-      dispose: vi.fn().mockResolvedValue(undefined),
-    };
+    });
+    const eventsClient = createEventsClient();
 
     hostClientFromRuntimeMock.mockResolvedValue(hostClient);
     eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
@@ -1409,4 +1509,19 @@ function getInventoryRowByActionLabel(section: HTMLElement, actionLabel: string)
     throw new Error(`Inventory row for ${actionLabel} not found.`);
   }
   return row;
+}
+
+function getHelpValue(label: "Monitor 版本" | "内置 JS SDK 版本" | "当前 Host 版本" | "兼容状态"): string {
+  const labelNode = screen.getByText(label);
+  const group = labelNode.closest(".form-group");
+  if (!group) {
+    throw new Error(`Help form group for ${label} not found.`);
+  }
+
+  const valueNode = group.querySelector(".version-text");
+  if (!(valueNode instanceof HTMLElement)) {
+    throw new Error(`Help value for ${label} not found.`);
+  }
+
+  return valueNode.textContent ?? "";
 }
