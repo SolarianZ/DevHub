@@ -1,8 +1,10 @@
 import { Mutex } from "./async-utils.js";
+import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 import {
   DevHubConnectionError,
   normalizeConnectionError,
 } from "./errors.js";
+import type { JsonRpcEventSession } from "./events-client.js";
 import {
   buildRpcError,
   createPendingRequest,
@@ -21,12 +23,19 @@ export interface JsonRpcWsSessionOptions {
   onTerminate?: (error?: Error) => void;
 }
 
-export class JsonRpcWsSession {
+interface AbandonedRequestEntry {
+  requestId: string;
+  method: string;
+  abandonedAt: number;
+  appId?: string;
+}
+
+export class JsonRpcWsSession implements JsonRpcEventSession {
   private socket: WebSocketLike | null = null;
   private socketCleanup: Array<() => void> = [];
   private connectPromise: Promise<void> | null = null;
   private readonly pendingRequests = new Map<string, PendingRequest>();
-  private readonly abandonedRequests = new Set<string>();
+  private readonly abandonedRequests = new Map<string, AbandonedRequestEntry>();
   private readonly sendLock = new Mutex();
   private socketOpen = false;
   private disposed = false;
@@ -79,8 +88,9 @@ export class JsonRpcWsSession {
       payload.params = params;
     }
 
+    const abandonedRequestAppId = tryExtractAppId(params);
     const waiter = createPendingRequest(this.options.requestTimeoutMs, () => {
-      this.markPendingRequestAsAbandoned(requestId);
+      this.markPendingRequestAsAbandoned(requestId, method, abandonedRequestAppId);
     });
     this.pendingRequests.set(requestId, waiter);
 
@@ -96,6 +106,47 @@ export class JsonRpcWsSession {
       }
       throw error;
     }
+  }
+
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   * 该操作只读取本地维护状态，不会触发网络交互或连接状态变化。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    const normalizedFilter = normalizeAbandonedRequestFilter(filter);
+    const now = Date.now();
+    let count = 0;
+
+    for (const entry of this.abandonedRequests.values()) {
+      if (matchesAbandonedRequest(entry, normalizedFilter, now)) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   * 该操作只修改本地维护状态，不会触发网络交互或连接状态变化。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    const normalizedFilter = normalizeAbandonedRequestFilter(filter);
+    const now = Date.now();
+    let removed = 0;
+
+    for (const [requestId, entry] of this.abandonedRequests) {
+      if (!matchesAbandonedRequest(entry, normalizedFilter, now)) {
+        continue;
+      }
+
+      this.abandonedRequests.delete(requestId);
+      removed += 1;
+    }
+
+    return removed;
   }
 
   async disconnect(reason: string): Promise<void> {
@@ -284,11 +335,91 @@ export class JsonRpcWsSession {
     this.connectPromise = null;
   }
 
-  private markPendingRequestAsAbandoned(requestId: string): void {
+  private markPendingRequestAsAbandoned(requestId: string, method: string, appId?: string): void {
     if (this.pendingRequests.delete(requestId)) {
-      this.abandonedRequests.add(requestId);
+      this.abandonedRequests.set(requestId, {
+        requestId,
+        method,
+        abandonedAt: Date.now(),
+        appId
+      });
     }
   }
+}
+
+function normalizeAbandonedRequestFilter(filter?: AbandonedRequestFilter | null): AbandonedRequestFilter | undefined {
+  if (filter === undefined || filter === null) {
+    return undefined;
+  }
+
+  if (!isRecord(filter)) {
+    throw new Error("filter 必须为对象。");
+  }
+
+  const filterRecord = filter as Record<string, unknown>;
+  const normalizedFilter: AbandonedRequestFilter = {};
+  const olderThanMs = filterRecord.olderThanMs;
+  const appId = filterRecord.appId;
+  const method = filterRecord.method;
+
+  if (olderThanMs !== undefined) {
+    if (typeof olderThanMs !== "number" || !Number.isFinite(olderThanMs) || olderThanMs < 0) {
+      throw new Error("filter.olderThanMs 必须为大于等于 0 的有限数字。");
+    }
+
+    normalizedFilter.olderThanMs = olderThanMs;
+  }
+
+  if (appId !== undefined) {
+    if (typeof appId !== "string" || !appId.trim()) {
+      throw new Error("filter.appId 必须为非空字符串。");
+    }
+
+    normalizedFilter.appId = appId;
+  }
+
+  if (method !== undefined) {
+    if (typeof method !== "string" || !method.trim()) {
+      throw new Error("filter.method 必须为非空字符串。");
+    }
+
+    normalizedFilter.method = method;
+  }
+
+  return normalizedFilter;
+}
+
+function matchesAbandonedRequest(
+  entry: AbandonedRequestEntry,
+  filter: AbandonedRequestFilter | undefined,
+  now: number
+): boolean {
+  if (!filter) {
+    return true;
+  }
+
+  if (filter.olderThanMs !== undefined && now - entry.abandonedAt < filter.olderThanMs) {
+    return false;
+  }
+
+  if (filter.appId !== undefined && entry.appId !== filter.appId) {
+    return false;
+  }
+
+  if (filter.method !== undefined && entry.method !== filter.method) {
+    return false;
+  }
+
+  return true;
+}
+
+function tryExtractAppId(params?: Record<string, unknown>): string | undefined {
+  const appId = params?.appId;
+  if (typeof appId !== "string" || !appId.trim()) {
+    return undefined;
+  }
+
+  return appId;
 }
 
 interface WebSocketLike {

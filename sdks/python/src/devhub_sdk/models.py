@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -8,6 +9,7 @@ from uuid import uuid4
 
 from .constants import DevHubEventType
 from ._validation import (
+    require_app_id,
     require_non_empty_string,
     require_positive_number,
     require_protocol_version,
@@ -48,6 +50,34 @@ class DevHubClientOptions:
         require_protocol_version(self.protocol_version)
         if self.request_timeout is not None:
             require_positive_number(self.request_timeout, "request_timeout")
+
+
+@dataclass(slots=True)
+class AbandonedRequestFilter:
+    """已放弃请求过滤器。
+
+    多个字段同时提供时按逻辑与匹配。
+    """
+
+    older_than_seconds: float | int | None = None
+    app_id: str | None = None
+    method: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验过滤条件合法性。"""
+
+        if self.older_than_seconds is not None:
+            if (
+                isinstance(self.older_than_seconds, bool)
+                or not isinstance(self.older_than_seconds, (int, float))
+                or not math.isfinite(float(self.older_than_seconds))
+                or self.older_than_seconds < 0
+            ):
+                raise ValueError("older_than_seconds 必须为大于等于 0 的有限数值。")
+        if self.app_id is not None:
+            self.app_id = require_app_id(self.app_id, "app_id")
+        if self.method is not None:
+            self.method = require_non_empty_string(self.method, "method")
 
 
 @dataclass(slots=True)

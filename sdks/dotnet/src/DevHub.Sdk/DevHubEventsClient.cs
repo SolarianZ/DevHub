@@ -245,6 +245,31 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 获取当前会话内匹配条件的已放弃请求数量。
+    /// 该操作仅维护本地状态，不会发送网络请求，也不会修改认证或订阅状态。
+    /// </summary>
+    /// <param name="filter">可选过滤条件；多个条件按逻辑与匹配。</param>
+    /// <returns>当前匹配的已放弃请求数量。</returns>
+    public int GetAbandonedRequestCount(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        return _session.GetAbandonedRequestCount(filter);
+    }
+
+    /// <summary>
+    /// 清理当前会话内匹配条件的已放弃请求记录。
+    /// 该操作仅维护本地状态，不会发送网络请求，也不会修改认证或订阅状态。
+    /// 若之后再收到已清理请求的迟到响应，将按未知 response id 的既有故障语义处理。
+    /// </summary>
+    /// <param name="filter">可选过滤条件；多个条件按逻辑与匹配。</param>
+    /// <returns>本次实际移除的记录数量。</returns>
+    public int ClearAbandonedRequests(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        return _session.ClearAbandonedRequests(filter);
+    }
+
+    /// <summary>
     /// 订阅事件。
     /// </summary>
     /// <param name="types">事件类型列表；为空或 <see langword="null"/> 表示订阅全部。</param>

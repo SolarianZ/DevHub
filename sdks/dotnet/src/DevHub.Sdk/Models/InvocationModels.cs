@@ -149,6 +149,27 @@ public sealed class ListInstancesRequest
 }
 
 /// <summary>
+/// 已放弃请求过滤器。
+/// </summary>
+public sealed class AbandonedRequestFilter
+{
+    /// <summary>
+    /// 仅匹配已放弃时长达到该阈值的记录。
+    /// </summary>
+    public TimeSpan? OlderThan { get; set; }
+
+    /// <summary>
+    /// 仅匹配已记录到相同应用标识的请求。
+    /// </summary>
+    public string? AppId { get; set; }
+
+    /// <summary>
+    /// 仅匹配相同 JSON-RPC 方法名的请求。
+    /// </summary>
+    public string? Method { get; set; }
+}
+
+/// <summary>
 /// 调用请求。
 /// </summary>
 public sealed class InvokeRequest

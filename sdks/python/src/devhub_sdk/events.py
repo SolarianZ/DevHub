@@ -28,6 +28,7 @@ from ._payloads import (
 from .constants import DevHubEventType
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
+    AbandonedRequestFilter,
     AppDefinition,
     AppInstance,
     DevHubClientOptions,
@@ -232,6 +233,24 @@ class DevHubEventsClient:
             if aclose is not None:
                 await aclose()
             self._refresh_session_state()
+
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """返回当前会话内匹配条件的已放弃请求数量。
+
+        该操作仅维护当前客户端持有的本地会话状态，不会发送网络请求。
+        """
+
+        self._ensure_not_closed()
+        return self._session.get_abandoned_request_count(filter)
+
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """清理当前会话内匹配条件的已放弃请求记录。
+
+        该操作仅维护当前客户端持有的本地会话状态，不会发送网络请求。
+        """
+
+        self._ensure_not_closed()
+        return self._session.clear_abandoned_requests(filter)
 
     async def close(self) -> None:
         """关闭 WebSocket 客户端。"""

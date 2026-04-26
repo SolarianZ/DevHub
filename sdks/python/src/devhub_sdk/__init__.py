@@ -18,6 +18,7 @@ from .events import DevHubEventsClient, DevHubEventsClientDependencies
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
+    AbandonedRequestFilter,
     AppCapabilities,
     AppDefinition,
     AppInstance,
@@ -63,6 +64,7 @@ __all__ = [
     "APP_DEFINITION_UPSERTED",
     "APP_INSTANCE_REGISTERED",
     "APP_INSTANCE_UNREGISTERED",
+    "AbandonedRequestFilter",
     "AppCapabilities",
     "AppDefinition",
     "AppInstance",

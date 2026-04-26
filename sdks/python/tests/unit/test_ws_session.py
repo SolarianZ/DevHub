@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from devhub_sdk import DevHubClientOptions, HubRuntime, HubRuntimeTuning, RuntimeConnectionInfo
+from devhub_sdk import AbandonedRequestFilter, DevHubClientOptions, HubRuntime, HubRuntimeTuning, RuntimeConnectionInfo
 from devhub_sdk._ws_session import WebSocketJsonRpcSession
 
 
@@ -63,6 +63,29 @@ async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
         if asyncio.get_running_loop().time() >= deadline:
             raise AssertionError("等待条件成立超时。")
         await asyncio.sleep(0.01)
+
+
+async def _create_abandoned_request(
+    session: WebSocketJsonRpcSession,
+    websocket: FakeWebSocket,
+    method: str,
+    params: dict[str, Any] | None,
+) -> dict[str, Any]:
+    with pytest.raises(asyncio.TimeoutError):
+        await session.send_request(method, params)
+    return json.loads(websocket.sent_messages[-1])
+
+
+def test_ws_session_abandoned_request_maintenance_should_revalidate_mutated_filter() -> None:
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=1),
+    )
+    request_filter = AbandonedRequestFilter(app_id="valid.app")
+    request_filter.app_id = "Invalid App Id"
+
+    with pytest.raises(ValueError, match="app_id 必须符合 appId 格式要求"):
+        session.get_abandoned_request_count(request_filter)
 
 
 @pytest.mark.asyncio
@@ -134,6 +157,7 @@ async def test_ws_session_when_late_response_matches_timed_out_request_should_ig
         }
     )
     await asyncio.sleep(0)
+    assert session.get_abandoned_request_count() == 1
 
     second_task = asyncio.create_task(session.send_request("hub.ping", {"echo": "fast"}))
     await _wait_until(lambda: len(websocket.sent_messages) == 2)
@@ -150,6 +174,96 @@ async def test_ws_session_when_late_response_matches_timed_out_request_should_ig
 
     assert second_result["echo"] == "fast"
     assert session.is_terminated() is False
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_ws_session_should_count_and_clear_abandoned_requests_by_filter() -> None:
+    websocket = FakeWebSocket()
+
+    async def connect(*_args, **_kwargs) -> FakeWebSocket:
+        return websocket
+
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=0.02),
+        connect=connect,
+    )
+
+    first_request = await _create_abandoned_request(
+        session,
+        websocket,
+        "hub.apps.getDefinition",
+        {"appId": "app-a", "scope": ""},
+    )
+    await _create_abandoned_request(
+        session,
+        websocket,
+        "hub.apps.listInstances",
+        {"scope": None, "appId": "app-b"},
+    )
+    third_request = await _create_abandoned_request(
+        session,
+        websocket,
+        "hub.apps.getInstance",
+        {"instanceId": "inst-1"},
+    )
+
+    session._abandoned_request_ids[first_request["id"]].abandoned_at -= 10
+    session._abandoned_request_ids[third_request["id"]].abandoned_at -= 10
+
+    assert session.get_abandoned_request_count() == 3
+    assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-a")) == 1
+    assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-b")) == 1
+    assert session.get_abandoned_request_count(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
+    assert session.get_abandoned_request_count(AbandonedRequestFilter(older_than_seconds=5)) == 2
+    assert session.get_abandoned_request_count(
+        AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
+    ) == 1
+
+    assert session.clear_abandoned_requests(
+        AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
+    ) == 1
+    assert session.get_abandoned_request_count() == 2
+    assert session.clear_abandoned_requests(AbandonedRequestFilter(app_id="app-b")) == 1
+    assert session.clear_abandoned_requests(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
+    assert session.get_abandoned_request_count() == 0
+
+    await session.close()
+
+
+@pytest.mark.asyncio
+async def test_ws_session_when_manually_cleared_request_receives_late_response_should_fault_session() -> None:
+    websocket = FakeWebSocket()
+
+    async def connect(*_args, **_kwargs) -> FakeWebSocket:
+        return websocket
+
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=0.05),
+        connect=connect,
+    )
+
+    request = await _create_abandoned_request(session, websocket, "hub.ping", {"echo": "slow"})
+
+    assert session.get_abandoned_request_count() == 1
+    assert session.clear_abandoned_requests() == 1
+    assert session.get_abandoned_request_count() == 0
+
+    await websocket.emit_json(
+        {
+            "jsonrpc": "2.0",
+            "id": request["id"],
+            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
+        }
+    )
+    await asyncio.sleep(0)
+
+    assert session.is_terminated() is True
+    with pytest.raises(RuntimeError, match="事件流已终止"):
+        await session.send_request("hub.ping", None)
+
     await session.close()
 
 

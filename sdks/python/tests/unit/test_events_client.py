@@ -11,6 +11,7 @@ import pytest
 import websockets
 
 from devhub_sdk import (
+    AbandonedRequestFilter,
     DevHubClientOptions,
     DevHubEventsClient,
     DevHubEventsClientDependencies,
@@ -44,6 +45,10 @@ class FakeWsSession:
     events: list[dict[str, Any]]
     requests: list[dict[str, Any]] = field(default_factory=list)
     disconnect_reasons: list[str] = field(default_factory=list)
+    abandoned_request_count_result: int = 0
+    clear_abandoned_requests_result: int = 0
+    abandoned_request_count_filters: list[AbandonedRequestFilter | None] = field(default_factory=list)
+    clear_abandoned_request_filters: list[AbandonedRequestFilter | None] = field(default_factory=list)
     closed: bool = False
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
@@ -62,6 +67,14 @@ class FakeWsSession:
 
     async def close(self) -> None:
         self.closed = True
+
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self.abandoned_request_count_filters.append(filter)
+        return self.abandoned_request_count_result
+
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self.clear_abandoned_request_filters.append(filter)
+        return self.clear_abandoned_requests_result
 
 
 @dataclass(slots=True)
@@ -216,6 +229,37 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
     assert session.requests[3]["params"] == {"appId": "ws.app", "scope": ""}
     assert session.requests[4]["params"] == {"instanceId": "inst-1"}
     assert session.requests[5]["params"] == {"scope": None}
+
+
+@pytest.mark.asyncio
+async def test_events_client_should_delegate_local_abandoned_request_maintenance_to_session() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={},
+        events=[],
+        abandoned_request_count_result=3,
+        clear_abandoned_requests_result=2,
+    )
+    session_factory = FakeWsSessionFactory(session)
+    request_filter = AbandonedRequestFilter(older_than_seconds=5, app_id="ws.app", method="hub.apps.getDefinition")
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        assert client.get_abandoned_request_count(request_filter) == 3
+        assert client.clear_abandoned_requests(request_filter) == 2
+    finally:
+        await client.close()
+
+    assert session.requests == []
+    assert session.abandoned_request_count_filters == [request_filter]
+    assert session.clear_abandoned_request_filters == [request_filter]
 
 
 @pytest.mark.asyncio

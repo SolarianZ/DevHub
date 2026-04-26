@@ -299,6 +299,131 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task EventsClient_ShouldCountAndClearAbandonedRequestsByFilter()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal)
+                ? [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")]
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir,
+                RequestTimeout = TimeSpan.FromMilliseconds(20)
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1").Create);
+
+        await client.AuthenticateAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            AppId = "app-a",
+            Scope = null
+        }));
+
+        await Task.Delay(70);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetDefinitionAsync("app-b", string.Empty));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetInstanceAsync("inst-1"));
+
+        Assert.Equal(3, client.GetAbandonedRequestCount());
+        Assert.Equal(1, client.GetAbandonedRequestCount(new AbandonedRequestFilter { AppId = "app-a" }));
+        Assert.Equal(1, client.GetAbandonedRequestCount(new AbandonedRequestFilter { AppId = "app-b" }));
+        Assert.Equal(1, client.GetAbandonedRequestCount(new AbandonedRequestFilter { Method = "hub.apps.getInstance" }));
+
+        Assert.Equal(1, client.ClearAbandonedRequests(new AbandonedRequestFilter
+        {
+            OlderThan = TimeSpan.FromMilliseconds(60)
+        }));
+        Assert.Equal(2, client.GetAbandonedRequestCount());
+        Assert.Equal(1, client.ClearAbandonedRequests(new AbandonedRequestFilter { AppId = "app-b" }));
+        Assert.Equal(1, client.ClearAbandonedRequests(new AbandonedRequestFilter { Method = "hub.apps.getInstance" }));
+        Assert.Equal(0, client.GetAbandonedRequestCount());
+    }
+
+    [Fact]
+    public async Task JsonRpcWebSocketSession_WhenLateResponseMatchesTrackedAbandonedRequest_ShouldIgnoreItAndKeepSessionUsable()
+    {
+        var connection = new FakeWebSocketConnection();
+        var termination = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var session = new JsonRpcWebSocketSession(
+            new DevHubWebSocketSessionOptions
+            {
+                WebSocketEndpoint = new Uri("ws://127.0.0.1:47231/ws"),
+                RequestTimeout = TimeSpan.FromMilliseconds(20),
+                OnEvent = _ => { },
+                OnTerminated = error => termination.TrySetResult(error)
+            },
+            new FakeWebSocketConnectionFactory(connection),
+            new SequenceRequestIdFactory("ws-timeout-1", "ws-ping-2").Create);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.SendRequestAsync(
+            "hub.apps.listDefinitions",
+            new Dictionary<string, object?>
+            {
+                ["appId"] = "app-a",
+                ["scope"] = null
+            }));
+
+        Assert.Equal(1, session.GetAbandonedRequestCount());
+
+        connection.Enqueue(CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-timeout-1","result":{"ok":true,"definitions":[]}}"""));
+        await Task.Delay(50);
+
+        Assert.Equal(1, session.GetAbandonedRequestCount());
+        Assert.False(termination.Task.IsCompleted);
+
+        var secondRequest = session.SendRequestAsync("hub.ping", null);
+        await WaitUntilAsync(() => connection.SentTexts.Count >= 2);
+        connection.Enqueue(CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-ping-2","result":{"ok":true,"serverTimeUtc":"2026-03-09T00:00:00Z"}}"""));
+
+        var result = await secondRequest;
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.False(termination.Task.IsCompleted);
+    }
+
+    [Fact]
+    public async Task JsonRpcWebSocketSession_WhenLateResponseMatchesClearedAbandonedRequest_ShouldTerminate()
+    {
+        var connection = new FakeWebSocketConnection();
+        var termination = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var session = new JsonRpcWebSocketSession(
+            new DevHubWebSocketSessionOptions
+            {
+                WebSocketEndpoint = new Uri("ws://127.0.0.1:47231/ws"),
+                RequestTimeout = TimeSpan.FromMilliseconds(20),
+                OnEvent = _ => { },
+                OnTerminated = error => termination.TrySetResult(error)
+            },
+            new FakeWebSocketConnectionFactory(connection),
+            new SequenceRequestIdFactory("ws-timeout-1").Create);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.SendRequestAsync(
+            "hub.apps.getDefinition",
+            new Dictionary<string, object?>
+            {
+                ["appId"] = "app-a",
+                ["scope"] = string.Empty
+            }));
+
+        Assert.Equal(1, session.ClearAbandonedRequests());
+
+        connection.Enqueue(CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-timeout-1","result":{"ok":true,"definition":{"appId":"app-a","scope":"","displayName":"App A"}}}"""));
+
+        var terminalException = await termination.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.NotNull(terminalException);
+        Assert.Contains("响应 id 未匹配任何挂起请求", terminalException!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EventsClient_AfterAuthenticate_WhenGetInstanceInstanceIdInvalid_ShouldThrowArgumentExceptionWithoutSendingRequest()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -997,6 +1122,20 @@ public sealed class WsLifecycleTests : IDisposable
             await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
             await enumerator.MoveNextAsync();
         });
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMilliseconds = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        while (!predicate())
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException("等待条件成立超时。");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     private sealed class FakeWebSocketConnectionFactory : IWebSocketConnectionFactory

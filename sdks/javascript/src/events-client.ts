@@ -44,11 +44,24 @@ import {
   type DevHubRuntimeView
 } from "./runtime-view.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
+import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
+
+export type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 
 export interface JsonRpcEventSession {
   ensureConnected(): Promise<void>;
   sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
+
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number;
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number;
   disconnect(reason: string): Promise<void>;
   dispose(reason?: string): Promise<void>;
 }
@@ -84,6 +97,24 @@ export class DevHubEventsClient {
 
   get runtime(): DevHubRuntimeView {
     return createRuntimeView(this.#connection.runtime);
+  }
+
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   * 该操作只读取本地维护状态，不会发送网络请求，也不会修改认证或订阅状态。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    return this.#session.getAbandonedRequestCount(filter);
+  }
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   * 该操作只修改本地维护状态，不会发送网络请求，也不会修改认证或订阅状态。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    return this.#session.clearAbandonedRequests(filter);
   }
 
   static async fromRuntime(

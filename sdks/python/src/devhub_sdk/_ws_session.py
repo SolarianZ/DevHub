@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable
@@ -11,7 +12,7 @@ import websockets
 
 from ._json import load_json_text
 from ._jsonrpc import validate_response_envelope
-from .models import DevHubClientOptions, RuntimeConnectionInfo
+from .models import AbandonedRequestFilter, DevHubClientOptions, RuntimeConnectionInfo
 
 
 _SENTINEL = object()
@@ -34,6 +35,20 @@ class JsonRpcWsSession(ABC):
     async def close(self) -> None:
         """关闭会话。"""
 
+    @abstractmethod
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """返回当前会话内匹配条件的已放弃请求数量。
+
+        该操作仅维护本地状态，不会发送网络请求。
+        """
+
+    @abstractmethod
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """清理当前会话内匹配条件的已放弃请求记录。
+
+        该操作仅维护本地状态，不会发送网络请求。
+        """
+
     def reopen(self) -> None:
         """为重新认证准备新的连接代次。"""
 
@@ -48,6 +63,14 @@ class _EventStreamState:
     queue: asyncio.Queue[dict[str, Any] | object] = field(default_factory=asyncio.Queue)
     terminal_error: BaseException | None = None
     completed: bool = False
+
+
+@dataclass(slots=True)
+class _AbandonedRequestEntry:
+    request_id: str
+    method: str
+    abandoned_at: float
+    app_id: str | None
 
 
 class WebSocketJsonRpcSession(JsonRpcWsSession):
@@ -65,7 +88,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._connect_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
-        self._abandoned_request_ids: dict[str, float] = {}
+        self._abandoned_request_ids: dict[str, _AbandonedRequestEntry] = {}
         self._abandoned_request_ttl_seconds = max(float(self._options.request_timeout or 0.0), 30.0)
         self._stream = _EventStreamState()
         self._event_reader_lock = asyncio.Lock()
@@ -111,7 +134,7 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
                 )
         except asyncio.TimeoutError:
             self._pending.pop(request_id, None)
-            self._mark_request_abandoned(request_id)
+            self._mark_request_abandoned(request_id, method, params)
             future.cancel()
             raise
         except BaseException:
@@ -148,6 +171,32 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
 
         self._closed = True
         await self._disconnect_current_connection("session_closed")
+
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self._ensure_open()
+        normalized_filter = self._normalize_abandoned_request_filter(filter)
+        self._prune_abandoned_request_ids()
+        now = time.monotonic()
+        return sum(
+            1
+            for entry in self._abandoned_request_ids.values()
+            if self._matches_abandoned_request(entry, normalized_filter, now)
+        )
+
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self._ensure_open()
+        normalized_filter = self._normalize_abandoned_request_filter(filter)
+        self._prune_abandoned_request_ids()
+        now = time.monotonic()
+        removed = 0
+
+        for request_id, entry in list(self._abandoned_request_ids.items()):
+            if not self._matches_abandoned_request(entry, normalized_filter, now):
+                continue
+            if self._abandoned_request_ids.pop(request_id, None) is not None:
+                removed += 1
+
+        return removed
 
     async def _ensure_connected(self) -> None:
         if self._websocket is not None:
@@ -221,12 +270,12 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._prune_abandoned_request_ids()
         future = self._pending.get(request_id)
         if future is None:
-            if self._consume_abandoned_request(request_id):
+            if self._is_tracked_abandoned_request(request_id):
                 return
             raise RuntimeError("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。")
         if future.done():
             self._pending.pop(request_id, None)
-            if self._consume_abandoned_request(request_id):
+            if self._is_tracked_abandoned_request(request_id):
                 return
             raise RuntimeError("WebSocket JSON-RPC 响应 id 未匹配任何挂起请求。")
         future.set_result(root)
@@ -285,36 +334,77 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         async with self._event_reader_lock:
             self._event_reader_active = False
 
-    def _mark_request_abandoned(self, request_id: str) -> None:
-        self._abandoned_request_ids[request_id] = (
-            asyncio.get_running_loop().time() + self._abandoned_request_ttl_seconds
+    def _mark_request_abandoned(self, request_id: str, method: str, params: dict[str, Any] | None) -> None:
+        self._abandoned_request_ids[request_id] = _AbandonedRequestEntry(
+            request_id=request_id,
+            method=method,
+            abandoned_at=time.monotonic(),
+            app_id=self._try_extract_app_id(params),
         )
 
-    def _consume_abandoned_request(self, request_id: str) -> bool:
-        expiration = self._abandoned_request_ids.get(request_id)
-        if expiration is None:
+    def _is_tracked_abandoned_request(self, request_id: str) -> bool:
+        return request_id in self._abandoned_request_ids
+
+    def _normalize_abandoned_request_filter(
+        self,
+        filter: AbandonedRequestFilter | None,
+    ) -> AbandonedRequestFilter | None:
+        if filter is None:
+            return None
+        if not isinstance(filter, AbandonedRequestFilter):
+            raise TypeError("filter 必须为 AbandonedRequestFilter 或 None。")
+        return AbandonedRequestFilter(
+            older_than_seconds=filter.older_than_seconds,
+            app_id=filter.app_id,
+            method=filter.method,
+        )
+
+    def _matches_abandoned_request(
+        self,
+        entry: _AbandonedRequestEntry,
+        filter: AbandonedRequestFilter | None,
+        now: float,
+    ) -> bool:
+        if filter is None:
+            return True
+
+        older_than_seconds = filter.older_than_seconds
+        if older_than_seconds is not None and now - entry.abandoned_at < float(older_than_seconds):
             return False
-        if expiration <= asyncio.get_running_loop().time():
-            self._abandoned_request_ids.pop(request_id, None)
+
+        if filter.app_id is not None and entry.app_id != filter.app_id:
             return False
-        self._abandoned_request_ids.pop(request_id, None)
+
+        if filter.method is not None and entry.method != filter.method:
+            return False
+
         return True
 
     def _prune_abandoned_request_ids(self) -> None:
         if not self._abandoned_request_ids:
             return
 
-        now = asyncio.get_running_loop().time()
+        now = time.monotonic()
         expired_request_ids = [
             request_id
-            for request_id, expiration in self._abandoned_request_ids.items()
-            if expiration <= now
+            for request_id, entry in self._abandoned_request_ids.items()
+            if entry.abandoned_at + self._abandoned_request_ttl_seconds <= now
         ]
         for request_id in expired_request_ids:
             self._abandoned_request_ids.pop(request_id, None)
 
     def _clear_abandoned_request_ids(self) -> None:
         self._abandoned_request_ids.clear()
+
+    @staticmethod
+    def _try_extract_app_id(params: dict[str, Any] | None) -> str | None:
+        if not isinstance(params, dict):
+            return None
+
+        app_id = params.get("appId")
+        if not isinstance(app_id, str) or not app_id.strip():
+            return None
+        return app_id
 
     async def _shutdown_connection(self, reason: str | None = None) -> None:
         websocket = self._websocket

@@ -44,7 +44,7 @@ it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () =>
     { clientId: "runtime-loader-events" },
     {
       runtimeResolver,
-      sessionFactory: () => ({
+      sessionFactory: () => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(): Promise<Record<string, unknown>> {
@@ -103,7 +103,7 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
   const eventsClient = await DevHubEventsClient.fromRuntime(
     { clientId: "runtime-loader-default-events" },
     {
-      sessionFactory: () => ({
+      sessionFactory: () => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(): Promise<Record<string, unknown>> {
@@ -146,5 +146,18 @@ function createConnectionInfo(): RuntimeConnectionInfo {
     },
     rpcEndpoint: "http://127.0.0.1:47231/rpc",
     websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  };
+}
+
+function createStubEventSession(session: {
+  ensureConnected(): Promise<void>;
+  sendRequest(): Promise<Record<string, unknown>>;
+  disconnect(): Promise<void>;
+  dispose(): Promise<void>;
+}) {
+  return {
+    getAbandonedRequestCount: () => 0,
+    clearAbandonedRequests: () => 0,
+    ...session
   };
 }

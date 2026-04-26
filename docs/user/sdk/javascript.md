@@ -46,6 +46,7 @@ Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript
 - 本地参数校验：对 `echo`、`args`、`meta`、`error.data` 等 JSON 载荷执行严格校验。
 - 闭集事件类型：公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供编译期约束。
 - 运行时上下文：当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
+- 已放弃请求本地维护：`DevHubEventsClient` 提供 `getAbandonedRequestCount(filter?)` 与 `clearAbandonedRequests(filter?)`，可按过滤器统计或清理本地已放弃请求记录。
 
 ## 5. 连接 Host
 
@@ -211,7 +212,29 @@ await client.respond({
 - `AppDefinition.launch` 只要存在，就必须显式提供 `launch.exePath`。
 - `RespondRequest` 只接受“携带 `value`”或“携带 `error`”两种互斥形状之一，不能同时省略，也不能同时提供。
 
-### 6.4 错误处理约定
+### 6.4 已放弃请求维护
+
+```ts
+const total = eventsClient.getAbandonedRequestCount();
+
+const appScoped = eventsClient.getAbandonedRequestCount({
+  appId: "sample.app",
+  method: "hub.apps.getDefinition"
+});
+
+const removed = eventsClient.clearAbandonedRequests({
+  olderThanMs: 120_000
+});
+```
+
+- `getAbandonedRequestCount(filter?)` 返回当前匹配过滤条件的已放弃请求数量。
+- `clearAbandonedRequests(filter?)` 只移除匹配条件的本地记录，并返回本次实际移除数量。
+- `AbandonedRequestFilter` 支持 `olderThanMs`、`appId`、`method` 三个可选字段；同时提供多个字段时按逻辑与匹配。
+- 两个接口都只读取或修改当前 `DevHubEventsClient` 关联 WebSocket 会话中的本地 tombstone 记录，不发送 JSON-RPC 请求，不隐式重连，也不改变当前认证或订阅状态。
+- `appId` 匹配采用最佳努力规则：只有请求进入已放弃状态时能稳定识别 `appId` 的记录才会命中 `appId` 过滤条件。
+- 某条记录被手动清理后，如果服务端随后返回同一 `id` 的迟到响应，该响应会回到既有 unknown `response id` 故障语义，而不是继续被忽略。
+
+### 6.5 错误处理约定
 
 ```ts
 import {
@@ -279,6 +302,8 @@ const eventsClient = await DevHubEventsClient.fromRuntime(
   }
 );
 ```
+
+自定义 `JsonRpcEventSession` / `JsonRpcWsSession` 实现需要提供 `getAbandonedRequestCount(filter?)` 与 `clearAbandonedRequests(filter?)` 两个同步本地维护接口。这组接口属于当前公开 session 合同的一部分。
 
 ## 8. 最小验证方式
 

@@ -173,6 +173,125 @@ it("超时很久后的迟到响应仍应被忽略且会话保持可用", async (
   }
 });
 
+it("应统计并按过滤条件清理已放弃请求记录", async () => {
+  vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws",
+    requestTimeoutMs: 20
+  });
+
+  try {
+    const firstRequest = session.sendRequest("hub.apps.getDefinition", {
+      appId: "app-a",
+      scope: ""
+    });
+    await flushMicrotasks();
+
+    const socket = ControlledWebSocket.instances[0]!;
+    socket.emitOpen();
+    await waitForSentRequestCount(socket, 1);
+
+    await expect(firstRequest).rejects.toThrow("WebSocket request timed out.");
+    await sleep(60);
+
+    const secondRequest = session.sendRequest("hub.apps.listInstances", {
+      appId: "app-b",
+      scope: ""
+    });
+    await waitForSentRequestCount(socket, 2);
+    await expect(secondRequest).rejects.toThrow("WebSocket request timed out.");
+
+    expect(session.getAbandonedRequestCount()).toBe(2);
+    expect(session.getAbandonedRequestCount({ appId: "app-a" })).toBe(1);
+    expect(session.getAbandonedRequestCount({ method: "hub.apps.listInstances" })).toBe(1);
+    expect(session.getAbandonedRequestCount({ olderThanMs: 30 })).toBe(1);
+    expect(session.getAbandonedRequestCount({
+      olderThanMs: 30,
+      appId: "app-a",
+      method: "hub.apps.getDefinition"
+    })).toBe(1);
+    expect(session.getAbandonedRequestCount({
+      olderThanMs: 30,
+      appId: "app-b"
+    })).toBe(0);
+    expect(socket.sentRequests).toHaveLength(2);
+
+    expect(session.clearAbandonedRequests({ olderThanMs: 30 })).toBe(1);
+    expect(session.getAbandonedRequestCount()).toBe(1);
+    expect(session.clearAbandonedRequests({
+      appId: "app-b",
+      method: "hub.apps.listInstances"
+    })).toBe(1);
+    expect(session.getAbandonedRequestCount()).toBe(0);
+    expect(session.clearAbandonedRequests()).toBe(0);
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("已放弃请求过滤器应拒绝非法参数", async () => {
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  });
+
+  try {
+    expect(() => session.getAbandonedRequestCount({ olderThanMs: -1 }))
+      .toThrow("filter.olderThanMs 必须为大于等于 0 的有限数字。");
+    expect(() => session.clearAbandonedRequests({ appId: "   " }))
+      .toThrow("filter.appId 必须为非空字符串。");
+    expect(() => session.getAbandonedRequestCount({ method: "" }))
+      .toThrow("filter.method 必须为非空字符串。");
+  } finally {
+    await session.dispose();
+  }
+});
+
+it("手动清理后迟到响应应恢复未知响应 id 故障语义", async () => {
+  vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const onTerminate = vi.fn();
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws",
+    requestTimeoutMs: 20,
+    onTerminate
+  });
+
+  try {
+    const request = session.sendRequest("hub.timeout", {
+      appId: "app-a"
+    });
+    await flushMicrotasks();
+
+    const socket = ControlledWebSocket.instances[0]!;
+    socket.emitOpen();
+    await waitForSentRequestCount(socket, 1);
+    const timedOutRequestId = socket.sentRequests[0]!.id;
+
+    await expect(request).rejects.toThrow("WebSocket request timed out.");
+    expect(session.getAbandonedRequestCount()).toBe(1);
+    expect(session.clearAbandonedRequests({
+      appId: "app-a",
+      method: "hub.timeout"
+    })).toBe(1);
+    expect(session.getAbandonedRequestCount()).toBe(0);
+
+    socket.respondWithResult(timedOutRequestId, { ok: true, late: true });
+    await flushMicrotasks();
+
+    expect(onTerminate).toHaveBeenCalledTimes(1);
+    expect(socket.closeCalls.at(-1)).toEqual({
+      code: 1000,
+      reason: "connection_closed"
+    });
+  } finally {
+    await session.dispose();
+  }
+});
+
 it("真正未知的响应 id 应终止当前会话", async () => {
   vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
 
@@ -339,4 +458,8 @@ async function waitForSentRequestCount(socket: ControlledWebSocket, count: numbe
   }
 
   expect(socket.sentRequests).toHaveLength(count);
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -5,6 +5,7 @@ from devhub_sdk import (
     ALL_EVENT_TYPES,
     APP_DEFINITION_DELETED,
     APP_DEFINITION_UPSERTED,
+    AbandonedRequestFilter,
     AppInstance,
     DefinitionValidationResult,
     DevHubClientDependencies,
@@ -35,6 +36,7 @@ from devhub_sdk._http_transport import JsonRpcHttpTransport as InternalJsonRpcHt
 from devhub_sdk._http_transport import UrllibJsonRpcHttpTransport as InternalUrllibJsonRpcHttpTransport
 from devhub_sdk._ws_session import JsonRpcWsSession as InternalJsonRpcWsSession
 from devhub_sdk._ws_session import WebSocketJsonRpcSession as InternalWebSocketJsonRpcSession
+from devhub_sdk.models import AbandonedRequestFilter as InternalAbandonedRequestFilter
 from devhub_sdk.models import DefinitionValidationResult as InternalDefinitionValidationResult
 from devhub_sdk.models import ValidationIssue as InternalValidationIssue
 from devhub_sdk.runtime import FileSystemRuntimeResolver as InternalFileSystemRuntimeResolver
@@ -45,6 +47,7 @@ from devhub_sdk.runtime import resolve_data_directory as InternalResolveDataDire
 def test_package_root_should_export_runtime_and_transport_abstractions() -> None:
     assert APP_DEFINITION_UPSERTED is InternalAppDefinitionUpserted
     assert APP_DEFINITION_DELETED is InternalAppDefinitionDeleted
+    assert AbandonedRequestFilter is InternalAbandonedRequestFilter
     assert DevHubClientDependencies is InternalDevHubClientDependencies
     assert DevHubEventsClientDependencies is InternalDevHubEventsClientDependencies
     assert DefinitionValidationResult is InternalDefinitionValidationResult

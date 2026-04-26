@@ -16,6 +16,7 @@ export {
 export { JsonRpcWsSession } from "./ws-session.js";
 export * from "./errors.js";
 export * from "./models.js";
+export type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 export type { DevHubEventType } from "./event-types.js";
 export type { DevHubClientDependencies, JsonRpcTransport, JsonRpcTransportFactory } from "./client.js";
 export type { DevHubRuntimeView } from "./runtime-view.js";

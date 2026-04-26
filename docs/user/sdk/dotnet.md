@@ -36,6 +36,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - HTTP JSON-RPC：覆盖 `hub.ping`、`hub.apps.*` 与 `hub.invoke.*`。
 - WebSocket Events：覆盖 `hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe` 与 `hub.event`。
 - 单读取器事件契约：每个 `DevHubEventsClient` 同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。
+- 已放弃请求本地维护：`DevHubEventsClient` 提供 `GetAbandonedRequestCount(...)` 与 `ClearAbandonedRequests(...)`，可按过滤器统计或清理本地已放弃请求记录。
 - 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam；`AddDevHubSdk` 与客户端工厂位于 companion package。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
 - 统一错误模型：`DevHubRpcException`；协议 `error.data` 通过 `ErrorData` 暴露，非对象响应会被视为非法 JSON-RPC 包。
@@ -204,6 +205,33 @@ await eventsClient.UnsubscribeAsync(subscriptionId);
 ```
 
 `DevHubEventsClient` 在同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
+
+### 6.4 已放弃请求维护
+
+`DevHubEventsClient` 暴露两组纯本地维护接口：
+
+```csharp
+using DevHub.Sdk.Models;
+
+var total = eventsClient.GetAbandonedRequestCount();
+var appScoped = eventsClient.GetAbandonedRequestCount(new AbandonedRequestFilter
+{
+    AppId = "sample.app",
+    Method = "hub.apps.getDefinition"
+});
+
+var removed = eventsClient.ClearAbandonedRequests(new AbandonedRequestFilter
+{
+    OlderThan = TimeSpan.FromMinutes(2)
+});
+```
+
+- `GetAbandonedRequestCount(...)` 返回当前匹配过滤条件的已放弃请求数量。
+- `ClearAbandonedRequests(...)` 只移除匹配条件的本地记录，并返回本次实际移除数量。
+- `AbandonedRequestFilter` 支持 `OlderThan`、`AppId`、`Method` 三个可选条件；同时提供多个条件时按逻辑与匹配。
+- 两个接口都只读取或修改当前 `DevHubEventsClient` 关联 WebSocket 会话中的本地 tombstone 记录，不发送 JSON-RPC 请求，不隐式重连，也不改变当前认证或订阅状态。
+- `AppId` 匹配采用最佳努力规则：只有请求进入已放弃状态时能稳定识别 `appId` 的记录才会命中 `AppId` 过滤条件。
+- 某条记录被手动清理后，如果服务端随后返回同一 `requestId` 的迟到响应，该响应会回到既有 unknown `response id` 故障语义，而不是继续被忽略。
 
 ## 7. 高级扩展
 

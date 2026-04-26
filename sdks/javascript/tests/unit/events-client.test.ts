@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
+import type { AbandonedRequestFilter, JsonRpcEventSession } from "../../src/index.js";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
 import {
@@ -75,6 +76,51 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   }
 
   expect(session?.disposedReason).toBe("client_dispose");
+});
+
+it("本地已放弃请求维护接口应直接委托 session 且不要求认证", async () => {
+  const connection = createConnectionInfo();
+  const ensureConnected = vi.fn(async () => {});
+  const sendRequest = vi.fn(async () => {
+    throw new Error("sendRequest should not be called.");
+  });
+  const getAbandonedRequestCount = vi.fn((filter?: AbandonedRequestFilter) => filter?.appId === "app-a" ? 2 : 3);
+  const clearAbandonedRequests = vi.fn((filter?: AbandonedRequestFilter) => filter?.method === "hub.apps.listInstances" ? 1 : 0);
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-local-abandoned-request-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        ensureConnected,
+        sendRequest,
+        getAbandonedRequestCount,
+        clearAbandonedRequests,
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    expect(client.getAbandonedRequestCount()).toBe(3);
+    expect(client.getAbandonedRequestCount({ appId: "app-a" })).toBe(2);
+    expect(client.clearAbandonedRequests({ method: "hub.apps.listInstances" })).toBe(1);
+    expect(ensureConnected).not.toHaveBeenCalled();
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(getAbandonedRequestCount).toHaveBeenNthCalledWith(1, undefined);
+    expect(getAbandonedRequestCount).toHaveBeenNthCalledWith(2, { appId: "app-a" });
+    expect(clearAbandonedRequests).toHaveBeenCalledWith({ method: "hub.apps.listInstances" });
+  } finally {
+    await client.dispose();
+  }
 });
 
 it("同一个 events client 实例一次只允许一个活动中的 readEvents 读取器，return 后应释放租约", async () => {
@@ -306,7 +352,7 @@ it("getInstance should propagate instance_not_found over WS without rewriting th
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: () => ({
+      sessionFactory: () => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -372,7 +418,7 @@ it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => 
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -431,7 +477,7 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -491,7 +537,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -553,7 +599,7 @@ it("实例事件应接受省略 scope 的 payload", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -620,7 +666,7 @@ it("实例事件应继续拒绝非法 scope", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -1377,6 +1423,17 @@ async function closeWebSocketServer(server: any): Promise<void> {
   });
 }
 
+function createStubEventSession(
+  session: Omit<JsonRpcEventSession, "getAbandonedRequestCount" | "clearAbandonedRequests">
+    & Partial<Pick<JsonRpcEventSession, "getAbandonedRequestCount" | "clearAbandonedRequests">>
+): JsonRpcEventSession {
+  return {
+    getAbandonedRequestCount: () => 0,
+    clearAbandonedRequests: () => 0,
+    ...session
+  };
+}
+
 class FakeInjectedWsSession {
   readonly requests: Array<{ method: string; params?: Record<string, unknown> }> = [];
   disposedReason: string | undefined;
@@ -1497,6 +1554,14 @@ class FakeInjectedWsSession {
   }
 
   async disconnect(): Promise<void> {
+  }
+
+  getAbandonedRequestCount(): number {
+    return 0;
+  }
+
+  clearAbandonedRequests(): number {
+    return 0;
   }
 
   async dispose(reason = "client_dispose"): Promise<void> {
