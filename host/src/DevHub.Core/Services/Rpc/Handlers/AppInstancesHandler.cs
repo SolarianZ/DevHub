@@ -90,7 +90,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.registerInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.registerInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -169,12 +169,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.registerInstance方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.registerInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.registerInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.registerInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -186,7 +186,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.heartbeat方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.heartbeat方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -254,12 +254,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.heartbeat方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.heartbeat方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.heartbeat方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.heartbeat方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -271,7 +271,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.unregisterInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.unregisterInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -318,12 +318,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.unregisterInstance方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.unregisterInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.unregisterInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.unregisterInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -335,7 +335,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.listInstances方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.listInstances方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             string? appId = null;
             string? scope = null;
@@ -403,12 +403,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.listInstances方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.listInstances方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.listInstances方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.listInstances方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -420,7 +420,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.getInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.getInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {
@@ -459,12 +459,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.getInstance方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.getInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.getInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.getInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }

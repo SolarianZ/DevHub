@@ -30,7 +30,7 @@ public sealed class HubGetVersionHandler : IRpcHandler
     /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("收到 hub.getVersion 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+        _logger.LogDebug("收到 hub.getVersion 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
         if (!AcceptsParams(request.Params))
         {
@@ -49,7 +49,7 @@ public sealed class HubGetVersionHandler : IRpcHandler
         };
 
         _logger.LogInformation("处理 hub.getVersion 请求成功，RequestId: {RequestId}", request.Id);
-        _logger.LogDebug("hub.getVersion 响应内容: {Response}", JsonSerializer.Serialize(response));
+        _logger.LogDebug("hub.getVersion 响应内容: {Response}", RpcLogJsonSerializer.Serialize(response));
         return Task.FromResult(response);
     }
 

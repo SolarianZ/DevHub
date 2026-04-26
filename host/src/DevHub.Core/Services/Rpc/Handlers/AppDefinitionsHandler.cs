@@ -69,7 +69,7 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.listDefinitions方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {
@@ -125,12 +125,12 @@ public class AppDefinitionsHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.listDefinitions方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.listDefinitions方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.listDefinitions方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -142,7 +142,7 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             // 每次查询前重新加载，反映测试期间新增/修改的定义文件
             _definitionProvider.Refresh();
@@ -195,12 +195,12 @@ public class AppDefinitionsHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.getDefinition方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.getDefinition方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.getDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -212,7 +212,7 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.validateDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.validateDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (!TryGetDefinitionElement(request, out var definitionElement, out var error))
             {
@@ -233,7 +233,7 @@ public class AppDefinitionsHandler : IRpcHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.validateDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.validateDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -245,7 +245,7 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.upsertDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.upsertDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (!TryGetDefinitionElement(request, out var definitionElement, out var error))
             {
@@ -273,7 +273,7 @@ public class AppDefinitionsHandler : IRpcHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.upsertDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.upsertDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -285,7 +285,7 @@ public class AppDefinitionsHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.deleteDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.deleteDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {
@@ -323,7 +323,7 @@ public class AppDefinitionsHandler : IRpcHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.deleteDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.deleteDefinition方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
