@@ -11,6 +11,7 @@ from devhub_sdk._parsing import (
     parse_definition_validation_result,
     parse_event,
     parse_hub_runtime,
+    parse_instance_result,
     parse_invocation,
     parse_launch_result,
     parse_notify_result,
@@ -322,6 +323,43 @@ def test_parse_register_instance_result_should_attach_instance_session_token() -
 
     assert instance.instance_id == "inst-1"
     assert instance.instance_session_token == "token-1"
+
+
+def test_parse_instance_result_should_return_exact_instance() -> None:
+    instance = parse_instance_result(
+        {
+            "ok": True,
+            "instance": _app_instance_payload(),
+        },
+        path="hub.apps.getInstance.result",
+    )
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token is None
+
+
+def test_parse_instance_result_when_password_present_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"password"):
+        parse_instance_result(
+            {
+                "ok": True,
+                "password": "secret-1",
+                "instance": _app_instance_payload(),
+            },
+            path="hub.apps.getInstance.result",
+        )
+
+
+def test_parse_instance_result_when_instance_session_token_present_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_instance_result(
+            {
+                "ok": True,
+                "instanceSessionToken": "token-1",
+                "instance": _app_instance_payload(),
+            },
+            path="hub.apps.getInstance.result",
+        )
 
 
 def test_parse_app_instance_when_scope_is_null_should_raise() -> None:

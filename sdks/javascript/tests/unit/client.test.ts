@@ -533,6 +533,62 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("getInstance should send the exact instanceId and parse a single AppInstance", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getInstance");
+    expect(body.params).toEqual({
+      instanceId: "inst-1"
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      instance: {
+        instanceId: "inst-1",
+        appId: "test.instance.app",
+        scope: "",
+        pid: 12345,
+        registeredAtUtc: "2026-03-09T00:00:00Z",
+        lastSeenUtc: "2026-03-09T00:00:01Z",
+        invoke: {
+          poll: true,
+          respond: false
+        },
+        meta: {
+          source: "unit"
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-instance-client",
+    dataDir: runtimeDir
+  });
+
+  const instance = await client.getInstance("inst-1");
+
+  expect(instance).toEqual({
+    instanceId: "inst-1",
+    appId: "test.instance.app",
+    scope: "",
+    pid: 12345,
+    registeredAtUtc: new Date("2026-03-09T00:00:00Z"),
+    lastSeenUtc: new Date("2026-03-09T00:00:01Z"),
+    invoke: {
+      poll: true,
+      respond: false
+    },
+    meta: {
+      source: "unit"
+    }
+  });
+  expect((instance as unknown as Record<string, unknown>).instanceSessionToken).toBeUndefined();
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("validateDefinition 应发送校验请求并返回结构化结果", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -1126,6 +1182,21 @@ it("getDefinition should reject an invalid appId before sending the request", as
     appId: "Invalid.App",
     scope: ""
   })).rejects.toThrow(/appId/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("getInstance should reject an invalid instanceId before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-instance-instanceid-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.getInstance("bad id")).rejects.toThrow(/instanceId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1941,6 +2012,119 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   })).rejects.toThrow(
     "hub.apps.listInstances.result.instances[0].meta.callback 包含不支持的 JSON 类型。"
   );
+});
+
+it("getInstance should propagate instance_not_found without rewriting error data", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getInstance");
+    expect(body.params).toEqual({
+      instanceId: "missing-inst-1"
+    });
+
+    return createJsonResponse(body.id, undefined, {
+      code: DevHubRpcErrorCode.InstanceNotFound,
+      message: "instance_not_found",
+      data: {
+        reason: "unknown_instance",
+        instanceId: "missing-inst-1"
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-instance-not-found-client",
+    dataDir: runtimeDir
+  });
+
+  let capturedError: unknown;
+  try {
+    await client.getInstance("missing-inst-1");
+  } catch (error) {
+    capturedError = error;
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(DevHubRpcErrorCode.InstanceNotFound);
+  expect(rpcError.message).toBe("instance_not_found");
+  expect(rpcError.reason).toBe("unknown_instance");
+  expect(rpcError.tryGetDataString("instanceId")).toBe("missing-inst-1");
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("getInstance should reject an AppInstance payload containing instanceSessionToken", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-get-instance-token-leak-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          instance: {
+            instanceId: "inst-1",
+            appId: "test.app",
+            scope: "",
+            pid: 12345,
+            registeredAtUtc: "2026-03-09T00:00:00Z",
+            lastSeenUtc: "2026-03-09T00:00:01Z",
+            invoke: {
+              poll: true,
+              respond: true
+            },
+            instanceSessionToken: "session-1"
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.getInstance("inst-1")).rejects.toThrow(/instanceSessionToken/i);
+});
+
+it("getInstance should reject an AppInstance payload containing password", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-get-instance-password-leak-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          instance: {
+            instanceId: "inst-1",
+            appId: "test.app",
+            scope: "",
+            pid: 12345,
+            registeredAtUtc: "2026-03-09T00:00:00Z",
+            lastSeenUtc: "2026-03-09T00:00:01Z",
+            invoke: {
+              poll: true,
+              respond: true
+            },
+            password: "secret-1"
+          }
+        })
+      })
+    }
+  );
+
+  await expect(client.getInstance("inst-1")).rejects.toThrow(/password/i);
 });
 
 it("poll should reject null optional invocation booleans", async () => {

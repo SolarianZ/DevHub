@@ -8,6 +8,7 @@ from ._parsing import (
     parse_definition_result,
     parse_definitions_result,
     parse_event,
+    parse_instance_result,
     parse_instances_result,
     parse_ping_result,
     require_bool,
@@ -16,6 +17,7 @@ from ._parsing import (
 )
 from ._payloads import (
     build_get_definition_params,
+    build_get_instance_params,
     build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
@@ -167,6 +169,17 @@ class DevHubEventsClient:
             require_authenticated=True,
         )
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
+
+    async def get_instance(self, instance_id: str) -> AppInstance:
+        """通过 WebSocket 调用 `hub.apps.getInstance`，按 `instanceId` 精确读取实例快照。"""
+
+        self._ensure_authenticated()
+        result = await self._send_request(
+            "hub.apps.getInstance",
+            build_get_instance_params(instance_id),
+            require_authenticated=True,
+        )
+        return parse_instance_result(result, path="hub.apps.getInstance.result")
 
     async def list_instances(self, request: ListInstancesRequest) -> list[AppInstance]:
         """通过 WebSocket 调用 `hub.apps.listInstances`。"""

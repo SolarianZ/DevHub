@@ -133,6 +133,40 @@ internal static class ReadOnlyRpcExecutor
             cancellationToken);
     }
 
+    internal static Task<AppInstance> GetInstanceAsync(
+        SendAsyncDelegate sendAsync,
+        string instanceId,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            sendAsync,
+            "hub.apps.getInstance",
+            RequestPayloadFactory.BuildGetInstanceParams(instanceId),
+            static result =>
+            {
+                ResponsePayloadReader.ValidateAppInstanceElement(
+                    ResponsePayloadReader.EnsurePropertyExists(
+                        result,
+                        "hub.apps.getInstance.result",
+                        "instance",
+                        JsonValueKind.Object),
+                    "hub.apps.getInstance.result.instance");
+
+                var payload = ResponsePayloadReader.DeserializeRequired<GetInstanceContract>(
+                    result,
+                    "hub.apps.getInstance.result");
+                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getInstance.result");
+                ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.getInstance.result", "instance");
+                ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.getInstance.result", "instance.instanceId");
+                ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.getInstance.result", "instance.appId");
+                ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.getInstance.result", "instance.registeredAtUtc");
+                ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.getInstance.result", "instance.lastSeenUtc");
+                ResponsePayloadReader.EnsureNotNull(payload.Instance.Invoke, "hub.apps.getInstance.result", "instance.invoke");
+                return payload.Instance;
+            },
+            cancellationToken);
+    }
+
     private static async Task<TResult> ExecuteAsync<TResult>(
         SendAsyncDelegate sendAsync,
         string method,

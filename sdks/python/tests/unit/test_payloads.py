@@ -14,6 +14,7 @@ from devhub_sdk import (
 from devhub_sdk._payloads import (
     build_heartbeat_params,
     build_get_definition_params,
+    build_get_instance_params,
     build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
@@ -268,6 +269,16 @@ def test_get_definition_builder_should_validate_app_id() -> None:
 
     with pytest.raises(ValueError, match="scope"):
         build_get_definition_params("test.app", None)  # type: ignore[arg-type]
+
+
+def test_get_instance_builder_should_validate_instance_id() -> None:
+    assert build_get_instance_params("inst-1") == {"instanceId": "inst-1"}
+
+    with pytest.raises(ValueError, match="instance_id"):
+        build_get_instance_params("inst/1")
+
+    with pytest.raises(ValueError, match="instance_id"):
+        build_get_instance_params(None)  # type: ignore[arg-type]
 
 
 def test_list_definitions_builder_should_include_explicit_scope_filter() -> None:

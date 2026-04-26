@@ -157,6 +157,7 @@ public sealed class EventsFlowTests
         var ping = await eventsClient.PingAsync(new { source = "ws" });
         var definitions = await eventsClient.ListDefinitionsAsync(new ListDefinitionsRequest());
         var definition = await eventsClient.GetDefinitionAsync("events.ws.read.app", string.Empty);
+        var instance = await eventsClient.GetInstanceAsync("events-ws-read-inst-1");
         var instances = await eventsClient.ListInstancesAsync(new ListInstancesRequest
         {
             AppId = "events.ws.read.app",
@@ -166,8 +167,25 @@ public sealed class EventsFlowTests
         Assert.True(ping.Ok);
         Assert.Equal("events.ws.read.app", definition.AppId);
         Assert.Equal(string.Empty, definition.Scope);
+        Assert.Equal("events-ws-read-inst-1", instance.InstanceId);
+        Assert.Null(instance.InstanceSessionToken);
         Assert.Contains(definitions, item => item.AppId == "events.ws.read.app");
         Assert.Contains(instances, item => item.InstanceId == "events-ws-read-inst-1");
+    }
+
+    [Fact]
+    public async Task WsGetInstance_WhenMissing_ShouldPropagateInstanceNotFound()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var eventsClient = await host.CreateEventsClientAsync("events-get-instance-missing-client");
+        await eventsClient.AuthenticateAsync();
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => eventsClient.GetInstanceAsync("missing-events-inst"));
+
+        Assert.Equal(-32010, exception.Code);
+        Assert.Equal("instance_not_found", exception.Message);
+        Assert.Equal("unknown_instance", exception.Reason);
+        Assert.Equal("missing-events-inst", exception.ErrorData!.Value.GetProperty("instanceId").GetString());
     }
 
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId)

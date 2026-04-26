@@ -233,6 +233,18 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.getInstance</c>。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>实例快照。</returns>
+    public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken);
+    }
+
+    /// <summary>
     /// 订阅事件。
     /// </summary>
     /// <param name="types">事件类型列表；为空或 <see langword="null"/> 表示订阅全部。</param>

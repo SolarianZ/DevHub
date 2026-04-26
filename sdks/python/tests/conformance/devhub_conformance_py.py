@@ -24,6 +24,7 @@ if str(PYTHON_SDK_ROOT) not in sys.path:
 from devhub_sdk import (  # type: ignore  # noqa: E402
     AppCapabilities,
     AppDefinition,
+    AppInstance,
     AppInstanceRegistration,
     DevHubClient,
     DevHubClientOptions,
@@ -370,6 +371,18 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 captures[capture_as] = require_mapping(result.get("definition"), f"request.steps[{index}].captureAs")
                 continue
 
+            if action == "get_instance":
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                instance_id = resolve_capture_value(step, captures, index, "instanceId")
+                events_client = event_clients.get(client_name)
+                if events_client is not None:
+                    instance = await events_client.get_instance(str(instance_id))
+                else:
+                    instance = require_http_client(http_clients, client_name, index).get_instance(str(instance_id))
+                captures[capture_as] = normalize_app_instance(instance)
+                continue
+
             if action == "list_definitions":
                 params: dict[str, Any] = {"scope": resolve_capture_value(step, captures, index, "scope")}
                 app_id = resolve_capture_value(step, captures, index, "appId")
@@ -677,6 +690,24 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
         if definition.launch.dedupe_key_template is not None:
             launch["dedupeKeyTemplate"] = definition.launch.dedupe_key_template
         actual["launch"] = launch
+    return actual
+
+
+def normalize_app_instance(instance: AppInstance) -> dict[str, Any]:
+    actual: dict[str, Any] = {
+        "instanceId": instance.instance_id,
+        "appId": instance.app_id,
+        "scope": instance.scope,
+        "pid": instance.pid,
+        "registeredAtUtc": instance.registered_at_utc.isoformat().replace("+00:00", "Z"),
+        "lastSeenUtc": instance.last_seen_utc.isoformat().replace("+00:00", "Z"),
+        "invoke": {
+            "poll": instance.invoke.poll,
+            "respond": instance.invoke.respond,
+        },
+    }
+    if instance.meta is not None:
+        actual["meta"] = instance.meta
     return actual
 
 

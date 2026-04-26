@@ -11,6 +11,7 @@ from ._parsing import (
     parse_definition_validation_result,
     parse_definition_result,
     parse_definitions_result,
+    parse_instance_result,
     parse_instances_result,
     parse_launch_result,
     parse_notify_result,
@@ -24,6 +25,7 @@ from ._parsing import (
 from ._payloads import (
     build_delete_definition_params,
     build_get_definition_params,
+    build_get_instance_params,
     build_heartbeat_params,
     build_launch_params,
     build_list_definitions_params,
@@ -149,6 +151,12 @@ class DevHubClient:
 
         result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id, scope))
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
+
+    def get_instance(self, instance_id: str) -> AppInstance:
+        """调用 `hub.apps.getInstance`，按 `instanceId` 精确读取实例快照。"""
+
+        result = self._send("hub.apps.getInstance", build_get_instance_params(instance_id))
+        return parse_instance_result(result, path="hub.apps.getInstance.result")
 
     def validate_definition(self, definition: AppDefinition) -> DefinitionValidationResult:
         """调用 `hub.apps.validateDefinition`。"""

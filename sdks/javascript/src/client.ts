@@ -38,6 +38,7 @@ import {
   parseDefinitionValidationResult,
   parseDefinitionsResult,
   parseHeartbeatResult,
+  parseInstanceResult,
   parseInstancesResult,
   parseLaunchResult,
   parseNotifyResult,
@@ -51,6 +52,7 @@ import {
 import {
   buildDeleteDefinitionParams,
   buildGetDefinitionParams,
+  buildGetInstanceParams,
   buildHeartbeatParams,
   buildInvokeParams,
   buildLaunchParams,
@@ -180,6 +182,11 @@ export class DevHubClient {
   async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
     this.throwIfDisposed();
     return parseInstancesResult(await this.#transport.send("hub.apps.listInstances", buildListInstancesParams(request)));
+  }
+
+  async getInstance(instanceId: string): Promise<AppInstance> {
+    this.throwIfDisposed();
+    return parseInstanceResult(await this.#transport.send("hub.apps.getInstance", buildGetInstanceParams(instanceId)));
   }
 
   async launch(request: LaunchRequest): Promise<LaunchResult> {

@@ -67,6 +67,15 @@ export function parseDefinitionResult(payload: unknown): AppDefinition {
   return parseDefinitionEnvelope(payload, "hub.apps.getDefinition.result");
 }
 
+export function parseInstanceResult(payload: unknown): AppInstance {
+  const record = ensureRecord(payload, "hub.apps.getInstance.result");
+  ensureOk(record, "hub.apps.getInstance.result");
+  return parseAppInstance(
+    readObject(record, "hub.apps.getInstance.result", "instance"),
+    "hub.apps.getInstance.result.instance"
+  );
+}
+
 export function parseDefinitionValidationResult(payload: unknown): DefinitionValidationResult {
   const record = ensureRecord(payload, "hub.apps.validateDefinition.result");
   ensureOk(record, "hub.apps.validateDefinition.result");
@@ -262,7 +271,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
 export function parseAppInstance(payload: unknown, location: string): AppInstance {
   const record = ensureRecord(payload, location);
-  ensureNoPasswordField(record, location);
+  ensureNoSensitiveInstanceFields(record, location);
   const invokePayload = readObject(record, location, "invoke");
 
   return {
@@ -422,13 +431,17 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
     readOptionalScopeString(payload, location, "scope");
-    ensureNoPasswordField(payload, location);
+    ensureNoSensitiveInstanceFields(payload, location);
   }
 }
 
-function ensureNoPasswordField(payload: Record<string, unknown>, location: string): void {
+function ensureNoSensitiveInstanceFields(payload: Record<string, unknown>, location: string): void {
   if ("password" in payload) {
     throw new Error(`${location}.password must not be present.`);
+  }
+
+  if ("instanceSessionToken" in payload) {
+    throw new Error(`${location}.instanceSessionToken must not be present.`);
   }
 }
 

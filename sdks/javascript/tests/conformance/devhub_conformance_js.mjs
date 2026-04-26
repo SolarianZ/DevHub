@@ -331,6 +331,21 @@ async function runEvents(context) {
         continue;
       }
 
+      if (action === "get_instance") {
+        const clientName = ensureString(step.client, `request.steps[${index}].client`);
+        const client = eventClients.get(clientName) ?? httpClients.get(clientName);
+        if (!client) {
+          throw new Error(`request.steps[${index}] 未找到 client：${clientName}`);
+        }
+
+        const instanceId = String(resolveCaptureValue(step, captures, index, "instanceId"));
+        const instance = await client.getInstance(instanceId);
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = normalizeAppInstance(instance);
+        }
+        continue;
+      }
+
       if (action === "read_event") {
         const clientName = ensureString(step.client, `request.steps[${index}].client`);
         const captureAs = ensureString(step.captureAs, `request.steps[${index}].captureAs`);
@@ -407,6 +422,19 @@ async function runEvents(context) {
       actual: captures,
       error: null
     };
+  } catch (error) {
+    if (error instanceof DevHubRpcError) {
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "sdk-events",
+        outcome: "error",
+        actual: normalizeInvocationError(error),
+        error: null
+      };
+    }
+
+    throw error;
   } finally {
     for (let index = registeredInstances.length - 1; index >= 0; index -= 1) {
       const registered = registeredInstances[index];
@@ -611,6 +639,27 @@ function normalizeEvent(event) {
     type: event.type,
     payload: event.payload
   };
+}
+
+function normalizeAppInstance(instance) {
+  const normalized = {
+    instanceId: instance.instanceId,
+    appId: instance.appId,
+    scope: instance.scope,
+    pid: instance.pid,
+    registeredAtUtc: instance.registeredAtUtc.toISOString(),
+    lastSeenUtc: instance.lastSeenUtc.toISOString(),
+    invoke: {
+      poll: instance.invoke.poll,
+      respond: instance.invoke.respond
+    }
+  };
+
+  if (instance.meta !== undefined) {
+    normalized.meta = instance.meta;
+  }
+
+  return normalized;
 }
 
 function findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index) {

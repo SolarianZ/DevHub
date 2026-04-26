@@ -53,6 +53,14 @@ def build_get_definition_params(app_id: str, scope: str) -> dict[str, Any]:
     }
 
 
+def build_get_instance_params(instance_id: str) -> dict[str, Any]:
+    """构造 `hub.apps.getInstance` 参数。"""
+
+    return {
+        "instanceId": require_instance_id(instance_id, "instance_id"),
+    }
+
+
 def build_ping_params(echo: Any = _MISSING) -> dict[str, Any] | None:
     """构造 `hub.ping` 参数。"""
 

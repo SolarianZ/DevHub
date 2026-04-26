@@ -127,6 +127,22 @@ it("HTTP 链路应可完成基础流程", async () => {
   });
   expect(instances.length).toBe(1);
 
+  const instance = await client.getInstance("http-flow-inst-1");
+  expect(instance).toMatchObject({
+    instanceId: "http-flow-inst-1",
+    appId: "http.flow.app",
+    scope: "",
+    pid: process.pid,
+    invoke: {
+      poll: true,
+      respond: true
+    },
+    meta: {
+      source: "integration"
+    }
+  });
+  expect((instance as unknown as Record<string, unknown>).instanceSessionToken).toBeUndefined();
+
   const lastSeenUtc = await client.heartbeat("http-flow-inst-1", registered.instanceSessionToken);
   expect(lastSeenUtc.getTime()).toBeGreaterThan(0);
 
@@ -170,6 +186,20 @@ it("heartbeat / unregisterInstance 使用错误 instanceSessionToken 时应映�
   });
 
   await client.unregisterInstance("http-flow-mismatch-inst-1", registered.instanceSessionToken);
+  await client.dispose();
+});
+
+it("getInstance 读取缺失实例时应透传 instance_not_found", async () => {
+  const client = await DevHubClient.fromRuntime({
+    clientId: "http-get-instance-missing-client",
+    dataDir: getHost().dataDirectory
+  });
+
+  await expect(client.getInstance("http-missing-inst-1")).rejects.toMatchObject({
+    code: DevHubRpcErrorCode.InstanceNotFound,
+    reason: "unknown_instance"
+  });
+
   await client.dispose();
 });
 

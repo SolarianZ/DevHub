@@ -341,6 +341,25 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                             JsonValueKind.Object));
                     break;
                 }
+                case "get_instance":
+                {
+                    var clientName = ReadString(step, "client");
+                    var captureAs = ReadString(step, "captureAs");
+                    var instanceId = Convert.ToString(ResolveCaptureValue(step, captures, index, "instanceId"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].instanceId 不能为空。");
+
+                    if (eventClients.TryGetValue(clientName, out var eventsClient))
+                    {
+                        captures[captureAs] = NormalizeAppInstance(await eventsClient.GetInstanceAsync(instanceId));
+                    }
+                    else
+                    {
+                        var httpClient = RequireValue(httpClients, clientName, index, "http client");
+                        captures[captureAs] = NormalizeAppInstance(await httpClient.GetInstanceAsync(instanceId));
+                    }
+
+                    break;
+                }
                 case "list_definitions":
                 {
                     var listResponse = await CallRawRpcAsync(
@@ -848,6 +867,11 @@ object NormalizeEvent(DevHubEvent @event)
         ["type"] = @event.Type.Value,
         ["payload"] = ConvertJsonElement(@event.Payload)
     };
+}
+
+object NormalizeAppInstance(AppInstance instance)
+{
+    return ConvertJsonElement(JsonSerializer.SerializeToElement(instance, jsonOptions))!;
 }
 
 async Task SendTextAsync(ClientWebSocket socket, string payload)

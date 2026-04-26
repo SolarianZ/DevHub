@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
+import { DevHubRpcErrorCode } from "../../src/errors.js";
 import {
   APP_DEFINITION_DELETED,
   APP_DEFINITION_UPSERTED,
@@ -192,9 +193,38 @@ it("authenticated WS should support ping and apps queries", async () => {
     });
     expect(instances.some((instance) => instance.instanceId === "events-query-inst-1")).toBe(true);
 
+    const instance = await eventsClient.getInstance("events-query-inst-1");
+    expect(instance).toMatchObject({
+      instanceId: "events-query-inst-1",
+      appId: "events.flow.app",
+      scope: "",
+      pid: process.pid,
+      invoke: {
+        poll: true,
+        respond: true
+      }
+    });
+
     await httpClient.unregisterInstance("events-query-inst-1", registered.instanceSessionToken);
   } finally {
     await httpClient.dispose();
+    await eventsClient.dispose();
+  }
+});
+
+it("authenticated WS getInstance 应透传 instance_not_found", async () => {
+  const eventsClient = await DevHubEventsClient.fromRuntime({
+    clientId: "events-get-instance-missing-client",
+    dataDir: getHost().dataDirectory
+  });
+
+  try {
+    await eventsClient.authenticate();
+    await expect(eventsClient.getInstance("events-missing-inst-1")).rejects.toMatchObject({
+      code: DevHubRpcErrorCode.InstanceNotFound,
+      reason: "unknown_instance"
+    });
+  } finally {
     await eventsClient.dispose();
   }
 });

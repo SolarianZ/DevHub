@@ -30,7 +30,7 @@ python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局。
 - HTTP 客户端：覆盖 `ping`、应用定义查询 / 校验 / 写入 / 删除、实例管理、`launch`、`notify`、`request`、`poll`、`respond`。
 - WebSocket 事件客户端：覆盖鉴权、订阅、取消订阅、事件流读取与定义生命周期事件解析。
-- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`list_instances` 复用同一套本地参数构造与防御式校验规则。
+- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`get_instance`、`list_instances` 复用同一套本地参数构造与防御式校验规则。
 - 统一错误模型：`DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力。
 
 ## 4. 运行时发现
@@ -107,9 +107,13 @@ registered = client.register_instance(
     password="sample-instance-secret",
 )
 
+exact_instance = client.get_instance("sample-inst-1")
+
 client.unregister_instance(registered.instance_id, registered.instance_session_token)
 client.delete_definition(definition.app_id, definition.scope)
 ```
+
+`get_instance(...)` 按精确 `instance_id` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则透传 `instance_not_found`。
 
 ## 7. WebSocket 事件流约定
 

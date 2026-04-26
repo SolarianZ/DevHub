@@ -139,9 +139,11 @@ var instances = await client.ListInstancesAsync(new ListInstancesRequest
     Scope = null,
     IncludeOffline = true
 });
+var instance = await client.GetInstanceAsync("sample-inst-1");
 ```
 
 列表查询按当前协议必须显式提供 `scope`；如需跨全部作用域枚举，请对 `ListDefinitionsAsync(...)` / `ListInstancesAsync(...)` 显式传入 `null`，不要省略该字段。
+`GetInstanceAsync(...)` 按精确 `instanceId` 读取单个 `AppInstance` 快照；实例离线但仍保留在注册表时，读取结果仍返回该快照，未命中则透传 `instance_not_found`。
 
 ### 6.2 校验与写入定义
 

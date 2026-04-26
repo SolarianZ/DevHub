@@ -57,6 +57,11 @@ public sealed class HttpFlowTests
         Assert.Equal("http-flow-inst-1", registered.InstanceId);
         Assert.False(string.IsNullOrWhiteSpace(registered.InstanceSessionToken));
 
+        var instance = await client.GetInstanceAsync("http-flow-inst-1");
+        Assert.Equal("http-flow-inst-1", instance.InstanceId);
+        Assert.Equal("http.flow.app", instance.AppId);
+        Assert.Null(instance.InstanceSessionToken);
+
         var instances = await client.ListInstancesAsync(new ListInstancesRequest
         {
             AppId = "http.flow.app",
@@ -74,6 +79,20 @@ public sealed class HttpFlowTests
             Scope = null
         });
         Assert.Empty(instancesAfterUnregister);
+    }
+
+    [Fact]
+    public async Task Impl_GetInstance_WhenMissing_ShouldPropagateInstanceNotFound()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var client = await host.CreateClientAsync("http-get-instance-missing-client");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetInstanceAsync("missing-http-inst"));
+
+        Assert.Equal(-32010, exception.Code);
+        Assert.Equal("instance_not_found", exception.Message);
+        Assert.Equal("unknown_instance", exception.Reason);
+        Assert.Equal("missing-http-inst", exception.ErrorData!.Value.GetProperty("instanceId").GetString());
     }
 
     [Fact]

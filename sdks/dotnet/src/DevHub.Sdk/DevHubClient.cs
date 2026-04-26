@@ -305,6 +305,18 @@ public sealed class DevHubClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 调用 <c>hub.apps.getInstance</c>。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>实例快照。</returns>
+    public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken);
+    }
+
+    /// <summary>
     /// 调用 <c>hub.apps.launch</c>。
     /// </summary>
     /// <param name="request">启动请求。</param>

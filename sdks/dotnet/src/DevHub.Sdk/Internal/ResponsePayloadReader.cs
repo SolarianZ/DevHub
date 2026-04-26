@@ -121,6 +121,11 @@ internal static class ResponsePayloadReader
         {
             throw new InvalidOperationException($"{location} 返回结果非法：不得包含 password。");
         }
+
+        if (element.TryGetProperty("instanceSessionToken", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：不得包含 instanceSessionToken。");
+        }
     }
 
     internal static void ValidateValidationIssuesElement(JsonElement element, string location)

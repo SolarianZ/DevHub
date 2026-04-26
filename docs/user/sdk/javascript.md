@@ -175,12 +175,16 @@ const registered = await client.registerInstance({
   invoke: { poll: true, respond: true }
 }, "sample-instance-secret");
 
+const exactInstance = await client.getInstance("sample-inst-1");
+
 await client.unregisterInstance(registered.instanceId, registered.instanceSessionToken);
 await client.deleteDefinition({
   appId: definition.appId,
   scope: definition.scope
 });
 ```
+
+`getInstance(...)` 按精确 `instanceId` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则继续以现有 `DevHubRpcError` 语义暴露 `instance_not_found`。
 
 ### 6.3 调用与响应对象形状
 

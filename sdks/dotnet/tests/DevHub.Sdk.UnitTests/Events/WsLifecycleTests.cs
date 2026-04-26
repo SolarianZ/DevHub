@@ -79,11 +79,12 @@ public sealed class WsLifecycleTests : IDisposable
                 DataDir = dataDir
             },
             factory,
-            new SequenceRequestIdFactory("ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
+            new SequenceRequestIdFactory("ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1", "ws-listinst-1").Create);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync());
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync(new ListDefinitionsRequest()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app", string.Empty));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListInstancesAsync(new ListInstancesRequest()));
         Assert.Empty(connection.SentTexts);
     }
@@ -227,6 +228,14 @@ public sealed class WsLifecycleTests : IDisposable
                 ];
             }
 
+            if (sent.Contains("\"id\":\"ws-getinst-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-getinst-1","result":{"ok":true,"instance":{"instanceId":"inst-1","appId":"ws.app","scope":"","pid":12345,"registeredAtUtc":"2026-03-09T00:00:00Z","lastSeenUtc":"2026-03-09T00:00:01Z","invoke":{"poll":true,"respond":true}}}}""")
+                ];
+            }
+
             if (sent.Contains("\"id\":\"ws-listinst-1\"", StringComparison.Ordinal))
             {
                 return
@@ -246,19 +255,22 @@ public sealed class WsLifecycleTests : IDisposable
                 DataDir = dataDir
             },
             factory,
-            new SequenceRequestIdFactory("ws-auth-1", "ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-listinst-1").Create);
+            new SequenceRequestIdFactory("ws-auth-1", "ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1", "ws-listinst-1").Create);
 
         await client.AuthenticateAsync();
 
         var ping = await client.PingAsync(new { value = 1 });
         var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest());
         var definition = await client.GetDefinitionAsync("ws.app", string.Empty);
+        var instance = await client.GetInstanceAsync("inst-1");
         var instances = await client.ListInstancesAsync(new ListInstancesRequest());
 
         Assert.True(ping.Ok);
         Assert.Equal("ws.app", definitions.Single().AppId);
         Assert.Equal("ws.app", definition.AppId);
         Assert.Equal(string.Empty, definition.Scope);
+        Assert.Equal("inst-1", instance.InstanceId);
+        Assert.Null(instance.InstanceSessionToken);
         Assert.Equal("inst-1", instances.Single().InstanceId);
 
         var listDefinitionsRequest = connection.SentTexts.Single(sent => sent.Contains("hub.apps.listDefinitions", StringComparison.Ordinal));
@@ -276,9 +288,45 @@ public sealed class WsLifecycleTests : IDisposable
             },
             sent =>
             {
+                Assert.Contains("hub.apps.getInstance", sent, StringComparison.Ordinal);
+                Assert.Contains("\"instanceId\":\"inst-1\"", sent, StringComparison.Ordinal);
+            },
+            sent =>
+            {
                 Assert.Contains("hub.apps.listInstances", sent, StringComparison.Ordinal);
                 Assert.Contains("\"scope\":null", sent, StringComparison.Ordinal);
             });
+    }
+
+    [Fact]
+    public async Task EventsClient_AfterAuthenticate_WhenGetInstanceInstanceIdInvalid_ShouldThrowArgumentExceptionWithoutSendingRequest()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal)
+                ? [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")]
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-getinst-1").Create);
+
+        await client.AuthenticateAsync();
+        var sentCountAfterAuthenticate = connection.SentTexts.Count;
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => client.GetInstanceAsync("inst/1"));
+
+        Assert.Equal("instanceId", exception.ParamName);
+        Assert.Equal(sentCountAfterAuthenticate, connection.SentTexts.Count);
     }
 
     [Fact]

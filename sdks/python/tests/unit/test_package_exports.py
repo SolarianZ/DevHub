@@ -5,10 +5,12 @@ from devhub_sdk import (
     ALL_EVENT_TYPES,
     APP_DEFINITION_DELETED,
     APP_DEFINITION_UPSERTED,
+    AppInstance,
     DefinitionValidationResult,
     DevHubClientDependencies,
     DevHubEventType,
     DevHubClient,
+    DevHubEventsClient,
     DevHubEventsClientDependencies,
     FileSystemRuntimeResolver,
     JsonRpcHttpTransport,
@@ -62,3 +64,8 @@ def test_package_root_should_export_runtime_and_transport_abstractions() -> None
 
 def test_public_client_api_should_preserve_heartbeat_return_type_annotation() -> None:
     assert get_type_hints(DevHubClient.heartbeat)["return"] is datetime
+
+
+def test_public_client_api_should_preserve_exact_instance_return_type_annotations() -> None:
+    assert get_type_hints(DevHubClient.get_instance)["return"] is AppInstance
+    assert get_type_hints(DevHubEventsClient.get_instance)["return"] is AppInstance

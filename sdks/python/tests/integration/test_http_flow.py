@@ -60,6 +60,11 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         instance_session_token = registered.instance_session_token
         assert instance_session_token is not None
 
+        exact_instance = client.get_instance("http-flow-inst-1")
+        assert exact_instance.instance_id == "http-flow-inst-1"
+        assert exact_instance.meta == {"source": "integration"}
+        assert exact_instance.instance_session_token is None
+
         instances = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert len(instances) == 1
 
@@ -105,6 +110,19 @@ def test_instance_session_token_mismatch_should_surface_forbidden_reason() -> No
         instance_session_token = registered.instance_session_token
         assert instance_session_token is not None
         client.unregister_instance("http-token-inst-1", instance_session_token)
+
+
+def test_get_instance_missing_should_surface_instance_not_found() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("http-get-instance-client")
+
+        with pytest.raises(DevHubRpcException) as exc_info:
+            client.get_instance("missing-http-inst")
+
+    assert exc_info.value.code == DevHubRpcErrorCode.INSTANCE_NOT_FOUND
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-http-inst"
 
 
 def test_definition_management_should_round_trip_and_surface_host_validation() -> None:

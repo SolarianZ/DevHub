@@ -54,7 +54,7 @@ class FakeRuntimeResolver:
 class FakeHttpTransport:
     """用于验证依赖注入的 HTTP 传输。"""
 
-    response: dict[str, Any]
+    response: dict[str, Any] | BaseException
     calls: list[dict[str, Any]] = field(default_factory=list)
     close_calls: int = 0
 
@@ -65,6 +65,8 @@ class FakeHttpTransport:
                 "params": params,
             }
         )
+        if isinstance(self.response, BaseException):
+            raise self.response
         return self.response
 
     def close(self) -> None:
@@ -447,6 +449,55 @@ def test_http_client_get_definition_should_send_request_and_parse_definition() -
     }
 
 
+def test_http_client_get_instance_should_send_request_and_parse_instance() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instance": {
+                "instanceId": "inst-1",
+                "appId": "test.app",
+                "scope": "",
+                "pid": 1234,
+                "registeredAtUtc": "2026-03-09T00:00:00Z",
+                "lastSeenUtc": "2026-03-09T00:00:01Z",
+                "invoke": {"poll": True, "respond": True},
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    instance = client.get_instance("inst-1")
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token is None
+    assert transport.calls[0] == {
+        "method": "hub.apps.getInstance",
+        "params": {"instanceId": "inst-1"},
+    }
+
+
+def test_http_client_get_instance_should_reuse_shared_payload_builder_validation() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True, "instance": {}})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(ValueError, match="instance_id"):
+        client.get_instance("inst/1")
+
+    assert transport.calls == []
+
+
 def test_http_client_delete_definition_should_send_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
@@ -487,6 +538,66 @@ def test_http_client_list_instances_should_send_explicit_scope_filter() -> None:
         "method": "hub.apps.listInstances",
         "params": {"appId": "test.app", "scope": None},
     }
+
+
+def test_http_client_get_instance_should_propagate_remote_instance_not_found() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        DevHubRpcException(
+            code=-32010,
+            message="instance_not_found",
+            data={"reason": "unknown_instance", "instanceId": "missing-inst"},
+            request_id="req-http-1",
+        )
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(DevHubRpcException) as exc_info:
+        client.get_instance("missing-inst")
+
+    assert exc_info.value.code == -32010
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-inst"
+    assert transport.calls[0] == {
+        "method": "hub.apps.getInstance",
+        "params": {"instanceId": "missing-inst"},
+    }
+
+
+def test_http_client_get_instance_when_result_contains_sensitive_fields_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instanceSessionToken": "token-1",
+            "instance": {
+                "instanceId": "inst-1",
+                "appId": "test.app",
+                "scope": "",
+                "pid": 1234,
+                "registeredAtUtc": "2026-03-09T00:00:00Z",
+                "lastSeenUtc": "2026-03-09T00:00:01Z",
+                "invoke": {"poll": True, "respond": True},
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(RuntimeError, match="instanceSessionToken"):
+        client.get_instance("inst-1")
+
+    assert transport.calls[0]["method"] == "hub.apps.getInstance"
 
 
 def test_http_client_instance_lifecycle_methods_should_forward_instance_session_token() -> None:

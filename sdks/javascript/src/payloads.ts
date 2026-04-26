@@ -31,6 +31,12 @@ export function buildGetDefinitionParams(identity: AppDefinitionIdentity): Recor
   return buildDefinitionIdentityPayload(identity, "identity");
 }
 
+export function buildGetInstanceParams(instanceId: string): Record<string, unknown> {
+  return {
+    instanceId: ensureInstanceId(instanceId, "instanceId")
+  };
+}
+
 export function buildValidateDefinitionParams(definition: AppDefinition): Record<string, unknown> {
   return {
     definition: buildDefinitionPayload(definition)

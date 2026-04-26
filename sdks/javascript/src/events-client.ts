@@ -25,6 +25,7 @@ import {
   parseDefinitionResult,
   parseDefinitionsResult,
   parseEvent,
+  parseInstanceResult,
   parseInstancesResult,
   parsePingResult,
   parseSubscriptionResult,
@@ -32,6 +33,7 @@ import {
 } from "./parsers.js";
 import {
   buildGetDefinitionParams,
+  buildGetInstanceParams,
   buildListDefinitionsParams,
   buildListInstancesParams
 } from "./payloads.js";
@@ -173,6 +175,13 @@ export class DevHubEventsClient {
     this.ensureAuthenticated();
     return parseInstancesResult(
       await this.#session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
+    );
+  }
+
+  async getInstance(instanceId: string): Promise<AppInstance> {
+    this.ensureAuthenticated();
+    return parseInstanceResult(
+      await this.#session.sendRequest("hub.apps.getInstance", buildGetInstanceParams(instanceId))
     );
   }
 

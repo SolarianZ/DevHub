@@ -223,6 +223,7 @@ it("authenticate should support WS ping and apps queries", async () => {
       scope: null,
       includeOffline: false
     });
+    const instance = await client.getInstance("inst-1");
 
     expect(ping.echo).toEqual({
       channel: "ws"
@@ -232,12 +233,14 @@ it("authenticate should support WS ping and apps queries", async () => {
     expect(definition.displayName).toBe("Test Launch App");
     expect(instances).toHaveLength(1);
     expect(instances[0].instanceId).toBe("inst-1");
+    expect(instance.instanceId).toBe("inst-1");
     expect(session?.requests.map((item) => item.method)).toEqual([
       "hub.ws.authenticate",
       "hub.ping",
       "hub.apps.listDefinitions",
       "hub.apps.getDefinition",
-      "hub.apps.listInstances"
+      "hub.apps.listInstances",
+      "hub.apps.getInstance"
     ]);
     expect(session?.requests[1]?.params).toEqual({
       echo: {
@@ -253,9 +256,108 @@ it("authenticate should support WS ping and apps queries", async () => {
       scope: null,
       includeOffline: false
     });
+    expect(session?.requests[5]?.params).toEqual({
+      instanceId: "inst-1"
+    });
   } finally {
     await client.dispose();
   }
+});
+
+it("getInstance should reject an invalid instanceId before sending the WS request", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-instance-id-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.getInstance("bad id")).rejects.toThrow(/instanceId/);
+  } finally {
+    await client.dispose();
+  }
+
+  expect(session?.requests.map((item) => item.method)).toEqual(["hub.ws.authenticate"]);
+});
+
+it("getInstance should propagate instance_not_found over WS without rewriting the error", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-get-instance-not-found-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => ({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getInstance") {
+            expect(params).toEqual({
+              instanceId: "missing-inst-1"
+            });
+            throw new DevHubRpcError({
+              code: DevHubRpcErrorCode.InstanceNotFound,
+              message: "instance_not_found",
+              data: {
+                reason: "unknown_instance",
+                instanceId: "missing-inst-1"
+              },
+              requestId: "ws-get-instance-missing"
+            });
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  let capturedError: unknown;
+  try {
+    await client.authenticate();
+    await client.getInstance("missing-inst-1");
+  } catch (error) {
+    capturedError = error;
+  } finally {
+    await client.dispose();
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(DevHubRpcErrorCode.InstanceNotFound);
+  expect(rpcError.message).toBe("instance_not_found");
+  expect(rpcError.reason).toBe("unknown_instance");
+  expect(rpcError.tryGetDataString("instanceId")).toBe("missing-inst-1");
 });
 
 it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => {
@@ -724,6 +826,7 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
   await expect(client.listInstances({
     scope: null
   })).rejects.toThrow();
+  await expect(client.getInstance("inst-1")).rejects.toThrow();
   expect(() => client.readEvents()).toThrow();
 });
 
@@ -1363,6 +1466,24 @@ class FakeInjectedWsSession {
             }
           }
         ]
+      };
+    }
+
+    if (method === "hub.apps.getInstance") {
+      return {
+        ok: true,
+        instance: {
+          instanceId: "inst-1",
+          appId: "test.launch.app",
+          scope: "",
+          pid: 12345,
+          registeredAtUtc: "2026-03-09T00:00:00Z",
+          lastSeenUtc: "2026-03-09T00:00:01Z",
+          invoke: {
+            poll: true,
+            respond: true
+          }
+        }
       };
     }
 

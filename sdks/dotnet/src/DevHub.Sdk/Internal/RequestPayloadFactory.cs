@@ -1,10 +1,13 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.Internal;
 
 internal static class RequestPayloadFactory
 {
+    private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
+
     internal static object BuildGetDefinitionParams(string appId, string scope)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appId);
@@ -12,6 +15,14 @@ internal static class RequestPayloadFactory
         {
             ["appId"] = appId,
             ["scope"] = ScopeContract.EnsureScopedString(scope, nameof(scope))
+        };
+    }
+
+    internal static object BuildGetInstanceParams(string instanceId)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["instanceId"] = EnsureGetInstanceId(instanceId, nameof(instanceId))
         };
     }
 
@@ -325,6 +336,18 @@ internal static class RequestPayloadFactory
         };
 
         return payload;
+    }
+
+    private static string EnsureGetInstanceId(string instanceId, string paramName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+
+        if (instanceId.Length > 256 || !InstanceIdPattern.IsMatch(instanceId))
+        {
+            throw new ArgumentException("instanceId 必须匹配 ^[a-zA-Z0-9._:-]+$ 且长度不超过 256 个字符。", paramName);
+        }
+
+        return instanceId;
     }
 
     private static void EnsureSerializesToObject(object value, string paramName, string propertyName)

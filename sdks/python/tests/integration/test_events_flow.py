@@ -10,6 +10,8 @@ from devhub_sdk import (
     APP_INSTANCE_REGISTERED,
     AppDefinition,
     AppInstanceRegistration,
+    DevHubRpcErrorCode,
+    DevHubRpcException,
     InvokeCapability,
     ListDefinitionsRequest,
     ListInstancesRequest,
@@ -208,6 +210,7 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
             ping = await events_client.ping({"source": "ws"})
             definitions = await events_client.list_definitions(ListDefinitionsRequest(scope=None))
             definition = await events_client.get_definition("events.ws.read.app", "")
+            instance = await events_client.get_instance("events-ws-read-inst-1")
             instances = await events_client.list_instances(ListInstancesRequest(scope=None))
         finally:
             await events_client.close()
@@ -216,7 +219,27 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
     assert any(item.app_id == "events.ws.read.app" for item in definitions)
     assert definition.app_id == "events.ws.read.app"
     assert definition.scope == ""
+    assert instance.instance_id == "events-ws-read-inst-1"
+    assert instance.instance_session_token is None
     assert any(item.instance_id == "events-ws-read-inst-1" for item in instances)
+
+
+@pytest.mark.asyncio
+async def test_ws_get_instance_missing_should_surface_instance_not_found() -> None:
+    with DevHubHostFixture.start() as host:
+        events_client = await host.create_events_client("events-get-instance-client")
+        try:
+            await events_client.authenticate()
+
+            with pytest.raises(DevHubRpcException) as exc_info:
+                await events_client.get_instance("missing-events-inst")
+        finally:
+            await events_client.close()
+
+    assert exc_info.value.code == DevHubRpcErrorCode.INSTANCE_NOT_FOUND
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-events-inst"
 
 
 @pytest.mark.asyncio

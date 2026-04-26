@@ -308,6 +308,97 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenGetInstanceInstanceIdInvalid_ShouldThrowArgumentExceptionBeforeSending()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-get-instance\",\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-instance");
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => client.GetInstanceAsync("inst/1", CancellationToken.None));
+
+        Assert.Equal("instanceId", exception.ParamName);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetInstanceRemoteReturnsInstanceNotFound_ShouldPropagateDevHubRpcException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-instance\",\"error\":{\"code\":-32010,\"message\":\"instance_not_found\",\"data\":{\"reason\":\"unknown_instance\",\"instanceId\":\"missing-inst-1\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-instance");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetInstanceAsync("missing-inst-1", CancellationToken.None));
+
+        Assert.Equal(-32010, exception.Code);
+        Assert.Equal("instance_not_found", exception.Message);
+        Assert.Equal("unknown_instance", exception.Reason);
+        Assert.Equal("missing-inst-1", exception.ErrorData!.Value.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetInstanceResultLeaksPassword_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-instance\",\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"password\":\"secret-1\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-instance");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1", CancellationToken.None));
+        Assert.Contains("password", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetInstanceResultLeaksInstanceSessionToken_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-instance\",\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true},\"instanceSessionToken\":\"session-1\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-instance");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1", CancellationToken.None));
+        Assert.Contains("instanceSessionToken", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();

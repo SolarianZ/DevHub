@@ -242,6 +242,20 @@ def parse_register_instance_result(value: Any, *, path: str) -> AppInstance:
     return instance
 
 
+def parse_instance_result(value: Any, *, path: str) -> AppInstance:
+    """解析单个实例结果。"""
+
+    root = require_mapping(value, path)
+    if "password" in root:
+        raise RuntimeError(f"{path}.password 不得出现。")
+    if "instanceSessionToken" in root:
+        raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    return parse_app_instance(root.get("instance"), path=f"{path}.instance")
+
+
 def parse_instances_result(value: Any, *, path: str) -> list[AppInstance]:
     """解析实例列表结果。"""
 

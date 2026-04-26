@@ -207,6 +207,30 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void GetInstanceBuilder_ShouldSerializeValidatedInstanceId()
+    {
+        var payload = RequestPayloadFactory.BuildGetInstanceParams("inst-1:scope");
+
+        using var document = Serialize(payload);
+        Assert.Equal("inst-1:scope", document.RootElement.GetProperty("instanceId").GetString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("inst/1")]
+    public void GetInstanceBuilder_WhenInstanceIdInvalid_ShouldThrowArgumentException(string instanceId)
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(instanceId));
+    }
+
+    [Fact]
+    public void GetInstanceBuilder_WhenInstanceIdTooLong_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(new string('a', 257)));
+    }
+
+    [Fact]
     public void ListScopeFilters_WhenScopeIsWhitespace_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => new ListDefinitionsRequest
