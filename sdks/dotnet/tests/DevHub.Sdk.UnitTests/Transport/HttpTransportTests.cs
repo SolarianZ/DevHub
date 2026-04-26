@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
@@ -493,6 +494,47 @@ public sealed class HttpTransportTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1", CancellationToken.None));
         Assert.Contains("instanceSessionToken", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenRegisterInstanceSucceeds_ShouldReturnSeparatedSnapshotAndToken()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-register\"," +
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true}},\"instanceSessionToken\":\"session-1\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-register");
+
+        var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "sample.app",
+            Scope = string.Empty,
+            Pid = 12345,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "secret-1", CancellationToken.None);
+
+        Assert.Equal("inst-1", registered.Instance.InstanceId);
+        Assert.Equal("sample.app", registered.Instance.AppId);
+        Assert.Equal("session-1", registered.InstanceSessionToken);
+        Assert.DoesNotContain("instanceSessionToken", JsonSerializer.Serialize(registered.Instance));
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(registered));
+        Assert.Equal("session-1", document.RootElement.GetProperty("instanceSessionToken").GetString());
+        Assert.False(document.RootElement.GetProperty("instance").TryGetProperty("instanceSessionToken", out _));
     }
 
     [Fact]

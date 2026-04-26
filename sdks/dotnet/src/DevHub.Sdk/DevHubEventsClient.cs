@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Threading.Channels;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevHub.Sdk;
 
@@ -12,9 +14,13 @@ namespace DevHub.Sdk;
 /// </summary>
 public sealed class DevHubEventsClient : IAsyncDisposable
 {
+    internal const int DefaultEventBufferCapacity = 256;
+
     private readonly DevHubClientOptions _options;
     private readonly DevHubRuntimeConnectionInfo _connectionInfo;
     private readonly JsonRpcWebSocketSession _session;
+    private readonly ILogger _logger;
+    private readonly SemaphoreSlim _lifecycleLock;
     private Channel<DevHubEvent> _eventChannel;
     private volatile bool _authenticated;
     private volatile bool _eventStreamAvailable;
@@ -24,11 +30,14 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     private DevHubEventsClient(
         DevHubClientOptions options,
         DevHubRuntimeConnectionInfo connectionInfo,
-        JsonRpcWebSocketSession session)
+        JsonRpcWebSocketSession session,
+        ILogger? logger)
     {
         _options = options;
         _connectionInfo = connectionInfo;
         _session = session;
+        _logger = logger ?? NullLogger.Instance;
+        _lifecycleLock = new SemaphoreSlim(1, 1);
         _eventChannel = CreateEventChannel();
     }
 
@@ -69,7 +78,31 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         clonedOptions.Validate();
 
         dependencies ??= new DevHubEventsClientDependencies();
-        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var loggerFactory = dependencies.LoggerFactory;
+        var logger = loggerFactory.CreateLogger<DevHubEventsClient>();
+        logger.LogInformation(
+            "Starting DevHub runtime discovery for WebSocket client {ClientId}. DataDir override set: {HasDataDirOverride}.",
+            clonedOptions.ClientId,
+            !string.IsNullOrWhiteSpace(clonedOptions.DataDir));
+
+        DevHubRuntimeConnectionInfo connectionInfo;
+        try
+        {
+            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "DevHub runtime discovery failed for WebSocket client {ClientId}.",
+                clonedOptions.ClientId);
+            throw;
+        }
+
+        logger.LogInformation(
+            "Resolved DevHub runtime for WebSocket client {ClientId}. WebSocketEndpoint: {WebSocketEndpoint}.",
+            clonedOptions.ClientId,
+            connectionInfo.WebSocketEndpoint);
 
         DevHubEventsClient? client = null;
         var session = new JsonRpcWebSocketSession(new DevHubWebSocketSessionOptions
@@ -77,10 +110,11 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             WebSocketEndpoint = connectionInfo.WebSocketEndpoint,
             RequestTimeout = clonedOptions.RequestTimeout,
             OnEvent = paramsElement => client!.HandleEvent(paramsElement),
-            OnTerminated = error => client?.HandleTermination(error)
+            OnTerminated = error => client?.HandleTermination(error),
+            Logger = loggerFactory.CreateLogger<JsonRpcWebSocketSession>()
         });
 
-        client = new DevHubEventsClient(clonedOptions, connectionInfo, session);
+        client = new DevHubEventsClient(clonedOptions, connectionInfo, session, logger);
         return client;
     }
 
@@ -98,7 +132,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             cancellationToken);
     }
 
-    private static async Task<DevHubEventsClient> FromRuntimeAsync(
+    internal static async Task<DevHubEventsClient> FromRuntimeAsync(
         DevHubClientOptions options,
         DevHubEventsClientDependencies dependencies,
         IWebSocketConnectionFactory connectionFactory,
@@ -110,6 +144,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
         dependencies ??= new DevHubEventsClientDependencies();
         var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var loggerFactory = dependencies.LoggerFactory;
+        var logger = loggerFactory.CreateLogger<DevHubEventsClient>();
 
         DevHubEventsClient? client = null;
         var session = new JsonRpcWebSocketSession(
@@ -118,12 +154,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                 WebSocketEndpoint = connectionInfo.WebSocketEndpoint,
                 RequestTimeout = clonedOptions.RequestTimeout,
                 OnEvent = paramsElement => client!.HandleEvent(paramsElement),
-                OnTerminated = error => client?.HandleTermination(error)
+                OnTerminated = error => client?.HandleTermination(error),
+                Logger = loggerFactory.CreateLogger<JsonRpcWebSocketSession>()
             },
             connectionFactory,
             requestIdFactory);
 
-        client = new DevHubEventsClient(clonedOptions, connectionInfo, session);
+        client = new DevHubEventsClient(clonedOptions, connectionInfo, session, logger);
         return client;
     }
 
@@ -134,50 +171,62 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        if (_authenticated)
-        {
-            throw new InvalidOperationException("当前 WebSocket 客户端已完成认证。");
-        }
-
+        await _lifecycleLock.WaitAsync(cancellationToken);
         try
         {
-            var result = await _session.SendRequestAsync(
-                "hub.ws.authenticate",
-                new Dictionary<string, object?>
-                {
-                    ["token"] = _connectionInfo.Token,
-                    ["protocolVersion"] = _options.ProtocolVersion,
-                    ["clientId"] = _options.ClientId,
-                    ["clientSessionId"] = _options.ClientSessionId.ToString("D")
-                },
-                cancellationToken);
-
-            var payload = JsonSerializer.Deserialize<AuthenticateResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-                ?? throw new InvalidOperationException("无法解析 hub.ws.authenticate 结果。");
-
-            if (!payload.Ok || payload.ProtocolVersion != 1)
+            ThrowIfDisposed();
+            if (_authenticated)
             {
-                throw new InvalidOperationException("hub.ws.authenticate 返回结果非法。");
+                throw new InvalidOperationException("当前 WebSocket 客户端已完成认证。");
             }
 
-            _eventChannel = CreateEventChannel();
-            _authenticated = true;
-            _eventStreamAvailable = true;
-        }
-        catch
-        {
-            _authenticated = false;
-            _eventStreamAvailable = false;
+            _logger.LogInformation(
+                "Authenticating DevHub WebSocket session for client {ClientId}. WebSocketEndpoint: {WebSocketEndpoint}.",
+                _options.ClientId,
+                _connectionInfo.WebSocketEndpoint);
 
             try
             {
-                await _session.DisconnectAsync("authenticate_failed", CancellationToken.None);
-            }
-            catch
-            {
-            }
+                var result = await _session.SendRequestAsync(
+                    "hub.ws.authenticate",
+                    new Dictionary<string, object?>
+                    {
+                        ["token"] = _connectionInfo.Token,
+                        ["protocolVersion"] = _options.ProtocolVersion,
+                        ["clientId"] = _options.ClientId,
+                        ["clientSessionId"] = _options.ClientSessionId.ToString("D")
+                    },
+                    cancellationToken);
 
-            throw;
+                var payload = JsonSerializer.Deserialize<AuthenticateResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
+                    ?? throw new InvalidOperationException("无法解析 hub.ws.authenticate 结果。");
+
+                if (!payload.Ok || payload.ProtocolVersion != 1)
+                {
+                    throw new InvalidOperationException("hub.ws.authenticate 返回结果非法。");
+                }
+
+                _eventChannel = CreateEventChannel();
+                _authenticated = true;
+                _eventStreamAvailable = true;
+                _logger.LogInformation(
+                    "Authenticated DevHub WebSocket session for client {ClientId}.",
+                    _options.ClientId);
+            }
+            catch (Exception exception)
+            {
+                ResetSessionState(new InvalidOperationException("当前 WebSocket 会话认证失败，连接已重置。", exception));
+                _logger.LogWarning(
+                    exception,
+                    "DevHub WebSocket authentication failed for client {ClientId}. The current session will be discarded.",
+                    _options.ClientId);
+                await DisconnectSessionAsync("authenticate_failed");
+                throw;
+            }
+        }
+        finally
+        {
+            _lifecycleLock.Release();
         }
     }
 
@@ -302,8 +351,6 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>订阅标识。</returns>
     public async Task<string> SubscribeAsync(IEnumerable<DevHubEventType>? types = null, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
-
         object? parameters = null;
         if (types is not null)
         {
@@ -322,16 +369,22 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             }
         }
 
-        var result = await _session.SendRequestAsync("hub.events.subscribe", parameters, cancellationToken);
-        var payload = JsonSerializer.Deserialize<SubscribeResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-            ?? throw new InvalidOperationException("无法解析 hub.events.subscribe 结果。");
+        return await ExecuteSubscriptionLifecycleRequestAsync(
+            "hub.events.subscribe",
+            parameters,
+            static result =>
+            {
+                var payload = JsonSerializer.Deserialize<SubscribeResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
+                    ?? throw new InvalidOperationException("无法解析 hub.events.subscribe 结果。");
 
-        if (!payload.Ok || string.IsNullOrWhiteSpace(payload.SubscriptionId))
-        {
-            throw new InvalidOperationException("hub.events.subscribe 返回结果非法。");
-        }
+                if (!payload.Ok || string.IsNullOrWhiteSpace(payload.SubscriptionId))
+                {
+                    throw new InvalidOperationException("hub.events.subscribe 返回结果非法。");
+                }
 
-        return payload.SubscriptionId;
+                return payload.SubscriptionId;
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -341,24 +394,27 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken = default)
     {
-        EnsureAuthenticated();
         ArgumentException.ThrowIfNullOrWhiteSpace(subscriptionId);
 
-        var result = await _session.SendRequestAsync(
+        await ExecuteSubscriptionLifecycleRequestAsync(
             "hub.events.unsubscribe",
             new Dictionary<string, object?>
             {
                 ["subscriptionId"] = subscriptionId
             },
+            static result =>
+            {
+                var payload = JsonSerializer.Deserialize<OkOnlyContract>(result.GetRawText(), DevHubJson.SerializerOptions)
+                    ?? throw new InvalidOperationException("无法解析 hub.events.unsubscribe 结果。");
+
+                if (!payload.Ok)
+                {
+                    throw new InvalidOperationException("hub.events.unsubscribe 返回结果非法。");
+                }
+
+                return true;
+            },
             cancellationToken);
-
-        var payload = JsonSerializer.Deserialize<OkOnlyContract>(result.GetRawText(), DevHubJson.SerializerOptions)
-            ?? throw new InvalidOperationException("无法解析 hub.events.unsubscribe 结果。");
-
-        if (!payload.Ok)
-        {
-            throw new InvalidOperationException("hub.events.unsubscribe 返回结果非法。");
-        }
     }
 
     /// <summary>
@@ -397,10 +453,9 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         }
 
         _disposed = true;
-        _authenticated = false;
-        _eventStreamAvailable = false;
-        _eventChannel.Writer.TryComplete();
+        ResetSessionState();
         await _session.DisposeAsync();
+        _lifecycleLock.Dispose();
     }
 
     private void HandleEvent(JsonElement paramsElement)
@@ -411,7 +466,13 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
         if (!_eventChannel.Writer.TryWrite(evt))
         {
-            throw new InvalidOperationException("当前事件流不可用。");
+            _logger.LogError(
+                "DevHub event buffer overflowed for client {ClientId}. SubscriptionId: {SubscriptionId}. EventType: {EventType}. BufferCapacity: {BufferCapacity}.",
+                _options.ClientId,
+                evt.SubscriptionId,
+                evt.Type.Value,
+                DefaultEventBufferCapacity);
+            throw new InvalidOperationException("当前事件流缓冲已满，事件流已终止；请重新认证并重新订阅。");
         }
     }
 
@@ -422,9 +483,21 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             return;
         }
 
-        _authenticated = false;
-        _eventStreamAvailable = false;
-        _eventChannel.Writer.TryComplete(terminalException);
+        if (terminalException is null)
+        {
+            _logger.LogWarning(
+                "DevHub WebSocket session terminated for client {ClientId}. Event stream is no longer available.",
+                _options.ClientId);
+        }
+        else
+        {
+            _logger.LogError(
+                terminalException,
+                "DevHub WebSocket session terminated with an error for client {ClientId}. Event stream is no longer available.",
+                _options.ClientId);
+        }
+
+        ResetSessionState(terminalException);
     }
 
     private static void ValidateEvent(DevHubEvent evt)
@@ -485,11 +558,86 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
     private static Channel<DevHubEvent> CreateEventChannel()
     {
-        return Channel.CreateUnbounded<DevHubEvent>(new UnboundedChannelOptions
+        return Channel.CreateBounded<DevHubEvent>(new BoundedChannelOptions(DefaultEventBufferCapacity)
         {
             SingleReader = true,
-            SingleWriter = true
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait
         });
+    }
+
+    private async Task<T> ExecuteSubscriptionLifecycleRequestAsync<T>(
+        string method,
+        object? parameters,
+        Func<JsonElement, T> parseResult,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        await _lifecycleLock.WaitAsync(cancellationToken);
+        try
+        {
+            EnsureAuthenticated();
+            _logger.LogInformation(
+                "Sending DevHub WebSocket subscription lifecycle request. Method: {Method}. ClientId: {ClientId}.",
+                method,
+                _options.ClientId);
+
+            try
+            {
+                var result = await _session.SendRequestAsync(method, parameters, cancellationToken);
+                var parsed = parseResult(result);
+                _logger.LogInformation(
+                    "Completed DevHub WebSocket subscription lifecycle request. Method: {Method}. ClientId: {ClientId}.",
+                    method,
+                    _options.ClientId);
+                return parsed;
+            }
+            catch (OperationCanceledException exception)
+            {
+                await HandleAmbiguousSubscriptionStateAsync(method, exception);
+                throw;
+            }
+        }
+        finally
+        {
+            _lifecycleLock.Release();
+        }
+    }
+
+    private async Task HandleAmbiguousSubscriptionStateAsync(string method, OperationCanceledException exception)
+    {
+        _logger.LogWarning(
+            exception,
+            "DevHub WebSocket subscription lifecycle request became ambiguous. Method: {Method}. ClientId: {ClientId}. The current session will be discarded.",
+            method,
+            _options.ClientId);
+        ResetSessionState(new InvalidOperationException(
+            $"{method} 在结果返回前已超时或被取消；当前 WebSocket 会话已失效，必须重新认证并重新订阅。",
+            exception));
+        await DisconnectSessionAsync("subscription_state_ambiguous");
+    }
+
+    private async Task DisconnectSessionAsync(string reason)
+    {
+        try
+        {
+            await _session.DisconnectAsync(reason, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(
+                exception,
+                "DevHub WebSocket session disconnect raised an exception during cleanup. ClientId: {ClientId}. Reason: {Reason}.",
+                _options.ClientId,
+                reason);
+        }
+    }
+
+    private void ResetSessionState(Exception? terminalException = null)
+    {
+        _authenticated = false;
+        _eventStreamAvailable = false;
+        _eventChannel.Writer.TryComplete(terminalException);
     }
 
     private sealed class AuthenticateResultContract

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Sdk;
 
@@ -58,9 +59,39 @@ public sealed class DevHubClient : IAsyncDisposable
         clonedOptions.Validate();
 
         dependencies ??= new DevHubClientDependencies();
-        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var loggerFactory = dependencies.LoggerFactory;
+        var logger = loggerFactory.CreateLogger<DevHubClient>();
+        logger.LogInformation(
+            "Starting DevHub runtime discovery for HTTP client {ClientId}. DataDir override set: {HasDataDirOverride}.",
+            clonedOptions.ClientId,
+            !string.IsNullOrWhiteSpace(clonedOptions.DataDir));
+
+        DevHubRuntimeConnectionInfo connectionInfo;
+        try
+        {
+            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "DevHub runtime discovery failed for HTTP client {ClientId}.",
+                clonedOptions.ClientId);
+            throw;
+        }
+
+        logger.LogInformation(
+            "Resolved DevHub runtime for HTTP client {ClientId}. RpcEndpoint: {RpcEndpoint}.",
+            clonedOptions.ClientId,
+            connectionInfo.RpcEndpoint);
+
         var httpClient = dependencies.HttpClientProvider.CreateClient(clonedOptions, connectionInfo);
-        var transport = new JsonRpcHttpTransport(httpClient, clonedOptions, connectionInfo, ownsHttpClient: true);
+        var transport = new JsonRpcHttpTransport(
+            httpClient,
+            clonedOptions,
+            connectionInfo,
+            loggerFactory.CreateLogger<JsonRpcHttpTransport>(),
+            ownsHttpClient: true);
         return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
 
@@ -75,7 +106,13 @@ public sealed class DevHubClient : IAsyncDisposable
 
         var connectionInfo = await new FileSystemDevHubRuntimeResolver().ResolveAsync(clonedOptions, cancellationToken);
         var httpClient = JsonRpcHttpTransport.CreateHttpClient(handler);
-        var transport = new JsonRpcHttpTransport(httpClient, clonedOptions, connectionInfo, requestIdFactory, ownsHttpClient: true);
+        var transport = new JsonRpcHttpTransport(
+            httpClient,
+            clonedOptions,
+            connectionInfo,
+            logger: null,
+            requestIdFactory: requestIdFactory,
+            ownsHttpClient: true);
         return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
 
@@ -236,8 +273,8 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="instance">实例注册载荷。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>注册后的实例。返回值中的 <see cref="AppInstance.InstanceSessionToken"/> 可用于后续心跳、反注册与调用处理。</returns>
-    public async Task<AppInstance> RegisterInstanceAsync(
+    /// <returns>注册结果。调用方应通过返回值中的 <see cref="RegisterInstanceResult.Instance" /> 读取实例快照，并使用 <see cref="RegisterInstanceResult.InstanceSessionToken" /> 进行后续实例生命周期调用。</returns>
+    public async Task<RegisterInstanceResult> RegisterInstanceAsync(
         AppInstanceRegistration instance,
         string password,
         CancellationToken cancellationToken = default)
@@ -266,8 +303,11 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
-        payload.Instance.InstanceSessionToken = payload.InstanceSessionToken;
-        return payload.Instance;
+        return new RegisterInstanceResult
+        {
+            Instance = payload.Instance,
+            InstanceSessionToken = payload.InstanceSessionToken
+        };
     }
 
     /// <summary>

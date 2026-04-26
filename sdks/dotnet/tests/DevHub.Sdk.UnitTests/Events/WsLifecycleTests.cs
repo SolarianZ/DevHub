@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Sdk.UnitTests.Events;
 
@@ -306,7 +308,7 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Equal("ws.app", definition.AppId);
         Assert.Equal(string.Empty, definition.Scope);
         Assert.Equal("inst-1", instance.InstanceId);
-        Assert.Null(instance.InstanceSessionToken);
+        Assert.DoesNotContain("instanceSessionToken", JsonSerializer.Serialize(instance));
         Assert.Equal("inst-1", instances.Single().InstanceId);
 
         var listDefinitionsRequest = connection.SentTexts.Single(sent => sent.Contains("hub.apps.listDefinitions", StringComparison.Ordinal));
@@ -770,6 +772,53 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task EventsClient_WhenAuthenticateCalledConcurrently_ShouldSerializeAuthenticateRequestAndLogLifecycle()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var loggerFactory = new RecordingLoggerFactory();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal)
+                ? []
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            new DevHubEventsClientDependencies
+            {
+                LoggerFactory = loggerFactory
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-auth-2").Create,
+            CancellationToken.None);
+
+        var firstAuthenticateTask = client.AuthenticateAsync();
+        await WaitUntilAsync(() => connection.SentTexts.Count == 1);
+
+        var secondAuthenticateTask = client.AuthenticateAsync();
+        await Task.Delay(50);
+        Assert.False(secondAuthenticateTask.IsCompleted);
+
+        connection.Enqueue(CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}"""));
+
+        await firstAuthenticateTask;
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => secondAuthenticateTask);
+
+        Assert.Contains("已完成认证", exception.Message, StringComparison.Ordinal);
+        Assert.Single(connection.SentTexts, sent => sent.Contains("hub.ws.authenticate", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Authenticating DevHub WebSocket session", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Authenticated DevHub WebSocket session", StringComparison.Ordinal));
+        Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-1", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task EventsClient_WhenAuthenticateReturnsInvalidSuccessPayload_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -845,6 +894,188 @@ public sealed class WsLifecycleTests : IDisposable
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthenticateAsync());
         Assert.Contains("响应", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EventsClient_WhenSubscribeTimesOut_ShouldDisconnectAndRequireReauthentication()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var loggerFactory = new RecordingLoggerFactory();
+
+        var firstConnection = new FakeWebSocketConnection();
+        firstConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            return [];
+        };
+
+        var secondConnection = new FakeWebSocketConnection();
+        secondConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-2\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-2","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-2\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-2","result":{"ok":true,"subscriptionId":"sub-2"}}""")];
+            }
+
+            return [];
+        };
+
+        var factory = new SequenceWebSocketConnectionFactory(firstConnection, secondConnection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir,
+                RequestTimeout = TimeSpan.FromMilliseconds(50)
+            },
+            new DevHubEventsClientDependencies
+            {
+                LoggerFactory = loggerFactory
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-timeout-1", "ws-auth-2", "ws-sub-2").Create,
+            CancellationToken.None);
+
+        await client.AuthenticateAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted }));
+        Assert.True(firstConnection.CloseCallCount >= 1);
+        Assert.Contains("subscription_state_ambiguous", firstConnection.CloseStatusDescriptions);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted }));
+        _ = await AssertReadEventsThrowsInvalidOperationAsync(client);
+
+        await client.AuthenticateAsync();
+        var subscriptionId = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        Assert.Equal("sub-2", subscriptionId);
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("subscription lifecycle request became ambiguous", StringComparison.Ordinal));
+        Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EventsClient_WhenUnsubscribeTimesOut_ShouldDisconnectAndRequireReauthentication()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+
+        var firstConnection = new FakeWebSocketConnection();
+        firstConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}""")];
+            }
+
+            return [];
+        };
+
+        var secondConnection = new FakeWebSocketConnection();
+        secondConnection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-2\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-2","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-2\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-2","result":{"ok":true,"subscriptionId":"sub-2"}}""")];
+            }
+
+            return [];
+        };
+
+        var factory = new SequenceWebSocketConnectionFactory(firstConnection, secondConnection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir,
+                RequestTimeout = TimeSpan.FromMilliseconds(50)
+            },
+            new DevHubEventsClientDependencies(),
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1", "ws-unsub-timeout-1", "ws-auth-2", "ws-sub-2").Create,
+            CancellationToken.None);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.UnsubscribeAsync("sub-1"));
+        Assert.True(firstConnection.CloseCallCount >= 1);
+        Assert.Contains("subscription_state_ambiguous", firstConnection.CloseStatusDescriptions);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.UnsubscribeAsync("sub-1"));
+
+        await client.AuthenticateAsync();
+        var subscriptionId = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+        Assert.Equal("sub-2", subscriptionId);
+    }
+
+    [Fact]
+    public async Task EventsClient_WhenEventBufferOverflows_ShouldTerminateCurrentStreamAndLogFailure()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var loggerFactory = new RecordingLoggerFactory();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}""")];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            new DevHubEventsClientDependencies
+            {
+                LoggerFactory = loggerFactory
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create,
+            CancellationToken.None);
+
+        await client.AuthenticateAsync();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.InvocationCompleted });
+
+        for (var index = 0; index <= DevHubEventsClient.DefaultEventBufferCapacity; index++)
+        {
+            connection.Enqueue(CreateTextMessage(
+                "{\"jsonrpc\":\"2.0\",\"method\":\"hub.event\",\"params\":{\"subscriptionId\":\"sub-1\",\"type\":\"invocation.completed\",\"timeUtc\":\"2026-03-09T00:00:00Z\",\"payload\":{\"invocationId\":\"invk-"
+                + index
+                + "\"}}}"));
+        }
+
+        await WaitUntilAsync(() => connection.CloseCallCount == 1);
+
+        var exception = await AssertReadEventsThrowsInvalidOperationAsync(client);
+        Assert.Contains("事件流不可用", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("event buffer overflowed", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -1229,6 +1460,10 @@ public sealed class WsLifecycleTests : IDisposable
 
         public WebSocketState State { get; private set; } = WebSocketState.Open;
 
+        public int CloseCallCount { get; private set; }
+
+        public List<string?> CloseStatusDescriptions { get; } = [];
+
         public void Enqueue(WebSocketReceiveMessage message)
         {
             _messages.Enqueue(message);
@@ -1270,6 +1505,8 @@ public sealed class WsLifecycleTests : IDisposable
         public Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
         {
             State = WebSocketState.Closed;
+            CloseCallCount++;
+            CloseStatusDescriptions.Add(statusDescription);
             return Task.CompletedTask;
         }
 
@@ -1306,5 +1543,56 @@ public sealed class WsLifecycleTests : IDisposable
         }
 
         return string.Join(" | ", messages);
+    }
+
+    private sealed class RecordingLoggerFactory : ILoggerFactory
+    {
+        public ConcurrentQueue<LogEntry> Entries { get; } = [];
+
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new RecordingLogger(categoryName, Entries);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class RecordingLogger(string categoryName, ConcurrentQueue<LogEntry> entries) : ILogger
+    {
+        private readonly string _categoryName = categoryName;
+        private readonly ConcurrentQueue<LogEntry> _entries = entries;
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return NullScope.Instance;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            _entries.Enqueue(new LogEntry(_categoryName, logLevel, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(string Category, LogLevel Level, string Message);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevHub.Sdk;
 
@@ -12,6 +14,7 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
     private readonly HttpClient _httpClient;
     private readonly DevHubClientOptions _options;
     private readonly DevHubRuntimeConnectionInfo _connectionInfo;
+    private readonly ILogger _logger;
     private readonly Func<string> _requestIdFactory;
     private readonly bool _ownsHttpClient;
 
@@ -21,18 +24,21 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
     /// <param name="httpClient">底层 HTTP 客户端。</param>
     /// <param name="options">客户端选项。</param>
     /// <param name="connectionInfo">运行时连接信息。</param>
+    /// <param name="logger">可选日志器。</param>
     /// <param name="requestIdFactory">请求标识工厂。</param>
     /// <param name="ownsHttpClient">当前 transport 是否负责释放 <paramref name="httpClient"/>。</param>
     internal JsonRpcHttpTransport(
         HttpClient httpClient,
         DevHubClientOptions options,
         DevHubRuntimeConnectionInfo connectionInfo,
+        ILogger? logger = null,
         Func<string>? requestIdFactory = null,
         bool ownsHttpClient = false)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
         _connectionInfo = connectionInfo ?? throw new ArgumentNullException(nameof(connectionInfo));
+        _logger = logger ?? NullLogger.Instance;
         _requestIdFactory = requestIdFactory ?? CreateRequestId;
         _ownsHttpClient = ownsHttpClient;
     }
@@ -49,6 +55,11 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
 
         var requestId = _requestIdFactory();
+        _logger.LogInformation(
+            "Sending DevHub HTTP RPC request. Method: {Method}. RequestId: {RequestId}. RpcEndpoint: {RpcEndpoint}.",
+            method,
+            requestId,
+            _connectionInfo.RpcEndpoint);
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, _connectionInfo.RpcEndpoint);
         requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _connectionInfo.Token);
         requestMessage.Headers.TryAddWithoutValidation("X-DevHub-Protocol", _options.ProtocolVersion.ToString(CultureInfo.InvariantCulture));
@@ -66,17 +77,59 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
 
         requestMessage.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-        using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-        using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
-        var body = await responseMessage.Content.ReadAsStringAsync(linkedCts.Token);
-
-        if (!responseMessage.IsSuccessStatusCode)
+        try
         {
-            throw new InvalidOperationException($"HTTP 请求失败：{(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}，响应体：{body}");
-        }
+            using var linkedCts = CreateLinkedTokenSource(cancellationToken);
+            using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
+            var body = await responseMessage.Content.ReadAsStringAsync(linkedCts.Token);
 
-        using var document = JsonDocument.Parse(body);
-        return ValidateResponseEnvelope(document.RootElement, requestId);
+            if (!responseMessage.IsSuccessStatusCode)
+            {
+                _logger.LogError(
+                    "DevHub HTTP RPC request failed with HTTP status. Method: {Method}. RequestId: {RequestId}. RpcEndpoint: {RpcEndpoint}. StatusCode: {StatusCode}.",
+                    method,
+                    requestId,
+                    _connectionInfo.RpcEndpoint,
+                    (int)responseMessage.StatusCode);
+                throw new InvalidOperationException($"HTTP 请求失败：{(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}，响应体：{body}");
+            }
+
+            using var document = JsonDocument.Parse(body);
+            var result = ValidateResponseEnvelope(document.RootElement, requestId);
+            _logger.LogInformation(
+                "DevHub HTTP RPC request completed. Method: {Method}. RequestId: {RequestId}.",
+                method,
+                requestId);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "DevHub HTTP RPC request timed out or was canceled. Method: {Method}. RequestId: {RequestId}. RpcEndpoint: {RpcEndpoint}.",
+                method,
+                requestId,
+                _connectionInfo.RpcEndpoint);
+            throw;
+        }
+        catch (DevHubRpcException exception)
+        {
+            _logger.LogWarning(
+                "DevHub HTTP RPC request returned RPC error. Method: {Method}. RequestId: {RequestId}. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}.",
+                method,
+                requestId,
+                exception.Code,
+                exception.Message);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "DevHub HTTP RPC request failed while validating response. Method: {Method}. RequestId: {RequestId}.",
+                method,
+                requestId);
+            throw;
+        }
     }
 
     internal HttpClient HttpClient => _httpClient;

@@ -168,7 +168,7 @@ public sealed class EventsFlowTests
         Assert.Equal("events.ws.read.app", definition.AppId);
         Assert.Equal(string.Empty, definition.Scope);
         Assert.Equal("events-ws-read-inst-1", instance.InstanceId);
-        Assert.Null(instance.InstanceSessionToken);
+        Assert.DoesNotContain("instanceSessionToken", JsonSerializer.Serialize(instance));
         Assert.Contains(definitions, item => item.AppId == "events.ws.read.app");
         Assert.Contains(instances, item => item.InstanceId == "events-ws-read-inst-1");
     }

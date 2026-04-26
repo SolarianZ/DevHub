@@ -35,9 +35,12 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`。
 - HTTP JSON-RPC：覆盖 `hub.ping`、`hub.apps.*` 与 `hub.invoke.*`。
 - WebSocket Events：覆盖 `hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe` 与 `hub.event`。
+- loopback runtime discovery：接受 `localhost`、IPv4 loopback 与 IPv6 loopback 形式的合法 `hub.json` 端点。
 - 单读取器事件契约：每个 `DevHubEventsClient` 同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。
+- 分离的实例注册结果：`RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，将 `AppInstance` 快照与 `InstanceSessionToken` 分离。
+- 事件恢复约束：订阅结果未知或本地事件缓冲溢出时，当前 WebSocket 会话终止，后续需要重新认证并重新订阅。
 - 已放弃请求本地维护：`DevHubEventsClient` 提供 `GetAbandonedRequestCount(...)` 与 `ClearAbandonedRequests(...)`，可按过滤器统计或清理本地已放弃请求记录。
-- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam；`AddDevHubSdk` 与客户端工厂位于 companion package。
+- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam、可选 `ILoggerFactory`；`AddDevHubSdk` 与客户端工厂位于 companion package。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
 - 统一错误模型：`DevHubRpcException`；协议 `error.data` 通过 `ErrorData` 暴露，非对象响应会被视为非法 JSON-RPC 包。
 
@@ -178,7 +181,41 @@ if (validation.Valid)
 
 所有会序列化 `scope` 的出站模型都必须显式赋值 `Scope`。Global 作用域使用 `string.Empty`，未赋值状态会在本地直接失败。
 
-### 6.3 事件订阅
+### 6.3 注册实例与实例所有权凭据
+
+```csharp
+using DevHub.Sdk;
+using DevHub.Sdk.Models;
+
+await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+{
+    ClientId = "instance-owner"
+});
+
+var registered = await client.RegisterInstanceAsync(
+    new AppInstanceRegistration
+    {
+        InstanceId = "sample-inst-1",
+        AppId = "sample.app",
+        Scope = string.Empty,
+        Pid = Environment.ProcessId,
+        Invoke = new InvokeCapability
+        {
+            Poll = true,
+            Respond = true
+        }
+    },
+    password: "instance-password");
+
+var snapshot = registered.Instance;
+var token = registered.InstanceSessionToken;
+```
+
+- `RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，其中 `Instance` 为 `AppInstance` 快照，`InstanceSessionToken` 为实例所有权凭据。
+- `AppInstance`、`GetInstanceAsync(...)`、`ListInstancesAsync(...)` 与 `app.instance.*` 事件载荷都不包含 `instanceSessionToken`。
+- `HeartbeatAsync(...)`、`UnregisterInstanceAsync(...)`、`PollAsync(...)` 与 `RespondAsync(...)` 需要显式使用 `RegisterInstanceResult.InstanceSessionToken`。
+
+### 6.4 事件订阅
 
 ```csharp
 using DevHub.Sdk;
@@ -204,9 +241,15 @@ await foreach (var evt in eventsClient.ReadEventsAsync())
 await eventsClient.UnsubscribeAsync(subscriptionId);
 ```
 
-`DevHubEventsClient` 在同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
+`DevHubEventsClient` 的运行时约束如下：
 
-### 6.4 已放弃请求维护
+- 同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。
+- 同一实例上的 `AuthenticateAsync(...)` 会串行执行，避免并发认证竞态。
+- 若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
+- `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在请求发出后若因超时或取消进入结果未知状态，SDK 会主动废弃当前 WebSocket 会话；后续必须重新认证并重新订阅。
+- 本地事件缓冲采用有界 fail-fast 队列；消费者处理速度落后导致缓冲溢出时，当前事件流会终止，并要求重新认证与重新订阅。
+
+### 6.5 已放弃请求维护
 
 `DevHubEventsClient` 暴露两组纯本地维护接口：
 
@@ -251,7 +294,8 @@ var client = await DevHubClient.FromRuntimeAsync(
     new DevHubClientDependencies
     {
         RuntimeResolver = runtimeResolver,
-        HttpClientProvider = httpClientProvider
+        HttpClientProvider = httpClientProvider,
+        LoggerFactory = loggerFactory
     });
 
 var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
@@ -262,11 +306,14 @@ var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
     },
     new DevHubEventsClientDependencies
     {
-        RuntimeResolver = runtimeResolver
+        RuntimeResolver = runtimeResolver,
+        LoggerFactory = loggerFactory
     });
 ```
 
 `HttpClientProvider` 只负责为当前 `DevHubClient` 提供底层 `HttpClient`，JSON-RPC 请求封装、错误映射与响应校验仍由 SDK 内部负责。低层 `JsonRpcHttpTransport` / `JsonRpcWebSocketSession` 不属于稳定公开契约。
+
+`LoggerFactory` 为可选扩展点。配置后，SDK 会输出 runtime discovery、HTTP/WS 连接生命周期、认证、订阅迁移、缓冲溢出与终止协议错误的结构化日志；日志不会写出 bearer token、`instanceSessionToken` 或 token 文件内容。
 
 ## 8. 最小验证方式
 

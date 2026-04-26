@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DevHub.Sdk.UnitTests.PublicSeams;
 
@@ -41,6 +42,32 @@ public sealed class PublicExtensionPointTests
         Assert.Equal("1", httpClientProvider.LastRequest.Protocol);
         Assert.Equal("public-http-client", httpClientProvider.LastRequest.ClientId);
         Assert.Equal("hub.ping", httpClientProvider.LastRequest.Method);
+    }
+
+    [Fact]
+    public async Task DevHubClient_FromRuntime_WithInjectedLoggerFactory_ShouldEmitDiscoveryAndHttpDiagnosticsWithoutLeakingToken()
+    {
+        var connectionInfo = CreateConnectionInfo();
+        var loggerFactory = new RecordingLoggerFactory();
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "public-http-client",
+                DataDir = @"D:\sdk-test\data"
+            },
+            new DevHubClientDependencies
+            {
+                RuntimeResolver = new RecordingRuntimeResolver(connectionInfo),
+                HttpClientProvider = new RecordingHttpClientProvider(),
+                LoggerFactory = loggerFactory
+            });
+
+        _ = await client.PingAsync(new { channel = "http" });
+
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Starting DevHub runtime discovery for HTTP client", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Sending DevHub HTTP RPC request", StringComparison.Ordinal));
+        Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-public", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -120,10 +147,35 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
+    public async Task DevHubEventsClient_FromRuntime_WithInjectedLoggerFactory_ShouldEmitRuntimeDiscoveryDiagnosticsWithoutLeakingToken()
+    {
+        var connectionInfo = CreateConnectionInfo();
+        var loggerFactory = new RecordingLoggerFactory();
+
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "public-events-client",
+                DataDir = @"D:\sdk-test\data"
+            },
+            new DevHubEventsClientDependencies
+            {
+                RuntimeResolver = new RecordingRuntimeResolver(connectionInfo),
+                LoggerFactory = loggerFactory
+            });
+
+        Assert.Equal(connectionInfo.Runtime.WsUrl, client.Runtime.WsUrl);
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Starting DevHub runtime discovery for WebSocket client", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for WebSocket client", StringComparison.Ordinal));
+        Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-public", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void PublicSurface_ShouldHideLowLevelTransportAndSessionTypes()
     {
         var exportedTypeNames = typeof(DevHubClient).Assembly.GetExportedTypes().Select(type => type.Name).ToArray();
 
+        Assert.Contains("RegisterInstanceResult", exportedTypeNames);
         Assert.Contains("VersionCompatibilityResult", exportedTypeNames);
         Assert.Contains("VersionCompatibilityStatus", exportedTypeNames);
         Assert.DoesNotContain("IDevHubHttpTransport", exportedTypeNames);
@@ -255,5 +307,56 @@ public sealed class PublicExtensionPointTests
         public Uri? RequestUri { get; init; }
 
         public string Method { get; init; } = string.Empty;
+    }
+
+    private sealed class RecordingLoggerFactory : ILoggerFactory
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new RecordingLogger(categoryName, Entries);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class RecordingLogger(string categoryName, List<LogEntry> entries) : ILogger
+    {
+        private readonly string _categoryName = categoryName;
+        private readonly List<LogEntry> _entries = entries;
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return NullScope.Instance;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            _entries.Add(new LogEntry(_categoryName, logLevel, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(string Category, LogLevel Level, string Message);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

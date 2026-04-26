@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace DevHub.Sdk;
@@ -79,11 +81,13 @@ public static class DevHubServiceCollectionExtensions
     private sealed class DefaultDevHubClientFactory(
         IOptionsMonitor<DevHubClientOptions> optionsMonitor,
         IDevHubRuntimeResolver runtimeResolver,
-        IDevHubHttpClientProvider httpClientProvider) : IDevHubClientFactory
+        IDevHubHttpClientProvider httpClientProvider,
+        IServiceProvider serviceProvider) : IDevHubClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
         private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
         private readonly IDevHubHttpClientProvider _httpClientProvider = httpClientProvider;
+        private readonly IServiceProvider _serviceProvider = serviceProvider;
 
         public Task<DevHubClient> CreateAsync(CancellationToken cancellationToken = default)
         {
@@ -92,7 +96,8 @@ public static class DevHubServiceCollectionExtensions
                 new DevHubClientDependencies
                 {
                     RuntimeResolver = _runtimeResolver,
-                    HttpClientProvider = _httpClientProvider
+                    HttpClientProvider = _httpClientProvider,
+                    LoggerFactory = _serviceProvider.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance
                 },
                 cancellationToken);
         }
@@ -100,10 +105,12 @@ public static class DevHubServiceCollectionExtensions
 
     private sealed class DefaultDevHubEventsClientFactory(
         IOptionsMonitor<DevHubClientOptions> optionsMonitor,
-        IDevHubRuntimeResolver runtimeResolver) : IDevHubEventsClientFactory
+        IDevHubRuntimeResolver runtimeResolver,
+        IServiceProvider serviceProvider) : IDevHubEventsClientFactory
     {
         private readonly IOptionsMonitor<DevHubClientOptions> _optionsMonitor = optionsMonitor;
         private readonly IDevHubRuntimeResolver _runtimeResolver = runtimeResolver;
+        private readonly IServiceProvider _serviceProvider = serviceProvider;
 
         public Task<DevHubEventsClient> CreateAsync(CancellationToken cancellationToken = default)
         {
@@ -111,7 +118,8 @@ public static class DevHubServiceCollectionExtensions
                 _optionsMonitor.CurrentValue,
                 new DevHubEventsClientDependencies
                 {
-                    RuntimeResolver = _runtimeResolver
+                    RuntimeResolver = _runtimeResolver,
+                    LoggerFactory = _serviceProvider.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance
                 },
                 cancellationToken);
         }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using DevHub.Sdk.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace DevHub.Sdk.DependencyInjection.UnitTests;
@@ -20,6 +21,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         var runtimeResolver = new RecordingRuntimeResolver(CreateConnectionInfo());
         var handler = new RecordingHandler();
+        var loggerFactory = new RecordingLoggerFactory();
 
         var services = new ServiceCollection();
         services.AddDevHubSdk(options =>
@@ -28,6 +30,7 @@ public sealed class ServiceCollectionExtensionsTests
             options.RequestTimeout = TimeSpan.FromSeconds(5);
         });
         services.Replace(ServiceDescriptor.Singleton<IDevHubRuntimeResolver>(runtimeResolver));
+        services.AddSingleton<ILoggerFactory>(loggerFactory);
         services.AddHttpClient(DevHubServiceCollectionExtensions.DefaultHttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => handler);
 
@@ -48,6 +51,8 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Equal("di-client", handler.LastRequest.ClientId);
         Assert.Equal("hub.ping", handler.LastRequest.Method);
         Assert.Equal(2, runtimeResolver.ResolveCallCount);
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for HTTP client", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for WebSocket client", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -146,5 +151,56 @@ public sealed class ServiceCollectionExtensionsTests
         public string ClientId { get; init; } = string.Empty;
 
         public string Method { get; init; } = string.Empty;
+    }
+
+    private sealed class RecordingLoggerFactory : ILoggerFactory
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new RecordingLogger(categoryName, Entries);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class RecordingLogger(string categoryName, List<LogEntry> entries) : ILogger
+    {
+        private readonly string _categoryName = categoryName;
+        private readonly List<LogEntry> _entries = entries;
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return NullScope.Instance;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            _entries.Add(new LogEntry(_categoryName, logLevel, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(string Category, LogLevel Level, string Message);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static NullScope Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
     }
 }

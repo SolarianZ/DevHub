@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DevHub.Sdk;
 
@@ -15,6 +17,7 @@ internal sealed class DevHubWebSocketSessionOptions
     private Uri? _webSocketEndpoint;
     private Action<JsonElement>? _onEvent;
     private Action<Exception?>? _onTerminated;
+    private ILogger? _logger;
 
     /// <summary>
     /// WebSocket 端点。
@@ -46,6 +49,15 @@ internal sealed class DevHubWebSocketSessionOptions
     {
         get => _onTerminated ?? throw new InvalidOperationException("OnTerminated 尚未设置。");
         init => _onTerminated = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// 可选日志器。
+    /// </summary>
+    public ILogger Logger
+    {
+        get => _logger ?? NullLogger.Instance;
+        init => _logger = value ?? NullLogger.Instance;
     }
 }
 
@@ -111,6 +123,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
     private readonly DevHubWebSocketSessionOptions _options;
     private readonly IWebSocketConnectionFactory _connectionFactory;
+    private readonly ILogger _logger;
     private readonly Func<string> _requestIdFactory;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pendingRequests;
     private readonly ConcurrentDictionary<string, AbandonedRequestEntry> _abandonedRequests;
@@ -140,6 +153,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _logger = options.Logger;
         _requestIdFactory = requestIdFactory ?? CreateRequestId;
         _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JsonElement>>(StringComparer.Ordinal);
         _abandonedRequests = new ConcurrentDictionary<string, AbandonedRequestEntry>(StringComparer.Ordinal);
@@ -195,13 +209,32 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
                 return;
             }
 
-            var connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token);
+            _logger.LogInformation(
+                "Opening DevHub WebSocket session. WebSocketEndpoint: {WebSocketEndpoint}.",
+                _options.WebSocketEndpoint);
+            IWebSocketConnection connection;
+            try
+            {
+                connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Failed to open DevHub WebSocket session. WebSocketEndpoint: {WebSocketEndpoint}.",
+                    _options.WebSocketEndpoint);
+                throw;
+            }
+
             var connectionReceiveLoopCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
             _connection = connection;
             _connectionReceiveLoopCts = connectionReceiveLoopCts;
             _receiverLoopTask = Task.Run(
                 () => RunReceiveLoopAsync(connection, connectionReceiveLoopCts, connectionReceiveLoopCts.Token),
                 CancellationToken.None);
+            _logger.LogInformation(
+                "Opened DevHub WebSocket session. WebSocketEndpoint: {WebSocketEndpoint}.",
+                _options.WebSocketEndpoint);
         }
         finally
         {
@@ -252,6 +285,10 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         catch (OperationCanceledException)
         {
             MarkPendingRequestAsAbandoned(requestId, method, parameters);
+            _logger.LogWarning(
+                "DevHub WebSocket request timed out or was canceled. Method: {Method}. RequestId: {RequestId}.",
+                method,
+                requestId);
             throw;
         }
         catch
@@ -264,6 +301,10 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     /// <inheritdoc />
     public async Task DisconnectAsync(string reason, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation(
+            "Disconnecting DevHub WebSocket session. WebSocketEndpoint: {WebSocketEndpoint}. Reason: {Reason}.",
+            _options.WebSocketEndpoint,
+            reason);
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
@@ -422,6 +463,20 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             _abandonedRequests.Clear();
             await DisposeConnectionAsync(connection, "connection_closed", CancellationToken.None);
 
+            if (terminalException is null)
+            {
+                _logger.LogWarning(
+                    "DevHub WebSocket session closed. WebSocketEndpoint: {WebSocketEndpoint}.",
+                    _options.WebSocketEndpoint);
+            }
+            else
+            {
+                _logger.LogError(
+                    terminalException,
+                    "DevHub WebSocket session terminated with a protocol or transport error. WebSocketEndpoint: {WebSocketEndpoint}.",
+                    _options.WebSocketEndpoint);
+            }
+
             if (!_disposed && !_suppressNextTerminationCallback)
             {
                 _options.OnTerminated(terminalException);
@@ -576,6 +631,10 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     {
         if (_pendingRequests.TryRemove(requestId, out _))
         {
+            _logger.LogWarning(
+                "Tracked DevHub WebSocket request as abandoned after local cancellation. Method: {Method}. RequestId: {RequestId}.",
+                method,
+                requestId);
             _abandonedRequests[requestId] = new AbandonedRequestEntry(
                 requestId,
                 method,

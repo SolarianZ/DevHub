@@ -55,13 +55,13 @@ public sealed class HttpFlowTests
             Meta = new { source = "integration" }
         }, InstancePassword);
 
-        Assert.Equal("http-flow-inst-1", registered.InstanceId);
+        Assert.Equal("http-flow-inst-1", registered.Instance.InstanceId);
         Assert.False(string.IsNullOrWhiteSpace(registered.InstanceSessionToken));
 
         var instance = await client.GetInstanceAsync("http-flow-inst-1");
         Assert.Equal("http-flow-inst-1", instance.InstanceId);
         Assert.Equal("http.flow.app", instance.AppId);
-        Assert.Null(instance.InstanceSessionToken);
+        Assert.DoesNotContain("instanceSessionToken", JsonSerializer.Serialize(instance));
 
         var instances = await client.ListInstancesAsync(new ListInstancesRequest
         {

@@ -58,7 +58,7 @@ public sealed class LaunchFlowTests
             Scope = string.Empty
         });
         Assert.Equal("already_running", alreadyRunning.Status);
-        Assert.Equal(registered.Pid, alreadyRunning.Pid);
+        Assert.Equal(registered.Instance.Pid, alreadyRunning.Pid);
 
         var firstDedupeLaunch = await client.LaunchAsync(new LaunchRequest
         {

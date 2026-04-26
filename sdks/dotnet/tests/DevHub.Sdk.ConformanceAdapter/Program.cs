@@ -250,9 +250,8 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
                     var registered = await client.RegisterInstanceAsync(instance, password);
-                    var instanceSessionToken = registered.InstanceSessionToken
-                        ?? throw new InvalidOperationException($"request.steps[{index}] 注册结果缺少 instanceSessionToken。");
-                    registeredInstances.Add((clientName, registered.InstanceId, instanceSessionToken));
+                    var instanceSessionToken = registered.InstanceSessionToken;
+                    registeredInstances.Add((clientName, registered.Instance.InstanceId, instanceSessionToken));
                     if (step.TryGetProperty("captureAs", out var captureElement))
                     {
                         captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] = instanceSessionToken;
