@@ -16,6 +16,13 @@
 
 当前 Host 对 HTTP `X-DevHub-ClientSessionId` 和 WS `hub.ws.authenticate.clientSessionId` 都要求带连字符的 UUID 字符串（`D` 格式）。
 
+JSON-RPC 信封约束：
+
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
+- notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
+- `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
+
 ## 2. 接口速览表
 
 | 接口                          | 传输          | 能力说明                                                    |
@@ -252,7 +259,8 @@
 - `options.ttlMs` 如果出现，必须是大于等于 `1000` 的整数。
 - 指定 `target.instanceId` 时，当前 Host 不允许显式传 `options.autoLaunch = true`。
 - 当前 Host 要求 `options.autoLaunch = true` 时同时满足 `options.queueIfOffline = true`。
-- 如果以 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；需要读取成功结果或错误时，必须改为发送带 `id` 的普通 request。
+- 带 `id` 调用时，传输层按普通 request 处理；成功响应体可读取 `{ "ok": true, "invocationId": "..." }`，失败时返回 JSON-RPC `error`。
+- 如果以 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；本次响应无法携带业务错误码或错误对象，需要读取成功结果或错误时，必须改为发送带 `id` 的普通 request。
 
 ### 3.14 `hub.invoke.request`
 

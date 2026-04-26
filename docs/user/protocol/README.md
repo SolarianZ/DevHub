@@ -78,6 +78,13 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - 浏览器 / WebView 首次向 `/rpc` 发起带 `Origin` 的调用时，Host 会先处理 `OPTIONS /rpc` 预检，回显当前请求 `Origin`，并声明 `POST`、`OPTIONS` 以及 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId` 可用于后续正式请求。
 - 实际 `POST /rpc` 仍必须携带本节列出的全部协议头与 Bearer Token；无论 RPC 结果成功还是返回 JSON-RPC `error`，带 `Origin` 的响应都可以读取原始响应体。
 
+JSON-RPC 信封约束：
+
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
+- notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
+- `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
+
 最小健康检查可以直接调用 `hub.ping`。原始 JSON 示例见：
 
 - [`ping.request.json`](../../specification/protocol-examples/v1.0.1/http/ping.request.json)
@@ -127,7 +134,8 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - `hub.apps.listInstances` 支持可选 `appId` 与 `includeOffline`，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global 实例，其他合法字符串按精确作用域过滤。
 - 只有 `hub.apps.listDefinitions.scope` 与 `hub.apps.listInstances.scope` 接受 `scope: null` 表示“不限制作用域”，且这两个接口也必须显式携带 `scope` 字段。
 - `hub.apps.launch.scope` 与 `hub.invoke.*.target.scope` 都必须显式给出合法字符串；`scope: ""` 表示仅限 Global，缺失 `scope` 或使用 `scope: null` 都属于非法请求。
-- `hub.invoke.notify` 如果按 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；需要读取 JSON-RPC 成功结果或错误时，必须改为发送带 `id` 的普通 request。
+- `hub.invoke.notify` 带 `id` 调用时属于普通 request，成功响应体可读取 `{ "ok": true, "invocationId": "..." }`，失败时返回 JSON-RPC `error`。
+- `hub.invoke.notify` 如果按 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；本次响应无法携带业务错误码或错误对象，需要读取 JSON-RPC 成功结果或错误时，必须改为发送带 `id` 的普通 request。
 - 浏览器 / WebView 预检成功仅代表 `/rpc` 可建立 HTTP 会话；WebSocket 连接与 `hub.ws.authenticate` 仍按协议规范单独处理。
 
 ## 4. WebSocket 鉴权与事件订阅
@@ -204,7 +212,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - 必须忽略未知响应字段。
 - 必须将未知错误码按通用错误处理，而不是直接崩溃。
 - 必须把 HTTP 状态码 `200 OK` 与 JSON-RPC `error` 区分开看：HTTP 成功不代表 RPC 成功。
-- 必须区分“HTTP 空 `200` notification 响应”和“带 JSON-RPC `result` 的普通 request 响应”；`hub.invoke.notify` 若省略 `id`，空响应体属于成功收口，不表示缺包。
+- 必须区分“HTTP 空 `200` notification 响应”和“带 JSON-RPC `result` 或 `error` 的普通 request 响应”；`hub.invoke.notify` 若省略 `id`，空响应体仅表示 notification 路径已结束，不能据此判断业务成功或失败。
 
 ## 6. Schema 与原始协议示例
 
