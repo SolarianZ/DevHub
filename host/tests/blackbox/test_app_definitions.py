@@ -484,9 +484,9 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
-    def test_register_instance_should_reject_undeclared_scope_for_definition_managed_app(self):
-        """测试 Definition 管理下的 appId 不能注册到未声明 scope"""
-        result = TestResult("测试 Definition 管理 appId 拒绝未声明 scope 注册")
+    def test_register_instance_should_allow_undeclared_scope_for_definition_managed_app(self):
+        """测试 Definition 管理下的 appId 仍可自主注册到未声明 scope"""
+        result = TestResult("测试 Definition 管理 appId 允许未声明 scope 自主注册")
         definition_path = None
         instance_id = self._new_app_id("managed-scope-instance")
 
@@ -509,9 +509,37 @@ class TestAppDefinitions(unittest.TestCase):
                 pid=33001,
             )
 
-            if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
+            if not RpcAssertions.expect_success(result, response, ["instance"]):
                 return result
-            if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id, "scope": "workspace-b"}):
+
+            instance = response["result"]["instance"]
+            if instance.get("appId") != app_id or instance.get("scope") != "workspace-b":
+                result.mark_failure(f"❌ registerInstance 返回的实例信息不正确: {instance}")
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {
+                "appId": app_id,
+                "scope": None,
+                "includeOffline": True,
+            })
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            instances = list_response["result"]["instances"]
+            if not any(
+                candidate.get("instanceId") == instance_id and candidate.get("scope") == "workspace-b"
+                for candidate in instances
+            ):
+                result.mark_failure(f"❌ listInstances 未返回未声明 scope 的自主注册实例: {instances}")
+                return result
+
+            get_response = client.call("hub.apps.getInstance", {"instanceId": instance_id})
+            if not RpcAssertions.expect_success(result, get_response, ["instance"]):
+                return result
+
+            fetched_instance = get_response["result"]["instance"]
+            if fetched_instance.get("appId") != app_id or fetched_instance.get("scope") != "workspace-b":
+                result.mark_failure(f"❌ getInstance 未返回正确的未声明 scope 实例: {fetched_instance}")
                 return result
 
             result.mark_success()
@@ -563,7 +591,7 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_upsert_definition_and_delete_definition(),
             self.test_scoped_definitions_should_use_composite_identity(),
             self.test_upsert_invalid_definition(),
-            self.test_register_instance_should_reject_undeclared_scope_for_definition_managed_app(),
+            self.test_register_instance_should_allow_undeclared_scope_for_definition_managed_app(),
             self.test_delete_nonexistent_definition()
         ]
 
