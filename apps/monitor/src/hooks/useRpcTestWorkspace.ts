@@ -68,15 +68,13 @@ export function useRpcTestWorkspace(options: UseRpcTestWorkspaceOptions) {
   }, []);
 
   const updateDraft = useEffectEvent((value: string) => {
-    startTransition(() => {
-      setDraft(value);
-      setValidationFeedback(null);
-      if (requestStatus === "validation_failed") {
-        setRequestStatus("idle");
-        setRequestStatusDetail(connection ? IDLE_STATUS_DETAIL : CONNECTION_UNAVAILABLE_DETAIL);
-      }
-      setRequestError(null);
-    });
+    setDraft(value);
+    setValidationFeedback(null);
+    if (requestStatus === "validation_failed") {
+      setRequestStatus("idle");
+      setRequestStatusDetail(connection ? IDLE_STATUS_DETAIL : CONNECTION_UNAVAILABLE_DETAIL);
+    }
+    setRequestError(null);
   });
 
   const validateDraft = useEffectEvent(() => {

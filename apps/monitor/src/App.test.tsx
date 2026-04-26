@@ -544,6 +544,33 @@ describe("Monitor App", () => {
     }
   });
 
+  it("keeps the caret position when editing the RPC draft in the middle of the text", async () => {
+    const hostClient = createHostClient();
+    const eventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    const user = userEvent.setup();
+    await openTestWorkspace(user);
+
+    const input = await findRpcTestRequestInput();
+    const initialValue = "{\"jsonrpc\":\"2.0\",\"id\":\"req-1\",\"method\":\"hub.ping\",\"params\":{}}";
+    const insertAt = initialValue.indexOf("\"req-1\"") + 1;
+
+    await replaceRpcTestRequest(user, input, initialValue);
+
+    input.focus();
+    input.setSelectionRange(insertAt, insertAt);
+    await user.keyboard("X");
+
+    expect(input.value).toBe("{\"jsonrpc\":\"2.0\",\"id\":\"Xreq-1\",\"method\":\"hub.ping\",\"params\":{}}");
+    expect(input.selectionStart).toBe(insertAt + 1);
+    expect(input.selectionEnd).toBe(insertAt + 1);
+  });
+
   it("renders shared inventory metadata rows with tooltip titles and missing-definition fallback", async () => {
     const longDisplayName = "Monitor Inventory Display Name With Long Overflow";
     const longAppId = "monitor.inventory.long.app.identifier";
