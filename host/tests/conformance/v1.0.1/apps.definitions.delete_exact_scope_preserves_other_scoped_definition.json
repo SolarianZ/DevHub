@@ -14,7 +14,7 @@
         }
       },
       {
-        "fileName": "apps.delete.exact-scope.app--73636F70652D61.json",
+        "fileName": "apps.delete.exact-scope.app--scope-scope-a.json",
         "definition": {
           "appId": "apps.delete.exact-scope.app",
           "scope": "scope-a",

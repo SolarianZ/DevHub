@@ -38,7 +38,7 @@ def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_app_definition(
             {
-                "appId": "Test.App",
+                "appId": ".Test.App",
                 "scope": "",
                 "displayName": "Test App",
             },
@@ -62,7 +62,7 @@ def test_parse_app_definition_when_scope_is_blank_should_raise() -> None:
         parse_app_definition(
             {
                 "appId": "test.app",
-                "scope": " ",
+                "scope": "workspace ",
                 "displayName": "Test App",
             },
             path="app.definition",
@@ -95,6 +95,20 @@ def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default
     assert definition.capabilities.rpc is True
     assert definition.capabilities.events is None
     assert definition.scope == ""
+
+
+def test_parse_app_definition_should_preserve_case_sensitive_canonical_identifier() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "Sample.App",
+            "scope": "Workspace-A.v2",
+            "displayName": "Sample App",
+        },
+        path="app.definition",
+    )
+
+    assert definition.app_id == "Sample.App"
+    assert definition.scope == "Workspace-A.v2"
 
 
 def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_default() -> None:
@@ -183,7 +197,7 @@ def test_parse_definition_validation_result_should_round_trip_issues() -> None:
                 {
                     "path": "definition.appId",
                     "code": "invalid_app_id",
-                    "message": "appId must match ^[a-z0-9][a-z0-9.-]*$",
+                    "message": "appId must match ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$",
                 }
             ],
         },
@@ -365,6 +379,14 @@ def test_parse_instance_result_when_instance_session_token_present_should_raise(
 def test_parse_app_instance_when_scope_is_null_should_raise() -> None:
     payload = _app_instance_payload()
     payload["scope"] = None
+
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
+def test_parse_app_instance_when_scope_violates_canonical_grammar_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["scope"] = ".workspace"
 
     with pytest.raises(RuntimeError, match=r"scope"):
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
@@ -622,7 +644,8 @@ def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
     ("mutator",),
     [
         (lambda payload: payload.__setitem__("invocationId", "request-1"),),
-        (lambda payload: payload["target"].__setitem__("instanceId", "inst/1"),),
+        (lambda payload: payload["target"].__setitem__("instanceId", "inst-1."),),
+        (lambda payload: payload["target"].__setitem__("scope", ".workspace"),),
         (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
     ],
 )
@@ -632,6 +655,50 @@ def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) ->
 
     with pytest.raises(RuntimeError):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+@pytest.mark.parametrize(
+    ("event_type", "payload"),
+    [
+        (
+            "app.definition.deleted",
+            {
+                "appId": "Sample.App-",
+                "scope": "",
+            },
+        ),
+        (
+            "app.instance.registered",
+            {
+                "appId": "Sample.App",
+                "instanceId": ".node-01",
+                "scope": "",
+            },
+        ),
+        (
+            "app.instance.unregistered",
+            {
+                "appId": "Sample.App",
+                "instanceId": "NODE_01.alpha",
+                "scope": "workspace.",
+            },
+        ),
+    ],
+)
+def test_parse_event_when_identifier_violates_canonical_grammar_should_raise(
+    event_type: str,
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(RuntimeError):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": event_type,
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": payload,
+            },
+            path="hub.event.params",
+        )
 
 
 @pytest.mark.parametrize(

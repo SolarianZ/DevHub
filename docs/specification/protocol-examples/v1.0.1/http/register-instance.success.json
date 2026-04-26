@@ -5,8 +5,8 @@
     "ok": true,
     "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}",
     "instance": {
-      "instanceId": "sample-instance-1",
-      "appId": "sample.app",
+      "instanceId": "NODE_01.alpha",
+      "appId": "Sample.App",
       "scope": "",
       "pid": 32001,
       "registeredAtUtc": "${INSTANCE_REGISTERED_AT_UTC}",

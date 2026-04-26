@@ -6,8 +6,8 @@
     "type": "app.definition.deleted",
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
-      "appId": "sample.app",
-      "scope": "workspace-a"
+      "appId": "Sample.App",
+      "scope": "Workspace-A.v2"
     }
   }
 }

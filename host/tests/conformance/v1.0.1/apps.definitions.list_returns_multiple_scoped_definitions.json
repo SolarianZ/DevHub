@@ -14,11 +14,11 @@
         }
       },
       {
-        "fileName": "apps.list.multi-scope.app--776F726B73706163652D61.json",
+        "fileName": "apps.list.multi-scope.app--scope-global.json",
         "definition": {
           "appId": "apps.list.multi-scope.app",
-          "scope": "workspace-a",
-          "displayName": "Apps List Multi Scope Workspace A"
+          "scope": "global",
+          "displayName": "Apps List Multi Scope Explicit Global"
         }
       }
     ]
@@ -53,8 +53,8 @@
         },
         {
           "appId": "apps.list.multi-scope.app",
-          "scope": "workspace-a",
-          "displayName": "Apps List Multi Scope Workspace A"
+          "scope": "global",
+          "displayName": "Apps List Multi Scope Explicit Global"
         }
       ]
     }

@@ -81,7 +81,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         _definitionProvider.Refresh();
@@ -292,7 +292,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private Process? StartProcess(
         LaunchConfiguration launchConfig,
         string appId,
-        string? scope,
+        string scope,
         string httpBaseUrl,
         string launchId)
     {

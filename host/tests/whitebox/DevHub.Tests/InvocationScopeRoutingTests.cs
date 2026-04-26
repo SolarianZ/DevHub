@@ -82,7 +82,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "scoped-inst",
             AppId = "scope.app",
-            Scope = "workspace://a",
+            Scope = "workspace.a",
             Pid = 2002,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -91,7 +91,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
         var candidates = service.GetOnlineCandidates(
             "scope.app",
-            new InvocationTarget { Scope = "workspace://a", InstanceId = null });
+            new InvocationTarget { Scope = "workspace.a", InstanceId = null });
 
         Assert.Single(candidates);
         Assert.Equal("scoped-inst", candidates[0].InstanceId);
@@ -755,4 +755,3 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
 }
-

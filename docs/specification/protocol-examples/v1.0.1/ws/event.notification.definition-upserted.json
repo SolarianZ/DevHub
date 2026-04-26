@@ -6,11 +6,11 @@
     "type": "app.definition.upserted",
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
-      "appId": "sample.app",
-      "scope": "workspace-a",
+      "appId": "Sample.App",
+      "scope": "Workspace-A.v2",
       "definition": {
-        "appId": "sample.app",
-        "scope": "workspace-a",
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
         "displayName": "Sample App"
       }
     }

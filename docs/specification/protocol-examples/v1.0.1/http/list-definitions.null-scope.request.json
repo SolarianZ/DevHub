@@ -3,7 +3,7 @@
   "id": "apps-definitions-list-all-scopes",
   "method": "hub.apps.listDefinitions",
   "params": {
-    "appId": "sample.app",
+    "appId": "Sample.App",
     "scope": null
   }
 }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
+using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
@@ -466,12 +467,11 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     private static string GetDefinitionFileName(AppDefinition definition)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(definition.AppId);
-        var normalizedScope = string.IsNullOrEmpty(definition.Scope) ? null : definition.Scope;
-        var scopeSegment = normalizedScope is null
+        var appId = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(definition.AppId));
+        var scopeSegment = definition.Scope.Length == 0
             ? "global"
-            : Convert.ToHexString(Encoding.UTF8.GetBytes(normalizedScope));
-        return $"{definition.AppId}--{scopeSegment}.json";
+            : $"scope-{ScopeContract.EnsureScopedString(definition.Scope, nameof(definition.Scope))}";
+        return $"{appId}--{scopeSegment}.json";
     }
 
     private static string? ReadEnvironmentVariable(

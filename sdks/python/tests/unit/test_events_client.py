@@ -284,7 +284,7 @@ async def test_events_client_get_definition_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.get_definition("Test.App", "")
+            await client.get_definition(".Test.App", "")
     finally:
         await client.close()
 
@@ -313,7 +313,7 @@ async def test_events_client_get_instance_should_reuse_shared_payload_builder_va
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="instance_id"):
-            await client.get_instance("inst/1")
+            await client.get_instance("inst-1.")
     finally:
         await client.close()
 
@@ -342,7 +342,7 @@ async def test_events_client_list_instances_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.list_instances(ListInstancesRequest(scope=None, app_id="Test.App"))
+            await client.list_instances(ListInstancesRequest(scope=None, app_id="Test.App-"))
     finally:
         await client.close()
 

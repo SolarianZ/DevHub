@@ -3,7 +3,7 @@
   "id": "apps-definitions-get",
   "method": "hub.apps.getDefinition",
   "params": {
-    "appId": "sample.app",
+    "appId": "Sample.App",
     "scope": ""
   }
 }

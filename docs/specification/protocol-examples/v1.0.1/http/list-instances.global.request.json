@@ -3,7 +3,7 @@
   "id": "apps-instances-list-global",
   "method": "hub.apps.listInstances",
   "params": {
-    "appId": "sample.app",
+    "appId": "Sample.App",
     "scope": "",
     "includeOffline": false
   }

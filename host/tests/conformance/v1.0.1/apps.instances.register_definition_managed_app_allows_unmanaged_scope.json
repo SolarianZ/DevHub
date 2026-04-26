@@ -6,7 +6,7 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.instance.managed-scope.app--73636F70652D61.json",
+        "fileName": "apps.instance.managed-scope.app--scope-scope-a.json",
         "definition": {
           "appId": "apps.instance.managed-scope.app",
           "scope": "scope-a",

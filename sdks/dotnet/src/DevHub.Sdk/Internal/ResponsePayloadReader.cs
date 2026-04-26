@@ -12,7 +12,7 @@ internal static class ResponsePayloadReader
             var value = JsonSerializer.Deserialize<T>(result.GetRawText(), DevHubJson.SerializerOptions);
             return value ?? throw new InvalidOperationException($"无法解析 {location}。");
         }
-        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        catch (Exception exception) when (exception is JsonException or NotSupportedException or ArgumentException or InvalidOperationException)
         {
             throw new InvalidOperationException($"无法解析 {location}。", exception);
         }
@@ -61,6 +61,22 @@ internal static class ResponsePayloadReader
         }
     }
 
+    internal static void EnsureAppIdValue(string? value, string location, string propertyName)
+    {
+        if (!ProtocolIdentifier.IsValidAppId(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    internal static void EnsureInstanceIdValue(string? value, string location, string propertyName)
+    {
+        if (!ProtocolIdentifier.IsValidInstanceId(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
     internal static void EnsureNotNull<T>(T? value, string location, string propertyName)
         where T : class
     {
@@ -73,7 +89,7 @@ internal static class ResponsePayloadReader
     internal static void ValidateAppDefinitionElement(JsonElement element, string location)
     {
         EnsureElementKind(element, location, JsonValueKind.Object);
-        EnsureStringProperty(element, location, "appId");
+        EnsureAppIdProperty(element, location, "appId");
         EnsureScopeStringProperty(element, location, "scope");
         EnsureStringProperty(element, location, "displayName");
         EnsureOptionalStringProperty(element, location, "description");
@@ -100,8 +116,8 @@ internal static class ResponsePayloadReader
     internal static void ValidateAppInstanceElement(JsonElement element, string location)
     {
         EnsureElementKind(element, location, JsonValueKind.Object);
-        EnsureStringProperty(element, location, "instanceId");
-        EnsureStringProperty(element, location, "appId");
+        EnsureInstanceIdProperty(element, location, "instanceId");
+        EnsureAppIdProperty(element, location, "appId");
         EnsureScopeStringProperty(element, location, "scope");
         EnsurePositiveIntegerProperty(element, location, "pid");
         EnsureStringProperty(element, location, "registeredAtUtc");
@@ -166,7 +182,7 @@ internal static class ResponsePayloadReader
         {
             case "app.definition.upserted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
                 var upsertedScope = EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 var definitionElement = EnsurePropertyExists(payload, $"{location}.payload", "definition", JsonValueKind.Object);
                 ValidateAppDefinitionElement(definitionElement, $"{location}.payload.definition");
@@ -179,14 +195,14 @@ internal static class ResponsePayloadReader
                 break;
             case "app.definition.deleted":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
                 EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 break;
             case "app.instance.registered":
             case "app.instance.unregistered":
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
-                EnsureStringProperty(payload, $"{location}.payload", "instanceId");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
+                EnsureInstanceIdProperty(payload, $"{location}.payload", "instanceId");
                 EnsureOptionalScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (payload.TryGetProperty("password", out _))
                 {
@@ -201,10 +217,10 @@ internal static class ResponsePayloadReader
     {
         EnsureElementKind(element, location, JsonValueKind.Object);
         EnsureStringProperty(element, location, "invocationId");
-        EnsureStringProperty(element, location, "appId");
+        EnsureAppIdProperty(element, location, "appId");
         var targetElement = EnsurePropertyExists(element, location, "target", JsonValueKind.Object);
         EnsureScopeStringProperty(targetElement, $"{location}.target", "scope");
-        EnsureOptionalStringOrNullProperty(targetElement, $"{location}.target", "instanceId");
+        EnsureOptionalInstanceIdOrNullProperty(targetElement, $"{location}.target", "instanceId");
         EnsureStringProperty(element, location, "method");
         EnsureStringProperty(element, location, "kind");
         EnsureStringProperty(element, location, "createdAtUtc");
@@ -246,6 +262,24 @@ internal static class ResponsePayloadReader
         if (string.IsNullOrWhiteSpace(propertyValue.GetString()))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void EnsureAppIdProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
+        if (!ProtocolIdentifier.IsValidAppId(propertyValue.GetString()))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureInstanceIdProperty(JsonElement element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JsonValueKind.String);
+        if (!ProtocolIdentifier.IsValidInstanceId(propertyValue.GetString()))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
@@ -297,6 +331,25 @@ internal static class ResponsePayloadReader
         }
 
         if (propertyValue.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalInstanceIdOrNullProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.String ||
+            !ProtocolIdentifier.IsValidInstanceId(propertyValue.GetString()))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }

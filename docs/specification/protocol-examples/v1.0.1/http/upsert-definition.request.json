@@ -4,7 +4,7 @@
   "method": "hub.apps.upsertDefinition",
   "params": {
     "definition": {
-      "appId": "sample.app",
+      "appId": "Sample.App",
       "scope": "",
       "displayName": "Sample App"
     }

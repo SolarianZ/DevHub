@@ -6,8 +6,8 @@
     "type": "app.instance.registered",
     "timeUtc": "${EVENT_TIME_UTC}",
     "payload": {
-      "appId": "sample.app",
-      "instanceId": "sample-instance-1",
+      "appId": "Sample.App",
+      "instanceId": "NODE_01.alpha",
       "scope": ""
     }
   }

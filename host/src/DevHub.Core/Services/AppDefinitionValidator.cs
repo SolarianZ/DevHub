@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using DevHub.Core.Models;
 
 namespace DevHub.Core.Services;
@@ -9,8 +8,6 @@ namespace DevHub.Core.Services;
 /// </summary>
 public sealed class AppDefinitionValidator
 {
-    private static readonly Regex AppIdPattern = new("^[a-z0-9][a-z0-9.-]*$", RegexOptions.Compiled);
-
     /// <summary>
     /// 判断 appId 是否满足协议格式要求。
     /// </summary>
@@ -18,7 +15,7 @@ public sealed class AppDefinitionValidator
     /// <returns>格式合法时返回 <c>true</c>。</returns>
     public static bool IsValidAppId(string? appId)
     {
-        return !string.IsNullOrWhiteSpace(appId) && AppIdPattern.IsMatch(appId);
+        return ProtocolIdentifier.IsValidAppId(appId);
     }
 
     /// <summary>
@@ -48,14 +45,16 @@ public sealed class AppDefinitionValidator
         var appId = ReadRequiredString(definitionElement, "appId", issues, "definition.appId", "missing_app_id", "appId is required");
         if (appId is not null && !IsValidAppId(appId))
         {
-            issues.Add(CreateIssue("definition.appId", "invalid_app_id", "appId must match ^[a-z0-9][a-z0-9.-]*$"));
+            issues.Add(CreateIssue("definition.appId", "invalid_app_id", $"appId must match {ProtocolIdentifier.CanonicalPattern}"));
         }
 
         var scope = ReadRequiredScope(definitionElement, issues);
 
-        if (!string.IsNullOrWhiteSpace(actualFileName) && IsValidAppId(appId))
+        if (!string.IsNullOrWhiteSpace(actualFileName)
+            && ProtocolIdentifier.IsValidAppId(appId)
+            && ProtocolIdentifier.IsValidScope(scope))
         {
-            var expectedFileName = AppDefinitionIdentity.Create(appId!, scope).GetFileName();
+            var expectedFileName = AppDefinitionIdentity.Create(appId!, scope!).GetFileName();
             if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
             {
                 issues.Add(CreateIssue("definition.appId", "file_name_mismatch", $"definition file name must be {expectedFileName}"));
@@ -76,7 +75,7 @@ public sealed class AppDefinitionValidator
         definition = new AppDefinition
         {
             AppId = appId!,
-            Scope = scope,
+            Scope = scope!,
             DisplayName = displayName!,
             Description = description,
             Launch = launch,
@@ -242,9 +241,9 @@ public sealed class AppDefinitionValidator
         }
 
         var scope = scopeProperty.GetString();
-        if (!ScopeContract.IsValidScopedString(scope))
+        if (!ProtocolIdentifier.IsValidScope(scope))
         {
-            issues.Add(CreateIssue("definition.scope", "invalid_scope", "scope must be \"\" or a non-empty string without leading or trailing whitespace"));
+            issues.Add(CreateIssue("definition.scope", "invalid_scope", $"scope must be \"\" or match {ProtocolIdentifier.CanonicalPattern}"));
             return null;
         }
 

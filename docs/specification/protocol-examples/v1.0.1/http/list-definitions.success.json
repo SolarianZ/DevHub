@@ -5,14 +5,14 @@
     "ok": true,
     "definitions": [
       {
-        "appId": "sample.app",
+        "appId": "Sample.App",
         "scope": "",
         "displayName": "Sample App"
       },
       {
-        "appId": "sample.app",
-        "scope": "workspace-a",
-        "displayName": "Sample App (Workspace A)"
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
+        "displayName": "Sample App (Workspace-A.v2)"
       }
     ]
   }

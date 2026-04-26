@@ -68,6 +68,7 @@ import {
   buildValidateDefinitionParams
 } from "./payloads.js";
 import { getRuntimeResolver } from "./default-runtime-resolver.js";
+import { DevHubConnectionError } from "./errors.js";
 import { ensureJsonValue } from "./validation.js";
 import { checkVersionCompatibilityWithFallback } from "./versioning.js";
 
@@ -123,7 +124,7 @@ export class DevHubClient {
   async ping(echo?: JsonValue): Promise<PingResult> {
     this.throwIfDisposed();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
-    return parsePingResult(await this.#transport.send("hub.ping", params));
+    return await this.sendAndParse("hub.ping.result", params, "hub.ping", parsePingResult);
   }
 
   /**
@@ -131,7 +132,7 @@ export class DevHubClient {
    */
   async getHostVersion(): Promise<string> {
     this.throwIfDisposed();
-    return parseHostVersionResult(await this.#transport.send("hub.getVersion"));
+    return await this.sendAndParse("hub.getVersion.result", undefined, "hub.getVersion", parseHostVersionResult);
   }
 
   /**
@@ -147,95 +148,141 @@ export class DevHubClient {
 
   async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {
     this.throwIfDisposed();
-    return parseDefinitionsResult(
-      await this.#transport.send("hub.apps.listDefinitions", buildListDefinitionsParams(request))
+    return await this.sendAndParse(
+      "hub.apps.listDefinitions.result",
+      buildListDefinitionsParams(request),
+      "hub.apps.listDefinitions",
+      parseDefinitionsResult
     );
   }
 
   async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
     this.throwIfDisposed();
-    return parseDefinitionResult(await this.#transport.send("hub.apps.getDefinition", buildGetDefinitionParams(identity)));
+    return await this.sendAndParse(
+      "hub.apps.getDefinition.result",
+      buildGetDefinitionParams(identity),
+      "hub.apps.getDefinition",
+      parseDefinitionResult
+    );
   }
 
   async validateDefinition(definition: AppDefinition): Promise<DefinitionValidationResult> {
     this.throwIfDisposed();
-    return parseDefinitionValidationResult(
-      await this.#transport.send("hub.apps.validateDefinition", buildValidateDefinitionParams(definition))
+    return await this.sendAndParse(
+      "hub.apps.validateDefinition.result",
+      buildValidateDefinitionParams(definition),
+      "hub.apps.validateDefinition",
+      parseDefinitionValidationResult
     );
   }
 
   async upsertDefinition(definition: AppDefinition): Promise<AppDefinition> {
     this.throwIfDisposed();
-    return parseUpsertDefinitionResult(
-      await this.#transport.send("hub.apps.upsertDefinition", buildUpsertDefinitionParams(definition))
+    return await this.sendAndParse(
+      "hub.apps.upsertDefinition.result",
+      buildUpsertDefinitionParams(definition),
+      "hub.apps.upsertDefinition",
+      parseUpsertDefinitionResult
     );
   }
 
   async deleteDefinition(identity: AppDefinitionIdentity): Promise<void> {
     this.throwIfDisposed();
-    parseVoidOkResult(
-      await this.#transport.send("hub.apps.deleteDefinition", buildDeleteDefinitionParams(identity)),
-      "hub.apps.deleteDefinition.result"
+    await this.sendAndParse(
+      "hub.apps.deleteDefinition.result",
+      buildDeleteDefinitionParams(identity),
+      "hub.apps.deleteDefinition",
+      (payload) => parseVoidOkResult(payload, "hub.apps.deleteDefinition.result")
     );
   }
 
   async registerInstance(instance: AppInstanceRegistration, password: string): Promise<RegisteredAppInstance> {
     this.throwIfDisposed();
-    return parseRegisterInstanceResult(
-      await this.#transport.send("hub.apps.registerInstance", buildRegisterInstanceParams(instance, password))
+    return await this.sendAndParse(
+      "hub.apps.registerInstance.result",
+      buildRegisterInstanceParams(instance, password),
+      "hub.apps.registerInstance",
+      parseRegisterInstanceResult
     );
   }
 
   async heartbeat(instanceId: string, instanceSessionToken: string): Promise<Date> {
     this.throwIfDisposed();
-    return parseHeartbeatResult(
-      await this.#transport.send("hub.apps.heartbeat", buildHeartbeatParams(instanceId, instanceSessionToken))
+    return await this.sendAndParse(
+      "hub.apps.heartbeat.result",
+      buildHeartbeatParams(instanceId, instanceSessionToken),
+      "hub.apps.heartbeat",
+      parseHeartbeatResult
     );
   }
 
   async unregisterInstance(instanceId: string, instanceSessionToken: string): Promise<void> {
     this.throwIfDisposed();
-    parseVoidOkResult(
-      await this.#transport.send("hub.apps.unregisterInstance", buildUnregisterParams(instanceId, instanceSessionToken)),
-      "hub.apps.unregisterInstance.result"
+    await this.sendAndParse(
+      "hub.apps.unregisterInstance.result",
+      buildUnregisterParams(instanceId, instanceSessionToken),
+      "hub.apps.unregisterInstance",
+      (payload) => parseVoidOkResult(payload, "hub.apps.unregisterInstance.result")
     );
   }
 
   async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
     this.throwIfDisposed();
-    return parseInstancesResult(await this.#transport.send("hub.apps.listInstances", buildListInstancesParams(request)));
+    return await this.sendAndParse(
+      "hub.apps.listInstances.result",
+      buildListInstancesParams(request),
+      "hub.apps.listInstances",
+      parseInstancesResult
+    );
   }
 
   async getInstance(instanceId: string): Promise<AppInstance> {
     this.throwIfDisposed();
-    return parseInstanceResult(await this.#transport.send("hub.apps.getInstance", buildGetInstanceParams(instanceId)));
+    return await this.sendAndParse(
+      "hub.apps.getInstance.result",
+      buildGetInstanceParams(instanceId),
+      "hub.apps.getInstance",
+      parseInstanceResult
+    );
   }
 
   async launch(request: LaunchRequest): Promise<LaunchResult> {
     this.throwIfDisposed();
-    return parseLaunchResult(await this.#transport.send("hub.apps.launch", buildLaunchParams(request)));
+    return await this.sendAndParse("hub.apps.launch.result", buildLaunchParams(request), "hub.apps.launch", parseLaunchResult);
   }
 
   async notify(request: InvokeRequest): Promise<NotifyResult> {
     this.throwIfDisposed();
-    return parseNotifyResult(await this.#transport.send("hub.invoke.notify", buildInvokeParams(request, false)));
+    return await this.sendAndParse(
+      "hub.invoke.notify.result",
+      buildInvokeParams(request, false),
+      "hub.invoke.notify",
+      parseNotifyResult
+    );
   }
 
   async request(request: InvokeRequest): Promise<RequestResult> {
     this.throwIfDisposed();
-    return parseRequestResult(await this.#transport.send("hub.invoke.request", buildInvokeParams(request, true)));
+    return await this.sendAndParse(
+      "hub.invoke.request.result",
+      buildInvokeParams(request, true),
+      "hub.invoke.request",
+      parseRequestResult
+    );
   }
 
   async poll(request: PollRequest): Promise<PollResult> {
     this.throwIfDisposed();
-    return parsePollResult(await this.#transport.send("hub.invoke.poll", buildPollParams(request)));
+    return await this.sendAndParse("hub.invoke.poll.result", buildPollParams(request), "hub.invoke.poll", parsePollResult);
   }
 
   async respond(request: RespondRequest): Promise<void> {
     this.throwIfDisposed();
-    parseVoidOkResult(
-      await this.#transport.send("hub.invoke.respond", buildRespondParams(request)),
-      "hub.invoke.respond.result"
+    await this.sendAndParse(
+      "hub.invoke.respond.result",
+      buildRespondParams(request),
+      "hub.invoke.respond",
+      (payload) => parseVoidOkResult(payload, "hub.invoke.respond.result")
     );
   }
 
@@ -253,6 +300,33 @@ export class DevHubClient {
       throw new Error("The client has been disposed.");
     }
   }
+
+  private async sendAndParse<TResult>(
+    responseLocation: string,
+    params: Record<string, unknown> | undefined,
+    method: string,
+    parser: (payload: Record<string, unknown>) => TResult
+  ): Promise<TResult> {
+    const payload = await this.#transport.send(method, params);
+
+    try {
+      return parser(payload);
+    } catch (error) {
+      throw toInvalidResponseError(error, responseLocation);
+    }
+  }
 }
 
 export { DevHubEventsClient } from "./events-client.js";
+
+function toInvalidResponseError(error: unknown, location: string): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError) {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    kind: "invalid_response",
+    message: error instanceof Error ? error.message : `${location} is invalid.`,
+    cause: error
+  });
+}

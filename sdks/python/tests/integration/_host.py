@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubEventsClient
+from devhub_sdk._validation import require_app_id, require_scoped_string
 
 PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_PYTHON_SDK_HOST_ASSEMBLY"
 SHARED_PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_SDK_HOST_ASSEMBLY"
@@ -138,9 +139,7 @@ class DevHubHostFixture:
 
     def write_definition(self, definition: Mapping[str, Any]) -> None:
         payload = dict(definition)
-        app_id = payload.get("appId")
-        if not isinstance(app_id, str) or not app_id:
-            raise ValueError("definition.appId 必须为非空字符串。")
+        app_id = require_app_id(payload.get("appId"), "definition.appId")
 
         scope = _normalize_definition_scope(payload.get("scope"))
         payload["scope"] = scope
@@ -378,13 +377,11 @@ def _ensure_trailing_separator(path_value: Path) -> str:
 def _normalize_definition_scope(value: Any) -> str:
     if value is None:
         return ""
-    if not isinstance(value, str) or (value and value != value.strip()):
-        raise ValueError("definition.scope 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。")
-    return value
+    return require_scoped_string(value, "definition.scope")
 
 
 def _build_definition_file_name(app_id: str, scope: str) -> str:
-    scope_segment = "global" if scope == "" else scope.encode("utf-8").hex().upper()
+    scope_segment = "global" if scope == "" else f"scope-{scope}"
     return f"{app_id}--{scope_segment}.json"
 
 

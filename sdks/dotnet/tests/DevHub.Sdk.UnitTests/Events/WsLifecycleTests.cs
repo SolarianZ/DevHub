@@ -33,8 +33,20 @@ public sealed class WsLifecycleTests : IDisposable
             "scope"
         },
         {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.definition.deleted","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":".test.app","scope":""}}}""",
+            "appId"
+        },
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.definition.deleted","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","scope":"workspace."}}}""",
+            "scope"
+        },
+        {
             """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":null}}}""",
             "scope"
+        },
+        {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1.","scope":""}}}""",
+            "instanceId"
         },
         {
             """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":"","password":"secret-1"}}}""",

@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace DevHub.Core.Models;
 
 /// <summary>
@@ -13,11 +11,16 @@ public readonly record struct AppDefinitionIdentity(string AppId, string Scope)
     public const string GlobalScopeFileSegment = "global";
 
     /// <summary>
+    /// 显式 scope 的文件名编码前缀。
+    /// </summary>
+    public const string ExplicitScopeFileSegmentPrefix = "scope-";
+
+    /// <summary>
     /// 从 appId 与 scope 构造复合身份。
     /// </summary>
     public static AppDefinitionIdentity Create(string appId, string scope)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         ScopeContract.EnsureScopedString(scope, nameof(scope));
         return new AppDefinitionIdentity(appId, scope);
     }
@@ -40,7 +43,7 @@ public readonly record struct AppDefinitionIdentity(string AppId, string Scope)
     }
 
     /// <summary>
-    /// 生成文件名安全的 scope 片段。
+    /// 生成无冲突的 scope 文件名片段。
     /// </summary>
     public static string EncodeScopeSegment(string scope)
     {
@@ -51,6 +54,6 @@ public readonly record struct AppDefinitionIdentity(string AppId, string Scope)
             return GlobalScopeFileSegment;
         }
 
-        return Convert.ToHexString(Encoding.UTF8.GetBytes(scope));
+        return $"{ExplicitScopeFileSegmentPrefix}{scope}";
     }
 }

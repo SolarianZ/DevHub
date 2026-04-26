@@ -406,6 +406,50 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenGetDefinitionResultAppIdViolatesCanonicalGrammar_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-definition\",\"result\":{\"ok\":true,\"definition\":{\"appId\":\".sample.app\",\"scope\":\"\",\"displayName\":\"Sample App\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
+        Assert.Contains("appId", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetDefinitionResultScopeViolatesCanonicalGrammar_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-definition\",\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":\"workspace.\",\"displayName\":\"Sample App\"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
+        Assert.Contains("scope", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HttpTransport_WhenGetInstanceInstanceIdInvalid_ShouldThrowArgumentExceptionBeforeSending()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -450,6 +494,28 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Equal("instance_not_found", exception.Message);
         Assert.Equal("unknown_instance", exception.Reason);
         Assert.Equal("missing-inst-1", exception.ErrorData!.Value.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetInstanceResultIdentifiersViolateCanonicalGrammar_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-instance\",\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1.\",\"appId\":\"sample.app\",\"scope\":\"\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true}}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-instance");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1", CancellationToken.None));
+        Assert.Contains("instanceId", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -768,6 +834,33 @@ public sealed class HttpTransportTests : IDisposable
 
         Assert.Contains("items[0].options", exception.Message, StringComparison.Ordinal);
         Assert.Contains("queueIfOffline", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenPollResultTargetInstanceIdViolatesCanonicalGrammar_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-poll\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":\".inst-1\"},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"}}]}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-poll");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
+        }, CancellationToken.None));
+
+        Assert.Contains("instanceId", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -454,7 +454,10 @@ public class SpecConformanceTests : IDisposable
         var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
             ? scopeElement.GetString()!
             : ScopeContract.Global;
-        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName());
+        var resolvedFileName = ProtocolIdentifier.IsValidAppId(appId) && ProtocolIdentifier.IsValidScope(scope)
+            ? AppDefinitionIdentity.Create(appId, scope).GetFileName()
+            : fileName;
+        var fullPath = Path.Combine(_tempDirectory, resolvedFileName);
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 

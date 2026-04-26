@@ -245,7 +245,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.upsertDefinition.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.upsertDefinition.result");
         ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.upsertDefinition.result", "definition");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.upsertDefinition.result", "definition.appId");
+        ResponsePayloadReader.EnsureAppIdValue(payload.Definition.AppId, "hub.apps.upsertDefinition.result", "definition.appId");
         ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.upsertDefinition.result", "definition.displayName");
         return payload.Definition;
     }
@@ -299,8 +299,8 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
         ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
         ResponsePayloadReader.EnsureNotEmpty(payload.InstanceSessionToken, "hub.apps.registerInstance.result", "instanceSessionToken");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
+        ResponsePayloadReader.EnsureInstanceIdValue(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
+        ResponsePayloadReader.EnsureAppIdValue(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
         return new RegisterInstanceResult

@@ -12,12 +12,12 @@
     "appId": {
       "type": "string",
       "description": "Application identifier. Together with scope it uniquely identifies one AppDefinition.",
-      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "scope": {
-      "description": "Definition scope. Use the empty string for the Global Definition. Any other scope must be a string with no leading or trailing whitespace.",
+      "description": "Definition scope. Use the empty string for the Global Definition. Any other scope must satisfy the canonical DevHub identifier grammar and is preserved verbatim.",
       "type": "string",
-      "pattern": "^$|^\\S(?:.*\\S)?$"
+      "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "displayName": {
       "type": "string"

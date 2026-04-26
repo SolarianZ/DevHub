@@ -8,7 +8,6 @@ using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
 
@@ -17,8 +16,6 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 /// </summary>
 public class AppInstancesHandler : IRpcHandler
 {
-    private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
-
     private readonly AppRegistry _appRegistry;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly ILaunchRegistrationTracker _launchRegistrationTracker;
@@ -194,22 +191,15 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!paramsElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
             {
-                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceId、类型错误或格式非法, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
             {
                 _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceSessionToken 或非字符串, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-            }
-
-            var instanceId = instanceIdProperty.GetString();
-            if (string.IsNullOrWhiteSpace(instanceId))
-            {
-                _logger.LogWarning("hub.apps.heartbeat参数无效: instanceId 为空, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
@@ -279,7 +269,7 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
             {
                 _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
@@ -356,7 +346,7 @@ public class AppInstancesHandler : IRpcHandler
                 }
 
                 appId = appIdProperty.GetString();
-                if (!AppDefinitionValidator.IsValidAppId(appId))
+                if (!ProtocolIdentifier.IsValidAppId(appId))
                 {
                     _logger.LogWarning("hub.apps.listInstances参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
                     return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
@@ -428,15 +418,9 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(invalidParams);
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
             {
                 _logger.LogWarning("hub.apps.getInstance参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-            }
-
-            if (instanceId.Length > 256 || !InstanceIdPattern.IsMatch(instanceId))
-            {
-                _logger.LogWarning("hub.apps.getInstance参数无效: instanceId 不符合格式要求, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
@@ -488,7 +472,7 @@ public class AppInstancesHandler : IRpcHandler
         }
 
         var instanceId = instanceIdProperty.GetString();
-        if (string.IsNullOrWhiteSpace(instanceId) || instanceId.Length > 256 || !InstanceIdPattern.IsMatch(instanceId))
+        if (!ProtocolIdentifier.IsValidInstanceId(instanceId))
         {
             _logger.LogWarning("hub.apps.registerInstance参数无效: instanceId 不合法, RequestId: {RequestId}", requestId);
             return false;
@@ -501,7 +485,7 @@ public class AppInstancesHandler : IRpcHandler
         }
 
         var appId = appIdProperty.GetString();
-        if (!AppDefinitionValidator.IsValidAppId(appId))
+        if (!ProtocolIdentifier.IsValidAppId(appId))
         {
             _logger.LogWarning("hub.apps.registerInstance参数无效: appId 不符合格式要求, RequestId: {RequestId}", requestId);
             return false;
@@ -553,9 +537,9 @@ public class AppInstancesHandler : IRpcHandler
 
         instance = new AppInstance
         {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = scope,
+            InstanceId = instanceId!,
+            AppId = appId!,
+            Scope = scope!,
             Pid = pid,
             Invoke = new InvokeCapability
             {

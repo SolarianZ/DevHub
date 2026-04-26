@@ -166,7 +166,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试更新实例心跳: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -191,7 +191,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public bool UnregisterInstance(string instanceId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试注销应用程序实例: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -224,7 +224,7 @@ public class AppRegistry : IDisposable
         out DateTime lastSeenUtc,
         out InstanceSessionValidationStatus validationStatus)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
 
         lock (_syncRoot)
@@ -258,7 +258,7 @@ public class AppRegistry : IDisposable
         out AppInstance? instance,
         out InstanceSessionValidationStatus validationStatus)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
 
         lock (_syncRoot)
@@ -289,7 +289,7 @@ public class AppRegistry : IDisposable
         out AppInstance? instance,
         out InstanceSessionValidationStatus validationStatus)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
 
         lock (_syncRoot)
@@ -321,7 +321,7 @@ public class AppRegistry : IDisposable
         out AppInstance? removedInstance,
         out InstanceSessionValidationStatus validationStatus)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
 
         lock (_syncRoot)
@@ -353,9 +353,9 @@ public class AppRegistry : IDisposable
     /// </summary>
     public IEnumerable<AppInstance> ListInstances(string? appId = null, string? scope = null, bool includeOffline = false)
     {
-        if (appId is not null && string.IsNullOrWhiteSpace(appId))
+        if (appId is not null && !ProtocolIdentifier.IsValidAppId(appId))
         {
-            throw new ArgumentException("appId 不能为空白字符串。", nameof(appId));
+            throw new ArgumentException($"appId must match {ProtocolIdentifier.CanonicalPattern}.", nameof(appId));
         }
 
         ScopeContract.EnsureListFilter(scope, nameof(scope));
@@ -396,7 +396,7 @@ public class AppRegistry : IDisposable
     /// </summary>
     public AppInstance? GetInstance(string instanceId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试获取应用程序实例: {InstanceId}", instanceId);
 
         lock (_syncRoot)
@@ -415,7 +415,7 @@ public class AppRegistry : IDisposable
 
     internal string? GetCurrentInstanceSessionToken(string instanceId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
 
         lock (_syncRoot)
         {
@@ -522,8 +522,8 @@ public class AppRegistry : IDisposable
 
     private static void ValidateInstance(AppInstance instance)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
+        ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(instance.InstanceId));
+        ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(instance.AppId));
         ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope));
         ArgumentOutOfRangeException.ThrowIfLessThan(instance.Pid, 1, nameof(instance.Pid));
     }

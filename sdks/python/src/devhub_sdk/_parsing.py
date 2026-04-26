@@ -14,6 +14,7 @@ from ._validation import (
     require_instance_id as validate_instance_id,
     require_invocation_id as validate_invocation_id,
     require_optional_instance_id as validate_optional_instance_id,
+    require_scoped_string as validate_scope_string,
     require_uuid_string as validate_uuid_string,
 )
 from .models import (
@@ -600,11 +601,10 @@ def optional_str(value: Any, path: str) -> str | None:
 def parse_scope_string(value: Any, path: str) -> str:
     """读取显式字符串 scope。"""
 
-    if not isinstance(value, str):
-        raise RuntimeError(f"{path} 类型非法。")
-    if value and value != value.strip():
-        raise RuntimeError(f"{path} 类型非法。")
-    return value
+    try:
+        return validate_scope_string(value, path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def require_int(root: Mapping[str, Any], name: str, path: str) -> int:

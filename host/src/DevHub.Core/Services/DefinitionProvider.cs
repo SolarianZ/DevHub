@@ -50,6 +50,7 @@ public sealed class DefinitionProvider : IDefinitionProvider
     /// <inheritdoc />
     public AppDefinition? GetDefinition(string appId, string scope)
     {
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         lock (_syncRoot)
@@ -63,6 +64,8 @@ public sealed class DefinitionProvider : IDefinitionProvider
     /// <inheritdoc />
     public bool HasDefinitions(string appId)
     {
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
+
         lock (_syncRoot)
         {
             return _snapshot.Any(definition => definition.AppId == appId);

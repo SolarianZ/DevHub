@@ -533,6 +533,45 @@ it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("getDefinition 应保留 canonical mixed-case appId 与 dotted scope", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+    expect(body.params).toEqual({
+      appId: "Sample.App",
+      scope: "Workspace-A.v2"
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "Sample.App",
+        scope: "Workspace-A.v2",
+        displayName: "Sample App"
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-canonical-client",
+    dataDir: runtimeDir
+  });
+
+  const definition = await client.getDefinition({
+    appId: "Sample.App",
+    scope: "Workspace-A.v2"
+  });
+
+  expect(definition).toMatchObject({
+    appId: "Sample.App",
+    scope: "Workspace-A.v2",
+    displayName: "Sample App"
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("getInstance should send the exact instanceId and parse a single AppInstance", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -1179,7 +1218,7 @@ it("getDefinition should reject an invalid appId before sending the request", as
   });
 
   await expect(client.getDefinition({
-    appId: "Invalid.App",
+    appId: ".Invalid.App",
     scope: ""
   })).rejects.toThrow(/appId/);
 
@@ -1196,7 +1235,7 @@ it("getInstance should reject an invalid instanceId before sending the request",
     dataDir: runtimeDir
   });
 
-  await expect(client.getInstance("bad id")).rejects.toThrow(/instanceId/);
+  await expect(client.getInstance("node-01-")).rejects.toThrow(/instanceId/);
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1212,7 +1251,7 @@ it("registerInstance should reject an invalid instanceId before sending the requ
   });
 
   await expect(client.registerInstance({
-    instanceId: "bad id",
+    instanceId: ".node-01",
     appId: "test.app",
     scope: "",
     pid: 12345,
@@ -2012,6 +2051,46 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   })).rejects.toThrow(
     "hub.apps.listInstances.result.instances[0].meta.callback 包含不支持的 JSON 类型。"
   );
+});
+
+it("getDefinition 应将非法入站标识符视为 invalid_response", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubClient.fromRuntime(
+    {
+      clientId: "unit-injected-invalid-identifier-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => ({
+        send: async () => ({
+          ok: true,
+          definition: {
+            appId: ".Invalid.App",
+            scope: "",
+            displayName: "Invalid App"
+          }
+        })
+      })
+    }
+  );
+
+  let captured: unknown;
+  try {
+    await client.getDefinition({
+      appId: "Sample.App",
+      scope: ""
+    });
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+  expect((captured as Error).message).toMatch(/appId/);
 });
 
 it("getInstance should propagate instance_not_found without rewriting error data", async () => {

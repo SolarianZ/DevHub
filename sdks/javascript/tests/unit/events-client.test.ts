@@ -332,12 +332,79 @@ it("getInstance should reject an invalid instanceId before sending the WS reques
 
   try {
     await client.authenticate();
-    await expect(client.getInstance("bad id")).rejects.toThrow(/instanceId/);
+    await expect(client.getInstance("node-01-")).rejects.toThrow(/instanceId/);
   } finally {
     await client.dispose();
   }
 
   expect(session?.requests.map((item) => item.method)).toEqual(["hub.ws.authenticate"]);
+});
+
+it("getDefinition 应将 WS 非法入站标识符视为 invalid_response", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-identifier-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getDefinition") {
+            expect(params).toEqual({
+              appId: "Sample.App",
+              scope: ""
+            });
+
+            return {
+              ok: true,
+              definition: {
+                appId: ".Invalid.App",
+                scope: "",
+                displayName: "Invalid App"
+              }
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  let captured: unknown;
+  try {
+    await client.authenticate();
+    await client.getDefinition({
+      appId: "Sample.App",
+      scope: ""
+    });
+  } catch (error) {
+    captured = error;
+  } finally {
+    await client.dispose();
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+  expect((captured as Error).message).toMatch(/appId/);
 });
 
 it("getInstance should propagate instance_not_found over WS without rewriting the error", async () => {
@@ -685,7 +752,7 @@ it("实例事件应继续拒绝非法 scope", async () => {
               payload: {
                 appId: "test.app",
                 instanceId: "inst-1",
-                scope: null
+                scope: ".invalid-scope"
               }
             });
 
@@ -707,9 +774,16 @@ it("实例事件应继续拒绝非法 scope", async () => {
 
   try {
     await client.authenticate();
-    await expect(client.subscribe(["app.instance.registered"]))
-      .rejects
-      .toThrow(/scope/i);
+    let captured: unknown;
+    try {
+      await client.subscribe(["app.instance.registered"]);
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(captured).toBeInstanceOf(DevHubConnectionError);
+    expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+    expect((captured as Error).message).toMatch(/scope/i);
   } finally {
     await client.dispose();
   }

@@ -14,7 +14,7 @@ import {
   tryGetResponse,
   validateIncomingEnvelope
 } from "./jsonrpc.js";
-import { ensureRecord, isRecord } from "./validation.js";
+import { ensureAppId, ensureRecord, isRecord, isValidAppId } from "./validation.js";
 
 export interface JsonRpcWsSessionOptions {
   websocketEndpoint: string;
@@ -371,11 +371,7 @@ function normalizeAbandonedRequestFilter(filter?: AbandonedRequestFilter | null)
   }
 
   if (appId !== undefined) {
-    if (typeof appId !== "string" || !appId.trim()) {
-      throw new Error("filter.appId 必须为非空字符串。");
-    }
-
-    normalizedFilter.appId = appId;
+    normalizedFilter.appId = ensureAppId(appId, "filter.appId");
   }
 
   if (method !== undefined) {
@@ -415,7 +411,7 @@ function matchesAbandonedRequest(
 
 function tryExtractAppId(params?: Record<string, unknown>): string | undefined {
   const appId = params?.appId;
-  if (typeof appId !== "string" || !appId.trim()) {
+  if (!isValidAppId(appId)) {
     return undefined;
   }
 

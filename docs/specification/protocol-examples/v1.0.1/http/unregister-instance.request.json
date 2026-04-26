@@ -3,7 +3,7 @@
   "id": "apps-instances-unregister",
   "method": "hub.apps.unregisterInstance",
   "params": {
-    "instanceId": "sample-instance-1",
+    "instanceId": "NODE_01.alpha",
     "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}"
   }
 }

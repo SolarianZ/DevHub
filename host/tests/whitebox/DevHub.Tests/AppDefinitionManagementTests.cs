@@ -171,6 +171,59 @@ public sealed class AppDefinitionManagementTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_UpsertDefinition_WhenScopeLiteralGlobal_ShouldUseDistinctScopeKeyAndEchoCanonicalIdentifiers()
+    {
+        using var context = CreateContext();
+        const string appId = "Sample.App_01";
+        const string scope = "global";
+
+        var response = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "upsert-explicit-global-definition",
+            Method = HubRpcMethods.HubAppsUpsertDefinition,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                definition = new
+                {
+                    appId,
+                    scope,
+                    displayName = "Sample Explicit Global Definition"
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var definition = JsonSerializer.SerializeToElement(response.Result).GetProperty("definition");
+        Assert.Equal(appId, definition.GetProperty("appId").GetString());
+        Assert.Equal(scope, definition.GetProperty("scope").GetString());
+
+        var scopedGlobalPath = Path.Combine(
+            context.RuntimePathOptions.DefinitionsPath,
+            AppDefinitionIdentity.Create(appId, scope).GetFileName());
+        var defaultGlobalPath = Path.Combine(
+            context.RuntimePathOptions.DefinitionsPath,
+            AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
+
+        Assert.Equal($"{appId}--scope-global.json", Path.GetFileName(scopedGlobalPath));
+        Assert.Equal($"{appId}--global.json", Path.GetFileName(defaultGlobalPath));
+        Assert.NotEqual(scopedGlobalPath, defaultGlobalPath);
+        Assert.True(File.Exists(scopedGlobalPath));
+        Assert.False(File.Exists(defaultGlobalPath));
+
+        var getResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-explicit-global-definition",
+            Method = HubRpcMethods.HubAppsGetDefinition,
+            Params = JsonSerializer.SerializeToElement(new { appId, scope })
+        }, CancellationToken.None);
+
+        Assert.Null(getResponse.Error);
+        var storedDefinition = JsonSerializer.SerializeToElement(getResponse.Result).GetProperty("definition");
+        Assert.Equal(appId, storedDefinition.GetProperty("appId").GetString());
+        Assert.Equal(scope, storedDefinition.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public void Impl_DefinitionManager_ObjectOverloads_ShouldOmitNullOptionalFieldsWhenRevalidatingAndPersisting()
     {
         using var context = CreateContext();

@@ -203,6 +203,63 @@ it("getInstance 读取缺失实例时应透传 instance_not_found", async () => 
   await client.dispose();
 });
 
+it("HTTP 链路应接受并原样回传 canonical mixed-case 标识符", async () => {
+  const client = await DevHubClient.fromRuntime({
+    clientId: "http-canonical-identifiers-client",
+    dataDir: getHost().dataDirectory
+  });
+
+  await getHost().writeDefinition({
+    appId: "Sample.App",
+    scope: "Workspace-A.v2",
+    displayName: "Sample App Workspace"
+  });
+
+  try {
+    const definition = await client.getDefinition({
+      appId: "Sample.App",
+      scope: "Workspace-A.v2"
+    });
+    expect(definition).toMatchObject({
+      appId: "Sample.App",
+      scope: "Workspace-A.v2",
+      displayName: "Sample App Workspace"
+    });
+
+    const registered = await client.registerInstance({
+      instanceId: "NODE_01.alpha",
+      appId: "Sample.App",
+      scope: "Workspace-A.v2",
+      pid: process.pid,
+      invoke: {
+        poll: true,
+        respond: true
+      }
+    }, INSTANCE_PASSWORD);
+
+    expect(registered).toMatchObject({
+      instanceId: "NODE_01.alpha",
+      appId: "Sample.App",
+      scope: "Workspace-A.v2"
+    });
+
+    const instance = await client.getInstance("NODE_01.alpha");
+    expect(instance).toMatchObject({
+      instanceId: "NODE_01.alpha",
+      appId: "Sample.App",
+      scope: "Workspace-A.v2"
+    });
+
+    await client.unregisterInstance("NODE_01.alpha", registered.instanceSessionToken);
+  } finally {
+    await client.deleteDefinition({
+      appId: "Sample.App",
+      scope: "Workspace-A.v2"
+    });
+    await client.dispose();
+  }
+});
+
 it("launch 应覆盖 started / starting / already_running", async () => {
   const client = await DevHubClient.fromRuntime({
     clientId: "http-launch-client",

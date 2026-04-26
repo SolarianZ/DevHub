@@ -1,19 +1,15 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.Internal;
 
 internal static class RequestPayloadFactory
 {
-    private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
-
     internal static object BuildGetDefinitionParams(string appId, string scope)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
-            ["appId"] = appId,
+            ["appId"] = ProtocolIdentifier.EnsureAppId(appId, nameof(appId)),
             ["scope"] = ScopeContract.EnsureScopedString(scope, nameof(scope))
         };
     }
@@ -22,13 +18,14 @@ internal static class RequestPayloadFactory
     {
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = EnsureGetInstanceId(instanceId, nameof(instanceId))
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId))
         };
     }
 
     internal static object BuildValidateDefinitionParams(AppDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        _ = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(AppDefinition.AppId));
         _ = definition.Scope;
         return new Dictionary<string, object?>
         {
@@ -39,6 +36,7 @@ internal static class RequestPayloadFactory
     internal static object BuildUpsertDefinitionParams(AppDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        _ = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(AppDefinition.AppId));
         _ = definition.Scope;
         return new Dictionary<string, object?>
         {
@@ -48,10 +46,9 @@ internal static class RequestPayloadFactory
 
     internal static object BuildDeleteDefinitionParams(string appId, string scope)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         return new Dictionary<string, object?>
         {
-            ["appId"] = appId,
+            ["appId"] = ProtocolIdentifier.EnsureAppId(appId, nameof(appId)),
             ["scope"] = ScopeContract.EnsureScopedString(scope, nameof(scope))
         };
     }
@@ -60,8 +57,6 @@ internal static class RequestPayloadFactory
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.InstanceId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(instance.AppId);
         ArgumentNullException.ThrowIfNull(instance.Invoke);
         var scope = instance.Scope;
 
@@ -77,8 +72,8 @@ internal static class RequestPayloadFactory
 
         var instancePayload = new Dictionary<string, object?>
         {
-            ["instanceId"] = instance.InstanceId,
-            ["appId"] = instance.AppId,
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(AppInstanceRegistration.InstanceId)),
+            ["appId"] = ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(AppInstanceRegistration.AppId)),
             ["pid"] = instance.Pid,
             ["invoke"] = new Dictionary<string, object?>
             {
@@ -103,22 +98,20 @@ internal static class RequestPayloadFactory
 
     internal static object BuildHeartbeatParams(string instanceId, string instanceSessionToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = instanceId,
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId)),
             ["instanceSessionToken"] = instanceSessionToken
         };
     }
 
     internal static object BuildUnregisterParams(string instanceId, string instanceSessionToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceSessionToken);
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = instanceId,
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId)),
             ["instanceSessionToken"] = instanceSessionToken
         };
     }
@@ -134,7 +127,7 @@ internal static class RequestPayloadFactory
 
         if (request.AppId is not null)
         {
-            payload["appId"] = request.AppId;
+            payload["appId"] = ProtocolIdentifier.EnsureAppId(request.AppId, nameof(request.AppId));
         }
 
         return payload;
@@ -150,7 +143,7 @@ internal static class RequestPayloadFactory
         };
         if (request.AppId is not null)
         {
-            payload["appId"] = request.AppId;
+            payload["appId"] = ProtocolIdentifier.EnsureAppId(request.AppId, nameof(request.AppId));
         }
 
         if (request.IncludeOffline)
@@ -164,7 +157,6 @@ internal static class RequestPayloadFactory
     internal static object BuildLaunchParams(LaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
         var scope = ScopeContract.EnsureScopedString(request.Scope, nameof(request.Scope));
 
         if (request.WaitForRegisterMs is { } waitForRegisterMs && waitForRegisterMs < 0)
@@ -174,7 +166,7 @@ internal static class RequestPayloadFactory
 
         var payload = new Dictionary<string, object?>
         {
-            ["appId"] = request.AppId,
+            ["appId"] = ProtocolIdentifier.EnsureAppId(request.AppId, nameof(request.AppId)),
             ["scope"] = scope
         };
 
@@ -204,7 +196,6 @@ internal static class RequestPayloadFactory
     internal static object BuildPollParams(PollRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
 
         var maxCount = request.MaxCount ?? 10;
@@ -222,7 +213,7 @@ internal static class RequestPayloadFactory
 
         return new Dictionary<string, object?>
         {
-            ["instanceId"] = request.InstanceId,
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(request.InstanceId, nameof(request.InstanceId)),
             ["instanceSessionToken"] = request.InstanceSessionToken,
             ["maxCount"] = maxCount,
             ["waitMs"] = waitMs
@@ -232,7 +223,6 @@ internal static class RequestPayloadFactory
     internal static object BuildRespondParams(RespondRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
 
@@ -245,7 +235,7 @@ internal static class RequestPayloadFactory
 
         var payload = new Dictionary<string, object?>
         {
-            ["instanceId"] = request.InstanceId,
+            ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(request.InstanceId, nameof(request.InstanceId)),
             ["instanceSessionToken"] = request.InstanceSessionToken,
             ["invocationId"] = request.InvocationId
         };
@@ -265,16 +255,11 @@ internal static class RequestPayloadFactory
     private static object BuildInvokeParams(InvokeRequest request, bool isRequest)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.AppId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Method);
 
         var target = request.Target ?? throw new ArgumentException("Target 不能为空。", nameof(request));
-        if (target.InstanceId is not null && string.IsNullOrWhiteSpace(target.InstanceId))
-        {
-            throw new ArgumentException("Target.InstanceId 不能为空白字符串。", nameof(request));
-        }
-
         var targetScope = ScopeContract.EnsureScopedString(target.Scope, nameof(target.Scope));
+        var targetInstanceId = ProtocolIdentifier.EnsureOptionalInstanceId(target.InstanceId, nameof(target.InstanceId));
 
         int? ttlMs = request.Options?.TtlMs ?? (isRequest ? 300000 : 60000);
         if (!isRequest && request.Options?.WaitTimeoutMs is not null)
@@ -284,7 +269,7 @@ internal static class RequestPayloadFactory
 
         int? waitTimeoutMs = isRequest ? request.Options?.WaitTimeoutMs ?? 120000 : null;
         var queueIfOffline = request.Options?.QueueIfOffline ?? true;
-        var autoLaunch = request.Options?.AutoLaunch ?? target.InstanceId is null;
+        var autoLaunch = request.Options?.AutoLaunch ?? targetInstanceId is null;
 
         if (ttlMs is null || ttlMs < 1000)
         {
@@ -301,7 +286,7 @@ internal static class RequestPayloadFactory
             throw new ArgumentException("waitTimeoutMs 不能大于 ttlMs。", nameof(request));
         }
 
-        if (target.InstanceId is not null && autoLaunch)
+        if (targetInstanceId is not null && autoLaunch)
         {
             throw new ArgumentException("指定 target.instanceId 时不能启用 autoLaunch。", nameof(request));
         }
@@ -313,7 +298,7 @@ internal static class RequestPayloadFactory
 
         var payload = new Dictionary<string, object?>
         {
-            ["appId"] = request.AppId,
+            ["appId"] = ProtocolIdentifier.EnsureAppId(request.AppId, nameof(request.AppId)),
             ["method"] = request.Method,
             ["args"] = request.Args,
             ["options"] = new Dictionary<string, object?>
@@ -332,22 +317,10 @@ internal static class RequestPayloadFactory
         payload["target"] = new Dictionary<string, object?>
         {
             ["scope"] = targetScope,
-            ["instanceId"] = target.InstanceId
+            ["instanceId"] = targetInstanceId
         };
 
         return payload;
-    }
-
-    private static string EnsureGetInstanceId(string instanceId, string paramName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
-
-        if (instanceId.Length > 256 || !InstanceIdPattern.IsMatch(instanceId))
-        {
-            throw new ArgumentException("instanceId 必须匹配 ^[a-zA-Z0-9._:-]+$ 且长度不超过 256 个字符。", paramName);
-        }
-
-        return instanceId;
     }
 
     private static void EnsureSerializesToObject(object value, string paramName, string propertyName)

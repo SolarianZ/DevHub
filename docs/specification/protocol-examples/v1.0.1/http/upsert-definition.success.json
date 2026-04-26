@@ -4,7 +4,7 @@
   "result": {
     "ok": true,
     "definition": {
-      "appId": "sample.app",
+      "appId": "Sample.App",
       "scope": "",
       "displayName": "Sample App"
     }

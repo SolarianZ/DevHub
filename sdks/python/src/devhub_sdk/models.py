@@ -10,7 +10,10 @@ from uuid import uuid4
 from .constants import DevHubEventType
 from ._validation import (
     require_app_id,
+    require_instance_id,
     require_non_empty_string,
+    require_optional_app_id,
+    require_optional_instance_id,
     require_positive_number,
     require_protocol_version,
     require_scope_filter,
@@ -112,6 +115,7 @@ class AppDefinition:
     def __post_init__(self) -> None:
         """校验 Definition 复合身份中的 scope。"""
 
+        self.app_id = require_app_id(self.app_id, "app_id")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -158,6 +162,8 @@ class AppInstance:
     def __post_init__(self) -> None:
         """校验实例中的 scope。"""
 
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
+        self.app_id = require_app_id(self.app_id, "app_id")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -175,6 +181,8 @@ class AppInstanceRegistration:
     def __post_init__(self) -> None:
         """校验实例注册中的 scope。"""
 
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
+        self.app_id = require_app_id(self.app_id, "app_id")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -261,6 +269,7 @@ class LaunchRequest:
     def __post_init__(self) -> None:
         """校验启动请求中的 scope。"""
 
+        self.app_id = require_app_id(self.app_id, "app_id")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -275,6 +284,7 @@ class ListDefinitionsRequest:
         """校验 Definition 列表请求中的 scope 过滤器。"""
 
         self.scope = require_scope_filter(self.scope, "scope")
+        self.app_id = require_optional_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
@@ -299,6 +309,7 @@ class ListInstancesRequest:
         """校验实例列表请求中的 scope 过滤器。"""
 
         self.scope = require_scope_filter(self.scope, "scope")
+        self.app_id = require_optional_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
@@ -312,6 +323,7 @@ class InvocationTarget:
         """校验调用目标中的 scope。"""
 
         self.scope = require_scoped_string(self.scope, "scope")
+        self.instance_id = require_optional_instance_id(self.instance_id, "instance_id")
 
 
 @dataclass(slots=True)
@@ -352,6 +364,7 @@ class InvokeRequest:
         self.args = None if args is _INVOKE_ARGS_UNSET else args
         self.options = options
         self._has_args = args is not _INVOKE_ARGS_UNSET
+        self.app_id = require_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
@@ -379,6 +392,11 @@ class PollRequest:
     instance_session_token: str
     max_count: int | None = None
     wait_ms: int | None = None
+
+    def __post_init__(self) -> None:
+        """校验轮询请求中的实例身份。"""
+
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
 
 
 class InvocationKind(str, Enum):
@@ -472,6 +490,7 @@ class RespondRequest:
         self.value = None if value is _RESPOND_VALUE_UNSET else value
         self.error = error
         self._has_value = value is not _RESPOND_VALUE_UNSET
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
 
 
 @dataclass(slots=True)

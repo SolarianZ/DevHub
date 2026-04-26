@@ -1,3 +1,4 @@
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
@@ -87,7 +88,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 }
 
                 appId = appIdProperty.GetString();
-                if (!AppDefinitionValidator.IsValidAppId(appId))
+                if (!ProtocolIdentifier.IsValidAppId(appId))
                 {
                     _logger.LogWarning("hub.apps.listDefinitions方法参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
                     return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
@@ -153,15 +154,9 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(invalidParams);
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId))
+            if (!RpcParamReader.TryGetRequiredAppId(paramsElement, "appId", out var appId))
             {
-                _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少appId或appId不是字符串, RequestId: {RequestId}", request.Id);
-                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-            }
-
-            if (!AppDefinitionValidator.IsValidAppId(appId))
-            {
-                _logger.LogWarning("hub.apps.getDefinition方法参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.getDefinition方法参数无效: 缺少 appId、类型错误或格式非法, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
@@ -292,7 +287,7 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(invalidParams);
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) || !AppDefinitionValidator.IsValidAppId(appId))
+            if (!RpcParamReader.TryGetRequiredAppId(paramsElement, "appId", out var appId))
             {
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
@@ -348,7 +343,7 @@ public class AppDefinitionsHandler : IRpcHandler
         return true;
     }
 
-    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string? scope)
+    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string scope)
     {
         return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new AppDefinitionIdentityErrorData
         {

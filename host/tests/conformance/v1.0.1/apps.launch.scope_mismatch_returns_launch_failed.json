@@ -14,7 +14,7 @@
     },
     "definitions": [
       {
-        "fileName": "apps.launch.bound-scope.app--73636F70652D61.json",
+        "fileName": "apps.launch.bound-scope.app--scope-scope-a.json",
         "definition": {
           "appId": "apps.launch.bound-scope.app",
           "scope": "scope-a",
@@ -30,7 +30,7 @@
         }
       },
       {
-        "fileName": "apps.launch.bound-scope.app--73636F70652D62.json",
+        "fileName": "apps.launch.bound-scope.app--scope-scope-b.json",
         "definition": {
           "appId": "apps.launch.bound-scope.app",
           "scope": "scope-b",

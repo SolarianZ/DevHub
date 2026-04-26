@@ -241,7 +241,9 @@ it("已放弃请求过滤器应拒绝非法参数", async () => {
     expect(() => session.getAbandonedRequestCount({ olderThanMs: -1 }))
       .toThrow("filter.olderThanMs 必须为大于等于 0 的有限数字。");
     expect(() => session.clearAbandonedRequests({ appId: "   " }))
-      .toThrow("filter.appId 必须为非空字符串。");
+      .toThrow("filter.appId 不能为空。");
+    expect(() => session.getAbandonedRequestCount({ appId: ".app-a" }))
+      .toThrow(/filter\.appId/);
     expect(() => session.getAbandonedRequestCount({ method: "" }))
       .toThrow("filter.method 必须为非空字符串。");
   } finally {

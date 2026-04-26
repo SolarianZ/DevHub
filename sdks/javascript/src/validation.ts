@@ -1,7 +1,8 @@
 import type { JsonObject, JsonValue } from "./models.js";
 
-const APP_ID_REGEX = /^[a-z0-9][a-z0-9.-]*$/;
-const INSTANCE_ID_REGEX = /^[a-zA-Z0-9._:-]+$/;
+export const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 const INVOCATION_ID_REGEX = /^invk-[a-zA-Z0-9._:-]+$/;
 const RFC3339_DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
 const IDENTIFIER_MAX_LENGTH = 256;
@@ -92,12 +93,7 @@ export function readOptionalObject(
 }
 
 export function readAppId(payload: Record<string, unknown>, location: string, key: string): string {
-  const value = readString(payload, location, key);
-  if (!APP_ID_REGEX.test(value)) {
-    throw new Error(`${location}.${key} must match ^[a-z0-9][a-z0-9.-]*$.`);
-  }
-
-  return value;
+  return readCanonicalIdentifier(payload, location, key);
 }
 
 export function readStringValue(payload: Record<string, unknown>, location: string, key: string): string {
@@ -114,12 +110,7 @@ export function readStringValue(payload: Record<string, unknown>, location: stri
 }
 
 export function readInstanceId(payload: Record<string, unknown>, location: string, key: string): string {
-  const value = readString(payload, location, key);
-  if (value.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(value)) {
-    throw new Error(`${location}.${key} must be a valid instance id.`);
-  }
-
-  return value;
+  return readCanonicalIdentifier(payload, location, key);
 }
 
 export function readInvocationId(payload: Record<string, unknown>, location: string, key: string): string {
@@ -141,8 +132,8 @@ export function readOptionalInstanceIdOrNull(
     return value;
   }
 
-  if (value.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(value)) {
-    throw new Error(`${location}.${key} must be a valid instance id.`);
+  if (!isValidCanonicalIdentifier(value)) {
+    throw new Error(`${location}.${key} must match ${CANONICAL_IDENTIFIER_PATTERN}.`);
   }
 
   return value;
@@ -193,7 +184,7 @@ export function readScopeString(payload: Record<string, unknown>, location: stri
 
   const value = payload[key];
   if (!isValidScopeString(value)) {
-    throw new Error(`${location}.${key} must be "" or a non-empty string without leading or trailing whitespace.`);
+    throw new Error(`${location}.${key} must be empty or match ${CANONICAL_IDENTIFIER_PATTERN}.`);
   }
 
   return value;
@@ -210,7 +201,7 @@ export function readOptionalScopeString(
 
   const value = payload[key];
   if (!isValidScopeString(value)) {
-    throw new Error(`${location}.${key} must be "" or a non-empty string without leading or trailing whitespace.`);
+    throw new Error(`${location}.${key} must be empty or match ${CANONICAL_IDENTIFIER_PATTERN}.`);
   }
 
   return value;
@@ -323,8 +314,8 @@ export function ensureRequiredInputStringValue(value: unknown, propertyName: str
 
 export function ensureAppId(value: unknown, propertyName: string): string {
   const parsed = ensureRequiredInputString(value, propertyName);
-  if (!APP_ID_REGEX.test(parsed)) {
-    throw new Error(`${propertyName} 必须匹配 ^[a-z0-9][a-z0-9.-]*$。`);
+  if (!isValidCanonicalIdentifier(parsed)) {
+    throw new Error(`${propertyName} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
   }
 
   return parsed;
@@ -332,7 +323,7 @@ export function ensureAppId(value: unknown, propertyName: string): string {
 
 export function ensureScopedString(value: unknown, propertyName: string): string {
   if (!isValidScopeString(value)) {
-    throw new Error(`${propertyName} 必须为 "" 或首尾无空白的非空字符串。`);
+    throw new Error(`${propertyName} 必须为 "" 或匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
   }
 
   return value;
@@ -348,8 +339,8 @@ export function ensureScopeFilter(value: unknown, propertyName: string): string 
 
 export function ensureInstanceId(value: unknown, propertyName: string): string {
   const parsed = ensureRequiredInputString(value, propertyName);
-  if (parsed.length > IDENTIFIER_MAX_LENGTH || !INSTANCE_ID_REGEX.test(parsed)) {
-    throw new Error(`${propertyName} 必须是长度不超过 256 的有效实例 ID。`);
+  if (!isValidCanonicalIdentifier(parsed)) {
+    throw new Error(`${propertyName} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
   }
 
   return parsed;
@@ -398,9 +389,32 @@ export function ensureOptionalInputStringOrNull(value: unknown, propertyName: st
   return ensureOptionalInputString(value, propertyName, true, `${propertyName} 不能为空。`, true);
 }
 
-function isValidScopeString(value: unknown): value is string {
+export function isValidAppId(value: unknown): value is string {
+  return isValidCanonicalIdentifier(value);
+}
+
+export function isValidInstanceId(value: unknown): value is string {
+  return isValidCanonicalIdentifier(value);
+}
+
+export function isValidScopeString(value: unknown): value is string {
   return typeof value === "string"
-    && (value.length === 0 || value.trim() === value);
+    && (value.length === 0 || isValidCanonicalIdentifier(value));
+}
+
+function readCanonicalIdentifier(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readString(payload, location, key);
+  if (!isValidCanonicalIdentifier(value)) {
+    throw new Error(`${location}.${key} must match ${CANONICAL_IDENTIFIER_PATTERN}.`);
+  }
+
+  return value;
+}
+
+function isValidCanonicalIdentifier(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && CANONICAL_IDENTIFIER_REGEX.test(value);
 }
 
 export function ensureOptionalInputRecord(

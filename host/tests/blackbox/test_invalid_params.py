@@ -317,6 +317,28 @@ class TestInvalidParams(unittest.TestCase):
                     }
                 },
                 {
+                    "name": "instanceId 以 . 开头",
+                    "payload": {
+                        "instance": {
+                            "instanceId": ".invalid-id",
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "instanceId 以 - 结尾",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "invalid-id-",
+                            "appId": "test-app",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
                     "name": "instanceId 长度超过256",
                     "payload": {
                         "instance": {
@@ -382,6 +404,30 @@ class TestInvalidParams(unittest.TestCase):
                             "instanceId": "test-instance-scope-3",
                             "appId": "test-app",
                             "scope": {"name": "workspace-a"},
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "scope 以 . 开头",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance-scope-4",
+                            "appId": "test-app",
+                            "scope": ".invalid-scope",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True}
+                        }
+                    }
+                },
+                {
+                    "name": "scope 以 - 结尾",
+                    "payload": {
+                        "instance": {
+                            "instanceId": "test-instance-scope-5",
+                            "appId": "test-app",
+                            "scope": "invalid-scope-",
                             "pid": 12345,
                             "invoke": {"poll": True, "respond": True}
                         }
@@ -640,6 +686,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "instanceId 空字符串", "payload": {"instanceId": ""}},
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 12345}},
                 {"name": "instanceId 为 null", "payload": {"instanceId": None}},
+                {"name": "instanceId 以 . 开头", "payload": {"instanceId": ".invalid"}},
             ]
 
             for case in cases:
@@ -667,6 +714,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "instanceId 空字符串", "payload": {"instanceId": ""}},
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 12345}},
                 {"name": "instanceId 为 null", "payload": {"instanceId": None}},
+                {"name": "instanceId 以 - 结尾", "payload": {"instanceId": "invalid-"}},
             ]
 
             for case in cases:
@@ -813,6 +861,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "缺少 instanceId", "payload": {}},
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 123}},
                 {"name": "instanceId 格式非法", "payload": {"instanceId": "invalid instance id"}},
+                {"name": "instanceId 以 . 开头", "payload": {"instanceId": ".invalid.instance"}},
             ]
 
             for case in cases:

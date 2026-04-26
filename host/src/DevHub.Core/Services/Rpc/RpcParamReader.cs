@@ -56,6 +56,24 @@ internal static class RpcParamReader
     }
 
     /// <summary>
+    /// 尝试读取必填的 canonical `appId` 字段。
+    /// </summary>
+    public static bool TryGetRequiredAppId(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        return TryGetRequiredString(element, propertyName, out value) && ProtocolIdentifier.IsValidAppId(value);
+    }
+
+    /// <summary>
+    /// 尝试读取必填的 canonical `instanceId` 字段。
+    /// </summary>
+    public static bool TryGetRequiredInstanceId(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        return TryGetRequiredString(element, propertyName, out value) && ProtocolIdentifier.IsValidInstanceId(value);
+    }
+
+    /// <summary>
     /// 尝试读取可选字符串字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
@@ -116,7 +134,7 @@ internal static class RpcParamReader
             return false;
         }
 
-        scope = scopeElement.GetString();
+        scope = scopeElement.GetString() ?? string.Empty;
         if (!ScopeContract.IsValidScopedString(scope))
         {
             errorData = BuildInvalidScopeErrorData(invalidReason);
@@ -215,7 +233,7 @@ internal static class RpcParamReader
             else if (instanceIdElement.ValueKind == JsonValueKind.String)
             {
                 instanceId = instanceIdElement.GetString();
-                if (string.IsNullOrWhiteSpace(instanceId))
+                if (!ProtocolIdentifier.IsValidInstanceId(instanceId))
                 {
                     errorData = new { reason = "invalid_target_instance" };
                     return false;

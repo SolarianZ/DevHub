@@ -20,7 +20,7 @@
       "password": "conformance-password",
       "instance": {
         "instanceId": "apps-instance-invalid-appid-1",
-        "appId": "Invalid.App",
+        "appId": ".Invalid.App",
         "scope": "",
         "pid": 32015,
         "invoke": {

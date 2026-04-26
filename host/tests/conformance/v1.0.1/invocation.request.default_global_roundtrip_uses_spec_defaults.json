@@ -14,7 +14,7 @@
         }
       },
       {
-        "fileName": "invoke.request.default-global--73636F70652D61.json",
+        "fileName": "invoke.request.default-global--scope-scope-a.json",
         "definition": {
           "appId": "invoke.request.default-global",
           "scope": "scope-a",

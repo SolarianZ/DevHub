@@ -14,9 +14,11 @@ internal static class ScopeContract
 
     internal static string EnsureScopedString(string? scope, string paramName)
     {
-        if (!IsValidScopedString(scope))
+        if (!ProtocolIdentifier.IsValidScope(scope))
         {
-            throw new ArgumentException("scope 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。", paramName);
+            throw new ArgumentException(
+                "scope 必须为显式字符串：\"\" 表示 Global，其他值必须匹配 ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$。",
+                paramName);
         }
 
         return scope!;
@@ -34,7 +36,6 @@ internal static class ScopeContract
 
     internal static bool IsValidScopedString(string? scope)
     {
-        return scope is not null
-            && (scope.Length == 0 || !char.IsWhiteSpace(scope[0]) && !char.IsWhiteSpace(scope[^1]));
+        return ProtocolIdentifier.IsValidScope(scope);
     }
 }

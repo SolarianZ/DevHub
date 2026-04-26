@@ -134,7 +134,7 @@ export class DevHubEventsClient {
       requestTimeoutMs: normalized.requestTimeoutMs,
       onEvent: (params) => {
         if (client) {
-          client.#eventStream.queue.push(parseEvent(params, "hub.event.params"));
+          client.#eventStream.queue.push(client.parseEventPayload(params));
         }
       },
       onTerminate: (error) => {
@@ -162,7 +162,7 @@ export class DevHubEventsClient {
         clientSessionId: this.options.clientSessionId
       });
 
-      parseAuthenticateResult(result);
+      parseProtocolPayload("hub.ws.authenticate.result", () => parseAuthenticateResult(result));
       this.invalidateReaderLease();
       this.#eventStream = createEventStreamGeneration();
       this.#authenticated = true;
@@ -182,13 +182,18 @@ export class DevHubEventsClient {
 
   async subscribe(types?: readonly DevHubEventType[]): Promise<string> {
     this.ensureAuthenticated();
-    return parseSubscriptionResult(await this.#session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
+    return await this.sendAndParse(
+      "hub.events.subscribe.result",
+      buildSubscribeParams(types),
+      "hub.events.subscribe",
+      parseSubscriptionResult
+    );
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {
     this.ensureAuthenticated();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
-    return parsePingResult(await this.#session.sendRequest("hub.ping", params));
+    return await this.sendAndParse("hub.ping.result", params, "hub.ping", parsePingResult);
   }
 
   /**
@@ -197,7 +202,7 @@ export class DevHubEventsClient {
    */
   async getHostVersion(): Promise<string> {
     this.ensureAuthenticated();
-    return parseHostVersionResult(await this.#session.sendRequest("hub.getVersion"));
+    return await this.sendAndParse("hub.getVersion.result", undefined, "hub.getVersion", parseHostVersionResult);
   }
 
   /**
@@ -214,29 +219,41 @@ export class DevHubEventsClient {
 
   async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {
     this.ensureAuthenticated();
-    return parseDefinitionsResult(
-      await this.#session.sendRequest("hub.apps.listDefinitions", buildListDefinitionsParams(request))
+    return await this.sendAndParse(
+      "hub.apps.listDefinitions.result",
+      buildListDefinitionsParams(request),
+      "hub.apps.listDefinitions",
+      parseDefinitionsResult
     );
   }
 
   async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
     this.ensureAuthenticated();
-    return parseDefinitionResult(
-      await this.#session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(identity))
+    return await this.sendAndParse(
+      "hub.apps.getDefinition.result",
+      buildGetDefinitionParams(identity),
+      "hub.apps.getDefinition",
+      parseDefinitionResult
     );
   }
 
   async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
     this.ensureAuthenticated();
-    return parseInstancesResult(
-      await this.#session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
+    return await this.sendAndParse(
+      "hub.apps.listInstances.result",
+      buildListInstancesParams(request),
+      "hub.apps.listInstances",
+      parseInstancesResult
     );
   }
 
   async getInstance(instanceId: string): Promise<AppInstance> {
     this.ensureAuthenticated();
-    return parseInstanceResult(
-      await this.#session.sendRequest("hub.apps.getInstance", buildGetInstanceParams(instanceId))
+    return await this.sendAndParse(
+      "hub.apps.getInstance.result",
+      buildGetInstanceParams(instanceId),
+      "hub.apps.getInstance",
+      parseInstanceResult
     );
   }
 
@@ -246,7 +263,12 @@ export class DevHubEventsClient {
       throw new Error("subscriptionId cannot be empty.");
     }
 
-    parseUnsubscribeResult(await this.#session.sendRequest("hub.events.unsubscribe", { subscriptionId }));
+    await this.sendAndParse(
+      "hub.events.unsubscribe.result",
+      { subscriptionId },
+      "hub.events.unsubscribe",
+      (payload) => parseUnsubscribeResult(payload)
+    );
   }
 
   readEvents(): AsyncIterable<DevHubEvent> {
@@ -312,6 +334,20 @@ export class DevHubEventsClient {
     if (this.#disposed) {
       throw new Error("The events client has been disposed.");
     }
+  }
+
+  private parseEventPayload(payload: Record<string, unknown>): DevHubEvent {
+    return parseProtocolPayload("hub.event.params", () => parseEvent(payload, "hub.event.params"));
+  }
+
+  private async sendAndParse<TResult>(
+    responseLocation: string,
+    params: Record<string, unknown> | undefined,
+    method: string,
+    parser: (payload: Record<string, unknown>) => TResult
+  ): Promise<TResult> {
+    const payload = await this.#session.sendRequest(method, params);
+    return parseProtocolPayload(responseLocation, () => parser(payload));
   }
 
   private createEventIterator(): AsyncIterableIterator<DevHubEvent> {
@@ -390,6 +426,26 @@ export class DevHubEventsClient {
   private invalidateReaderLease(): void {
     this.#activeReaderLease = null;
   }
+}
+
+function parseProtocolPayload<TResult>(location: string, parser: () => TResult): TResult {
+  try {
+    return parser();
+  } catch (error) {
+    throw toInvalidResponseError(error, location);
+  }
+}
+
+function toInvalidResponseError(error: unknown, location: string): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError) {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    kind: "invalid_response",
+    message: error instanceof Error ? error.message : `${location} is invalid.`,
+    cause: error
+  });
 }
 
 interface EventStreamGeneration {

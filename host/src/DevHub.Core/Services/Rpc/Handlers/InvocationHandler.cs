@@ -282,7 +282,7 @@ public class InvocationHandler : IRpcHandler
             return new InvocationBuildResult(null, paramsError);
         }
 
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId) ||
+        if (!RpcParamReader.TryGetRequiredAppId(paramsElement, "appId", out var appId) ||
             !RpcParamReader.TryGetRequiredString(paramsElement, "method", out var method))
         {
             return new InvocationBuildResult(null, RpcErrorFactory.InvalidParams(request.Id));
@@ -459,7 +459,7 @@ public class InvocationHandler : IRpcHandler
             return paramsError;
         }
 
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
+        if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
         {
             return RpcErrorFactory.InvalidParams(request.Id);
         }
@@ -537,7 +537,7 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(paramsError);
         }
 
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId) ||
+        if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId) ||
             !RpcParamReader.TryGetRequiredString(paramsElement, "invocationId", out var invocationId))
         {
             return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));

@@ -34,7 +34,7 @@
         }
       },
       {
-        "fileName": "apps.list.invalid-whitespace-scope.app--202020.json",
+        "fileName": "apps.list.invalid-whitespace-scope.app--scope-spaces.json",
         "definition": {
           "appId": "apps.list.invalid-whitespace-scope.app",
           "scope": "   ",

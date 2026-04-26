@@ -4,7 +4,7 @@
   "method": "hub.apps.validateDefinition",
   "params": {
     "definition": {
-      "appId": "sample.app",
+      "appId": "Sample.App",
       "scope": "",
       "displayName": "Sample App"
     }

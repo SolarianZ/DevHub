@@ -88,7 +88,7 @@ it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范
 
     const fileNames = await fsPromises.readdir(host.definitionsDirectory);
     expect(fileNames).toContain("fixture.scope.app--global.json");
-    expect(fileNames).toContain("fixture.scope.app--776F726B73706163652D41.json");
+    expect(fileNames).toContain("fixture.scope.app--scope-workspace-A.json");
 
     const globalDefinition = JSON.parse(
       await fsPromises.readFile(

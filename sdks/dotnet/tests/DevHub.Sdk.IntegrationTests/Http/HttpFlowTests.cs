@@ -258,17 +258,25 @@ public sealed class HttpFlowTests
         await using var host = await DevHubHostFixture.StartAsync();
         await using var client = await host.CreateClientAsync("definition-management-client");
 
-        var invalid = await client.ValidateDefinitionAsync(new AppDefinition
+        var localException = Assert.Throws<ArgumentException>(() => new AppDefinition
         {
             AppId = "Invalid App Id",
             Scope = string.Empty,
             DisplayName = "Broken Definition"
         });
+        Assert.Equal("AppId", localException.ParamName);
+
+        var invalid = await client.ValidateDefinitionAsync(new AppDefinition
+        {
+            AppId = "definition.invalid.display-name",
+            Scope = string.Empty,
+            DisplayName = string.Empty
+        });
 
         Assert.True(invalid.Ok);
         Assert.False(invalid.Valid);
         Assert.NotEmpty(invalid.Errors);
-        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.appId");
+        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.displayName");
 
         var validDefinition = new AppDefinition
         {
@@ -291,9 +299,9 @@ public sealed class HttpFlowTests
 
         var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
         {
-            AppId = "Invalid App Id",
+            AppId = "definition.invalid.display-name",
             Scope = string.Empty,
-            DisplayName = "Broken Definition"
+            DisplayName = string.Empty
         }));
         Assert.Equal(-32602, invalidException.Code);
         Assert.Equal("definition_invalid", invalidException.Reason);

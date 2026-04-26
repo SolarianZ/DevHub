@@ -112,7 +112,7 @@ internal static class ReadOnlyRpcExecutor
                     "hub.apps.getDefinition.result");
                 ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
                 ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
-                ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
+                ResponsePayloadReader.EnsureAppIdValue(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
                 ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
                 return payload.Definition;
             },
@@ -180,8 +180,8 @@ internal static class ReadOnlyRpcExecutor
                     "hub.apps.getInstance.result");
                 ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getInstance.result");
                 ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.getInstance.result", "instance");
-                ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.getInstance.result", "instance.instanceId");
-                ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.getInstance.result", "instance.appId");
+                ResponsePayloadReader.EnsureInstanceIdValue(payload.Instance.InstanceId, "hub.apps.getInstance.result", "instance.instanceId");
+                ResponsePayloadReader.EnsureAppIdValue(payload.Instance.AppId, "hub.apps.getInstance.result", "instance.appId");
                 ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.getInstance.result", "instance.registeredAtUtc");
                 ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.getInstance.result", "instance.lastSeenUtc");
                 ResponsePayloadReader.EnsureNotNull(payload.Instance.Invoke, "hub.apps.getInstance.result", "instance.invoke");

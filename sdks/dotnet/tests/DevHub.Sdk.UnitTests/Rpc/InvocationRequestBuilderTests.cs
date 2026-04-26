@@ -160,10 +160,16 @@ public sealed class InvocationRequestBuilderTests
         Assert.Equal(0, document.RootElement.GetProperty("waitForRegisterMs").GetInt32());
     }
 
-    [Fact]
-    public void LaunchBuilder_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    [Theory]
+    [InlineData(" ")]
+    [InlineData(".workspace")]
+    [InlineData("workspace.")]
+    [InlineData("-workspace")]
+    [InlineData("workspace-")]
+    [InlineData("workspace:a")]
+    public void LaunchBuilder_WhenScopeInvalid_ShouldThrowArgumentException(string scope)
     {
-        Assert.Throws<ArgumentException>(() => new LaunchRequest { Scope = " " });
+        Assert.Throws<ArgumentException>(() => new LaunchRequest { Scope = scope });
     }
 
     [Fact]
@@ -209,38 +215,44 @@ public sealed class InvocationRequestBuilderTests
     [Fact]
     public void GetInstanceBuilder_ShouldSerializeValidatedInstanceId()
     {
-        var payload = RequestPayloadFactory.BuildGetInstanceParams("inst-1:scope");
+        var payload = RequestPayloadFactory.BuildGetInstanceParams("NODE_01.alpha");
 
         using var document = Serialize(payload);
-        Assert.Equal("inst-1:scope", document.RootElement.GetProperty("instanceId").GetString());
+        Assert.Equal("NODE_01.alpha", document.RootElement.GetProperty("instanceId").GetString());
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
     [InlineData("inst/1")]
+    [InlineData(".inst-1")]
+    [InlineData("inst-1.")]
+    [InlineData("-inst-1")]
+    [InlineData("inst-1-")]
+    [InlineData("inst-1:scope")]
     public void GetInstanceBuilder_WhenInstanceIdInvalid_ShouldThrowArgumentException(string instanceId)
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(instanceId));
     }
 
-    [Fact]
-    public void GetInstanceBuilder_WhenInstanceIdTooLong_ShouldThrowArgumentException()
-    {
-        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(new string('a', 257)));
-    }
-
-    [Fact]
-    public void ListScopeFilters_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData(".scope")]
+    [InlineData("scope.")]
+    [InlineData("-scope")]
+    [InlineData("scope-")]
+    [InlineData("scope:a")]
+    public void ListScopeFilters_WhenScopeInvalid_ShouldThrowArgumentException(string scope)
     {
         Assert.Throws<ArgumentException>(() => new ListDefinitionsRequest
         {
-            Scope = " "
+            Scope = scope
         });
 
         Assert.Throws<ArgumentException>(() => new ListInstancesRequest
         {
-            Scope = "\t"
+            Scope = scope
         });
     }
 
@@ -274,29 +286,62 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void DefinitionIdentityBuilders_WhenScopeIsWhitespace_ShouldThrowArgumentException()
+    public void DefinitionIdentityBuilders_WhenScopeInvalid_ShouldThrowArgumentException()
     {
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetDefinitionParams("test.app", " "));
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", "\t"));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams("test.app", ".scope"));
+    }
+
+    [Theory]
+    [InlineData(".test.app")]
+    [InlineData("test.app.")]
+    [InlineData("test:app")]
+    [InlineData("test app")]
+    public void DefinitionIdentityBuilders_WhenAppIdInvalid_ShouldThrowArgumentException(string appId)
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetDefinitionParams(appId, string.Empty));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildDeleteDefinitionParams(appId, string.Empty));
     }
 
     [Fact]
     public void ScopeBearingModels_ShouldEnforceUpdatedContract()
     {
+        Assert.Throws<ArgumentException>(() => new AppDefinition { AppId = ".bad" });
         Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = null! });
         Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = " " });
 
+        Assert.Throws<ArgumentException>(() => new AppInstance { InstanceId = "inst:1" });
+        Assert.Throws<ArgumentException>(() => new AppInstance { AppId = "-bad" });
         Assert.Throws<ArgumentException>(() => new AppInstance { Scope = null! });
+
+        Assert.Throws<ArgumentException>(() => new AppInstanceRegistration { InstanceId = ".inst-1" });
+        Assert.Throws<ArgumentException>(() => new AppInstanceRegistration { AppId = "bad app" });
         Assert.Throws<ArgumentException>(() => new AppInstanceRegistration { Scope = null! });
+
+        Assert.Throws<ArgumentException>(() => new ListDefinitionsRequest { AppId = ".bad" });
+        Assert.Throws<ArgumentException>(() => new ListInstancesRequest { AppId = "bad:scope" });
+        Assert.Throws<ArgumentException>(() => new AbandonedRequestFilter { AppId = "bad scope" });
+
+        Assert.Throws<ArgumentException>(() => new LaunchRequest { AppId = ".bad" });
         Assert.Throws<ArgumentException>(() => new LaunchRequest { Scope = null! });
+
+        Assert.Throws<ArgumentException>(() => new InvokeRequest { AppId = "bad:app" });
         Assert.Throws<ArgumentException>(() => new InvocationTarget { Scope = null! });
+        Assert.Throws<ArgumentException>(() => new InvocationTarget { InstanceId = "-inst" });
+        Assert.Throws<ArgumentException>(() => new PollRequest { InstanceId = "inst-" });
+        Assert.Throws<ArgumentException>(() => new RespondRequest { InstanceId = ".inst" });
 
         var globalInstance = new AppInstanceRegistration
         {
+            InstanceId = "NODE_01.alpha",
+            AppId = "Sample.App",
             Scope = string.Empty
         };
 
         Assert.Equal(string.Empty, globalInstance.Scope);
+        Assert.Equal("NODE_01.alpha", globalInstance.InstanceId);
+        Assert.Equal("Sample.App", globalInstance.AppId);
     }
 
     [Fact]

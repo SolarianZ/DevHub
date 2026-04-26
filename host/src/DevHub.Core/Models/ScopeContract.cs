@@ -15,12 +15,7 @@ public static class ScopeContract
     /// </summary>
     public static bool IsValidScopedString(string? scope)
     {
-        if (scope is null)
-        {
-            return false;
-        }
-
-        return scope.Length == 0 || (!char.IsWhiteSpace(scope[0]) && !char.IsWhiteSpace(scope[^1]));
+        return ProtocolIdentifier.IsValidScope(scope);
     }
 
     /// <summary>
@@ -28,7 +23,7 @@ public static class ScopeContract
     /// </summary>
     public static bool IsValidListFilter(string? scope)
     {
-        return scope is null || IsValidScopedString(scope);
+        return ProtocolIdentifier.IsValidListScope(scope);
     }
 
     /// <summary>
@@ -36,10 +31,7 @@ public static class ScopeContract
     /// </summary>
     public static void EnsureScopedString(string? scope, string paramName)
     {
-        if (!IsValidScopedString(scope))
-        {
-            throw new ArgumentException("scope 必须为显式字符串：\"\" 表示 Global，其他值不得包含前后空白。", paramName);
-        }
+        ProtocolIdentifier.EnsureScope(scope, paramName);
     }
 
     /// <summary>
@@ -47,10 +39,7 @@ public static class ScopeContract
     /// </summary>
     public static void EnsureListFilter(string? scope, string paramName)
     {
-        if (!IsValidListFilter(scope))
-        {
-            throw new ArgumentException("scope 过滤器必须为 null 或合法的显式字符串。", paramName);
-        }
+        ProtocolIdentifier.EnsureListScope(scope, paramName);
     }
 
     /// <summary>

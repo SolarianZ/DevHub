@@ -729,7 +729,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             }
 
             var appId = appIdElement.GetString();
-            return string.IsNullOrWhiteSpace(appId) ? null : appId;
+            return ProtocolIdentifier.IsValidAppId(appId) ? appId : null;
         }
         catch
         {

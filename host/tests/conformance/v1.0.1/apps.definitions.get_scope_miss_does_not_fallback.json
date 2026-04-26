@@ -14,7 +14,7 @@
         }
       },
       {
-        "fileName": "apps.get.no-fallback.app--73636F70652D61.json",
+        "fileName": "apps.get.no-fallback.app--scope-scope-a.json",
         "definition": {
           "appId": "apps.get.no-fallback.app",
           "scope": "scope-a",

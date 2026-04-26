@@ -493,7 +493,7 @@ def test_http_client_get_instance_should_reuse_shared_payload_builder_validation
     )
 
     with pytest.raises(ValueError, match="instance_id"):
-        client.get_instance("inst/1")
+        client.get_instance("inst-1.")
 
     assert transport.calls == []
 

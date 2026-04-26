@@ -114,6 +114,7 @@ public class DefinitionLoader
     /// </summary>
     public AppDefinition? GetDefinition(string appId, string scope)
     {
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         _logger.LogDebug("尝试获取应用程序定义，AppId: {AppId}, Scope: {Scope}", appId, scope);
@@ -136,6 +137,7 @@ public class DefinitionLoader
     /// </summary>
     public bool HasDefinitions(string appId)
     {
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         return _definitions.Any(definition => definition.AppId == appId);
     }
 }

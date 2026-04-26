@@ -716,11 +716,11 @@ def normalize_definition_scope(scope: Optional[str]) -> str:
 
 
 def encode_definition_scope_segment(scope: str) -> str:
-    """把 Definition scope 编码为稳定文件名片段。"""
+    """把 Definition scope 编码为无冲突文件名片段。"""
     if scope == "":
         return "global"
 
-    return scope.encode("utf-8").hex().upper()
+    return f"scope-{scope}"
 
 
 def build_definition_file_name(app_id: str, scope: Optional[str] = "") -> str:

@@ -3,7 +3,7 @@
   "id": "req-1",
   "method": "hub.invoke.request",
   "params": {
-    "appId": "sample.app",
+    "appId": "Sample.App",
     "target": {
       "scope": ""
     },

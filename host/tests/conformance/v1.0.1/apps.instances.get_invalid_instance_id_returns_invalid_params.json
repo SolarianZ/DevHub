@@ -17,7 +17,7 @@
     "id": "apps-instances-get-invalid-instance-id",
     "method": "hub.apps.getInstance",
     "params": {
-      "instanceId": "invalid instance id"
+      "instanceId": ".invalid.instance"
     }
   },
   "expectedResponse": {

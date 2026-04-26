@@ -9,13 +9,18 @@ namespace DevHub.Sdk.Models;
 /// </summary>
 public sealed class AppDefinition
 {
+    private string _appId = string.Empty;
     private string? _scope;
 
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonPropertyName("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// Definition 作用域。空字符串表示 Global Definition。
@@ -166,19 +171,29 @@ public sealed class DefinitionValidationResult
 /// </summary>
 public sealed class AppInstance
 {
+    private string _instanceId = string.Empty;
+    private string _appId = string.Empty;
     private string _scope = string.Empty;
 
     /// <summary>
     /// 实例标识。
     /// </summary>
     [JsonPropertyName("instanceId")]
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonPropertyName("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 作用域。空字符串表示 Global 实例。
@@ -260,19 +275,29 @@ public sealed class RegisterInstanceResult
 /// </summary>
 public sealed class AppInstanceRegistration
 {
+    private string _instanceId = string.Empty;
+    private string _appId = string.Empty;
     private string? _scope;
 
     /// <summary>
     /// 实例标识。
     /// </summary>
     [JsonPropertyName("instanceId")]
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonPropertyName("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 作用域。空字符串表示 Global 实例。

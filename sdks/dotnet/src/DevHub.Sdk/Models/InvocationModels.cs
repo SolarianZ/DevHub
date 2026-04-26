@@ -33,12 +33,17 @@ public sealed class PingResult
 /// </summary>
 public sealed class ListDefinitionsRequest
 {
+    private string? _appId;
     private string? _scope;
 
     /// <summary>
     /// 应用标识过滤。
     /// </summary>
-    public string? AppId { get; set; }
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
@@ -58,12 +63,17 @@ public sealed class ListDefinitionsRequest
 /// </summary>
 public sealed class LaunchRequest
 {
+    private string _appId = string.Empty;
     private string? _scope;
 
     /// <summary>
     /// 应用标识。
     /// </summary>
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 作用域。空字符串表示 Global Definition。
@@ -123,12 +133,17 @@ public sealed class LaunchResult
 /// </summary>
 public sealed class ListInstancesRequest
 {
+    private string? _appId;
     private string? _scope;
 
     /// <summary>
     /// 应用标识过滤。
     /// </summary>
-    public string? AppId { get; set; }
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
@@ -153,6 +168,8 @@ public sealed class ListInstancesRequest
 /// </summary>
 public sealed class AbandonedRequestFilter
 {
+    private string? _appId;
+
     /// <summary>
     /// 仅匹配已放弃时长达到该阈值的记录。
     /// </summary>
@@ -161,7 +178,11 @@ public sealed class AbandonedRequestFilter
     /// <summary>
     /// 仅匹配已记录到相同应用标识的请求。
     /// </summary>
-    public string? AppId { get; set; }
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 仅匹配相同 JSON-RPC 方法名的请求。
@@ -174,10 +195,16 @@ public sealed class AbandonedRequestFilter
 /// </summary>
 public sealed class InvokeRequest
 {
+    private string _appId = string.Empty;
+
     /// <summary>
     /// 目标应用标识。
     /// </summary>
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 调用目标。
@@ -247,10 +274,16 @@ public sealed class RequestResult
 /// </summary>
 public sealed class PollRequest
 {
+    private string _instanceId = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 实例会话令牌。
@@ -297,12 +330,17 @@ public sealed class PollResult
 /// </summary>
 public sealed class RespondRequest
 {
+    private string _instanceId = string.Empty;
     private object? _value;
 
     /// <summary>
     /// 实例标识。
     /// </summary>
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 实例会话令牌。
@@ -340,6 +378,8 @@ public sealed class RespondRequest
 /// </summary>
 public sealed class Invocation
 {
+    private string _appId = string.Empty;
+
     /// <summary>
     /// 调用标识。
     /// </summary>
@@ -350,7 +390,11 @@ public sealed class Invocation
     /// 应用标识。
     /// </summary>
     [JsonPropertyName("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 调用目标。
@@ -406,6 +450,7 @@ public sealed class Invocation
 /// </summary>
 public sealed class InvocationTarget
 {
+    private string? _instanceId;
     private string? _scope;
 
     /// <summary>
@@ -427,7 +472,11 @@ public sealed class InvocationTarget
     /// </summary>
     [JsonPropertyName("instanceId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? InstanceId { get; set; }
+    public string? InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureOptionalInstanceId(value, nameof(InstanceId));
+    }
 }
 
 /// <summary>

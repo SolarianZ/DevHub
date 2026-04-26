@@ -5,7 +5,7 @@
     "ok": true,
     "invocationId": "${INVOCATION_ID}",
     "value": {
-      "handledBy": "sample-instance-1"
+      "handledBy": "NODE_01.alpha"
     }
   }
 }

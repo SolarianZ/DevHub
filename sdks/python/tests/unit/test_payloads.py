@@ -80,6 +80,22 @@ def test_request_builder_should_apply_default_options() -> None:
     assert "args" not in payload
 
 
+def test_request_builder_should_preserve_case_sensitive_canonical_identifiers() -> None:
+    payload = build_request_params(
+        InvokeRequest(
+            app_id="Sample.App",
+            method="test.request",
+            target=InvocationTarget(scope="Workspace-A.v2", instance_id="NODE_01.alpha"),
+        )
+    )
+
+    assert payload["appId"] == "Sample.App"
+    assert payload["target"] == {
+        "scope": "Workspace-A.v2",
+        "instanceId": "NODE_01.alpha",
+    }
+
+
 def test_notify_builder_when_wait_timeout_specified_should_raise() -> None:
     with pytest.raises(ValueError, match="wait_timeout_ms"):
         build_notify_params(
@@ -148,7 +164,7 @@ def test_request_builder_when_auto_launch_enabled_with_instance_id_should_raise(
 
 def test_request_builder_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
-        build_request_params(InvokeRequest(app_id="Test.App", method="test.request", target=InvocationTarget(scope="")))
+        build_request_params(InvokeRequest(app_id="Test.App-", method="test.request", target=InvocationTarget(scope="")))
 
 
 def test_notify_builder_when_target_instance_id_violates_spec_should_raise() -> None:
@@ -157,7 +173,18 @@ def test_notify_builder_when_target_instance_id_violates_spec_should_raise() -> 
             InvokeRequest(
                 app_id="test.app",
                 method="test.notify",
-                target=InvocationTarget(scope="", instance_id="inst/1"),
+                target=InvocationTarget(scope="", instance_id="inst-1."),
+            )
+        )
+
+
+def test_notify_builder_when_target_scope_violates_spec_should_raise() -> None:
+    with pytest.raises(ValueError, match="scope"):
+        build_notify_params(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.notify",
+                target=InvocationTarget(scope=".workspace"),
             )
         )
 
@@ -185,24 +212,24 @@ def test_poll_builder_should_apply_defaults() -> None:
 def test_definition_builder_should_preserve_supported_fields() -> None:
     payload = build_upsert_definition_params(
         AppDefinition(
-            app_id="test.app",
+            app_id="Sample.App",
             display_name="Test App",
-            scope="workspace-a",
+            scope="Workspace-A.v2",
             description="用于测试。",
             capabilities=AppCapabilities(rpc=False, events=True),
             launch=LaunchConfiguration(
                 exe_path="python",
                 args_template="-m app",
                 working_directory="/tmp",
-                dedupe_key_template="test.app",
+                dedupe_key_template="Sample.App",
             ),
         )
     )
 
     assert payload == {
         "definition": {
-            "appId": "test.app",
-            "scope": "workspace-a",
+            "appId": "Sample.App",
+            "scope": "Workspace-A.v2",
             "displayName": "Test App",
             "description": "用于测试。",
             "capabilities": {
@@ -213,7 +240,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
                 "exePath": "python",
                 "argsTemplate": "-m app",
                 "workingDirectory": "/tmp",
-                "dedupeKeyTemplate": "test.app",
+                "dedupeKeyTemplate": "Sample.App",
             },
         }
     }
@@ -221,7 +248,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
 
 def test_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(ValueError):
-        build_validate_definition_params(AppDefinition(app_id="Test.App", display_name="Broken", scope=""))
+        build_validate_definition_params(AppDefinition(app_id=".Broken.App", display_name="Broken", scope=""))
 
 
 def test_validate_definition_builder_when_scope_is_blank_should_raise() -> None:
@@ -237,10 +264,11 @@ def test_app_definition_should_preserve_existing_positional_description() -> Non
 
 
 def test_app_definition_should_preserve_keyword_scope() -> None:
-    definition = AppDefinition("demo.app", "Demo App", "Description", scope="workspace-a")
+    definition = AppDefinition("Sample.App", "Demo App", "Description", scope="Workspace-A.v2")
 
     assert definition.description == "Description"
-    assert definition.scope == "workspace-a"
+    assert definition.app_id == "Sample.App"
+    assert definition.scope == "Workspace-A.v2"
 
 
 def test_delete_definition_builder_should_validate_app_id() -> None:
@@ -251,7 +279,7 @@ def test_delete_definition_builder_should_validate_app_id() -> None:
     }
 
     with pytest.raises(ValueError):
-        build_delete_definition_params("Test.App", "")
+        build_delete_definition_params(".Test.App", "")
 
     with pytest.raises(ValueError, match="scope"):
         build_delete_definition_params("test.app", None)  # type: ignore[arg-type]
@@ -259,13 +287,17 @@ def test_delete_definition_builder_should_validate_app_id() -> None:
 
 def test_get_definition_builder_should_validate_app_id() -> None:
     assert build_get_definition_params("test.app", "") == {"appId": "test.app", "scope": ""}
+    assert build_get_definition_params("Sample.App", "Workspace-A.v2") == {
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
+    }
     assert build_get_definition_params("test.app", "workspace-a") == {
         "appId": "test.app",
         "scope": "workspace-a",
     }
 
     with pytest.raises(ValueError):
-        build_get_definition_params("Test.App", "")
+        build_get_definition_params("Test.App-", "")
 
     with pytest.raises(ValueError, match="scope"):
         build_get_definition_params("test.app", None)  # type: ignore[arg-type]
@@ -273,9 +305,10 @@ def test_get_definition_builder_should_validate_app_id() -> None:
 
 def test_get_instance_builder_should_validate_instance_id() -> None:
     assert build_get_instance_params("inst-1") == {"instanceId": "inst-1"}
+    assert build_get_instance_params("NODE_01.alpha") == {"instanceId": "NODE_01.alpha"}
 
     with pytest.raises(ValueError, match="instance_id"):
-        build_get_instance_params("inst/1")
+        build_get_instance_params(".inst-1")
 
     with pytest.raises(ValueError, match="instance_id"):
         build_get_instance_params(None)  # type: ignore[arg-type]
@@ -301,7 +334,7 @@ def test_list_instances_builder_should_share_filter_validation_rules() -> None:
     }
 
     with pytest.raises(ValueError):
-        build_list_instances_params(ListInstancesRequest(scope=None, app_id="Test.App"))
+        build_list_instances_params(ListInstancesRequest(scope=None, app_id=".Test.App"))
 
 
 def test_list_instances_request_should_not_accept_include_all_scopes() -> None:
@@ -374,7 +407,7 @@ def test_register_instance_builder_when_instance_id_violates_spec_should_raise()
     with pytest.raises(ValueError):
         build_register_instance_params(
             AppInstanceRegistration(
-                instance_id="inst/1",
+                instance_id="inst:1",
                 app_id="test.app",
                 pid=1234,
                 invoke=InvokeCapability(poll=True, respond=True),

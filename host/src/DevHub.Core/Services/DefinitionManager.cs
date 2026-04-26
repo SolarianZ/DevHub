@@ -104,12 +104,7 @@ public sealed class DefinitionManager : IDefinitionManager
     /// <inheritdoc />
     public bool Delete(string appId, string scope)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
-        if (!AppDefinitionValidator.IsValidAppId(appId))
-        {
-            throw new ArgumentException("appId format is invalid.", nameof(appId));
-        }
-
+        ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         var identity = AppDefinitionIdentity.Create(appId, scope);

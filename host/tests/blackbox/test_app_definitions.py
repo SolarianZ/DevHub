@@ -452,6 +452,74 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
+    def test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(self):
+        """测试 scope='global' 使用独立 scopeKey 且按原值回显"""
+        result = TestResult("测试 scope='global' 文件名与 canonical 回显")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = f"Sample.App_{uuid.uuid4().hex[:8]}"
+
+            upsert_response = client.call("hub.apps.upsertDefinition", {
+                "definition": {
+                    "appId": app_id,
+                    "scope": "global",
+                    "displayName": "Explicit Global App",
+                }
+            })
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
+
+            definition = upsert_response["result"]["definition"]
+            if definition.get("appId") != app_id or definition.get("scope") != "global":
+                result.mark_failure(f"❌ upsertDefinition 未按原值回显 canonical 标识符: {definition}")
+                return result
+
+            explicit_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "global"))
+            default_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, ""))
+            if not os.path.exists(explicit_global_path):
+                result.mark_failure(f"❌ 未生成 scope='global' 的独立 Definition 文件: {explicit_global_path}")
+                return result
+            if os.path.exists(default_global_path):
+                result.mark_failure(f"❌ scope='global' 错误覆盖了 Global Definition 文件: {default_global_path}")
+                return result
+
+            get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "global"))
+            if not RpcAssertions.expect_success(result, get_response, ["definition"]):
+                return result
+            if get_response["result"]["definition"].get("scope") != "global":
+                result.mark_failure(f"❌ getDefinition 未回显 scope='global': {get_response}")
+                return result
+
+            list_global_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": ""})
+            if not RpcAssertions.expect_success(result, list_global_response, ["definitions"]):
+                return result
+            if list_global_response["result"]["definitions"]:
+                result.mark_failure(f"❌ Global 过滤错误命中了 scope='global' 定义: {list_global_response}")
+                return result
+
+            list_explicit_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": "global"})
+            if not RpcAssertions.expect_success(result, list_explicit_response, ["definitions"]):
+                return result
+            explicit_definitions = list_explicit_response["result"]["definitions"]
+            if len(explicit_definitions) != 1 or explicit_definitions[0].get("scope") != "global":
+                result.mark_failure(f"❌ scope='global' 过滤结果不正确: {list_explicit_response}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "global"))
+                    safe_remove(os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "")))
+            except Exception:
+                pass
+
+        return result
+
     def test_upsert_invalid_definition(self):
         """测试 upsertDefinition 对非法定义返回 definition_invalid"""
         result = TestResult("测试 upsertDefinition 对非法定义返回 definition_invalid")
@@ -590,6 +658,7 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_validate_definition(),
             self.test_upsert_definition_and_delete_definition(),
             self.test_scoped_definitions_should_use_composite_identity(),
+            self.test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(),
             self.test_upsert_invalid_definition(),
             self.test_register_instance_should_allow_undeclared_scope_for_definition_managed_app(),
             self.test_delete_nonexistent_definition()

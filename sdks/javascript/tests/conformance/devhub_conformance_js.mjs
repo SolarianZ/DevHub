@@ -10,6 +10,8 @@ import {
 import { discoverRuntime } from "../../dist/runtime.js";
 
 const WebSocketCtor = globalThis.WebSocket;
+const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 
 function emit(payload) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -547,8 +549,8 @@ function buildInvokeRequest(payload) {
 function buildAppInstanceRegistration(payload) {
   const invoke = ensureRecord(payload.invoke, "instance.invoke");
   return {
-    instanceId: ensureString(payload.instanceId, "instance.instanceId"),
-    appId: ensureString(payload.appId, "instance.appId"),
+    instanceId: ensureCanonicalIdentifier(payload.instanceId, "instance.instanceId"),
+    appId: ensureCanonicalIdentifier(payload.appId, "instance.appId"),
     scope: ensureScopeString(payload.scope, "instance.scope"),
     pid: ensureInteger(payload.pid, "instance.pid"),
     invoke: {
@@ -561,7 +563,7 @@ function buildAppInstanceRegistration(payload) {
 
 function buildAppDefinition(payload) {
   const definition = {
-    appId: ensureString(payload.appId, "definition.appId"),
+    appId: ensureCanonicalIdentifier(payload.appId, "definition.appId"),
     scope: ensureScopeString(payload.scope, "definition.scope"),
     displayName: ensureStringValue(payload.displayName, "definition.displayName")
   };
@@ -729,7 +731,10 @@ function readRawResult(response, pathLabel) {
 }
 
 function buildDefinitionIdentityParams(step, captures, index) {
-  const appId = String(resolveCaptureValue(step, captures, index, "appId"));
+  const appId = ensureCanonicalIdentifier(
+    String(resolveCaptureValue(step, captures, index, "appId")),
+    `request.steps[${index}].appId`
+  );
   const scope = resolveCaptureValue(step, captures, index, "scope");
   return {
     appId,
@@ -804,8 +809,16 @@ function ensureStringValue(value, pathLabel) {
 }
 
 function ensureScopeString(value, pathLabel) {
-  if (typeof value !== "string" || (value.length > 0 && value.trim() !== value)) {
-    throw new Error(`${pathLabel} 必须为 "" 或首尾无空白的非空字符串。`);
+  if (typeof value !== "string" || (value.length > 0 && !CANONICAL_IDENTIFIER_REGEX.test(value))) {
+    throw new Error(`${pathLabel} 必须为 "" 或匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
+  return value;
+}
+
+function ensureCanonicalIdentifier(value, pathLabel) {
+  if (typeof value !== "string" || !CANONICAL_IDENTIFIER_REGEX.test(value)) {
+    throw new Error(`${pathLabel} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
   }
 
   return value;

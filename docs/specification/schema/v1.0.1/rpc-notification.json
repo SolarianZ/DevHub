@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://devhub.spec/v1/rpc-notification.json",
+  "type": "object",
+  "required": [
+    "jsonrpc",
+    "method"
+  ],
+  "not": {
+    "required": [
+      "id"
+    ]
+  },
+  "properties": {
+    "jsonrpc": {
+      "type": "string",
+      "enum": [
+        "2.0"
+      ]
+    },
+    "method": {
+      "type": "string"
+    },
+    "params": {
+      "oneOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        }
+      ]
+    }
+  }
+}

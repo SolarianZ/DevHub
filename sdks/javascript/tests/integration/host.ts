@@ -14,6 +14,8 @@ const SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY"
 const SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 const TestLiveStatusEnvironmentVariable = "DEVHUB_TEST_LIVE_STATUS";
 const LongWaitStatusThresholdSeconds = 8;
+const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 let sharedHostAssemblyPromise: Promise<string> | undefined;
 let sharedHostBuildRoot: string | undefined;
 let sharedHostCleanupRegistered = false;
@@ -152,10 +154,7 @@ export class DevHubHostFixture {
 
   async writeDefinition(definition: Record<string, unknown>): Promise<void> {
     const payload = { ...definition };
-    const appId = payload.appId;
-    if (typeof appId !== "string" || !appId.trim()) {
-      throw new Error("appId 不能为空。");
-    }
+    const appId = ensureCanonicalIdentifier(payload.appId, "definition.appId");
 
     const scope = normalizeDefinitionScope(payload.scope);
     payload.scope = scope;
@@ -381,8 +380,8 @@ function normalizeDefinitionScope(value: unknown): string {
     return "";
   }
 
-  if (typeof value !== "string" || (value.length > 0 && value.trim() !== value)) {
-    throw new Error("definition.scope 必须为 \"\" 或首尾无空白的非空字符串。");
+  if (typeof value !== "string" || (value.length > 0 && !CANONICAL_IDENTIFIER_REGEX.test(value))) {
+    throw new Error(`definition.scope 必须为 "" 或匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
   }
 
   return value;
@@ -391,8 +390,16 @@ function normalizeDefinitionScope(value: unknown): string {
 function buildDefinitionFileName(appId: string, scope: string): string {
   const scopeSegment = scope === ""
     ? "global"
-    : Buffer.from(scope, "utf-8").toString("hex").toUpperCase();
+    : `scope-${scope}`;
   return `${appId}--${scopeSegment}.json`;
+}
+
+function ensureCanonicalIdentifier(value: unknown, propertyName: string): string {
+  if (typeof value !== "string" || !CANONICAL_IDENTIFIER_REGEX.test(value)) {
+    throw new Error(`${propertyName} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
+  return value;
 }
 
 function registerSharedHostCleanup(): void {

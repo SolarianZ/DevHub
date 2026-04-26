@@ -18,7 +18,8 @@
       "pattern": "^invk-[a-zA-Z0-9._:-]+$"
     },
     "appId": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "target": {
       "type": "object",
@@ -27,15 +28,16 @@
       ],
       "properties": {
         "scope": {
-          "description": "Target scope. Use the empty string to explicitly target Global. Any other legal string must not contain leading or trailing whitespace.",
+          "description": "Target scope. Use the empty string to explicitly target Global. Any other legal string must satisfy the canonical DevHub identifier grammar and is preserved verbatim.",
           "type": "string",
-          "pattern": "^$|^\\S(?:.*\\S)?$"
+          "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
         },
         "instanceId": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
         }
       }
     },

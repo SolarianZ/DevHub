@@ -3,7 +3,7 @@
   "id": "apps-definitions-delete",
   "method": "hub.apps.deleteDefinition",
   "params": {
-    "appId": "sample.app",
+    "appId": "Sample.App",
     "scope": ""
   }
 }
