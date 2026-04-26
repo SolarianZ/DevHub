@@ -773,10 +773,13 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` / re-register 时生成新的、不透明的 `instanceSessionToken`，并立即使该 `instanceId` 先前持有的旧 token 失效。
 - Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 缺失、为 `null`、类型非法或未通过字符串验证，**必须**返回 `-32602 invalid_params`。
-- 如果某个 `appId` 已存在至少一份 Definition，Hub **必须**只接受与现有 `appId + scope` 精确匹配的实例注册；当该 `appId` 下不存在对应 `scope` 的 Definition 时，Hub **必须**返回 `-32014 app_definition_not_found`，并在 `error.data` 中至少包含 `appId` 与规范化 `scope`。
+- 未关联到活动 `launchId` 的 `hub.apps.registerInstance` **必须**视为实例自主注册路径；Hub **必须**仅依据请求参数合法性、实例密码/所有权规则和既有实例更新规则决定是否接受该注册。
+- 对于上述自主注册路径，若同一 `appId` 已存在其他 scope 的 Definition，Hub **不得**再要求当前 `scope` 也存在精确匹配的 Definition，也**不得**因缺少同 scope Definition 返回 `-32014 app_definition_not_found`。
 - 当某个 `instanceId` 首次成功注册时，Hub **必须**把该次请求中的 `password` 与该 `instanceId` 绑定。
 - 当某个 `instanceId` 已存在时，Hub **必须**只在 `password` 匹配时允许更新该实例；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
 - `instanceSessionToken` **必须**作为该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权凭据使用。
+- 自主注册成功的实例，即使其 `scope` 未被任何 Definition 覆盖，后续 `hub.apps.listInstances` 与 `hub.apps.getInstance` 仍**必须**返回该实例快照；Hub **不得**因此自动创建、复制或推导新的 Definition。
+- Definition inventory **必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist。
 - 当某次注册可被 Hub 关联到一条尚未完成的启动记录时，该注册**必须**通过被跟踪的 `launchId` 绑定回对应启动记录；仅凭“已有同 `appId + scope` 实例在线”**不得**视为该次启动已完成。
 - 若该启动绑定注册的 `appId + scope` 与发起启动的 Definition 不一致，Hub **必须**拒绝本次注册，并返回 `-32002 forbidden` 且 `error.data.reason="definition_scope_mismatch"`；Hub **不得**让同 `appId` 的其他作用域 Definition 吸收该进程。
 - 发生上述启动绑定冲突时，任何等待该启动完成的 `hub.apps.launch` **必须**以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；相关 `error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope` 以便诊断。
@@ -1214,7 +1217,7 @@ stateDiagram-v2
 | -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 / 精确实例查询未命中 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`; 对于 `hub.apps.getInstance` 精确未命中，**必须**附带 `instanceId`: string；在 auto-launch 未命中请求的精确 Definition 时**可以**附带 `appId?`: string, `scope?`: string |
 | -32011 | `invocation_expired`       | TTL 耗尽 / 调用已过期 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
-| -32014 | `app_definition_not_found` | 定义文件缺失 / 启动所需定义缺失     | `appId?`: string; `scope?`: string                                                                                    |
+| -32014 | `app_definition_not_found` | 精确 Definition 缺失 / 启动所需定义缺失 | `appId?`: string; `scope?`: string                                                                                    |
 | -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string; 若等待中的 launch 因作用域回绑冲突失败，`reason` **必须**为 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
 | -32030 | `delivery_conflict`        | 重复响应或违反租约                  | `currentLeaseHolder?`: string; `invocationId?`: string                                                                |
 | -32040 | `rate_limited`             | 超过速率限制或资源上限              | `reason?`: string                                                                                                     |

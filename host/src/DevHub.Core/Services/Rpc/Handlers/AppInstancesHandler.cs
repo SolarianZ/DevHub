@@ -118,7 +118,6 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
-            _definitionProvider.Refresh();
             var launchId = TryGetLaunchId(instance.Meta);
             var launchBindingValidation = _launchRegistrationTracker.ValidateRegistration(launchId, instance.AppId, instance.Scope);
             if (launchBindingValidation.Status == LaunchRegistrationValidationStatus.Mismatched)
@@ -131,18 +130,6 @@ public class AppInstancesHandler : IRpcHandler
                     launchId,
                     request.Id);
                 return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, launchBindingValidation.ErrorData));
-            }
-
-            if (_definitionProvider.HasDefinitions(instance.AppId)
-                && _definitionProvider.GetDefinition(instance.AppId, instance.Scope) is null)
-            {
-                _logger.LogWarning(
-                    "注册应用程序实例失败: 未找到匹配 Definition，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
-                    instance.InstanceId,
-                    instance.AppId,
-                    instance.Scope,
-                    request.Id);
-                return Task.FromResult(AppDefinitionNotFound(request.Id, instance.AppId, instance.Scope));
             }
 
             if (!_appRegistry.TryRegisterInstance(
@@ -614,15 +601,6 @@ public class AppInstancesHandler : IRpcHandler
             JsonElement { ValueKind: JsonValueKind.String } element when !string.IsNullOrWhiteSpace(element.GetString()) => element.GetString(),
             _ => null
         };
-    }
-
-    private static JsonRpcResponse AppDefinitionNotFound(object? id, string appId, string scope)
-    {
-        return RpcErrorFactory.Create(id, -32014, "app_definition_not_found", new AppDefinitionIdentityErrorData
-        {
-            AppId = appId,
-            Scope = scope
-        });
     }
 
     private static JsonRpcResponse InstanceNotFound(object? id, string instanceId)

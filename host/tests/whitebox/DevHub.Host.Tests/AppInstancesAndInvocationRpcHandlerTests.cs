@@ -113,15 +113,20 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedScopeMissing_ShouldReturnAppDefinitionNotFound()
+    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
     {
-        WriteDefinition("managed.scope.app", rpcEnabled: true, definitionScope: "workspace-A");
+        const string appId = "managed.scope.app";
+        const string managedScope = "workspace-A";
+        const string selfRegisteredScope = "workspace-B";
+        const string instanceId = "managed.scope.instance";
+
+        WriteDefinition(appId, rpcEnabled: true, definitionScope: managedScope);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var definitionProvider = CreateDefinitionProvider();
         var handler = CreateAppInstancesHandler(appRegistry, definitionProvider: definitionProvider);
 
-        var response = await handler.HandleAsync(
+        var registerResponse = await handler.HandleAsync(
             CreateRequest(
                 HubRpcMethods.HubAppsRegisterInstance,
                 "register-missing-managed-scope",
@@ -130,9 +135,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     password = "managed-password",
                     instance = new
                     {
-                        instanceId = "managed.scope.instance",
-                        appId = "managed.scope.app",
-                        scope = "workspace-B",
+                        instanceId,
+                        appId,
+                        scope = selfRegisteredScope,
                         pid = 7309,
                         invoke = new
                         {
@@ -143,10 +148,134 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        AssertError(response, -32014, "app_definition_not_found", "register-missing-managed-scope");
-        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
-        Assert.Equal("managed.scope.app", errorData.GetProperty("appId").GetString());
-        Assert.Equal("workspace-B", errorData.GetProperty("scope").GetString());
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+        var registeredInstance = registerResult.GetProperty("instance");
+        Assert.Equal(instanceId, registeredInstance.GetProperty("instanceId").GetString());
+        Assert.Equal(appId, registeredInstance.GetProperty("appId").GetString());
+        Assert.Equal(selfRegisteredScope, registeredInstance.GetProperty("scope").GetString());
+
+        var listResponse = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsListInstances,
+                "list-managed-scopes",
+                new
+                {
+                    appId,
+                    scope = (string?)null,
+                    includeOffline = true
+                }),
+            CancellationToken.None);
+
+        Assert.Null(listResponse.Error);
+        var listResult = JsonSerializer.SerializeToElement(listResponse.Result);
+        Assert.True(listResult.GetProperty("ok").GetBoolean());
+        var listedInstance = Assert.Single(listResult.GetProperty("instances").EnumerateArray());
+        Assert.Equal(instanceId, listedInstance.GetProperty("instanceId").GetString());
+        Assert.Equal(selfRegisteredScope, listedInstance.GetProperty("scope").GetString());
+
+        var getResponse = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsGetInstance,
+                "get-managed-scope-instance",
+                new
+                {
+                    instanceId
+                }),
+            CancellationToken.None);
+
+        Assert.Null(getResponse.Error);
+        var getResult = JsonSerializer.SerializeToElement(getResponse.Result);
+        Assert.True(getResult.GetProperty("ok").GetBoolean());
+        var fetchedInstance = getResult.GetProperty("instance");
+        Assert.Equal(instanceId, fetchedInstance.GetProperty("instanceId").GetString());
+        Assert.Equal(appId, fetchedInstance.GetProperty("appId").GetString());
+        Assert.Equal(selfRegisteredScope, fetchedInstance.GetProperty("scope").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.12")]
+    public async Task Spec_6_3_12_AppInstancesAndLaunch_WhenUntrackedRegistrationUsesDifferentScope_ShouldKeepLaunchWaiting()
+    {
+        const string appId = "managed.untracked.launch";
+        const string launchScope = "workspace-A";
+        const string selfRegisteredScope = "workspace-B";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        var launchStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback(() => launchStarted.TrySetResult())
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "untracked-launch",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 250
+                }),
+            CancellationToken.None);
+
+        await launchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "untracked-register",
+                new
+                {
+                    password = "untracked-password",
+                    instance = new
+                    {
+                        instanceId = "untracked.scope.instance",
+                        appId,
+                        scope = selfRegisteredScope,
+                        pid = 7311,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+        Assert.Equal(selfRegisteredScope, registerResult.GetProperty("instance").GetProperty("scope").GetString());
+
+        var launchResponse = await launchTask;
+        Assert.Null(launchResponse.Error);
+        var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
+        Assert.Equal("starting", launchResult.GetProperty("status").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(launchResult.GetProperty("launchId").GetString()));
     }
 
     [Fact]
