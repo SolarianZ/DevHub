@@ -27,6 +27,7 @@ JSON-RPC 信封约束：
 
 | 接口                          | 传输          | 能力说明                                                    |
 | ----------------------------- | ------------- | ----------------------------------------------------------- |
+| `hub.getVersion`              | HTTP / WS     | 读取当前运行中的 Host 版本。                                |
 | `hub.ping`                    | HTTP / WS     | 检查连通性，并可回显一段调用方提供的数据。                  |
 | `hub.ws.authenticate`         | WS            | 绑定当前 WebSocket 连接的客户端身份，后续 WS 方法都依赖它。 |
 | `hub.apps.heartbeat`          | HTTP          | 刷新已注册实例的在线时间。                                  |
@@ -36,6 +37,7 @@ JSON-RPC 信封约束：
 | `hub.apps.upsertDefinition`   | HTTP          | 原子创建或更新 AppDefinition，并刷新定义快照。              |
 | `hub.apps.deleteDefinition`   | HTTP          | 删除指定 `appId + scope` 的 AppDefinition。                 |
 | `hub.apps.listInstances`      | HTTP / WS     | 按应用和作用域列出实例，可选择包含离线实例。                |
+| `hub.apps.getInstance`        | HTTP / WS     | 按精确 `instanceId` 读取单个实例快照。                      |
 | `hub.apps.registerInstance`   | HTTP          | 注册应用实例，写入或更新实例镜像。                          |
 | `hub.apps.unregisterInstance` | HTTP          | 注销应用实例并清理对应镜像。                                |
 | `hub.apps.launch`             | HTTP          | 根据 Definition 的启动配置拉起应用进程。                    |
@@ -49,13 +51,24 @@ JSON-RPC 信封约束：
 
 ## 3. 接口参数说明
 
-### 3.1 `hub.ping`
+### 3.1 `hub.getVersion`
+
+该接口没有业务参数。
+
+约束：
+
+- 成功结果中的 `version` 表示当前运行中的 Host 版本，格式为非空 `SemVer` 字符串。
+- 可以省略 `params`，也可以传 `null` 或空对象 `{}`。
+- 当 `params` 为数组时，Host 返回 `-32602 invalid_params`。
+- 当 `params` 为除 `null` 之外的非对象值，或对象中包含任意字段时，Host 返回 `-32602 invalid_params`。
+
+### 3.2 `hub.ping`
 
 | 参数           | 用途                                                                   |
 | -------------- | ---------------------------------------------------------------------- |
 | `echo`（可选） | 原样回显到响应结果中，便于做连通性验证、链路追踪或附带一段临时上下文。 |
 
-### 3.2 `hub.ws.authenticate`
+### 3.3 `hub.ws.authenticate`
 
 | 参数              | 用途                                                                  |
 | ----------------- | --------------------------------------------------------------------- |
@@ -69,7 +82,7 @@ JSON-RPC 信封约束：
 - `protocolVersion` 当前只接受 `1`。
 - `clientSessionId` 当前 Host 实现要求带连字符的 UUID 字符串（`D` 格式）。
 
-### 3.3 `hub.apps.heartbeat`
+### 3.4 `hub.apps.heartbeat`
 
 | 参数                   | 用途                                   |
 | ---------------------- | -------------------------------------- |
@@ -81,7 +94,7 @@ JSON-RPC 信封约束：
 - `instanceId` 与 `instanceSessionToken` 都必须是非空字符串。
 - 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
-### 3.4 `hub.apps.listDefinitions`
+### 3.5 `hub.apps.listDefinitions`
 
 | 参数            | 用途                                                                                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -93,7 +106,7 @@ JSON-RPC 信封约束：
 - `scope` 必须显式出现；`null` 与 `""` 语义不同。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
 
-### 3.5 `hub.apps.getDefinition`
+### 3.6 `hub.apps.getDefinition`
 
 | 参数    | 用途                                                                     |
 | ------- | ------------------------------------------------------------------------ |
@@ -105,7 +118,7 @@ JSON-RPC 信封约束：
 - `scope` 必须是显式字符串，不能传 `null`。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
 
-### 3.6 `hub.apps.validateDefinition`
+### 3.7 `hub.apps.validateDefinition`
 
 | 参数                                          | 用途                                                                                           |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -128,7 +141,7 @@ JSON-RPC 信封约束：
 - `definition`、`definition.capabilities`、`definition.launch` 如果出现，都必须是对象，不能是 `null`。
 - `definition.displayName`、`definition.launch.exePath` 在当前 Host 中都要求非空字符串。
 
-### 3.7 `hub.apps.upsertDefinition`
+### 3.8 `hub.apps.upsertDefinition`
 
 | 参数                                          | 用途                                                                             |
 | --------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -151,7 +164,7 @@ JSON-RPC 信封约束：
 - 参数结构和 `hub.apps.validateDefinition` 完全一致。
 - 当前 Host 对 `definition` 应用与 `validateDefinition` 相同的校验规则后才允许写入。
 
-### 3.8 `hub.apps.deleteDefinition`
+### 3.9 `hub.apps.deleteDefinition`
 
 | 参数    | 用途                                                                     |
 | ------- | ------------------------------------------------------------------------ |
@@ -163,7 +176,7 @@ JSON-RPC 信封约束：
 - `scope` 必须是显式字符串，不能传 `null`。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
 
-### 3.9 `hub.apps.registerInstance`
+### 3.10 `hub.apps.registerInstance`
 
 | 参数                      | 用途                                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -192,9 +205,9 @@ JSON-RPC 信封约束：
 
 - 成功结果顶层会返回新的 `instanceSessionToken`。
 - 每次成功的 re-register 都会轮换 `instanceSessionToken`；旧 token 随即失效。
-- `instanceSessionToken` 不会出现在 `AppInstance`、`hub.apps.listInstances` 或 `app.instance.*` 事件载荷中。
+- `instanceSessionToken` 不会出现在 `AppInstance`、`hub.apps.getInstance`、`hub.apps.listInstances` 或 `app.instance.*` 事件载荷中。
 
-### 3.10 `hub.apps.unregisterInstance`
+### 3.11 `hub.apps.unregisterInstance`
 
 | 参数                   | 用途                               |
 | ---------------------- | ---------------------------------- |
@@ -206,7 +219,7 @@ JSON-RPC 信封约束：
 - `instanceId` 与 `instanceSessionToken` 都必须是非空字符串。
 - 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
-### 3.11 `hub.apps.listInstances`
+### 3.12 `hub.apps.listInstances`
 
 | 参数                     | 用途                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
@@ -220,7 +233,23 @@ JSON-RPC 信封约束：
 - `includeOffline` 如果出现，必须是布尔值。
 - 当前 Host 对 `appId` 额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验。
 
-### 3.12 `hub.apps.launch`
+### 3.13 `hub.apps.getInstance`
+
+| 参数         | 用途                           |
+| ------------ | ------------------------------ |
+| `instanceId` | 指定要读取的实例唯一标识。     |
+
+约束：
+
+- `params` 必须是对象。
+- `instanceId` 必须是非空字符串，并且必须匹配 `^[a-zA-Z0-9._:-]+$`。
+- 该接口只按 `instanceId` 做精确匹配；命中时返回当前仍保留在注册表中的 `AppInstance` 快照。
+- 对于已经离线但尚未被显式注销或过期清理移除的实例，仍会返回该保留快照。
+- 该接口不会刷新 `lastSeenUtc`，也不要求 `instanceSessionToken`。
+- 当目标实例不存在、已注销或已被过期清理移除时，Host 返回 `-32010 instance_not_found`，并在 `error.data` 中至少包含 `instanceId` 与 `reason = "unknown_instance"`。
+- 成功结果中的 `instance` 不会泄漏 `password` 或 `instanceSessionToken`。
+
+### 3.14 `hub.apps.launch`
 
 | 参数                        | 用途                                                                     |
 | --------------------------- | ------------------------------------------------------------------------ |
@@ -236,7 +265,7 @@ JSON-RPC 信封约束：
 - `waitForRegisterMs` 如果出现，必须是大于等于 `0` 的整数。
 - 对同一解析后 `dedupeKey`，只要已有启动记录对应的进程仍存活且尚未完成注册绑定，Host 都会继续返回 `already_running`，不会因为超过去重窗口就放行第二次启动。
 
-### 3.13 `hub.invoke.notify`
+### 3.15 `hub.invoke.notify`
 
 | 参数                             | 用途                                                                                                                                    |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -262,7 +291,7 @@ JSON-RPC 信封约束：
 - 带 `id` 调用时，传输层按普通 request 处理；成功响应体可读取 `{ "ok": true, "invocationId": "..." }`，失败时返回 JSON-RPC `error`。
 - 如果以 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；本次响应无法携带业务错误码或错误对象，需要读取成功结果或错误时，必须改为发送带 `id` 的普通 request。
 
-### 3.14 `hub.invoke.request`
+### 3.16 `hub.invoke.request`
 
 | 参数                             | 用途                                                                                                                                    |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -287,7 +316,7 @@ JSON-RPC 信封约束：
 - 当前 Host 要求 `options.autoLaunch = true` 时同时满足 `options.queueIfOffline = true`。
 - 当前 Host 在 HTTP caller 主动断连后只会结束当前等待，不会仅因断连把 invocation 推进到 timeout / expired；后续实例侧 `poll/respond` 仍按原始 `ttlMs` / `waitTimeoutMs` 预算继续生效。
 
-### 3.15 `hub.invoke.poll`
+### 3.17 `hub.invoke.poll`
 
 | 参数                   | 用途                                                               |
 | ---------------------- | ------------------------------------------------------------------ |
@@ -303,7 +332,7 @@ JSON-RPC 信封约束：
 - `waitMs` 如果出现，必须是大于等于 `0` 的整数。
 - 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
-### 3.16 `hub.invoke.respond`
+### 3.18 `hub.invoke.respond`
 
 参数组合规则：`value` 与 `error` 必须二选一，且只能出现其中一个。
 
@@ -324,7 +353,7 @@ JSON-RPC 信封约束：
 - `error` 如果出现，必须是对象，并且至少包含整数 `code` 与非空字符串 `message`。
 - 当 `instanceSessionToken` 与当前实例会话不匹配时，Host 返回 `forbidden`，并携带 `reason = "instance_session_token_mismatch"`。
 
-### 3.17 `hub.events.subscribe`
+### 3.19 `hub.events.subscribe`
 
 | 参数            | 用途                                                                           |
 | --------------- | ------------------------------------------------------------------------------ |
@@ -346,7 +375,7 @@ JSON-RPC 信封约束：
 - `types` 如果出现，必须是由非空字符串组成的数组。
 - 当前 Host 会拒绝未知事件类型，并返回 `reason = "unsupported_event_type"`。
 
-### 3.18 `hub.events.unsubscribe`
+### 3.20 `hub.events.unsubscribe`
 
 | 参数             | 用途                   |
 | ---------------- | ---------------------- |
@@ -357,7 +386,7 @@ JSON-RPC 信封约束：
 - `subscriptionId` 必须是非空字符串。
 - 取消未知 `subscriptionId` 仍会返回 `{ "ok": true }`。
 
-### 3.19 `hub.event`
+### 3.21 `hub.event`
 
 `hub.event` 是 Host 主动发送到客户端的 JSON-RPC 通知，不需要客户端发起调用。
 
