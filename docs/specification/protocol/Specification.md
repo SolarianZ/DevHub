@@ -217,6 +217,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 规范性要求：
 - 本规范的 `protocolVersion` **必须**为 `1`。
 - 在当前基线下，Host 与客户端 **必须**使用 §5.4 定义的 `hub.json` 架构。若 `hub.json` 字段集合为纠正核心目标偏差而确需变更，**必须**同步更新 §5.4、Schema、协议示例、SDK、测试与接入文档；兼容性处理规则见 §9.2。
+- `hubVersion` 若存在，**必须**为字符串；该字段用于发现阶段诊断，已连接状态下的权威运行版本查询以 §6.3.1.1 `hub.getVersion` 为准。
 - `httpBaseUrl` **禁止**包含末尾斜杠。
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
@@ -587,6 +588,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 | 方法                          | HTTP | WS (鉴权后)      | 重试安全* | 副作用                            |
 | ----------------------------- | ---- | ---------------- | --------- | --------------------------------- |
 | `hub.ping`                    | ✓    | ✓                | ✓         | 无                                |
+| `hub.getVersion`              | ✓    | ✓                | ✓         | 无                                |
 | `hub.ws.authenticate`         | ✗    | ✓ (仅限首条消息) | ✓         | 将客户端身份绑定到 WS             |
 | `hub.apps.listDefinitions`    | ✓    | ✓                | ✓         | 无                                |
 | `hub.apps.getDefinition`      | ✓    | ✓                | ✓         | 无                                |
@@ -620,6 +622,19 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```json
 { "ok": true, "serverTimeUtc": "2026-01-30T12:34:56Z", "echo": "..." }
 ```
+
+#### 6.3.1.1 `hub.getVersion`
+**参数（可选）**：可以省略 `params`，也可以传 `null` 或空对象 `{}`
+**结果**：
+```json
+{ "ok": true, "version": "1.0.1" }
+```
+
+规范性行为：
+- Host **必须**返回当前运行中的 Host 版本。
+- `version` **必须**是非空 `SemVer` 字符串。
+- 当 `params` 为数组时，Hub **必须**按 §6.1 返回 `-32602 invalid_params`。
+- 当 `params` 为除 `null` 之外的非对象值，或对象中包含任意字段时，Hub **必须**返回 `-32602 invalid_params`。
 
 #### 6.3.2 `hub.ws.authenticate` (仅限 WS)
 **参数**：

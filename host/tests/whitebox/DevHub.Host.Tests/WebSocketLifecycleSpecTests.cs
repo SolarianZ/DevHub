@@ -37,6 +37,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     [Theory]
     [Trait("SpecRef", "4.3")]
     [InlineData("hub.ping")]
+    [InlineData("hub.getVersion")]
     [InlineData("hub.events.subscribe")]
     public async Task Spec_4_3_FirstMessageNotAuthenticate_ShouldReturnUnauthorizedAndClose(string method)
     {
@@ -664,6 +665,82 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(invalidRequestResponse.TryGetProperty("error", out var error));
         Assert.Equal(-32600, error.GetProperty("code").GetInt32());
         Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsNull_ShouldReturnVersion()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-get-version-null",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-get-version-client",
+                clientSessionId = "78787878-7878-7878-7878-787878787878"
+            }
+        });
+
+        const string getVersionRequest = """
+        {"jsonrpc":"2.0","id":"ws-get-version-null","method":"hub.getVersion","params":null}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, getVersionRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var authResponse = FindResponseById(responses, "auth-get-version-null");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var getVersionResponse = FindResponseById(responses, "ws-get-version-null");
+        Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
+        Assert.True(getVersionResponse.TryGetProperty("result", out var result));
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Matches(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:[-+][0-9A-Za-z.-]+)?$",
+            result.GetProperty("version").GetString()!);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-get-version-extra",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-get-version-client",
+                clientSessionId = "67676767-6767-6767-6767-676767676767"
+            }
+        });
+
+        const string getVersionRequest = """
+        {"jsonrpc":"2.0","id":"ws-get-version-extra","method":"hub.getVersion","params":{"verbose":true}}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, getVersionRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var getVersionResponse = FindResponseById(responses, "ws-get-version-extra");
+        Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
+        Assert.True(getVersionResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
     }
 
     [Fact]

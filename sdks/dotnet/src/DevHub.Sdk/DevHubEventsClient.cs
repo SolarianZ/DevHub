@@ -194,6 +194,31 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.getVersion</c> 获取当前 Host 版本。
+    /// 该方法要求当前客户端已经完成认证，并只返回 RPC 的直接结果；旧 Host 若不支持该方法，会按既有 JSON-RPC 语义抛出异常。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>Host 返回的版本字符串。</returns>
+    public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken);
+    }
+
+    /// <summary>
+    /// 检查当前 SDK 与 Host 的版本兼容性。
+    /// 该方法要求当前客户端已经完成认证，并优先调用 <c>hub.getVersion</c>；若 Host 返回 <c>method_not_found</c>，则回退到 <see cref="Runtime"/>.<see cref="HubRuntime.HubVersion"/>。
+    /// 当任一版本缺失或无法解析为比较所需的语义化版本格式时，返回 <see cref="VersionCompatibilityStatus.Unknown"/>。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>兼容性检查结果。</returns>
+    public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken);
+    }
+
+    /// <summary>
     /// 通过 WebSocket 调用 <c>hub.apps.listDefinitions</c>。
     /// </summary>
     /// <param name="request">过滤参数。</param>

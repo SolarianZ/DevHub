@@ -7,6 +7,29 @@ internal static class ReadOnlyRpcExecutor
 {
     internal delegate Task<JsonElement> SendAsyncDelegate(string method, object? parameters, CancellationToken cancellationToken);
 
+    internal static Task<string> GetHostVersionAsync(
+        SendAsyncDelegate sendAsync,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(
+            sendAsync,
+            "hub.getVersion",
+            parameters: null,
+            static result =>
+            {
+                ResponsePayloadReader.EnsurePropertyExists(
+                    result,
+                    "hub.getVersion.result",
+                    "version",
+                    JsonValueKind.String);
+                var payload = ResponsePayloadReader.DeserializeRequired<GetHostVersionContract>(result, "hub.getVersion.result");
+                ResponsePayloadReader.EnsureOk(payload.Ok, "hub.getVersion.result");
+                ResponsePayloadReader.EnsureNotEmpty(payload.Version, "hub.getVersion.result", "version");
+                return payload.Version;
+            },
+            cancellationToken);
+    }
+
     internal static Task<PingResult> PingAsync(
         SendAsyncDelegate sendAsync,
         object? echo,

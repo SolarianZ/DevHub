@@ -222,6 +222,24 @@ class RuntimeConnectionInfo:
         return self.runtime.ws_url
 
 
+class VersionCompatibilityStatus(str, Enum):
+    """版本兼容状态。"""
+
+    COMPATIBLE = "compatible"
+    UPDATE_RECOMMENDED = "update_recommended"
+    INCOMPATIBLE = "incompatible"
+    UNKNOWN = "unknown"
+
+
+@dataclass(slots=True, frozen=True)
+class VersionCompatibilityResult:
+    """版本兼容检查结果。"""
+
+    sdk_version: str
+    host_version: str | None
+    status: VersionCompatibilityStatus
+
+
 @dataclass(slots=True)
 class PingResult:
     """Ping 结果。"""

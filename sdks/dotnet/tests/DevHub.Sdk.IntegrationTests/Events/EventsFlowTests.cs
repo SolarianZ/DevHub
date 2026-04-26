@@ -174,6 +174,30 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
+    public async Task WsVersionCompatibility_AfterAuthenticate_ShouldUseRpcWhenAvailableOrFallbackToRuntime()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var eventsClient = await host.CreateEventsClientAsync("events-version-client");
+        await eventsClient.AuthenticateAsync();
+
+        var compatibility = await eventsClient.CheckVersionCompatibilityAsync();
+
+        Assert.False(string.IsNullOrWhiteSpace(compatibility.SdkVersion));
+
+        try
+        {
+            var hostVersion = await eventsClient.GetHostVersionAsync();
+            Assert.Equal(hostVersion, compatibility.HostVersion);
+        }
+        catch (DevHubRpcException exception) when (exception.Is(DevHubRpcErrorCode.MethodNotFound))
+        {
+            Assert.Equal(eventsClient.Runtime.HubVersion, compatibility.HostVersion);
+        }
+
+        Assert.NotEqual(VersionCompatibilityStatus.Unknown, compatibility.Status);
+    }
+
+    [Fact]
     public async Task WsGetInstance_WhenMissing_ShouldPropagateInstanceNotFound()
     {
         await using var host = await DevHubHostFixture.StartAsync();

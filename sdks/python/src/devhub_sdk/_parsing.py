@@ -110,6 +110,16 @@ def parse_ping_result(value: Any, *, path: str) -> PingResult:
     return PingResult(ok=ok, server_time_utc=server_time_utc, echo=echo)
 
 
+def parse_host_version_result(value: Any, *, path: str) -> str:
+    """解析 `hub.getVersion` 结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    return require_non_empty_string(root, "version", path)
+
+
 def parse_definitions_result(value: Any, *, path: str) -> list[AppDefinition]:
     """解析应用定义列表结果。"""
 

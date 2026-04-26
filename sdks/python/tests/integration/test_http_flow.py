@@ -16,6 +16,8 @@ from devhub_sdk import (
     InvokeCapability,
     ListDefinitionsRequest,
     ListInstancesRequest,
+    SDK_VERSION,
+    VersionCompatibilityStatus,
 )
 from devhub_sdk.models import LaunchRequest
 
@@ -74,6 +76,24 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         client.unregister_instance("http-flow-inst-1", instance_session_token)
         instances_after_unregister = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert instances_after_unregister == []
+
+
+def test_version_methods_should_use_rpc_or_runtime_fallback() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("http-version-client")
+
+        rpc_version: str | None = None
+        try:
+            rpc_version = client.get_host_version()
+        except DevHubRpcException as exc:
+            assert exc.code == DevHubRpcErrorCode.METHOD_NOT_FOUND
+
+        compatibility = client.check_version_compatibility()
+
+    expected_host_version = rpc_version if rpc_version is not None else client.runtime.hub_version
+    assert compatibility.sdk_version == SDK_VERSION
+    assert compatibility.host_version == expected_host_version
+    assert compatibility.status == _expected_version_status(SDK_VERSION, expected_host_version)
 
 
 def test_instance_session_token_mismatch_should_surface_forbidden_reason() -> None:
@@ -352,3 +372,28 @@ def _kill_process(pid: int) -> None:
         os.kill(pid, 9)
     except OSError:
         return
+
+
+def _expected_version_status(
+    sdk_version: str,
+    host_version: str | None,
+) -> VersionCompatibilityStatus:
+    sdk_parts = _parse_major_minor(sdk_version)
+    host_parts = _parse_major_minor(host_version)
+    if sdk_parts is None or host_parts is None:
+        return VersionCompatibilityStatus.UNKNOWN
+    if sdk_parts[0] != host_parts[0]:
+        return VersionCompatibilityStatus.INCOMPATIBLE
+    if sdk_parts[1] != host_parts[1]:
+        return VersionCompatibilityStatus.UPDATE_RECOMMENDED
+    return VersionCompatibilityStatus.COMPATIBLE
+
+
+def _parse_major_minor(version: str | None) -> tuple[int, int] | None:
+    if not isinstance(version, str):
+        return None
+
+    parts = version.split(".", 2)
+    if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return int(parts[0]), int(parts[1])

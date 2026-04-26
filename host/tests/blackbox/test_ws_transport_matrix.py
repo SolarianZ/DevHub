@@ -105,6 +105,32 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
+    def test_ws_matrix_001a_get_version_should_work_after_auth(self):
+        """WS-MATRIX-001A: 鉴权后 hub.getVersion 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-001A 鉴权后 WS hub.getVersion")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-001a")
+                if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
+                    return result
+
+                response = self._ws_call(ws, "matrix-get-version-001a", "hub.getVersion", {})
+                if not RpcAssertions.expect_success(result, response, ["version"]):
+                    return result
+
+                version = response.get("result", {}).get("version")
+                if not isinstance(version, str) or not version.strip():
+                    result.mark_failure(f"❌ version 非法: {response}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_matrix_002_list_definitions_should_work_after_auth(self):
         """WS-MATRIX-002: 鉴权后 hub.apps.listDefinitions 可在 WS 调用。"""
         result = TestResult("WS-MATRIX-002 鉴权后 WS hub.apps.listDefinitions")
@@ -303,6 +329,7 @@ class TestWsTransportMatrix(unittest.TestCase):
 
                 cases = [
                     ("matrix-invalid-ping-array", "hub.ping"),
+                    ("matrix-invalid-get-version-array", "hub.getVersion"),
                     ("matrix-invalid-list-def-array", "hub.apps.listDefinitions"),
                     ("matrix-invalid-get-def-array", "hub.apps.getDefinition"),
                     ("matrix-invalid-list-instances-array", "hub.apps.listInstances"),

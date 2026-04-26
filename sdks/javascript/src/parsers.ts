@@ -56,6 +56,12 @@ export function parsePingResult(payload: unknown): PingResult {
   };
 }
 
+export function parseHostVersionResult(payload: unknown): string {
+  const record = ensureRecord(payload, "hub.getVersion.result");
+  ensureOk(record, "hub.getVersion.result");
+  return readString(record, "hub.getVersion.result", "version");
+}
+
 export function parseDefinitionsResult(payload: unknown): AppDefinition[] {
   const record = ensureRecord(payload, "hub.apps.listDefinitions.result");
   ensureOk(record, "hub.apps.listDefinitions.result");

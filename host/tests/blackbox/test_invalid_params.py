@@ -23,6 +23,7 @@ class TestInvalidParams(unittest.TestCase):
 
             cases = [
                 ("hub.ping", ["invalid"]),
+                ("hub.getVersion", ["invalid"]),
                 ("hub.apps.listDefinitions", ["invalid"]),
                 ("hub.apps.getDefinition", ["invalid"]),
                 ("hub.apps.registerInstance", ["invalid"]),
@@ -46,6 +47,35 @@ class TestInvalidParams(unittest.TestCase):
                 ):
                     return result
                 result.add_detail(f"✅ {method} 正确拒绝数组参数")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_hub_get_version_unexpected_params(self):
+        """测试 hub.getVersion 传入额外字段或标量时返回 invalid_params"""
+        result = TestResult("测试 hub.getVersion 传入额外字段或标量时返回 invalid_params")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call("hub.getVersion", {"verbose": True})
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+
+            scalar_response = client.call("hub.getVersion", 1, request_id="get-version-scalar")
+            if not RpcAssertions.expect_error(
+                result,
+                scalar_response,
+                expected_code=-32602,
+                expected_message="invalid_params",
+                expected_id="get-version-scalar",
+            ):
+                return result
 
             result.mark_success()
 

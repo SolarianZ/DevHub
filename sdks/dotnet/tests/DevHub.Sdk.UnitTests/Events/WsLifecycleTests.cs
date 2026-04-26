@@ -79,9 +79,18 @@ public sealed class WsLifecycleTests : IDisposable
                 DataDir = dataDir
             },
             factory,
-            new SequenceRequestIdFactory("ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1", "ws-listinst-1").Create);
+            new SequenceRequestIdFactory(
+                "ws-ping-1",
+                "ws-get-version-1",
+                "ws-check-version-1",
+                "ws-listdefs-1",
+                "ws-getdef-1",
+                "ws-getinst-1",
+                "ws-listinst-1").Create);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetHostVersionAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.CheckVersionCompatibilityAsync());
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync(new ListDefinitionsRequest()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("ws.app", string.Empty));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetInstanceAsync("inst-1"));
@@ -212,6 +221,19 @@ public sealed class WsLifecycleTests : IDisposable
                 ];
             }
 
+            if (sent.Contains("\"id\":\"ws-get-version-1\"", StringComparison.Ordinal) ||
+                sent.Contains("\"id\":\"ws-check-version-1\"", StringComparison.Ordinal))
+            {
+                var responseId = sent.Contains("\"id\":\"ws-get-version-1\"", StringComparison.Ordinal)
+                    ? "ws-get-version-1"
+                    : "ws-check-version-1";
+                return
+                [
+                    CreateTextMessage(
+                        $"{{\"jsonrpc\":\"2.0\",\"id\":\"{responseId}\",\"result\":{{\"ok\":true,\"version\":\"{CreateHostVersionWithPatchDelta(3)}\"}}}}")
+                ];
+            }
+
             if (sent.Contains("\"id\":\"ws-listdefs-1\"", StringComparison.Ordinal))
             {
                 return
@@ -255,17 +277,31 @@ public sealed class WsLifecycleTests : IDisposable
                 DataDir = dataDir
             },
             factory,
-            new SequenceRequestIdFactory("ws-auth-1", "ws-ping-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1", "ws-listinst-1").Create);
+            new SequenceRequestIdFactory(
+                "ws-auth-1",
+                "ws-ping-1",
+                "ws-get-version-1",
+                "ws-check-version-1",
+                "ws-listdefs-1",
+                "ws-getdef-1",
+                "ws-getinst-1",
+                "ws-listinst-1").Create);
 
         await client.AuthenticateAsync();
 
         var ping = await client.PingAsync(new { value = 1 });
+        var hostVersion = await client.GetHostVersionAsync();
+        var compatibility = await client.CheckVersionCompatibilityAsync();
         var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest());
         var definition = await client.GetDefinitionAsync("ws.app", string.Empty);
         var instance = await client.GetInstanceAsync("inst-1");
         var instances = await client.ListInstancesAsync(new ListInstancesRequest());
 
         Assert.True(ping.Ok);
+        Assert.Equal(CreateHostVersionWithPatchDelta(3), hostVersion);
+        Assert.Equal(CreateHostVersionWithPatchDelta(3), compatibility.HostVersion);
+        Assert.Equal(SdkVersionSource.CurrentVersion, compatibility.SdkVersion);
+        Assert.Equal(VersionCompatibilityStatus.Compatible, compatibility.Status);
         Assert.Equal("ws.app", definitions.Single().AppId);
         Assert.Equal("ws.app", definition.AppId);
         Assert.Equal(string.Empty, definition.Scope);
@@ -280,6 +316,8 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Collection(connection.SentTexts,
             sent => Assert.Contains("hub.ws.authenticate", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.ping", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.getVersion", sent, StringComparison.Ordinal),
+            sent => Assert.Contains("hub.getVersion", sent, StringComparison.Ordinal),
             sent => Assert.Contains("hub.apps.listDefinitions", sent, StringComparison.Ordinal),
             sent =>
             {
@@ -1122,6 +1160,12 @@ public sealed class WsLifecycleTests : IDisposable
             await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
             await enumerator.MoveNextAsync();
         });
+    }
+
+    private static string CreateHostVersionWithPatchDelta(int patchDelta)
+    {
+        Assert.True(SemanticVersionParser.TryParse(SdkVersionSource.CurrentVersion, out var sdkVersion));
+        return $"{sdkVersion.Major}.{sdkVersion.Minor}.{sdkVersion.Patch + patchDelta}";
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMilliseconds = 1000)

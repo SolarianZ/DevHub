@@ -15,6 +15,8 @@ from devhub_sdk import (
     InvokeCapability,
     ListDefinitionsRequest,
     ListInstancesRequest,
+    SDK_VERSION,
+    VersionCompatibilityStatus,
 )
 
 from ._host import DevHubHostFixture
@@ -225,6 +227,29 @@ async def test_ws_readable_methods_should_match_published_surface() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ws_version_methods_should_use_rpc_or_runtime_fallback() -> None:
+    with DevHubHostFixture.start() as host:
+        events_client = await host.create_events_client("events-version-client")
+        try:
+            await events_client.authenticate()
+
+            rpc_version: str | None = None
+            try:
+                rpc_version = await events_client.get_host_version()
+            except DevHubRpcException as exc:
+                assert exc.code == DevHubRpcErrorCode.METHOD_NOT_FOUND
+
+            compatibility = await events_client.check_version_compatibility()
+        finally:
+            await events_client.close()
+
+    expected_host_version = rpc_version if rpc_version is not None else events_client.runtime.hub_version
+    assert compatibility.sdk_version == SDK_VERSION
+    assert compatibility.host_version == expected_host_version
+    assert compatibility.status == _expected_version_status(SDK_VERSION, expected_host_version)
+
+
+@pytest.mark.asyncio
 async def test_ws_get_instance_missing_should_surface_instance_not_found() -> None:
     with DevHubHostFixture.start() as host:
         events_client = await host.create_events_client("events-get-instance-client")
@@ -342,3 +367,28 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
 
 def _instance_password(instance_id: str) -> str:
     return f"python-sdk-{instance_id}"
+
+
+def _expected_version_status(
+    sdk_version: str,
+    host_version: str | None,
+) -> VersionCompatibilityStatus:
+    sdk_parts = _parse_major_minor(sdk_version)
+    host_parts = _parse_major_minor(host_version)
+    if sdk_parts is None or host_parts is None:
+        return VersionCompatibilityStatus.UNKNOWN
+    if sdk_parts[0] != host_parts[0]:
+        return VersionCompatibilityStatus.INCOMPATIBLE
+    if sdk_parts[1] != host_parts[1]:
+        return VersionCompatibilityStatus.UPDATE_RECOMMENDED
+    return VersionCompatibilityStatus.COMPATIBLE
+
+
+def _parse_major_minor(version: str | None) -> tuple[int, int] | None:
+    if not isinstance(version, str):
+        return None
+
+    parts = version.split(".", 2)
+    if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return int(parts[0]), int(parts[1])

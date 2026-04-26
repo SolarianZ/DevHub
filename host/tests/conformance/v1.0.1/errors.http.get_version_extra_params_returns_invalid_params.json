@@ -1,0 +1,36 @@
+{
+  "id": "errors.http.get_version_extra_params_returns_invalid_params",
+  "caseId": "CONF-003",
+  "description": "HTTP 调用 hub.getVersion 且传入额外字段时，必须返回 invalid_params。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "Conformance",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000012"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "http-get-version-invalid-params",
+    "method": "hub.getVersion",
+    "params": {
+      "verbose": true
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "http-get-version-invalid-params",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params"
+    }
+  },
+  "tags": [
+    "errors",
+    "http",
+    "params"
+  ]
+}

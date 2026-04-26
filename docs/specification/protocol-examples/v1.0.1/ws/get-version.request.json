@@ -1,0 +1,6 @@
+{
+  "jsonrpc": "2.0",
+  "id": "ws-get-version-1",
+  "method": "hub.getVersion",
+  "params": {}
+}

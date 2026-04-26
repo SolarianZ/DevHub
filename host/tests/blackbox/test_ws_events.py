@@ -404,6 +404,34 @@ class TestWsEvents:
 
         return result
 
+    def test_ws_001a_first_get_version_message_must_authenticate(self):
+        """WS-001A: 首条 hub.getVersion 请求也应先完成鉴权。"""
+        result = TestResult("WS-001A 首条 hub.getVersion 请求应返回 unauthorized")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "pre-auth-get-version",
+                    "method": "hub.getVersion",
+                    "params": {}
+                })
+                response = ws.recv_json(timeout=3)
+
+                if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-get-version"):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ hub.getVersion 未鉴权请求返回 unauthorized 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_002_pre_auth_notification_should_close_connection(self):
         """WS-002: 鉴权前非鉴权通知（无 id）应关闭连接。"""
         result = TestResult("WS-002 鉴权前通知应触发断连")

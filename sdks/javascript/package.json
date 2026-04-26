@@ -23,8 +23,12 @@
     "LICENSE"
   ],
   "scripts": {
+    "sync:version": "node ./scripts/sync-sdk-version.mjs",
+    "prebuild": "npm run sync:version",
     "build": "tsc -p tsconfig.build.json",
+    "pretest": "npm run sync:version",
     "test": "vitest run",
+    "pretypecheck": "npm run sync:version",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

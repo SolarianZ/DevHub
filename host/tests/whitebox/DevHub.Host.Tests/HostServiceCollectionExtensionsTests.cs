@@ -44,6 +44,7 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
 
         Assert.NotNull(provider.GetRequiredService<RuntimeTuningOptions>());
         Assert.IsType<SystemClock>(provider.GetRequiredService<IClock>());
+        Assert.False(string.IsNullOrWhiteSpace(provider.GetRequiredService<IHubVersionSource>().CurrentVersion));
         Assert.IsType<ProcessLauncher>(provider.GetRequiredService<IProcessLauncher>());
         Assert.NotNull(provider.GetRequiredService<AppDefinitionValidator>());
         Assert.NotNull(provider.GetRequiredService<AppRegistry>());
@@ -72,6 +73,7 @@ public sealed class HostServiceCollectionExtensionsTests : IDisposable
 
         var handlers = provider.GetServices<IRpcHandler>().ToList();
         Assert.Contains(handlers, handler => handler is HubPingHandler);
+        Assert.Contains(handlers, handler => handler is HubGetVersionHandler);
         Assert.Contains(handlers, handler => handler is AppDefinitionsHandler);
         Assert.Contains(handlers, handler => handler is AppInstancesHandler);
         Assert.Contains(handlers, handler => handler is InvocationHandler);

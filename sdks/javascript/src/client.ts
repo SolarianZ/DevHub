@@ -31,13 +31,15 @@ import type {
   RegisteredAppInstance,
   RequestResult,
   RespondRequest,
-  NormalizedDevHubClientOptions
+  NormalizedDevHubClientOptions,
+  VersionCompatibilityResult
 } from "./models.js";
 import {
   parseDefinitionResult,
   parseDefinitionValidationResult,
   parseDefinitionsResult,
   parseHeartbeatResult,
+  parseHostVersionResult,
   parseInstanceResult,
   parseInstancesResult,
   parseLaunchResult,
@@ -67,6 +69,7 @@ import {
 } from "./payloads.js";
 import { getRuntimeResolver } from "./default-runtime-resolver.js";
 import { ensureJsonValue } from "./validation.js";
+import { checkVersionCompatibilityWithFallback } from "./versioning.js";
 
 export interface JsonRpcTransport {
   send(method: string, params?: Record<string, unknown> | null): Promise<Record<string, unknown>>;
@@ -121,6 +124,25 @@ export class DevHubClient {
     this.throwIfDisposed();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
     return parsePingResult(await this.#transport.send("hub.ping", params));
+  }
+
+  /**
+   * 读取当前连接 Host 的运行时版本。
+   */
+  async getHostVersion(): Promise<string> {
+    this.throwIfDisposed();
+    return parseHostVersionResult(await this.#transport.send("hub.getVersion"));
+  }
+
+  /**
+   * 检查当前 SDK 与 Host 的版本兼容状态。
+   * 优先调用 hub.getVersion；旧 Host 返回 method_not_found 时回退到 runtime.hubVersion。
+   */
+  async checkVersionCompatibility(): Promise<VersionCompatibilityResult> {
+    return checkVersionCompatibilityWithFallback(
+      () => this.getHostVersion(),
+      this.#connection.runtime.hubVersion
+    );
   }
 
   async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {

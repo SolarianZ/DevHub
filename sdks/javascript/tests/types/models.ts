@@ -2,8 +2,11 @@ import type {
   AppDefinition,
   Invocation,
   InvokeRequest,
-  RespondRequest
+  RespondRequest,
+  VersionCompatibilityResult,
+  VersionCompatibilityStatus
 } from "../../src/index.js";
+import { SDK_VERSION } from "../../src/index.js";
 
 const definition: AppDefinition = {
   appId: "sample.app",
@@ -56,6 +59,18 @@ const respondWithError: RespondRequest = {
   }
 };
 
+const compatibilityStatus: VersionCompatibilityStatus = "compatible";
+const compatibilityResult: VersionCompatibilityResult = {
+  sdkVersion: SDK_VERSION,
+  hostVersion: "0.7.0",
+  status: compatibilityStatus
+};
+const unknownCompatibilityResult: VersionCompatibilityResult = {
+  sdkVersion: SDK_VERSION,
+  hostVersion: null,
+  status: "unknown"
+};
+
 // @ts-expect-error InvokeRequest.target is required.
 const missingInvokeTarget: InvokeRequest = {
   appId: "sample.app",
@@ -104,13 +119,20 @@ const invalidRespondPayload: RespondRequest = {
   }
 };
 
+// @ts-expect-error VersionCompatibilityStatus must use a known literal.
+const invalidCompatibilityStatus: VersionCompatibilityStatus = "outdated";
+
 void definition;
 void invokeRequest;
 void invocation;
 void respondWithValue;
 void respondWithError;
+void compatibilityStatus;
+void compatibilityResult;
+void unknownCompatibilityResult;
 void missingInvokeTarget;
 void missingLaunchExePath;
 void missingInvocationTarget;
 void missingRespondPayload;
 void invalidRespondPayload;
+void invalidCompatibilityStatus;

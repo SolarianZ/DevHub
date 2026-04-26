@@ -7,6 +7,13 @@ internal sealed class OkOnlyContract
     public bool Ok { get; set; }
 }
 
+internal sealed class GetHostVersionContract
+{
+    public bool Ok { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+}
+
 internal sealed class ListDefinitionsContract
 {
     public bool Ok { get; set; }

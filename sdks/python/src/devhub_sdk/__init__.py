@@ -1,5 +1,6 @@
 from .client import DevHubClient, DevHubClientDependencies
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
+from ._versioning import SDK_VERSION
 from .constants import (
     ALL_EVENT_TYPES,
     APP_DEFINITION_DELETED,
@@ -49,6 +50,8 @@ from .models import (
     RequestResult,
     RespondRequest,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
+    VersionCompatibilityStatus,
     ValidationIssue,
 )
 from .runtime import (
@@ -57,6 +60,8 @@ from .runtime import (
     discover_runtime,
     resolve_data_directory,
 )
+
+__version__ = SDK_VERSION
 
 __all__ = [
     "ALL_EVENT_TYPES",
@@ -110,10 +115,14 @@ __all__ = [
     "RespondRequest",
     "RuntimeResolver",
     "RuntimeConnectionInfo",
+    "SDK_VERSION",
     "SUPPORTED_EVENT_TYPES",
     "UrllibJsonRpcHttpTransport",
     "ValidationIssue",
+    "VersionCompatibilityResult",
+    "VersionCompatibilityStatus",
     "WebSocketJsonRpcSession",
+    "__version__",
     "discover_runtime",
     "ensure_supported_event_type",
     "resolve_data_directory",

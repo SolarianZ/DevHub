@@ -14,6 +14,7 @@ it("顶层入口应导出高级扩展点", () => {
   expect(sdk.JsonRpcHttpTransport).toBe(JsonRpcHttpTransport);
   expect(sdk.JsonRpcWsSession).toBe(JsonRpcWsSession);
   expect(sdk.DevHubConnectionError).toBeTypeOf("function");
+  expect(sdk.SDK_VERSION).toBeTypeOf("string");
   expect((sdk as Record<string, unknown>).FileSystemRuntimeResolver).toBeUndefined();
   expect(sdk.SUPPORTED_EVENT_TYPES).toBe(SUPPORTED_EVENT_TYPES);
   expect(sdk.APP_INSTANCE_REGISTERED).toBe(APP_INSTANCE_REGISTERED);
@@ -24,9 +25,11 @@ it("顶层入口应导出高级扩展点", () => {
 it("package exports 应为 runtime 提供显式子路径", async () => {
   const packageJsonUrl = new URL("../../package.json", import.meta.url);
   const packageJson = JSON.parse(await readFile(packageJsonUrl, "utf-8")) as {
+    version?: string;
     exports?: Record<string, { default?: string; types?: string }>;
   };
 
+  expect(sdk.SDK_VERSION).toBe(packageJson.version);
   expect(packageJson.exports?.["."]).toEqual({
     types: "./dist/index.d.ts",
     default: "./dist/index.js"

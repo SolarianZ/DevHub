@@ -4,10 +4,12 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
+from . import _versioning
 from ._parsing import (
     parse_definition_result,
     parse_definitions_result,
     parse_event,
+    parse_host_version_result,
     parse_instance_result,
     parse_instances_result,
     parse_ping_result,
@@ -26,6 +28,7 @@ from ._payloads import (
     build_ws_authenticate_params,
 )
 from .constants import DevHubEventType
+from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
     AbandonedRequestFilter,
@@ -38,6 +41,7 @@ from .models import (
     ListInstancesRequest,
     PingResult,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
@@ -148,6 +152,28 @@ class DevHubEventsClient:
         params = build_ping_params() if echo is _ECHO_UNSET else build_ping_params(echo)
         result = await self._send_request("hub.ping", params, require_authenticated=True)
         return parse_ping_result(result, path="hub.ping.result")
+
+    async def get_host_version(self) -> str:
+        """通过 WebSocket 调用 `hub.getVersion` 并返回当前 Host 版本。"""
+
+        self._ensure_authenticated()
+        result = await self._send_request("hub.getVersion", None, require_authenticated=True)
+        return parse_host_version_result(result, path="hub.getVersion.result")
+
+    async def check_version_compatibility(self) -> VersionCompatibilityResult:
+        """检查当前 SDK 与已连接 Host 的版本兼容性。"""
+
+        try:
+            host_version = await self.get_host_version()
+        except DevHubRpcException as exc:
+            if not exc.is_code(DevHubRpcErrorCode.METHOD_NOT_FOUND):
+                raise
+            host_version = self.runtime.hub_version
+
+        return _versioning.evaluate_version_compatibility(
+            _versioning.get_sdk_version(),
+            host_version,
+        )
 
     async def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """通过 WebSocket 调用 `hub.apps.listDefinitions`。"""

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.UnitTests.Transport;
@@ -42,6 +43,102 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Equal("11111111-1111-1111-1111-111111111111", handler.LastRequest.ClientSessionId);
         Assert.EndsWith("/rpc", handler.LastRequest.RequestUri, StringComparison.Ordinal);
         Assert.DoesNotContain("\"params\"", handler.LastRequest.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetHostVersionSucceeds_ShouldReturnVersionAndOmitParams()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-version\",\"result\":{\"ok\":true,\"version\":\"1.2.3-beta.1+build.4\"}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => "req-get-version");
+
+        var version = await client.GetHostVersionAsync(CancellationToken.None);
+
+        Assert.Equal("1.2.3-beta.1+build.4", version);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Contains("\"method\":\"hub.getVersion\"", handler.LastRequest!.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"params\"", handler.LastRequest.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenGetHostVersionMethodNotFound_ShouldPropagateDevHubRpcException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(CreateMethodNotFoundResponse("req-get-version"));
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => "req-get-version");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetHostVersionAsync(CancellationToken.None));
+
+        Assert.Equal((int)DevHubRpcErrorCode.MethodNotFound, exception.Code);
+        Assert.Equal("method_not_found", exception.Message);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenCheckVersionCompatibilityMethodNotFoundAndRuntimeHubVersionValid_ShouldUseFallback()
+    {
+        var fallbackVersion = CreateHostVersionWithPatchDelta(5);
+        var dataDir = await CreateDataDirectoryAsync(fallbackVersion);
+        var handler = new StaticResponseHandler(CreateMethodNotFoundResponse("req-check-version"));
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => "req-check-version");
+
+        var result = await client.CheckVersionCompatibilityAsync(CancellationToken.None);
+
+        Assert.Equal(SdkVersionSource.CurrentVersion, result.SdkVersion);
+        Assert.Equal(fallbackVersion, result.HostVersion);
+        Assert.Equal(VersionCompatibilityStatus.Compatible, result.Status);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenCheckVersionCompatibilityMethodNotFoundAndRuntimeHubVersionInvalid_ShouldReturnUnknown()
+    {
+        const string invalidFallbackVersion = "not-semver";
+        var dataDir = await CreateDataDirectoryAsync(invalidFallbackVersion);
+        var handler = new StaticResponseHandler(CreateMethodNotFoundResponse("req-check-version"));
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => "req-check-version");
+
+        var result = await client.CheckVersionCompatibilityAsync(CancellationToken.None);
+
+        Assert.Equal(SdkVersionSource.CurrentVersion, result.SdkVersion);
+        Assert.Equal(invalidFallbackVersion, result.HostVersion);
+        Assert.Equal(VersionCompatibilityStatus.Unknown, result.Status);
     }
 
     [Fact]
@@ -694,18 +791,24 @@ public sealed class HttpTransportTests : IDisposable
         }
     }
 
-    private async Task<string> CreateDataDirectoryAsync()
+    private async Task<string> CreateDataDirectoryAsync(string? hubVersion = null)
     {
         var dataDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
         var runtimeDir = Path.Combine(dataDir, "runtime");
         Directory.CreateDirectory(runtimeDir);
         var tokenFile = Path.Combine(runtimeDir, "token.txt");
         await File.WriteAllTextAsync(tokenFile, "token-1");
+        var hubVersionProperty = hubVersion is null
+            ? string.Empty
+            : $$"""
+              "hubVersion": "{{hubVersion}}",
+            """;
         await File.WriteAllTextAsync(
             Path.Combine(runtimeDir, "hub.json"),
             $$"""
             {
               "protocolVersion": 1,
+              {{hubVersionProperty}}
               "pid": 12345,
               "httpBaseUrl": "http://127.0.0.1:47231",
               "wsUrl": "ws://127.0.0.1:47231/ws",
@@ -719,6 +822,23 @@ public sealed class HttpTransportTests : IDisposable
             }
             """);
         return dataDir;
+    }
+
+    private static HttpResponseMessage CreateMethodNotFoundResponse(string requestId)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                $"{{\"jsonrpc\":\"2.0\",\"id\":\"{requestId}\",\"error\":{{\"code\":-32601,\"message\":\"method_not_found\",\"data\":{{\"reason\":\"unsupported_method\",\"method\":\"hub.getVersion\"}}}}}}",
+                Encoding.UTF8,
+                "application/json")
+        };
+    }
+
+    private static string CreateHostVersionWithPatchDelta(int patchDelta)
+    {
+        Assert.True(SemanticVersionParser.TryParse(SdkVersionSource.CurrentVersion, out var sdkVersion));
+        return $"{sdkVersion.Major}.{sdkVersion.Minor}.{sdkVersion.Patch + patchDelta}";
     }
 
     private sealed class CaptureHandler : HttpMessageHandler

@@ -104,6 +104,62 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsNull_ShouldReturnVersion()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-null","method":"hub.getVersion","params":null}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-null", root.GetProperty("id").GetString());
+        var result = root.GetProperty("result");
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Matches(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:[-+][0-9A-Za-z.-]+)?$",
+            result.GetProperty("version").GetString()!);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-extra","method":"hub.getVersion","params":{"verbose":true}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-extra", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsScalar_ShouldReturnInvalidParams()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-scalar","method":"hub.getVersion","params":1}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-scalar", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "3.2")]
     public async Task Spec_3_2_HttpInvalidContentType_ShouldBeRejectedBeforeJsonParse()
     {

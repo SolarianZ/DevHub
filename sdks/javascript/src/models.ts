@@ -28,6 +28,36 @@ export interface PingResult {
   echo?: JsonValue;
 }
 
+/**
+ * SDK 与 Host 的版本兼容状态。
+ */
+export type VersionCompatibilityStatus =
+  | "compatible"
+  | "updateRecommended"
+  | "incompatible"
+  | "unknown";
+
+/**
+ * 当前 SDK 与 Host 的版本兼容检查结果。
+ */
+export interface VersionCompatibilityResult {
+  /**
+   * 当前 SDK 的运行时版本。
+   */
+  sdkVersion: string;
+
+  /**
+   * 用于比较的 Host 版本。
+   * 当无法确定 Host 版本时返回 null。
+   */
+  hostVersion: string | null;
+
+  /**
+   * 版本兼容状态。
+   */
+  status: VersionCompatibilityStatus;
+}
+
 export interface AppCapabilities {
   rpc?: boolean;
   events?: boolean;

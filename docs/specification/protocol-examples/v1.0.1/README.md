@@ -14,6 +14,7 @@
 示例中的占位符均为字面字符串，使用前需要替换成真实值：
 
 - `${HOST_TOKEN}`：从 `hub.json.tokenFile` 读取到的 bearer token
+- `${HOST_VERSION}`：`hub.getVersion` 返回的 Host 版本字符串
 - `${SUBSCRIPTION_ID}`：订阅成功后返回的 `subscriptionId`
 - `${INVOCATION_ID}`：调用成功或错误响应中的 `invocationId`
 - `${INSTANCE_SESSION_TOKEN}`：`hub.apps.registerInstance` 成功结果返回的实例会话凭据，供 `heartbeat` / `unregisterInstance` / `hub.invoke.poll` / `hub.invoke.respond` 复用
@@ -48,6 +49,8 @@ HTTP：
 
 - [`http/ping.request.json`](./http/ping.request.json)
 - [`http/ping.success.json`](./http/ping.success.json)
+- [`http/get-version.request.json`](./http/get-version.request.json)
+- [`http/get-version.success.json`](./http/get-version.success.json)
 - [`http/list-definitions.null-scope.request.json`](./http/list-definitions.null-scope.request.json)
 - [`http/list-definitions.global.request.json`](./http/list-definitions.global.request.json)
 - [`http/list-definitions.success.json`](./http/list-definitions.success.json)
@@ -84,6 +87,8 @@ WebSocket：
 
 - [`ws/authenticate.request.json`](./ws/authenticate.request.json)
 - [`ws/authenticate.success.json`](./ws/authenticate.success.json)
+- [`ws/get-version.request.json`](./ws/get-version.request.json)
+- [`ws/get-version.success.json`](./ws/get-version.success.json)
 - [`ws/subscribe.request.json`](./ws/subscribe.request.json)
 - [`ws/subscribe.success.json`](./ws/subscribe.success.json)
 - [`ws/event.notification.json`](./ws/event.notification.json)

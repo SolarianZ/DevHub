@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.UnitTests.PublicSeams;
@@ -40,6 +41,36 @@ public sealed class PublicExtensionPointTests
         Assert.Equal("1", httpClientProvider.LastRequest.Protocol);
         Assert.Equal("public-http-client", httpClientProvider.LastRequest.ClientId);
         Assert.Equal("hub.ping", httpClientProvider.LastRequest.Method);
+    }
+
+    [Fact]
+    public async Task DevHubClient_FromRuntime_WithInjectedRuntimeResolverAndHttpClientProvider_ShouldSupportVersionCompatibilityApis()
+    {
+        var connectionInfo = CreateConnectionInfo();
+        var runtimeResolver = new RecordingRuntimeResolver(connectionInfo);
+        var httpClientProvider = new RecordingHttpClientProvider();
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "public-http-client",
+                DataDir = @"D:\sdk-test\data"
+            },
+            new DevHubClientDependencies
+            {
+                RuntimeResolver = runtimeResolver,
+                HttpClientProvider = httpClientProvider
+            });
+
+        var hostVersion = await client.GetHostVersionAsync();
+        var compatibility = await client.CheckVersionCompatibilityAsync();
+
+        Assert.Equal(SdkVersionSource.CurrentVersion, hostVersion);
+        Assert.Equal(SdkVersionSource.CurrentVersion, compatibility.SdkVersion);
+        Assert.Equal(SdkVersionSource.CurrentVersion, compatibility.HostVersion);
+        Assert.Equal(VersionCompatibilityStatus.Compatible, compatibility.Status);
+        Assert.Equal(connectionInfo, httpClientProvider.LastConnectionInfo);
+        Assert.Equal("hub.getVersion", httpClientProvider.LastRequest!.Method);
     }
 
     [Fact]
@@ -93,6 +124,8 @@ public sealed class PublicExtensionPointTests
     {
         var exportedTypeNames = typeof(DevHubClient).Assembly.GetExportedTypes().Select(type => type.Name).ToArray();
 
+        Assert.Contains("VersionCompatibilityResult", exportedTypeNames);
+        Assert.Contains("VersionCompatibilityStatus", exportedTypeNames);
         Assert.DoesNotContain("IDevHubHttpTransport", exportedTypeNames);
         Assert.DoesNotContain("JsonRpcHttpTransport", exportedTypeNames);
         Assert.DoesNotContain("IDevHubWebSocketSession", exportedTypeNames);
@@ -198,7 +231,11 @@ public sealed class PublicExtensionPointTests
                 Method = method
             };
 
-            var payload = $"{{\"jsonrpc\":\"2.0\",\"id\":\"{requestId}\",\"result\":{{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"echo\":{{\"channel\":\"http\"}}}}}}";
+            var payload = method switch
+            {
+                "hub.getVersion" => $"{{\"jsonrpc\":\"2.0\",\"id\":\"{requestId}\",\"result\":{{\"ok\":true,\"version\":\"{SdkVersionSource.CurrentVersion}\"}}}}",
+                _ => $"{{\"jsonrpc\":\"2.0\",\"id\":\"{requestId}\",\"result\":{{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"echo\":{{\"channel\":\"http\"}}}}}}"
+            };
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {

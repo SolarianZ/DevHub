@@ -81,6 +81,46 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
+    {
+        var handler = new HubGetVersionHandler(
+            Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0-preview.1+build.2"),
+            Mock.Of<ILogger<HubGetVersionHandler>>());
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1.1-get-version",
+            Method = "hub.getVersion"
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal("0.7.0-preview.1+build.2", result.GetProperty("version").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        var handler = new HubGetVersionHandler(
+            Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0"),
+            Mock.Of<ILogger<HubGetVersionHandler>>());
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1.1-get-version-invalid",
+            Method = "hub.getVersion",
+            Params = JsonSerializer.SerializeToElement(new { verbose = true })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.3")]
     public async Task Spec_6_3_3_ListDefinitions_ShouldReturnDefinitions()
     {

@@ -18,13 +18,15 @@ import type {
   ListDefinitionsRequest,
   ListInstancesRequest,
   PingResult,
-  NormalizedDevHubClientOptions
+  NormalizedDevHubClientOptions,
+  VersionCompatibilityResult
 } from "./models.js";
 import {
   parseAuthenticateResult,
   parseDefinitionResult,
   parseDefinitionsResult,
   parseEvent,
+  parseHostVersionResult,
   parseInstanceResult,
   parseInstancesResult,
   parsePingResult,
@@ -46,6 +48,7 @@ import {
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
 import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
+import { checkVersionCompatibilityWithFallback } from "./versioning.js";
 
 export type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 
@@ -186,6 +189,27 @@ export class DevHubEventsClient {
     this.ensureAuthenticated();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
     return parsePingResult(await this.#session.sendRequest("hub.ping", params));
+  }
+
+  /**
+   * 读取当前连接 Host 的运行时版本。
+   * 该操作复用已认证 WebSocket 只读 RPC 通道。
+   */
+  async getHostVersion(): Promise<string> {
+    this.ensureAuthenticated();
+    return parseHostVersionResult(await this.#session.sendRequest("hub.getVersion"));
+  }
+
+  /**
+   * 检查当前 SDK 与 Host 的版本兼容状态。
+   * 优先调用 hub.getVersion；旧 Host 返回 method_not_found 时回退到 runtime.hubVersion。
+   */
+  async checkVersionCompatibility(): Promise<VersionCompatibilityResult> {
+    this.ensureAuthenticated();
+    return checkVersionCompatibilityWithFallback(
+      () => this.getHostVersion(),
+      this.#connection.runtime.hubVersion
+    );
   }
 
   async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {

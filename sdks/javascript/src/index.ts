@@ -1,5 +1,6 @@
 export { DevHubClient } from "./client.js";
 export { JsonRpcHttpTransport } from "./http-transport.js";
+export { SDK_VERSION } from "./sdk-version.js";
 export {
   ALL_EVENT_TYPES,
   APP_DEFINITION_DELETED,

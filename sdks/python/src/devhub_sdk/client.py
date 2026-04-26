@@ -5,12 +5,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from . import _versioning
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
+from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._parsing import (
     parse_datetime,
     parse_definition_validation_result,
     parse_definition_result,
     parse_definitions_result,
+    parse_host_version_result,
     parse_instance_result,
     parse_instances_result,
     parse_launch_result,
@@ -59,6 +62,7 @@ from .models import (
     RequestResult,
     RespondRequest,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
@@ -139,6 +143,27 @@ class DevHubClient:
         params = build_ping_params() if echo is _ECHO_UNSET else build_ping_params(echo)
         result = self._send("hub.ping", params)
         return parse_ping_result(result, path="hub.ping.result")
+
+    def get_host_version(self) -> str:
+        """调用 `hub.getVersion` 并返回当前 Host 版本。"""
+
+        result = self._send("hub.getVersion", None)
+        return parse_host_version_result(result, path="hub.getVersion.result")
+
+    def check_version_compatibility(self) -> VersionCompatibilityResult:
+        """检查当前 SDK 与已连接 Host 的版本兼容性。"""
+
+        try:
+            host_version = self.get_host_version()
+        except DevHubRpcException as exc:
+            if not exc.is_code(DevHubRpcErrorCode.METHOD_NOT_FOUND):
+                raise
+            host_version = self.runtime.hub_version
+
+        return _versioning.evaluate_version_compatibility(
+            _versioning.get_sdk_version(),
+            host_version,
+        )
 
     def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """调用 `hub.apps.listDefinitions`。"""

@@ -1,5 +1,6 @@
 using DevHub.Core.Extensions;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
@@ -30,7 +31,11 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(runtimePathOptions);
 
+        var runtimeVersion = HostVersionProvider.ResolveRuntimeVersion(hubVersion)
+            ?? throw new InvalidOperationException("无法解析 Host 运行时版本。");
+
         services.AddDevHubCore(runtimePathOptions);
+        services.AddSingleton<IHubVersionSource>(new FixedHubVersionSource(runtimeVersion));
         services.AddSingleton<HostRuntimeContext>();
         services.AddSingleton<IRuntimeHttpBaseUrlProvider, HostRuntimeHttpBaseUrlProvider>();
         services.AddSingleton<HubEventBus>();
@@ -48,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<InvocationTimeoutBackgroundService>();
         services.AddHostedService(sp => sp.GetRequiredService<InvocationTimeoutBackgroundService>());
         services.AddSingleton<IRpcHandler, HubPingHandler>();
+        services.AddSingleton<IRpcHandler, HubGetVersionHandler>();
         services.AddSingleton<IRpcHandler, AppDefinitionsHandler>();
         services.AddSingleton<IRpcHandler, AppInstancesHandler>();
         services.AddSingleton<IRpcHandler, InvocationHandler>();
@@ -57,5 +63,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WebSocketSessionHandler>();
 
         return services;
+    }
+
+    private sealed class FixedHubVersionSource : IHubVersionSource
+    {
+        public FixedHubVersionSource(string currentVersion)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(currentVersion);
+            CurrentVersion = currentVersion;
+        }
+
+        public string CurrentVersion { get; }
     }
 }
