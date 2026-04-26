@@ -458,11 +458,11 @@ class TestInvalidParams(unittest.TestCase):
 
             cases = [
                 {
-                    "name": "appId 包含大写字母",
+                    "name": "appId 以前导点开头",
                     "payload": {
                         "instance": {
                             "instanceId": "test-instance-appid-1",
-                            "appId": "Invalid.App",
+                            "appId": ".Invalid.App",
                             "scope": "",
                             "pid": 12345,
                             "invoke": {"poll": True, "respond": True}
@@ -470,11 +470,11 @@ class TestInvalidParams(unittest.TestCase):
                     }
                 },
                 {
-                    "name": "appId 包含下划线",
+                    "name": "appId 以后缀连字符结尾",
                     "payload": {
                         "instance": {
                             "instanceId": "test-instance-appid-2",
-                            "appId": "invalid_app",
+                            "appId": "invalid-app-",
                             "scope": "",
                             "pid": 12345,
                             "invoke": {"poll": True, "respond": True}
