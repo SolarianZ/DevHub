@@ -13,6 +13,7 @@ import {
   definitionFormToModel,
   definitionToForm,
   mapValidationIssues,
+  validateDefinitionIdentifiers,
   type DefinitionFormState,
 } from "../lib/definition-form";
 import type { FrontendLogInput } from "../lib/models";
@@ -330,6 +331,36 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     }
 
     const candidateDefinition = definitionFormToModel(definitionWorkspace.form);
+    const identifierIssues = validateDefinitionIdentifiers(candidateDefinition);
+    if (Object.keys(identifierIssues).length > 0) {
+      setDefinitionError(null);
+
+      recordFrontendLog({
+        level: "warn",
+        category: "frontend.definition",
+        action: "submit",
+        result: "validation_failed",
+        context: {
+          appId: candidateDefinition.appId,
+          mode: definitionWorkspace.mode,
+          scope: candidateDefinition.scope,
+        },
+      });
+
+      startTransition(() => {
+        setDefinitionWorkspace((current) =>
+          current
+            ? {
+                ...current,
+                saving: false,
+                fieldErrors: identifierIssues,
+                submitError: "预校验未通过，请修正下列字段错误后再提交。",
+              }
+            : current,
+        );
+      });
+      return false;
+    }
 
     startTransition(() => {
       setDefinitionWorkspace((current) =>

@@ -1,5 +1,7 @@
 import type { AppDefinition, ValidationIssue } from "@devhub/sdk";
 
+const CANONICAL_IDENTIFIER_REGEX = /^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$/;
+
 export interface DefinitionFormState {
   appId: string;
   scope: string;
@@ -50,8 +52,8 @@ export function definitionToForm(definition: AppDefinition): DefinitionFormState
 
 export function definitionFormToModel(form: DefinitionFormState): AppDefinition {
   const definition: AppDefinition = {
-    appId: form.appId.trim(),
-    scope: form.scope === "" ? "" : form.scope,
+    appId: form.appId,
+    scope: form.scope,
     displayName: form.displayName.trim(),
   };
 
@@ -98,6 +100,26 @@ export function areDefinitionFormsEqual(left: DefinitionFormState, right: Defini
   return JSON.stringify(definitionFormToModel(left)) === JSON.stringify(definitionFormToModel(right));
 }
 
+export function validateDefinitionIdentifiers(
+  definition: Pick<AppDefinition, "appId" | "scope">,
+): DefinitionIssueMap {
+  const issues: ValidationIssue[] = [];
+  const appId = definition.appId ?? "";
+  const scope = definition.scope ?? "";
+
+  if (appId.trim().length === 0) {
+    issues.push(createValidationIssue("definition.appId", "required", "appId 不能为空。"));
+  } else if (!isCanonicalIdentifier(appId)) {
+    issues.push(createValidationIssue("definition.appId", "format", "appId 格式不合法。"));
+  }
+
+  if (scope !== "" && !isCanonicalIdentifier(scope)) {
+    issues.push(createValidationIssue("definition.scope", "format", "scope 格式不合法。"));
+  }
+
+  return mapValidationIssues(issues);
+}
+
 export function mapValidationIssues(errors: readonly ValidationIssue[]): DefinitionIssueMap {
   const result: DefinitionIssueMap = {};
 
@@ -115,4 +137,16 @@ export function mapValidationIssues(errors: readonly ValidationIssue[]): Definit
 function normalizeOptionalText(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function createValidationIssue(path: string, code: string, message: string): ValidationIssue {
+  return {
+    path,
+    code,
+    message,
+  };
+}
+
+function isCanonicalIdentifier(value: string): boolean {
+  return value.length > 0 && CANONICAL_IDENTIFIER_REGEX.test(value);
 }

@@ -150,10 +150,10 @@ describe("monitor-ui definition helpers", () => {
     ]);
   });
 
-  it("preserves non-empty scope text verbatim in definition identities", () => {
-    expect(createDefinitionIdentity("demo.app", "  workspace-a  ")).toEqual({
+  it("preserves canonical non-empty scope text verbatim in definition identities", () => {
+    expect(createDefinitionIdentity("demo.app", "Workspace-A.v2")).toEqual({
       appId: "demo.app",
-      scope: "  workspace-a  ",
+      scope: "Workspace-A.v2",
     });
   });
 

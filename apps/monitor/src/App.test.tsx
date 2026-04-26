@@ -1405,15 +1405,48 @@ describe("Monitor App", () => {
     screen.getByRole("button", { name: "展开侧边栏" });
   });
 
-  it("shows inline validation and stays in the definition workspace when precheck fails", async () => {
+  it("shows inline identifier validation without calling host precheck", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([]),
+      listInstances: vi.fn().mockResolvedValue([]),
+    });
+    const eventsClient = createEventsClient();
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "新增定义" });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "新增定义" }));
+    await screen.findByRole("heading", { name: "新增 App 定义" });
+    await user.type(screen.getByLabelText("App ID"), ".demo.app");
+    await user.type(screen.getByLabelText("scope"), "workspace.");
+    await user.type(screen.getByLabelText("显示名称"), "Demo App");
+    await user.click(screen.getByRole("button", { name: "创建定义" }));
+
+    await screen.findByText("预校验未通过，请修正下列字段错误后再提交。");
+    screen.getByText("appId 格式不合法。");
+    screen.getByText("scope 格式不合法。");
+    screen.getByRole("heading", { name: "新增 App 定义" });
+    screen.getByDisplayValue(".demo.app");
+    screen.getByDisplayValue("workspace.");
+
+    expect(hostClient.validateDefinition).not.toHaveBeenCalled();
+    expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
+  });
+
+  it("shows inline validation and stays in the definition workspace when host precheck fails", async () => {
     const invalidValidation: DefinitionValidationResult = {
       ok: true,
       valid: false,
       errors: [
         {
-          path: "definition.scope",
-          code: "format",
-          message: "scope 格式不合法。",
+          path: "definition.displayName",
+          code: "required",
+          message: "displayName 不能为空。",
         },
       ],
     };
@@ -1434,15 +1467,16 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "新增定义" }));
     await screen.findByRole("heading", { name: "新增 App 定义" });
-    await user.type(screen.getByLabelText("App ID"), "demo.app");
-    await user.type(screen.getByLabelText("scope"), "invalid scope");
+    await user.type(screen.getByLabelText("App ID"), "Sample.App_01");
+    await user.type(screen.getByLabelText("scope"), "Workspace-A.v2");
     await user.type(screen.getByLabelText("显示名称"), "Demo App");
     await user.click(screen.getByRole("button", { name: "创建定义" }));
 
     await screen.findByText("预校验未通过，请修正下列字段错误后再提交。");
-    screen.getByText("scope 格式不合法。");
+    screen.getByText("displayName 不能为空。");
     screen.getByRole("heading", { name: "新增 App 定义" });
-    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("invalid scope");
+    expect((screen.getByLabelText("App ID") as HTMLInputElement).value).toBe("Sample.App_01");
+    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("Workspace-A.v2");
 
     expect(hostClient.validateDefinition).toHaveBeenCalledTimes(1);
     expect(hostClient.upsertDefinition).not.toHaveBeenCalled();
