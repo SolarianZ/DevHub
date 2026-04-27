@@ -4,6 +4,6 @@
   "method": "hub.apps.heartbeat",
   "params": {
     "instanceId": "NODE_01.alpha",
-    "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}"
+    "instanceSessionToken": "inst-session-node-01-alpha-001"
   }
 }

@@ -3,6 +3,6 @@
   "id": "ws-subscribe-1",
   "result": {
     "ok": true,
-    "subscriptionId": "${SUBSCRIPTION_ID}"
+    "subscriptionId": "sub-sample-001"
   }
 }

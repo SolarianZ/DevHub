@@ -3,14 +3,14 @@
   "id": "apps-instances-register",
   "result": {
     "ok": true,
-    "instanceSessionToken": "${INSTANCE_SESSION_TOKEN}",
+    "instanceSessionToken": "inst-session-node-01-alpha-001",
     "instance": {
       "instanceId": "NODE_01.alpha",
       "appId": "Sample.App",
       "scope": "",
       "pid": 32001,
-      "registeredAtUtc": "${INSTANCE_REGISTERED_AT_UTC}",
-      "lastSeenUtc": "${INSTANCE_LAST_SEEN_UTC}",
+      "registeredAtUtc": "2026-03-28T12:35:01Z",
+      "lastSeenUtc": "2026-03-28T12:35:16Z",
       "invoke": {
         "poll": true,
         "respond": true

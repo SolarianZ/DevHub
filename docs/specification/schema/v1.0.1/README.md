@@ -49,22 +49,24 @@
 
 ## 4. 使用方式
 
-本目录可作为 DevHub v1.0.1 的版本化协议资产：
+本目录可作为 DevHub v1.0.1 的版本化协议资产；各文件与 [`Specification.md`](../../protocol/Specification.md) 保持同一套公开契约约束：
 
-- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验。
+- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验；该 schema 要求 `httpBaseUrl` 与 `wsUrl` 使用 loopback 地址、禁止末尾斜杠，并要求 `tokenFile` 为绝对路径。
 - 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用 canonical identifier grammar 的非空字符串。
-- 读取实例镜像或注册返回值时，用 `app-instance.json` 校验。
-- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
+- 读取实例镜像或注册返回值时，用 `app-instance.json` 校验；该 schema 明确禁止 `password` 与 `instanceSessionToken` 出现在公共实例结构中。
+- 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。该 schema 同样禁止 `password` 与 `instanceSessionToken` 混入 `params.instance`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
 - 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，`caller.clientSessionId` **必须**是 canonical UUID string。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
 - 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；该 schema 接受 `params: null`，但具体方法仍受 [`Specification.md`](../../protocol/Specification.md) 的方法级约束。
 - 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验。
 - 接收成功响应时，用 `rpc-response.json` 校验；接收错误响应时，用 `error-response.json` 校验。这两个 schema 分别约束成功/错误信封，不能同时接受同一个同时带 `result` 与 `error` 的响应对象。
-- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验。
+- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition / Instance 生命周期事件施加最小 payload 约束。
 
 实例所有权相关的 `instanceSessionToken` 还适用于 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 的顶层 `params`，这些字段属于方法级参数而不是通用数据模型，因此未单独收敛到 `app-instance*.json` 中。
 
 `app-definition.json` 只描述单个 Definition payload 的结构；持久化文件名与 Definition 公开身份仍以 [`Specification.md`](../../protocol/Specification.md) §4.1.4 / §5.1.1 为准，即精确 `(appId, scope)` 复合身份与 `{appId}--{scopeKey}.json` 的 canonical 存储形状，其中 `scopeKey = "global"` 对应 Global，`scopeKey = "scope-" + scope` 对应显式 scope。
+
+[`protocol-examples/v1.0.1`](../../protocol-examples/v1.0.1/README.md) 中的原始协议示例使用固定合法字面值，可直接作为本目录 schema 的结构校验样例。
 
 如果需要请求/响应示例，请同时参考：
 

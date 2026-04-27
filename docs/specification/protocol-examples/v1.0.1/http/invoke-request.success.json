@@ -3,7 +3,7 @@
   "id": "req-1",
   "result": {
     "ok": true,
-    "invocationId": "${INVOCATION_ID}",
+    "invocationId": "invk-sample-request-001",
     "value": {
       "handledBy": "NODE_01.alpha"
     }

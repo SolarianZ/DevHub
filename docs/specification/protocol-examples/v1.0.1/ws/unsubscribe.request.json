@@ -3,6 +3,6 @@
   "id": "ws-unsubscribe-1",
   "method": "hub.events.unsubscribe",
   "params": {
-    "subscriptionId": "${SUBSCRIPTION_ID}"
+    "subscriptionId": "sub-sample-001"
   }
 }

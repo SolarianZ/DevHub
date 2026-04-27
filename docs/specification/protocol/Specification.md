@@ -417,7 +417,11 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       }
     },
     "meta": { "type": "object" }
-  }
+  },
+  "allOf": [
+    { "not": { "required": ["password"] } },
+    { "not": { "required": ["instanceSessionToken"] } }
+  ]
 }
 ```
 
@@ -451,7 +455,11 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       }
     },
     "meta": { "type": "object" }
-  }
+  },
+  "allOf": [
+    { "not": { "required": ["password"] } },
+    { "not": { "required": ["instanceSessionToken"] } }
+  ]
 }
 ```
 
@@ -546,9 +554,24 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
     "protocolVersion": { "type": "integer", "enum": [1] },
     "hubVersion": { "type": "string" },
     "pid": { "type": "integer", "minimum": 1 },
-    "httpBaseUrl": { "type": "string", "format": "uri" },
-    "wsUrl": { "type": "string", "format": "uri" },
-    "tokenFile": { "type": "string" },
+    "httpBaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
+    },
+    "wsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^wss?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
+    },
+    "tokenFile": {
+      "type": "string",
+      "oneOf": [
+        { "pattern": "^/.+" },
+        { "pattern": "^[A-Za-z]:[\\\\/].+" },
+        { "pattern": "^\\\\\\\\[^\\\\/]+[\\\\/][^\\\\/]+(?:[\\\\/].+)?$" }
+      ]
+    },
     "startedAtUtc": { "type": "string", "format": "date-time" },
     "runtimeTuning": {
       "type": "object",
@@ -1150,7 +1173,7 @@ Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 规范性事件载荷：
 - `app.definition.upserted` 的 `payload` **必须**至少包含 `appId`、`scope` 与最新 `definition`；其中 `payload.definition.scope` **必须**与 `payload.scope` 一致。
 - `app.definition.deleted` 的 `payload` **必须**至少包含 `appId` 与 `scope`。
-- `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 `appId` 与 `instanceId`，且**不得**包含 `password`。
+- `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 `appId` 与 `instanceId`，且**不得**包含 `password` 或 `instanceSessionToken`。
 - 如果 `app.instance.*.payload.scope` 存在，其值 **必须**使用实例镜像中的原始 canonical 作用域表示：Global 为 `""`，显式作用域为合法非空字符串。
 
 ---

@@ -56,5 +56,21 @@
     "meta": {
       "type": "object"
     }
-  }
+  },
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "password"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "instanceSessionToken"
+        ]
+      }
+    }
+  ]
 }

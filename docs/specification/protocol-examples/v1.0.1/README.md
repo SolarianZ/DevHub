@@ -9,19 +9,20 @@
 
 这些文件只描述 JSON 消息本身，不重复封装 SDK 调用，也不替代 [`Specification.md`](../../protocol/Specification.md)。
 
-## 2. 占位符约定
+## 2. 样例值约定
 
-示例中的占位符均为字面字符串，使用前需要替换成真实值：
+本目录中的 JSON 文件统一使用固定字面值，目的是提供可直接消费、可直接校验的合法样例。涉及运行时生成或返回的字段时，示例统一采用以下样例值：
 
-- `${HOST_TOKEN}`：从 `hub.json.tokenFile` 读取到的 bearer token
-- `${HOST_VERSION}`：`hub.getVersion` 返回的 Host 版本字符串
-- `${SUBSCRIPTION_ID}`：订阅成功后返回的 `subscriptionId`
-- `${INVOCATION_ID}`：调用成功或错误响应中的 `invocationId`
-- `${LAUNCH_ID}`：`hub.apps.launch` 成功结果中的 `launchId`
-- `${INSTANCE_SESSION_TOKEN}`：`hub.apps.registerInstance` 成功结果返回的实例会话凭据，供 `heartbeat` / `unregisterInstance` / `hub.invoke.poll` / `hub.invoke.respond` 复用
-- `${SERVER_TIME_UTC}`：服务端返回的 UTC 时间戳
-- `${INSTANCE_REGISTERED_AT_UTC}` / `${INSTANCE_LAST_SEEN_UTC}`：服务端管理的实例时间戳
-- `${EVENT_TIME_UTC}`：事件消息中的时间戳
+- Host token：`devhub-host-token-sample`
+- Host version：`1.0.1`
+- `subscriptionId`：`sub-sample-001`
+- `invocationId`：`invk-sample-request-001`
+- `launchId`：`launch-sample-app-global-001`
+- `instanceSessionToken`：`inst-session-node-01-alpha-001`
+- `serverTimeUtc`：`2026-03-28T12:34:56Z`
+- `registeredAtUtc`：`2026-03-28T12:35:01Z`
+- `lastSeenUtc`：`2026-03-28T12:35:16Z`
+- `event.timeUtc`：`2026-03-28T12:36:00Z`
 
 本目录的正向示例统一采用以下 canonical 标识符：
 
@@ -32,11 +33,17 @@
 
 ## 3. 动态读取规则
 
-以下值必须从运行中的 Hub 动态获取，不能硬编码：
+以下地址、凭据与运行时返回值由运行中的 Hub 决定；示例中的固定字面值仅用于说明报文形状：
 
 - HTTP 地址：`hub.json.httpBaseUrl`
 - WebSocket 地址：`hub.json.wsUrl`
 - token：`hub.json.tokenFile`
+- Host 版本：`hub.getVersion.result.version`
+- `subscriptionId`：`hub.events.subscribe.result.subscriptionId`
+- `instanceSessionToken`：`hub.apps.registerInstance.result.instanceSessionToken`
+- `invocationId`：`hub.invoke.notify` / `hub.invoke.request` 的结果或错误载荷
+- `launchId`：`hub.apps.launch.result.launchId`
+- 所有服务端生成的 UTC 时间戳字段
 
 HTTP 示例默认对应：
 
@@ -111,6 +118,7 @@ WebSocket：
 
 ## 5. 与 Schema / Conformance 的关系
 
+- 本目录中的 JSON 文件本身使用固定合法字面值，可直接作为对应 schema 的结构校验输入。
 - 带 `id` 的 HTTP / WS 请求示例对应 [`rpc-request.json`](../../schema/v1.0.1/rpc-request.json)。
 - 省略 `id` 的 [`http/invoke-notify.notification.request.json`](./http/invoke-notify.notification.request.json) 对应 [`rpc-notification.json`](../../schema/v1.0.1/rpc-notification.json)。
 - 所有 `*.success.json` 响应示例对应 [`rpc-response.json`](../../schema/v1.0.1/rpc-response.json)。

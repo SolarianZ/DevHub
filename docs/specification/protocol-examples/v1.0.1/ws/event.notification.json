@@ -2,9 +2,9 @@
   "jsonrpc": "2.0",
   "method": "hub.event",
   "params": {
-    "subscriptionId": "${SUBSCRIPTION_ID}",
+    "subscriptionId": "sub-sample-001",
     "type": "app.instance.registered",
-    "timeUtc": "${EVENT_TIME_UTC}",
+    "timeUtc": "2026-03-28T12:36:00Z",
     "payload": {
       "appId": "Sample.App",
       "instanceId": "NODE_01.alpha",
