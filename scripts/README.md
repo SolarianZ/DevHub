@@ -1,6 +1,7 @@
 # DevHub Scripts
 
 此目录包含 DevHub 工程的常用工具脚本。详细文档请查看 [docs](../docs/README.md) 。
+所有脚本都支持 `--help` 参数，传递该参数时，将忽略其他所有参数，只输出脚本用途和参数摘要，不执行其他逻辑。
 
 ## 内容结构
 
@@ -26,5 +27,5 @@ scripts/
 
 - `scripts/release/package_release.py` 负责 release 级元数据、组件打包编排、manifest、release notes 和最终完整性检查。
 - `scripts/release/package_host.py`、`package_dotnet_sdk.py`、`package_js_sdk.py`、`package_py_sdk.py`、`package_monitor.py` 负责各自产物域的独立验证或打包。
-- 所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，将忽略其他所有参数，只输出脚本用途和参数摘要，不执行验证、目录删除或打包逻辑。
-- 具备“只验证不产物化”语义的脚本提供 `--verify-only`，用于执行对应工作流同级别的本地校验而不写出完整产物。
+- 所有 package 脚本都支持 `--release-id` 和 `--output-root` 参数。
+- 具备“只验证不产物化”语义的脚本提供 `--verify-only` 参数，用于执行对应工作流同级别的本地校验而不写出完整产物。
