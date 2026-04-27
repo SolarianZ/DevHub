@@ -38,6 +38,7 @@
 - `dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release`
 - `npm --prefix sdks/javascript test`
 - `python -m pytest sdks/python/tests`
+- Monitor 前端构建、前端测试、原生测试、Tauri 检查与打包验证
 - 本地一键打包脚本中的 Host 双变体、manifest、release notes 与 SDK 资产完整性检查
 
 统一执行入口见 [`release-checklist.md`](./release-checklist.md) 和仓库脚本 `scripts/release/package_release.py`。
@@ -50,10 +51,13 @@
 - `.NET SDK`：`DevHub.Sdk.DotNet.<version>.nupkg`、`DevHub.Sdk.DotNet.<version>.snupkg`、`DevHub.Sdk.DotNet.DependencyInjection.<version>.nupkg` 与 `DevHub.Sdk.DotNet.DependencyInjection.<version>.snupkg`
 - `JS/TS SDK`：`devhub-sdk-javascript-<version>.tgz`
 - `Python SDK`：`devhub_sdk_python-<version>.tar.gz` 与 `devhub_sdk_python-<version>-py3-none-any.whl`
+- Monitor App：preview 与 main 快照预发布上传 Linux、Windows、macOS 平台的 Tauri bundle 资产
 - 资产清单：`release-manifest.json`
 - 发布说明：`release-notes.md`
 
 Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录发布；single-file 版启用 `EnableCompressionInSingleFile=true`，但不引入 trimmed 或 self-contained 分发模式。
+
+稳定版 `v*` 发布上传 Host 与三套 SDK 资产。preview 与 main 快照预发布的 `release-manifest.json` 和 `release-notes.md` 同时列出 Monitor App 资产、目标平台、Monitor 版本和 JS SDK 版本。
 
 详细目录结构和 manifest 字段定义见 [`release-asset-layout.md`](./release-asset-layout.md)。
 
@@ -61,13 +65,12 @@ Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录
 
 - 仓库发布版本统一以 `eng/Version.props` 为唯一来源；Host 与 `.NET SDK` 直接消费该文件，`JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与之保持同步。
 - `scripts/release/package_release.py` 会在打包开始前执行版本一致性校验，发现 `package.json`、`package-lock.json` 或 `pyproject.toml` 与 `eng/Version.props` 漂移时直接失败。
-- 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产；该入口会为每个默认 Host RID 同时生成 multi-file 与 single-file compression 两类 ZIP，不生成 trimmed Host 资产。
-- `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
-- `.github/workflows/monitor.yml` 独立承担 Monitor 前端构建、前端测试、原生测试与打包验证；该 workflow 以 `local-src` 直连当前分支的 `sdks/javascript/src` 做仓库内联调门禁，不进入 `publish-release` 的 `needs`，也不通过 `workflow_run` 回串到发布链。
+- 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产；该入口会为每个默认 Host RID 同时生成 multi-file 与 single-file compression 两类 ZIP，不生成 trimmed Host 资产。`preview` 与 `main-snapshot` 渠道还会在当前机器生成 Monitor App 资产，并写入 `monitor/<targetPlatform>/`。
+- `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`monitor-validation`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
 - `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动重跑入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经通过 `ci`。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
-- `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、资产打包与 GitHub Release 发布，避免自动发布与手动重跑重复维护两套脚本。
+- `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、Host/SDK 核心资产打包、Monitor 三平台矩阵打包、release manifest 汇总与 GitHub Release 发布。
 - 当前发布流程只生成并上传 GitHub Release 资产，不会同步把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，或把 `Python SDK` 发布到 PyPI。
-- `apps/monitor/` 使用独立的本地一键打包脚本 `python scripts/release/package_monitor.py --release-id <id>`；该脚本支持 `--sdk-source {release,local-src}`，默认正式来源为 `release`，`local-src` 仅用于本地 SDK / Monitor 联调包。该脚本不接入本节描述的 GitHub Release / CI 自动发布链路。
+- `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码。
 
 ## 5. 发布说明与 TODO 占位
 

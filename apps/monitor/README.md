@@ -12,7 +12,6 @@
 - `npm run tauri:check`
 - `npm run verify`
 - `python ../../scripts/release/package_monitor.py --release-id local-dry-run`
-- `python ../../scripts/release/package_monitor.py --release-id local-dry-run --sdk-source local-src`
 
 ## 环境要求
 
@@ -26,7 +25,7 @@
 
 - `npm ci`
 
-与仓库独立 Monitor workflow 对齐的验证命令：
+与主 CI `monitor-validation` job 对齐的验证命令：
 
 - `npm run build:web`：构建前端并执行类型检查。
 - `npm test`：执行前端侧边栏导航、主页 phase 切换、帮助/设置页面、Definition 页面工作流，以及基于真实 Host fixture 的前端回归。
@@ -34,26 +33,26 @@
 - `npm run tauri:check`：执行 Tauri 原生侧非平台特定编译校验。
 - `npm run verify`：串联上述全部验证入口。
 
-仓库中的独立 `monitor.yml` workflow 会以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行上述验证，确保 Monitor 与当前分支的 JS SDK 源码保持一致。`apps/monitor/` 内的 `dev`、`build:web`、`test`、`verify`、`tauri:*` 等本地开发和验证命令在未设置环境变量时也默认解析 `local-src`；如需额外核对 release tarball 路径，可显式设置 `DEVHUB_MONITOR_SDK_SOURCE=release`。
+仓库主 `ci.yml` 中的 `monitor-validation` job 运行上述验证，并执行 `python scripts/release/package_monitor.py --release-id monitor-ci --verify-only`。Monitor 的构建、测试、类型检查、版本元数据和打包脚本均解析当前仓库 `sdks/javascript` 源码。
 
 对齐该 workflow 的本地验收入口：
 
-- `DEVHUB_MONITOR_SDK_SOURCE=local-src npm run verify`
+- `npm run verify`
 
-`DEVHUB_MONITOR_SDK_SOURCE=local-src` 的验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该模式不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
+验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该路径不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
 
 ## SDK 来源
 
-- 默认 `local-src`：`@devhub/sdk` 与 `@devhub/sdk/runtime` 会分别解析到 `../../sdks/javascript/src/index.ts` 与 `../../sdks/javascript/src/runtime.ts`，适用于仓库内 Monitor 与 SDK 的源码联调、构建和验证。
-- 可选 `release`：显式设置 `DEVHUB_MONITOR_SDK_SOURCE=release` 后，模块解析会回到 `package.json` 中声明的 GitHub Release tarball，适用于额外核对正式 SDK 包路径。
-- `local-src` 只切换构建、测试、类型检查和本地打包时的模块解析来源，不修改 `package.json`、`package-lock.json` 或其他依赖声明文件；依赖声明本身仍保持 release tarball 形式，便于正式安装和打包。
-- `local-src` 仍要求 `@devhub/sdk` 根入口保持浏览器 / WebView 安全；仅供 Node 使用的 `ws` 回退必须停留在运行时路径，不能在 Monitor 前端构建或类型检查阶段变成静态依赖。
+- `@devhub/sdk` 解析到 `../../sdks/javascript/src/index.ts`。
+- `@devhub/sdk/runtime` 解析到 `../../sdks/javascript/src/runtime.ts`。
+- Vite、Vitest、TypeScript 类型检查、版本元数据同步与 Monitor 打包脚本使用同一源码来源。
+- `@devhub/sdk` 根入口保持浏览器 / WebView 安全；仅供 Node 使用的能力通过 `@devhub/sdk/runtime` 子路径暴露。
 
 ## 目录说明
 
 - `src/`：前端 WebView 工程；`App.tsx` 负责 `主页 / 测试 / 帮助 / 设置 / Definition` 多工作区状态编排，bootstrap / Host 会话 / 测试页状态 / Definition 编辑分别落在独立 hooks，壳层通过侧边栏驱动切换。
 - `src-tauri/`：Rust 原生后端；Tauri command 只做参数校验与转发，设置、快照、discovery、Host 启动、日志写入与日志目录打开能力由独立服务协作。
-- `@devhub/sdk`：前端 Host 通信依赖；依赖声明位于 `package.json`，本地开发和验证默认解析 `local-src`，需要时可显式切回 release tarball。
+- `@devhub/sdk`：前端 Host 通信公开入口，由构建工具映射到仓库内 `sdks/javascript/src/index.ts`。
 
 ## 工作区概览
 
@@ -67,14 +66,14 @@
 
 - 开发态桌面运行：`npm run tauri:dev`
 - 前端单独调试：`npm run dev`
-- 生产发布优先入口：`python ../../scripts/release/package_monitor.py --release-id <release-id>`
-- 本地 SDK 联调打包：`python ../../scripts/release/package_monitor.py --release-id <release-id> --sdk-source local-src`
+- Monitor 单平台打包入口：`python ../../scripts/release/package_monitor.py --release-id <release-id>`
+- preview/main 发布候选入口：`python ../../scripts/release/package_release.py --release-id <release-id> --channel preview|main-snapshot`
 - 底层 Tauri 构建命令：`npm run tauri:build`
 - 安装包与桌面快捷方式按单实例运行；重复启动时会唤醒已有主窗口，不会创建新的 Monitor 进程。
 
-`package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 与共享版本元数据的一致性，再串联 `npm ci`、`npm run verify`、`npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。脚本支持 `--sdk-source {release,local-src}`；默认 `release` 用于正式打包校验，`--sdk-source local-src` 用于源码联调包，并会把当前生效的 `JS SDK` 版本写入产物说明。
+`package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 与共享版本元数据的一致性，再串联 `npm ci`、`npm run verify`、`npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。产物 manifest 记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。
 
-当前 Monitor 的 CI 验证由独立的 `.github/workflows/monitor.yml` 承担；该 workflow 与 `package_monitor.py` 一样只服务于 Monitor 工作区验证，不接入 Host / SDK GitHub Release 自动发布链路。
+preview/main 发布链通过主 CI 验证 Monitor，并在 `.github/workflows/release-reusable.yml` 的 Linux、Windows、macOS 矩阵中生成 Monitor App 资产。稳定版发布资产集合维持 Host 与 SDK 资产。
 
 Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜索可用 Host。原生 discovery 会先确认 `runtime.protocolVersion=1` 与真实 `hub.ping` 成功，再优先调用 `hub.getVersion` 获取 Host 版本；仅在 `hub.getVersion` 返回 `method_not_found` 时回退到 `runtime.hubVersion`。只有确定兼容状态为 `incompatible` 时才会阻断发现态；`updateRecommended` 与 `unknown` 会继续允许前端建立会话，并在 `主页` 顶部和 `帮助` 工作区暴露诊断信息。若前端连接阶段再次得到保护性 `incompatible` 结果，当前 session 会被主动释放，并切回阻断式提示。若自动搜索约 3 秒后仍未发现可用 Host，`主页` 才会显示 `启动 Host`；若未配置 Host 可执行文件路径，则会引导用户进入 `设置` 工作区补全配置；若发现确定不兼容的 Host，则保留发现态并提供 `重新扫描` 与 `前往设置` 恢复动作。
 

@@ -11,11 +11,9 @@ export default defineConfig(async () => ({
   resolve: {
     alias: sdkSourceConfig.resolveAlias,
   },
-  optimizeDeps: sdkSourceConfig.isLocalSource
-    ? {
-        exclude: ["@devhub/sdk", "@devhub/sdk/runtime"],
-      }
-    : undefined,
+  optimizeDeps: {
+    exclude: ["@devhub/sdk", "@devhub/sdk/runtime"],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

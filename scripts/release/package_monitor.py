@@ -29,8 +29,6 @@ MONITOR_CARGO_TOML = MONITOR_TAURI_DIR / "Cargo.toml"
 MONITOR_VERSION_METADATA = MONITOR_DIR / "src" / "generated" / "version-metadata.json"
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
 SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
-MONITOR_SDK_SOURCE_ENV = "DEVHUB_MONITOR_SDK_SOURCE"
-MONITOR_SDK_SOURCE_CHOICES = ("release", "local-src")
 
 
 @dataclass
@@ -56,12 +54,6 @@ def parse_args() -> argparse.Namespace:
         help="Only run validation and version consistency checks without invoking tauri build.",
     )
     parser.add_argument(
-        "--sdk-source",
-        choices=MONITOR_SDK_SOURCE_CHOICES,
-        default="release",
-        help="JS SDK source for Monitor validation and packaging. Use local-src only for local development bundles.",
-    )
-    parser.add_argument(
         "tauri_args",
         nargs=argparse.REMAINDER,
         help="Additional arguments passed to `npm run tauri:build -- ...`.",
@@ -75,7 +67,6 @@ def main() -> int:
     release_id = validate_release_label(args.release_id, field_name="release-id")
     output_dir = resolve_release_output_dir(output_root, release_id)
     checks_dir = output_dir / "checks"
-    sdk_source = args.sdk_source
 
     if output_dir.exists():
         remove_tree(output_dir)
@@ -84,7 +75,7 @@ def main() -> int:
     validation_records: list[ValidationRecord] = []
     versions = ensure_monitor_version_consistency()
 
-    run_monitor_validation(checks_dir, validation_records, sdk_source=sdk_source)
+    run_monitor_validation(checks_dir, validation_records)
     versions.update(read_monitor_version_metadata(expected_monitor_version=versions["monitor"]))
     write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
 
@@ -96,7 +87,6 @@ def main() -> int:
         output_dir=output_dir,
         checks_dir=checks_dir,
         validation_records=validation_records,
-        sdk_source=sdk_source,
         tauri_args=normalize_tauri_args(args.tauri_args),
     )
     manifest = build_manifest(
@@ -104,7 +94,6 @@ def main() -> int:
         release_id=release_id,
         versions=versions,
         asset_paths=asset_paths,
-        sdk_source=sdk_source,
     )
     write_json(output_dir / "release-manifest.json", manifest)
     write_release_notes(output_dir=output_dir, manifest=manifest)
@@ -208,7 +197,6 @@ def read_monitor_version_metadata(expected_monitor_version: str) -> dict[str, st
 def run_monitor_validation(
     checks_dir: Path,
     validation_records: list[ValidationRecord],
-    sdk_source: str,
 ) -> None:
     run_logged_command(
         name="Monitor install",
@@ -223,7 +211,6 @@ def run_monitor_validation(
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-verify.log",
         validation_records=validation_records,
-        env_overrides={MONITOR_SDK_SOURCE_ENV: sdk_source},
     )
 
 
@@ -231,7 +218,6 @@ def build_monitor_assets(
     output_dir: Path,
     checks_dir: Path,
     validation_records: list[ValidationRecord],
-    sdk_source: str,
     tauri_args: Sequence[str],
 ) -> list[Path]:
     bundle_source_dir = MONITOR_TAURI_DIR / "target" / "release" / "bundle"
@@ -250,7 +236,6 @@ def build_monitor_assets(
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-bundle-build.log",
         validation_records=validation_records,
-        env_overrides={MONITOR_SDK_SOURCE_ENV: sdk_source},
     )
 
     if not bundle_source_dir.exists():
@@ -290,7 +275,6 @@ def build_manifest(
     release_id: str,
     versions: dict[str, str],
     asset_paths: Sequence[Path],
-    sdk_source: str,
 ) -> dict[str, object]:
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     assets: list[dict[str, object]] = []
@@ -314,8 +298,7 @@ def build_manifest(
         "generatedAtUtc": generated_at,
         "targetPlatform": current_platform_tag(),
         "versions": versions,
-        "sdkSource": sdk_source,
-        "developmentOnly": sdk_source != "release",
+        "sdkSource": "repository-source",
         "assets": assets,
         "validation": {
             "executed": True,
@@ -360,14 +343,6 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object]) -> None:
         f"- Generated At (UTC): `{manifest['generatedAtUtc']}`",
     ]
 
-    if manifest["developmentOnly"]:
-        lines.extend(
-            [
-                "- Package Type: `development-only`",
-                "- This package was built against `local-src` for local SDK/Monitor integration work and is not a formal release candidate.",
-            ]
-        )
-
     lines.extend(
         [
             "",
@@ -388,7 +363,6 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object]) -> None:
             "",
             "- Validation executed locally through `python scripts/release/package_monitor.py`.",
             "- Summary file: `checks/validation-summary.json`.",
-            "- This packaging flow is not wired into the current GitHub Release workflow.",
             "",
             "## Next Steps",
             "",

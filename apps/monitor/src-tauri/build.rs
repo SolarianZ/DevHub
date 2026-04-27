@@ -10,7 +10,6 @@ fn main() {
             .join("generated")
             .join("version-metadata.json");
     println!("cargo:rerun-if-changed={}", metadata_path.display());
-    println!("cargo:rerun-if-env-changed=DEVHUB_MONITOR_SDK_SOURCE");
 
     let metadata_text = fs::read_to_string(&metadata_path).unwrap_or_else(|error| {
         panic!(

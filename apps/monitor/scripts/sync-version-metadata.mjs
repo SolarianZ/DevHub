@@ -4,17 +4,13 @@ import { fileURLToPath } from "node:url";
 
 const monitorDir = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const monitorPackageJsonPath = path.join(monitorDir, "package.json");
+const sdkPackageJsonPath = path.resolve(monitorDir, "..", "..", "sdks", "javascript", "package.json");
 const generatedDir = path.join(monitorDir, "src", "generated");
 const generatedMetadataPath = path.join(generatedDir, "version-metadata.json");
-const monitorSdkSourceEnv = "DEVHUB_MONITOR_SDK_SOURCE";
-const releaseSdkSource = "release";
-const localSdkSource = "local-src";
-const defaultSdkSource = localSdkSource;
 
 async function main() {
-  const sdkSource = readMonitorSdkSource(process.env);
   const monitorVersion = await readPackageVersion(monitorPackageJsonPath);
-  const sdkVersion = await readPackageVersion(resolveSdkPackageJsonPath(sdkSource));
+  const sdkVersion = await readPackageVersion(sdkPackageJsonPath);
   const payload = {
     monitorVersion,
     sdkVersion,
@@ -34,29 +30,6 @@ async function main() {
 
   await fs.mkdir(generatedDir, { recursive: true });
   await fs.writeFile(generatedMetadataPath, nextText, "utf8");
-}
-
-function readMonitorSdkSource(env) {
-  const candidate = env[monitorSdkSourceEnv]?.trim();
-  if (!candidate) {
-    return defaultSdkSource;
-  }
-
-  if (candidate === releaseSdkSource || candidate === localSdkSource) {
-    return candidate;
-  }
-
-  throw new Error(
-    `${monitorSdkSourceEnv} 必须为 ${releaseSdkSource} 或 ${localSdkSource}，实际收到：${candidate}`,
-  );
-}
-
-function resolveSdkPackageJsonPath(sdkSource) {
-  if (sdkSource === localSdkSource) {
-    return path.resolve(monitorDir, "..", "..", "sdks", "javascript", "package.json");
-  }
-
-  return path.resolve(monitorDir, "node_modules", "@devhub", "sdk", "package.json");
 }
 
 async function readPackageVersion(packageJsonPath) {

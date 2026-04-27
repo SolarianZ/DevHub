@@ -18,14 +18,19 @@ on:
         type: boolean
 
 jobs:
-  package-and-publish:
+  resolve_release_metadata:
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      contents: write
-
-    env:
-      PYTHONUNBUFFERED: "1"
+      contents: read
+    outputs:
+      commit_sha: ${{ steps.meta.outputs.commit_sha }}
+      channel: ${{ steps.meta.outputs.channel }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_id: ${{ steps.meta.outputs.release_id }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      should_publish: ${{ steps.gate.outputs.should_publish }}
 
     steps:
       - name: Checkout target
@@ -33,23 +38,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.target_ref }}
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: sdks/javascript/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
 
       - name: Resolve release metadata
         id: meta
@@ -170,33 +158,208 @@ jobs:
 
           echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
 
-      - name: Skip stale preview publish
-        if: steps.gate.outputs.should_publish != 'true'
-        shell: bash
-        run: echo "Skip release publish because the preview branch has advanced."
+  package_core_assets:
+    needs: resolve_release_metadata
+    if: needs.resolve_release_metadata.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
 
-      - name: Package release assets
-        if: steps.gate.outputs.should_publish == 'true'
+    env:
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Package Host and SDK release assets
         run: |
           python scripts/release/package_release.py \
-            --release-id "${{ steps.meta.outputs.release_id }}" \
-            --channel "${{ steps.meta.outputs.channel }}" \
-            --release-tag "${{ steps.meta.outputs.release_tag }}" \
-            --release-name "${{ steps.meta.outputs.release_name }}" \
-            --commit "${{ steps.meta.outputs.commit_sha }}"
+            --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" \
+            --channel "${{ needs.resolve_release_metadata.outputs.channel }}" \
+            --release-tag "${{ needs.resolve_release_metadata.outputs.release_tag }}" \
+            --release-name "${{ needs.resolve_release_metadata.outputs.release_name }}" \
+            --commit "${{ needs.resolve_release_metadata.outputs.commit_sha }}" \
+            --skip-monitor
+
+      - name: Upload core release assets
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-core-${{ needs.resolve_release_metadata.outputs.release_id }}
+          path: artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}
+          if-no-files-found: error
+
+      - name: Upload core release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-core-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
+
+  package_monitor_assets:
+    needs: resolve_release_metadata
+    if: >
+      needs.resolve_release_metadata.outputs.should_publish == 'true' &&
+      (needs.resolve_release_metadata.outputs.channel == 'preview' ||
+       needs.resolve_release_metadata.outputs.channel == 'main-snapshot')
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.runner }}
+
+    env:
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/monitor/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Package Monitor App assets
+        run: python scripts/release/package_monitor.py --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" --output-root artifacts/monitor
+
+      - name: Upload Monitor App assets
+        uses: actions/upload-artifact@v6
+        with:
+          name: monitor-assets-${{ matrix.runner }}
+          path: artifacts/monitor/${{ needs.resolve_release_metadata.outputs.release_id }}
+          if-no-files-found: error
+
+      - name: Upload Monitor diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: monitor-diagnostics-${{ matrix.runner }}-${{ github.run_id }}
+          path: |
+            artifacts/monitor/**
+            apps/monitor/src-tauri/target/release/bundle/**
+          if-no-files-found: warn
+
+  publish_github_release:
+    needs:
+      - resolve_release_metadata
+      - package_core_assets
+      - package_monitor_assets
+    if: >
+      always() &&
+      needs.resolve_release_metadata.outputs.should_publish == 'true' &&
+      needs.package_core_assets.result == 'success' &&
+      (needs.resolve_release_metadata.outputs.channel == 'stable' ||
+       needs.package_monitor_assets.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout target
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Download core release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: release-core-${{ needs.resolve_release_metadata.outputs.release_id }}
+          path: artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}
+
+      - name: Download Monitor App assets
+        if: needs.resolve_release_metadata.outputs.channel != 'stable'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: monitor-assets-*
+          path: ${{ runner.temp }}/monitor-assets
+          merge-multiple: false
+
+      - name: Refresh release manifest with Monitor assets
+        if: needs.resolve_release_metadata.outputs.channel != 'stable'
+        run: |
+          python scripts/release/package_release.py \
+            --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" \
+            --channel "${{ needs.resolve_release_metadata.outputs.channel }}" \
+            --release-tag "${{ needs.resolve_release_metadata.outputs.release_tag }}" \
+            --release-name "${{ needs.resolve_release_metadata.outputs.release_name }}" \
+            --commit "${{ needs.resolve_release_metadata.outputs.commit_sha }}" \
+            --reuse-existing-output \
+            --skip-monitor \
+            --monitor-assets-root "${{ runner.temp }}/monitor-assets"
 
       - name: Publish GitHub Release
-        if: steps.gate.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
 
-          release_dir="artifacts/release/${{ steps.meta.outputs.release_id }}"
-          release_tag="${{ steps.meta.outputs.release_tag }}"
-          release_name="${{ steps.meta.outputs.release_name }}"
-          channel="${{ steps.meta.outputs.channel }}"
+          release_dir="artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}"
+          release_tag="${{ needs.resolve_release_metadata.outputs.release_tag }}"
+          release_name="${{ needs.resolve_release_metadata.outputs.release_name }}"
+          channel="${{ needs.resolve_release_metadata.outputs.channel }}"
 
           release_files=(
             "$release_dir"/host/*.zip
@@ -207,20 +370,26 @@ jobs:
             "$release_dir"/release-notes.md
           )
 
+          if [[ -d "$release_dir/monitor" ]]; then
+            while IFS= read -r -d '' file; do
+              release_files+=("$file")
+            done < <(find "$release_dir/monitor" -type f -path "*/bundle/*" -print0 | sort -z)
+          fi
+
           if [[ "${channel}" == "preview" ]]; then
             gh release delete "${release_tag}" --yes --cleanup-tag || true
             gh release create "${release_tag}" "${release_files[@]}" \
               --title "${release_name}" \
               --notes-file "$release_dir/release-notes.md" \
               --prerelease \
-              --target "${{ steps.meta.outputs.commit_sha }}"
+              --target "${{ needs.resolve_release_metadata.outputs.commit_sha }}"
           elif [[ "${channel}" == "main-snapshot" ]]; then
             gh release delete "${release_tag}" --yes --cleanup-tag || true
             gh release create "${release_tag}" "${release_files[@]}" \
               --title "${release_name}" \
               --notes-file "$release_dir/release-notes.md" \
               --prerelease \
-              --target "${{ steps.meta.outputs.commit_sha }}"
+              --target "${{ needs.resolve_release_metadata.outputs.commit_sha }}"
           else
             if gh release view "${release_tag}" >/dev/null 2>&1; then
               gh release upload "${release_tag}" "${release_files[@]}" --clobber
@@ -231,12 +400,12 @@ jobs:
               gh release create "${release_tag}" "${release_files[@]}" \
                 --title "${release_name}" \
                 --notes-file "$release_dir/release-notes.md" \
-                --target "${{ steps.meta.outputs.commit_sha }}"
+                --target "${{ needs.resolve_release_metadata.outputs.commit_sha }}"
             fi
           fi
 
       - name: Upload release diagnostics
-        if: failure() && steps.gate.outputs.should_publish == 'true'
+        if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: release-diagnostics-${{ github.run_id }}

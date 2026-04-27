@@ -384,6 +384,70 @@ jobs:
             temp/conformance_snapshots/**
           if-no-files-found: warn
 
+  monitor-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/monitor/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Monitor dependencies
+        run: npm --prefix apps/monitor ci
+
+      - name: Build Monitor frontend
+        run: npm --prefix apps/monitor run build:web
+
+      - name: Run Monitor frontend tests
+        run: npm --prefix apps/monitor test
+
+      - name: Run Monitor native tests
+        run: npm --prefix apps/monitor run test:native
+
+      - name: Run Monitor native checks
+        run: npm --prefix apps/monitor run tauri:check
+
+      - name: Run Monitor packaging verification
+        run: python3 scripts/release/package_monitor.py --release-id monitor-ci --verify-only
+
+      - name: Upload Monitor diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: monitor-diagnostics-${{ github.run_id }}
+          path: |
+            artifacts/monitor/**
+            apps/monitor/src-tauri/target/release/bundle/**
+          if-no-files-found: warn
+
   integration-full-gate:
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -696,6 +760,7 @@ jobs:
       - sdk-ts-tests
       - sdk-python-tests
       - sdk-conformance
+      - monitor-validation
       - integration-full-gate
       - cross-platform-smoke
     permissions:
