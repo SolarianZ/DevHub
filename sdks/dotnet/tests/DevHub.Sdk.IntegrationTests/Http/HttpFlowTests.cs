@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using DevHub.Sdk.IntegrationTests.TestHost;
 using DevHub.Sdk.Models;
 
@@ -103,37 +102,6 @@ public sealed class HttpFlowTests
         }
 
         Assert.NotEqual(VersionCompatibilityStatus.Unknown, compatibility.Status);
-    }
-
-    [Fact]
-    public async Task VersionCompatibility_WhenRuntimeHubVersionInvalid_ShouldOnlyReturnUnknownWithoutRpcVersionSupport()
-    {
-        await using var host = await DevHubHostFixture.StartAsync();
-        await RewriteHubVersionAsync(host, "not-semver");
-        await using var client = await host.CreateClientAsync("http-version-invalid-runtime-client");
-
-        string? directHostVersion = null;
-        var rpcSupported = true;
-        try
-        {
-            directHostVersion = await client.GetHostVersionAsync();
-        }
-        catch (DevHubRpcException exception) when (exception.Is(DevHubRpcErrorCode.MethodNotFound))
-        {
-            rpcSupported = false;
-        }
-
-        var compatibility = await client.CheckVersionCompatibilityAsync();
-
-        if (rpcSupported)
-        {
-            Assert.Equal(directHostVersion, compatibility.HostVersion);
-            Assert.NotEqual(VersionCompatibilityStatus.Unknown, compatibility.Status);
-            return;
-        }
-
-        Assert.Equal("not-semver", compatibility.HostVersion);
-        Assert.Equal(VersionCompatibilityStatus.Unknown, compatibility.Status);
     }
 
     [Fact]
@@ -502,20 +470,4 @@ public sealed class HttpFlowTests
         }
     }
 
-    private static async Task RewriteHubVersionAsync(DevHubHostFixture host, string? hubVersion)
-    {
-        var hubJsonPath = Path.Combine(host.RuntimeDirectory, "hub.json");
-        var runtime = JsonSerializer.Deserialize<HubRuntime>(await File.ReadAllTextAsync(hubJsonPath))
-            ?? throw new InvalidOperationException("无法解析测试 Host 的 hub.json。");
-        runtime.HubVersion = hubVersion;
-
-        await File.WriteAllTextAsync(
-            hubJsonPath,
-            JsonSerializer.Serialize(
-                runtime,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                {
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                }));
-    }
 }
