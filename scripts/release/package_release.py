@@ -1,100 +1,112 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
-import re
-import shlex
-import shutil
-import subprocess
 import sys
-import time
-import zipfile
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
-from xml.etree import ElementTree
 
-import tomllib
-
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VERSION_SYNC_SCRIPT = REPO_ROOT / "scripts" / "release" / "sync_versions.py"
-PACKAGE_MONITOR_SCRIPT = REPO_ROOT / "scripts" / "release" / "package_monitor.py"
-HOST_PROJECT = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
-DOTNET_SDK_PROJECTS = (
-    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj",
-    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk.DependencyInjection" / "DevHub.Sdk.DependencyInjection.csproj",
+from package_dotnet_sdk import package_dotnet_sdk
+from package_host import package_host
+from package_js_sdk import package_js_sdk
+from package_models import (
+    DotNetSdkPackageOptions,
+    HostPackageOptions,
+    JavaScriptSdkPackageOptions,
+    MonitorPackageOptions,
+    PackageHelp,
+    PackageHelpOption,
+    PackageHelpSection,
+    PythonSdkPackageOptions,
+    ReleaseAsset,
+    ReleasePackageOptions,
+    ReleasePackageResult,
+    ValidationRecord,
 )
-JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
-PYTHON_SDK_DIR = REPO_ROOT / "sdks" / "python"
-MONITOR_PACKAGE_JSON = REPO_ROOT / "apps" / "monitor" / "package.json"
-DEFAULT_HOST_RIDS = ("win-x64", "linux-x64", "osx-arm64")
-NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
-SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
-
-
-@dataclass
-class ValidationRecord:
-    name: str
-    command: list[str]
-    cwd: str
-    logPath: str
-    status: str
-
-
-@dataclass(frozen=True)
-class HostVariant:
-    name: str
-    archive_name_suffix: str
-    publish_arguments: tuple[str, ...]
-
-    def archive_name(self, rid: str) -> str:
-        return f"devhub-host-{rid}{self.archive_name_suffix}.zip"
-
-    def archive_root_name(self, rid: str) -> str:
-        return f"devhub-host-{rid}{self.archive_name_suffix}"
-
-
-@dataclass(frozen=True)
-class ReleaseAsset:
-    path: Path
-    category: str
-    target: str
-    variant: str | None = None
-    monitorVersion: str | None = None
-    javascriptSdkVersion: str | None = None
-
-
-HOST_VARIANTS = (
-    HostVariant(
-        name="multi-file",
-        archive_name_suffix="",
-        publish_arguments=(
-            "--self-contained",
-            "false",
-            "-p:PublishSingleFile=false",
-        ),
-    ),
-    HostVariant(
-        name="single-file",
-        archive_name_suffix="-single-file",
-        publish_arguments=(
-            "--self-contained",
-            "false",
-            "-p:PublishSingleFile=true",
-            "-p:EnableCompressionInSingleFile=true",
-        ),
-    ),
+from package_monitor import copy_monitor_package_outputs, package_monitor
+from package_py_sdk import package_py_sdk
+from package_shared import (
+    DEFAULT_HOST_RIDS,
+    DOTNET_SDK_PROJECTS,
+    HOST_PROJECT,
+    HOST_VARIANTS,
+    JS_SDK_DIR,
+    MONITOR_PACKAGE_JSON,
+    PYTHON_SDK_DIR,
+    REPO_ROOT,
+    add_release_output_arguments,
+    build_validation_summary,
+    create_argument_parser,
+    current_utc_timestamp,
+    describe_release_assets,
+    ensure_version_metadata_consistency,
+    maybe_print_help,
+    read_existing_validation_records,
+    read_git_output,
+    read_json_version,
+    read_msbuild_version,
+    read_toml_version,
+    release_asset_sort_key,
+    remove_tree,
+    resolve_release_output_dir,
+    sha256_file,
+    validate_release_label,
+    write_json,
 )
-HOST_VARIANT_ORDER = {variant.name: index for index, variant in enumerate(HOST_VARIANTS)}
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build DevHub release assets and validation output.")
-    parser.add_argument("--release-id", required=True, help="Output folder name under artifacts/release.")
+DEFAULT_OUTPUT_ROOT = REPO_ROOT / "artifacts" / "release"
+
+
+def build_help() -> PackageHelp:
+    return PackageHelp(
+        command="python scripts/release/package_release.py --help",
+        summary="Build the full DevHub local release candidate by orchestrating Host, SDK, and optional Monitor component packagers.",
+        sections=(
+            PackageHelpSection(
+                title="Common Parameters",
+                options=(
+                    PackageHelpOption("--help", "Print this capability and parameter summary without validation or packaging."),
+                    PackageHelpOption("--release-id <id>", "Output folder name under the selected output root."),
+                    PackageHelpOption(
+                        "--output-root <dir>",
+                        f"Directory that contains release-id subdirectories. Default: {DEFAULT_OUTPUT_ROOT}",
+                    ),
+                ),
+            ),
+            PackageHelpSection(
+                title="Release Parameters",
+                options=(
+                    PackageHelpOption("--channel <local|preview|main-snapshot|stable>", "Release channel identifier."),
+                    PackageHelpOption("--release-tag <tag>", "GitHub Release tag recorded in the manifest. Defaults to release-id."),
+                    PackageHelpOption("--release-name <name>", "Release display name recorded in the manifest."),
+                    PackageHelpOption("--commit <sha>", "Commit SHA recorded in the manifest and release notes."),
+                    PackageHelpOption(
+                        "--host-rid <rid>",
+                        "Override the Host RID matrix. Repeat for multiple targets. Defaults to win-x64, linux-x64, osx-arm64.",
+                    ),
+                    PackageHelpOption("--skip-monitor", "Skip local Monitor packaging for preview/main-snapshot channels."),
+                    PackageHelpOption(
+                        "--monitor-assets-root <dir>",
+                        "Merge Monitor package outputs from an external root instead of building them locally.",
+                    ),
+                    PackageHelpOption(
+                        "--reuse-existing-output",
+                        "Refresh manifest, notes, and integrity checks from an existing release output directory.",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = create_argument_parser("Build DevHub release assets and validation output.")
+    add_release_output_arguments(
+        parser,
+        default_output_root=DEFAULT_OUTPUT_ROOT,
+        output_root_help="Directory that contains release-id subdirectories for full release packaging output.",
+    )
     parser.add_argument(
         "--channel",
         required=True,
@@ -104,11 +116,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--release-tag", help="GitHub Release tag associated with this build.")
     parser.add_argument("--release-name", help="GitHub Release display name associated with this build.")
     parser.add_argument("--commit", help="Commit SHA for manifest and release notes.")
-    parser.add_argument(
-        "--output-root",
-        default=str(REPO_ROOT / "artifacts" / "release"),
-        help="Directory that contains release-id subdirectories.",
-    )
     parser.add_argument(
         "--host-rid",
         action="append",
@@ -129,24 +136,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Refresh manifest, notes, and integrity checks from an existing release output directory.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
     ensure_version_metadata_consistency()
-    output_root = Path(args.output_root).resolve()
-    release_id = validate_release_label(args.release_id, field_name="release-id")
-    release_tag = validate_release_label(args.release_tag or release_id, field_name="release-tag")
-    release_name = args.release_name or f"DevHub {release_id}"
-    commit = args.commit or read_git_output(["git", "rev-parse", "HEAD"]).strip()
-    host_rids = tuple(args.host_rids or DEFAULT_HOST_RIDS)
-    generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    output_dir = resolve_release_output_dir(output_root, release_id)
-    checks_dir = output_dir / "checks"
-    monitor_assets_root = Path(args.monitor_assets_root).resolve() if args.monitor_assets_root else None
 
-    if args.reuse_existing_output:
+    output_dir = resolve_release_output_dir(options.output_root, options.release_id)
+    checks_dir = output_dir / "checks"
+    monitor_assets_root = options.monitor_assets_root.resolve() if options.monitor_assets_root is not None else None
+
+    if options.reuse_existing_output:
         if not output_dir.exists():
             raise RuntimeError(f"无法刷新不存在的发布输出目录：{output_dir}")
     elif output_dir.exists():
@@ -154,12 +154,79 @@ def main() -> int:
 
     checks_dir.mkdir(parents=True, exist_ok=True)
     validation_records = (
-        read_existing_validation_records(checks_dir / "validation-summary.json")
-        if args.reuse_existing_output
+        [record for record in read_existing_validation_records(checks_dir / "validation-summary.json") if record.name != "Release asset integrity"]
+        if options.reuse_existing_output
         else []
     )
 
-    versions = {
+    if options.reuse_existing_output:
+        assets = discover_core_release_assets(output_dir, options.host_rids)
+        versions = collect_release_versions()
+    else:
+        assets, versions = build_core_release_assets(
+            output_dir=output_dir,
+            checks_dir=checks_dir,
+            host_rids=options.host_rids,
+            validation_records=validation_records,
+        )
+
+    include_local_monitor = options.channel in {"preview", "main-snapshot"} and not options.skip_monitor
+    monitor_assets: list[ReleaseAsset] = []
+    if monitor_assets_root is not None:
+        if options.channel == "stable":
+            raise RuntimeError("stable 渠道不接受 Monitor App 发布资产。")
+        monitor_assets.extend(copy_monitor_package_outputs(output_dir, monitor_assets_root))
+    elif include_local_monitor:
+        local_monitor_assets, monitor_records = package_local_monitor_assets(
+            output_dir=output_dir,
+            release_id=options.release_id,
+        )
+        monitor_assets.extend(local_monitor_assets)
+        validation_records.extend(monitor_records)
+    assets.extend(monitor_assets)
+
+    write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
+
+    generated_at = current_utc_timestamp()
+    manifest = build_manifest(
+        output_dir=output_dir,
+        assets=assets,
+        versions=versions,
+        release_id=options.release_id,
+        channel=options.channel,
+        release_tag=options.release_tag,
+        release_name=options.release_name,
+        commit=options.commit,
+        generated_at=generated_at,
+    )
+    write_json(output_dir / "release-manifest.json", manifest)
+    write_release_notes(
+        output_dir=output_dir,
+        manifest=manifest,
+        release_name=options.release_name,
+    )
+
+    ensure_asset_integrity(
+        output_dir=output_dir,
+        manifest=manifest,
+        host_rids=options.host_rids,
+        validation_records=validation_records,
+        require_monitor=bool(monitor_assets),
+    )
+    write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
+
+    return ReleasePackageResult(
+        output_dir=output_dir,
+        assets=tuple(assets),
+        versions=versions,
+        manifest=manifest,
+        includes_monitor=bool(monitor_assets),
+        validation_records=tuple(validation_records),
+    )
+
+
+def collect_release_versions() -> dict[str, str]:
+    return {
         "host": read_msbuild_version(HOST_PROJECT),
         "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECTS[0]),
         "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_PROJECTS[1]),
@@ -168,336 +235,60 @@ def main() -> int:
         "monitor": read_json_version(MONITOR_PACKAGE_JSON),
     }
 
-    if args.reuse_existing_output:
-        assets = discover_core_release_assets(output_dir, host_rids)
-    else:
-        run_release_validation(checks_dir, validation_records)
-        assets = build_release_assets(output_dir, checks_dir, host_rids, validation_records)
 
-    include_local_monitor = args.channel in {"preview", "main-snapshot"} and not args.skip_monitor
-    monitor_assets: list[ReleaseAsset] = []
-    if monitor_assets_root is not None:
-        if args.channel == "stable":
-            raise RuntimeError("stable 渠道不接受 Monitor App 发布资产。")
-        monitor_assets.extend(copy_monitor_package_outputs(output_dir, monitor_assets_root))
-    elif include_local_monitor:
-        monitor_assets.extend(package_local_monitor_assets(output_dir, release_id, checks_dir, validation_records))
-    assets.extend(monitor_assets)
-
-    validation_summary = {
-        "schemaVersion": 1,
-        "executedAtUtc": generated_at,
-        "records": [asdict(record) for record in validation_records],
-    }
-    write_json(checks_dir / "validation-summary.json", validation_summary)
-
-    manifest = build_manifest(
-        output_dir=output_dir,
-        assets=assets,
-        versions=versions,
-        release_id=release_id,
-        channel=args.channel,
-        release_tag=release_tag,
-        release_name=release_name,
-        commit=commit,
-        generated_at=generated_at,
-    )
-    write_json(output_dir / "release-manifest.json", manifest)
-    write_release_notes(
-        output_dir=output_dir,
-        manifest=manifest,
-        release_name=release_name,
-    )
-
-    ensure_asset_integrity(
-        output_dir,
-        manifest,
-        host_rids,
-        validation_records,
-        require_monitor=bool(monitor_assets),
-    )
-    write_json(checks_dir / "validation-summary.json", validation_summary_with_integrity(validation_records))
-
-    print(f"Release assets ready: {output_dir}")
-    return 0
-
-
-def validation_summary_with_integrity(records: Sequence[ValidationRecord]) -> dict[str, object]:
-    return {
-        "schemaVersion": 1,
-        "executedAtUtc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "records": [asdict(record) for record in records],
-    }
-
-
-def read_existing_validation_records(summary_path: Path) -> list[ValidationRecord]:
-    if not summary_path.is_file():
-        raise RuntimeError(f"无法刷新发布输出，缺少验证摘要：{summary_path}")
-
-    payload = json.loads(summary_path.read_text(encoding="utf-8"))
-    records = payload.get("records")
-    if not isinstance(records, list):
-        raise RuntimeError(f"验证摘要缺少 records 数组：{summary_path}")
-
-    validation_records: list[ValidationRecord] = []
-    for record in records:
-        if not isinstance(record, dict):
-            raise RuntimeError(f"验证摘要包含无效记录：{summary_path}")
-        name = record.get("name")
-        command = record.get("command")
-        cwd = record.get("cwd")
-        log_path = record.get("logPath")
-        status = record.get("status")
-        if not isinstance(name, str) or not isinstance(command, list):
-            raise RuntimeError(f"验证摘要记录缺少 name 或 command：{summary_path}")
-        if not isinstance(cwd, str) or not isinstance(log_path, str) or not isinstance(status, str):
-            raise RuntimeError(f"验证摘要记录缺少 cwd、logPath 或 status：{summary_path}")
-        validation_records.append(
-            ValidationRecord(
-                name=name,
-                command=[str(part) for part in command],
-                cwd=cwd,
-                logPath=log_path,
-                status=status,
-            )
-        )
-
-    return [record for record in validation_records if record.name != "Release asset integrity"]
-
-
-def ensure_version_metadata_consistency() -> None:
-    subprocess.run(
-        [sys.executable, str(VERSION_SYNC_SCRIPT), "--check"],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        encoding="utf-8",
-    )
-
-
-def validate_release_label(value: str, field_name: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise RuntimeError(f"{field_name} 不能为空。")
-    if not SAFE_RELEASE_LABEL_PATTERN.fullmatch(normalized):
-        raise RuntimeError(
-            f"{field_name} 只能包含字母、数字、点、下划线、连字符或加号，且必须以字母或数字开头：{value!r}"
-        )
-    return normalized
-
-
-def resolve_release_output_dir(output_root: Path, release_id: str) -> Path:
-    resolved_output_root = output_root.resolve()
-    candidate = (resolved_output_root / release_id).resolve()
-
-    try:
-        candidate.relative_to(resolved_output_root)
-    except ValueError as exc:
-        raise RuntimeError(f"release-id 解析后的输出目录超出发布根目录：{candidate}") from exc
-
-    if candidate == resolved_output_root:
-        raise RuntimeError("release-id 不能直接指向发布根目录。")
-
-    return candidate
-
-
-def run_release_validation(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
-    run_logged_command(
-        name="Host build",
-        command=["dotnet", "build", str(REPO_ROOT / "host" / "DevHub.slnx"), "-c", "Release"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "host-build.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="Host tests",
-        command=["dotnet", "test", str(REPO_ROOT / "host" / "DevHub.slnx"), "-c", "Release"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "host-tests.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="Host smoke dependencies",
-        command=[sys.executable, "-m", "pip", "install", "requests"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "smoke-dependencies.log",
-        validation_records=validation_records,
-    )
-    run_host_smoke(checks_dir, validation_records)
-    run_logged_command(
-        name=".NET SDK tests",
-        command=["dotnet", "test", str(REPO_ROOT / "sdks" / "dotnet" / "DevHub.DotNetSdk.slnx"), "-c", "Release"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "dotnet-sdk-tests.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="JS SDK install",
-        command=[NPM_COMMAND, "ci"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-install.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="JS SDK build",
-        command=[NPM_COMMAND, "run", "build"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-build.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="JS SDK tests",
-        command=[NPM_COMMAND, "test"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-tests.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="Python SDK install",
-        command=[sys.executable, "-m", "pip", "install", "-e", "./sdks/python[test]"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "python-install.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="Python SDK tests",
-        command=[sys.executable, "-m", "pytest", "sdks/python/tests"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "python-tests.log",
-        validation_records=validation_records,
-    )
-
-
-def build_release_assets(
+def build_core_release_assets(
+    *,
     output_dir: Path,
     checks_dir: Path,
-    host_rids: Sequence[str],
+    host_rids: tuple[str, ...],
     validation_records: list[ValidationRecord],
-) -> list[ReleaseAsset]:
-    host_dir = output_dir / "host"
-    dotnet_dir = output_dir / "sdk" / "dotnet"
-    javascript_dir = output_dir / "sdk" / "javascript"
-    python_dir = output_dir / "sdk" / "python"
-    staging_dir = output_dir / ".staging"
-
-    host_dir.mkdir(parents=True, exist_ok=True)
-    dotnet_dir.mkdir(parents=True, exist_ok=True)
-    javascript_dir.mkdir(parents=True, exist_ok=True)
-    python_dir.mkdir(parents=True, exist_ok=True)
-    staging_dir.mkdir(parents=True, exist_ok=True)
-
+) -> tuple[list[ReleaseAsset], dict[str, str]]:
     assets: list[ReleaseAsset] = []
+    versions: dict[str, str] = {}
 
-    for rid in host_rids:
-        restore_dir = staging_dir / "host" / rid
-        restore_dir.mkdir(parents=True, exist_ok=True)
-        run_logged_command(
-            name=f"Host restore ({rid})",
-            command=["dotnet", "restore", str(HOST_PROJECT), "-r", rid],
-            cwd=REPO_ROOT,
-            log_path=checks_dir / f"host-restore-{rid}.log",
-            validation_records=validation_records,
+    host_result = package_host(
+        HostPackageOptions(
+            output_dir=output_dir,
+            checks_dir=checks_dir,
+            host_rids=host_rids,
         )
-        for variant in HOST_VARIANTS:
-            publish_dir = staging_dir / "host" / rid / variant.name
-            publish_dir.mkdir(parents=True, exist_ok=True)
-            run_logged_command(
-                name=f"Host publish ({rid}, {variant.name})",
-                command=[
-                    "dotnet",
-                    "publish",
-                    str(HOST_PROJECT),
-                    "-c",
-                    "Release",
-                    "-r",
-                    rid,
-                    *variant.publish_arguments,
-                    "--no-restore",
-                    "-o",
-                    str(publish_dir),
-                ],
-                cwd=REPO_ROOT,
-                log_path=checks_dir / f"host-publish-{rid}-{variant.name}.log",
-                validation_records=validation_records,
-            )
-            archive_path = host_dir / variant.archive_name(rid)
-            create_zip_archive(
-                source_dir=publish_dir,
-                archive_path=archive_path,
-                root_name=variant.archive_root_name(rid),
-            )
-            assets.append(
-                ReleaseAsset(
-                    path=archive_path,
-                    category="host",
-                    target=rid,
-                    variant=variant.name,
-                )
-            )
+    )
+    assets.extend(host_result.assets)
+    versions.update(host_result.versions)
+    validation_records.extend(host_result.validation_records)
 
-    for name, project, log_name in (
-        (".NET SDK core pack", DOTNET_SDK_PROJECTS[0], "dotnet-sdk-core-pack.log"),
-        (".NET SDK DI pack", DOTNET_SDK_PROJECTS[1], "dotnet-sdk-dependency-injection-pack.log"),
-    ):
-        run_logged_command(
-            name=name,
-            command=[
-                "dotnet",
-                "pack",
-                str(project),
-                "-c",
-                "Release",
-                f"-p:PackageOutputPath={dotnet_dir}",
-            ],
-            cwd=REPO_ROOT,
-            log_path=checks_dir / log_name,
-            validation_records=validation_records,
+    dotnet_result = package_dotnet_sdk(
+        DotNetSdkPackageOptions(
+            output_dir=output_dir,
+            checks_dir=checks_dir,
         )
-    assets.extend(describe_release_assets(sorted(dotnet_dir.glob("*"))))
+    )
+    assets.extend(dotnet_result.assets)
+    versions.update(dotnet_result.versions)
+    validation_records.extend(dotnet_result.validation_records)
 
-    run_logged_command(
-        name="JS SDK install for pack",
-        command=[NPM_COMMAND, "ci"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-pack-install.log",
-        validation_records=validation_records,
+    javascript_result = package_js_sdk(
+        JavaScriptSdkPackageOptions(
+            output_dir=output_dir,
+            checks_dir=checks_dir,
+        )
     )
-    run_logged_command(
-        name="JS SDK build for pack",
-        command=[NPM_COMMAND, "run", "build"],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-pack-build.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="JS SDK pack",
-        command=[NPM_COMMAND, "pack", "--pack-destination", str(javascript_dir)],
-        cwd=JS_SDK_DIR,
-        log_path=checks_dir / "javascript-pack.log",
-        validation_records=validation_records,
-    )
-    assets.extend(describe_release_assets(sorted(javascript_dir.glob("*"))))
+    assets.extend(javascript_result.assets)
+    versions.update(javascript_result.versions)
+    validation_records.extend(javascript_result.validation_records)
 
-    run_logged_command(
-        name="Python build backend install",
-        command=[sys.executable, "-m", "pip", "install", "build"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "python-build-backend.log",
-        validation_records=validation_records,
+    python_result = package_py_sdk(
+        PythonSdkPackageOptions(
+            output_dir=output_dir,
+            checks_dir=checks_dir,
+        )
     )
-    run_logged_command(
-        name="Python SDK pack",
-        command=[sys.executable, "-m", "build", "--sdist", "--wheel", "--outdir", str(python_dir), "sdks/python"],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "python-pack.log",
-        validation_records=validation_records,
-    )
-    assets.extend(describe_release_assets(sorted(python_dir.glob("*"))))
+    assets.extend(python_result.assets)
+    versions.update(python_result.versions)
+    validation_records.extend(python_result.validation_records)
 
-    if staging_dir.exists():
-        remove_tree(staging_dir)
-
-    return assets
+    versions["monitor"] = read_json_version(MONITOR_PACKAGE_JSON)
+    return assets, versions
 
 
 def discover_core_release_assets(output_dir: Path, host_rids: Sequence[str]) -> list[ReleaseAsset]:
@@ -525,115 +316,27 @@ def discover_core_release_assets(output_dir: Path, host_rids: Sequence[str]) -> 
 
 
 def package_local_monitor_assets(
+    *,
     output_dir: Path,
     release_id: str,
-    checks_dir: Path,
-    validation_records: list[ValidationRecord],
-) -> list[ReleaseAsset]:
+) -> tuple[list[ReleaseAsset], tuple[ValidationRecord, ...]]:
     monitor_staging_root = output_dir / ".monitor-staging"
     if monitor_staging_root.exists():
         remove_tree(monitor_staging_root)
 
     try:
-        run_logged_command(
-            name="Monitor App package",
-            command=[
-                sys.executable,
-                str(PACKAGE_MONITOR_SCRIPT),
-                "--release-id",
-                release_id,
-                "--output-root",
-                str(monitor_staging_root),
-            ],
-            cwd=REPO_ROOT,
-            log_path=checks_dir / "monitor-package.log",
-            validation_records=validation_records,
+        monitor_output_dir = resolve_release_output_dir(monitor_staging_root, release_id)
+        monitor_result = package_monitor(
+            MonitorPackageOptions(
+                release_id=release_id,
+                output_dir=monitor_output_dir,
+                checks_dir=monitor_output_dir / "checks",
+            )
         )
-        return copy_monitor_package_outputs(output_dir, monitor_staging_root)
+        return copy_monitor_package_outputs(output_dir, monitor_staging_root), monitor_result.validation_records
     finally:
         if monitor_staging_root.exists():
             remove_tree(monitor_staging_root)
-
-
-def copy_monitor_package_outputs(output_dir: Path, monitor_assets_root: Path) -> list[ReleaseAsset]:
-    package_dirs = find_monitor_package_dirs(monitor_assets_root)
-    if not package_dirs:
-        raise RuntimeError(f"未找到 Monitor 打包输出：{monitor_assets_root}")
-
-    monitor_output_root = output_dir / "monitor"
-    if monitor_output_root.exists():
-        remove_tree(monitor_output_root)
-    monitor_output_root.mkdir(parents=True, exist_ok=True)
-
-    assets: list[ReleaseAsset] = []
-    seen_platforms: set[str] = set()
-    for package_dir in package_dirs:
-        manifest_path = package_dir / "release-manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("product") != "monitor":
-            raise RuntimeError(f"Monitor manifest product 字段无效：{manifest_path}")
-        target_platform = manifest.get("targetPlatform")
-        if not isinstance(target_platform, str) or not target_platform.strip():
-            raise RuntimeError(f"Monitor manifest 缺少 targetPlatform：{manifest_path}")
-        target_platform = validate_release_label(target_platform.strip(), field_name="monitor-target-platform")
-        if target_platform in seen_platforms:
-            raise RuntimeError(f"重复的 Monitor 目标平台：{target_platform}")
-        seen_platforms.add(target_platform)
-
-        destination_dir = monitor_output_root / target_platform
-        shutil.copytree(package_dir, destination_dir)
-        assets.extend(describe_monitor_release_assets(destination_dir, manifest))
-
-    return assets
-
-
-def find_monitor_package_dirs(monitor_assets_root: Path) -> list[Path]:
-    if not monitor_assets_root.exists():
-        raise RuntimeError(f"Monitor 资产根目录不存在：{monitor_assets_root}")
-
-    manifests = sorted(monitor_assets_root.rglob("release-manifest.json"))
-    return sorted({manifest.parent.resolve() for manifest in manifests})
-
-
-def describe_monitor_release_assets(package_dir: Path, manifest: dict[str, object]) -> list[ReleaseAsset]:
-    target_platform = str(manifest["targetPlatform"])
-    versions = manifest.get("versions")
-    if not isinstance(versions, dict):
-        raise RuntimeError(f"Monitor manifest 缺少 versions：{package_dir / 'release-manifest.json'}")
-    monitor_version = versions.get("monitor")
-    javascript_sdk_version = versions.get("sdk")
-    if not isinstance(monitor_version, str) or not isinstance(javascript_sdk_version, str):
-        raise RuntimeError(f"Monitor manifest 缺少 Monitor 或 JS SDK 版本：{package_dir / 'release-manifest.json'}")
-
-    manifest_assets = manifest.get("assets")
-    if not isinstance(manifest_assets, list):
-        raise RuntimeError(f"Monitor manifest 缺少 assets 数组：{package_dir / 'release-manifest.json'}")
-
-    assets: list[ReleaseAsset] = []
-    for asset in manifest_assets:
-        if not isinstance(asset, dict):
-            raise RuntimeError(f"Monitor manifest 包含无效资产条目：{package_dir / 'release-manifest.json'}")
-        relative_path = asset.get("path")
-        category = asset.get("category")
-        if not isinstance(relative_path, str) or not isinstance(category, str):
-            raise RuntimeError(f"Monitor manifest 资产缺少 path 或 category：{package_dir / 'release-manifest.json'}")
-        asset_path = (package_dir / relative_path).resolve()
-        try:
-            asset_path.relative_to(package_dir.resolve())
-        except ValueError as exc:
-            raise RuntimeError(f"Monitor 资产路径超出平台目录：{asset_path}") from exc
-        assets.append(
-            ReleaseAsset(
-                path=asset_path,
-                category="monitor-app",
-                target=target_platform,
-                variant=category,
-                monitorVersion=monitor_version,
-                javascriptSdkVersion=javascript_sdk_version,
-            )
-        )
-
-    return assets
 
 
 def build_manifest(
@@ -800,11 +503,7 @@ def ensure_asset_integrity(
     require_monitor: bool,
 ) -> None:
     required_paths = [output_dir / "release-manifest.json", output_dir / "release-notes.md"]
-    expected_host_asset_names = {
-        variant.archive_name(rid)
-        for rid in host_rids
-        for variant in HOST_VARIANTS
-    }
+    expected_host_asset_names = {variant.archive_name(rid) for rid in host_rids for variant in HOST_VARIANTS}
     required_paths.extend(output_dir / "host" / asset_name for asset_name in sorted(expected_host_asset_names))
     required_paths.extend(
         [
@@ -833,11 +532,7 @@ def ensure_asset_integrity(
     if not isinstance(manifest_assets, list):
         raise RuntimeError("release-manifest.json 缺少 assets 数组。")
 
-    expected_manifest_variants = {
-        (rid, variant.name)
-        for rid in host_rids
-        for variant in HOST_VARIANTS
-    }
+    expected_manifest_variants = {(rid, variant.name) for rid in host_rids for variant in HOST_VARIANTS}
     actual_manifest_variants: set[tuple[str, str]] = set()
     for asset in manifest_assets:
         if not isinstance(asset, dict) or asset.get("category") != "host":
@@ -923,289 +618,34 @@ def next_existing(base_dir: Path, pattern: str) -> Path:
     return match
 
 
-def run_host_smoke(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
-    smoke_data_dir = checks_dir / "smoke-data"
-    runtime_dir = smoke_data_dir / "runtime"
-    hub_json_path = runtime_dir / "hub.json"
-    stdout_log = checks_dir / "smoke-host.stdout.log"
-    stderr_log = checks_dir / "smoke-host.stderr.log"
-    runner_log = checks_dir / "smoke-runner.log"
+def main(argv: list[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if maybe_print_help(args_list, build_help()):
+        return 0
 
-    if smoke_data_dir.exists():
-        remove_tree(smoke_data_dir)
-    smoke_data_dir.mkdir(parents=True, exist_ok=True)
+    args = parse_args(args_list)
+    release_id = validate_release_label(args.release_id, field_name="release-id")
+    release_tag = validate_release_label(args.release_tag or release_id, field_name="release-tag")
+    release_name = args.release_name or f"DevHub {release_id}"
+    commit = args.commit or read_git_output(["git", "rev-parse", "HEAD"]).strip()
+    host_rids = tuple(args.host_rids or DEFAULT_HOST_RIDS)
 
-    env = os.environ.copy()
-    env["DEVHUB_DATA_DIR"] = str(smoke_data_dir)
-
-    with stdout_log.open("w", encoding="utf-8", errors="replace") as stdout_handle, stderr_log.open(
-        "w", encoding="utf-8", errors="replace"
-    ) as stderr_handle:
-        process = subprocess.Popen(
-            [
-                "dotnet",
-                "run",
-                "--project",
-                str(HOST_PROJECT),
-                "-c",
-                "Release",
-                "--no-build",
-                "--no-launch-profile",
-            ],
-            cwd=REPO_ROOT,
-            env=env,
-            stdout=stdout_handle,
-            stderr=stderr_handle,
-        )
-        try:
-            wait_for_path(hub_json_path, timeout_seconds=40)
-            run_logged_command(
-                name="Host smoke",
-                command=[sys.executable, "host/tests/blackbox/test_runner.py", "--smoke", "--no-header"],
-                cwd=REPO_ROOT,
-                log_path=runner_log,
-                validation_records=validation_records,
-                env=env,
-            )
-        finally:
-            terminate_process(process)
-
-    if smoke_data_dir.exists():
-        remove_tree(smoke_data_dir)
-
-
-def wait_for_path(path: Path, timeout_seconds: int) -> None:
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        if path.exists():
-            return
-        time.sleep(1)
-    raise RuntimeError(f"Timed out waiting for required file: {path}")
-
-
-def terminate_process(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
-    process.terminate()
-    try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
-
-
-def remove_tree(path: Path, retries: int = 10, delay_seconds: float = 0.2) -> None:
-    if not path.exists():
-        return
-
-    last_error: OSError | None = None
-    for attempt in range(retries):
-        try:
-            shutil.rmtree(path)
-            return
-        except FileNotFoundError:
-            return
-        except OSError as exc:
-            last_error = exc
-            if attempt == retries - 1:
-                raise
-            time.sleep(delay_seconds * (attempt + 1))
-
-    if last_error is not None:
-        raise last_error
-
-
-def run_logged_command(
-    name: str,
-    command: Sequence[str],
-    cwd: Path,
-    log_path: Path,
-    validation_records: list[ValidationRecord],
-    env: dict[str, str] | None = None,
-) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"==> {name}")
-    print(f"    {format_command(command)}")
-
-    with log_path.open("w", encoding="utf-8", errors="replace") as log_handle:
-        process = subprocess.Popen(
-            list(command),
-            cwd=cwd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        assert process.stdout is not None
-        for line in process.stdout:
-            sys.stdout.write(line)
-            log_handle.write(line)
-        return_code = process.wait()
-
-    status = "passed" if return_code == 0 else "failed"
-    validation_records.append(
-        ValidationRecord(
-            name=name,
-            command=list(command),
-            cwd=str(cwd),
-            logPath=str(log_path.relative_to(REPO_ROOT).as_posix()),
-            status=status,
+    result = package_release(
+        ReleasePackageOptions(
+            release_id=release_id,
+            channel=args.channel,
+            release_tag=release_tag,
+            release_name=release_name,
+            commit=commit,
+            output_root=Path(args.output_root).resolve(),
+            host_rids=host_rids,
+            skip_monitor=bool(args.skip_monitor),
+            monitor_assets_root=Path(args.monitor_assets_root).resolve() if args.monitor_assets_root else None,
+            reuse_existing_output=bool(args.reuse_existing_output),
         )
     )
-
-    if return_code != 0:
-        raise RuntimeError(f"{name} failed with exit code {return_code}. See {log_path}.")
-
-
-def create_zip_archive(source_dir: Path, archive_path: Path, root_name: str) -> None:
-    archive_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for file_path in sorted(source_dir.rglob("*")):
-            if file_path.is_dir():
-                continue
-            archive_name = Path(root_name) / file_path.relative_to(source_dir)
-            archive.write(file_path, archive_name.as_posix())
-
-
-def read_msbuild_version(project_path: Path) -> str:
-    for property_name in ("Version", "VersionPrefix"):
-        version = read_msbuild_property(project_path, property_name)
-        if version:
-            return version
-
-    root = ElementTree.fromstring(project_path.read_text(encoding="utf-8"))
-    version = root.findtext(".//Version")
-    if version:
-        return version.strip()
-    version = root.findtext(".//VersionPrefix")
-    if version:
-        return version.strip()
-    raise RuntimeError(f"Unable to resolve version from {project_path}.")
-
-
-def read_msbuild_property(project_path: Path, property_name: str) -> str | None:
-    completed = subprocess.run(
-        ["dotnet", "msbuild", str(project_path), f"-getProperty:{property_name}"],
-        cwd=REPO_ROOT,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-    )
-    if completed.returncode != 0:
-        return None
-
-    value = completed.stdout.strip()
-    return value or None
-
-
-def read_json_version(package_json_path: Path) -> str:
-    payload = json.loads(package_json_path.read_text(encoding="utf-8"))
-    version = payload.get("version")
-    if not isinstance(version, str) or not version.strip():
-        raise RuntimeError(f"Unable to resolve version from {package_json_path}.")
-    return version.strip()
-
-
-def read_toml_version(pyproject_path: Path) -> str:
-    payload = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    version = payload.get("project", {}).get("version")
-    if not isinstance(version, str) or not version.strip():
-        raise RuntimeError(f"Unable to resolve version from {pyproject_path}.")
-    return version.strip()
-
-
-def write_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def read_git_output(command: Sequence[str]) -> str:
-    completed = subprocess.run(
-        list(command),
-        cwd=REPO_ROOT,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-    )
-    return completed.stdout
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def describe_release_assets(paths: Sequence[Path]) -> list[ReleaseAsset]:
-    return [describe_release_asset(path) for path in paths]
-
-
-def describe_release_asset(path: Path) -> ReleaseAsset:
-    return ReleaseAsset(
-        path=path,
-        category=categorize_asset(path),
-        target=asset_target(path),
-    )
-
-
-def release_asset_sort_key(asset: ReleaseAsset) -> tuple[int, str, int, str]:
-    category_order = {
-        "host": 0,
-        "sdk-dotnet": 1,
-        "sdk-javascript": 2,
-        "sdk-python-sdist": 3,
-        "sdk-python-wheel": 4,
-        "monitor-app": 5,
-        "auxiliary": 6,
-    }
-    return (
-        category_order.get(asset.category, 99),
-        asset.target,
-        HOST_VARIANT_ORDER.get(asset.variant or "", 99),
-        asset.path.name,
-    )
-
-
-def categorize_asset(path: Path) -> str:
-    if path.parent.name == "host":
-        return "host"
-    if path.suffix in {".nupkg", ".snupkg"}:
-        return "sdk-dotnet"
-    if path.suffix == ".tgz":
-        return "sdk-javascript"
-    if path.suffix == ".whl":
-        return "sdk-python-wheel"
-    if path.suffixes[-2:] == [".tar", ".gz"]:
-        return "sdk-python-sdist"
-    return "auxiliary"
-
-
-def asset_target(path: Path) -> str:
-    name = path.name
-    for rid in DEFAULT_HOST_RIDS:
-        if rid in name:
-            return rid
-    if path.suffix in {".nupkg", ".snupkg"}:
-        return "dotnet"
-    if path.suffix == ".tgz":
-        return "javascript"
-    if path.suffix == ".whl":
-        return "python-wheel"
-    if path.suffixes[-2:] == [".tar", ".gz"]:
-        return "python-sdist"
-    return "n/a"
-
-
-def format_command(command: Sequence[str]) -> str:
-    return " ".join(shlex.quote(part) for part in command)
+    print(f"Release assets ready: {result.output_dir}")
+    return 0
 
 
 if __name__ == "__main__":

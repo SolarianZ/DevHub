@@ -23,7 +23,7 @@ python3 scripts/release/sync_versions.py
 python scripts/release/package_release.py --release-id local-dry-run --channel local
 ```
 
-该命令会串联并门禁以下步骤：
+该命令会通过 release 级编排入口串联并门禁以下步骤：
 
 - `dotnet build host/DevHub.slnx -c Release`
 - `dotnet test host/DevHub.slnx -c Release`
@@ -36,7 +36,19 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - `python -m pytest sdks/python/tests`
 - Host 双变体 / SDK 资产完整性检查、manifest 与 release notes 生成
 
-若需要本地核验 preview 或 main 快照预发布的 Monitor App 资产，可使用对应渠道：
+如需按产物域执行工作流同级别的局部验证，可使用以下组件脚本入口：
+
+```bash
+python scripts/release/package_host.py --release-id host-local-check --verify-only
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python scripts/release/package_js_sdk.py --release-id js-local-check --verify-only
+python scripts/release/package_py_sdk.py --release-id py-local-check --verify-only
+python scripts/release/package_monitor.py --release-id monitor-local-check --verify-only
+```
+
+所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，脚本只输出能力与参数摘要，不执行验证或打包。
+
+若需要本地核验 preview 或 main 快照预发布的完整 Monitor App 汇总路径，可使用对应渠道：
 
 ```bash
 python scripts/release/package_release.py --release-id preview-local-dry-run --channel preview

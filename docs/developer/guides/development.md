@@ -71,6 +71,11 @@ npm --prefix apps/monitor run test:native
 npm --prefix apps/monitor run tauri:check
 npm --prefix apps/monitor run verify
 python3 scripts/release/package_monitor.py --release-id local-dry-run
+python3 scripts/release/package_release.py --release-id local-dry-run --channel local
+python3 scripts/release/package_host.py --release-id host-local-check --verify-only
+python3 scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python3 scripts/release/package_js_sdk.py --release-id js-local-check --verify-only
+python3 scripts/release/package_py_sdk.py --release-id py-local-check --verify-only
 python3 host/tests/conformance/vector_runner.py
 python3 scripts/sdk/run_integration_full.py
 python3 scripts/docs/check_markdown_links.py
@@ -89,7 +94,10 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
 - Monitor 的 JS SDK 来源固定为当前仓库 `sdks/javascript/src`；`@devhub/sdk` 与 `@devhub/sdk/runtime` 分别解析到 SDK 源码公开入口和 runtime 子路径。该路径以“只安装 `apps/monitor` 依赖即可完成验证”为前提，不依赖 `sdks/javascript/node_modules`。
+- `python3 scripts/release/package_release.py --release-id local-dry-run --channel local` 用于执行 release 级 dry-run，并在 `artifacts/release/<release-id>/` 下汇总 Host、SDK 与按渠道决定是否纳入的 Monitor 资产。
+- `python3 scripts/release/package_host.py --release-id host-local-check --verify-only`、`python3 scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only`、`python3 scripts/release/package_js_sdk.py --release-id js-local-check --verify-only`、`python3 scripts/release/package_py_sdk.py --release-id py-local-check --verify-only` 用于按产物域执行与工作流同级别的局部验证。
 - `python3 scripts/release/package_monitor.py --release-id local-dry-run` 用于执行 Monitor 本地打包校验，并在 manifest 中记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。
+- 所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，只输出脚本用途和参数摘要，不执行验证、目录删除或打包逻辑。
 - Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
 - Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。

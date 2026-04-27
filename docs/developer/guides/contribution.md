@@ -50,7 +50,7 @@
 python scripts/release/package_release.py --release-id local-dry-run --channel local
 ```
 
-该入口会串联：
+该入口作为 release 级编排器，会串联：
 
 - Host 白盒测试与最小 smoke 验证
 - `.NET SDK`、`JS/TS SDK`、`Python SDK` 测试
@@ -63,13 +63,17 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 npm --prefix apps/monitor run verify
 ```
 
-如需单独生成 Monitor 本地发布产物，请使用独立脚本：
+如需按单一产物域执行局部验证或打包，请使用对应组件脚本：
 
 ```bash
+python scripts/release/package_host.py --release-id host-local-check --verify-only
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python scripts/release/package_js_sdk.py --release-id js-local-check --verify-only
+python scripts/release/package_py_sdk.py --release-id py-local-check --verify-only
 python scripts/release/package_monitor.py --release-id local-dry-run
 ```
 
-该脚本负责 Monitor 工作区的本地打包与产物归档。preview/main 发布候选资产由 `package_release.py` 汇总 Host、SDK 与 Monitor App 资产。
+其中 `package_monitor.py` 负责 Monitor 工作区的本地打包与产物归档；preview/main 发布候选资产由 `package_release.py` 汇总 Host、SDK 与 Monitor App 资产。所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；具备“只验证不产物化”语义的脚本支持 `--verify-only`。
 
 ## 3. 外部协作者常用入口
 

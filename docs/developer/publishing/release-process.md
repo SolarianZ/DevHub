@@ -41,7 +41,7 @@
 - Monitor 前端构建、前端测试、原生测试、Tauri 检查与打包验证
 - 本地一键打包脚本中的 Host 双变体、manifest、release notes 与 SDK 资产完整性检查
 
-统一执行入口见 [`release-checklist.md`](./release-checklist.md) 和仓库脚本 `scripts/release/package_release.py`。
+发布级统一执行入口见 [`release-checklist.md`](./release-checklist.md) 和仓库脚本 `scripts/release/package_release.py`。按产物域单独验证或打包时，使用 `scripts/release/package_host.py`、`package_dotnet_sdk.py`、`package_js_sdk.py`、`package_py_sdk.py` 与 `package_monitor.py`。
 
 ## 3. GitHub Release 资产
 
@@ -65,7 +65,9 @@ Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录
 
 - 仓库发布版本统一以 `eng/Version.props` 为唯一来源；Host 与 `.NET SDK` 直接消费该文件，`JS/TS SDK` 与 `Python SDK` 包元数据通过 `python3 scripts/release/sync_versions.py` 与之保持同步。
 - `scripts/release/package_release.py` 会在打包开始前执行版本一致性校验，发现 `package.json`、`package-lock.json` 或 `pyproject.toml` 与 `eng/Version.props` 漂移时直接失败。
-- 本地维护者统一通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产；该入口会为每个默认 Host RID 同时生成 multi-file 与 single-file compression 两类 ZIP，不生成 trimmed Host 资产。`preview` 与 `main-snapshot` 渠道还会在当前机器生成 Monitor App 资产，并写入 `monitor/<targetPlatform>/`。
+- 本地维护者通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产；该入口会在同一进程内依次调用 Host、`.NET SDK`、`JS/TS SDK`、`Python SDK` 和按渠道决定是否纳入的 Monitor 组件打包函数，为每个默认 Host RID 同时生成 multi-file 与 single-file compression 两类 ZIP，不生成 trimmed Host 资产。`preview` 与 `main-snapshot` 渠道还会在当前机器生成 Monitor App 资产，并写入 `monitor/<targetPlatform>/`。
+- 仓库提供以下组件级入口，用于单域验证或局部打包：`python scripts/release/package_host.py --release-id <id>`、`python scripts/release/package_dotnet_sdk.py --release-id <id>`、`python scripts/release/package_js_sdk.py --release-id <id>`、`python scripts/release/package_py_sdk.py --release-id <id>`、`python scripts/release/package_monitor.py --release-id <id>`。
+- 所有 package 脚本共用 `--help`、`--release-id` 和 `--output-root` 参数约定；命令行中出现 `--help` 时直接输出能力和参数摘要，不执行验证、目录删除或打包逻辑。具备“只验证不产物化”语义的脚本支持 `--verify-only`。
 - `.github/workflows/ci.yml` 在 `preview` / `main` / `v*` tag 的 `push` 场景下，如果工作流被触发且 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`monitor-validation`、`integration-full-gate`、`cross-platform-smoke` 全部通过，会调用 `.github/workflows/release-reusable.yml`，复用同一套打包与发布逻辑完成自动发布。
 - `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动重跑入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经通过 `ci`。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
 - `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、Host/SDK 核心资产打包、Monitor 三平台矩阵打包、release manifest 汇总与 GitHub Release 发布。
