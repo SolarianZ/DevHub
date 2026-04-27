@@ -1,6 +1,7 @@
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace DevHub.Host.Transport;
@@ -13,6 +14,11 @@ public static class HubEventNotificationFactory
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.Never
+    };
+
+    private static readonly JsonSerializerOptions TrimmedPayloadJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     /// <summary>
@@ -36,16 +42,18 @@ public static class HubEventNotificationFactory
 
     private static object? SerializePayload(string eventType, object? payload)
     {
-        if (!ShouldPreserveNestedNulls(eventType))
+        return eventType switch
         {
-            return payload switch
-            {
-                JsonDocument document => document.RootElement.Clone(),
-                JsonElement element => element.Clone(),
-                _ => payload
-            };
-        }
+            HubEventTypes.AppInstanceRegistered or
+            HubEventTypes.AppInstanceUnregistered or
+            HubEventTypes.AppDefinitionDeleted => SerializePayloadPreservingAllNulls(payload),
+            HubEventTypes.AppDefinitionUpserted => SerializeDefinitionUpsertedPayload(payload),
+            _ => ClonePayload(payload)
+        };
+    }
 
+    private static object? SerializePayloadPreservingAllNulls(object? payload)
+    {
         return payload switch
         {
             JsonDocument document => document.RootElement.Clone(),
@@ -54,10 +62,60 @@ public static class HubEventNotificationFactory
         };
     }
 
-    private static bool ShouldPreserveNestedNulls(string eventType)
+    private static object? SerializeDefinitionUpsertedPayload(object? payload)
     {
-        return string.Equals(eventType, HubEventTypes.AppInstanceRegistered, StringComparison.Ordinal)
-            || string.Equals(eventType, HubEventTypes.AppInstanceUnregistered, StringComparison.Ordinal);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        var fullPayload = JsonSerializer.SerializeToElement(payload, PayloadJsonOptions);
+        if (fullPayload.ValueKind != JsonValueKind.Object)
+        {
+            return ClonePayload(payload);
+        }
+
+        var trimmedPayloadNode = JsonSerializer.SerializeToNode(payload, TrimmedPayloadJsonOptions) as JsonObject;
+        if (trimmedPayloadNode is null)
+        {
+            return fullPayload.Clone();
+        }
+
+        CopyProperty(fullPayload, trimmedPayloadNode, "scope");
+
+        if (fullPayload.TryGetProperty("definition", out var definitionElement) &&
+            definitionElement.ValueKind == JsonValueKind.Object)
+        {
+            if (trimmedPayloadNode["definition"] is not JsonObject definitionNode)
+            {
+                definitionNode = new JsonObject();
+                trimmedPayloadNode["definition"] = definitionNode;
+            }
+
+            CopyProperty(definitionElement, definitionNode, "scope");
+        }
+
+        return JsonSerializer.SerializeToElement(trimmedPayloadNode, PayloadJsonOptions);
+    }
+
+    private static object? ClonePayload(object? payload)
+    {
+        return payload switch
+        {
+            JsonDocument document => document.RootElement.Clone(),
+            JsonElement element => element.Clone(),
+            _ => payload
+        };
+    }
+
+    private static void CopyProperty(JsonElement source, JsonObject destination, string propertyName)
+    {
+        if (!source.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        destination[propertyName] = JsonNode.Parse(propertyValue.GetRawText());
     }
 
     /// <summary>

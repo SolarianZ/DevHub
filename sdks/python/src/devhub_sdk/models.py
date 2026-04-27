@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -8,9 +9,15 @@ from uuid import uuid4
 
 from .constants import DevHubEventType
 from ._validation import (
+    require_app_id,
+    require_instance_id,
     require_non_empty_string,
+    require_optional_app_id,
+    require_optional_instance_id,
     require_positive_number,
     require_protocol_version,
+    require_scope_filter,
+    require_scoped_string,
     require_uuid_string,
 )
 
@@ -49,6 +56,34 @@ class DevHubClientOptions:
 
 
 @dataclass(slots=True)
+class AbandonedRequestFilter:
+    """已放弃请求过滤器。
+
+    多个字段同时提供时按逻辑与匹配。
+    """
+
+    older_than_seconds: float | int | None = None
+    app_id: str | None = None
+    method: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验过滤条件合法性。"""
+
+        if self.older_than_seconds is not None:
+            if (
+                isinstance(self.older_than_seconds, bool)
+                or not isinstance(self.older_than_seconds, (int, float))
+                or not math.isfinite(float(self.older_than_seconds))
+                or self.older_than_seconds < 0
+            ):
+                raise ValueError("older_than_seconds 必须为大于等于 0 的有限数值。")
+        if self.app_id is not None:
+            self.app_id = require_app_id(self.app_id, "app_id")
+        if self.method is not None:
+            self.method = require_non_empty_string(self.method, "method")
+
+
+@dataclass(slots=True)
 class AppCapabilities:
     """应用能力声明。"""
 
@@ -75,6 +110,13 @@ class AppDefinition:
     description: str | None = None
     capabilities: AppCapabilities | None = None
     launch: LaunchConfiguration | None = None
+    scope: str = field(kw_only=True)
+
+    def __post_init__(self) -> None:
+        """校验 Definition 复合身份中的 scope。"""
+
+        self.app_id = require_app_id(self.app_id, "app_id")
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -109,12 +151,20 @@ class AppInstance:
 
     instance_id: str
     app_id: str
-    scope: str | None
+    scope: str
     pid: int
     registered_at_utc: datetime
     last_seen_utc: datetime
     invoke: InvokeCapability
     meta: dict[str, Any] | None = None
+    instance_session_token: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验实例中的 scope。"""
+
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
+        self.app_id = require_app_id(self.app_id, "app_id")
+        self.scope = require_scoped_string(self.scope, "scope")
 
 
 @dataclass(slots=True)
@@ -125,11 +175,18 @@ class AppInstanceRegistration:
     app_id: str
     pid: int
     invoke: InvokeCapability
-    scope: str | None = None
+    scope: str = field(kw_only=True)
     meta: Any = None
 
+    def __post_init__(self) -> None:
+        """校验实例注册中的 scope。"""
 
-@dataclass(slots=True)
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
+        self.app_id = require_app_id(self.app_id, "app_id")
+        self.scope = require_scoped_string(self.scope, "scope")
+
+
+@dataclass(slots=True, frozen=True)
 class HubRuntimeTuning:
     """Hub 运行时调优参数。"""
 
@@ -138,7 +195,7 @@ class HubRuntimeTuning:
     launch_dedupe_window_seconds: int
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class HubRuntime:
     """Hub 运行时发现文件模型。"""
 
@@ -152,7 +209,7 @@ class HubRuntime:
     hub_version: str | None = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class RuntimeConnectionInfo:
     """运行时连接信息。"""
 
@@ -173,6 +230,24 @@ class RuntimeConnectionInfo:
         return self.runtime.ws_url
 
 
+class VersionCompatibilityStatus(str, Enum):
+    """版本兼容状态。"""
+
+    COMPATIBLE = "compatible"
+    UPDATE_RECOMMENDED = "update_recommended"
+    INCOMPATIBLE = "incompatible"
+    UNKNOWN = "unknown"
+
+
+@dataclass(slots=True, frozen=True)
+class VersionCompatibilityResult:
+    """版本兼容检查结果。"""
+
+    sdk_version: str
+    host_version: str | None
+    status: VersionCompatibilityStatus
+
+
 @dataclass(slots=True)
 class PingResult:
     """Ping 结果。"""
@@ -187,9 +262,29 @@ class LaunchRequest:
     """启动请求。"""
 
     app_id: str
-    scope: str | None = None
+    scope: str
     dedupe_key: str | None = None
     wait_for_register_ms: int | None = None
+
+    def __post_init__(self) -> None:
+        """校验启动请求中的 scope。"""
+
+        self.app_id = require_app_id(self.app_id, "app_id")
+        self.scope = require_scoped_string(self.scope, "scope")
+
+
+@dataclass(slots=True)
+class ListDefinitionsRequest:
+    """Definition 列表请求。"""
+
+    scope: str | None
+    app_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验 Definition 列表请求中的 scope 过滤器。"""
+
+        self.scope = require_scope_filter(self.scope, "scope")
+        self.app_id = require_optional_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
@@ -206,18 +301,29 @@ class LaunchResult:
 class ListInstancesRequest:
     """实例列表请求。"""
 
+    scope: str | None
     app_id: str | None = None
-    scope: str | None = None
     include_offline: bool = False
-    include_all_scopes: bool = False
+
+    def __post_init__(self) -> None:
+        """校验实例列表请求中的 scope 过滤器。"""
+
+        self.scope = require_scope_filter(self.scope, "scope")
+        self.app_id = require_optional_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
 class InvocationTarget:
     """调用目标。"""
 
-    scope: str | None = None
+    scope: str
     instance_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """校验调用目标中的 scope。"""
+
+        self.scope = require_scoped_string(self.scope, "scope")
+        self.instance_id = require_optional_instance_id(self.instance_id, "instance_id")
 
 
 @dataclass(slots=True)
@@ -258,6 +364,7 @@ class InvokeRequest:
         self.args = None if args is _INVOKE_ARGS_UNSET else args
         self.options = options
         self._has_args = args is not _INVOKE_ARGS_UNSET
+        self.app_id = require_app_id(self.app_id, "app_id")
 
 
 @dataclass(slots=True)
@@ -282,8 +389,14 @@ class PollRequest:
     """轮询请求。"""
 
     instance_id: str
+    instance_session_token: str
     max_count: int | None = None
     wait_ms: int | None = None
+
+    def __post_init__(self) -> None:
+        """校验轮询请求中的实例身份。"""
+
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
 
 
 class InvocationKind(str, Enum):
@@ -357,6 +470,7 @@ class RespondRequest:
     """响应请求。"""
 
     instance_id: str
+    instance_session_token: str
     invocation_id: str
     value: Any = None
     error: DevHubCalleeError | None = None
@@ -365,15 +479,18 @@ class RespondRequest:
     def __init__(
         self,
         instance_id: str,
+        instance_session_token: str,
         invocation_id: str,
         value: Any = _RESPOND_VALUE_UNSET,
         error: DevHubCalleeError | None = None,
     ) -> None:
         self.instance_id = instance_id
+        self.instance_session_token = instance_session_token
         self.invocation_id = invocation_id
         self.value = None if value is _RESPOND_VALUE_UNSET else value
         self.error = error
         self._has_value = value is not _RESPOND_VALUE_UNSET
+        self.instance_id = require_instance_id(self.instance_id, "instance_id")
 
 
 @dataclass(slots=True)

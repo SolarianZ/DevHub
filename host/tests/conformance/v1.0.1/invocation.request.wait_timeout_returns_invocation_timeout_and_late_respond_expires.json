@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.timeout.json",
+        "fileName": "invoke.request.timeout--global.json",
         "definition": {
           "appId": "invoke.request.timeout",
+          "scope": "",
           "displayName": "invoke.request.timeout"
         }
       }
@@ -22,7 +23,7 @@
         "instance": {
           "instanceId": "request-timeout-inst",
           "appId": "invoke.request.timeout",
-          "scope": null,
+          "scope": "",
           "pid": 32008,
           "invoke": {
             "poll": true,
@@ -73,6 +74,9 @@
         "waitTimeoutMs": 1000,
         "queueIfOffline": true,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

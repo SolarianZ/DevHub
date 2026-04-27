@@ -1,5 +1,9 @@
-import packageManifest from "../../package.json";
-import type { AppDefinition, AppInstance } from "@devhub/sdk";
+import type {
+  AppDefinition,
+  AppDefinitionIdentity,
+  AppInstance,
+  VersionCompatibilityResult,
+} from "@devhub/sdk";
 import { type ReactNode, useState } from "react";
 import type { DefinitionFormState } from "../lib/definition-form";
 import type {
@@ -13,11 +17,22 @@ import {
   type HomeWorkspaceMode,
   type HostSessionStatus,
   type MonitorWorkspace,
+  type RpcTestWorkspaceViewModel,
   type SettingsFieldErrors,
   type SidebarWorkspace,
+  createDefinitionIdentity,
+  definitionIdentityKey,
+  formatDefinitionScopeLabel,
   formatHostLogDirectory,
   getSidebarWorkspace,
 } from "../lib/monitor-ui";
+import {
+  formatVersionCompatibilityHostVersion,
+  formatVersionCompatibilityStatusLabel,
+  formatVersionGuidanceMessage,
+  getVersionGuidanceTitle,
+} from "../lib/version-guidance";
+import { MONITOR_VERSION_METADATA } from "../lib/version-metadata";
 
 interface AppShellProps {
   activeWorkspace: MonitorWorkspace;
@@ -34,10 +49,13 @@ interface AppShellProps {
   hostSessionStatus: HostSessionStatus;
   definitions: AppDefinition[];
   instances: AppInstance[];
+  versionCompatibility: VersionCompatibilityResult | null;
   definitionWorkspace: DefinitionWorkspaceState | null;
+  rpcTestWorkspace: RpcTestWorkspaceViewModel;
   onNavigateWorkspace: (workspace: SidebarWorkspace) => void;
   onOpenLogDirectory: (kind: LogKind) => void;
   onLaunchHost: () => void;
+  onResumeDiscovery: () => void;
   onChangeSettingsField: (
     field: keyof MonitorSettings,
     value: MonitorSettings[keyof MonitorSettings],
@@ -46,20 +64,26 @@ interface AppShellProps {
   onSelectDataDirectory: () => void;
   onSaveSettings: () => void;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
+  onChangeRpcTestDraft: (value: string) => void;
+  onValidateRpcTestRequest: () => void;
+  onSendRpcTestRequest: () => void;
+  onCancelRpcTestRequest: () => void;
   onChangeDefinitionField: (field: keyof DefinitionFormState, value: string | boolean) => void;
   onCloseDefinitionWorkspace: () => void;
   onDeleteDefinition: () => void;
   onSubmitDefinition: () => void;
 }
 
-const MONITOR_VERSION_TEXT = `Monitor v${packageManifest.version}`;
+const MONITOR_VERSION_TEXT = MONITOR_VERSION_METADATA.monitorVersion;
+const SDK_VERSION_TEXT = MONITOR_VERSION_METADATA.sdkVersion;
 const INVENTORY_DESCRIPTION_FALLBACK = "未提供 App 描述";
 
 interface InventoryItemViewModel {
   key: string;
   appId: string;
+  scopeLabel: string;
   title: string;
   description: string;
   actionAccessibleName: string;
@@ -84,10 +108,13 @@ export function AppShell(props: AppShellProps) {
     hostSessionStatus,
     definitions,
     instances,
+    versionCompatibility,
     definitionWorkspace,
+    rpcTestWorkspace,
     onNavigateWorkspace,
     onOpenLogDirectory,
     onLaunchHost,
+    onResumeDiscovery,
     onChangeSettingsField,
     onSelectHostExecutablePath,
     onSelectDataDirectory,
@@ -95,6 +122,10 @@ export function AppShell(props: AppShellProps) {
     onAddDefinition,
     onEditDefinition,
     onViewInstanceDefinition,
+    onChangeRpcTestDraft,
+    onValidateRpcTestRequest,
+    onSendRpcTestRequest,
+    onCancelRpcTestRequest,
     onChangeDefinitionField,
     onCloseDefinitionWorkspace,
     onDeleteDefinition,
@@ -120,6 +151,15 @@ export function AppShell(props: AppShellProps) {
           </div>
         ) : null}
 
+        {settings?.loadWarning ? (
+          <div className="warning-banner" role="status">
+            <p>{settings.loadWarning.message}</p>
+            {settings.loadWarning.backupFilePath ? (
+              <p>备份文件：{settings.loadWarning.backupFilePath}</p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="workspace-scroll">
           {activeWorkspace === "home" ? (
             <HomeWorkspace
@@ -130,10 +170,12 @@ export function AppShell(props: AppShellProps) {
               hostSessionStatus={hostSessionStatus}
               instances={instances}
               settings={settings}
+              versionCompatibility={versionCompatibility}
               onAddDefinition={onAddDefinition}
               onEditDefinition={onEditDefinition}
               onLaunchHost={onLaunchHost}
               onOpenSettings={() => onNavigateWorkspace("settings")}
+              onResumeDiscovery={onResumeDiscovery}
               onViewInstanceDefinition={onViewInstanceDefinition}
             />
           ) : null}
@@ -141,10 +183,23 @@ export function AppShell(props: AppShellProps) {
           {activeWorkspace === "help" ? (
             <HelpWorkspace
               bootstrap={bootstrap}
+              hostSessionStatus={hostSessionStatus}
               openingLogKind={openingLogKind}
               settings={settings}
-              versionText={MONITOR_VERSION_TEXT}
+              monitorVersionText={MONITOR_VERSION_TEXT}
+              sdkVersionText={SDK_VERSION_TEXT}
+              versionCompatibility={versionCompatibility}
               onOpenLogDirectory={onOpenLogDirectory}
+            />
+          ) : null}
+
+          {activeWorkspace === "test" ? (
+            <TestWorkspace
+              workspace={rpcTestWorkspace}
+              onCancel={onCancelRpcTestRequest}
+              onChangeDraft={onChangeRpcTestDraft}
+              onSend={onSendRpcTestRequest}
+              onValidate={onValidateRpcTestRequest}
             />
           ) : null}
 
@@ -205,6 +260,13 @@ function MonitorSidebar(props: {
           onClick={() => onNavigate("home")}
         />
         <SidebarButton
+          active={activeWorkspace === "test"}
+          collapsed={collapsed}
+          icon={<TestIcon />}
+          label="测试"
+          onClick={() => onNavigate("test")}
+        />
+        <SidebarButton
           active={activeWorkspace === "help"}
           collapsed={collapsed}
           icon={<HelpIcon />}
@@ -257,10 +319,12 @@ function HomeWorkspace(props: {
   hostSessionStatus: HostSessionStatus;
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
+  versionCompatibility: VersionCompatibilityResult | null;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
 }) {
   const { homeWorkspaceMode, ...rest } = props;
@@ -275,10 +339,14 @@ function HomeDiscoveryWorkspace(props: {
   busy: boolean;
   onLaunchHost: () => void;
   onOpenSettings: () => void;
+  onResumeDiscovery: () => void;
 }) {
-  const { bootstrap, busy, onLaunchHost, onOpenSettings } = props;
+  const { bootstrap, busy, onLaunchHost, onOpenSettings, onResumeDiscovery } = props;
   const requiresSettings = bootstrap?.phase === "settings_required" || !bootstrap?.hasConfiguredHostExecutable;
-  const showLaunchAction = bootstrap !== null && (requiresSettings || bootstrap.phase === "launch_available");
+  const showLaunchAction = bootstrap !== null
+    && bootstrap.phase !== "host_incompatible"
+    && (requiresSettings || bootstrap.phase === "launch_available");
+  const showRecoveryActions = bootstrap?.phase === "host_incompatible";
 
   return (
     <section className="workspace-view">
@@ -286,18 +354,33 @@ function HomeDiscoveryWorkspace(props: {
 
       <div className="discovery-view">
         <div className="loader" aria-hidden="true" />
-        <p className="status-title">{getDiscoveryTitle(bootstrap?.phase)}</p>
+        <p className="status-title">{getDiscoveryTitle(bootstrap)}</p>
         <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
+        {bootstrap?.lastProblem?.message ? (
+          <p className="status-detail">{bootstrap.lastProblem.message}</p>
+        ) : null}
 
-        {showLaunchAction ? (
+        {showLaunchAction || showRecoveryActions ? (
           <div className="status-actions">
-            <button
-              type="button"
-              onClick={requiresSettings ? onOpenSettings : onLaunchHost}
-              disabled={busy && !requiresSettings}
-            >
-              {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
-            </button>
+            {showLaunchAction ? (
+              <button
+                type="button"
+                onClick={requiresSettings ? onOpenSettings : onLaunchHost}
+                disabled={busy && !requiresSettings}
+              >
+                {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
+              </button>
+            ) : null}
+            {showRecoveryActions ? (
+              <>
+                <button type="button" onClick={onResumeDiscovery} disabled={busy}>
+                  {busy ? "正在重新扫描..." : "重新扫描"}
+                </button>
+                <button type="button" onClick={onOpenSettings}>
+                  前往设置
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -311,8 +394,9 @@ function HomeStatusWorkspace(props: {
   hostSessionStatus: HostSessionStatus;
   instances: AppInstance[];
   settings: SettingsSnapshot | null;
+  versionCompatibility: VersionCompatibilityResult | null;
   onAddDefinition: () => void;
-  onEditDefinition: (appId: string) => void;
+  onEditDefinition: (identity: AppDefinitionIdentity) => void;
   onViewInstanceDefinition: (instance: AppInstance) => void;
 }) {
   const {
@@ -321,6 +405,7 @@ function HomeStatusWorkspace(props: {
     hostSessionStatus,
     instances,
     settings,
+    versionCompatibility,
     onAddDefinition,
     onEditDefinition,
     onViewInstanceDefinition,
@@ -329,9 +414,16 @@ function HomeStatusWorkspace(props: {
   const [instancesCollapsed, setInstancesCollapsed] = useState(false);
   const [definitionsCollapsed, setDefinitionsCollapsed] = useState(false);
   const showInventories = hostSessionStatus === "connected";
-  const definitionIndex = new Map(definitions.map((definition) => [definition.appId, definition]));
+  const versionNotice = versionCompatibility && versionCompatibility.status !== "compatible"
+    ? versionCompatibility
+    : null;
+  const definitionIndex = new Map(definitions.map((definition) => [definitionIdentityKey(definition), definition]));
   const instanceItems = instances.map((instance) =>
-    createInstanceInventoryItem(instance, definitionIndex.get(instance.appId), onViewInstanceDefinition),
+    createInstanceInventoryItem(
+      instance,
+      definitionIndex.get(definitionIdentityKey(createDefinitionIdentity(instance.appId, instance.scope))),
+      onViewInstanceDefinition,
+    ),
   );
   const definitionItems = definitions.map((definition) =>
     createDefinitionInventoryItem(definition, onEditDefinition),
@@ -349,6 +441,13 @@ function HomeStatusWorkspace(props: {
           数据目录：{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}
         </p>
       </header>
+
+      {versionNotice ? (
+        <div className="warning-banner" role="status">
+          <p>{getVersionGuidanceTitle(versionNotice.status)}</p>
+          <p>{formatVersionGuidanceMessage(versionNotice)}</p>
+        </div>
+      ) : null}
 
       {showInventories ? (
         <>
@@ -444,9 +543,14 @@ function InventoryList(props: {
               <span className="inventory-item-name" title={item.title}>
                 {item.title}
               </span>
-              <span className="inventory-item-app-id" title={item.appId}>
-                {item.appId}
-              </span>
+              <div className="inventory-item-meta">
+                <span className="inventory-item-app-id" title={item.appId}>
+                  {item.appId}
+                </span>
+                <span className="inventory-item-scope" title={item.scopeLabel}>
+                  {item.scopeLabel}
+                </span>
+              </div>
             </div>
             <p className="inventory-item-description" title={item.description}>
               {item.description}
@@ -472,19 +576,22 @@ function InventoryList(props: {
 
 function createDefinitionInventoryItem(
   definition: AppDefinition,
-  onEditDefinition: (appId: string) => void,
+  onEditDefinition: (identity: AppDefinitionIdentity) => void,
 ): InventoryItemViewModel {
   const title = normalizeInventoryText(definition.displayName, definition.appId);
+  const scopeLabel = formatDefinitionScopeLabel(definition.scope);
+  const identity = createDefinitionIdentity(definition.appId, definition.scope);
 
   return {
-    key: definition.appId,
+    key: definitionIdentityKey(identity),
     appId: definition.appId,
+    scopeLabel,
     title,
     description: normalizeInventoryText(definition.description, INVENTORY_DESCRIPTION_FALLBACK),
-    actionAccessibleName: `编辑定义：${title}（${definition.appId}）`,
+    actionAccessibleName: `编辑定义：${title}（${definition.appId}，${scopeLabel}）`,
     actionIcon: <EditIcon />,
     actionTitle: "编辑",
-    onAction: () => onEditDefinition(definition.appId),
+    onAction: () => onEditDefinition(identity),
   };
 }
 
@@ -494,13 +601,15 @@ function createInstanceInventoryItem(
   onViewInstanceDefinition: (instance: AppInstance) => void,
 ): InventoryItemViewModel {
   const title = normalizeInventoryText(definition?.displayName, instance.appId);
+  const scopeLabel = formatDefinitionScopeLabel(instance.scope);
 
   return {
     key: instance.instanceId,
     appId: instance.appId,
+    scopeLabel,
     title,
     description: normalizeInventoryText(definition?.description, INVENTORY_DESCRIPTION_FALLBACK),
-    actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}）`,
+    actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}，${scopeLabel}）`,
     actionIcon: <ViewIcon />,
     actionTitle: "查看定义",
     onAction: () => onViewInstanceDefinition(instance),
@@ -514,13 +623,36 @@ function normalizeInventoryText(value: string | undefined, fallback: string): st
 
 function HelpWorkspace(props: {
   bootstrap: BootstrapSnapshot | null;
+  hostSessionStatus: HostSessionStatus;
   openingLogKind: LogKind | null;
   settings: SettingsSnapshot | null;
-  versionText: string;
+  monitorVersionText: string;
+  sdkVersionText: string;
+  versionCompatibility: VersionCompatibilityResult | null;
   onOpenLogDirectory: (kind: LogKind) => void;
 }) {
-  const { bootstrap, openingLogKind, settings, versionText, onOpenLogDirectory } = props;
+  const {
+    bootstrap,
+    hostSessionStatus,
+    openingLogKind,
+    settings,
+    monitorVersionText,
+    sdkVersionText,
+    versionCompatibility,
+    onOpenLogDirectory,
+  } = props;
   const hostLogDirectory = formatHostLogDirectory(bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir);
+  const hasActiveHostSession = bootstrap?.phase === "host_available" && hostSessionStatus !== "idle";
+  const hostVersionText = versionCompatibility
+    ? formatVersionCompatibilityHostVersion(versionCompatibility.hostVersion)
+    : hasActiveHostSession
+      ? "检查中"
+      : "未连接";
+  const compatibilityText = versionCompatibility
+    ? formatVersionCompatibilityStatusLabel(versionCompatibility.status)
+    : hasActiveHostSession
+      ? "检查中"
+      : "未知";
 
   return (
     <section className="workspace-view">
@@ -562,9 +694,133 @@ function HelpWorkspace(props: {
         </div>
 
         <div className="form-group">
-          <label className="form-label">版本</label>
-          <div className="version-text">{versionText}</div>
+          <label className="form-label">Monitor 版本</label>
+          <div className="version-text">{monitorVersionText}</div>
         </div>
+
+        <div className="form-group">
+          <label className="form-label">内置 JS SDK 版本</label>
+          <div className="version-text">{sdkVersionText}</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">当前 Host 版本</label>
+          <div className="version-text">{hostVersionText}</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">兼容状态</label>
+          <div className="version-text">{compatibilityText}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TestWorkspace(props: {
+  workspace: RpcTestWorkspaceViewModel;
+  onChangeDraft: (value: string) => void;
+  onValidate: () => void;
+  onSend: () => void;
+  onCancel: () => void;
+}) {
+  const { workspace, onChangeDraft, onValidate, onSend, onCancel } = props;
+
+  return (
+    <section className="workspace-view test-workspace">
+      <h1 className="view-title">测试</h1>
+
+      <div className="support-group">
+        <div className="form-group">
+          <label className="form-label" htmlFor="rpc-test-endpoint">
+            RPC 地址
+          </label>
+          <div id="rpc-test-endpoint" className="path-box">
+            {workspace.rpcEndpoint ?? "未连接"}
+          </div>
+        </div>
+
+        {!workspace.available ? (
+          <div className="empty-state" role="status">
+            当前没有可用 Host 连接，发送请求前请等待主页恢复连接状态。
+          </div>
+        ) : null}
+
+        <section className="test-panel">
+          <label className="field">
+            <span>JSON-RPC 请求文本</span>
+            <textarea
+              className="test-request-text"
+              value={workspace.draft}
+              placeholder={workspace.draftPlaceholder}
+              spellCheck={false}
+              onChange={(event) => onChangeDraft(event.target.value)}
+              disabled={workspace.requestStatus === "waiting"}
+            />
+          </label>
+
+          <div className="test-toolbar">
+            <div className="button-row test-toolbar-actions">
+              <button type="button" onClick={onValidate} disabled={!workspace.canValidate}>
+                校验
+              </button>
+              <button type="button" onClick={onSend} disabled={!workspace.canSend}>
+                发送请求
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={onCancel}
+                disabled={!workspace.canCancel}
+              >
+                取消等待
+              </button>
+            </div>
+
+            <span className={`test-status-pill status-${workspace.requestStatus}`}>
+              {workspace.requestStatusLabel}
+            </span>
+          </div>
+
+          {workspace.validationFeedback ? (
+            <div
+              className={`feedback-banner ${
+                workspace.validationFeedback.kind === "success"
+                  ? "feedback-success"
+                  : "feedback-error"
+              }`}
+              role={workspace.validationFeedback.kind === "success" ? "status" : "alert"}
+            >
+              {workspace.validationFeedback.message}
+            </div>
+          ) : null}
+
+          {workspace.requestError ? (
+            <div className="inline-error" role="alert">
+              {workspace.requestError}
+            </div>
+          ) : null}
+
+          <div className="test-status-grid">
+            <div className="form-group">
+              <label className="form-label" htmlFor="rpc-test-status">
+                请求状态
+              </label>
+              <div id="rpc-test-status" className="path-box">
+                {workspace.requestStatusDetail}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="rpc-test-result">
+                结果文本
+              </label>
+              <pre id="rpc-test-result" className="test-result-box">
+                {workspace.resultText ?? "当前没有可展示的响应。"}
+              </pre>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   );
@@ -736,16 +992,30 @@ function DefinitionWorkspacePage(props: {
         <>
           <div className="definition-form">
             <div className="form-grid">
-              <label className="field">
-                <span>App ID</span>
-                <input
-                  type="text"
-                  value={workspace.form.appId}
-                  disabled={disableInputs || workspace.mode !== "create"}
-                  onChange={(event) => onChangeField("appId", event.target.value)}
-                />
-                <FieldIssues issues={workspace.fieldErrors["definition.appId"]} />
-              </label>
+              <div className="field-stack">
+                <label className="field">
+                  <span>App ID</span>
+                  <input
+                    type="text"
+                    value={workspace.form.appId}
+                    disabled={disableInputs || workspace.mode !== "create"}
+                    onChange={(event) => onChangeField("appId", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.appId"]} />
+                </label>
+
+                <label className="field">
+                  <span>scope</span>
+                  <input
+                    aria-label="scope"
+                    type="text"
+                    value={workspace.form.scope}
+                    disabled={disableInputs || workspace.mode !== "create"}
+                    onChange={(event) => onChangeField("scope", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.scope"]} />
+                </label>
+              </div>
 
               <label className="field">
                 <span>显示名称</span>
@@ -928,10 +1198,12 @@ function EmptyState(props: {
   return <div className="empty-state">{props.title}</div>;
 }
 
-function getDiscoveryTitle(phase?: BootstrapSnapshot["phase"]): string {
-  switch (phase) {
+function getDiscoveryTitle(snapshot?: BootstrapSnapshot | null): string {
+  switch (snapshot?.phase) {
     case "settings_required":
       return "需要先补充 Host 设置";
+    case "host_incompatible":
+      return "当前 Host 版本不受支持";
     case "launch_available":
     case "scanning":
       return "正在搜索 DevHub Host";
@@ -954,6 +1226,16 @@ function HomeIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
+function TestIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 3h6" />
+      <path d="M10 3v5.2a3 3 0 0 1-.63 1.84L6.7 13.5A4.5 4.5 0 0 0 10.2 21h3.6a4.5 4.5 0 0 0 3.5-7.5l-2.67-3.46A3 3 0 0 1 14 8.2V3" />
+      <path d="M8 15h8" />
     </svg>
   );
 }

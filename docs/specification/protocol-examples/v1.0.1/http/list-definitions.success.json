@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-list-all-scopes",
+  "result": {
+    "ok": true,
+    "definitions": [
+      {
+        "appId": "Sample.App",
+        "scope": "",
+        "displayName": "Sample App"
+      },
+      {
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
+        "displayName": "Sample App (Workspace-A.v2)"
+      }
+    ]
+  }
+}

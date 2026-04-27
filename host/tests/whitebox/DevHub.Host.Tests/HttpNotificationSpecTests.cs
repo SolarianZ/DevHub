@@ -3,6 +3,7 @@ namespace DevHub.Host.Tests;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,6 +104,62 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsNull_ShouldReturnVersion()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-null","method":"hub.getVersion","params":null}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-null", root.GetProperty("id").GetString());
+        var result = root.GetProperty("result");
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Matches(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:[-+][0-9A-Za-z.-]+)?$",
+            result.GetProperty("version").GetString()!);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-extra","method":"hub.getVersion","params":{"verbose":true}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-extra", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsScalar_ShouldReturnInvalidParams()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-get-version-scalar","method":"hub.getVersion","params":1}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-get-version-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-get-version-scalar", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "3.2")]
     public async Task Spec_3_2_HttpInvalidContentType_ShouldBeRejectedBeforeJsonParse()
     {
@@ -149,10 +206,11 @@ public class HttpNotificationSpecTests : IDisposable
     public async Task Spec_5_1_And_5_2_HttpResponses_ShouldOmitOptionalNullFields()
     {
         File.WriteAllText(
-            Path.Combine(_definitionsDirectory, "http-null-omit.app.json"),
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create("http-null-omit.app", ScopeContract.Global).GetFileName()),
             """
             {
               "appId": "http-null-omit.app",
+              "scope": "",
               "displayName": "HTTP Null Omit App"
             }
             """);
@@ -171,6 +229,7 @@ public class HttpNotificationSpecTests : IDisposable
                 "instance": {
                   "instanceId": "http-null-omit-inst",
                   "appId": "http-null-omit.app",
+                  "scope": "",
                   "pid": 7001,
                   "invoke": {
                     "poll": true,
@@ -193,7 +252,8 @@ public class HttpNotificationSpecTests : IDisposable
               "id": "http-get-definition",
               "method": "hub.apps.getDefinition",
               "params": {
-                "appId": "http-null-omit.app"
+                "appId": "http-null-omit.app",
+                "scope": ""
               }
             }
             """);
@@ -204,6 +264,27 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.False(definition.TryGetProperty("launch", out _));
         Assert.False(definition.TryGetProperty("capabilities", out _));
 
+        using var getInstanceResponse = await ExecuteJsonRequestAsync(
+            harness,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "http-get-instance",
+              "method": "hub.apps.getInstance",
+              "params": {
+                "instanceId": "http-null-omit-inst"
+              }
+            }
+            """);
+
+        var getInstanceResult = getInstanceResponse.RootElement.GetProperty("result");
+        Assert.True(getInstanceResult.GetProperty("ok").GetBoolean());
+        Assert.False(getInstanceResult.TryGetProperty("instanceSessionToken", out _));
+        var exactInstance = getInstanceResult.GetProperty("instance");
+        Assert.Equal("http-null-omit-inst", exactInstance.GetProperty("instanceId").GetString());
+        Assert.False(exactInstance.TryGetProperty("meta", out _));
+        Assert.False(exactInstance.TryGetProperty("endpoints", out _));
+
         using var listInstancesResponse = await ExecuteJsonRequestAsync(
             harness,
             """
@@ -213,8 +294,8 @@ public class HttpNotificationSpecTests : IDisposable
               "method": "hub.apps.listInstances",
               "params": {
                 "appId": "http-null-omit.app",
-                "includeOffline": true,
-                "includeAllScopes": true
+                "scope": null,
+                "includeOffline": true
               }
             }
             """);
@@ -228,6 +309,108 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.Equal("http-null-omit-inst", instance.GetProperty("instanceId").GetString());
         Assert.False(instance.TryGetProperty("meta", out _));
         Assert.False(instance.TryGetProperty("endpoints", out _));
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.1")]
+    [Trait("SpecRef", "6.3.10")]
+    public async Task Spec_3_1_And_6_3_10_HttpInvokeNotifyNotification_ShouldAcceptCanonicalIdentifiersAndQueueInvocation()
+    {
+        const string appId = "Sample.App_01";
+        const string scope = "Workspace-A.v2";
+        const string instanceId = "NODE_01.alpha";
+
+        File.WriteAllText(
+            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
+            $$"""
+            {
+              "appId": "{{appId}}",
+              "scope": "{{scope}}",
+              "displayName": "HTTP Canonical Notify App"
+            }
+            """);
+
+        using var harness = CreateHarness();
+
+        using var registerResponse = await ExecuteJsonRequestAsync(
+            harness,
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "id": "http-register-canonical-notify",
+              "method": "hub.apps.registerInstance",
+              "params": {
+                "password": "http-notification-password",
+                "instance": {
+                  "instanceId": "{{instanceId}}",
+                  "appId": "{{appId}}",
+                  "scope": "{{scope}}",
+                  "pid": 7002,
+                  "invoke": {
+                    "poll": true,
+                    "respond": true
+                  }
+                }
+              }
+            }
+            """,
+            "http-canonical-register-client");
+
+        var instanceSessionToken = registerResponse.RootElement
+            .GetProperty("result")
+            .GetProperty("instanceSessionToken")
+            .GetString();
+        Assert.False(string.IsNullOrWhiteSpace(instanceSessionToken));
+
+        var notifyResponse = await ExecuteHttpRequestAsync(
+            harness,
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "method": "hub.invoke.notify",
+              "params": {
+                "appId": "{{appId}}",
+                "target": {
+                  "scope": "{{scope}}",
+                  "instanceId": null
+                },
+                "method": "sample.refresh",
+                "args": {
+                  "source": "http-notification"
+                }
+              }
+            }
+            """,
+            "http-canonical-notify-client");
+
+        Assert.Equal(StatusCodes.Status200OK, notifyResponse.StatusCode);
+        Assert.True(string.IsNullOrEmpty(notifyResponse.BodyText));
+
+        using var pollResponse = await ExecuteJsonRequestAsync(
+            harness,
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "id": "http-poll-canonical-notify",
+              "method": "hub.invoke.poll",
+              "params": {
+                "instanceId": "{{instanceId}}",
+                "instanceSessionToken": "{{instanceSessionToken}}",
+                "maxCount": 1,
+                "waitMs": 0
+              }
+            }
+            """,
+            "http-canonical-poll-client");
+
+        var item = Assert.Single(pollResponse.RootElement
+            .GetProperty("result")
+            .GetProperty("items")
+            .EnumerateArray()
+            .ToArray());
+        Assert.Equal(appId, item.GetProperty("appId").GetString());
+        Assert.Equal(scope, item.GetProperty("target").GetProperty("scope").GetString());
+        Assert.Equal("sample.refresh", item.GetProperty("method").GetString());
     }
 
     /// <summary>

@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.pending.json",
+        "fileName": "invoke.notify.pending--global.json",
         "definition": {
           "appId": "invoke.notify.pending",
+          "scope": "",
           "displayName": "invoke.notify.pending"
         }
       }
@@ -22,7 +23,7 @@
         "instance": {
           "instanceId": "notify-pending-inst",
           "appId": "invoke.notify.pending",
-          "scope": null,
+          "scope": "",
           "pid": 31005,
           "invoke": {
             "poll": true,
@@ -61,6 +62,9 @@
         "ttlMs": 5000,
         "queueIfOffline": true,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

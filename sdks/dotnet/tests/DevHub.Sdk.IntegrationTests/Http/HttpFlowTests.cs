@@ -75,14 +75,14 @@ public sealed class HttpFlowTests
 
         var invalid = await client.ValidateDefinitionAsync(new AppDefinition
         {
-            AppId = "Invalid App Id",
-            DisplayName = "Broken Definition"
+            AppId = "definition.http.invalid",
+            DisplayName = string.Empty
         });
 
         Assert.True(invalid.Ok);
         Assert.False(invalid.Valid);
         Assert.NotEmpty(invalid.Errors);
-        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.appId");
+        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.displayName");
 
         var validDefinition = new AppDefinition
         {
@@ -103,8 +103,8 @@ public sealed class HttpFlowTests
 
         var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
         {
-            AppId = "Invalid App Id",
-            DisplayName = "Broken Definition"
+            AppId = "definition.http.invalid",
+            DisplayName = string.Empty
         }));
         Assert.Equal(-32602, invalidException.Code);
         Assert.Equal("definition_invalid", invalidException.Reason);
@@ -157,7 +157,7 @@ public sealed class HttpFlowTests
 
         var unregisterException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UnregisterInstanceAsync(registration.InstanceId, "wrong-password"));
         Assert.Equal(-32002, unregisterException.Code);
-        Assert.Equal("instance_password_mismatch", unregisterException.Reason);
+        Assert.Equal("instance_session_token_mismatch", unregisterException.Reason);
 
         await client.UnregisterInstanceAsync(registration.InstanceId, InstancePassword);
     }

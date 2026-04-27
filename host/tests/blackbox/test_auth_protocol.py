@@ -4,6 +4,7 @@ DevHub 鉴权与协议版本测试
 """
 
 import os
+import re
 import uuid
 import unittest
 import requests
@@ -126,6 +127,29 @@ class TestAuthProtocol(unittest.TestCase):
 
             result.mark_success()
 
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_get_version_with_valid_credentials(self):
+        """测试使用有效凭证调用 hub.getVersion"""
+        result = TestResult("测试使用有效凭证调用 hub.getVersion")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.call("hub.getVersion")
+            if not RpcAssertions.expect_success(result, response, ["version"]):
+                return result
+
+            version = response["result"].get("version")
+            if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", version):
+                result.mark_failure(f"❌ hub.getVersion.version 不是合法 SemVer: {version!r}")
+                return result
+
+            result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
 

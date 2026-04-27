@@ -1,5 +1,6 @@
 from .client import DevHubClient, DevHubClientDependencies
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
+from ._versioning import SDK_VERSION
 from .constants import (
     ALL_EVENT_TYPES,
     APP_DEFINITION_DELETED,
@@ -18,6 +19,7 @@ from .events import DevHubEventsClient, DevHubEventsClientDependencies
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
+    AbandonedRequestFilter,
     AppCapabilities,
     AppDefinition,
     AppInstance,
@@ -36,6 +38,7 @@ from .models import (
     InvocationTarget,
     InvokeCapability,
     InvokeRequest,
+    ListDefinitionsRequest,
     LaunchConfiguration,
     LaunchRequest,
     LaunchResult,
@@ -47,6 +50,8 @@ from .models import (
     RequestResult,
     RespondRequest,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
+    VersionCompatibilityStatus,
     ValidationIssue,
 )
 from .runtime import (
@@ -56,12 +61,15 @@ from .runtime import (
     resolve_data_directory,
 )
 
+__version__ = SDK_VERSION
+
 __all__ = [
     "ALL_EVENT_TYPES",
     "APP_DEFINITION_DELETED",
     "APP_DEFINITION_UPSERTED",
     "APP_INSTANCE_REGISTERED",
     "APP_INSTANCE_UNREGISTERED",
+    "AbandonedRequestFilter",
     "AppCapabilities",
     "AppDefinition",
     "AppInstance",
@@ -94,6 +102,7 @@ __all__ = [
     "InvokeRequest",
     "JsonRpcHttpTransport",
     "JsonRpcWsSession",
+    "ListDefinitionsRequest",
     "LaunchConfiguration",
     "LaunchRequest",
     "LaunchResult",
@@ -106,10 +115,14 @@ __all__ = [
     "RespondRequest",
     "RuntimeResolver",
     "RuntimeConnectionInfo",
+    "SDK_VERSION",
     "SUPPORTED_EVENT_TYPES",
     "UrllibJsonRpcHttpTransport",
     "ValidationIssue",
+    "VersionCompatibilityResult",
+    "VersionCompatibilityStatus",
     "WebSocketJsonRpcSession",
+    "__version__",
     "discover_runtime",
     "ensure_supported_event_type",
     "resolve_data_directory",

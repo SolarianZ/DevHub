@@ -6,10 +6,19 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.scope.json",
+        "fileName": "invoke.notify.scope--global.json",
         "definition": {
           "appId": "invoke.notify.scope",
+          "scope": "",
           "displayName": "invoke.notify.scope"
+        }
+      },
+      {
+        "fileName": "invoke.notify.scope--scope-scope-a.json",
+        "definition": {
+          "appId": "invoke.notify.scope",
+          "scope": "scope-a",
+          "displayName": "invoke.notify.scope scope-a"
         }
       }
     ]
@@ -22,7 +31,7 @@
         "instance": {
           "instanceId": "notify-scope-global-inst",
           "appId": "invoke.notify.scope",
-          "scope": null,
+          "scope": "",
           "pid": 31003,
           "invoke": {
             "poll": true,

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-launch-global",
+  "method": "hub.apps.launch",
+  "params": {
+    "appId": "Sample.App",
+    "scope": "",
+    "dedupeKey": "Sample.App:global",
+    "waitForRegisterMs": 0
+  }
+}

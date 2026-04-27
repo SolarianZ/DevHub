@@ -70,17 +70,17 @@ public class CoreServiceTests
         {
             InstanceId = "online-threshold-instance",
             AppId = "online-threshold-app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 14001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
 
         now = now.AddSeconds(1);
-        var onlineInstances = appRegistry.ListInstances("online-threshold-app", includeAllScopes: true, includeOffline: false).ToList();
+        var onlineInstances = appRegistry.ListInstances("online-threshold-app", scope: null, includeOffline: false).ToList();
         Assert.Single(onlineInstances);
 
         now = now.AddSeconds(2);
-        var offlineInstances = appRegistry.ListInstances("online-threshold-app", includeAllScopes: true, includeOffline: false).ToList();
+        var offlineInstances = appRegistry.ListInstances("online-threshold-app", scope: null, includeOffline: false).ToList();
         Assert.Empty(offlineInstances);
     }
 
@@ -93,7 +93,7 @@ public class CoreServiceTests
         {
             InstanceId = "test-instance-1",
             AppId = "test-app-1",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 1234,
             RegisteredAtUtc = DateTime.UtcNow,
             LastSeenUtc = DateTime.UtcNow
@@ -118,7 +118,7 @@ public class CoreServiceTests
         {
             InstanceId = "test-instance-2",
             AppId = "test-app-2",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 5678,
             RegisteredAtUtc = DateTime.UtcNow,
             LastSeenUtc = DateTime.UtcNow.AddSeconds(-10)
@@ -179,7 +179,7 @@ public class CoreServiceTests
         {
             InstanceId = "test-instance-3",
             AppId = "test-app-3",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 9012,
             RegisteredAtUtc = DateTime.UtcNow,
             LastSeenUtc = DateTime.UtcNow
@@ -197,9 +197,9 @@ public class CoreServiceTests
         appRegistry.RegisterInstance(scopedInstance);
 
         // Act
-        var globalInstances = appRegistry.ListInstances(appId: "test-app-3", scope: null);
+        var allInstances = appRegistry.ListInstances(appId: "test-app-3", scope: null);
+        var globalInstances = appRegistry.ListInstances(appId: "test-app-3", scope: ScopeContract.Global);
         var scopedInstances = appRegistry.ListInstances(appId: "test-app-3", scope: "workspace1");
-        var allInstances = appRegistry.ListInstances(appId: "test-app-3", includeAllScopes: true);
 
         // Assert
         Assert.Single(globalInstances);
@@ -284,4 +284,3 @@ public static class TestHelpers
         return testDirectory;
     }
 }
-

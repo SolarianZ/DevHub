@@ -1,0 +1,69 @@
+{
+  "id": "auth.ws_authenticated_get_version_success",
+  "caseId": "CONF-007",
+  "description": "WS 完成鉴权后，hub.getVersion 必须成功。",
+  "transport": "ws",
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-auth-get-version",
+          "method": "hub.ws.authenticate",
+          "params": {
+            "token": "${HOST_TOKEN}",
+            "protocolVersion": 1,
+            "clientId": "ConformanceWsGetVersion",
+            "clientSessionId": "20000000-0000-0000-0000-000000000011"
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "auth"
+      },
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-get-version",
+          "method": "hub.getVersion",
+          "params": {}
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "response"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "auth": {
+        "jsonrpc": "2.0",
+        "id": "ws-auth-get-version",
+        "result": {
+          "ok": true,
+          "protocolVersion": 1
+        }
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "ws-get-version",
+        "result": {
+          "ok": true,
+          "version": "${ANY_NON_EMPTY_STRING}"
+        }
+      }
+    }
+  },
+  "tags": [
+    "auth",
+    "ws",
+    "success"
+  ]
+}

@@ -74,7 +74,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeEquivalentToGlobal()
+    public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeTreatedAsGlobal()
     {
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -95,32 +95,15 @@ public class LaunchScopeTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var nullScopeResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "launch-scope-null",
-            Method = "hub.apps.launch",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "scope-launch-app",
-                scope = (string?)null
-            })
-        }, CancellationToken.None);
-
         Assert.NotNull(response.Error);
-        Assert.NotNull(nullScopeResponse.Error);
         Assert.Equal(-32014, response.Error.Code);
-        Assert.Equal(-32014, nullScopeResponse.Error.Code);
         Assert.Equal("app_definition_not_found", response.Error.Message);
-        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
-
         var emptyData = JsonSerializer.SerializeToElement(response.Error.Data);
-        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
-        Assert.Equal("scope-launch-app", emptyData.GetProperty("appId").GetString());
-        Assert.Equal("scope-launch-app", nullData.GetProperty("appId").GetString());
+        Assert.Equal(ScopeContract.Global, emptyData.GetProperty("scope").GetString());
     }
 
     [Fact]
-    public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldKeepEquivalentBehavior()
+    public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -153,15 +136,12 @@ public class LaunchScopeTests : IDisposable
 
         Assert.NotNull(omittedScopeResponse.Error);
         Assert.NotNull(nullScopeResponse.Error);
-        Assert.Equal(-32014, omittedScopeResponse.Error.Code);
-        Assert.Equal(-32014, nullScopeResponse.Error.Code);
-        Assert.Equal("app_definition_not_found", omittedScopeResponse.Error.Message);
-        Assert.Equal("app_definition_not_found", nullScopeResponse.Error.Message);
-
-        var omittedData = JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data);
-        var nullData = JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data);
-        Assert.Equal("missing-scope-equivalent-app", omittedData.GetProperty("appId").GetString());
-        Assert.Equal("missing-scope-equivalent-app", nullData.GetProperty("appId").GetString());
+        Assert.Equal(-32602, omittedScopeResponse.Error.Code);
+        Assert.Equal(-32602, nullScopeResponse.Error.Code);
+        Assert.Equal("invalid_params", omittedScopeResponse.Error.Message);
+        Assert.Equal("invalid_params", nullScopeResponse.Error.Message);
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data).GetProperty("reason").GetString());
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data).GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -182,6 +162,7 @@ public class LaunchScopeTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scope-launch-app",
+                scope = ScopeContract.Global,
                 waitForRegisterMs = -1
             })
         }, CancellationToken.None);
@@ -215,6 +196,7 @@ public class LaunchScopeTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scope-launch-app",
+                scope = ScopeContract.Global,
                 dedupeKey = 123,
                 waitForRegisterMs = 0
             })
@@ -232,7 +214,14 @@ public class LaunchScopeTests : IDisposable
             "launch-scope-isolation.app",
             rpcEnabled: true,
             includeLaunch: true,
-            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            definitionScope: "workspace-A");
+        WriteDefinition(
+            "launch-scope-isolation.app",
+            rpcEnabled: true,
+            includeLaunch: true,
+            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
+            definitionScope: "workspace-B");
 
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
@@ -273,7 +262,8 @@ public class LaunchScopeTests : IDisposable
             rpcEnabled: true,
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-            argsTemplate: "--scope {scopeOrGlobal}");
+            argsTemplate: "--scope {scopeOrGlobal}",
+            definitionScope: targetScope);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
@@ -349,7 +339,7 @@ public class LaunchScopeTests : IDisposable
 
         var firstLaunch = await coordinator.LaunchAsync(
             appId: "launch-exit-retry.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -362,7 +352,7 @@ public class LaunchScopeTests : IDisposable
 
         var secondLaunch = await coordinator.LaunchAsync(
             appId: "launch-exit-retry.app",
-            scope: null,
+            scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,
             CancellationToken.None);
@@ -406,11 +396,14 @@ public class LaunchScopeTests : IDisposable
         bool rpcEnabled,
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = null)
+        string? argsTemplate = null,
+        string? definitionScope = null)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -435,7 +428,7 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 
@@ -463,7 +456,4 @@ public class LaunchScopeTests : IDisposable
         throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
-
-
-
 

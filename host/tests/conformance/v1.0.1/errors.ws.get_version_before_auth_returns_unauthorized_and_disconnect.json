@@ -1,0 +1,54 @@
+{
+  "id": "errors.ws.get_version_before_auth_returns_unauthorized_and_disconnect",
+  "caseId": "CONF-008",
+  "description": "WS 未鉴权时调用 hub.getVersion，必须返回 unauthorized/missing_token 且断开连接。",
+  "transport": "ws",
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-get-version-before-auth",
+          "method": "hub.getVersion",
+          "params": {}
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "response"
+      },
+      {
+        "action": "wait_closed",
+        "captureAs": "closed",
+        "timeoutMs": 1500
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "ws-get-version-before-auth",
+        "error": {
+          "code": -32001,
+          "message": "unauthorized",
+          "data": {
+            "reason": "missing_token"
+          }
+        }
+      },
+      "closed": {
+        "closed": true
+      }
+    }
+  },
+  "tags": [
+    "errors",
+    "ws",
+    "auth"
+  ]
+}

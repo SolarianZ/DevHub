@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.target-missing.json",
+        "fileName": "invoke.request.target-missing--global.json",
         "definition": {
           "appId": "invoke.request.target-missing",
+          "scope": "",
           "displayName": "invoke.request.target-missing"
         }
       }
@@ -21,7 +22,8 @@
       "appId": "invoke.request.target-missing",
       "method": "demo.request.target-missing",
       "target": {
-        "instanceId": "request-target-missing-inst"
+        "instanceId": "request-target-missing-inst",
+        "scope": ""
       },
       "options": {
         "queueIfOffline": false

@@ -1,0 +1,67 @@
+{
+  "id": "apps.instances.get_offline_retained_snapshot",
+  "caseId": "CONF-003",
+  "description": "实例离线但仍保留在注册表时，hub.apps.getInstance 必须继续返回该快照。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "offline",
+        "waitSeconds": 3,
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "apps-instance-get-offline",
+          "appId": "apps.instance.get.offline.app",
+          "scope": "",
+          "pid": 32010,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000036"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get-offline",
+    "method": "hub.apps.getInstance",
+    "params": {
+      "instanceId": "apps-instance-get-offline"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get-offline",
+    "result": {
+      "ok": true,
+      "instance": {
+        "instanceId": "apps-instance-get-offline",
+        "appId": "apps.instance.get.offline.app",
+        "scope": "",
+        "pid": 32010,
+        "registeredAtUtc": "${ANY_ISO_UTC}",
+        "lastSeenUtc": "${ANY_ISO_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "offline"
+  ]
+}

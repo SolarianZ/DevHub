@@ -1,14 +1,15 @@
 {
   "id": "events.subscribe_receives_registered_event",
   "caseId": "CONF-007",
-  "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。", 
+  "description": "通过 SDK EventsClient 订阅 app.instance.registered 后，注册实例必须收到 hub.event。",
   "transport": "ws",
   "setup": {
     "definitions": [
       {
-        "fileName": "events.subscribe.registered.json",
+        "fileName": "events.subscribe.registered--global.json",
         "definition": {
           "appId": "events.subscribe.registered",
+          "scope": "",
           "displayName": "events.subscribe.registered"
         }
       }
@@ -45,7 +46,7 @@
         "instance": {
           "instanceId": "events-register-inst-1",
           "appId": "events.subscribe.registered",
-          "scope": null,
+          "scope": "",
           "pid": 33001,
           "invoke": {
             "poll": true,
@@ -70,7 +71,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.subscribe.registered",
-          "instanceId": "events-register-inst-1"
+          "instanceId": "events-register-inst-1",
+          "scope": ""
         }
       }
     }

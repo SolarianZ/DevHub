@@ -10,9 +10,18 @@
 
 ## 2. 获取 SDK
 
-### 2.1 使用本地打包产物
+### 2.1 项目引用
 
-如果你希望更贴近“发布包消费”的形式，可先执行：
+仓库内联调时，可直接引用 SDK 项目：
+
+```xml
+<ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+<ProjectReference Include="..\..\..\sdks\dotnet\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" /> <!-- 仅在使用 AddDevHubSdk / 工厂时需要 -->
+```
+
+### 2.2 使用本地打包产物
+
+如需更贴近“发布包消费”的形式，可先执行：
 
 ```powershell
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
@@ -21,7 +30,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 然后在消费项目中引用输出目录里的 `.nupkg`。正式发布后的主包 `PackageId` 为 `DevHub.Sdk.DotNet`；若需要 `AddDevHubSdk()`、`IDevHubClientFactory` 或 `IDevHubEventsClientFactory`，再额外引用 `DevHub.Sdk.DotNet.DependencyInjection`。生成的资产文件名会与 [`../../developer/publishing/release-asset-layout.md`](../../developer/publishing/release-asset-layout.md) 保持一致。
 
-### 2.2 Unity 场景
+### 2.3 Unity 场景
 
 Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成 DLL，并引用脚本输出目录中的 DLL；不要直接引用 SDK `.csproj`，也不要把 `dotnet pack` 生成的 `.nupkg` 作为 Unity 接入入口。脚本参数与输出说明见 [`../../../sdks/dotnet/README.md`](../../../sdks/dotnet/README.md)。
 
@@ -30,7 +39,10 @@ Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生�
 - Runtime discovery：读取并校验 `hub.json` / `token.txt`。
 - HTTP JSON-RPC：覆盖 `hub.ping`、`hub.apps.*` 与 `hub.invoke.*`。
 - WebSocket Events：覆盖 `hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe` 与 `hub.event`。
-- 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam、依赖注入工厂。
+- 版本查询与兼容性检查：`GetHostVersionAsync(...)` 与 `CheckVersionCompatibilityAsync(...)`。
+- 注册实例结果：`RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，分离 `AppInstance` 快照与 `InstanceSessionToken`。
+- 事件恢复与本地维护：单活动读取器、已放弃请求计数/清理，以及订阅结果未知时的会话重建约束。
+- 公开扩展点：`runtime resolver`、`HTTP transport factory`、`WebSocket session factory`、依赖注入工厂。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
 - 统一错误模型：`DevHubRpcException`；协议要求 `error.data` 为对象，非对象响应会被视为非法 JSON-RPC 包。
 
@@ -125,13 +137,21 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 });
 
 var definitions = await client.ListDefinitionsAsync();
-var definition = await client.GetDefinitionAsync("sample.app");
-var instances = await client.ListInstancesAsync(new ListInstancesRequest
+var globalDefinition = await client.GetDefinitionAsync("sample.app");
+var scopedDefinitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
 {
     AppId = "sample.app",
+    Scope = "team-a"
+});
+var allInstances = await client.ListInstancesAsync(new ListInstancesRequest
+{
     IncludeOffline = true
 });
 ```
+
+- `GetDefinitionAsync("sample.app")` 与 `GetDefinitionAsync("sample.app", string.Empty)` 都读取 Global Definition。
+- `ListDefinitionsRequest.Scope` 与 `ListInstancesRequest.Scope` 中，`null` 表示不按作用域过滤，`string.Empty` 表示只匹配 Global 作用域。
+- `AppDefinition.Scope`、`AppInstanceRegistration.Scope`、`LaunchRequest.Scope` 与 `InvocationTarget.Scope` 使用 `string.Empty` 表示 Global；未显式赋值时会归一化为 `string.Empty`。
 
 ### 6.2 校验与写入定义
 
@@ -162,7 +182,46 @@ if (validation.Valid)
 }
 ```
 
-### 6.3 事件订阅
+### 6.3 注册实例与实例凭据复用
+
+```csharp
+using DevHub.Sdk;
+using DevHub.Sdk.Models;
+
+await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+{
+    ClientId = "instance-owner"
+});
+
+var registered = await client.RegisterInstanceAsync(
+    new AppInstanceRegistration
+    {
+        InstanceId = "sample-inst-1",
+        AppId = "sample.app",
+        Pid = Environment.ProcessId,
+        Invoke = new InvokeCapability
+        {
+            Poll = true,
+            Respond = true
+        }
+    },
+    password: "instance-password");
+
+var snapshot = registered.Instance;
+var token = registered.InstanceSessionToken;
+
+var lastSeenUtc = await client.HeartbeatAsync(registered.InstanceId);
+var polled = await client.PollAsync(new PollRequest
+{
+    InstanceId = registered.InstanceId
+});
+```
+
+- `RegisterInstanceResult.Instance` 是可序列化的实例快照，`RegisterInstanceResult.InstanceSessionToken` 是实例所有权凭据。
+- 在同一个 `DevHubClient` 实例内，`HeartbeatAsync(instanceId)`、`PollAsync(...)` 与 `RespondAsync(...)` 可复用该客户端先前注册时缓存的 `InstanceSessionToken`。
+- `UnregisterInstanceAsync(instanceId, credential)` 接受 `InstanceSessionToken`；若使用同一 `DevHubClient` 注册实例，也可传入当时使用的 `password`。
+
+### 6.4 事件订阅与已放弃请求维护
 
 ```csharp
 using DevHub.Sdk;
@@ -185,14 +244,23 @@ await foreach (var evt in eventsClient.ReadEventsAsync())
     Console.WriteLine($"{evt.TimeUtc:O} {evt.Type}");
 }
 
+var abandoned = eventsClient.GetAbandonedRequestCount(new AbandonedRequestFilter
+{
+    Method = "hub.apps.getDefinition"
+});
+
 await eventsClient.UnsubscribeAsync(subscriptionId);
 ```
+
+- 同一 `DevHubEventsClient` 同一时刻只允许一个活动中的 `ReadEventsAsync()` 读取器。
+- `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在结果未知后会废弃当前 WebSocket 会话；恢复时需要重新 `AuthenticateAsync()` 并重新订阅。
+- `GetAbandonedRequestCount(...)` 与 `ClearAbandonedRequests(...)` 只维护当前事件客户端本地记录，不会发送额外 JSON-RPC 请求。
 
 ## 7. 高级扩展
 
 默认情况下，推荐使用 `DevHubClient.FromRuntimeAsync(...)` 与 `DevHubEventsClient.FromRuntimeAsync(...)`。
 
-如果需要接入自定义运行时发现或按客户端粒度提供底层 `HttpClient`，可以通过公开扩展点注入：
+如果需要接入自定义运行时发现、HTTP transport 或 WebSocket session，可以通过公开扩展点注入：
 
 ```csharp
 using DevHub.Sdk;
@@ -206,7 +274,7 @@ var client = await DevHubClient.FromRuntimeAsync(
     new DevHubClientDependencies
     {
         RuntimeResolver = runtimeResolver,
-        HttpClientProvider = httpClientProvider
+        TransportFactory = transportFactory
     });
 
 var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
@@ -217,11 +285,12 @@ var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
     },
     new DevHubEventsClientDependencies
     {
-        RuntimeResolver = runtimeResolver
+        RuntimeResolver = runtimeResolver,
+        SessionFactory = sessionFactory
     });
 ```
 
-`HttpClientProvider` 只负责为当前 `DevHubClient` 提供底层 `HttpClient`，JSON-RPC 请求封装、错误映射与响应校验仍由 SDK 内部负责。低层 `JsonRpcHttpTransport` / `JsonRpcWebSocketSession` 不属于稳定公开契约。
+`IDevHubHttpTransportFactory` 与 `IDevHubWebSocketSessionFactory` 负责承接底层通信；JSON-RPC 请求封装、错误映射与响应校验仍由 SDK 内部负责。低层具体实现类型不构成稳定公开契约。
 
 ## 8. 最小验证方式
 
@@ -236,6 +305,7 @@ dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 
 ```powershell
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
+dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack
 ```
 
 - 若要查看工作区构建、集成测试隔离或仓库级联调要求，请阅读 [`../../developer/guides/development.md`](../../developer/guides/development.md)。

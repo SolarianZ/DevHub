@@ -30,7 +30,7 @@
 └── logs/
 ```
 
-补充说明：
+说明：
 
 - 单实例粒度为“同一 OS 用户 + 同一数据根目录”；不同 `DEVHUB_DATA_DIR` 可并行运行。
 - 并行排障、并行测试或多 Host 联调时，必须为每个 Host 使用独立数据根目录。
@@ -42,6 +42,7 @@
 - `DevHub Monitor` 会把自身结构化日志写入 Monitor 本地数据目录下的 `logs/monitor-YYYYMMDD.jsonl`。
 - 桌面应用帮助页提供 Host / Monitor 日志目录的直接打开入口。
 - Monitor 关键日志至少覆盖扫描状态切换、Host 启动尝试、连接/断连、设置保存和定义管理。
+- Host 兼容性判定、设置恢复告警与重新扫描动作均以后端结构化日志为准；排障时可结合 `host_incompatible`、`settings_recovered` 等上下文定位原因。
 - Monitor 设置页中的 `DEVHUB_DATA_DIR` 覆盖值与 Host 可执行文件路径必须为绝对路径；排障时若发现保存失败，应先排查是否填入了相对路径。
 
 ## 2. 故障分诊流程
@@ -149,6 +150,8 @@ npm --prefix apps/monitor run verify
 | `-32020 launch_failed`                 | `autoLaunch` 场景拉起失败                       | `AppDefinition.launch.exePath` 是否存在；系统权限/路径是否正确                                           | 修复定义文件与可执行路径；重试 `hub.apps.launch`      |
 | `-32012 invocation_timeout`            | request 等待超时                                | `waitTimeoutMs` 是否过短；被调方是否及时 `poll/respond`                                                  | 调大 `waitTimeoutMs`；排查被调方处理时延              |
 | `-32011 invocation_expired`            | 调用已过期或已取消                              | `ttlMs` 是否过短；系统是否长时间阻塞                                                                     | 调大 `ttlMs`；减少调用链路耗时并重试                  |
+| Monitor 显示 Host 版本不受支持        | 主页停留在发现态，并显示 `重新扫描/前往设置`    | `hub.ping` 是否成功；`runtime.protocolVersion` 是否为 `1`；`hub.getVersion` 返回的 Host 版本与 Monitor 内置 `JS SDK` 是否被判定为 `incompatible`；若 `hub.getVersion` 缺失则检查 `runtime.hubVersion` 回退值 | 升级 Host，或切换到兼容的数据根目录后重新扫描；若主页仅显示 `建议升级 Host` 或 `Host 兼容性未知` 横幅，则继续通过帮助页诊断信息排查 |
+| Monitor 顶部出现设置恢复告警          | 启动后使用默认设置，顶部显示备份文件路径        | `settings.json` 是否损坏；同目录下是否生成 `settings.json.corrupt-*.bak`；Monitor 日志是否记录恢复上下文 | 修复或重建设置内容后重新保存；必要时比对备份文件恢复  |
 
 ## 5. 标准恢复动作（通用）
 
@@ -158,7 +161,7 @@ npm --prefix apps/monitor run verify
 4. 必要时重启 Hub，并再次执行 smoke 校验：
    `python3 host/tests/blackbox/test_runner.py --smoke --no-header`
 
-## 6. 升级路径与补充说明
+## 6. 升级路径与相关说明
 
 - 协议兼容边界请参考 [`docs/specification/protocol/Specification.md`](../../specification/protocol/Specification.md) §9.2。
 - 发布、启动与回滚校验请参考 [`docs/developer/operations/deployment.md`](./deployment.md)。

@@ -27,14 +27,27 @@
     },
     "httpBaseUrl": {
       "type": "string",
-      "format": "uri"
+      "format": "uri",
+      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
     },
     "wsUrl": {
       "type": "string",
-      "format": "uri"
+      "format": "uri",
+      "pattern": "^wss?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
     },
     "tokenFile": {
-      "type": "string"
+      "type": "string",
+      "oneOf": [
+        {
+          "pattern": "^/.+"
+        },
+        {
+          "pattern": "^[A-Za-z]:[\\\\/].+"
+        },
+        {
+          "pattern": "^\\\\\\\\[^\\\\/]+[\\\\/][^\\\\/]+(?:[\\\\/].+)?$"
+        }
+      ]
     },
     "startedAtUtc": {
       "type": "string",

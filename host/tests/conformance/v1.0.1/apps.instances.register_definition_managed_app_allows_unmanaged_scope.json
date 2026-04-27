@@ -1,0 +1,122 @@
+{
+  "id": "apps.instances.register_definition_managed_app_allows_unmanaged_scope",
+  "caseId": "CONF-003",
+  "description": "当 appId 已存在其他 scope Definition 时，未关联活动 launchId 的 hub.apps.registerInstance 仍必须允许不同 scope 自主注册。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.instance.managed-scope.app--scope-scope-a.json",
+        "definition": {
+          "appId": "apps.instance.managed-scope.app",
+          "scope": "scope-a",
+          "displayName": "Apps Instance Managed Scope A"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.listInstances",
+        "requestId": "apps-instances-register-managed-scope-list",
+        "params": {
+          "appId": "apps.instance.managed-scope.app",
+          "scope": null,
+          "includeOffline": true
+        },
+        "expectedResult": {
+          "ok": true,
+          "instances": [
+            {
+              "instanceId": "apps-instance-managed-scope-b",
+              "appId": "apps.instance.managed-scope.app",
+              "scope": "scope-b",
+              "pid": 32021,
+              "invoke": {
+                "poll": true,
+                "respond": true
+              }
+            }
+          ]
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.getInstance",
+        "requestId": "apps-instances-register-managed-scope-get",
+        "params": {
+          "instanceId": "apps-instance-managed-scope-b"
+        },
+        "expectedResult": {
+          "ok": true,
+          "instance": {
+            "instanceId": "apps-instance-managed-scope-b",
+            "appId": "apps.instance.managed-scope.app",
+            "scope": "scope-b",
+            "pid": 32021,
+            "invoke": {
+              "poll": true,
+              "respond": true
+            }
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000125"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-managed-scope",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "password": "conformance-password",
+      "instance": {
+        "instanceId": "apps-instance-managed-scope-b",
+        "appId": "apps.instance.managed-scope.app",
+        "scope": "scope-b",
+        "pid": 32021,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-managed-scope",
+    "result": {
+      "ok": true,
+      "instanceSessionToken": "${ANY_NON_EMPTY_STRING}",
+      "instance": {
+        "instanceId": "apps-instance-managed-scope-b",
+        "appId": "apps.instance.managed-scope.app",
+        "scope": "scope-b",
+        "pid": 32021,
+        "registeredAtUtc": "${ANY_ISO_UTC}",
+        "lastSeenUtc": "${ANY_ISO_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "scope",
+    "success"
+  ]
+}

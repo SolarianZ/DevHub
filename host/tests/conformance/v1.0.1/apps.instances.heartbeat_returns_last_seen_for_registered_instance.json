@@ -11,7 +11,7 @@
         "instance": {
           "instanceId": "apps-instance-heartbeat-1",
           "appId": "apps.instance.heartbeat.app",
-          "scope": null,
+          "scope": "",
           "pid": 32003,
           "invoke": {
             "poll": true,
@@ -35,7 +35,8 @@
     "id": "apps-instances-heartbeat",
     "method": "hub.apps.heartbeat",
     "params": {
-      "instanceId": "apps-instance-heartbeat-1"
+      "instanceId": "apps-instance-heartbeat-1",
+      "instanceSessionToken": "${REGISTERED_INSTANCE_SESSION_TOKEN}"
     }
   },
   "expectedResponse": {

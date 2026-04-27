@@ -3,15 +3,21 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
+import type { AbandonedRequestFilter, JsonRpcEventSession } from "../../src/index.js";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
-import { DevHubRpcError, DevHubRpcErrorCode } from "../../src/errors.js";
+import {
+  DevHubConnectionError,
+  DevHubRpcError,
+  DevHubRpcErrorCode,
+} from "../../src/errors.js";
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 
 const tempRoots: string[] = [];
 
 afterEach(async () => {
+  vi.doUnmock("ws");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 
@@ -70,6 +76,86 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   }
 
   expect(session?.disposedReason).toBe("client_dispose");
+});
+
+it("本地已放弃请求维护接口应直接委托 session 且不要求认证", async () => {
+  const connection = createConnectionInfo();
+  const ensureConnected = vi.fn(async () => {});
+  const sendRequest = vi.fn(async () => {
+    throw new Error("sendRequest should not be called.");
+  });
+  const getAbandonedRequestCount = vi.fn((filter?: AbandonedRequestFilter) => filter?.appId === "app-a" ? 2 : 3);
+  const clearAbandonedRequests = vi.fn((filter?: AbandonedRequestFilter) => filter?.method === "hub.apps.listInstances" ? 1 : 0);
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-local-abandoned-request-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        ensureConnected,
+        sendRequest,
+        getAbandonedRequestCount,
+        clearAbandonedRequests,
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    expect(client.getAbandonedRequestCount()).toBe(3);
+    expect(client.getAbandonedRequestCount({ appId: "app-a" })).toBe(2);
+    expect(client.clearAbandonedRequests({ method: "hub.apps.listInstances" })).toBe(1);
+    expect(ensureConnected).not.toHaveBeenCalled();
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(getAbandonedRequestCount).toHaveBeenNthCalledWith(1, undefined);
+    expect(getAbandonedRequestCount).toHaveBeenNthCalledWith(2, { appId: "app-a" });
+    expect(clearAbandonedRequests).toHaveBeenCalledWith({ method: "hub.apps.listInstances" });
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("同一个 events client 实例一次只允许一个活动中的 readEvents 读取器，return 后应释放租约", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-single-reader-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => new FakeInjectedWsSession(options)
+    }
+  );
+
+  try {
+    await client.authenticate();
+
+    const firstIterator = client.readEvents()[Symbol.asyncIterator]();
+    expect(() => client.readEvents()[Symbol.asyncIterator]())
+      .toThrow("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+
+    await firstIterator.return?.();
+
+    const secondIterator = client.readEvents()[Symbol.asyncIterator]();
+    await expect(secondIterator.return?.()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+  } finally {
+    await client.dispose();
+  }
 });
 
 it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接上下文", async () => {
@@ -136,7 +222,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
     protocolVersion: 1,
     pid: 12345,
     startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-    hubVersion: "0.6.0-test"
+    hubVersion: "0.7.0-test"
   });
   expect((eventsClient.runtime as unknown as Record<string, unknown>).httpBaseUrl).toBeUndefined();
   expect((eventsClient.runtime as unknown as Record<string, unknown>).wsUrl).toBeUndefined();
@@ -171,13 +257,19 @@ it("authenticate should support WS ping and apps queries", async () => {
     const ping = await client.ping({
       channel: "ws"
     });
-    const definitions = await client.listDefinitions();
-    const definition = await client.getDefinition("test.launch.app");
+    const definitions = await client.listDefinitions({
+      scope: null
+    });
+    const definition = await client.getDefinition({
+      appId: "test.launch.app",
+      scope: ""
+    });
     const instances = await client.listInstances({
       appId: "test.launch.app",
       scope: null,
       includeOffline: false
     });
+    const instance = await client.getInstance("inst-1");
 
     expect(ping.echo).toEqual({
       channel: "ws"
@@ -187,12 +279,14 @@ it("authenticate should support WS ping and apps queries", async () => {
     expect(definition.displayName).toBe("Test Launch App");
     expect(instances).toHaveLength(1);
     expect(instances[0].instanceId).toBe("inst-1");
+    expect(instance.instanceId).toBe("inst-1");
     expect(session?.requests.map((item) => item.method)).toEqual([
       "hub.ws.authenticate",
       "hub.ping",
       "hub.apps.listDefinitions",
       "hub.apps.getDefinition",
-      "hub.apps.listInstances"
+      "hub.apps.listInstances",
+      "hub.apps.getInstance"
     ]);
     expect(session?.requests[1]?.params).toEqual({
       echo: {
@@ -200,16 +294,183 @@ it("authenticate should support WS ping and apps queries", async () => {
       }
     });
     expect(session?.requests[3]?.params).toEqual({
-      appId: "test.launch.app"
+      appId: "test.launch.app",
+      scope: ""
     });
     expect(session?.requests[4]?.params).toEqual({
       appId: "test.launch.app",
       scope: null,
       includeOffline: false
     });
+    expect(session?.requests[5]?.params).toEqual({
+      instanceId: "inst-1"
+    });
   } finally {
     await client.dispose();
   }
+});
+
+it("getInstance should reject an invalid instanceId before sending the WS request", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-instance-id-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.getInstance("node-01-")).rejects.toThrow(/instanceId/);
+  } finally {
+    await client.dispose();
+  }
+
+  expect(session?.requests.map((item) => item.method)).toEqual(["hub.ws.authenticate"]);
+});
+
+it("getDefinition 应将 WS 非法入站标识符视为 invalid_response", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-identifier-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getDefinition") {
+            expect(params).toEqual({
+              appId: "Sample.App",
+              scope: ""
+            });
+
+            return {
+              ok: true,
+              definition: {
+                appId: ".Invalid.App",
+                scope: "",
+                displayName: "Invalid App"
+              }
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  let captured: unknown;
+  try {
+    await client.authenticate();
+    await client.getDefinition({
+      appId: "Sample.App",
+      scope: ""
+    });
+  } catch (error) {
+    captured = error;
+  } finally {
+    await client.dispose();
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+  expect((captured as Error).message).toMatch(/appId/);
+});
+
+it("getInstance should propagate instance_not_found over WS without rewriting the error", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-get-instance-not-found-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getInstance") {
+            expect(params).toEqual({
+              instanceId: "missing-inst-1"
+            });
+            throw new DevHubRpcError({
+              code: DevHubRpcErrorCode.InstanceNotFound,
+              message: "instance_not_found",
+              data: {
+                reason: "unknown_instance",
+                instanceId: "missing-inst-1"
+              },
+              requestId: "ws-get-instance-missing"
+            });
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  let capturedError: unknown;
+  try {
+    await client.authenticate();
+    await client.getInstance("missing-inst-1");
+  } catch (error) {
+    capturedError = error;
+  } finally {
+    await client.dispose();
+  }
+
+  expect(capturedError).toBeInstanceOf(DevHubRpcError);
+  const rpcError = capturedError as DevHubRpcError;
+  expect(rpcError.code).toBe(DevHubRpcErrorCode.InstanceNotFound);
+  expect(rpcError.message).toBe("instance_not_found");
+  expect(rpcError.reason).toBe("unknown_instance");
+  expect(rpcError.tryGetDataString("instanceId")).toBe("missing-inst-1");
 });
 
 it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => {
@@ -224,7 +485,7 @@ it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => 
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -283,7 +544,7 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -300,7 +561,8 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
               type: "app.definition.upserted",
               timeUtc: "2026-03-09T00:00:00Z",
               payload: {
-                appId: "test.app"
+                appId: "test.app",
+                scope: ""
               }
             });
 
@@ -342,7 +604,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
       runtimeResolver: {
         resolve: async () => connection
       },
-      sessionFactory: (options) => ({
+      sessionFactory: (options) => createStubEventSession({
         async ensureConnected(): Promise<void> {
         },
         async sendRequest(method: string): Promise<Record<string, unknown>> {
@@ -361,7 +623,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
               payload: {
                 appId: "test.app",
                 instanceId: "inst-1",
-                scope: null,
+                scope: "",
                 password: "secret-1"
               }
             });
@@ -392,6 +654,141 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   }
 });
 
+it("实例事件应接受省略 scope 的 payload", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-omitted-scope-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-instance-omitted-scope",
+              type: "app.instance.registered",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                instanceId: "inst-1"
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-instance-omitted-scope"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["app.instance.registered"]);
+
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value.type).toBe("app.instance.registered");
+    expect(first.value.payload).toEqual({
+      appId: "test.app",
+      instanceId: "inst-1"
+    });
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("实例事件应继续拒绝非法 scope", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-scope-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-instance-invalid-scope",
+              type: "app.instance.registered",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                instanceId: "inst-1",
+                scope: ".invalid-scope"
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-instance-invalid-scope"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    let captured: unknown;
+    try {
+      await client.subscribe(["app.instance.registered"]);
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(captured).toBeInstanceOf(DevHubConnectionError);
+    expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+    expect((captured as Error).message).toMatch(/scope/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
@@ -414,14 +811,17 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
 
   try {
     await client.authenticate();
+    const previousIterator = client.readEvents()[Symbol.asyncIterator]();
     await client.subscribe(["invocation.completed"]);
     session?.terminate(new Error("socket_closed"));
-
-    const previousIterator = client.readEvents()[Symbol.asyncIterator]();
     const buffered = await previousIterator.next();
     expect(buffered.done).toBe(false);
     expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
-    await expect(previousIterator.next()).rejects.toThrow(/socket_closed/i);
+    await expect(previousIterator.next()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+    expect(() => client.readEvents()).toThrow("The event stream is unavailable. Re-authenticate and subscribe again.");
 
     await client.authenticate();
     await client.subscribe(["invocation.completed"]);
@@ -430,6 +830,98 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
     expect(second.done).toBe(false);
     expect(second.value.type).toBe("invocation.completed");
     expect(second.value.payload?.invocationId).toBe("invk-fake-2");
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("断线后即使不继续消费旧 iterator 也应允许重新认证恢复", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-reconnect-with-abandoned-iterator-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const abandonedIterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+
+    expect(() => client.readEvents()).toThrow("The event stream is unavailable. Re-authenticate and subscribe again.");
+
+    await client.authenticate();
+    const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
+    const recoveredEventTask = recoveredIterator.next();
+    await client.subscribe(["invocation.completed"]);
+
+    const recovered = await recoveredEventTask;
+    expect(recovered.done).toBe(false);
+    expect(recovered.value.type).toBe("invocation.completed");
+    expect(recovered.value.payload?.invocationId).toBe("invk-fake-2");
+
+    await recoveredIterator.return?.();
+    await abandonedIterator.return?.();
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("旧 iterator 的收尾动作不应释放新 reader 租约", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-stale-iterator-cleanup-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const abandonedIterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+    await client.authenticate();
+
+    const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
+    await expect(abandonedIterator.return?.()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+    expect(() => client.readEvents()[Symbol.asyncIterator]())
+      .toThrow("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+
+    const recoveredEventTask = recoveredIterator.next();
+    await client.subscribe(["invocation.completed"]);
+
+    const recovered = await recoveredEventTask;
+    expect(recovered.done).toBe(false);
+    expect(recovered.value.payload?.invocationId).toBe("invk-fake-2");
+    await recoveredIterator.return?.();
   } finally {
     await client.dispose();
   }
@@ -444,9 +936,17 @@ it("应在认证前拒绝 subscribe 和 readEvents", async () => {
 
   await expect(client.subscribe()).rejects.toThrow();
   await expect(client.ping()).rejects.toThrow();
-  await expect(client.listDefinitions()).rejects.toThrow();
-  await expect(client.getDefinition("test.app")).rejects.toThrow();
-  await expect(client.listInstances()).rejects.toThrow();
+  await expect(client.listDefinitions({
+    scope: null
+  })).rejects.toThrow();
+  await expect(client.getDefinition({
+    appId: "test.app",
+    scope: ""
+  })).rejects.toThrow();
+  await expect(client.listInstances({
+    scope: null
+  })).rejects.toThrow();
+  await expect(client.getInstance("inst-1")).rejects.toThrow();
   expect(() => client.readEvents()).toThrow();
 });
 
@@ -495,11 +995,11 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   const subscriptionId = await client.subscribe(["invocation.completed"]);
   expect(sockets).toHaveLength(1);
   await sockets[0].waitForClose();
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   const first = await iterator.next();
   expect(first.done).toBe(false);
   expect(first.value.subscriptionId).toBe(subscriptionId);
@@ -510,6 +1010,54 @@ it("连接关闭后仍应允许读取已缓冲事件", async () => {
 
   const second = await iterator.next();
   expect(second.done).toBe(true);
+});
+
+it("连接终止后新的 readEvents 应抛出 session_terminated typed connection error", async () => {
+  const connection = createConnectionInfo();
+  let session: FakeInjectedWsSession | undefined;
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-terminated-stream-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => {
+        session = new FakeInjectedWsSession(options);
+        return session;
+      }
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    session?.terminate(new Error("socket_closed"));
+
+    const buffered = await iterator.next();
+    expect(buffered.done).toBe(false);
+    expect(buffered.value.payload?.invocationId).toBe("invk-fake-1");
+    await expect(iterator.next()).resolves.toEqual({
+      value: undefined,
+      done: true
+    });
+
+    let captured: unknown;
+    try {
+      client.readEvents();
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(captured).toBeInstanceOf(DevHubConnectionError);
+    expect((captured as DevHubConnectionError).kind).toBe("session_terminated");
+  } finally {
+    await client.dispose();
+  }
 });
 
 it("事件通知携带 id 时应使事件流报错", async () => {
@@ -526,10 +1074,28 @@ it("事件通知携带 id 时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
-  await expect(iterator.next()).rejects.toThrow(/hub\.event/i);
+  let captured: unknown;
+  try {
+    await iterator.next();
+  } catch (error) {
+    captured = error;
+  }
+
+  expect(captured).toBeInstanceOf(DevHubConnectionError);
+  expect((captured as DevHubConnectionError).kind).toBe("invalid_response");
+  expect((captured as Error).message).toMatch(/hub\.event/i);
+
+  let streamError: unknown;
+  try {
+    client.readEvents();
+  } catch (error) {
+    streamError = error;
+  }
+
+  expect(streamError).toBe(captured);
 });
 
 it("收到空白文本消息时应使事件流报错", async () => {
@@ -546,9 +1112,9 @@ it("收到空白文本消息时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/blank/i);
 });
 
@@ -583,9 +1149,9 @@ it("收到未知 WS 通知方法时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/supported response or hub\.event/i);
 });
 
@@ -603,9 +1169,9 @@ it("收到未知事件类型时应使事件流报错", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/supported DevHub event type/i);
 });
 
@@ -669,8 +1235,8 @@ it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async 
 
     try {
       await client.authenticate();
-      await client.subscribe(["invocation.completed"]);
       const iterator = client.readEvents()[Symbol.asyncIterator]();
+      await client.subscribe(["invocation.completed"]);
       await expect(iterator.next()).rejects.toThrow(/text frame/i);
     } finally {
       await client.dispose();
@@ -784,6 +1350,28 @@ it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
   }
 });
 
+it("缺少全局 WebSocket 且 ws 不可用时 authenticate 应返回可读错误", async () => {
+  vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
+  vi.doMock("ws", () => {
+    throw new Error("Cannot find package 'ws'.");
+  });
+  vi.resetModules();
+
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-missing-ws-client",
+    dataDir: await createRuntime()
+  });
+
+  try {
+    await expect(client.authenticate())
+      .rejects
+      .toThrow("WebSocket 不可用。请安装 ws，或提供全局 WebSocket 实现。");
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("fromRuntime 应拒绝空 options", async () => {
   await expect(
     DevHubEventsClient.fromRuntime(null as unknown as Parameters<typeof DevHubEventsClient.fromRuntime>[0])
@@ -804,9 +1392,9 @@ it("event notifications should reject a null payload object", async () => {
   });
 
   await client.authenticate();
+  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await client.subscribe(["invocation.completed"]);
 
-  const iterator = client.readEvents()[Symbol.asyncIterator]();
   await expect(iterator.next()).rejects.toThrow(/payload/i);
 });
 
@@ -856,7 +1444,7 @@ function createConnectionInfo() {
       wsUrl: "ws://127.0.0.1:57231/ws",
       tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
-      hubVersion: "0.6.0-test",
+      hubVersion: "0.7.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
@@ -907,6 +1495,17 @@ async function closeWebSocketServer(server: any): Promise<void> {
       resolve();
     });
   });
+}
+
+function createStubEventSession(
+  session: Omit<JsonRpcEventSession, "getAbandonedRequestCount" | "clearAbandonedRequests">
+    & Partial<Pick<JsonRpcEventSession, "getAbandonedRequestCount" | "clearAbandonedRequests">>
+): JsonRpcEventSession {
+  return {
+    getAbandonedRequestCount: () => 0,
+    clearAbandonedRequests: () => 0,
+    ...session
+  };
 }
 
 class FakeInjectedWsSession {
@@ -960,6 +1559,7 @@ class FakeInjectedWsSession {
         definitions: [
           {
             appId: "test.launch.app",
+            scope: "",
             displayName: "Test Launch App"
           }
         ]
@@ -971,6 +1571,7 @@ class FakeInjectedWsSession {
         ok: true,
         definition: {
           appId: "test.launch.app",
+          scope: "",
           displayName: "Test Launch App",
           launch: {
             exePath: process.execPath
@@ -986,7 +1587,7 @@ class FakeInjectedWsSession {
           {
             instanceId: "inst-1",
             appId: "test.launch.app",
-            scope: null,
+            scope: "",
             pid: 12345,
             registeredAtUtc: "2026-03-09T00:00:00Z",
             lastSeenUtc: "2026-03-09T00:00:01Z",
@@ -996,6 +1597,24 @@ class FakeInjectedWsSession {
             }
           }
         ]
+      };
+    }
+
+    if (method === "hub.apps.getInstance") {
+      return {
+        ok: true,
+        instance: {
+          instanceId: "inst-1",
+          appId: "test.launch.app",
+          scope: "",
+          pid: 12345,
+          registeredAtUtc: "2026-03-09T00:00:00Z",
+          lastSeenUtc: "2026-03-09T00:00:01Z",
+          invoke: {
+            poll: true,
+            respond: true
+          }
+        }
       };
     }
 
@@ -1009,6 +1628,14 @@ class FakeInjectedWsSession {
   }
 
   async disconnect(): Promise<void> {
+  }
+
+  getAbandonedRequestCount(): number {
+    return 0;
+  }
+
+  clearAbandonedRequests(): number {
+    return 0;
   }
 
   async dispose(reason = "client_dispose"): Promise<void> {

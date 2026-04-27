@@ -29,6 +29,8 @@ public static class HubRpcMethods
 {
     public const string HubPing = "hub.ping";
 
+    public const string HubGetVersion = "hub.getVersion";
+
     public const string HubWsAuthenticate = "hub.ws.authenticate";
 
     public const string HubEvent = "hub.event";
@@ -54,6 +56,8 @@ public static class HubRpcMethods
     public const string HubAppsUnregisterInstance = "hub.apps.unregisterInstance";
 
     public const string HubAppsListInstances = "hub.apps.listInstances";
+
+    public const string HubAppsGetInstance = "hub.apps.getInstance";
 
     public const string HubAppsLaunch = "hub.apps.launch";
 

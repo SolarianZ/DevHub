@@ -28,20 +28,56 @@ export interface PingResult {
   echo?: JsonValue;
 }
 
+/**
+ * SDK 与 Host 的版本兼容状态。
+ */
+export type VersionCompatibilityStatus =
+  | "compatible"
+  | "updateRecommended"
+  | "incompatible"
+  | "unknown";
+
+/**
+ * 当前 SDK 与 Host 的版本兼容检查结果。
+ */
+export interface VersionCompatibilityResult {
+  /**
+   * 当前 SDK 的运行时版本。
+   */
+  sdkVersion: string;
+
+  /**
+   * 用于比较的 Host 版本。
+   * 当无法确定 Host 版本时返回 null。
+   */
+  hostVersion: string | null;
+
+  /**
+   * 版本兼容状态。
+   */
+  status: VersionCompatibilityStatus;
+}
+
 export interface AppCapabilities {
   rpc?: boolean;
   events?: boolean;
 }
 
 export interface LaunchConfiguration {
-  exePath?: string;
+  exePath: string;
   argsTemplate?: string;
   workingDirectory?: string;
   dedupeKeyTemplate?: string;
 }
 
+export interface AppDefinitionIdentity {
+  appId: string;
+  scope: string;
+}
+
 export interface AppDefinition {
   appId: string;
+  scope: string;
   displayName: string;
   description?: string;
   capabilities?: AppCapabilities;
@@ -68,7 +104,7 @@ export interface InvokeCapability {
 export interface AppInstance {
   instanceId: string;
   appId: string;
-  scope?: string | null;
+  scope: string;
   pid: number;
   registeredAtUtc: Date;
   lastSeenUtc: Date;
@@ -76,10 +112,14 @@ export interface AppInstance {
   meta?: JsonObject;
 }
 
+export interface RegisteredAppInstance extends AppInstance {
+  instanceSessionToken: string;
+}
+
 export interface AppInstanceRegistration {
   instanceId: string;
   appId: string;
-  scope?: string | null;
+  scope: string;
   pid: number;
   invoke: InvokeCapability;
   meta?: JsonObject;
@@ -87,9 +127,14 @@ export interface AppInstanceRegistration {
 
 export interface LaunchRequest {
   appId: string;
-  scope?: string | null;
+  scope: string;
   dedupeKey?: string | null;
   waitForRegisterMs?: number | null;
+}
+
+export interface ListDefinitionsRequest {
+  appId?: string;
+  scope: string | null;
 }
 
 export type LaunchStatus = "started" | "starting" | "already_running";
@@ -103,13 +148,12 @@ export interface LaunchResult {
 
 export interface ListInstancesRequest {
   appId?: string;
-  scope?: string | null;
+  scope: string | null;
   includeOffline?: boolean;
-  includeAllScopes?: boolean;
 }
 
 export interface InvocationTarget {
-  scope?: string | null;
+  scope: string;
   instanceId?: string | null;
 }
 
@@ -122,7 +166,7 @@ export interface InvocationOptions {
 
 export interface InvokeRequest {
   appId: string;
-  target?: InvocationTarget;
+  target: InvocationTarget;
   method: string;
   args?: JsonValue;
   options?: InvocationOptions;
@@ -139,8 +183,12 @@ export interface RequestResult {
   value: JsonValue;
 }
 
-export interface PollRequest {
+export interface InstanceOwnedRequest {
   instanceId: string;
+  instanceSessionToken: string;
+}
+
+export interface PollRequest extends InstanceOwnedRequest {
   maxCount?: number | null;
   waitMs?: number | null;
 }
@@ -160,7 +208,7 @@ export type InvocationKind = "request" | "notify";
 export interface Invocation {
   invocationId: string;
   appId: string;
-  target?: InvocationTarget;
+  target: InvocationTarget;
   method: string;
   args?: JsonValue;
   kind: InvocationKind;
@@ -176,12 +224,19 @@ export interface PollResult {
   items: Invocation[];
 }
 
-export interface RespondRequest {
-  instanceId: string;
+export interface RespondValueRequest extends InstanceOwnedRequest {
   invocationId: string;
-  value?: JsonValue;
-  error?: DevHubCalleeError;
+  value: JsonValue;
+  error?: never;
 }
+
+export interface RespondErrorRequest extends InstanceOwnedRequest {
+  invocationId: string;
+  value?: never;
+  error: DevHubCalleeError;
+}
+
+export type RespondRequest = RespondValueRequest | RespondErrorRequest;
 
 export interface DevHubEvent {
   subscriptionId: string;

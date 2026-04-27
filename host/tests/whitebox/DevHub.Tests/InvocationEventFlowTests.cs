@@ -43,10 +43,11 @@ public class InvocationEventFlowTests : IDisposable
         {
             InstanceId = "inst-event-success",
             AppId = "event.invoke.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 6101,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
+        var instanceSessionToken = GetInstanceSessionToken(appRegistry, "inst-event-success");
 
         var (handler, eventBus) = CreateHandler(appRegistry);
         PrepareSubscription(eventBus, "conn-invocation-success");
@@ -60,7 +61,7 @@ public class InvocationEventFlowTests : IDisposable
                 appId = "event.invoke.app",
                 target = new
                 {
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     instanceId = "inst-event-success"
                 },
                 method = "demo.notify",
@@ -83,6 +84,7 @@ public class InvocationEventFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-event-success",
+                instanceSessionToken,
                 maxCount = 1,
                 waitMs = 0
             })
@@ -102,6 +104,7 @@ public class InvocationEventFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-event-success",
+                instanceSessionToken,
                 invocationId,
                 value = new { ok = true }
             })
@@ -134,6 +137,7 @@ public class InvocationEventFlowTests : IDisposable
             Pid = 6102,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
+        var instanceSessionToken = GetInstanceSessionToken(appRegistry, "inst-event-failed");
 
         var (handler, eventBus) = CreateHandler(appRegistry);
         PrepareSubscription(eventBus, "conn-invocation-failed");
@@ -170,6 +174,7 @@ public class InvocationEventFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-event-failed",
+                instanceSessionToken,
                 maxCount = 1,
                 waitMs = 0
             })
@@ -186,6 +191,7 @@ public class InvocationEventFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-event-failed",
+                instanceSessionToken,
                 invocationId,
                 error = new
                 {
@@ -243,6 +249,12 @@ public class InvocationEventFlowTests : IDisposable
         eventBus.RegisterConnection(connectionId);
         Assert.True(eventBus.TryMarkAuthenticated(connectionId, "test-client", Guid.NewGuid().ToString("D")));
         Assert.True(eventBus.TrySubscribe(connectionId, null, out _));
+    }
+
+    private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)
+    {
+        return appRegistry.GetCurrentInstanceSessionToken(instanceId)
+               ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 }
 

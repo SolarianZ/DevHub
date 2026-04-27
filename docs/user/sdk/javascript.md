@@ -19,11 +19,13 @@ npm --prefix sdks/javascript ci
 npm --prefix sdks/javascript run build
 ```
 
-如果你希望模拟“发布资产消费”，可进一步执行：
+如需模拟“发布资产消费”，可进一步执行：
 
 ```bash
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 ```
+
+`DEVHUB_MONITOR_SDK_SOURCE=local-src` 是仓库内 `apps/monitor/` 与 `sdks/javascript/` 的源码联调机制，不属于外部调用方安装或消费 `JS/TS SDK` 的正式方式。面向发布包的调用方应优先使用已构建的 SDK 资产或 release tarball。
 
 ## 3. 入口分工
 
@@ -31,6 +33,8 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 - `@devhub/sdk-javascript/runtime`：Node.js 专用子路径，导出 `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 和 `DATA_DIR_ENV`。
 - 浏览器 / WebView：根入口可直接导入，但连接 Host 时必须显式注入自定义 `runtimeResolver`；官方支持路径是前端直接访问 Host，而不是通过原生层代理 `/rpc`。
 - Node.js：可直接调用 `DevHubClient.fromRuntime(...)` / `DevHubEventsClient.fromRuntime(...)` 使用默认文件系统发现，也可按需从 `@devhub/sdk-javascript/runtime` 导入文件系统发现辅助。
+- `DevHubEventsClient` / `JsonRpcWsSession` 会优先使用全局 `WebSocket`；仅当 Node 运行时缺少全局实现时，才会在运行时懒加载 `ws` 作为回退。该回退不会改变根入口的浏览器安全定位，也不应成为浏览器 / WebView 构建阶段的静态依赖。
+- 使用官方发布包时，Node 侧 `ws` 由 SDK 包依赖提供；若以仓库源码直接消费 SDK 且运行环境没有全局 `WebSocket`，则需要自行提供兼容实现或安装 `ws`。
 
 Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript/runtime`。
 
@@ -38,10 +42,11 @@ Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript
 
 - HTTP JSON-RPC：覆盖 `ping`、应用定义管理、实例管理、`launch`、`notify`、`request`、`poll`、`respond`。
 - WebSocket 事件：覆盖鉴权、订阅、取消订阅与 `hub.event` 事件流。
-- 统一错误模型：`DevHubRpcError` 以及 `reason`、`invocationId`、`calleeError` 等辅助属性。
+- 统一错误模型：`DevHubRpcError` 用于 JSON-RPC `error` 响应；`DevHubConnectionError` 用于超时、传输故障、非 `200` HTTP、非法响应和事件流终止等连接级失败。
 - 本地参数校验：对 `echo`、`args`、`meta`、`error.data` 等 JSON 载荷执行严格校验。
 - 闭集事件类型：公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供编译期约束。
 - 运行时上下文：当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
+- 已放弃请求本地维护：`DevHubEventsClient` 提供 `getAbandonedRequestCount(filter?)` 与 `clearAbandonedRequests(filter?)`，可按过滤器统计或清理本地已放弃请求记录。
 
 ## 5. 连接 Host
 
@@ -119,11 +124,38 @@ const client = await DevHubClient.fromRuntime(
 
 ## 6. 常见交互场景
 
-定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+### 6.1 事件流读取契约
+
+```ts
+import { APP_INSTANCE_REGISTERED } from "@devhub/sdk-javascript";
+
+await eventsClient.authenticate();
+const iterator = eventsClient.readEvents()[Symbol.asyncIterator]();
+const subscriptionId = await eventsClient.subscribe([APP_INSTANCE_REGISTERED]);
+
+try {
+  const first = await iterator.next();
+  if (!first.done) {
+    console.log(subscriptionId, first.value.type, first.value.payload);
+  }
+} finally {
+  await iterator.return?.();
+}
+```
+
+- 每个 `DevHubEventsClient` 实例同一时刻只允许一个活动中的 `readEvents()` 读取器；若业务需要多个消费者，应在调用方内部自行扇出。
+- 底层 WebSocket 终止或重新认证失败后，当前活动读取器仍可排空终止前已经进入缓冲的事件；后续新的 `readEvents()` 调用会在重新认证成功前直接失败。
+- 上述“直接失败”对外表现为 `DevHubConnectionError`；连接正常终止时 `kind === "session_terminated"`，若事件流或响应包本身不合法，则返回 `kind === "invalid_response"`。
+- 重新执行 `authenticate()` 只会建立新的事件流代次，不会恢复旧订阅；恢复事件交付时需要再次调用 `subscribe()`。
+
+### 6.2 定义与实例管理
+
+定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
 
 ```ts
 const definition = {
   appId: "sample.app",
+  scope: "",
   displayName: "Sample App",
   launch: {
     exePath: "python3",
@@ -136,16 +168,102 @@ if (validation.valid) {
   await client.upsertDefinition(definition);
 }
 
-const instance = await client.registerInstance({
+const registered = await client.registerInstance({
   instanceId: "sample-inst-1",
   appId: "sample.app",
+  scope: "",
   pid: process.pid,
   invoke: { poll: true, respond: true }
 }, "sample-instance-secret");
 
-await client.unregisterInstance(instance.instanceId, "sample-instance-secret");
-await client.deleteDefinition(definition.appId);
+const exactInstance = await client.getInstance("sample-inst-1");
+
+await client.unregisterInstance(registered.instanceId, registered.instanceSessionToken);
+await client.deleteDefinition({
+  appId: definition.appId,
+  scope: definition.scope
+});
 ```
+
+`getInstance(...)` 按精确 `instanceId` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则继续以现有 `DevHubRpcError` 语义暴露 `instance_not_found`。
+
+### 6.3 调用与响应对象形状
+
+```ts
+await client.request({
+  appId: "sample.app",
+  method: "sample.request",
+  target: {
+    scope: ""
+  }
+});
+
+await client.respond({
+  instanceId: "sample-inst-1",
+  instanceSessionToken: "sample-session-token",
+  invocationId: "invk-1",
+  value: {
+    ok: true
+  }
+});
+```
+
+- `InvokeRequest.target` 与 SDK 解析得到的 `Invocation.target` 都是必填字段，调用方不需要再为缺省 `target` 编写分支。
+- `AppDefinition.launch` 只要存在，就必须显式提供 `launch.exePath`。
+- `RespondRequest` 只接受“携带 `value`”或“携带 `error`”两种互斥形状之一，不能同时省略，也不能同时提供。
+
+### 6.4 已放弃请求维护
+
+```ts
+const total = eventsClient.getAbandonedRequestCount();
+
+const appScoped = eventsClient.getAbandonedRequestCount({
+  appId: "sample.app",
+  method: "hub.apps.getDefinition"
+});
+
+const removed = eventsClient.clearAbandonedRequests({
+  olderThanMs: 120_000
+});
+```
+
+- `getAbandonedRequestCount(filter?)` 返回当前匹配过滤条件的已放弃请求数量。
+- `clearAbandonedRequests(filter?)` 只移除匹配条件的本地记录，并返回本次实际移除数量。
+- `AbandonedRequestFilter` 支持 `olderThanMs`、`appId`、`method` 三个可选字段；同时提供多个字段时按逻辑与匹配。
+- 两个接口都只读取或修改当前 `DevHubEventsClient` 关联 WebSocket 会话中的本地 tombstone 记录，不发送 JSON-RPC 请求，不隐式重连，也不改变当前认证或订阅状态。
+- `appId` 匹配采用最佳努力规则：只有请求进入已放弃状态时能稳定识别 `appId` 的记录才会命中 `appId` 过滤条件。
+- 某条记录被手动清理后，如果服务端随后返回同一 `id` 的迟到响应，该响应会回到既有 unknown `response id` 故障语义，而不是继续被忽略。
+
+### 6.5 错误处理约定
+
+```ts
+import {
+  DevHubConnectionError,
+  DevHubRpcError,
+} from "@devhub/sdk-javascript";
+
+try {
+  await client.ping();
+} catch (error) {
+  if (error instanceof DevHubConnectionError) {
+    console.error("connection failure", error.kind, error.status, error.responseBody);
+    return;
+  }
+
+  if (error instanceof DevHubRpcError) {
+    console.error("rpc failure", error.code, error.reason, error.invocationId);
+    return;
+  }
+
+  throw error;
+}
+```
+
+- `DevHubRpcError` 表示 Host 已成功返回 JSON-RPC `error` 对象；调用方可继续读取 `code`、`knownCode`、`reason`、`invocationId`、`calleeError` 与 `tryGetDataProperty(...)`。
+- `DevHubConnectionError` 表示请求尚未进入有效业务结果阶段，或连接/会话已经失效。当前公开的 `kind` 包括：`timeout`、`transport`、`http_status`、`invalid_response`、`session_terminated`。
+- `timeout` 表示请求超时；`transport` 表示底层 `fetch`/WebSocket/网络栈失败；`http_status` 表示收到非 `200` HTTP 响应，并可结合 `status`、`statusText`、`responseBody` 诊断。
+- `invalid_response` 表示收到的 HTTP JSON-RPC 包、WebSocket 响应或事件通知不符合协议形状；此类错误通常意味着上游实现或中间链路返回了非法载荷。
+- `session_terminated` 表示事件流或 WebSocket 会话已经终止；对 `DevHubEventsClient` 而言，需要重新执行 `authenticate()`，并重新调用 `subscribe()` 恢复事件消费。
 
 ## 7. 高级扩展
 
@@ -184,6 +302,8 @@ const eventsClient = await DevHubEventsClient.fromRuntime(
   }
 );
 ```
+
+自定义 `JsonRpcEventSession` / `JsonRpcWsSession` 实现需要提供 `getAbandonedRequestCount(filter?)` 与 `clearAbandonedRequests(filter?)` 两个同步本地维护接口。这组接口属于当前公开 session 合同的一部分。
 
 ## 8. 最小验证方式
 

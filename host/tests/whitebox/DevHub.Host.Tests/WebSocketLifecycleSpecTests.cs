@@ -37,6 +37,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     [Theory]
     [Trait("SpecRef", "4.3")]
     [InlineData("hub.ping")]
+    [InlineData("hub.getVersion")]
     [InlineData("hub.events.subscribe")]
     public async Task Spec_4_3_FirstMessageNotAuthenticate_ShouldReturnUnauthorizedAndClose(string method)
     {
@@ -306,6 +307,18 @@ public class WebSocketLifecycleSpecTests : IDisposable
     {
         WriteDefinition("ws-supported.app");
         var context = CreateHostContext();
+        context.RegisterInstance(new AppInstance
+        {
+            InstanceId = "ws-supported.instance",
+            AppId = "ws-supported.app",
+            Scope = ScopeContract.Global,
+            Pid = 7101,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "ws-supported-password");
 
         var auth = CreateJson(new
         {
@@ -334,7 +347,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-list-definitions",
             method = "hub.apps.listDefinitions",
-            @params = new { }
+            @params = new { scope = (string?)null }
         });
 
         var getDefinition = CreateJson(new
@@ -342,7 +355,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-get-definition",
             method = "hub.apps.getDefinition",
-            @params = new { appId = "ws-supported.app" }
+            @params = new { appId = "ws-supported.app", scope = ScopeContract.Global }
         });
 
         var listInstances = CreateJson(new
@@ -350,10 +363,18 @@ public class WebSocketLifecycleSpecTests : IDisposable
             jsonrpc = "2.0",
             id = "ws-list-instances",
             method = "hub.apps.listInstances",
-            @params = new { includeAllScopes = true, includeOffline = true }
+            @params = new { scope = (string?)null, includeOffline = true }
         });
 
-        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances]);
+        var getInstance = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ws-get-instance",
+            method = "hub.apps.getInstance",
+            @params = new { instanceId = "ws-supported.instance" }
+        });
+
+        var socket = new ScriptedWebSocket([auth, ping, listDefinitions, getDefinition, listInstances, getInstance]);
         await context.InvokeWebSocketConnectionAsync(socket);
 
         var responses = ParseSentMessages(socket);
@@ -383,6 +404,14 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(listInstancesResponse.TryGetProperty("result", out var listInstancesResult));
         Assert.True(listInstancesResult.GetProperty("ok").GetBoolean());
         Assert.True(listInstancesResult.TryGetProperty("instances", out _));
+
+        var getInstanceResponse = FindResponseById(responses, "ws-get-instance");
+        Assert.True(getInstanceResponse.TryGetProperty("result", out var getInstanceResult));
+        Assert.True(getInstanceResult.GetProperty("ok").GetBoolean());
+        Assert.False(getInstanceResult.TryGetProperty("instanceSessionToken", out _));
+        var instance = getInstanceResult.GetProperty("instance");
+        Assert.Equal("ws-supported.instance", instance.GetProperty("instanceId").GetString());
+        Assert.False(instance.TryGetProperty("meta", out _));
     }
 
     [Fact]
@@ -636,6 +665,82 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(invalidRequestResponse.TryGetProperty("error", out var error));
         Assert.Equal(-32600, error.GetProperty("code").GetInt32());
         Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsNull_ShouldReturnVersion()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-get-version-null",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-get-version-client",
+                clientSessionId = "78787878-7878-7878-7878-787878787878"
+            }
+        });
+
+        const string getVersionRequest = """
+        {"jsonrpc":"2.0","id":"ws-get-version-null","method":"hub.getVersion","params":null}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, getVersionRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var authResponse = FindResponseById(responses, "auth-get-version-null");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var getVersionResponse = FindResponseById(responses, "ws-get-version-null");
+        Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
+        Assert.True(getVersionResponse.TryGetProperty("result", out var result));
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Matches(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:[-+][0-9A-Za-z.-]+)?$",
+            result.GetProperty("version").GetString()!);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-get-version-extra",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-get-version-client",
+                clientSessionId = "67676767-6767-6767-6767-676767676767"
+            }
+        });
+
+        const string getVersionRequest = """
+        {"jsonrpc":"2.0","id":"ws-get-version-extra","method":"hub.getVersion","params":{"verbose":true}}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, getVersionRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var getVersionResponse = FindResponseById(responses, "ws-get-version-extra");
+        Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
+        Assert.True(getVersionResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -1210,10 +1315,11 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     private void WriteDefinition(string appId)
     {
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {

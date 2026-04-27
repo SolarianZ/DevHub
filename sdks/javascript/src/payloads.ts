@@ -1,7 +1,9 @@
 import type {
   AppDefinition,
+  AppDefinitionIdentity,
   AppInstanceRegistration,
   InvokeRequest,
+  ListDefinitionsRequest,
   LaunchRequest,
   ListInstancesRequest,
   PollRequest,
@@ -9,6 +11,7 @@ import type {
 } from "./models.js";
 import {
   ensureAppId,
+  ensureScopeFilter,
   ensureInputBoolean,
   ensureInstanceId,
   ensureInvocationId,
@@ -19,14 +22,18 @@ import {
   ensureOptionalInputIntegerInRange,
   ensureOptionalInputRecord,
   ensureOptionalInputString,
-  ensureOptionalInputStringOrNull,
   ensureRequiredInputString,
-  ensureRequiredInputStringValue
+  ensureRequiredInputStringValue,
+  ensureScopedString
 } from "./validation.js";
 
-export function buildGetDefinitionParams(appId: string): Record<string, unknown> {
+export function buildGetDefinitionParams(identity: AppDefinitionIdentity): Record<string, unknown> {
+  return buildDefinitionIdentityPayload(identity, "identity");
+}
+
+export function buildGetInstanceParams(instanceId: string): Record<string, unknown> {
   return {
-    appId: ensureAppId(appId, "appId")
+    instanceId: ensureInstanceId(instanceId, "instanceId")
   };
 }
 
@@ -42,10 +49,8 @@ export function buildUpsertDefinitionParams(definition: AppDefinition): Record<s
   };
 }
 
-export function buildDeleteDefinitionParams(appId: string): Record<string, unknown> {
-  return {
-    appId: ensureAppId(appId, "appId")
-  };
+export function buildDeleteDefinitionParams(identity: AppDefinitionIdentity): Record<string, unknown> {
+  return buildDefinitionIdentityPayload(identity, "identity");
 }
 
 export function buildRegisterInstanceParams(
@@ -58,7 +63,7 @@ export function buildRegisterInstanceParams(
 
   const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
   const appId = ensureAppId(instance.appId, "appId");
-  const scope = ensureOptionalInputStringOrNull(instance.scope, "scope");
+  const scope = ensureScopedString(instance.scope, "scope");
   const normalizedPassword = ensureRequiredInputString(password, "password");
 
   if (!instance.invoke) {
@@ -77,6 +82,7 @@ export function buildRegisterInstanceParams(
     instance: {
       instanceId,
       appId,
+      scope,
       pid: instance.pid,
       invoke: {
         poll,
@@ -85,10 +91,6 @@ export function buildRegisterInstanceParams(
     }
   };
 
-  if (scope !== undefined && scope !== null) {
-    (payload.instance as Record<string, unknown>).scope = scope;
-  }
-
   if (instance.meta !== undefined) {
     (payload.instance as Record<string, unknown>).meta = ensureJsonObject(instance.meta, "meta");
   }
@@ -96,39 +98,49 @@ export function buildRegisterInstanceParams(
   return payload;
 }
 
-export function buildHeartbeatParams(instanceId: string): Record<string, unknown> {
-  return {
-    instanceId: ensureInstanceId(instanceId, "instanceId")
-  };
-}
-
-export function buildUnregisterParams(instanceId: string, password: string): Record<string, unknown> {
+export function buildHeartbeatParams(instanceId: string, instanceSessionToken: string): Record<string, unknown> {
   return {
     instanceId: ensureInstanceId(instanceId, "instanceId"),
-    password: ensureRequiredInputString(password, "password")
+    instanceSessionToken: ensureRequiredInputString(instanceSessionToken, "instanceSessionToken")
   };
 }
 
-export function buildListInstancesParams(request?: ListInstancesRequest): Record<string, unknown> | undefined {
+export function buildUnregisterParams(instanceId: string, instanceSessionToken: string): Record<string, unknown> {
+  return {
+    instanceId: ensureInstanceId(instanceId, "instanceId"),
+    instanceSessionToken: ensureRequiredInputString(instanceSessionToken, "instanceSessionToken")
+  };
+}
+
+export function buildListDefinitionsParams(request: ListDefinitionsRequest): Record<string, unknown> {
   if (!request) {
-    return undefined;
+    throw new Error("request cannot be empty.");
   }
 
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = {
+    scope: ensureScopeFilter(request.scope, "scope")
+  };
   const appIdRaw = ensureOptionalInputString(request.appId, "appId", false);
   const appId = appIdRaw === undefined ? undefined : ensureAppId(appIdRaw, "appId");
   if (appId !== undefined) {
     payload.appId = appId;
   }
 
-  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
-  if (scope !== undefined) {
-    payload.scope = scope;
+  return payload;
+}
+
+export function buildListInstancesParams(request: ListInstancesRequest): Record<string, unknown> {
+  if (!request) {
+    throw new Error("request cannot be empty.");
   }
 
-  const includeAllScopes = ensureOptionalInputBoolean(request.includeAllScopes, "includeAllScopes");
-  if (includeAllScopes !== undefined) {
-    payload.includeAllScopes = includeAllScopes;
+  const payload: Record<string, unknown> = {
+    scope: ensureScopeFilter(request.scope, "scope")
+  };
+  const appIdRaw = ensureOptionalInputString(request.appId, "appId", false);
+  const appId = appIdRaw === undefined ? undefined : ensureAppId(appIdRaw, "appId");
+  if (appId !== undefined) {
+    payload.appId = appId;
   }
 
   const includeOffline = ensureOptionalInputBoolean(request.includeOffline, "includeOffline");
@@ -136,7 +148,7 @@ export function buildListInstancesParams(request?: ListInstancesRequest): Record
     payload.includeOffline = includeOffline;
   }
 
-  return Object.keys(payload).length > 0 ? payload : undefined;
+  return payload;
 }
 
 export function buildLaunchParams(request: LaunchRequest): Record<string, unknown> {
@@ -145,7 +157,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
   }
 
   const appId = ensureAppId(request.appId, "appId");
-  const scope = ensureOptionalInputStringOrNull(request.scope, "scope");
+  const scope = ensureScopedString(request.scope, "scope");
   const dedupeKey = ensureOptionalInputString(request.dedupeKey, "dedupeKey", false);
   const waitForRegisterMs = ensureOptionalInputIntegerAtLeast(
     request.waitForRegisterMs,
@@ -154,10 +166,7 @@ export function buildLaunchParams(request: LaunchRequest): Record<string, unknow
     "waitForRegisterMs 必须为大于等于 0 的整数。"
   );
 
-  const payload: Record<string, unknown> = { appId };
-  if (scope !== undefined && scope !== null) {
-    payload.scope = scope;
-  }
+  const payload: Record<string, unknown> = { appId, scope };
 
   if (dedupeKey !== undefined && dedupeKey !== null) {
     payload.dedupeKey = dedupeKey;
@@ -179,7 +188,11 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
   const method = ensureRequiredInputString(request.method, "method");
   const target = ensureOptionalInputRecord(request.target, "target");
   const options = ensureOptionalInputRecord(request.options, "options");
-  const targetScope = ensureOptionalInputStringOrNull(target?.scope, "target.scope");
+  if (target === undefined) {
+    throw new Error("target cannot be empty.");
+  }
+
+  const targetScope = ensureScopedString(target.scope, "target.scope");
   const targetInstanceIdRaw = ensureOptionalInputString(
     target?.instanceId,
     "target.instanceId",
@@ -245,12 +258,10 @@ export function buildInvokeParams(request: InvokeRequest, isRequest: boolean): R
     (payload.options as Record<string, unknown>).waitTimeoutMs = waitTimeoutMs;
   }
 
-  if (target !== undefined) {
-    payload.target = {
-      scope: targetScope ?? null,
-      instanceId: targetInstanceId ?? null
-    };
-  }
+  payload.target = {
+    scope: targetScope,
+    instanceId: targetInstanceId ?? null
+  };
 
   return payload;
 }
@@ -261,6 +272,7 @@ export function buildPollParams(request: PollRequest): Record<string, unknown> {
   }
 
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
+  const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const maxCount = ensureOptionalInputIntegerInRange(
     request.maxCount,
     "maxCount",
@@ -277,6 +289,7 @@ export function buildPollParams(request: PollRequest): Record<string, unknown> {
 
   return {
     instanceId,
+    instanceSessionToken,
     maxCount,
     waitMs
   };
@@ -288,6 +301,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   }
 
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
+  const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const invocationId = ensureInvocationId(request.invocationId, "invocationId");
 
   const hasValue = request.value !== undefined;
@@ -298,6 +312,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
 
   const payload: Record<string, unknown> = {
     instanceId,
+    instanceSessionToken,
     invocationId
   };
 
@@ -331,6 +346,7 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
 
   const payload: Record<string, unknown> = {
     appId: ensureAppId(definition.appId, "definition.appId"),
+    scope: ensureScopedString(definition.scope, "definition.scope"),
     displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
   };
 
@@ -385,4 +401,15 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
   }
 
   return payload;
+}
+
+function buildDefinitionIdentityPayload(identity: AppDefinitionIdentity, propertyName: string): Record<string, unknown> {
+  if (!identity || typeof identity !== "object" || Array.isArray(identity)) {
+    throw new Error(`${propertyName} cannot be empty.`);
+  }
+
+  return {
+    appId: ensureAppId(identity.appId, `${propertyName}.appId`),
+    scope: ensureScopedString(identity.scope, `${propertyName}.scope`)
+  };
 }

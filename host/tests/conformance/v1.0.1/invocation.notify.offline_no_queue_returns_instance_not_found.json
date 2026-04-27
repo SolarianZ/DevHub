@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.no-queue.json",
+        "fileName": "invoke.notify.no-queue--global.json",
         "definition": {
           "appId": "invoke.notify.no-queue",
+          "scope": "",
           "displayName": "invoke.notify.no-queue"
         }
       }
@@ -23,6 +24,9 @@
       "options": {
         "queueIfOffline": false,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

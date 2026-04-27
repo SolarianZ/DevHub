@@ -12,3 +12,4 @@ export {
 } from "./event-types.js";
 export type { DevHubEventType } from "./event-types.js";
 export { DevHubEventsClient } from "./events-client.js";
+export type { AbandonedRequestFilter } from "./events-client.js";

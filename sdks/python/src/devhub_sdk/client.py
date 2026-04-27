@@ -5,18 +5,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from . import _versioning
 from ._http_transport import JsonRpcHttpTransport, UrllibJsonRpcHttpTransport
+from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._parsing import (
-    parse_app_instance,
     parse_datetime,
     parse_definition_validation_result,
     parse_definition_result,
     parse_definitions_result,
+    parse_host_version_result,
+    parse_instance_result,
     parse_instances_result,
     parse_launch_result,
     parse_notify_result,
     parse_ping_result,
     parse_poll_result,
+    parse_register_instance_result,
     parse_request_result,
     require_bool,
     require_mapping,
@@ -24,8 +28,10 @@ from ._parsing import (
 from ._payloads import (
     build_delete_definition_params,
     build_get_definition_params,
+    build_get_instance_params,
     build_heartbeat_params,
     build_launch_params,
+    build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
     build_notify_params,
@@ -45,6 +51,7 @@ from .models import (
     DevHubClientOptions,
     HubRuntime,
     InvokeRequest,
+    ListDefinitionsRequest,
     LaunchRequest,
     LaunchResult,
     ListInstancesRequest,
@@ -55,6 +62,7 @@ from .models import (
     RequestResult,
     RespondRequest,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
@@ -136,17 +144,44 @@ class DevHubClient:
         result = self._send("hub.ping", params)
         return parse_ping_result(result, path="hub.ping.result")
 
-    def list_definitions(self) -> list[AppDefinition]:
+    def get_host_version(self) -> str:
+        """调用 `hub.getVersion` 并返回当前 Host 版本。"""
+
+        result = self._send("hub.getVersion", None)
+        return parse_host_version_result(result, path="hub.getVersion.result")
+
+    def check_version_compatibility(self) -> VersionCompatibilityResult:
+        """检查当前 SDK 与已连接 Host 的版本兼容性。"""
+
+        try:
+            host_version = self.get_host_version()
+        except DevHubRpcException as exc:
+            if not exc.is_code(DevHubRpcErrorCode.METHOD_NOT_FOUND):
+                raise
+            host_version = self.runtime.hub_version
+
+        return _versioning.evaluate_version_compatibility(
+            _versioning.get_sdk_version(),
+            host_version,
+        )
+
+    def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """调用 `hub.apps.listDefinitions`。"""
 
-        result = self._send("hub.apps.listDefinitions", None)
+        result = self._send("hub.apps.listDefinitions", build_list_definitions_params(request))
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    def get_definition(self, app_id: str) -> AppDefinition:
-        """调用 `hub.apps.getDefinition`。"""
+    def get_definition(self, app_id: str, scope: str) -> AppDefinition:
+        """调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
-        result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id))
+        result = self._send("hub.apps.getDefinition", build_get_definition_params(app_id, scope))
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
+
+    def get_instance(self, instance_id: str) -> AppInstance:
+        """调用 `hub.apps.getInstance`，按 `instanceId` 精确读取实例快照。"""
+
+        result = self._send("hub.apps.getInstance", build_get_instance_params(instance_id))
+        return parse_instance_result(result, path="hub.apps.getInstance.result")
 
     def validate_definition(self, definition: AppDefinition) -> DefinitionValidationResult:
         """调用 `hub.apps.validateDefinition`。"""
@@ -160,10 +195,10 @@ class DevHubClient:
         result = self._send("hub.apps.upsertDefinition", build_upsert_definition_params(definition))
         return parse_definition_result(result, path="hub.apps.upsertDefinition.result")
 
-    def delete_definition(self, app_id: str) -> None:
-        """调用 `hub.apps.deleteDefinition`。"""
+    def delete_definition(self, app_id: str, scope: str) -> None:
+        """调用 `hub.apps.deleteDefinition`，按 `appId + scope` 精确删除 Definition。"""
 
-        result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id))
+        result = self._send("hub.apps.deleteDefinition", build_delete_definition_params(app_id, scope))
         root = require_mapping(result, "hub.apps.deleteDefinition.result")
         if not require_bool(root, "ok", "hub.apps.deleteDefinition.result"):
             raise RuntimeError("hub.apps.deleteDefinition.result 返回结果非法。")
@@ -172,15 +207,12 @@ class DevHubClient:
         """调用 `hub.apps.registerInstance`。"""
 
         result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password))
-        root = require_mapping(result, "hub.apps.registerInstance.result")
-        if not require_bool(root, "ok", "hub.apps.registerInstance.result"):
-            raise RuntimeError("hub.apps.registerInstance.result 返回结果非法。")
-        return parse_app_instance(root.get("instance"), path="hub.apps.registerInstance.result.instance")
+        return parse_register_instance_result(result, path="hub.apps.registerInstance.result")
 
-    def heartbeat(self, instance_id: str) -> datetime:
+    def heartbeat(self, instance_id: str, instance_session_token: str) -> datetime:
         """调用 `hub.apps.heartbeat`。"""
 
-        result = self._send("hub.apps.heartbeat", build_heartbeat_params(instance_id))
+        result = self._send("hub.apps.heartbeat", build_heartbeat_params(instance_id, instance_session_token))
         root = require_mapping(result, "hub.apps.heartbeat.result")
         if not require_bool(root, "ok", "hub.apps.heartbeat.result"):
             raise RuntimeError("hub.apps.heartbeat.result 返回结果非法。")
@@ -189,15 +221,18 @@ class DevHubClient:
             raise RuntimeError("hub.apps.heartbeat.result.lastSeenUtc 类型非法。")
         return parse_datetime(last_seen, "hub.apps.heartbeat.result.lastSeenUtc")
 
-    def unregister_instance(self, instance_id: str, password: str) -> None:
+    def unregister_instance(self, instance_id: str, instance_session_token: str) -> None:
         """调用 `hub.apps.unregisterInstance`。"""
 
-        result = self._send("hub.apps.unregisterInstance", build_unregister_params(instance_id, password))
+        result = self._send(
+            "hub.apps.unregisterInstance",
+            build_unregister_params(instance_id, instance_session_token),
+        )
         root = require_mapping(result, "hub.apps.unregisterInstance.result")
         if not require_bool(root, "ok", "hub.apps.unregisterInstance.result"):
             raise RuntimeError("hub.apps.unregisterInstance.result 返回结果非法。")
 
-    def list_instances(self, request: ListInstancesRequest | None = None) -> list[AppInstance]:
+    def list_instances(self, request: ListInstancesRequest) -> list[AppInstance]:
         """调用 `hub.apps.listInstances`。"""
 
         result = self._send("hub.apps.listInstances", build_list_instances_params(request))

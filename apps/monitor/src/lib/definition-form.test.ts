@@ -5,12 +5,14 @@ import {
   definitionFormToModel,
   definitionToForm,
   mapValidationIssues,
+  validateDefinitionIdentifiers,
 } from "./definition-form";
 
 describe("definition-form helpers", () => {
-  it("omits empty optional fields when converting a form to a definition", () => {
+  it("converts canonical identifiers while still trimming non-identifier text fields", () => {
     const form = createEmptyDefinitionForm();
-    form.appId = " sample.app ";
+    form.appId = "Sample.App_01";
+    form.scope = "";
     form.displayName = " Sample App ";
     form.description = "   ";
     form.enableEvents = true;
@@ -19,7 +21,8 @@ describe("definition-form helpers", () => {
     form.launchArgsTemplate = "   ";
 
     expect(definitionFormToModel(form)).toEqual<AppDefinition>({
-      appId: "sample.app",
+      appId: "Sample.App_01",
+      scope: "",
       displayName: "Sample App",
       capabilities: {
         rpc: true,
@@ -31,9 +34,26 @@ describe("definition-form helpers", () => {
     });
   });
 
+  it("preserves raw identifier input without implicit normalization", () => {
+    const form = createEmptyDefinitionForm();
+    form.appId = " sample.app ";
+    form.scope = " workspace-a ";
+    form.displayName = "Sample App";
+
+    expect(definitionFormToModel(form)).toEqual<AppDefinition>({
+      appId: " sample.app ",
+      scope: " workspace-a ",
+      displayName: "Sample App",
+      capabilities: {
+        rpc: true,
+      },
+    });
+  });
+
   it("restores launch and capability state when loading a definition into the form", () => {
     const definition: AppDefinition = {
       appId: "demo.app",
+      scope: "workspace-a",
       displayName: "Demo",
       description: "Monitor test definition",
       capabilities: {
@@ -50,6 +70,7 @@ describe("definition-form helpers", () => {
 
     expect(definitionToForm(definition)).toEqual({
       appId: "demo.app",
+      scope: "workspace-a",
       displayName: "Demo",
       description: "Monitor test definition",
       enableRpc: false,
@@ -59,6 +80,52 @@ describe("definition-form helpers", () => {
       launchArgsTemplate: "--headless",
       launchWorkingDirectory: "/tmp",
       launchDedupeKeyTemplate: "demo",
+    });
+  });
+
+  it("accepts only the latest canonical appId and scope grammar", () => {
+    expect(validateDefinitionIdentifiers({
+      appId: "Sample.App_01",
+      scope: "Workspace-A.v2",
+    })).toEqual({});
+
+    expect(validateDefinitionIdentifiers({
+      appId: ".sample.app",
+      scope: "Workspace-A.v2",
+    })).toEqual({
+      "definition.appId": [
+        {
+          path: "definition.appId",
+          code: "format",
+          message: "appId 格式不合法。",
+        },
+      ],
+    });
+
+    expect(validateDefinitionIdentifiers({
+      appId: "Sample.App_01",
+      scope: "workspace.",
+    })).toEqual({
+      "definition.scope": [
+        {
+          path: "definition.scope",
+          code: "format",
+          message: "scope 格式不合法。",
+        },
+      ],
+    });
+
+    expect(validateDefinitionIdentifiers({
+      appId: "  ",
+      scope: "",
+    })).toEqual({
+      "definition.appId": [
+        {
+          path: "definition.appId",
+          code: "required",
+          message: "appId 不能为空。",
+        },
+      ],
     });
   });
 

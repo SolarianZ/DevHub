@@ -1,14 +1,15 @@
 {
   "id": "events.disconnect_cleanup_requires_resubscribe",
   "caseId": "CONF-007",
-  "description": "首个连接断开后订阅状态必须被清理，第二个连接只有重新订阅后才会收到新事件。", 
+  "description": "首个连接断开后订阅状态必须被清理，第二个连接只有重新订阅后才会收到新事件。",
   "transport": "ws",
   "setup": {
     "definitions": [
       {
-        "fileName": "events.disconnect.cleanup.json",
+        "fileName": "events.disconnect.cleanup--global.json",
         "definition": {
           "appId": "events.disconnect.cleanup",
+          "scope": "",
           "displayName": "events.disconnect.cleanup"
         }
       }
@@ -57,7 +58,7 @@
         "instance": {
           "instanceId": "events-disconnect-window-inst-1",
           "appId": "events.disconnect.cleanup",
-          "scope": null,
+          "scope": "",
           "pid": 33003,
           "invoke": {
             "poll": true,
@@ -80,7 +81,7 @@
         "instance": {
           "instanceId": "events-disconnect-window-inst-2",
           "appId": "events.disconnect.cleanup",
-          "scope": null,
+          "scope": "",
           "pid": 33004,
           "invoke": {
             "poll": true,
@@ -106,7 +107,8 @@
         "type": "app.instance.registered",
         "payload": {
           "appId": "events.disconnect.cleanup",
-          "instanceId": "events-disconnect-window-inst-2"
+          "instanceId": "events-disconnect-window-inst-2",
+          "scope": ""
         }
       }
     }

@@ -25,6 +25,14 @@ public interface IDefinitionProvider
     /// 获取指定应用定义。
     /// </summary>
     /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域；空字符串表示 Global。</param>
     /// <returns>匹配的定义，不存在时返回 <c>null</c>。</returns>
-    AppDefinition? GetDefinition(string appId);
+    AppDefinition? GetDefinition(string appId, string scope);
+
+    /// <summary>
+    /// 判断指定 appId 是否存在任意 Definition。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <returns>存在任意 Definition 时返回 <c>true</c>。</returns>
+    bool HasDefinitions(string appId);
 }

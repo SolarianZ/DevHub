@@ -5,6 +5,7 @@
 ## 入口导航
 
 - [`quickstart.md`](./quickstart.md)：Host 快速上手、运行时发现、最小 `hub.ping` 验证与相关文档导航。
+- [`api-reference.md`](./api-reference.md)：Host 网络接口速览、方法能力说明与参数用途说明。
 - [`../../developer/operations/deployment.md`](../../developer/operations/deployment.md)：部署、发布、运行时数据目录和上线后检查项。
 - [`../../../apps/monitor/README.md`](../../../apps/monitor/README.md)：桌面 GUI 方式查看 Host 状态、定义、实例与日志。
 - [`../../specification/protocol/Specification.md`](../../specification/protocol/Specification.md)：`hub.json`、`tokenFile` 与公开协议行为的权威来源。

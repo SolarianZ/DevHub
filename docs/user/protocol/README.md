@@ -2,7 +2,7 @@
 
 本文面向不准备直接使用仓库内 `.NET` / `JS/TS` / `Python` SDK 的第三方开发者，说明如何仅基于公开协议资料完成 DevHub Hub v1.x 的原始接入与自测。
 
-如果你只是需要先启动 Host 或对照官方 SDK 的最小上手路径，可先阅读：
+仅需先启动 Host 或对照官方 SDK 的最小上手路径时，可先阅读：
 
 - [`../host/quickstart.md`](../host/quickstart.md)
 - [`../sdk/README.md`](../sdk/README.md)
@@ -13,7 +13,7 @@
 - 本文只整理“不依赖 SDK 源代码”的最小接入路径，不扩展或重写任何协议语义。
 - 当前兼容基线为 `protocolVersion=1`，适用 Hub v1.x。
 
-如果你已经有自己的 HTTP、WebSocket 与 JSON 处理栈，只需组合下列公开资料即可完成接入：
+已具备自有 HTTP、WebSocket 与 JSON 处理栈时，只需组合下列公开资料即可完成接入：
 
 - [`Specification.md`](../../specification/protocol/Specification.md)
 - [`docs/specification/schema/v1.0.1/README.md`](../../specification/schema/v1.0.1/README.md)
@@ -44,6 +44,8 @@
 │   └── instances/
 └── logs/
 ```
+
+其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: ""` 与 `scopeKey = global`；显式作用域 Definition 使用首尾均不含空白字符的非空 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、`scope: null` 或首尾包含空白字符的 `scope` 都不属于合法 Definition 资产。
 
 `hub.json` 至少需要读取这些字段：
 
@@ -76,6 +78,13 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - 浏览器 / WebView 首次向 `/rpc` 发起带 `Origin` 的调用时，Host 会先处理 `OPTIONS /rpc` 预检，回显当前请求 `Origin`，并声明 `POST`、`OPTIONS` 以及 `Authorization`、`Content-Type`、`X-DevHub-Protocol`、`X-DevHub-ClientId`、`X-DevHub-ClientSessionId` 可用于后续正式请求。
 - 实际 `POST /rpc` 仍必须携带本节列出的全部协议头与 Bearer Token；无论 RPC 结果成功还是返回 JSON-RPC `error`，带 `Origin` 的响应都可以读取原始响应体。
 
+JSON-RPC 信封约束：
+
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
+- notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
+- `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
+
 最小健康检查可以直接调用 `hub.ping`。原始 JSON 示例见：
 
 - [`ping.request.json`](../../specification/protocol-examples/v1.0.1/http/ping.request.json)
@@ -83,6 +92,10 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 
 如果要接入定义管理、实例注册与调用链路，可继续参考：
 
+- [`list-definitions.null-scope.request.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.null-scope.request.json)
+- [`list-definitions.global.request.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.global.request.json)
+- [`list-definitions.success.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.success.json)
+- [`list-definitions.global.success.json`](../../specification/protocol-examples/v1.0.1/http/list-definitions.global.success.json)
 - [`get-definition.request.json`](../../specification/protocol-examples/v1.0.1/http/get-definition.request.json)
 - [`get-definition.success.json`](../../specification/protocol-examples/v1.0.1/http/get-definition.success.json)
 - [`validate-definition.valid.request.json`](../../specification/protocol-examples/v1.0.1/http/validate-definition.valid.request.json)
@@ -96,16 +109,33 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 - [`delete-definition.success.json`](../../specification/protocol-examples/v1.0.1/http/delete-definition.success.json)
 - [`register-instance.request.json`](../../specification/protocol-examples/v1.0.1/http/register-instance.request.json)
 - [`register-instance.success.json`](../../specification/protocol-examples/v1.0.1/http/register-instance.success.json)
+- [`heartbeat.request.json`](../../specification/protocol-examples/v1.0.1/http/heartbeat.request.json)
+- [`heartbeat.success.json`](../../specification/protocol-examples/v1.0.1/http/heartbeat.success.json)
+- [`list-instances.null-scope.request.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.null-scope.request.json)
+- [`list-instances.global.request.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.global.request.json)
+- [`list-instances.success.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.success.json)
+- [`list-instances.global.success.json`](../../specification/protocol-examples/v1.0.1/http/list-instances.global.success.json)
 - [`unregister-instance.request.json`](../../specification/protocol-examples/v1.0.1/http/unregister-instance.request.json)
 - [`unregister-instance.success.json`](../../specification/protocol-examples/v1.0.1/http/unregister-instance.success.json)
+- [`invoke-notify.notification.request.json`](../../specification/protocol-examples/v1.0.1/http/invoke-notify.notification.request.json)
 - [`invoke-request.request.json`](../../specification/protocol-examples/v1.0.1/http/invoke-request.request.json)
 - [`invoke-request.success.json`](../../specification/protocol-examples/v1.0.1/http/invoke-request.success.json)
+- [`invoke-poll.request.json`](../../specification/protocol-examples/v1.0.1/http/invoke-poll.request.json)
+- [`invoke-respond.request.json`](../../specification/protocol-examples/v1.0.1/http/invoke-respond.request.json)
 
 其中：
 
+- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`。
 - `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
+- `hub.apps.listDefinitions` 支持可选 `appId` 过滤，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global Definition，其他合法字符串按精确作用域过滤。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
-- `hub.apps.registerInstance` / `hub.apps.unregisterInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中。
+- `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，并显式提供合法字符串 `scope`；仅按 `appId` 或使用 `scope: null` 都不是合法的 Definition 定位方式。
+- `hub.apps.registerInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；注册成功后，结果顶层会返回 `instanceSessionToken`，供 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 作为实例所有权凭据复用；该 token 不会出现在 `AppInstance`、`hub.apps.listInstances` 或事件载荷中。
+- `hub.apps.listInstances` 支持可选 `appId` 与 `includeOffline`，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global 实例，其他合法字符串按精确作用域过滤。
+- 只有 `hub.apps.listDefinitions.scope` 与 `hub.apps.listInstances.scope` 接受 `scope: null` 表示“不限制作用域”，且这两个接口也必须显式携带 `scope` 字段。
+- `hub.apps.launch.scope` 与 `hub.invoke.*.target.scope` 都必须显式给出合法字符串；`scope: ""` 表示仅限 Global，缺失 `scope` 或使用 `scope: null` 都属于非法请求。
+- `hub.invoke.notify` 带 `id` 调用时属于普通 request，成功响应体可读取 `{ "ok": true, "invocationId": "..." }`，失败时返回 JSON-RPC `error`。
+- `hub.invoke.notify` 如果按 JSON-RPC notification 方式省略 `id`，HTTP 层固定返回空的 `200 OK` 响应体；本次响应无法携带业务错误码或错误对象，需要读取 JSON-RPC 成功结果或错误时，必须改为发送带 `id` 的普通 request。
 - 浏览器 / WebView 预检成功仅代表 `/rpc` 可建立 HTTP 会话；WebSocket 连接与 `hub.ws.authenticate` 仍按协议规范单独处理。
 
 ## 4. WebSocket 鉴权与事件订阅
@@ -168,21 +198,25 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 
 - [`invoke-request.invocation-failed.error.json`](../../specification/protocol-examples/v1.0.1/http/invoke-request.invocation-failed.error.json)
 
-定义管理与实例密码场景还需要额外处理以下分支：
+定义管理与实例所有权场景还需要额外处理以下分支：
 
+- `hub.apps.validateDefinition` 中，`definition.scope` 缺失、为 `null` 或为非法字符串时，会进入定义校验失败结果，而不是 JSON-RPC `error`。
 - `hub.apps.upsertDefinition` 的业务校验失败走 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下携带 `errors: ValidationIssue[]`。
-- `hub.apps.unregisterInstance` 或同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
-- `hub.apps.deleteDefinition` 删除未知定义时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 中回传请求目标。
+- 除 `hub.apps.listDefinitions`、`hub.apps.listInstances`、`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` 的 Definition 校验分支外，其余带 `scope` / `target.scope` 的请求在缺失该字段或传入 `null` 时都返回 `-32602 invalid_params`。
+- 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
+- `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 在 `instanceSessionToken` 不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_session_token_mismatch"`。
+- `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 查找未知 Definition 时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 与 `error.data.scope` 中回传请求目标。
 
 ### 5.3 客户端兼容建议
 
 - 必须忽略未知响应字段。
 - 必须将未知错误码按通用错误处理，而不是直接崩溃。
 - 必须把 HTTP 状态码 `200 OK` 与 JSON-RPC `error` 区分开看：HTTP 成功不代表 RPC 成功。
+- 必须区分“HTTP 空 `200` notification 响应”和“带 JSON-RPC `result` 或 `error` 的普通 request 响应”；`hub.invoke.notify` 若省略 `id`，空响应体仅表示 notification 路径已结束，不能据此判断业务成功或失败。
 
 ## 6. Schema 与原始协议示例
 
-如果你需要做严格输入输出校验，可直接消费仓库内发布的 v1.0.1 Schema：
+如需做严格输入输出校验，可直接消费仓库内发布的 v1.0.1 Schema：
 
 - [`docs/specification/schema/v1.0.1/README.md`](../../specification/schema/v1.0.1/README.md)
 
@@ -196,28 +230,28 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - `rpc-response.json`
 - `error-response.json`
 
-如果你需要快速拼接请求或对照消息形态，请优先使用：
+如需快速拼接请求或对照消息形态，请优先使用：
 
 - [`docs/specification/protocol-examples/v1.0.1/README.md`](../../specification/protocol-examples/v1.0.1/README.md)
 
 ## 7. Conformance 自测入口
 
-仓库内的 conformance 向量面向 Spec v1.0.1 协议基线。你可以用它验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
+仓库内的 conformance 向量面向 Spec v1.0.1 协议基线，可用于验证自研实现或自研客户端接入是否满足 Spec §10.1 / §10.2。
 
 使用说明见：
 
 - [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)
 
-如果你只是要复用官方向量与 runner 来验证“自研 adapter / 自研客户端”，最小前提是先构建 Host，并准备一个外部 adapter manifest：
+如仅需复用官方向量与 runner 来验证“自研 adapter / 自研客户端”，最小前提是先构建 Host，并准备一个外部 adapter manifest：
 
 ```bash
 dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release
 python host/tests/conformance/vector_runner.py --adapter-manifest path/to/devhub.adapter.json
 ```
 
-manifest 需要声明你的 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源代码或参考官方适配器实现细节。
+manifest 需要声明 adapter 启动命令；runner 会在命令末尾自动追加 `execution-context.json` 路径，并通过 `DEVHUB_CONFORMANCE_CONTEXT` 环境变量暴露同一路径。第三方 adapter 只需要遵守 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md) 中的 Manifest 与输入/输出契约，不需要阅读仓库内 SDK 源代码或参考官方适配器实现细节。
 
-如果你只想聚焦某条向量，可运行：
+如只想聚焦某条向量，可运行：
 
 ```bash
 python host/tests/conformance/vector_runner.py \
@@ -225,7 +259,7 @@ python host/tests/conformance/vector_runner.py \
   --vector-id auth.valid_credentials_ping_success
 ```
 
-如果你想按签名案例分组过滤，可运行：
+如需按签名案例分组过滤，可运行：
 
 ```bash
 python host/tests/conformance/vector_runner.py \
@@ -233,7 +267,7 @@ python host/tests/conformance/vector_runner.py \
   --case-id CONF-001
 ```
 
-如果你想把第三方实现与仓库内官方适配器一起对照跑，再额外准备官方 SDK 产物，并显式传入：
+如需将第三方实现与仓库内官方适配器一起对照运行，再额外准备官方 SDK 产物，并显式传入：
 
 ```bash
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
@@ -253,6 +287,8 @@ python host/tests/conformance/vector_runner.py \
 - 当前公开基线是 `protocolVersion=1`，适用于 Hub v1.x。
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
+
+当前 v1.x 的 `scope` 基线已经固定为：Definition 持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，其中 `scope: ""` 是 Global 的唯一显式表示；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch` 与 `hub.invoke.*` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope: null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段。
 
 `Specification.md` §9 中允许的兼容扩展包括：
 

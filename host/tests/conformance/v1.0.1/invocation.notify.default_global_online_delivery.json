@@ -6,10 +6,19 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.default-global.json",
+        "fileName": "invoke.notify.default-global--global.json",
         "definition": {
           "appId": "invoke.notify.default-global",
+          "scope": "",
           "displayName": "invoke.notify.default-global"
+        }
+      },
+      {
+        "fileName": "invoke.notify.default-global--scope-scope-a.json",
+        "definition": {
+          "appId": "invoke.notify.default-global",
+          "scope": "scope-a",
+          "displayName": "invoke.notify.default-global scope-a"
         }
       }
     ]
@@ -22,7 +31,7 @@
         "instance": {
           "instanceId": "notify-default-global-inst",
           "appId": "invoke.notify.default-global",
-          "scope": null,
+          "scope": "",
           "pid": 31001,
           "invoke": {
             "poll": true,
@@ -77,6 +86,9 @@
       "method": "demo.notify.default-global",
       "args": {
         "message": "hello-default-global"
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

@@ -10,8 +10,11 @@
 artifacts/release/<release-id>/
 ├── host/
 │   ├── devhub-host-win-x64.zip
+│   ├── devhub-host-win-x64-single-file.zip
 │   ├── devhub-host-linux-x64.zip
-│   └── devhub-host-osx-arm64.zip
+│   ├── devhub-host-linux-x64-single-file.zip
+│   ├── devhub-host-osx-arm64.zip
+│   └── devhub-host-osx-arm64-single-file.zip
 ├── sdk/
 │   ├── dotnet/
 │   │   ├── DevHub.Sdk.DotNet.<version>.nupkg
@@ -41,8 +44,13 @@ artifacts/release/<release-id>/
 
 ## 3. Host 资产规则
 
-- Host 统一输出为 ZIP 压缩包，文件名固定为 `devhub-host-<rid>.zip`。
-- 压缩包内部根目录使用 `devhub-host-<rid>/`，避免解压时文件散落到当前目录。
+- 每个默认 RID 同时输出两类 framework-dependent Host ZIP：
+  - `devhub-host-<rid>.zip`：multi-file 版
+  - `devhub-host-<rid>-single-file.zip`：single-file compression 版
+- 压缩包内部根目录与 ZIP 文件名保持一致，避免同一 RID 的两个变体解压到相同目录名。
+- multi-file 版解压后保留标准 `dotnet publish` 目录布局，包含 `DevHub.Host.dll`、`DevHub.Core.dll` 与依赖侧车文件；使用时必须保留整目录。
+- single-file compression 版解压后保留平台启动文件与必要配置侧车文件，不以多文件 DLL 图形式暴露 Host 主体。
+- 两类 Host 资产都保持 framework-dependent，不生成 trimmed 变体，也不切换为 self-contained。
 - 当前固定支持的 Host 发布 RID：
   - `win-x64`
   - `linux-x64`
@@ -72,7 +80,16 @@ artifacts/release/<release-id>/
       "name": "devhub-host-win-x64.zip",
       "category": "host",
       "target": "win-x64",
+      "variant": "multi-file",
       "path": "host/devhub-host-win-x64.zip",
+      "sha256": "..."
+    },
+    {
+      "name": "devhub-host-win-x64-single-file.zip",
+      "category": "host",
+      "target": "win-x64",
+      "variant": "single-file",
+      "path": "host/devhub-host-win-x64-single-file.zip",
       "sha256": "..."
     }
   ],
@@ -83,10 +100,11 @@ artifacts/release/<release-id>/
 }
 ```
 
-补充约束：
+约束：
 
 - `assets[].path` 使用相对 `artifacts/release/<release-id>/` 的相对路径。
 - `assets[].sha256` 用于发布后人工核对或自动校验。
+- Host 资产条目必须包含 `assets[].variant`，取值限定为 `multi-file` 或 `single-file`。
 - `validation.executed=false` 仅允许出现在显式声明“已由外部流程完成门禁”的受控场景，默认本地打包必须自行执行验证。
 
 ## 6. 发布说明文件
@@ -94,7 +112,7 @@ artifacts/release/<release-id>/
 `release-notes.md` 应至少包含：
 
 - 发布通道、release id、release tag、提交 SHA
-- 资产摘要
+- 资产摘要；同一 RID 的 Host multi-file / single-file 资产通过独立条目与 `Variant` 列区分
 - 验证摘要
 - 面向用户的相关入口链接
 

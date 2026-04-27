@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-heartbeat",
+  "method": "hub.apps.heartbeat",
+  "params": {
+    "instanceId": "NODE_01.alpha",
+    "instanceSessionToken": "inst-session-node-01-alpha-001"
+  }
+}

@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.target-missing.json",
+        "fileName": "invoke.notify.target-missing--global.json",
         "definition": {
           "appId": "invoke.notify.target-missing",
+          "scope": "",
           "displayName": "invoke.notify.target-missing"
         }
       }
@@ -21,7 +22,8 @@
       "appId": "invoke.notify.target-missing",
       "method": "demo.notify.target-missing",
       "target": {
-        "instanceId": "notify-target-missing-inst"
+        "instanceId": "notify-target-missing-inst",
+        "scope": ""
       },
       "options": {
         "queueIfOffline": false

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import FrozenInstanceError, dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +21,9 @@ from devhub_sdk import (
     HubRuntimeTuning,
     InvokeCapability,
     InvokeRequest,
+    InvocationTarget,
+    ListDefinitionsRequest,
+    ListInstancesRequest,
     LaunchRequest,
     RuntimeConnectionInfo,
 )
@@ -51,7 +54,7 @@ class FakeRuntimeResolver:
 class FakeHttpTransport:
     """用于验证依赖注入的 HTTP 传输。"""
 
-    response: dict[str, Any]
+    response: dict[str, Any] | BaseException
     calls: list[dict[str, Any]] = field(default_factory=list)
     close_calls: int = 0
 
@@ -62,6 +65,8 @@ class FakeHttpTransport:
                 "params": params,
             }
         )
+        if isinstance(self.response, BaseException):
+            raise self.response
         return self.response
 
     def close(self) -> None:
@@ -168,6 +173,25 @@ def test_http_client_context_manager_should_close_transport_on_exit() -> None:
         assert client.runtime.http_base_url == "http://127.0.0.1:57231"
 
     assert transport.close_calls == 1
+
+
+def test_http_client_runtime_view_should_be_immutable_and_keep_original_endpoint(tmp_path: Path) -> None:
+    scenario = HttpScenario(responder=_ping_success_response)
+    server, thread = _start_http_server(scenario)
+    try:
+        data_dir = _write_data_directory(tmp_path, server.server_address[1])
+        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+
+        with pytest.raises(FrozenInstanceError):
+            client.runtime.http_base_url = "http://127.0.0.1:1"  # type: ignore[misc]
+
+        ping = client.ping({"source": "immutable-runtime"})
+
+        assert ping.ok is True
+        assert scenario.requests[0]["method"] == "hub.ping"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 def test_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:
@@ -303,17 +327,17 @@ def test_http_client_when_response_contains_non_standard_json_constant_should_ra
         thread.join(timeout=5)
 
 
-def test_http_client_when_params_none_should_omit_params(tmp_path: Path) -> None:
+def test_http_client_list_definitions_should_send_explicit_null_scope_filter(tmp_path: Path) -> None:
     scenario = HttpScenario(responder=_list_definitions_response)
     server, thread = _start_http_server(scenario)
     try:
         data_dir = _write_data_directory(tmp_path, server.server_address[1])
         client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
-        definitions = client.list_definitions()
+        definitions = client.list_definitions(ListDefinitionsRequest(scope=None))
 
         assert definitions == []
-        assert "params" not in scenario.requests[0]
+        assert scenario.requests[0]["params"] == {"scope": None}
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -327,7 +351,7 @@ def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Pa
         client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError):
-            client.request(InvokeRequest(app_id="test.app", method="test.request"))
+            client.request(InvokeRequest(app_id="test.app", method="test.request", target=InvocationTarget(scope="")))
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -355,7 +379,7 @@ def test_http_client_validate_definition_should_send_params_and_parse_result() -
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    result = client.validate_definition(AppDefinition(app_id="test.app", display_name="Test App"))
+    result = client.validate_definition(AppDefinition(app_id="test.app", display_name="Test App", scope=""))
 
     assert result.valid is False
     assert result.errors[0].code == "invalid_app_id"
@@ -364,6 +388,7 @@ def test_http_client_validate_definition_should_send_params_and_parse_result() -
         "params": {
             "definition": {
                 "appId": "test.app",
+                "scope": "",
                 "displayName": "Test App",
             }
         },
@@ -378,6 +403,7 @@ def test_http_client_upsert_definition_should_send_request_and_parse_definition(
             "ok": True,
             "definition": {
                 "appId": "test.app",
+                "scope": "",
                 "displayName": "Test App",
             },
         }
@@ -388,31 +414,42 @@ def test_http_client_upsert_definition_should_send_request_and_parse_definition(
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    definition = client.upsert_definition(AppDefinition(app_id="test.app", display_name="Test App"))
+    definition = client.upsert_definition(AppDefinition(app_id="test.app", display_name="Test App", scope=""))
 
     assert definition.app_id == "test.app"
+    assert definition.scope == ""
     assert transport.calls[0]["method"] == "hub.apps.upsertDefinition"
 
 
-def test_http_client_delete_definition_should_send_request() -> None:
+def test_http_client_get_definition_should_send_request_and_parse_definition() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
-    transport = FakeHttpTransport({"ok": True})
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "definition": {
+                "appId": "test.app",
+                "scope": "workspace-a",
+                "displayName": "Test App",
+            },
+        }
+    )
     transport_factory = FakeHttpTransportFactory(transport)
     client = DevHubClient.from_runtime(
         DevHubClientOptions(client_id="http-client"),
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    client.delete_definition("test.app")
+    definition = client.get_definition("test.app", "workspace-a")
 
+    assert definition.scope == "workspace-a"
     assert transport.calls[0] == {
-        "method": "hub.apps.deleteDefinition",
-        "params": {"appId": "test.app"},
+        "method": "hub.apps.getDefinition",
+        "params": {"appId": "test.app", "scope": "workspace-a"},
     }
 
 
-def test_http_client_register_and_unregister_should_send_password_at_top_level() -> None:
+def test_http_client_get_instance_should_send_request_and_parse_instance() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport(
@@ -421,7 +458,7 @@ def test_http_client_register_and_unregister_should_send_password_at_top_level()
             "instance": {
                 "instanceId": "inst-1",
                 "appId": "test.app",
-                "scope": None,
+                "scope": "",
                 "pid": 1234,
                 "registeredAtUtc": "2026-03-09T00:00:00Z",
                 "lastSeenUtc": "2026-03-09T00:00:01Z",
@@ -435,25 +472,191 @@ def test_http_client_register_and_unregister_should_send_password_at_top_level()
         DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
     )
 
-    client.register_instance(
+    instance = client.get_instance("inst-1")
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token is None
+    assert transport.calls[0] == {
+        "method": "hub.apps.getInstance",
+        "params": {"instanceId": "inst-1"},
+    }
+
+
+def test_http_client_get_instance_should_reuse_shared_payload_builder_validation() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True, "instance": {}})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(ValueError, match="instance_id"):
+        client.get_instance("inst-1.")
+
+    assert transport.calls == []
+
+
+def test_http_client_delete_definition_should_send_request() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    client.delete_definition("test.app", "")
+
+    assert transport.calls[0] == {
+        "method": "hub.apps.deleteDefinition",
+        "params": {"appId": "test.app", "scope": ""},
+    }
+
+
+def test_http_client_list_instances_should_send_explicit_scope_filter() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instances": [],
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    instances = client.list_instances(ListInstancesRequest(scope=None, app_id="test.app"))
+
+    assert instances == []
+    assert transport.calls[0] == {
+        "method": "hub.apps.listInstances",
+        "params": {"appId": "test.app", "scope": None},
+    }
+
+
+def test_http_client_get_instance_should_propagate_remote_instance_not_found() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        DevHubRpcException(
+            code=-32010,
+            message="instance_not_found",
+            data={"reason": "unknown_instance", "instanceId": "missing-inst"},
+            request_id="req-http-1",
+        )
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(DevHubRpcException) as exc_info:
+        client.get_instance("missing-inst")
+
+    assert exc_info.value.code == -32010
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-inst"
+    assert transport.calls[0] == {
+        "method": "hub.apps.getInstance",
+        "params": {"instanceId": "missing-inst"},
+    }
+
+
+def test_http_client_get_instance_when_result_contains_sensitive_fields_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instanceSessionToken": "token-1",
+            "instance": {
+                "instanceId": "inst-1",
+                "appId": "test.app",
+                "scope": "",
+                "pid": 1234,
+                "registeredAtUtc": "2026-03-09T00:00:00Z",
+                "lastSeenUtc": "2026-03-09T00:00:01Z",
+                "invoke": {"poll": True, "respond": True},
+            },
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(RuntimeError, match="instanceSessionToken"):
+        client.get_instance("inst-1")
+
+    assert transport.calls[0]["method"] == "hub.apps.getInstance"
+
+
+def test_http_client_instance_lifecycle_methods_should_forward_instance_session_token() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "instance": {
+                "instanceId": "inst-1",
+                "appId": "test.app",
+                "scope": "",
+                "pid": 1234,
+                "registeredAtUtc": "2026-03-09T00:00:00Z",
+                "lastSeenUtc": "2026-03-09T00:00:01Z",
+                "invoke": {"poll": True, "respond": True},
+            },
+            "instanceSessionToken": "token-1",
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    registered = client.register_instance(
         AppInstanceRegistration(
             instance_id="inst-1",
             app_id="test.app",
             pid=1234,
             invoke=InvokeCapability(poll=True, respond=True),
+            scope="",
         ),
         "secret-1",
     )
+    transport.response = {
+        "ok": True,
+        "lastSeenUtc": "2026-03-09T00:00:02Z",
+    }
+    client.heartbeat("inst-1", "token-1")
     transport.response = {"ok": True}
-    client.unregister_instance("inst-1", "secret-1")
+    client.unregister_instance("inst-1", "token-1")
 
+    assert registered.instance_session_token == "token-1"
     assert transport.calls[0]["params"]["password"] == "secret-1"
     assert "password" not in transport.calls[0]["params"]["instance"]
     assert transport.calls[1] == {
+        "method": "hub.apps.heartbeat",
+        "params": {
+            "instanceId": "inst-1",
+            "instanceSessionToken": "token-1",
+        },
+    }
+    assert transport.calls[2] == {
         "method": "hub.apps.unregisterInstance",
         "params": {
             "instanceId": "inst-1",
-            "password": "secret-1",
+            "instanceSessionToken": "token-1",
         },
     }
 
@@ -466,7 +669,7 @@ def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> 
         client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
 
         with pytest.raises(RuntimeError):
-            client.launch(LaunchRequest(app_id="test.app"))
+            client.launch(LaunchRequest(app_id="test.app", scope=""))
     finally:
         server.shutdown()
         thread.join(timeout=5)

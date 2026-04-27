@@ -10,6 +10,8 @@ import {
 import { discoverRuntime } from "../../dist/runtime.js";
 
 const WebSocketCtor = globalThis.WebSocket;
+const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 
 function emit(payload) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -165,6 +167,7 @@ async function runEvents(context) {
   const request = ensureRecord(context.vector?.request, "request");
   const steps = ensureArray(request.steps, "request.steps");
   const dataDir = context.dataDir;
+  const rawRpcConnection = await discoverRuntime(dataDir);
 
   const eventClients = new Map();
   const eventIterators = new Map();
@@ -228,61 +231,119 @@ async function runEvents(context) {
         const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
         const instance = buildAppInstanceRegistration(ensureRecord(step.instance, `request.steps[${index}].instance`));
         const password = ensureString(step.password, `request.steps[${index}].password`);
-        await client.registerInstance(instance, password);
+        const registered = await client.registerInstance(instance, password);
         registeredInstances.push({
           clientName: ensureString(step.client, `request.steps[${index}].client`),
           instanceId: instance.instanceId,
-          password
+          instanceSessionToken: registered.instanceSessionToken
         });
         continue;
       }
 
       if (action === "unregister_instance") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
+        const clientName = ensureString(step.client, `request.steps[${index}].client`);
+        const client = requireMapValue(httpClients, clientName, index, "http client");
         const instanceId = String(resolveCaptureValue(step, captures, index, "instanceId"));
-        const password = ensureString(step.password, `request.steps[${index}].password`);
-        await client.unregisterInstance(instanceId, password);
+        const instanceSessionToken = findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index);
+        await client.unregisterInstance(instanceId, instanceSessionToken);
+        removeRegisteredInstance(registeredInstances, clientName, instanceId);
         continue;
       }
 
       if (action === "validate_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const result = await client.validateDefinition(
-          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-validate-definition-${index}`,
+          "hub.apps.validateDefinition",
+          {
+            definition: ensureRecord(step.definition, `request.steps[${index}].definition`)
+          }
         );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = normalizeDefinitionValidationResult(result);
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
         }
         continue;
       }
 
       if (action === "upsert_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const result = await client.upsertDefinition(
-          buildAppDefinition(ensureRecord(step.definition, `request.steps[${index}].definition`))
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-upsert-definition-${index}`,
+          "hub.apps.upsertDefinition",
+          {
+            definition: ensureRecord(step.definition, `request.steps[${index}].definition`)
+          }
         );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureRecord(
+            result.definition,
+            `request.steps[${index}].captureAs`
+          );
         }
         continue;
       }
 
       if (action === "get_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
-        const result = await client.getDefinition(appId);
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-get-definition-${index}`,
+          "hub.apps.getDefinition",
+          buildDefinitionIdentityParams(step, captures, index)
+        );
+        const result = readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = result;
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureRecord(
+            result.definition,
+            `request.steps[${index}].captureAs`
+          );
         }
         continue;
       }
 
       if (action === "delete_definition") {
-        const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
-        const appId = ensureString(step.appId, `request.steps[${index}].appId`);
-        await client.deleteDefinition(appId);
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-delete-definition-${index}`,
+          "hub.apps.deleteDefinition",
+          buildDefinitionIdentityParams(step, captures, index)
+        );
+        readRawResult(response, `request.steps[${index}]`);
         if (step.captureAs !== undefined) {
           captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = { ok: true };
+        }
+        continue;
+      }
+
+      if (action === "list_definitions") {
+        const response = await sendRawRpc(
+          rawRpcConnection,
+          `sdk-events-list-definitions-${index}`,
+          "hub.apps.listDefinitions",
+          {
+            scope: null
+          }
+        );
+        const result = readRawResult(response, `request.steps[${index}]`);
+        captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureArray(
+          result.definitions,
+          `request.steps[${index}].captureAs`
+        );
+        continue;
+      }
+
+      if (action === "get_instance") {
+        const clientName = ensureString(step.client, `request.steps[${index}].client`);
+        const client = eventClients.get(clientName) ?? httpClients.get(clientName);
+        if (!client) {
+          throw new Error(`request.steps[${index}] 未找到 client：${clientName}`);
+        }
+
+        const instanceId = String(resolveCaptureValue(step, captures, index, "instanceId"));
+        const instance = await client.getInstance(instanceId);
+        if (step.captureAs !== undefined) {
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = normalizeAppInstance(instance);
         }
         continue;
       }
@@ -363,6 +424,19 @@ async function runEvents(context) {
       actual: captures,
       error: null
     };
+  } catch (error) {
+    if (error instanceof DevHubRpcError) {
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "sdk-events",
+        outcome: "error",
+        actual: normalizeInvocationError(error),
+        error: null
+      };
+    }
+
+    throw error;
   } finally {
     for (let index = registeredInstances.length - 1; index >= 0; index -= 1) {
       const registered = registeredInstances[index];
@@ -371,7 +445,7 @@ async function runEvents(context) {
         continue;
       }
       try {
-        await client.unregisterInstance(registered.instanceId, registered.password);
+        await client.unregisterInstance(registered.instanceId, registered.instanceSessionToken);
       } catch {
       }
     }
@@ -475,9 +549,9 @@ function buildInvokeRequest(payload) {
 function buildAppInstanceRegistration(payload) {
   const invoke = ensureRecord(payload.invoke, "instance.invoke");
   return {
-    instanceId: ensureString(payload.instanceId, "instance.instanceId"),
-    appId: ensureString(payload.appId, "instance.appId"),
-    scope: payload.scope ?? undefined,
+    instanceId: ensureCanonicalIdentifier(payload.instanceId, "instance.instanceId"),
+    appId: ensureCanonicalIdentifier(payload.appId, "instance.appId"),
+    scope: ensureScopeString(payload.scope, "instance.scope"),
     pid: ensureInteger(payload.pid, "instance.pid"),
     invoke: {
       poll: ensureBoolean(invoke.poll, "instance.invoke.poll"),
@@ -489,7 +563,8 @@ function buildAppInstanceRegistration(payload) {
 
 function buildAppDefinition(payload) {
   const definition = {
-    appId: ensureString(payload.appId, "definition.appId"),
+    appId: ensureCanonicalIdentifier(payload.appId, "definition.appId"),
+    scope: ensureScopeString(payload.scope, "definition.scope"),
     displayName: ensureStringValue(payload.displayName, "definition.displayName")
   };
 
@@ -568,11 +643,102 @@ function normalizeEvent(event) {
   };
 }
 
+function normalizeAppInstance(instance) {
+  const normalized = {
+    instanceId: instance.instanceId,
+    appId: instance.appId,
+    scope: instance.scope,
+    pid: instance.pid,
+    registeredAtUtc: instance.registeredAtUtc.toISOString(),
+    lastSeenUtc: instance.lastSeenUtc.toISOString(),
+    invoke: {
+      poll: instance.invoke.poll,
+      respond: instance.invoke.respond
+    }
+  };
+
+  if (instance.meta !== undefined) {
+    normalized.meta = instance.meta;
+  }
+
+  return normalized;
+}
+
+function findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index) {
+  for (let registeredIndex = registeredInstances.length - 1; registeredIndex >= 0; registeredIndex -= 1) {
+    const registered = registeredInstances[registeredIndex];
+    if (registered.clientName === clientName && registered.instanceId === instanceId) {
+      return registered.instanceSessionToken;
+    }
+  }
+
+  throw new Error(`request.steps[${index}] 未找到实例会话凭据：${clientName}/${instanceId}`);
+}
+
+function removeRegisteredInstance(registeredInstances, clientName, instanceId) {
+  for (let index = registeredInstances.length - 1; index >= 0; index -= 1) {
+    const registered = registeredInstances[index];
+    if (registered.clientName === clientName && registered.instanceId === instanceId) {
+      registeredInstances.splice(index, 1);
+      return;
+    }
+  }
+}
+
 function normalizeDefinitionValidationResult(result) {
   return {
     ok: result.ok,
     valid: result.valid,
     errors: result.errors
+  };
+}
+
+async function sendRawRpc(connection, requestId, method, params) {
+  const response = await fetch(`${connection.runtime.httpBaseUrl}/rpc`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${connection.token}`,
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawDefinitionRpc",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000099"
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: requestId,
+      method,
+      params
+    })
+  });
+  return JSON.parse(await response.text());
+}
+
+function readRawResult(response, pathLabel) {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    throw new Error(`${pathLabel} 定义 RPC 响应非法。`);
+  }
+
+  if ("error" in response) {
+    throw new Error(`${pathLabel} 定义 RPC 返回错误：${JSON.stringify(response.error)}`);
+  }
+
+  const result = ensureRecord(response.result, `${pathLabel}.result`);
+  if (result.ok !== true) {
+    throw new Error(`${pathLabel} 定义 RPC 缺少 result.ok=true。`);
+  }
+
+  return result;
+}
+
+function buildDefinitionIdentityParams(step, captures, index) {
+  const appId = ensureCanonicalIdentifier(
+    String(resolveCaptureValue(step, captures, index, "appId")),
+    `request.steps[${index}].appId`
+  );
+  const scope = resolveCaptureValue(step, captures, index, "scope");
+  return {
+    appId,
+    scope: ensureScopeString(scope, `request.steps[${index}].scope`)
   };
 }
 
@@ -639,6 +805,22 @@ function ensureStringValue(value, pathLabel) {
   if (typeof value !== "string") {
     throw new Error(`${pathLabel} 必须为字符串。`);
   }
+  return value;
+}
+
+function ensureScopeString(value, pathLabel) {
+  if (typeof value !== "string" || (value.length > 0 && !CANONICAL_IDENTIFIER_REGEX.test(value))) {
+    throw new Error(`${pathLabel} 必须为 "" 或匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
+  return value;
+}
+
+function ensureCanonicalIdentifier(value, pathLabel) {
+  if (typeof value !== "string" || !CANONICAL_IDENTIFIER_REGEX.test(value)) {
+    throw new Error(`${pathLabel} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
   return value;
 }
 

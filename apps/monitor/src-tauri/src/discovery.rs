@@ -1,5 +1,5 @@
 use crate::backend_support::{json_map, problem, record_backend_log};
-use crate::launch::HostLaunchService;
+use crate::launch::{HostLaunchAttemptStatus, HostLaunchService};
 use crate::logging::MonitorLogService;
 use crate::models::{
     BootstrapPhase, BootstrapSnapshot, MonitorLogLevel, MonitorProblem,
@@ -8,6 +8,10 @@ use crate::models::{
 use crate::runtime::{discover_runtime, port_from_runtime, verify_runtime};
 use crate::settings::SettingsService;
 use crate::snapshot::SnapshotPublisher;
+use crate::versioning::{
+    create_version_compatibility_result, VersionCompatibilityResult, VersionCompatibilityStatus,
+    MONITOR_VERSION, SDK_VERSION,
+};
 use anyhow::Result;
 use serde_json::Value;
 use std::path::Path;
@@ -45,11 +49,7 @@ impl DiscoveryCoordinator {
         app: AppHandle,
         reason: &str,
         last_problem: Option<MonitorProblem>,
-    ) -> Result<()> {
-        if reason != "launch_requested" {
-            self.launch_service.finish_launch_attempt();
-        }
-
+    ) -> Result<u64> {
         let generation = self.snapshot_publisher.advance_generation();
         let settings = self.settings_service.current();
         let resolved = self.settings_service.resolve_effective_data_dir();
@@ -92,16 +92,43 @@ impl DiscoveryCoordinator {
             }
         });
 
-        Ok(())
+        Ok(generation)
     }
 
     async fn run_loop(&self, app: AppHandle, generation: u64) -> Result<()> {
         let started_at = Instant::now();
         let mut announced_launch_action = false;
+        let mut last_incompatible_message: Option<String> = None;
 
         loop {
             if !self.snapshot_publisher.is_current_generation(generation) {
                 return Ok(());
+            }
+
+            for timed_out_attempt in self.launch_service.take_timed_out_attempts() {
+                record_backend_log(
+                    &self.log_service,
+                    timed_out_attempt.data_dir.clone(),
+                    MonitorLogLevel::Warn,
+                    "host",
+                    "launch",
+                    "timed_out",
+                    Some("DevHub Host launch attempt timed out."),
+                    Some(json_map(vec![
+                        ("dataDir", Value::String(timed_out_attempt.data_dir.clone())),
+                        (
+                            "status",
+                            Value::String(timed_out_attempt.status.as_str().to_string()),
+                        ),
+                        (
+                            "requestedGeneration",
+                            timed_out_attempt
+                                .requested_by_generation
+                                .map(Value::from)
+                                .unwrap_or(Value::Null),
+                        ),
+                    ])),
+                )?;
             }
 
             let settings = self.settings_service.current();
@@ -109,16 +136,79 @@ impl DiscoveryCoordinator {
 
             let discovery_result = match discover_runtime(Path::new(&resolved.path)) {
                 Ok(connection) => match verify_runtime(&connection).await {
-                    Ok(()) => Ok(connection),
+                    Ok(verification) => Ok((connection, verification)),
                     Err(error) => Err(error),
                 },
                 Err(error) => Err(error),
             };
 
-            let last_failure = match discovery_result {
-                Ok(connection) => {
+            match discovery_result {
+                Ok((connection, verification)) => {
                     if !self.snapshot_publisher.is_current_generation(generation) {
                         return Ok(());
+                    }
+
+                    let compatibility = assess_runtime_compatibility_with_host_version(
+                        &connection,
+                        verification.host_version.as_deref(),
+                    );
+
+                    if let Some(incompatible_problem) = compatibility.problem.clone() {
+                        let incompatible_message = incompatible_problem.message.clone();
+                        if last_incompatible_message.as_deref()
+                            != Some(incompatible_message.as_str())
+                        {
+                            let snapshot = build_snapshot(
+                                generation,
+                                BootstrapPhase::HostIncompatible,
+                                settings,
+                                resolved.clone(),
+                                None,
+                                Some(incompatible_problem.clone()),
+                            );
+                            if !self
+                                .snapshot_publisher
+                                .publish_if_current(&app, generation, snapshot)
+                            {
+                                return Ok(());
+                            }
+
+                            record_backend_log(
+                                &self.log_service,
+                                resolved.path.clone(),
+                                MonitorLogLevel::Warn,
+                                "discovery",
+                                "validate_host",
+                                "incompatible",
+                                Some(&incompatible_problem.message),
+                                Some(json_map(vec![
+                                    ("dataDir", Value::String(resolved.path.clone())),
+                                    (
+                                        "protocolVersion",
+                                        Value::from(connection.runtime.protocol_version),
+                                    ),
+                                    (
+                                        "hubVersion",
+                                        compatibility
+                                            .result
+                                            .host_version
+                                            .clone()
+                                            .map(Value::String)
+                                            .unwrap_or(Value::Null),
+                                    ),
+                                    (
+                                        "compatibilityStatus",
+                                        Value::String(
+                                            compatibility.result.status.as_str().to_string(),
+                                        ),
+                                    ),
+                                ])),
+                            )?;
+                            last_incompatible_message = Some(incompatible_message);
+                        }
+
+                        sleep(DISCOVERY_INTERVAL).await;
+                        continue;
                     }
 
                     let port = port_from_runtime(&connection);
@@ -130,8 +220,17 @@ impl DiscoveryCoordinator {
                         Some(connection.clone()),
                         None,
                     );
-                    self.snapshot_publisher.publish(&app, snapshot);
-                    self.launch_service.finish_launch_attempt();
+                    if !self
+                        .snapshot_publisher
+                        .publish_if_current(&app, generation, snapshot)
+                    {
+                        return Ok(());
+                    }
+
+                    self.launch_service.finish_launch_attempt(
+                        &resolved.path,
+                        HostLaunchAttemptStatus::HostAvailable,
+                    );
                     record_backend_log(
                         &self.log_service,
                         self.snapshot_publisher.current().effective_data_dir,
@@ -144,40 +243,81 @@ impl DiscoveryCoordinator {
                             ("dataDir", Value::String(resolved.path)),
                             ("hostPid", Value::from(connection.runtime.pid)),
                             ("port", port.map(Value::from).unwrap_or(Value::Null)),
+                            (
+                                "hubVersion",
+                                compatibility
+                                    .result
+                                    .host_version
+                                    .clone()
+                                    .map(Value::String)
+                                    .unwrap_or(Value::Null),
+                            ),
+                            (
+                                "compatibilityStatus",
+                                Value::String(compatibility.result.status.as_str().to_string()),
+                            ),
                         ])),
                     )?;
                     return Ok(());
                 }
-                Err(error) => error.to_string(),
-            };
+                Err(error) => {
+                    last_incompatible_message = None;
+                    let last_failure = error.to_string();
 
-            if should_transition_to_launch_available(started_at.elapsed(), announced_launch_action)
-            {
-                announced_launch_action = true;
-                let snapshot = build_launch_available_snapshot(
-                    generation,
-                    settings,
-                    resolved.clone(),
-                    last_failure.clone(),
-                );
-                self.snapshot_publisher.publish(&app, snapshot);
-                self.launch_service.finish_launch_attempt();
-                record_backend_log(
-                    &self.log_service,
-                    self.snapshot_publisher.current().effective_data_dir,
-                    MonitorLogLevel::Warn,
-                    "discovery",
-                    "launch_action",
-                    "available",
-                    Some("No validated DevHub Host found within the launch delay window."),
-                    Some(json_map(vec![
-                        ("dataDir", Value::String(resolved.path.clone())),
-                        ("lastFailure", Value::String(last_failure.clone())),
-                    ])),
-                )?;
+                    if should_transition_to_launch_available(
+                        started_at.elapsed(),
+                        announced_launch_action,
+                    ) {
+                        announced_launch_action = true;
+                        let snapshot = build_launch_available_snapshot(
+                            generation,
+                            settings,
+                            resolved.clone(),
+                            last_failure.clone(),
+                        );
+                        if !self
+                            .snapshot_publisher
+                            .publish_if_current(&app, generation, snapshot)
+                        {
+                            return Ok(());
+                        }
+                        record_backend_log(
+                            &self.log_service,
+                            self.snapshot_publisher.current().effective_data_dir,
+                            MonitorLogLevel::Warn,
+                            "discovery",
+                            "launch_action",
+                            "available",
+                            Some("No validated DevHub Host found within the launch delay window."),
+                            Some(json_map(vec![
+                                ("dataDir", Value::String(resolved.path.clone())),
+                                ("lastFailure", Value::String(last_failure.clone())),
+                            ])),
+                        )?;
+                    } else if matches!(
+                        self.snapshot_publisher.current().phase,
+                        BootstrapPhase::HostIncompatible
+                    ) {
+                        let snapshot = build_snapshot(
+                            generation,
+                            BootstrapPhase::Scanning,
+                            settings,
+                            resolved.clone(),
+                            None,
+                            None,
+                        );
+                        if !self
+                            .snapshot_publisher
+                            .publish_if_current(&app, generation, snapshot)
+                        {
+                            return Ok(());
+                        }
+                    }
+
+                    sleep(DISCOVERY_INTERVAL).await;
+                    continue;
+                }
             }
-
-            sleep(DISCOVERY_INTERVAL).await;
         }
     }
 }
@@ -222,12 +362,72 @@ fn should_transition_to_launch_available(elapsed: Duration, announced_launch_act
     !announced_launch_action && elapsed >= LAUNCH_ACTION_DELAY
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeCompatibilityAssessment {
+    result: VersionCompatibilityResult,
+    problem: Option<MonitorProblem>,
+}
+
+#[cfg(test)]
+fn assess_runtime_compatibility(
+    connection: &MonitorRuntimeConnectionInfo,
+) -> RuntimeCompatibilityAssessment {
+    assess_runtime_compatibility_with_host_version(
+        connection,
+        connection.runtime.hub_version.as_deref(),
+    )
+}
+
+fn assess_runtime_compatibility_with_host_version(
+    connection: &MonitorRuntimeConnectionInfo,
+    host_version: Option<&str>,
+) -> RuntimeCompatibilityAssessment {
+    if connection.runtime.protocol_version != 1 {
+        return RuntimeCompatibilityAssessment {
+            result: VersionCompatibilityResult {
+                sdk_version: SDK_VERSION.to_string(),
+                host_version: host_version.map(str::to_string),
+                status: VersionCompatibilityStatus::Incompatible,
+            },
+            problem: Some(problem(
+                "host_incompatible",
+                format!(
+                    "当前 Monitor 仅支持 protocolVersion=1 的 DevHub Host。检测到 protocolVersion={}。",
+                    connection.runtime.protocol_version
+                ),
+            )),
+        };
+    }
+
+    let result = create_version_compatibility_result(host_version);
+    let problem = if matches!(result.status, VersionCompatibilityStatus::Incompatible) {
+        Some(problem(
+            "host_incompatible",
+            format!(
+                "当前 Monitor v{} 内置的 JS SDK 与 DevHub Host 版本不兼容。JS SDK={}; Host={}。",
+                MONITOR_VERSION,
+                result.sdk_version,
+                result.host_version.as_deref().unwrap_or("未知")
+            ),
+        ))
+    } else {
+        None
+    };
+
+    RuntimeCompatibilityAssessment { result, problem }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        build_launch_available_snapshot, should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
+        assess_runtime_compatibility, build_launch_available_snapshot,
+        should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
     };
-    use crate::models::{BootstrapPhase, DataDirSource, MonitorSettings, ResolvedDataDir};
+    use crate::models::{
+        BootstrapPhase, DataDirSource, MonitorRuntimeConnectionInfo, MonitorRuntimeTuning,
+        MonitorSettings, ResolvedDataDir,
+    };
+    use crate::versioning::VersionCompatibilityStatus;
     use std::time::Duration;
 
     #[test]
@@ -268,5 +468,67 @@ mod tests {
         let problem = snapshot.last_problem.expect("expected last problem");
         assert_eq!(problem.code, "host_unavailable");
         assert_eq!(problem.message, "hub.ping failed");
+    }
+
+    fn create_connection(
+        protocol_version: u32,
+        hub_version: Option<&str>,
+    ) -> MonitorRuntimeConnectionInfo {
+        MonitorRuntimeConnectionInfo {
+            runtime_directory: "/tmp/devhub/runtime".to_string(),
+            token: "secret".to_string(),
+            rpc_endpoint: "http://127.0.0.1:4123/rpc".to_string(),
+            websocket_endpoint: "ws://127.0.0.1:4123/ws".to_string(),
+            runtime: crate::models::MonitorHubRuntime {
+                protocol_version,
+                pid: 4321,
+                http_base_url: "http://127.0.0.1:4123".to_string(),
+                ws_url: "ws://127.0.0.1:4123/ws".to_string(),
+                token_file: "/tmp/devhub/runtime/token.txt".to_string(),
+                started_at_utc: "2026-04-12T00:00:00Z".to_string(),
+                runtime_tuning: MonitorRuntimeTuning {
+                    lease_seconds: 30,
+                    online_threshold_seconds: 15,
+                    launch_dedupe_window_seconds: 5,
+                },
+                hub_version: hub_version.map(str::to_string),
+            },
+        }
+    }
+
+    #[test]
+    fn compatibility_check_rejects_unsupported_protocol_or_major_mismatch() {
+        let unsupported_protocol =
+            assess_runtime_compatibility(&create_connection(2, Some("0.7.0")))
+                .problem
+                .expect("expected protocol mismatch");
+        assert!(unsupported_protocol.message.contains("protocolVersion=2"));
+
+        let unsupported_hub = assess_runtime_compatibility(&create_connection(1, Some("1.0.0")))
+            .problem
+            .expect("expected incompatible hub version");
+        assert!(unsupported_hub.message.contains("JS SDK="));
+        assert!(unsupported_hub.message.contains("Host=1.0.0"));
+    }
+
+    #[test]
+    fn compatibility_check_allows_unknown_and_update_recommended_hosts() {
+        let unknown = assess_runtime_compatibility(&create_connection(1, None));
+        assert!(unknown.problem.is_none());
+        assert_eq!(unknown.result.status, VersionCompatibilityStatus::Unknown);
+
+        let update_recommended = assess_runtime_compatibility(&create_connection(1, Some("0.8.1")));
+        assert!(update_recommended.problem.is_none());
+        assert_eq!(
+            update_recommended.result.status,
+            VersionCompatibilityStatus::UpdateRecommended
+        );
+
+        let compatible = assess_runtime_compatibility(&create_connection(1, Some("0.7.0-rc.1")));
+        assert!(compatible.problem.is_none());
+        assert_eq!(
+            compatible.result.status,
+            VersionCompatibilityStatus::Compatible
+        );
     }
 }

@@ -13,6 +13,8 @@ import { JsonRpcWsSession } from "../../src/ws-session.js";
 it("顶层入口应导出高级扩展点", () => {
   expect(sdk.JsonRpcHttpTransport).toBe(JsonRpcHttpTransport);
   expect(sdk.JsonRpcWsSession).toBe(JsonRpcWsSession);
+  expect(sdk.DevHubConnectionError).toBeTypeOf("function");
+  expect(sdk.SDK_VERSION).toBeTypeOf("string");
   expect((sdk as Record<string, unknown>).FileSystemRuntimeResolver).toBeUndefined();
   expect(sdk.SUPPORTED_EVENT_TYPES).toBe(SUPPORTED_EVENT_TYPES);
   expect(sdk.APP_INSTANCE_REGISTERED).toBe(APP_INSTANCE_REGISTERED);
@@ -23,9 +25,11 @@ it("顶层入口应导出高级扩展点", () => {
 it("package exports 应为 runtime 提供显式子路径", async () => {
   const packageJsonUrl = new URL("../../package.json", import.meta.url);
   const packageJson = JSON.parse(await readFile(packageJsonUrl, "utf-8")) as {
+    version?: string;
     exports?: Record<string, { default?: string; types?: string }>;
   };
 
+  expect(sdk.SDK_VERSION).toBe(packageJson.version);
   expect(packageJson.exports?.["."]).toEqual({
     types: "./dist/index.d.ts",
     default: "./dist/index.js"
@@ -42,4 +46,13 @@ it("构建后的根入口应保持浏览器安全", async () => {
 
   expect(distIndex).not.toContain("./runtime.js");
   expect(distIndex).not.toMatch(/["']node:[^"']+["']/);
+});
+
+it("源码根入口不得静态解析 Node 专用 ws 依赖", async () => {
+  const wsSessionUrl = new URL("../../src/ws-session.ts", import.meta.url);
+  const wsSessionSource = await readFile(wsSessionUrl, "utf-8");
+
+  expect(wsSessionSource).not.toMatch(/import\s*\(\s*["']ws["']\s*\)/);
+  expect(wsSessionSource).not.toMatch(/from\s+["']ws["']/);
+  expect(wsSessionSource).not.toContain("@types/ws");
 });

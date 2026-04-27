@@ -1,0 +1,78 @@
+{
+  "id": "events.subscribe_receives_scoped_definition_upserted_event",
+  "caseId": "CONF-007",
+  "description": "通过 SDK EventsClient 订阅 app.definition.upserted 后，成功 upsert 非 Global Definition 必须收到携带精确 scope 的 hub.event。",
+  "transport": "ws",
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceScopedDefinitionUpsertedEvent",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "subscribe",
+        "client": "events",
+        "types": [
+          "app.definition.upserted"
+        ],
+        "captureAs": "subscriptionId"
+      },
+      {
+        "action": "create_http_client",
+        "client": "http"
+      },
+      {
+        "action": "upsert_definition",
+        "client": "http",
+        "definition": {
+          "appId": "events.definition.scoped-upserted",
+          "scope": "workspace-a",
+          "displayName": "Events Scoped Definition Upserted"
+        }
+      },
+      {
+        "action": "read_event",
+        "client": "events",
+        "captureAs": "event"
+      },
+      {
+        "action": "delete_definition",
+        "client": "http",
+        "appId": "events.definition.scoped-upserted",
+        "scope": "workspace-a"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+      "event": {
+        "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+        "type": "app.definition.upserted",
+        "payload": {
+          "appId": "events.definition.scoped-upserted",
+          "scope": "workspace-a",
+          "definition": {
+            "appId": "events.definition.scoped-upserted",
+            "scope": "workspace-a",
+            "displayName": "Events Scoped Definition Upserted"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk",
+    "scope"
+  ]
+}

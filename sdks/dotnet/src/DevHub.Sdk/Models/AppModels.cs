@@ -9,11 +9,28 @@ namespace DevHub.Sdk.Models;
 /// </summary>
 public sealed class AppDefinition
 {
+    private string _appId = string.Empty;
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonProperty("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
+
+    /// <summary>
+    /// Definition 作用域。空字符串表示 Global Definition。
+    /// </summary>
+    [JsonProperty("scope")]
+    public string Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopedString(value ?? string.Empty, nameof(Scope));
+    }
 
     /// <summary>
     /// 显示名称。
@@ -141,23 +158,39 @@ public sealed class DefinitionValidationResult
 /// </summary>
 public sealed class AppInstance
 {
+    private string _instanceId = string.Empty;
+    private string _appId = string.Empty;
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
     [JsonProperty("instanceId")]
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonProperty("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global 实例。
     /// </summary>
     [JsonProperty("scope")]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopedString(value ?? string.Empty, nameof(Scope));
+    }
 
     /// <summary>
     /// 进程标识。
@@ -192,27 +225,109 @@ public sealed class AppInstance
 }
 
 /// <summary>
+/// 实例注册结果。
+/// </summary>
+public sealed class RegisterInstanceResult
+{
+    /// <summary>
+    /// 注册后的实例快照。
+    /// </summary>
+    [JsonProperty("instance")]
+    public AppInstance Instance { get; set; } = new();
+
+    /// <summary>
+    /// 实例所有权会话令牌。
+    /// </summary>
+    [JsonProperty("instanceSessionToken")]
+    public string InstanceSessionToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 实例标识的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public string InstanceId => Instance.InstanceId;
+
+    /// <summary>
+    /// 应用标识的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public string AppId => Instance.AppId;
+
+    /// <summary>
+    /// 作用域的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public string Scope => Instance.Scope;
+
+    /// <summary>
+    /// 进程标识的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public int? Pid => Instance.Pid;
+
+    /// <summary>
+    /// 调用能力的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public InvokeCapability? Invoke => Instance.Invoke;
+
+    /// <summary>
+    /// 注册时间的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? RegisteredAtUtc => Instance.RegisteredAtUtc;
+
+    /// <summary>
+    /// 最后在线时间的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? LastSeenUtc => Instance.LastSeenUtc;
+
+    /// <summary>
+    /// 元数据的兼容快捷访问器。
+    /// </summary>
+    [JsonIgnore]
+    public JToken? Meta => Instance.Meta;
+}
+
+/// <summary>
 /// 实例注册载荷。
 /// </summary>
 public sealed class AppInstanceRegistration
 {
+    private string _instanceId = string.Empty;
+    private string _appId = string.Empty;
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
     [JsonProperty("instanceId")]
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
 
     /// <summary>
     /// 应用标识。
     /// </summary>
     [JsonProperty("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global 实例。
     /// </summary>
     [JsonProperty("scope")]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopedString(value ?? string.Empty, nameof(Scope));
+    }
 
     /// <summary>
     /// 进程标识。

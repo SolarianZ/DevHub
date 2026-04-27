@@ -2,6 +2,7 @@ import {
   DevHubRpcError,
   DevHubRpcErrorCode,
   type AppDefinition,
+  type AppDefinitionIdentity,
   type AppInstance,
   type DevHubClient,
   type DevHubEventsClient,
@@ -16,11 +17,39 @@ import type {
   MonitorRuntimeConnectionInfo,
   MonitorSettings,
 } from "./models";
-export type MonitorWorkspace = "home" | "help" | "settings" | "definition";
+export type MonitorWorkspace = "home" | "test" | "help" | "settings" | "definition";
 export type SidebarWorkspace = Exclude<MonitorWorkspace, "definition">;
 export type HomeWorkspaceMode = "discovery" | "status";
 export type HostSessionStatus = "idle" | "connecting" | "connected" | "recovering";
 export type DefinitionWorkspaceMode = "view" | "create" | "edit";
+export type RpcTestRequestStatus =
+  | "idle"
+  | "validation_failed"
+  | "waiting"
+  | "received"
+  | "request_failed"
+  | "cancelled";
+
+export interface RpcTestValidationFeedback {
+  kind: "success" | "error";
+  message: string;
+}
+
+export interface RpcTestWorkspaceViewModel {
+  available: boolean;
+  rpcEndpoint: string | null;
+  draft: string;
+  draftPlaceholder: string;
+  validationFeedback: RpcTestValidationFeedback | null;
+  requestStatus: RpcTestRequestStatus;
+  requestStatusLabel: string;
+  requestStatusDetail: string;
+  requestError: string | null;
+  resultText: string | null;
+  canValidate: boolean;
+  canSend: boolean;
+  canCancel: boolean;
+}
 
 export interface DefinitionWorkspaceState {
   mode: DefinitionWorkspaceMode;
@@ -40,14 +69,38 @@ export interface SettingsFieldErrors {
   hostExecutablePath?: string | null;
 }
 
+const GLOBAL_SCOPE_LABEL = "Global";
+
 export function getHomeWorkspaceMode(
   snapshot: BootstrapSnapshot | null,
 ): HomeWorkspaceMode {
-  return snapshot?.phase === "host_available" && snapshot.connection ? "status" : "discovery";
+  return snapshot?.phase === "host_available"
+      && snapshot.connection
+    ? "status"
+    : "discovery";
 }
 
 export function getSidebarWorkspace(workspace: MonitorWorkspace): SidebarWorkspace {
   return workspace === "definition" ? "home" : workspace;
+}
+
+export function getRpcTestStatusLabel(status: RpcTestRequestStatus): string {
+  switch (status) {
+    case "idle":
+      return "尚未发送";
+    case "validation_failed":
+      return "校验失败";
+    case "waiting":
+      return "等待回复";
+    case "received":
+      return "收到回复";
+    case "request_failed":
+      return "请求失败";
+    case "cancelled":
+      return "已取消";
+    default:
+      return "未知状态";
+  }
 }
 
 export function normalizeOptionalInput(value?: string | null): string | null {
@@ -83,14 +136,15 @@ export function hasSettingsFieldErrors(errors: SettingsFieldErrors): boolean {
 }
 
 export function shouldRecoverHostSession(error: unknown): boolean {
-  if (!(error instanceof DevHubRpcError)) {
-    return false;
+  if (isConnectionError(error)) {
+    return true;
   }
 
-  return (
-    error.is(DevHubRpcErrorCode.Unauthorized)
-    || error.is(DevHubRpcErrorCode.Forbidden)
-  );
+  return error instanceof DevHubRpcError
+    && (
+      error.is(DevHubRpcErrorCode.Unauthorized)
+      || error.is(DevHubRpcErrorCode.Forbidden)
+    );
 }
 
 export async function disposeSessionResources(
@@ -120,9 +174,19 @@ export async function disposeSessionResources(
 }
 
 export function sortDefinitions(definitions: readonly AppDefinition[]): AppDefinition[] {
-  return [...definitions].sort((left, right) =>
-    left.appId.localeCompare(right.appId, "zh-CN"),
-  );
+  return [...definitions].sort((left, right) => {
+    const appCompare = left.appId.localeCompare(right.appId, "zh-CN");
+    if (appCompare !== 0) {
+      return appCompare;
+    }
+
+    const scopeCompare = compareDefinitionScopes(left.scope, right.scope);
+    if (scopeCompare !== 0) {
+      return scopeCompare;
+    }
+
+    return left.displayName.localeCompare(right.displayName, "zh-CN");
+  });
 }
 
 export function sortInstances(instances: readonly AppInstance[]): AppInstance[] {
@@ -132,7 +196,7 @@ export function sortInstances(instances: readonly AppInstance[]): AppInstance[] 
       return appCompare;
     }
 
-    const scopeCompare = formatScope(left.scope).localeCompare(formatScope(right.scope), "zh-CN");
+    const scopeCompare = compareDefinitionScopes(left.scope, right.scope);
     if (scopeCompare !== 0) {
       return scopeCompare;
     }
@@ -146,14 +210,40 @@ export function upsertDefinition(
   nextDefinition: AppDefinition,
 ): AppDefinition[] {
   return sortDefinitions([
-    ...current.filter((definition) => definition.appId !== nextDefinition.appId),
+    ...current.filter((definition) => !isSameDefinitionIdentity(definition, nextDefinition)),
     nextDefinition,
   ]);
 }
 
-export function createMissingDefinitionForm(appId: string): DefinitionFormState {
+export function removeDefinition(
+  current: readonly AppDefinition[],
+  identity: AppDefinitionIdentity,
+): AppDefinition[] {
+  return current.filter((definition) => !isSameDefinitionIdentity(definition, identity));
+}
+
+export function createDefinitionIdentity(appId: string, scope?: string | null): AppDefinitionIdentity {
+  return {
+    appId,
+    scope: scope ?? "",
+  };
+}
+
+export function definitionIdentityKey(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
+  return JSON.stringify([identity.appId, identity.scope ?? ""]);
+}
+
+export function isSameDefinitionIdentity(
+  left: Pick<AppDefinitionIdentity, "appId" | "scope">,
+  right: Pick<AppDefinitionIdentity, "appId" | "scope">,
+): boolean {
+  return definitionIdentityKey(left) === definitionIdentityKey(right);
+}
+
+export function createMissingDefinitionForm(identity: AppDefinitionIdentity): DefinitionFormState {
   const form = createEmptyDefinitionForm();
-  form.appId = appId;
+  form.appId = identity.appId;
+  form.scope = identity.scope ?? "";
   form.enableRpc = false;
   return form;
 }
@@ -171,7 +261,15 @@ export function getRuntimePort(connection?: MonitorRuntimeConnectionInfo | null)
 }
 
 export function formatScope(scope?: string | null): string {
-  return scope && scope.trim() ? scope : "global";
+  return scope && scope.length > 0 ? scope : GLOBAL_SCOPE_LABEL;
+}
+
+export function formatDefinitionScopeLabel(scope?: string | null): string {
+  return `scope：${formatScope(scope)}`;
+}
+
+export function formatDefinitionIdentity(identity: Pick<AppDefinitionIdentity, "appId" | "scope">): string {
+  return `${identity.appId}（${formatDefinitionScopeLabel(identity.scope)}）`;
 }
 
 export function formatHostLogDirectory(effectiveDataDir?: string | null): string {
@@ -200,4 +298,31 @@ function isAbsolutePath(value: string): boolean {
     || /^[A-Za-z]:[\\/]/.test(trimmed)
     || /^\\\\/.test(trimmed)
   );
+}
+
+function compareDefinitionScopes(left?: string | null, right?: string | null): number {
+  const leftScope = left ?? "";
+  const rightScope = right ?? "";
+  if (leftScope === rightScope) {
+    return 0;
+  }
+
+  if (leftScope === "") {
+    return -1;
+  }
+
+  if (rightScope === "") {
+    return 1;
+  }
+
+  return leftScope.localeCompare(rightScope, "zh-CN");
+}
+
+function isConnectionError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "name" in error
+    && error.name === "DevHubConnectionError"
+    && "kind" in error
+    && typeof error.kind === "string";
 }

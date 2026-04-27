@@ -1,13 +1,15 @@
 use crate::models::{
-    DataDirSource, MonitorPlatform, MonitorSettings, ResolvedDataDir, SettingsSnapshot,
-    DEVHUB_DATA_DIR_ENV,
+    DataDirSource, MonitorPlatform, MonitorSettings, ResolvedDataDir, SettingsLoadWarning,
+    SettingsSnapshot, DEVHUB_DATA_DIR_ENV,
 };
 use anyhow::{Context, Result};
+use chrono::Utc;
 use directories::ProjectDirs;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct MonitorPaths {
@@ -43,30 +45,32 @@ impl MonitorPaths {
 #[derive(Clone)]
 pub struct SettingsStore {
     file_path: PathBuf,
-    current: Arc<RwLock<MonitorSettings>>,
+    state: Arc<RwLock<SettingsState>>,
+}
+
+#[derive(Debug, Clone)]
+struct SettingsState {
+    settings: MonitorSettings,
+    revision: u64,
+    load_warning: Option<SettingsLoadWarning>,
 }
 
 impl SettingsStore {
     pub fn load(file_path: PathBuf) -> Result<Self> {
-        let current = if file_path.exists() {
-            let content = fs::read_to_string(&file_path)
-                .with_context(|| format!("无法读取设置文件：{}", file_path.display()))?;
-            normalize_settings(
-                serde_json::from_str::<MonitorSettings>(&content)
-                    .with_context(|| format!("设置文件 JSON 无法解析：{}", file_path.display()))?,
-            )
-        } else {
-            MonitorSettings::default()
-        };
+        let state = load_settings_state(&file_path)?;
 
         Ok(Self {
             file_path,
-            current: Arc::new(RwLock::new(current)),
+            state: Arc::new(RwLock::new(state)),
         })
     }
 
     pub fn current(&self) -> MonitorSettings {
-        self.current.read().expect("settings lock poisoned").clone()
+        self.state
+            .read()
+            .expect("settings lock poisoned")
+            .settings
+            .clone()
     }
 
     pub fn save(&self, settings: MonitorSettings) -> Result<MonitorSettings> {
@@ -87,24 +91,28 @@ impl SettingsStore {
 
         let payload =
             serde_json::to_vec_pretty(&normalized).context("无法序列化 Monitor 设置。")?;
-        fs::write(&self.file_path, payload)
-            .with_context(|| format!("无法写入设置文件：{}", self.file_path.display()))?;
+        atomic_write_settings_file(&self.file_path, &payload)?;
 
-        *self.current.write().expect("settings lock poisoned") = normalized.clone();
+        let mut state = self.state.write().expect("settings lock poisoned");
+        state.settings = normalized.clone();
+        state.revision = state.revision.saturating_add(1);
+        state.load_warning = None;
         Ok(normalized)
     }
 
     pub fn snapshot(&self, paths: &MonitorPaths) -> SettingsSnapshot {
-        let settings = self.current();
-        let resolved = resolve_effective_data_dir(&settings);
+        let state = self.state.read().expect("settings lock poisoned").clone();
+        let resolved = resolve_effective_data_dir(&state.settings);
 
         SettingsSnapshot {
-            settings,
+            revision: state.revision,
+            settings: state.settings,
             platform: current_platform(),
             effective_data_dir: resolved.path,
             data_dir_source: resolved.source,
             settings_file_path: self.file_path.display().to_string(),
             monitor_log_directory: paths.monitor_log_directory.display().to_string(),
+            load_warning: state.load_warning,
         }
     }
 }
@@ -142,6 +150,104 @@ impl SettingsService {
     pub fn monitor_log_directory(&self) -> PathBuf {
         self.paths.monitor_log_directory.clone()
     }
+}
+
+fn load_settings_state(file_path: &Path) -> Result<SettingsState> {
+    if !file_path.exists() {
+        return Ok(SettingsState {
+            settings: MonitorSettings::default(),
+            revision: 0,
+            load_warning: None,
+        });
+    }
+
+    let content = fs::read_to_string(file_path)
+        .with_context(|| format!("无法读取设置文件：{}", file_path.display()))?;
+    match serde_json::from_str::<MonitorSettings>(&content) {
+        Ok(settings) => Ok(SettingsState {
+            settings: normalize_settings(settings),
+            revision: 0,
+            load_warning: None,
+        }),
+        Err(_) => recover_from_corrupt_settings_file(file_path),
+    }
+}
+
+fn recover_from_corrupt_settings_file(file_path: &Path) -> Result<SettingsState> {
+    let backup_path = isolate_corrupt_settings_file(file_path)?;
+
+    Ok(SettingsState {
+        settings: MonitorSettings::default(),
+        revision: 1,
+        load_warning: Some(SettingsLoadWarning {
+            code: "settings_recovered".to_string(),
+            message: "检测到损坏的设置文件，已备份原文件并回退为默认设置。".to_string(),
+            settings_file_path: file_path.display().to_string(),
+            backup_file_path: Some(backup_path.display().to_string()),
+        }),
+    })
+}
+
+fn isolate_corrupt_settings_file(file_path: &Path) -> Result<PathBuf> {
+    let backup_path = build_settings_backup_path(file_path);
+
+    match fs::rename(file_path, &backup_path) {
+        Ok(()) => Ok(backup_path),
+        Err(_) => {
+            fs::copy(file_path, &backup_path).with_context(|| {
+                format!(
+                    "无法备份损坏的设置文件：{} -> {}",
+                    file_path.display(),
+                    backup_path.display()
+                )
+            })?;
+            let _ = fs::remove_file(file_path);
+            Ok(backup_path)
+        }
+    }
+}
+
+fn build_settings_backup_path(file_path: &Path) -> PathBuf {
+    let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ");
+    let file_name = file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("settings.json");
+    let backup_file_name = format!("{file_name}.corrupt-{timestamp}-{}.bak", Uuid::new_v4());
+
+    file_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(backup_file_name)
+}
+
+fn atomic_write_settings_file(file_path: &Path, payload: &[u8]) -> Result<()> {
+    let temp_path = build_temp_settings_path(file_path);
+    fs::write(&temp_path, payload)
+        .with_context(|| format!("无法写入设置临时文件：{}", temp_path.display()))?;
+
+    fs::rename(&temp_path, file_path).with_context(|| {
+        format!(
+            "无法以原子方式写入设置文件：{} -> {}",
+            temp_path.display(),
+            file_path.display()
+        )
+    })?;
+
+    Ok(())
+}
+
+fn build_temp_settings_path(file_path: &Path) -> PathBuf {
+    let file_name = file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("settings.json");
+    let temp_file_name = format!("{file_name}.{}.tmp", Uuid::new_v4());
+
+    file_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(temp_file_name)
 }
 
 fn current_platform() -> MonitorPlatform {
@@ -273,7 +379,7 @@ fn user_home_directory() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_effective_data_dir, SettingsStore};
+    use super::{resolve_effective_data_dir, MonitorPaths, SettingsStore};
     use crate::models::{DataDirSource, MonitorSettings, DEVHUB_DATA_DIR_ENV};
     use serde_json::json;
     use std::fs;
@@ -427,11 +533,7 @@ mod tests {
             "hostExecutablePath": host_path,
         }))
         .expect("failed to serialize settings file");
-        fs::write(
-            &settings_file,
-            settings_payload,
-        )
-        .expect("failed to write settings file");
+        fs::write(&settings_file, settings_payload).expect("failed to write settings file");
 
         let store = SettingsStore::load(settings_file).expect("failed to load store");
         let current = store.current();
@@ -445,6 +547,44 @@ mod tests {
             Some(host_path.as_str())
         );
         assert!(current.hide_host_command_line_window);
+
+        fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn settings_store_load_recovers_corrupt_file_with_backup_and_warning() {
+        let temp_directory = create_temp_directory("settings-corrupt");
+        let settings_file = temp_directory.join("settings.json");
+        let log_directory = temp_directory.join("monitor-logs");
+        fs::create_dir_all(&log_directory).expect("failed to create log directory");
+        fs::write(&settings_file, "{ invalid json").expect("failed to write corrupt settings");
+
+        let store = SettingsStore::load(settings_file.clone()).expect("failed to recover settings");
+        let snapshot = store.snapshot(&MonitorPaths {
+            settings_file: settings_file.clone(),
+            monitor_log_directory: log_directory,
+        });
+
+        assert_eq!(snapshot.revision, 1);
+        assert!(snapshot.settings.data_dir_override.is_none());
+        assert!(snapshot.settings.host_executable_path.is_none());
+        assert!(snapshot.settings.hide_host_command_line_window);
+
+        let warning = snapshot.load_warning.expect("expected load warning");
+        assert_eq!(warning.code, "settings_recovered");
+        assert_eq!(
+            warning.settings_file_path,
+            settings_file.display().to_string()
+        );
+
+        let backup_path =
+            PathBuf::from(warning.backup_file_path.expect("expected backup file path"));
+        assert!(backup_path.exists());
+        assert!(!settings_file.exists());
+        assert_eq!(
+            fs::read_to_string(&backup_path).expect("failed to read backup"),
+            "{ invalid json"
+        );
 
         fs::remove_dir_all(temp_directory).expect("failed to clean temp directory");
     }

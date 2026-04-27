@@ -41,6 +41,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             """
             {
               "appId": "adapter.alpha",
+              "scope": "",
               "displayName": "Adapter Alpha"
             }
             """);
@@ -49,6 +50,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             """
             {
               "appId": "adapter.beta",
+              "scope": "",
               "displayName": "Adapter Beta"
             }
             """);
@@ -56,18 +58,18 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var listResponse = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsListDefinitions, "list-definitions", new { }),
+            CreateRequest(HubRpcMethods.HubAppsListDefinitions, "list-definitions", new { scope = (string?)null }),
             CancellationToken.None);
         var listResult = JsonSerializer.SerializeToElement(listResponse.Result);
         var definitions = listResult.GetProperty("definitions").EnumerateArray().ToArray();
 
         Assert.True(listResult.GetProperty("ok").GetBoolean());
         Assert.Equal(2, definitions.Length);
-        Assert.Contains(definitions, definition => definition.GetProperty("appId").GetString() == "adapter.alpha");
-        Assert.Contains(definitions, definition => definition.GetProperty("appId").GetString() == "adapter.beta");
+        Assert.Equal("adapter.alpha", definitions[0].GetProperty("appId").GetString());
+        Assert.Equal("adapter.beta", definitions[1].GetProperty("appId").GetString());
 
         var getResponse = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-definition", new { appId = "adapter.alpha" }),
+            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-definition", new { appId = "adapter.alpha", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         var getResult = JsonSerializer.SerializeToElement(getResponse.Result);
@@ -85,11 +87,12 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var response = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-missing-definition", new { appId = "missing.definition" }),
+            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-missing-definition", new { appId = "missing.definition", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         AssertError(response, -32014, "app_definition_not_found", "get-missing-definition");
         Assert.Equal("missing.definition", JsonSerializer.SerializeToElement(response.Error!.Data).GetProperty("appId").GetString());
+        Assert.Equal(ScopeContract.Global, JsonSerializer.SerializeToElement(response.Error!.Data).GetProperty("scope").GetString());
     }
 
     [Fact]
@@ -106,6 +109,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             definition = new
             {
                 appId = "Bad App",
+                scope = ScopeContract.Global,
                 displayName = "Broken Definition"
             }
         };
@@ -165,6 +169,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
                     definition = new
                     {
                         appId = "managed.adapter",
+                        scope = ScopeContract.Global,
                         displayName = "Managed Adapter",
                         launch = new
                         {
@@ -183,7 +188,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             Times.Once);
 
         var deleteResponse = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsDeleteDefinition, "delete-definition", new { appId = "managed.adapter" }),
+            CreateRequest(HubRpcMethods.HubAppsDeleteDefinition, "delete-definition", new { appId = "managed.adapter", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         var deleteResult = JsonSerializer.SerializeToElement(deleteResponse.Result);
@@ -193,10 +198,152 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             Times.Once);
 
         var getResponse = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-deleted-definition", new { appId = "managed.adapter" }),
+            CreateRequest(HubRpcMethods.HubAppsGetDefinition, "get-deleted-definition", new { appId = "managed.adapter", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         AssertError(getResponse, -32014, "app_definition_not_found", "get-deleted-definition");
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.3")]
+    public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
+    {
+        var eventPublisher = new Mock<IHubEventPublisher>();
+        using var context = CreateDefinitionContext(eventPublisher.Object);
+        var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
+
+        var upsertScopedZ = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsUpsertDefinition,
+                "upsert-scoped-z",
+                new
+                {
+                    definition = new
+                    {
+                        appId = "managed.scoped.adapter",
+                        scope = "workspace-Z",
+                        displayName = "Managed Scoped Adapter Workspace Z"
+                    }
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(upsertScopedZ.Result).GetProperty("ok").GetBoolean());
+
+        var upsertGlobal = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsUpsertDefinition,
+                "upsert-global",
+                new
+                {
+                    definition = new
+                    {
+                        appId = "managed.scoped.adapter",
+                        scope = ScopeContract.Global,
+                        displayName = "Managed Scoped Adapter Global"
+                    }
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(upsertGlobal.Result).GetProperty("ok").GetBoolean());
+
+        var upsertScopedA = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsUpsertDefinition,
+                "upsert-scoped-a",
+                new
+                {
+                    definition = new
+                    {
+                        appId = "managed.scoped.adapter",
+                        scope = "workspace-A",
+                        displayName = "Managed Scoped Adapter Workspace A"
+                    }
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(upsertScopedA.Result).GetProperty("ok").GetBoolean());
+
+        var listResponse = await handler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsListDefinitions, "list-scoped", new { scope = (string?)null }),
+            CancellationToken.None);
+        var definitions = JsonSerializer.SerializeToElement(listResponse.Result)
+            .GetProperty("definitions")
+            .EnumerateArray()
+            .Where(definition => definition.GetProperty("appId").GetString() == "managed.scoped.adapter")
+            .ToArray();
+        Assert.Equal(3, definitions.Length);
+        Assert.Equal(ScopeContract.Global, definitions[0].GetProperty("scope").GetString());
+        Assert.Equal("workspace-A", definitions[1].GetProperty("scope").GetString());
+        Assert.Equal("workspace-Z", definitions[2].GetProperty("scope").GetString());
+
+        var getScoped = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsGetDefinition,
+                "get-scoped",
+                new
+                {
+                    appId = "managed.scoped.adapter",
+                    scope = "workspace-A"
+                }),
+            CancellationToken.None);
+        Assert.Equal(
+            "Managed Scoped Adapter Workspace A",
+            JsonSerializer.SerializeToElement(getScoped.Result).GetProperty("definition").GetProperty("displayName").GetString());
+
+        var deleteGlobal = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsDeleteDefinition,
+                "delete-global",
+                new
+                {
+                    appId = "managed.scoped.adapter",
+                    scope = ScopeContract.Global
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(deleteGlobal.Result).GetProperty("ok").GetBoolean());
+
+        var getGlobalMissing = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsGetDefinition,
+                "get-global-missing",
+                new
+                {
+                    appId = "managed.scoped.adapter",
+                    scope = ScopeContract.Global
+                }),
+            CancellationToken.None);
+        AssertError(getGlobalMissing, -32014, "app_definition_not_found", "get-global-missing");
+
+        var getScopedAfterDelete = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsGetDefinition,
+                "get-scoped-after-delete",
+                new
+                {
+                    appId = "managed.scoped.adapter",
+                    scope = "workspace-A"
+                }),
+            CancellationToken.None);
+        Assert.True(JsonSerializer.SerializeToElement(getScopedAfterDelete.Result).GetProperty("ok").GetBoolean());
+
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
+                message.Type == HubEventTypes.AppDefinitionUpserted
+                && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == ScopeContract.Global)),
+            Times.Once);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
+                message.Type == HubEventTypes.AppDefinitionUpserted
+                && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == "workspace-A")),
+            Times.Once);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
+                message.Type == HubEventTypes.AppDefinitionUpserted
+                && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == "workspace-Z")),
+            Times.Once);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<HubEventMessage>(message =>
+                message.Type == HubEventTypes.AppDefinitionDeleted
+                && JsonSerializer.SerializeToElement(message.Payload).GetProperty("scope").GetString() == ScopeContract.Global)),
+            Times.Once);
     }
 
     [Fact]
@@ -214,12 +361,12 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(invalidScope.Error!.Data).GetProperty("reason").GetString());
 
         var invalidWait = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-invalid-wait", new { appId = "launch.app", waitForRegisterMs = -1 }),
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-invalid-wait", new { appId = "launch.app", scope = ScopeContract.Global, waitForRegisterMs = -1 }),
             CancellationToken.None);
         AssertError(invalidWait, -32602, "invalid_params", "launch-invalid-wait");
 
         var invalidDedupe = await handler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-invalid-dedupe", new { appId = "launch.app", dedupeKey = 1 }),
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-invalid-dedupe", new { appId = "launch.app", scope = ScopeContract.Global, dedupeKey = 1 }),
             CancellationToken.None);
         AssertError(invalidDedupe, -32602, "invalid_params", "launch-invalid-dedupe");
     }
@@ -237,7 +384,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 
         var missingDefinitionHandler = CreateLaunchHandler(context, processLauncher: processLauncher.Object);
         var missingDefinitionResponse = await missingDefinitionHandler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-missing-definition", new { appId = "missing.launch.app" }),
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-missing-definition", new { appId = "missing.launch.app", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         AssertError(missingDefinitionResponse, -32014, "app_definition_not_found", "launch-missing-definition");
@@ -247,12 +394,13 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             """
             {
               "appId": "launch.no-config",
+              "scope": "",
               "displayName": "Launch Without Config"
             }
             """);
 
         var missingConfigResponse = await missingDefinitionHandler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-missing-config", new { appId = "launch.no-config" }),
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-missing-config", new { appId = "launch.no-config", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         AssertError(missingConfigResponse, -32020, "launch_failed", "launch-missing-config");
@@ -263,6 +411,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             """
             {
               "appId": "launch.success",
+              "scope": "",
               "displayName": "Launch Success",
               "launch": {
                 "exePath": "dotnet",
@@ -272,7 +421,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             """);
 
         var successResponse = await missingDefinitionHandler.HandleAsync(
-            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-success", new { appId = "launch.success" }),
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-success", new { appId = "launch.success", scope = ScopeContract.Global }),
             CancellationToken.None);
 
         var successResult = JsonSerializer.SerializeToElement(successResponse.Result);
@@ -357,7 +506,12 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     {
         using var document = JsonDocument.Parse(json);
         var appId = document.RootElement.GetProperty("appId").GetString();
-        File.WriteAllText(Path.Combine(definitionsPath, $"{appId}.json"), json);
+        var scope = document.RootElement.TryGetProperty("scope", out var scopeElement)
+            ? scopeElement.ValueKind == JsonValueKind.Null ? ScopeContract.Global : scopeElement.GetString()
+            : ScopeContract.Global;
+        File.WriteAllText(
+            Path.Combine(definitionsPath, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName()),
+            json);
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message, object id)

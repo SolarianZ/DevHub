@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-list-global",
+  "result": {
+    "ok": true,
+    "definitions": [
+      {
+        "appId": "Sample.App",
+        "scope": "",
+        "displayName": "Sample App"
+      }
+    ]
+  }
+}

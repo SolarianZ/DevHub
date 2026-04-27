@@ -4,6 +4,7 @@ using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
@@ -41,14 +42,7 @@ public class InvocationRequestFlowTests : IDisposable
         WriteDefinition(appId, rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6101,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6101);
 
         var handler = CreateHandler(appRegistry);
 
@@ -59,7 +53,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { branch = "main" },
                 options = new
@@ -79,6 +73,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 maxCount = 1,
                 waitMs = 1000
             })
@@ -97,6 +92,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 invocationId,
                 value = new { ok = true, version = 1 }
             })
@@ -123,14 +119,7 @@ public class InvocationRequestFlowTests : IDisposable
         WriteDefinition(appId, rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6109,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6109);
 
         var handler = CreateHandler(appRegistry);
 
@@ -141,7 +130,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.null-result",
                 options = new
                 {
@@ -160,6 +149,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 maxCount = 1,
                 waitMs = 1000
             })
@@ -176,6 +166,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 invocationId,
                 value = (object?)null
             })
@@ -198,14 +189,7 @@ public class InvocationRequestFlowTests : IDisposable
         WriteDefinition(appId, rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6102,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6102);
 
         var handler = CreateHandler(appRegistry);
 
@@ -216,7 +200,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { branch = "dev" },
                 options = new
@@ -233,7 +217,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             Id = "poll-failed",
             Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
         }, CancellationToken.None);
 
         Assert.Null(pollResponse.Error);
@@ -247,6 +231,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 invocationId,
                 error = new
                 {
@@ -280,14 +265,7 @@ public class InvocationRequestFlowTests : IDisposable
         WriteDefinition(appId, rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6103,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6103);
 
         var handler = CreateHandler(appRegistry);
 
@@ -298,7 +276,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.slow",
                 args = new { x = 1 },
                 options = new
@@ -315,7 +293,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             Id = "poll-timeout",
             Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
         }, CancellationToken.None);
 
         Assert.Null(pollResponse.Error);
@@ -338,6 +316,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
                 invocationId,
                 value = new { ok = true }
             })
@@ -349,21 +328,14 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_Request_WhenCallerCanceled_ShouldReturnTimeout_AndLateRespondShouldBeExpired()
+    public async Task Impl_Request_WhenCallerCanceled_ShouldStopWaiting_AndRespondShouldStillSucceed()
     {
         const string appId = "request-canceled.app";
         const string instanceId = "request-canceled-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6104,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6104);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
@@ -383,7 +355,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.cancel",
                 args = new { x = 2 },
                 options = new
@@ -400,7 +372,7 @@ public class InvocationRequestFlowTests : IDisposable
         {
             Id = "poll-canceled",
             Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
         }, CancellationToken.None);
 
         Assert.Null(pollResponse.Error);
@@ -409,23 +381,96 @@ public class InvocationRequestFlowTests : IDisposable
 
         cts.Cancel();
 
-        var requestResponse = await requestTask;
-        Assert.NotNull(requestResponse.Error);
-        Assert.Equal(-32012, requestResponse.Error.Code);
-        Assert.Equal("invocation_timeout", requestResponse.Error.Message);
-
-        var timeoutData = JsonSerializer.SerializeToElement(requestResponse.Error.Data);
-        Assert.Equal(invocationId, timeoutData.GetProperty("invocationId").GetString());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
 
         Assert.False(waiter.Cleanup(invocationId!), "waiter 应在 caller 取消后被及时清理");
 
-        var lateRespondResponse = await handler.HandleAsync(new JsonRpcRequest
+        var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "respond-canceled-late",
+            Id = "respond-canceled",
             Method = "hub.invoke.respond",
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = instanceToken,
+                invocationId,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(respondResponse.Error);
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenCallerCanceledAndTimeoutLaterElapsed_ShouldRejectLateRespond()
+    {
+        const string appId = "request-canceled-timeout.app";
+        const string instanceId = "request-canceled-timeout-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6105);
+
+        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+        var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), clock, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, clock, _invocationHandlerLogger.Object);
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-canceled-timeout",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.cancel.timeout",
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 300,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-canceled-timeout",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var invocationId = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("invocationId")
+            .GetString();
+
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
+
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+        _ = store.Sweep(clock.UtcNow);
+
+        var lateRespondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-canceled-timeout-late",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = instanceToken,
                 invocationId,
                 value = new { ok = true }
             })
@@ -449,7 +494,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-invalid.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { },
                 options = new
@@ -480,7 +525,7 @@ public class InvocationRequestFlowTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "request-offline.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.build",
                 args = new { },
                 options = new
@@ -504,56 +549,36 @@ public class InvocationRequestFlowTests : IDisposable
     public async Task Impl_Request_WhenOptionsOmitted_ShouldApplySpecDefaultsAndReturnTimeout()
     {
         const string appId = "request-default-options.app";
-        const string instanceId = "request-default-options-instance";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = null,
-            Pid = 6110,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMinutes(2));
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 10000, 30);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object, runtimeTuningOptions);
+        _ = RegisterInstance(appRegistry, appId, "request-default-options-instance", pid: 6110);
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
         var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
-        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), new SystemClock(), _launchLogger.Object);
-        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), _invocationHandlerLogger.Object);
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), clock, runtimeTuningOptions, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, clock, _invocationHandlerLogger.Object, runtimeTuningOptions);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        var requestResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "req-default-options",
             Method = "hub.invoke.request",
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.default",
                 args = new { x = 1 }
             })
-        }, cts.Token);
-
-        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "poll-default-options",
-            Method = "hub.invoke.poll",
-            Params = JsonSerializer.SerializeToElement(new { instanceId, maxCount = 1, waitMs = 1000 })
         }, CancellationToken.None);
 
-        Assert.Null(pollResponse.Error);
-        var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(invocationId));
-
-        var requestResponse = await requestTask;
         Assert.NotNull(requestResponse.Error);
         Assert.Equal(-32012, requestResponse.Error.Code);
         Assert.Equal("invocation_timeout", requestResponse.Error.Message);
@@ -585,10 +610,11 @@ public class InvocationRequestFlowTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {
@@ -597,10 +623,62 @@ public class InvocationRequestFlowTests : IDisposable
             }
         }));
     }
+
+    private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)
+    {
+        var registered = appRegistry.TryRegisterInstance(
+            new AppInstance
+            {
+                InstanceId = instanceId,
+                AppId = appId,
+                Scope = ScopeContract.Global,
+                Pid = pid,
+                Invoke = new InvokeCapability { Poll = true, Respond = true }
+            },
+            $"{instanceId}-password",
+            out _,
+            out var instanceToken,
+            out _);
+        Assert.True(registered);
+        return instanceToken;
+    }
+
+    private sealed class MutableClock : IClock
+    {
+        private DateTime _current;
+
+        public MutableClock(DateTime initialUtc)
+        {
+            _current = initialUtc;
+        }
+
+        public DateTime UtcNow => _current;
+
+        public void Advance(TimeSpan delta)
+        {
+            _current = _current.Add(delta);
+        }
+    }
+
+    private sealed class SequenceClock : IClock
+    {
+        private readonly DateTime _start;
+        private readonly TimeSpan _delta;
+        private int _readCount;
+
+        public SequenceClock(DateTime start, TimeSpan delta)
+        {
+            _start = start;
+            _delta = delta;
+        }
+
+        public DateTime UtcNow
+        {
+            get
+            {
+                var current = Interlocked.Increment(ref _readCount);
+                return _start.AddTicks(_delta.Ticks * current);
+            }
+        }
+    }
 }
-
-
-
-
-
-

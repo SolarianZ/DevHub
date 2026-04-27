@@ -62,6 +62,22 @@ internal static class ResponsePayloadReader
         }
     }
 
+    internal static void EnsureAppIdValue(string? value, string location, string propertyName)
+    {
+        if (!ProtocolIdentifier.IsValidAppId(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    internal static void EnsureInstanceIdValue(string? value, string location, string propertyName)
+    {
+        if (!ProtocolIdentifier.IsValidInstanceId(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
     internal static void EnsureNotNull<T>(T? value, string location, string propertyName)
         where T : class
     {
@@ -74,7 +90,8 @@ internal static class ResponsePayloadReader
     internal static void ValidateAppDefinitionElement(JToken element, string location)
     {
         EnsureElementKind(element, location, JTokenType.Object);
-        EnsureStringProperty(element, location, "appId");
+        EnsureAppIdProperty(element, location, "appId");
+        EnsureScopeStringProperty(element, location, "scope");
         EnsureStringProperty(element, location, "displayName");
         EnsureOptionalStringProperty(element, location, "description");
 
@@ -98,9 +115,9 @@ internal static class ResponsePayloadReader
     internal static void ValidateAppInstanceElement(JToken element, string location)
     {
         EnsureElementKind(element, location, JTokenType.Object);
-        EnsureStringProperty(element, location, "instanceId");
-        EnsureStringProperty(element, location, "appId");
-        EnsureOptionalStringOrNullProperty(element, location, "scope");
+        EnsureInstanceIdProperty(element, location, "instanceId");
+        EnsureAppIdProperty(element, location, "appId");
+        EnsureScopeStringProperty(element, location, "scope");
         EnsurePositiveIntegerProperty(element, location, "pid");
         EnsureStringProperty(element, location, "registeredAtUtc");
         EnsureStringProperty(element, location, "lastSeenUtc");
@@ -117,6 +134,11 @@ internal static class ResponsePayloadReader
         if (TryGetProperty(element, "password", out _))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：不得包含 password。");
+        }
+
+        if (TryGetProperty(element, "instanceSessionToken", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：不得包含 instanceSessionToken。");
         }
     }
 
@@ -156,10 +178,10 @@ internal static class ResponsePayloadReader
     {
         EnsureElementKind(element, location, JTokenType.Object);
         EnsureStringProperty(element, location, "invocationId");
-        EnsureStringProperty(element, location, "appId");
+        EnsureAppIdProperty(element, location, "appId");
         var targetToken = EnsurePropertyExists(element, location, "target", JTokenType.Object);
-        EnsureOptionalStringOrNullProperty(targetToken, $"{location}.target", "scope");
-        EnsureOptionalStringOrNullProperty(targetToken, $"{location}.target", "instanceId");
+        EnsureScopeStringProperty(targetToken, $"{location}.target", "scope");
+        EnsureOptionalInstanceIdOrNullProperty(targetToken, $"{location}.target", "instanceId");
         EnsureStringProperty(element, location, "method");
         EnsureStringProperty(element, location, "kind");
         EnsureStringProperty(element, location, "createdAtUtc");
@@ -175,7 +197,7 @@ internal static class ResponsePayloadReader
 
         var callerToken = EnsurePropertyExists(element, location, "caller", JTokenType.Object);
         EnsureStringProperty(callerToken, $"{location}.caller", "clientId");
-        EnsureStringProperty(callerToken, $"{location}.caller", "clientSessionId");
+        EnsureGuidStringProperty(callerToken, $"{location}.caller", "clientSessionId");
 
         if (TryGetProperty(element, "delivery", out var deliveryToken) && deliveryToken.Type != JTokenType.Null)
         {
@@ -199,6 +221,34 @@ internal static class ResponsePayloadReader
         if (string.IsNullOrWhiteSpace((string?)propertyValue))
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 不能为空。");
+        }
+    }
+
+    private static void EnsureGuidStringProperty(JToken element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.String);
+        var value = (string?)propertyValue;
+        if (string.IsNullOrWhiteSpace(value) || !Guid.TryParseExact(value, "D", out _))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 必须为 UUID 字符串。");
+        }
+    }
+
+    private static void EnsureAppIdProperty(JToken element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.String);
+        if (!ProtocolIdentifier.IsValidAppId((string?)propertyValue))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureInstanceIdProperty(JToken element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.String);
+        if (!ProtocolIdentifier.IsValidInstanceId((string?)propertyValue))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
         }
     }
 
@@ -255,6 +305,49 @@ internal static class ResponsePayloadReader
         }
     }
 
+    private static string EnsureScopeStringProperty(JToken element, string location, string propertyName)
+    {
+        var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.String);
+        var value = (string?)propertyValue;
+        if (!ScopeContract.IsValidScopedString(value))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+
+        return value!;
+    }
+
+    private static void EnsureOptionalScopeStringProperty(JToken element, string location, string propertyName)
+    {
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.Type != JTokenType.String || !ScopeContract.IsValidScopedString((string?)propertyValue))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalInstanceIdOrNullProperty(JToken element, string location, string propertyName)
+    {
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.Type == JTokenType.Null)
+        {
+            return;
+        }
+
+        if (propertyValue.Type != JTokenType.String || !ProtocolIdentifier.IsValidInstanceId((string?)propertyValue))
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
     private static void EnsurePositiveIntegerProperty(JToken element, string location, string propertyName)
     {
         var propertyValue = EnsurePropertyExists(element, location, propertyName, JTokenType.Integer);
@@ -289,21 +382,28 @@ internal static class ResponsePayloadReader
         {
             case "app.definition.upserted":
                 EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
-                ValidateAppDefinitionElement(
-                    EnsurePropertyExists(payload, $"{location}.payload", "definition", JTokenType.Object),
-                    $"{location}.payload.definition");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
+                var payloadScope = EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
+                var definitionElement = EnsurePropertyExists(payload, $"{location}.payload", "definition", JTokenType.Object);
+                ValidateAppDefinitionElement(definitionElement, $"{location}.payload.definition");
+                var definitionScope = (string?)EnsurePropertyExists(definitionElement, $"{location}.payload.definition", "scope", JTokenType.String);
+                if (!string.Equals(payloadScope, definitionScope, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"{location}.payload 返回结果非法：scope 与 definition.scope 必须一致。");
+                }
+
                 break;
             case "app.definition.deleted":
                 EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
+                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 break;
             case "app.instance.registered":
             case "app.instance.unregistered":
                 EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
-                EnsureStringProperty(payload, $"{location}.payload", "appId");
-                EnsureStringProperty(payload, $"{location}.payload", "instanceId");
-                EnsureOptionalStringOrNullProperty(payload, $"{location}.payload", "scope");
+                EnsureAppIdProperty(payload, $"{location}.payload", "appId");
+                EnsureInstanceIdProperty(payload, $"{location}.payload", "instanceId");
+                EnsureOptionalScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (TryGetProperty(payload, "password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");

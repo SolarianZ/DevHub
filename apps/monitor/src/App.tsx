@@ -6,14 +6,21 @@ import { useBootstrapFlow } from "./hooks/useBootstrapFlow";
 import { useConfirmDialog } from "./hooks/useConfirmDialog";
 import { useDefinitionEditor } from "./hooks/useDefinitionEditor";
 import { useHostSession } from "./hooks/useHostSession";
+import { useRpcTestWorkspace } from "./hooks/useRpcTestWorkspace";
 import {
   openLogDirectory,
   pickDataDirectory,
   pickHostExecutablePath,
   writeFrontendLog,
 } from "./lib/monitor-api";
+import type { AppDefinitionIdentity } from "@devhub/sdk";
 import type { FrontendLogInput, LogKind } from "./lib/models";
-import { type MonitorWorkspace, getHomeWorkspaceMode, toErrorMessage } from "./lib/monitor-ui";
+import {
+  type MonitorWorkspace,
+  type SidebarWorkspace,
+  getHomeWorkspaceMode,
+  toErrorMessage,
+} from "./lib/monitor-ui";
 
 function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<MonitorWorkspace>("home");
@@ -33,6 +40,7 @@ function App() {
     bootstrapError,
     discardSettingsChanges,
     handleLaunchHost,
+    handleResumeDiscovery,
     handleSaveSettings: handleSaveSettingsRequest,
     replaceBootstrap,
     settings,
@@ -55,10 +63,22 @@ function App() {
     runHostAction,
     sessionError,
     sessionResetVersion,
+    versionCompatibility,
   } = useHostSession({
     bootstrap,
     onReplaceBootstrap: replaceBootstrap,
     recordFrontendLog,
+  });
+
+  const {
+    workspace: rpcTestWorkspace,
+    cancelRequest: cancelRpcTestRequest,
+    sendDraft: sendRpcTestDraft,
+    updateDraft: updateRpcTestDraft,
+    validateDraft: validateRpcTestDraft,
+  } = useRpcTestWorkspace({
+    connection: bootstrap?.phase === "host_available" ? bootstrap.connection ?? null : null,
+    sessionResetVersion,
   });
 
   const {
@@ -140,7 +160,7 @@ function App() {
     return true;
   });
 
-  const handleNavigateWorkspace = useEffectEvent(async (workspace: "home" | "help" | "settings") => {
+  const handleNavigateWorkspace = useEffectEvent(async (workspace: SidebarWorkspace) => {
     if (!(await leaveCurrentWorkspace(workspace))) {
       return;
     }
@@ -157,11 +177,11 @@ function App() {
     void openCreateDefinitionWorkspace();
   });
 
-  const handleOpenDefinitionEdit = useEffectEvent((appId: string) => {
+  const handleOpenDefinitionEdit = useEffectEvent((identity: AppDefinitionIdentity) => {
     startTransition(() => {
       setActiveWorkspace("definition");
     });
-    void openEditDefinitionWorkspace(appId);
+    void openEditDefinitionWorkspace(identity);
   });
 
   const handleOpenInstanceDefinition = useEffectEvent((instance: Parameters<typeof openInstanceDefinitionWorkspace>[0]) => {
@@ -307,7 +327,9 @@ function App() {
         hostSessionStatus={hostSessionStatus}
         definitions={definitions}
         instances={instances}
+        versionCompatibility={versionCompatibility}
         definitionWorkspace={definitionWorkspace}
+        rpcTestWorkspace={rpcTestWorkspace}
         onNavigateWorkspace={(workspace) => {
           void handleNavigateWorkspace(workspace);
         }}
@@ -316,6 +338,9 @@ function App() {
         }}
         onLaunchHost={() => {
           void handleLaunch();
+        }}
+        onResumeDiscovery={() => {
+          void handleResumeDiscovery();
         }}
         onChangeSettingsField={updateSettingsDraftField}
         onSelectHostExecutablePath={() => {
@@ -330,12 +355,20 @@ function App() {
         onAddDefinition={() => {
           handleOpenDefinitionCreate();
         }}
-        onEditDefinition={(appId) => {
-          handleOpenDefinitionEdit(appId);
+        onEditDefinition={(identity) => {
+          handleOpenDefinitionEdit(identity);
         }}
         onViewInstanceDefinition={(instance) => {
           handleOpenInstanceDefinition(instance);
         }}
+        onChangeRpcTestDraft={updateRpcTestDraft}
+        onValidateRpcTestRequest={() => {
+          validateRpcTestDraft();
+        }}
+        onSendRpcTestRequest={() => {
+          void sendRpcTestDraft();
+        }}
+        onCancelRpcTestRequest={cancelRpcTestRequest}
         onChangeDefinitionField={updateDefinitionField}
         onCloseDefinitionWorkspace={() => {
           void handleCloseDefinition();

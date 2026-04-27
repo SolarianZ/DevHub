@@ -1,14 +1,15 @@
 {
   "id": "errors.invocation_expired_includes_elapsed_ms",
   "caseId": "CONF-008",
-  "description": "原始 HTTP request 在 ttlMs 到期时，必须返回 invocation_expired，并包含 invocationId 与 elapsedMs。", 
+  "description": "原始 HTTP request 在 ttlMs 到期时，必须返回 invocation_expired，并包含 invocationId 与 elapsedMs。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.expired.json",
+        "fileName": "errors.invocation.expired--global.json",
         "definition": {
           "appId": "errors.invocation.expired",
+          "scope": "",
           "displayName": "errors.invocation.expired"
         }
       }
@@ -30,7 +31,7 @@
     "params": {
       "appId": "errors.invocation.expired",
       "target": {
-        "scope": null,
+        "scope": "",
         "instanceId": null
       },
       "method": "demo.request.expired",

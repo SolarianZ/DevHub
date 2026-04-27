@@ -9,6 +9,12 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 const DISCOVERY_CLIENT_ID: &str = "DevHubMonitor";
+const METHOD_NOT_FOUND_ERROR_CODE: i64 = -32601;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeVerification {
+    pub host_version: Option<String>,
+}
 
 pub fn discover_runtime(data_directory: &Path) -> Result<MonitorRuntimeConnectionInfo> {
     reject_legacy_layout(data_directory)?;
@@ -42,80 +48,32 @@ pub fn discover_runtime(data_directory: &Path) -> Result<MonitorRuntimeConnectio
     })
 }
 
-pub async fn verify_runtime(connection: &MonitorRuntimeConnectionInfo) -> Result<()> {
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_millis(1500))
-        .build()
-        .context("无法创建 Hub 校验 HTTP 客户端。")?;
+pub async fn verify_runtime(
+    connection: &MonitorRuntimeConnectionInfo,
+) -> Result<RuntimeVerification> {
+    let client = build_discovery_client()?;
+    let headers = build_request_headers(connection)?;
 
-    let request_id = format!("monitor-ping-{}", Uuid::new_v4());
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", connection.token))
-            .context("无法构造 Authorization 请求头。")?,
-    );
-    headers.insert("X-DevHub-Protocol", HeaderValue::from_static("1"));
-    headers.insert(
-        "X-DevHub-ClientId",
-        HeaderValue::from_static(DISCOVERY_CLIENT_ID),
-    );
-    headers.insert(
-        "X-DevHub-ClientSessionId",
-        HeaderValue::from_str(&Uuid::new_v4().to_string())
-            .context("无法构造 X-DevHub-ClientSessionId 请求头。")?,
-    );
-
-    let response = client
-        .post(&connection.rpc_endpoint)
-        .headers(headers)
-        .json(&json!({
+    let ping_request_id = format!("monitor-ping-{}", Uuid::new_v4());
+    let ping_payload = send_json_rpc_request(
+        &client,
+        connection,
+        headers.clone(),
+        &json!({
             "jsonrpc": "2.0",
-            "id": request_id,
+            "id": ping_request_id,
             "method": "hub.ping",
             "params": {
                 "echo": "monitor-discovery"
             }
-        }))
-        .send()
-        .await
-        .with_context(|| format!("hub.ping 请求失败：{}", connection.rpc_endpoint))?;
+        }),
+        "hub.ping",
+    )
+    .await?;
+    validate_ping_response(&ping_payload, &ping_request_id)?;
 
-    let payload = response
-        .json::<Value>()
-        .await
-        .context("hub.ping 响应 JSON 无法解析。")?;
-
-    if payload.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-        anyhow::bail!("hub.ping 响应缺少合法 jsonrpc 字段。");
-    }
-
-    if payload.get("id").and_then(Value::as_str) != Some(request_id.as_str()) {
-        anyhow::bail!("hub.ping 响应 id 不匹配。");
-    }
-
-    if let Some(error) = payload.get("error") {
-        anyhow::bail!("hub.ping 返回错误：{error}");
-    }
-
-    let result = payload
-        .get("result")
-        .and_then(Value::as_object)
-        .context("hub.ping 响应缺少 result。")?;
-
-    if result.get("ok").and_then(Value::as_bool) != Some(true) {
-        anyhow::bail!("hub.ping 响应缺少 ok=true。");
-    }
-
-    let server_time = result
-        .get("serverTimeUtc")
-        .and_then(Value::as_str)
-        .context("hub.ping 响应缺少 serverTimeUtc。")?;
-    DateTime::parse_from_rfc3339(server_time)
-        .context("hub.ping.serverTimeUtc 不是合法的 RFC 3339 时间。")?;
-
-    Ok(())
+    let host_version = resolve_host_version(&client, connection, headers).await?;
+    Ok(RuntimeVerification { host_version })
 }
 
 pub fn port_from_runtime(connection: &MonitorRuntimeConnectionInfo) -> Option<u16> {
@@ -139,7 +97,7 @@ fn reject_legacy_layout(data_directory: &Path) -> Result<()> {
 }
 
 fn validate_runtime(runtime: &MonitorHubRuntime, source: &Path) -> Result<()> {
-    if runtime.protocol_version != 1 {
+    if runtime.protocol_version == 0 {
         anyhow::bail!("hub.json.protocolVersion 非法：{}", source.display());
     }
 
@@ -209,9 +167,164 @@ fn validate_runtime_url(
     Ok(())
 }
 
+fn build_discovery_client() -> Result<Client> {
+    Client::builder()
+        .timeout(std::time::Duration::from_millis(1500))
+        .build()
+        .context("无法创建 Hub 校验 HTTP 客户端。")
+}
+
+fn build_request_headers(connection: &MonitorRuntimeConnectionInfo) -> Result<HeaderMap> {
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {}", connection.token))
+            .context("无法构造 Authorization 请求头。")?,
+    );
+    headers.insert("X-DevHub-Protocol", HeaderValue::from_static("1"));
+    headers.insert(
+        "X-DevHub-ClientId",
+        HeaderValue::from_static(DISCOVERY_CLIENT_ID),
+    );
+    headers.insert(
+        "X-DevHub-ClientSessionId",
+        HeaderValue::from_str(&Uuid::new_v4().to_string())
+            .context("无法构造 X-DevHub-ClientSessionId 请求头。")?,
+    );
+    Ok(headers)
+}
+
+async fn send_json_rpc_request(
+    client: &Client,
+    connection: &MonitorRuntimeConnectionInfo,
+    headers: HeaderMap,
+    body: &Value,
+    method_name: &str,
+) -> Result<Value> {
+    let response = client
+        .post(&connection.rpc_endpoint)
+        .headers(headers)
+        .json(body)
+        .send()
+        .await
+        .with_context(|| format!("{method_name} 请求失败：{}", connection.rpc_endpoint))?;
+
+    response
+        .json::<Value>()
+        .await
+        .with_context(|| format!("{method_name} 响应 JSON 无法解析。"))
+}
+
+fn validate_ping_response(payload: &Value, request_id: &str) -> Result<()> {
+    validate_json_rpc_envelope(payload, request_id, "hub.ping")?;
+
+    if let Some(error) = payload.get("error") {
+        anyhow::bail!("hub.ping 返回错误：{error}");
+    }
+
+    let result = payload
+        .get("result")
+        .and_then(Value::as_object)
+        .context("hub.ping 响应缺少 result。")?;
+
+    if result.get("ok").and_then(Value::as_bool) != Some(true) {
+        anyhow::bail!("hub.ping 响应缺少 ok=true。");
+    }
+
+    let server_time = result
+        .get("serverTimeUtc")
+        .and_then(Value::as_str)
+        .context("hub.ping 响应缺少 serverTimeUtc。")?;
+    DateTime::parse_from_rfc3339(server_time)
+        .context("hub.ping.serverTimeUtc 不是合法的 RFC 3339 时间。")?;
+
+    Ok(())
+}
+
+async fn resolve_host_version(
+    client: &Client,
+    connection: &MonitorRuntimeConnectionInfo,
+    headers: HeaderMap,
+) -> Result<Option<String>> {
+    let request_id = format!("monitor-get-version-{}", Uuid::new_v4());
+    let payload = send_json_rpc_request(
+        client,
+        connection,
+        headers,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "hub.getVersion",
+            "params": {}
+        }),
+        "hub.getVersion",
+    )
+    .await?;
+
+    parse_host_version_response(
+        &payload,
+        &request_id,
+        connection.runtime.hub_version.as_deref(),
+    )
+}
+
+fn parse_host_version_response(
+    payload: &Value,
+    request_id: &str,
+    fallback_hub_version: Option<&str>,
+) -> Result<Option<String>> {
+    validate_json_rpc_envelope(payload, request_id, "hub.getVersion")?;
+
+    if let Some(error) = payload.get("error") {
+        let code = error
+            .get("code")
+            .and_then(Value::as_i64)
+            .context("hub.getVersion 错误响应缺少 code。")?;
+        if code == METHOD_NOT_FOUND_ERROR_CODE {
+            return Ok(fallback_hub_version.map(str::to_string));
+        }
+
+        anyhow::bail!("hub.getVersion 返回错误：{error}");
+    }
+
+    let result = payload
+        .get("result")
+        .and_then(Value::as_object)
+        .context("hub.getVersion 响应缺少 result。")?;
+    if result.get("ok").and_then(Value::as_bool) != Some(true) {
+        anyhow::bail!("hub.getVersion 响应缺少 ok=true。");
+    }
+
+    let version = result
+        .get("version")
+        .and_then(Value::as_str)
+        .context("hub.getVersion 响应缺少 version。")?;
+    if version.trim().is_empty() {
+        anyhow::bail!("hub.getVersion 响应 version 为空。");
+    }
+
+    Ok(Some(version.to_string()))
+}
+
+fn validate_json_rpc_envelope(payload: &Value, request_id: &str, method_name: &str) -> Result<()> {
+    if payload.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        anyhow::bail!("{method_name} 响应缺少合法 jsonrpc 字段。");
+    }
+
+    if payload.get("id").and_then(Value::as_str) != Some(request_id) {
+        anyhow::bail!("{method_name} 响应 id 不匹配。");
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{discover_runtime, port_from_runtime};
+    use super::{
+        discover_runtime, parse_host_version_response, port_from_runtime, validate_ping_response,
+    };
+    use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -245,7 +358,7 @@ mod tests {
                 "onlineThresholdSeconds": 15,
                 "launchDedupeWindowSeconds": 5
             },
-            "hubVersion": "0.6.0"
+            "hubVersion": "0.7.0"
         }))
         .expect("failed to serialize hub.json");
         fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
@@ -270,5 +383,66 @@ mod tests {
             .contains("DEVHUB_DATA_DIR 必须指向数据根目录"));
 
         fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn validate_ping_response_accepts_expected_payload() {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": "request-1",
+            "result": {
+                "ok": true,
+                "serverTimeUtc": "2026-04-12T00:00:00Z"
+            }
+        });
+
+        validate_ping_response(&payload, "request-1").expect("expected valid ping response");
+    }
+
+    #[test]
+    fn parse_host_version_response_falls_back_only_for_method_not_found() {
+        let method_not_found = json!({
+            "jsonrpc": "2.0",
+            "id": "request-2",
+            "error": {
+                "code": -32601,
+                "message": "method_not_found"
+            }
+        });
+        assert_eq!(
+            parse_host_version_response(&method_not_found, "request-2", Some("0.7.1"))
+                .expect("expected fallback result"),
+            Some("0.7.1".to_string())
+        );
+
+        let invalid_params = json!({
+            "jsonrpc": "2.0",
+            "id": "request-3",
+            "error": {
+                "code": -32602,
+                "message": "invalid_params"
+            }
+        });
+        let error = parse_host_version_response(&invalid_params, "request-3", Some("0.7.1"))
+            .expect_err("expected non-fallback error");
+        assert!(error.to_string().contains("hub.getVersion 返回错误"));
+    }
+
+    #[test]
+    fn parse_host_version_response_reads_version_result() {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": "request-4",
+            "result": {
+                "ok": true,
+                "version": "0.7.0-rc.1"
+            }
+        });
+
+        assert_eq!(
+            parse_host_version_response(&payload, "request-4", Some("0.6.9"))
+                .expect("expected version result"),
+            Some("0.7.0-rc.1".to_string())
+        );
     }
 }

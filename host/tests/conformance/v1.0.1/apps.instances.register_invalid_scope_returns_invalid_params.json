@@ -1,7 +1,7 @@
 {
   "id": "apps.instances.register_invalid_scope_returns_invalid_params",
   "caseId": "CONF-003",
-  "description": "注册实例时 scope 类型非法时，hub.apps.registerInstance 必须返回 invalid_params/invalid_scope。",
+  "description": "注册实例时 scope grammar 非法时，hub.apps.registerInstance 必须返回 invalid_params/invalid_scope。",
   "transport": "http",
   "http": {
     "headers": {
@@ -21,7 +21,7 @@
       "instance": {
         "instanceId": "apps-instance-register-invalid-scope",
         "appId": "apps.instance.invalid-scope.app",
-        "scope": 1,
+        "scope": ".invalid-scope",
         "pid": 32002,
         "invoke": {
           "poll": true,

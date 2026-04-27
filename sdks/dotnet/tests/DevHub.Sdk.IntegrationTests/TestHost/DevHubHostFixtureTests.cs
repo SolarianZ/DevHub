@@ -201,6 +201,35 @@ public sealed class DevHubHostFixtureTests
     }
 
     [Fact]
+    public async Task Impl_HostFixture_WhenWritingDefinitions_ShouldUseCanonicalScopeKeyFilenames()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "fixture.scope.app",
+            Scope = string.Empty,
+            DisplayName = "fixture.scope.app.global"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "fixture.scope.app",
+            Scope = "global",
+            DisplayName = "fixture.scope.app.literal-global"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "fixture.scope.app",
+            Scope = "workspace.a",
+            DisplayName = "fixture.scope.app.workspace-a"
+        });
+
+        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--global.json")));
+        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--scope-global.json")));
+        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--scope-workspace.a.json")));
+    }
+
+    [Fact]
     public async Task Impl_HostFixture_WhenDisposed_ShouldCleanupTempRootAndExitHostProcess()
     {
         var host = await DevHubHostFixture.StartAsync();
@@ -229,6 +258,7 @@ public sealed class DevHubHostFixtureTests
             var launchResult = await client.LaunchAsync(new LaunchRequest
             {
                 AppId = "host.cleanup.app",
+                Scope = string.Empty,
                 WaitForRegisterMs = 0
             });
 
@@ -292,6 +322,7 @@ public sealed class DevHubHostFixtureTests
             return new AppDefinition
             {
                 AppId = appId,
+                Scope = string.Empty,
                 DisplayName = appId,
                 Launch = new LaunchConfiguration
                 {
@@ -304,6 +335,7 @@ public sealed class DevHubHostFixtureTests
         return new AppDefinition
         {
             AppId = appId,
+            Scope = string.Empty,
             DisplayName = appId,
             Launch = new LaunchConfiguration
             {

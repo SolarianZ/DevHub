@@ -1,7 +1,7 @@
 {
-  "id": "apps.instances.unregister_password_mismatch_returns_forbidden",
+  "id": "apps.instances.unregister_session_token_mismatch_returns_forbidden",
   "caseId": "CONF-003",
-  "description": "已注册 instanceId 以错误 password 调用 hub.apps.unregisterInstance 时，必须返回 instance_password_mismatch，且保留原状态。",
+  "description": "已注册 instanceId 以错误 instanceSessionToken 调用 hub.apps.unregisterInstance 时，必须返回 instance_session_token_mismatch，且保留原状态。",
   "transport": "http",
   "setup": {
     "instances": [
@@ -29,8 +29,8 @@
         "requestId": "apps-instances-unregister-mismatch-list",
         "params": {
           "appId": "apps.instance.unregister.guard.app",
-          "includeAllScopes": true,
-          "includeOffline": true
+          "includeOffline": true,
+          "scope": null
         },
         "expectedResult": {
           "ok": true,
@@ -61,21 +61,21 @@
   },
   "request": {
     "jsonrpc": "2.0",
-    "id": "apps-instances-unregister-password-mismatch",
+    "id": "apps-instances-unregister-token-mismatch",
     "method": "hub.apps.unregisterInstance",
     "params": {
       "instanceId": "apps-instance-unregister-guard",
-      "password": "wrong-password"
+      "instanceSessionToken": "wrong-instance-session-token"
     }
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
-    "id": "apps-instances-unregister-password-mismatch",
+    "id": "apps-instances-unregister-token-mismatch",
     "error": {
       "code": -32002,
       "message": "forbidden",
       "data": {
-        "reason": "instance_password_mismatch",
+        "reason": "instance_session_token_mismatch",
         "instanceId": "apps-instance-unregister-guard"
       }
     }

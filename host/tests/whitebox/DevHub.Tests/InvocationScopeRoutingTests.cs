@@ -43,7 +43,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "inst-a",
             AppId = "route.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 1001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -51,7 +51,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "inst-b",
             AppId = "route.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 1002,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -60,7 +60,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
         var candidates = service.GetOnlineCandidates(
             "route.app",
-            new InvocationTarget { Scope = null, InstanceId = "inst-b" });
+            new InvocationTarget { Scope = ScopeContract.Global, InstanceId = "inst-b" });
 
         Assert.Single(candidates);
         Assert.Equal("inst-b", candidates[0].InstanceId);
@@ -74,7 +74,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "global-inst",
             AppId = "scope.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 2001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -82,7 +82,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "scoped-inst",
             AppId = "scope.app",
-            Scope = "workspace://a",
+            Scope = "workspace.a",
             Pid = 2002,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -91,21 +91,21 @@ public class InvocationScopeRoutingTests : IDisposable
 
         var candidates = service.GetOnlineCandidates(
             "scope.app",
-            new InvocationTarget { Scope = "workspace://a", InstanceId = null });
+            new InvocationTarget { Scope = "workspace.a", InstanceId = null });
 
         Assert.Single(candidates);
         Assert.Equal("scoped-inst", candidates[0].InstanceId);
     }
 
     [Fact]
-    public void Impl_RoutingService_WithNullTargetScope_ShouldOnlyRouteToGlobalInstances()
+    public void Impl_RoutingService_WithGlobalTargetScope_ShouldOnlyRouteToGlobalInstances()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "global-only-inst",
             AppId = "scope-null.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 2051,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -122,7 +122,7 @@ public class InvocationScopeRoutingTests : IDisposable
 
         var candidates = service.GetOnlineCandidates(
             "scope-null.app",
-            new InvocationTarget { Scope = null, InstanceId = null });
+            new InvocationTarget { Scope = ScopeContract.Global, InstanceId = null });
 
         Assert.Single(candidates);
         Assert.Equal("global-only-inst", candidates[0].InstanceId);
@@ -166,34 +166,18 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
     [Fact]
-    public void Impl_RoutingService_WithWhitespaceScope_ShouldRouteToExactWhitespaceScope()
+    public void Impl_RoutingService_WithWhitespaceScope_ShouldRejectInvalidScope()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = "global-inst",
-            AppId = "space-scope.app",
-            Scope = null,
-            Pid = 2101,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
-        appRegistry.RegisterInstance(new AppInstance
+        var exception = Assert.Throws<ArgumentException>(() => appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "space-scope-inst",
             AppId = "space-scope.app",
             Scope = "   ",
             Pid = 2102,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
-
-        var service = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-
-        var candidates = service.GetOnlineCandidates(
-            "space-scope.app",
-            new InvocationTarget { Scope = "   ", InstanceId = null });
-
-        Assert.Single(candidates);
-        Assert.Equal("space-scope-inst", candidates[0].InstanceId);
+        }));
+        Assert.Equal("Scope", exception.ParamName);
     }
 
     [Fact]
@@ -217,7 +201,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "target-missing.app",
-                target = new { scope = (string?)null, instanceId = "inst-not-exists" },
+                target = new { scope = ScopeContract.Global, instanceId = "inst-not-exists" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -260,7 +244,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "target-missing.app",
-                target = new { scope = (string?)null, instanceId = "inst-not-exists" },
+                target = new { scope = ScopeContract.Global, instanceId = "inst-not-exists" },
                 method = "task.run",
                 args = new { },
                 options = new
@@ -301,7 +285,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "route-log-notify-global",
             AppId = "route-log-notify.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4201,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -313,7 +297,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "route-log-notify.app",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "asset.rebuild",
                 args = new { sample = true },
                 options = new
@@ -415,7 +399,7 @@ public class InvocationScopeRoutingTests : IDisposable
     {
         foreach (var scopeCase in new (string? TargetScope, string ScopeName, string ScopeTag)[]
                  {
-                     (null, "global", "global"),
+                     (ScopeContract.Global, "global", "global"),
                      ("workspace-A", "workspace-A", "scoped")
                  })
         {
@@ -455,7 +439,7 @@ public class InvocationScopeRoutingTests : IDisposable
                     Params = JsonSerializer.SerializeToElement(new
                     {
                         appId,
-                        target = new { scope, instanceId = (string?)null },
+                        target = new { scope = scope ?? ScopeContract.Global, instanceId = (string?)null },
                         method = "asset.rebuild",
                         args = new { @case = caseName },
                         options = new
@@ -489,7 +473,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Equal("offline_no_queue", noQueueData.GetProperty("reason").GetString());
 
             var pendingAppId = $"scope-010-pending-{scopeTag}";
-            WriteDefinition(pendingAppId, rpcEnabled: true);
+            WriteDefinition(pendingAppId, rpcEnabled: true, definitionScope: targetScope);
             definitionProvider.Refresh();
 
             var pendingResponse = await invocationHandler.HandleAsync(
@@ -511,7 +495,7 @@ public class InvocationScopeRoutingTests : IDisposable
             {
                 InstanceId = $"scope-010-pending-inst-{scopeName}",
                 AppId = pendingAppId,
-                Scope = targetScope,
+                Scope = targetScope ?? ScopeContract.Global,
                 Pid = 6021,
                 Invoke = new InvokeCapability { Poll = true, Respond = true }
             });
@@ -525,7 +509,8 @@ public class InvocationScopeRoutingTests : IDisposable
                 rpcEnabled: true,
                 includeLaunch: true,
                 dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-                argsTemplate: "{scopeOrGlobal}");
+                argsTemplate: "{scopeOrGlobal}",
+                definitionScope: targetScope);
             definitionProvider.Refresh();
 
             var autoLaunchResponse = await invocationHandler.HandleAsync(
@@ -547,7 +532,7 @@ public class InvocationScopeRoutingTests : IDisposable
             {
                 InstanceId = $"scope-010-autolaunch-inst-{scopeName}",
                 AppId = autoLaunchAppId,
-                Scope = targetScope,
+                Scope = targetScope ?? ScopeContract.Global,
                 Pid = 6022,
                 Invoke = new InvokeCapability { Poll = true, Respond = true }
             });
@@ -562,7 +547,7 @@ public class InvocationScopeRoutingTests : IDisposable
                 Params = JsonSerializer.SerializeToElement(new
                 {
                     appId = autoLaunchAppId,
-                    scope = targetScope,
+                    scope = targetScope ?? ScopeContract.Global,
                     waitForRegisterMs = 0
                 })
             }, CancellationToken.None);
@@ -570,7 +555,7 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Null(launchAfterAutoLaunch.Error);
             var launchResult = JsonSerializer.SerializeToElement(launchAfterAutoLaunch.Result);
             Assert.Equal("already_running", launchResult.GetProperty("status").GetString());
-            var expectedLaunchArguments = targetScope is null ? "global" : targetScope;
+            var expectedLaunchArguments = ScopeContract.IsGlobal(targetScope ?? ScopeContract.Global) ? "global" : targetScope;
             Assert.Equal(expectedLaunchArguments, launchArguments);
             processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
 
@@ -620,7 +605,7 @@ public class InvocationScopeRoutingTests : IDisposable
         {
             InstanceId = "inst-scope-requeue-global",
             AppId = "scope-requeue.app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 4013,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -698,12 +683,15 @@ public class InvocationScopeRoutingTests : IDisposable
         bool rpcEnabled,
         bool includeLaunch = false,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = null)
+        string? argsTemplate = null,
+        string? definitionScope = null)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -739,7 +727,7 @@ public class InvocationScopeRoutingTests : IDisposable
             AppId = appId,
             Target = new InvocationTarget
             {
-                Scope = targetScope,
+                Scope = targetScope ?? ScopeContract.Global,
                 InstanceId = targetInstanceId
             },
             Method = "demo.notify",
@@ -767,9 +755,3 @@ public class InvocationScopeRoutingTests : IDisposable
     }
 
 }
-
-
-
-
-
-

@@ -23,7 +23,7 @@ function createConnection(): MonitorRuntimeConnectionInfo {
         onlineThresholdSeconds: 15,
         launchDedupeWindowSeconds: 5,
       },
-      hubVersion: "0.6.0",
+      hubVersion: "0.7.0",
     },
   };
 }
@@ -49,7 +49,7 @@ describe("monitor-api runtime conversion", () => {
           onlineThresholdSeconds: 15,
           launchDedupeWindowSeconds: 5,
         },
-        hubVersion: "0.6.0",
+        hubVersion: "0.7.0",
       },
     });
   });

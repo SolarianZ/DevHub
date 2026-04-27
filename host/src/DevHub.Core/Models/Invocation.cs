@@ -114,7 +114,7 @@ public class InvocationTarget
     /// 目标作用域。
     /// </summary>
     [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
+    public required string Scope { get; set; }
 
     /// <summary>
     /// 指定实例 ID。

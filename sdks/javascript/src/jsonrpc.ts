@@ -1,4 +1,4 @@
-import { DevHubRpcError } from "./errors.js";
+import { DevHubConnectionError, DevHubRpcError } from "./errors.js";
 import { ensureRecord, isRecord } from "./validation.js";
 import { createRandomUuid } from "./web-crypto.js";
 
@@ -184,7 +184,10 @@ export function createPendingRequest(timeoutMs: number | undefined, onTimeout: (
   if (timeoutMs && timeoutMs > 0) {
     timeoutId = setTimeout(() => {
       onTimeout();
-      reject(new Error("WebSocket request timed out."));
+      reject(new DevHubConnectionError({
+        kind: "timeout",
+        message: "WebSocket request timed out."
+      }));
     }, timeoutMs);
   }
 

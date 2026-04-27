@@ -34,20 +34,23 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - `npm --prefix sdks/javascript test`
 - `python -m pip install -e "./sdks/python[test]" requests`
 - `python -m pytest sdks/python/tests`
-- Host / SDK 资产完整性检查、manifest 与 release notes 生成
+- Host 双变体 / SDK 资产完整性检查、manifest 与 release notes 生成
 
 若通过 GitHub Actions 执行远端发布：
 
-- 自动发布由 `ci.yml` 的 `publish-release` job 触发；只有 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`monitor-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过后，才会调用可复用发布工作流。
+- 自动发布由 `ci.yml` 的 `publish-release` job 触发；只有 `build-and-test`、`sdk-dotnet-tests`、`sdk-ts-tests`、`sdk-python-tests`、`sdk-conformance`、`integration-full-gate`、`cross-platform-smoke` 全部通过后，才会调用可复用发布工作流。
+- 独立的 `monitor.yml` 负责 Monitor 工作区验证；该 workflow 不属于 Host / SDK 发布门禁，`preview` 分支的 required check 配置也不应把它作为发布前置条件。
 - `workflow_dispatch` 只允许填写 `preview`、`main` 或 `v*` tag 作为 `target_ref`，且目标提交必须已有成功的 `ci`；若要通过 GitHub UI / CLI 手动触发，`release.yml` 必须存在于仓库默认分支。
 
 ### 1.3 资产检查
 
 发布前至少确认：
 
-- `artifacts/release/<release-id>/host/` 下包含三个 Host ZIP 资产。
+- `artifacts/release/<release-id>/host/` 下对每个默认 RID 都同时包含 `devhub-host-<rid>.zip` 与 `devhub-host-<rid>-single-file.zip`。
+- `artifacts/release/<release-id>/host/` 下不存在 `trimmed` 或其他第三种 Host 变体。
 - `artifacts/release/<release-id>/sdk/` 下包含 `.NET`、`JS/TS`、`Python` 三套 SDK 资产，其中 `.NET SDK` 同时包含主包与 DI companion package 的 `nupkg` / `snupkg`。
-- `release-manifest.json` 和 `release-notes.md` 已生成。
+- `release-manifest.json` 已为每条 Host 资产写入 `variant = multi-file | single-file`。
+- `release-notes.md` 已把同一 RID 的 Host multi-file / single-file 资产分开展示。
 - `checks/validation-summary.json` 记录了本次验证结果。
 
 ## 2. 发布通道专项确认
@@ -75,7 +78,9 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 发布完成后至少执行以下核验：
 
 - 打开 GitHub Release 页面，确认资产名称、数量与 `release-manifest.json` 一致。
-- 下载任意一个 Host ZIP，确认压缩包内存在对应平台的 `DevHub.Host` 启动文件。
+- 下载同一 RID 的 multi-file 与 single-file Host ZIP 各一份，确认：
+- multi-file 版解压后包含 `DevHub.Host.dll`、`DevHub.Core.dll` 与依赖侧车文件，且目录整体可直接用于运行。
+- single-file 版解压后包含平台启动文件与必要配置侧车文件，不以多文件 DLL 图形式暴露 Host 主体。
 - 抽查 `.NET SDK` 主包、`.NET SDK` DI companion package、`JS/TS SDK`、`Python SDK` 至少各一个资产，确认文件可读且名称与版本一致。
 - 核对 `release-notes.md` 中的通道、tag 和提交 SHA 与本次发布相符。
 - 若为 preview 或 main 预发布，确认 release 被标记为 prerelease。

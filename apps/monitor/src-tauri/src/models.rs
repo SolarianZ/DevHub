@@ -54,12 +54,23 @@ pub struct ResolvedDataDir {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSnapshot {
+    pub revision: u64,
     pub settings: MonitorSettings,
     pub platform: MonitorPlatform,
     pub effective_data_dir: String,
     pub data_dir_source: DataDirSource,
     pub settings_file_path: String,
     pub monitor_log_directory: String,
+    pub load_warning: Option<SettingsLoadWarning>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsLoadWarning {
+    pub code: String,
+    pub message: String,
+    pub settings_file_path: String,
+    pub backup_file_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +86,7 @@ pub enum BootstrapPhase {
     Scanning,
     LaunchAvailable,
     SettingsRequired,
+    HostIncompatible,
     HostAvailable,
 }
 

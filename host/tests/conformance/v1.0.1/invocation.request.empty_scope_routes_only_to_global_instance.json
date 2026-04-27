@@ -6,10 +6,19 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.empty-scope.json",
+        "fileName": "invoke.request.empty-scope--global.json",
         "definition": {
           "appId": "invoke.request.empty-scope",
+          "scope": "",
           "displayName": "invoke.request.empty-scope"
+        }
+      },
+      {
+        "fileName": "invoke.request.empty-scope--scope-scope-a.json",
+        "definition": {
+          "appId": "invoke.request.empty-scope",
+          "scope": "scope-a",
+          "displayName": "invoke.request.empty-scope scope-a"
         }
       }
     ]
@@ -22,7 +31,7 @@
         "instance": {
           "instanceId": "request-empty-global-inst",
           "appId": "invoke.request.empty-scope",
-          "scope": null,
+          "scope": "",
           "pid": 32005,
           "invoke": {
             "poll": true,

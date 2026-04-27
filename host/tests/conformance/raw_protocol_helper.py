@@ -146,6 +146,8 @@ class RawProtocolHelper:
     def _call_rpc(self, phase: str, index: int, step: dict[str, Any]) -> None:
         method = require_string(step.get("method"), f"orchestration.{phase}[{index}].method")
         params = step.get("params")
+        if isinstance(params, dict):
+            params = self._inject_instance_session_token_if_needed(params)
         request_id = step.get("requestId")
         if request_id is None:
             request_id = f"{self._vector_id}-{phase}-{index}"
@@ -219,6 +221,7 @@ class RawProtocolHelper:
             max_count=max_count,
             wait_ms=wait_ms,
             timeout_sec=max(30, wait_ms / 1000 + 5),
+            instance_session_token=self._resolve_instance_session_token(instance_id, phase, index),
         )
 
         ensure_success_response(
@@ -289,6 +292,7 @@ class RawProtocolHelper:
             max_count=read_non_negative_int(step, "maxCount", f"orchestration.{phase}[{index}]", default=10),
             wait_ms=wait_ms,
             timeout_sec=max(30, wait_ms / 1000 + 5),
+            instance_session_token=self._resolve_instance_session_token(instance_id, phase, index),
         )
 
         ensure_success_response(
@@ -319,6 +323,7 @@ class RawProtocolHelper:
         params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
+            "instanceSessionToken": self._resolve_instance_session_token(instance_id, phase, index),
         }
         if is_error:
             params["error"] = require_mapping(step.get("error"), f"orchestration.{phase}[{index}].error")
@@ -351,6 +356,27 @@ class RawProtocolHelper:
             step_index=index,
             action="respond_error" if is_error else "respond_value",
         )
+
+    def _inject_instance_session_token_if_needed(self, params: dict[str, Any]) -> dict[str, Any]:
+        instance_id = params.get("instanceId")
+        if (
+            isinstance(instance_id, str)
+            and "instanceSessionToken" not in params
+        ):
+            enriched = dict(params)
+            instance_session_token = self._cleanup_ledger.instance_session_tokens.get(instance_id)
+            if instance_session_token is not None:
+                enriched["instanceSessionToken"] = instance_session_token
+            return enriched
+
+        return params
+
+    def _resolve_instance_session_token(self, instance_id: str, phase: str, index: int) -> str:
+        instance_session_token = self._cleanup_ledger.instance_session_tokens.get(instance_id)
+        if isinstance(instance_session_token, str) and instance_session_token:
+            return instance_session_token
+
+        raise ValueError(f"orchestration.{phase}[{index}].instanceId 未找到可用 instanceSessionToken：{instance_id}")
 
 
 def load_orchestration_phase(vector: dict[str, Any], phase: str) -> list[Any]:

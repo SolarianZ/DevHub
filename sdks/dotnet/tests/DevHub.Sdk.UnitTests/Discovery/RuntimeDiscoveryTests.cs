@@ -11,6 +11,8 @@ namespace DevHub.Sdk.UnitTests.Discovery;
 /// </summary>
 public sealed class RuntimeDiscoveryTests : IDisposable
 {
+    private const string ExpectedHubVersion = "1.0.1";
+
     private static readonly JsonSerializerSettings HubJsonSerializerSettings = new()
     {
         ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -62,6 +64,76 @@ public sealed class RuntimeDiscoveryTests : IDisposable
         Assert.Equal("http://127.0.0.1:47231", connectionInfo.Runtime.HttpBaseUrl);
         Assert.Equal("ws://127.0.0.1:47231/ws", connectionInfo.Runtime.WsUrl);
         Assert.Equal(tokenFile, connectionInfo.Runtime.TokenFile);
+    }
+
+    [Fact]
+    public async Task RuntimeDiscovery_WithIpv6LoopbackEndpoints_ShouldAcceptRuntime()
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-ipv6");
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            HubVersion = ExpectedHubVersion,
+            Pid = 12345,
+            HttpBaseUrl = "http://[::1]:47231",
+            WsUrl = "ws://[::1]:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None);
+
+        Assert.Equal("token-ipv6", connectionInfo.Token);
+        Assert.Equal("http://[::1]:47231", connectionInfo.Runtime.HttpBaseUrl);
+        Assert.Equal("ws://[::1]:47231/ws", connectionInfo.Runtime.WsUrl);
+    }
+
+    [Fact]
+    public async Task RuntimeDiscovery_WithIpv4LoopbackRangeEndpoints_ShouldAcceptRuntime()
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-ipv4-loopback");
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            HubVersion = ExpectedHubVersion,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.23:47231",
+            WsUrl = "ws://127.0.0.23:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30
+            }
+        });
+
+        var connectionInfo = await RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None);
+
+        Assert.Equal("token-ipv4-loopback", connectionInfo.Token);
+        Assert.Equal("http://127.0.0.23:47231", connectionInfo.Runtime.HttpBaseUrl);
+        Assert.Equal("ws://127.0.0.23:47231/ws", connectionInfo.Runtime.WsUrl);
     }
 
     [Theory]

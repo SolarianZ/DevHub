@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-definitions-list-all-scopes",
+  "method": "hub.apps.listDefinitions",
+  "params": {
+    "appId": "Sample.App",
+    "scope": null
+  }
+}

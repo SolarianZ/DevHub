@@ -28,7 +28,7 @@ public class ScopeParsingTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenScopeGlobal_ShouldTreatAsExplicitScope()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenGlobalLiteral_ShouldRemainDistinctFromGlobal()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
@@ -42,7 +42,7 @@ public class ScopeParsingTests : IDisposable
                 password = InstancePassword,
                 instance = new
                 {
-                    instanceId = "inst-scope-global",
+                    instanceId = "inst-scope-literal",
                     appId = "scope-test-app",
                     scope = "global",
                     pid = 12345,
@@ -51,18 +51,18 @@ public class ScopeParsingTests : IDisposable
             })
         }, CancellationToken.None);
 
-        var nullGlobalResponse = await handler.HandleAsync(new JsonRpcRequest
+        var globalResponse = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "scope-null",
+            Id = "scope-global",
             Method = "hub.apps.registerInstance",
             Params = JsonSerializer.SerializeToElement(new
             {
                 password = InstancePassword,
                 instance = new
                 {
-                    instanceId = "inst-scope-null",
+                    instanceId = "inst-scope-global",
                     appId = "scope-test-app",
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     pid = 12346,
                     invoke = new { poll = true, respond = true }
                 }
@@ -70,14 +70,14 @@ public class ScopeParsingTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Null(scopedGlobalResponse.Error);
-        Assert.Null(nullGlobalResponse.Error);
+        Assert.Null(globalResponse.Error);
 
-        var scopedGlobalInstance = appRegistry.GetInstance("inst-scope-global");
-        var nullGlobalInstance = appRegistry.GetInstance("inst-scope-null");
+        var scopedGlobalInstance = appRegistry.GetInstance("inst-scope-literal");
+        var globalInstance = appRegistry.GetInstance("inst-scope-global");
         Assert.NotNull(scopedGlobalInstance);
-        Assert.NotNull(nullGlobalInstance);
+        Assert.NotNull(globalInstance);
         Assert.Equal("global", scopedGlobalInstance!.Scope);
-        Assert.Null(nullGlobalInstance!.Scope);
+        Assert.Equal(ScopeContract.Global, globalInstance!.Scope);
 
         var defaultListResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -85,7 +85,8 @@ public class ScopeParsingTests : IDisposable
             Method = "hub.apps.listInstances",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "scope-test-app"
+                appId = "scope-test-app",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
         Assert.Null(defaultListResponse.Error);
@@ -113,10 +114,10 @@ public class ScopeParsingTests : IDisposable
             .Select(item => item.GetProperty("instanceId").GetString())
             .ToHashSet(StringComparer.Ordinal);
 
-        Assert.Contains("inst-scope-null", defaultListInstances);
-        Assert.DoesNotContain("inst-scope-global", defaultListInstances);
-        Assert.Contains("inst-scope-global", scopedListInstances);
-        Assert.DoesNotContain("inst-scope-null", scopedListInstances);
+        Assert.Contains("inst-scope-global", defaultListInstances);
+        Assert.DoesNotContain("inst-scope-literal", defaultListInstances);
+        Assert.Contains("inst-scope-literal", scopedListInstances);
+        Assert.DoesNotContain("inst-scope-global", scopedListInstances);
     }
 
     [Fact]
@@ -136,7 +137,7 @@ public class ScopeParsingTests : IDisposable
                 {
                     instanceId = "inst-empty-scope-global",
                     appId = "scope-empty-list-app",
-                    scope = (string?)null,
+                    scope = ScopeContract.Global,
                     pid = 12347,
                     invoke = new { poll = true, respond = true }
                 }
@@ -161,12 +162,12 @@ public class ScopeParsingTests : IDisposable
         Assert.Single(instances);
         Assert.Equal("inst-empty-scope-global", instances[0].GetProperty("instanceId").GetString());
         Assert.True(instances[0].TryGetProperty("scope", out var scopeElement));
-        Assert.Equal(JsonValueKind.Null, scopeElement.ValueKind);
+        Assert.Equal(ScopeContract.Global, scopeElement.GetString());
     }
 
 
     [Fact]
-    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldTreatBothAsGlobal()
+    public async Task Impl_AppInstancesHandler_RegisterInstance_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), Mock.Of<ILogger<AppInstancesHandler>>());
@@ -206,31 +207,12 @@ public class ScopeParsingTests : IDisposable
             })
         }, CancellationToken.None);
 
-        Assert.Null(omittedScopeResponse.Error);
-        Assert.Null(nullScopeResponse.Error);
-
-        var omittedInstance = appRegistry.GetInstance("inst-scope-omitted");
-        var nullInstance = appRegistry.GetInstance("inst-scope-null");
-        Assert.NotNull(omittedInstance);
-        Assert.NotNull(nullInstance);
-        Assert.Null(omittedInstance!.Scope);
-        Assert.Null(nullInstance!.Scope);
-
-        var listResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "list-global-default",
-            Method = "hub.apps.listInstances",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "scope-global-equivalent-app"
-            })
-        }, CancellationToken.None);
-
-        Assert.Null(listResponse.Error);
-        var result = JsonSerializer.SerializeToElement(listResponse.Result);
-        var instances = result.GetProperty("instances").EnumerateArray().ToList();
-        Assert.Contains(instances, item => item.GetProperty("instanceId").GetString() == "inst-scope-omitted");
-        Assert.Contains(instances, item => item.GetProperty("instanceId").GetString() == "inst-scope-null");
+        Assert.NotNull(omittedScopeResponse.Error);
+        Assert.NotNull(nullScopeResponse.Error);
+        Assert.Equal(-32602, omittedScopeResponse.Error.Code);
+        Assert.Equal(-32602, nullScopeResponse.Error.Code);
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(omittedScopeResponse.Error.Data).GetProperty("reason").GetString());
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(nullScopeResponse.Error.Data).GetProperty("reason").GetString());
     }
 
 
@@ -250,11 +232,11 @@ public class ScopeParsingTests : IDisposable
         var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
         var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
 
-        var nullGlobal = appRegistry.RegisterInstance(new AppInstance
+        var globalInstance = appRegistry.RegisterInstance(new AppInstance
         {
-            InstanceId = "scope-invoke-app-global-null",
+            InstanceId = "scope-invoke-app-global",
             AppId = "scope-invoke-app",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 22001,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -289,8 +271,8 @@ public class ScopeParsingTests : IDisposable
         var explicitGlobalPoll = await store.PollAsync(explicitGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
         Assert.Contains(explicitGlobalPoll, item => item.InvocationId == invocationId);
 
-        var nullGlobalPoll = await store.PollAsync(nullGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
-        Assert.DoesNotContain(nullGlobalPoll, item => item.InvocationId == invocationId);
+        var globalPoll = await store.PollAsync(globalInstance, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.DoesNotContain(globalPoll, item => item.InvocationId == invocationId);
     }
 
     [Fact]
@@ -309,11 +291,11 @@ public class ScopeParsingTests : IDisposable
         var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, provider, new ProcessLauncher(), new SystemClock(), Mock.Of<ILogger<LaunchCoordinator>>());
         var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, new SystemClock(), Mock.Of<ILogger<InvocationHandler>>());
 
-        var nullGlobal = appRegistry.RegisterInstance(new AppInstance
+        var globalInstance = appRegistry.RegisterInstance(new AppInstance
         {
-            InstanceId = "scope-invoke-app-empty-global-null",
+            InstanceId = "scope-invoke-app-empty-global",
             AppId = "scope-invoke-app-empty",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 22003,
             Invoke = new InvokeCapability { Poll = true, Respond = true }
         });
@@ -345,8 +327,8 @@ public class ScopeParsingTests : IDisposable
         var invocationId = result.GetProperty("invocationId").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
-        var nullGlobalPoll = await store.PollAsync(nullGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
-        Assert.Contains(nullGlobalPoll, item => item.InvocationId == invocationId);
+        var globalPoll = await store.PollAsync(globalInstance, maxCount: 10, waitMs: 0, CancellationToken.None);
+        Assert.Contains(globalPoll, item => item.InvocationId == invocationId);
 
         var explicitGlobalPoll = await store.PollAsync(explicitGlobal, maxCount: 10, waitMs: 0, CancellationToken.None);
         Assert.DoesNotContain(explicitGlobalPoll, item => item.InvocationId == invocationId);
@@ -375,7 +357,7 @@ public class ScopeParsingTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "scope-invoke-app-2",
-                target = new { scope = (string?)null, instanceId = "   " },
+                target = new { scope = ScopeContract.Global, instanceId = "   " },
                 method = "asset.build",
                 args = new { },
                 options = new
@@ -408,10 +390,11 @@ public class ScopeParsingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(new
         {
             appId,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {
@@ -421,6 +404,3 @@ public class ScopeParsingTests : IDisposable
         }));
     }
 }
-
-
-

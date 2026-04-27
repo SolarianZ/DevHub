@@ -36,11 +36,38 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.9-negative-wait",
+                scope = ScopeContract.Global,
                 waitForRegisterMs = -1
             })
         }, CancellationToken.None);
 
         AssertError(response, -32602, "invalid_params");
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.9")]
+    public async Task Spec_6_3_9_Launch_WhenScopeEmpty_ShouldResolveGlobalDefinition()
+    {
+        const string appId = "spec-6.3.9-empty-scope";
+        WriteDefinition(appId, includeLaunch: true);
+
+        var handler = CreateLaunchHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.9-empty-scope",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                scope = string.Empty,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertSuccess(response);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.Equal("started", result.GetProperty("status").GetString());
     }
 
     [Fact]
@@ -55,7 +82,8 @@ public class LaunchSpecTests : IDisposable
             Method = "hub.apps.launch",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "spec-6.3.9-missing-definition"
+                appId = "spec-6.3.9-missing-definition",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
 
@@ -80,6 +108,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -110,6 +139,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -140,6 +170,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 80
             })
         }, CancellationToken.None);
@@ -171,6 +202,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -188,7 +220,7 @@ public class LaunchSpecTests : IDisposable
     {
         const string appId = "spec-6.3.9-online-instance";
         const string scope = "workspace-A";
-        WriteDefinition(appId, includeLaunch: true);
+        WriteDefinition(appId, includeLaunch: true, definitionScope: scope);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         appRegistry.RegisterInstance(new AppInstance
@@ -226,7 +258,7 @@ public class LaunchSpecTests : IDisposable
     public async Task Spec_6_3_9_Launch_WhenDedupeHitsWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         const string appId = "spec-6.3.9-dedupe-hit";
-        WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
+        WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}", definitionScope: "workspace-A");
 
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
@@ -290,7 +322,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -302,7 +334,7 @@ public class LaunchSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = string.Empty,
+                scope = ScopeContract.Global,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -329,7 +361,8 @@ public class LaunchSpecTests : IDisposable
             appId,
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scope}:{scopeOrGlobal}:{httpBaseUrl}",
-            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}");
+            argsTemplate: "{appId}|{scope}|{scopeOrGlobal}|{httpBaseUrl}",
+            definitionScope: scope);
 
         string? renderedArguments = null;
         var processLauncher = new Mock<IProcessLauncher>();
@@ -416,11 +449,14 @@ public class LaunchSpecTests : IDisposable
         string appId,
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
-        string? argsTemplate = "--version")
+        string? argsTemplate = "--version",
+        string? definitionScope = null)
     {
+        var normalizedScope = definitionScope ?? ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = normalizedScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -445,7 +481,7 @@ public class LaunchSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
 

@@ -24,12 +24,46 @@
 - WebSocket Events：`hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe`、`hub.event`
 - 定义管理：`hub.apps.validateDefinition`、`hub.apps.upsertDefinition`、`hub.apps.deleteDefinition`
 - 定义生命周期事件：`app.definition.upserted`、`app.definition.deleted`
-- 公开扩展点：`runtime resolver`、`HTTP client provider`、`HTTP transport`、`WS session`
+- 版本查询与兼容性检查：`GetHostVersionAsync(...)`、`CheckVersionCompatibilityAsync(...)`
+- 实例注册结果：`RegisterInstanceResult` 同时暴露 `AppInstance` 快照与 `InstanceSessionToken`
+- 事件恢复与本地维护：单活动读取器、订阅结果未知后的重认证/重订阅，以及已放弃请求的本地计数/清理
+- 公开扩展点：`runtime resolver`、`HTTP transport factory`、`WS session factory`
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`
 - 统一错误模型：`DevHubRpcException`（协议要求 `error.data` 为对象；非对象响应会被视为非法 JSON-RPC 包）
 - 协议辅助常量与结构化错误：`DevHubRpcException.CalleeError`
 - 可选依赖注入 companion package：`AddDevHubSdk()`、`IDevHubClientFactory`、`IDevHubEventsClientFactory`
 - SDK 单元测试 + SDK↔Hub 黑盒集成测试 + conformance 适配器
+
+## 版本与会话语义
+
+`DevHubClient` 与 `DevHubEventsClient` 都提供以下入口：
+
+- `GetHostVersionAsync(...)`：调用 `hub.getVersion` 并返回 Host 的直接版本字符串。
+- `CheckVersionCompatibilityAsync(...)`：优先调用 `hub.getVersion`；当 Host 返回 `method_not_found` 时回退到 `Runtime.HubVersion`，并返回 `VersionCompatibilityResult`。
+
+`VersionCompatibilityResult.Status` 的判定规则如下：
+
+- `Incompatible`：`Major` 不同。
+- `UpdateRecommended`：`Major` 相同但 `Minor` 不同。
+- `Compatible`：`Major` 与 `Minor` 相同；`Patch`、预发布标签和构建元数据差异不单独提示。
+- `Unknown`：版本缺失，或无法解析为兼容检查所需的语义化版本格式。
+
+事件客户端上的版本查询与兼容性检查继续复用已鉴权 WebSocket 只读通道，因此调用前需要先执行 `AuthenticateAsync(...)`。
+
+`RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`：
+
+- `Instance`：注册后的 `AppInstance` 快照。
+- `InstanceSessionToken`：实例所有权凭据，用于后续 `HeartbeatAsync(...)`、`UnregisterInstanceAsync(...)`、`PollAsync(...)` 与 `RespondAsync(...)`。
+
+在同一 `DevHubClient` 实例内，`HeartbeatAsync(instanceId)`、`PollAsync(...)` 与 `RespondAsync(...)` 可以复用该客户端先前注册时缓存的 `InstanceSessionToken`；`UnregisterInstanceAsync(instanceId, credential)` 接受实例会话令牌，也接受同一客户端注册实例时使用的 password。
+
+`DevHubEventsClient` 的恢复语义如下：
+
+- 同一实例同一时刻只允许一个活动中的 `ReadEventsAsync()` 读取器。
+- `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在请求发出后若因超时或取消进入结果未知状态，SDK 会主动废弃当前 WebSocket 会话。
+- 会话被废弃后，后续读取、订阅或只读 WS RPC 都需要先重新执行 `AuthenticateAsync(...)`，再重新执行 `SubscribeAsync(...)`。
+- 本地事件缓冲采用有界 fail-fast 队列；消费者落后导致缓冲溢出时，当前事件流会终止，并要求重新认证与重新订阅。
+- `GetAbandonedRequestCount(...)` 与 `ClearAbandonedRequests(...)` 只维护当前事件客户端本地 tombstone 记录，不会发送额外 JSON-RPC 请求。
 
 ## 文档边界
 
@@ -102,8 +136,7 @@ Unity 接入边界固定为 `publish_unity_dotnet_sdk.py` 产出的 DLL 目录�
 
 SDK 的公开 JSON 类型面使用 `Newtonsoft.Json` 类型，并由 `Json.Net.Unity3D 9.0.1` 提供程序集：
 
-- `PingResult.Echo`、`RequestResult.Value`、`Invocation.Args`、`DevHubEvent.Payload`、`DevHubRpcException.ErrorData` 等公开载荷现在使用 `JToken` / `JObject`
-- 旧版基于 `System.Text.Json` 的 `JsonElement`、`JsonDocument`、`GetRawText()` 与对应特性不再属于当前公开契约
+- `PingResult.Echo`、`RequestResult.Value`、`Invocation.Args`、`DevHubEvent.Payload`、`DevHubRpcException.ErrorData` 等公开载荷使用 `JToken` / `JObject`
 - 若消费端需要读取载荷字段，推荐使用 `JObject` / `JToken` 的属性访问与 `Value<T>()` 系列 API
 
 ## SDK 包依赖边界
@@ -270,6 +303,8 @@ var instances = await client.ListInstancesAsync(new ListInstancesRequest
 });
 ```
 
+`ListDefinitionsRequest.Scope` 与 `ListInstancesRequest.Scope` 中，`null` 表示不按作用域过滤，`string.Empty` 表示只匹配 Global 作用域。`AppDefinition.Scope`、`AppInstanceRegistration.Scope`、`LaunchRequest.Scope` 与 `InvocationTarget.Scope` 使用 `string.Empty` 表示 Global；未显式赋值时会归一化为 `string.Empty`。
+
 ### 注册实例并维持心跳
 
 ```csharp
@@ -281,7 +316,7 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
     ClientId = "WorkerClient"
 });
 
-var instance = await client.RegisterInstanceAsync(new AppInstanceRegistration
+var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
 {
     InstanceId = "sample-inst-1",
     AppId = "sample.app",
@@ -294,9 +329,9 @@ var instance = await client.RegisterInstanceAsync(new AppInstanceRegistration
     Meta = new { role = "worker" }
 }, password: "sample-password");
 
-var lastSeenUtc = await client.HeartbeatAsync(instance.InstanceId);
+var lastSeenUtc = await client.HeartbeatAsync(registered.InstanceId);
 
-await client.UnregisterInstanceAsync(instance.InstanceId, password: "sample-password");
+await client.UnregisterInstanceAsync(registered.InstanceId, registered.InstanceSessionToken);
 ```
 
 ### 管理应用定义

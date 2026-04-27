@@ -1,6 +1,7 @@
 using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 using Newtonsoft.Json.Linq;
+using System.Collections.Concurrent;
 
 namespace DevHub.Sdk;
 
@@ -10,6 +11,7 @@ namespace DevHub.Sdk;
 public sealed class DevHubClient : IAsyncDisposable
 {
     private readonly IDevHubHttpTransport _transport;
+    private readonly ConcurrentDictionary<string, RegisteredInstanceState> _registeredInstances = new(StringComparer.Ordinal);
     private bool _disposed;
 
     private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, IDevHubHttpTransport transport)
@@ -87,12 +89,30 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
-        var result = await _transport.SendAsync("hub.ping", parameters, cancellationToken);
-        var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.ping.result");
-        ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
-        return payload;
+        return await ReadOnlyRpcExecutor.PingAsync(_transport.SendAsync, echo, cancellationToken);
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.getVersion</c> 获取当前 Host 版本。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>Host 返回的版本字符串。</returns>
+    public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_transport.SendAsync, cancellationToken);
+    }
+
+    /// <summary>
+    /// 检查当前 SDK 与 Host 的版本兼容性。
+    /// 优先调用 <c>hub.getVersion</c>；若 Host 返回 <c>method_not_found</c>，则回退到 <see cref="Runtime"/>.<see cref="HubRuntime.HubVersion"/>。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>兼容性检查结果。</returns>
+    public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await VersionCompatibilityEvaluator.CheckAsync(_transport.SendAsync, Runtime.HubVersion, cancellationToken);
     }
 
     /// <summary>
@@ -103,42 +123,49 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.listDefinitions", null, cancellationToken);
-        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JTokenType.Array);
-        var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken);
+    }
 
-        var index = 0;
-        foreach (var definitionElement in definitionsElement.Children())
-        {
-            ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
-            index++;
-        }
-
-        return payload.Definitions;
+    /// <summary>
+    /// 调用 <c>hub.apps.listDefinitions</c>。
+    /// </summary>
+    /// <param name="request">过滤参数。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义列表。</returns>
+    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(
+        ListDefinitionsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken);
     }
 
     /// <summary>
     /// 调用 <c>hub.apps.getDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
-        ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.getDefinition", RequestPayloadFactory.BuildGetDefinitionParams(appId), cancellationToken);
-        ResponsePayloadReader.ValidateAppDefinitionElement(
-            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JTokenType.Object),
-            "hub.apps.getDefinition.result.definition");
+        return await GetDefinitionAsync(appId, string.Empty, cancellationToken);
+    }
 
-        var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
-        return payload.Definition;
+    /// <summary>
+    /// 调用 <c>hub.apps.getDefinition</c>。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义。</returns>
+    public async Task<AppDefinition> GetDefinitionAsync(
+        string appId,
+        string scope,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken);
     }
 
     /// <summary>
@@ -220,10 +247,24 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task DeleteDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
+        await DeleteDefinitionAsync(appId, string.Empty, cancellationToken);
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.deleteDefinition</c>。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task DeleteDefinitionAsync(
+        string appId,
+        string scope,
+        CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
         var result = await _transport.SendAsync(
             "hub.apps.deleteDefinition",
-            RequestPayloadFactory.BuildDeleteDefinitionParams(appId),
+            RequestPayloadFactory.BuildDeleteDefinitionParams(appId, scope),
             cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.deleteDefinition.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.deleteDefinition.result");
@@ -235,8 +276,8 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="instance">实例注册载荷。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>注册后的实例。</returns>
-    public async Task<AppInstance> RegisterInstanceAsync(
+    /// <returns>注册结果。</returns>
+    public async Task<RegisterInstanceResult> RegisterInstanceAsync(
         AppInstanceRegistration instance,
         string password,
         CancellationToken cancellationToken = default)
@@ -249,15 +290,27 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JTokenType.Object),
             "hub.apps.registerInstance.result.instance");
+        ResponsePayloadReader.EnsurePropertyExists(
+            result,
+            "hub.apps.registerInstance.result",
+            "instanceSessionToken",
+            JTokenType.String);
 
         var payload = ResponsePayloadReader.DeserializeRequired<RegisterInstanceContract>(result, "hub.apps.registerInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.registerInstance.result");
         ResponsePayloadReader.EnsureNotNull(payload.Instance, "hub.apps.registerInstance.result", "instance");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
+        ResponsePayloadReader.EnsureNotEmpty(payload.InstanceSessionToken, "hub.apps.registerInstance.result", "instanceSessionToken");
+        ResponsePayloadReader.EnsureInstanceIdValue(payload.Instance.InstanceId, "hub.apps.registerInstance.result", "instance.instanceId");
+        ResponsePayloadReader.EnsureAppIdValue(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
-        return payload.Instance;
+        var registerResult = new RegisterInstanceResult
+        {
+            Instance = payload.Instance,
+            InstanceSessionToken = payload.InstanceSessionToken
+        };
+        _registeredInstances[payload.Instance.InstanceId] = new RegisteredInstanceState(password, payload.InstanceSessionToken);
+        return registerResult;
     }
 
     /// <summary>
@@ -269,7 +322,27 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<DateTimeOffset> HeartbeatAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.heartbeat", RequestPayloadFactory.BuildHeartbeatParams(instanceId), cancellationToken);
+        var instanceSessionToken = ResolveInstanceSessionToken(instanceId);
+        return await HeartbeatAsync(instanceId, instanceSessionToken, cancellationToken);
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.heartbeat</c>。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="instanceSessionToken">实例会话令牌。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>服务端返回的最后在线时间。</returns>
+    public async Task<DateTimeOffset> HeartbeatAsync(
+        string instanceId,
+        string instanceSessionToken,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var result = await _transport.SendAsync(
+            "hub.apps.heartbeat",
+            RequestPayloadFactory.BuildHeartbeatParams(instanceId, instanceSessionToken),
+            cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
@@ -280,14 +353,22 @@ public sealed class DevHubClient : IAsyncDisposable
     /// 调用 <c>hub.apps.unregisterInstance</c>。
     /// </summary>
     /// <param name="instanceId">实例标识。</param>
-    /// <param name="password">实例密码。</param>
+    /// <param name="instanceSessionToken">实例会话令牌。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task UnregisterInstanceAsync(string instanceId, string password, CancellationToken cancellationToken = default)
+    public async Task UnregisterInstanceAsync(
+        string instanceId,
+        string instanceSessionToken,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.unregisterInstance", RequestPayloadFactory.BuildUnregisterParams(instanceId, password), cancellationToken);
+        var resolvedSessionToken = ResolveUnregisterCredential(instanceId, instanceSessionToken);
+        var result = await _transport.SendAsync(
+            "hub.apps.unregisterInstance",
+            RequestPayloadFactory.BuildUnregisterParams(instanceId, resolvedSessionToken),
+            cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
+        _registeredInstances.TryRemove(instanceId, out _);
     }
 
     /// <summary>
@@ -299,20 +380,22 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest? request = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.listInstances", RequestPayloadFactory.BuildListInstancesParams(request), cancellationToken);
-        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JTokenType.Array);
-        var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
+        return await ReadOnlyRpcExecutor.ListInstancesAsync(
+            _transport.SendAsync,
+            request ?? new ListInstancesRequest(),
+            cancellationToken);
+    }
 
-        var index = 0;
-        foreach (var instanceElement in instancesElement.Children())
-        {
-            ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
-            index++;
-        }
-
-        return payload.Instances;
+    /// <summary>
+    /// 调用 <c>hub.apps.getInstance</c>。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>实例快照。</returns>
+    public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken);
     }
 
     /// <summary>
@@ -381,6 +464,11 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PollResult> PollAsync(PollRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(request.InstanceSessionToken))
+        {
+            request.InstanceSessionToken = ResolveInstanceSessionToken(request.InstanceId);
+        }
+
         var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
         var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JTokenType.Array);
 
@@ -406,6 +494,11 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task RespondAsync(RespondRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(request.InstanceSessionToken))
+        {
+            request.InstanceSessionToken = ResolveInstanceSessionToken(request.InstanceId);
+        }
+
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");
@@ -426,6 +519,44 @@ public sealed class DevHubClient : IAsyncDisposable
     private void ThrowIfDisposed()
     {
         CompatibilityGuards.ThrowIfDisposed(_disposed, this);
+    }
+
+    private string ResolveInstanceSessionToken(string instanceId)
+    {
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instanceId, nameof(instanceId));
+        if (_registeredInstances.TryGetValue(instanceId, out var state))
+        {
+            return state.InstanceSessionToken;
+        }
+
+        throw new InvalidOperationException($"未找到实例 {instanceId} 的会话令牌，请先通过 RegisterInstanceAsync 注册并保留返回结果。");
+    }
+
+    private string ResolveUnregisterCredential(string instanceId, string credential)
+    {
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(instanceId, nameof(instanceId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(credential, nameof(credential));
+
+        if (_registeredInstances.TryGetValue(instanceId, out var state) &&
+            string.Equals(credential, state.Password, StringComparison.Ordinal))
+        {
+            return state.InstanceSessionToken;
+        }
+
+        return credential;
+    }
+
+    private sealed class RegisteredInstanceState
+    {
+        public RegisteredInstanceState(string password, string instanceSessionToken)
+        {
+            Password = password;
+            InstanceSessionToken = instanceSessionToken;
+        }
+
+        public string Password { get; }
+
+        public string InstanceSessionToken { get; }
     }
 
     private sealed class TestHttpTransportFactory : IDevHubHttpTransportFactory

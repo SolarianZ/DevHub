@@ -93,6 +93,32 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenCanonicalIdentifiersContainInternalDots_ShouldEchoVerbatim()
+    {
+        var handler = CreateHandler();
+
+        var registerResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-canonical-identifiers",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "NODE_01.alpha",
+                appId = "Sample.App_01",
+                scope = "Workspace-A.v2",
+                pid = 100,
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var instance = JsonSerializer.SerializeToElement(registerResponse.Result).GetProperty("instance");
+        Assert.Equal("NODE_01.alpha", instance.GetProperty("instanceId").GetString());
+        Assert.Equal("Sample.App_01", instance.GetProperty("appId").GetString());
+        Assert.Equal("Workspace-A.v2", instance.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public async Task Impl_RegisterInstance_WhenAppIdInvalidOrInvokeInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
@@ -164,6 +190,57 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenIdentifiersUseLeadingOrTrailingDotOrHyphen_ShouldReturnInvalidParams()
+    {
+        var handler = CreateHandler();
+
+        var invalidInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-leading-dot-instance-id",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = ".node-01",
+                appId = "app.validation",
+                pid = 101,
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+        AssertError(invalidInstanceId, -32602, "invalid_params");
+
+        var invalidAppId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-trailing-dot-app-id",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-valid-id",
+                appId = "app.validation.",
+                pid = 101,
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+        AssertError(invalidAppId, -32602, "invalid_params");
+
+        var invalidScope = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-trailing-hyphen-scope",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-valid-scope",
+                appId = "app.validation",
+                pid = 101,
+                scope = "workspace-",
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+        AssertError(invalidScope, -32602, "invalid_params");
+        var errorData = JsonSerializer.SerializeToElement(invalidScope.Error!.Data);
+        Assert.Equal("invalid_scope", errorData.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task Impl_RegisterInstance_WhenMetaProvided_ShouldPersistMeta()
     {
         var handler = CreateHandler();
@@ -176,6 +253,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-with-meta",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 102,
                 invoke = new { poll = true, respond = true },
                 meta = new
@@ -227,7 +305,11 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "heartbeat-unknown",
             Method = HubRpcMethods.HubAppsHeartbeat,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance" })
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = "missing-instance",
+                instanceSessionToken = "missing-instance-token"
+            })
         }, CancellationToken.None);
 
         AssertError(response, -32010, "instance_not_found");
@@ -253,6 +335,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { instanceId = "" })
         }, CancellationToken.None);
         AssertError(emptyInstanceId, -32602, "invalid_params");
+
+        var leadingDotInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "heartbeat-leading-dot-instance-id",
+            Method = HubRpcMethods.HubAppsHeartbeat,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = ".invalid" })
+        }, CancellationToken.None);
+        AssertError(leadingDotInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -304,6 +394,70 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_GetInstance_WhenParamsInvalid_ShouldReturnInvalidParams()
+    {
+        var handler = CreateHandler();
+
+        var invalidRoot = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-invalid-root",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement("bad")
+        }, CancellationToken.None);
+        AssertError(invalidRoot, -32602, "invalid_params");
+
+        var missingInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-missing-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { })
+        }, CancellationToken.None);
+        AssertError(missingInstanceId, -32602, "invalid_params");
+
+        var emptyInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-empty-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "" })
+        }, CancellationToken.None);
+        AssertError(emptyInstanceId, -32602, "invalid_params");
+
+        var malformedInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-malformed-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "invalid instance id" })
+        }, CancellationToken.None);
+        AssertError(malformedInstanceId, -32602, "invalid_params");
+
+        var trailingHyphenInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-trailing-hyphen-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "invalid-instance-" })
+        }, CancellationToken.None);
+        AssertError(trailingHyphenInstanceId, -32602, "invalid_params");
+    }
+
+    [Fact]
+    public async Task Impl_GetInstance_WhenUnknown_ShouldReturnInstanceNotFoundWithInstanceId()
+    {
+        var handler = CreateHandler();
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-unknown-instance",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "missing-instance" })
+        }, CancellationToken.None);
+
+        AssertError(response, -32010, "instance_not_found");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("unknown_instance", errorData.GetProperty("reason").GetString());
+        Assert.Equal("missing-instance", errorData.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
     public async Task Impl_ListInstances_WhenScopeAndFlagsInvalid_ShouldReturnInvalidParams()
     {
         var handler = CreateHandler();
@@ -316,19 +470,19 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
         AssertError(invalidScope, -32602, "invalid_params");
 
-        var invalidIncludeAllScopes = await handler.HandleAsync(new JsonRpcRequest
+        var missingScope = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "list-invalid-include-all-scopes",
+            Id = "list-missing-scope",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeAllScopes = "yes" })
+            Params = JsonSerializer.SerializeToElement(new { includeOffline = true })
         }, CancellationToken.None);
-        AssertError(invalidIncludeAllScopes, -32602, "invalid_params");
+        AssertError(missingScope, -32602, "invalid_params");
 
         var invalidIncludeOffline = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "list-invalid-include-offline",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeOffline = "yes" })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = "yes" })
         }, CancellationToken.None);
         AssertError(invalidIncludeOffline, -32602, "invalid_params");
 
@@ -336,7 +490,7 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "list-invalid-appid",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { appId = 1 })
+            Params = JsonSerializer.SerializeToElement(new { appId = 1, scope = (string?)null })
         }, CancellationToken.None);
         AssertError(invalidAppId, -32602, "invalid_params");
     }
@@ -357,14 +511,14 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Impl_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreInvalidScopeType()
+    public async Task Impl_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = "inst-global",
             AppId = "app.validation.scope",
-            Scope = null,
+            Scope = ScopeContract.Global,
             Pid = 2001,
             Invoke = new InvokeCapability
             {
@@ -389,12 +543,11 @@ public sealed class AppInstancesHandlerValidationTests
 
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "list-ignore-invalid-scope",
+            Id = "list-all-scopes",
             Method = HubRpcMethods.HubAppsListInstances,
             Params = JsonSerializer.SerializeToElement(new
             {
-                scope = 123,
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -419,6 +572,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-logger-throw",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 103,
                 invoke = new { poll = true, respond = true }
             }))
@@ -449,9 +603,17 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "list-logger-throw",
             Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { includeOffline = true })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = true })
         }, CancellationToken.None);
         AssertError(list, -32603, "internal_error");
+
+        var getInstance = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-instance-logger-throw",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
+        }, CancellationToken.None);
+        AssertError(getInstance, -32603, "internal_error");
     }
 
     [Fact]
@@ -468,12 +630,14 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-no-event-bus",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 103,
                 invoke = new { poll = true, respond = true }
             }))
         }, CancellationToken.None);
 
         Assert.Null(register.Error);
+        var instanceSessionToken = ExtractInstanceSessionToken(register);
 
         var unregister = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -482,7 +646,7 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "inst-no-event-bus",
-                password = InstancePassword
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -504,6 +668,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-password-guard",
                 appId = "app.original",
+                scope = ScopeContract.Global,
                 pid = 201,
                 invoke = new { poll = true, respond = true }
             }, password: "correct-password"))
@@ -518,6 +683,7 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-password-guard",
                 appId = "app.updated",
+                scope = ScopeContract.Global,
                 pid = 202,
                 invoke = new { poll = true, respond = true }
             }, password: "wrong-password"))
@@ -547,27 +713,29 @@ public sealed class AppInstancesHandlerValidationTests
             {
                 instanceId = "inst-unregister-guard",
                 appId = "app.validation",
+                scope = ScopeContract.Global,
                 pid = 301,
                 invoke = new { poll = true, respond = true }
             }, password: "correct-password"))
         }, CancellationToken.None);
         Assert.Null(register.Error);
 
+        var currentToken = ExtractInstanceSessionToken(register);
         var unregister = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "unregister-password-mismatch",
             Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("inst-unregister-guard", password: "wrong-password"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("inst-unregister-guard", instanceSessionToken: $"wrong-{currentToken}"))
         }, CancellationToken.None);
 
         AssertError(unregister, -32002, "forbidden");
         var errorData = JsonSerializer.SerializeToElement(unregister.Error!.Data);
-        Assert.Equal("instance_password_mismatch", errorData.GetProperty("reason").GetString());
+        Assert.Equal("instance_session_token_mismatch", errorData.GetProperty("reason").GetString());
         Assert.NotNull(appRegistry.GetInstance("inst-unregister-guard"));
     }
 
     [Fact]
-    public async Task Impl_Unregister_WhenUnknownInstanceAndPasswordPresent_ShouldReturnOk()
+    public async Task Impl_Unregister_WhenUnknownInstanceAndTokenPresent_ShouldReturnOk()
     {
         var handler = CreateHandler();
 
@@ -575,7 +743,7 @@ public sealed class AppInstancesHandlerValidationTests
         {
             Id = "unregister-unknown-with-password",
             Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("missing-instance", password: "any-password"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("missing-instance", instanceSessionToken: "missing-instance-token"))
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -604,12 +772,17 @@ public sealed class AppInstancesHandlerValidationTests
         };
     }
 
-    private static object CreateUnregisterParams(string instanceId, string? password = null)
+    private static string ExtractInstanceSessionToken(JsonRpcResponse response)
+    {
+        return JsonSerializer.SerializeToElement(response.Result).GetProperty("instanceSessionToken").GetString()!;
+    }
+
+    private static object CreateUnregisterParams(string instanceId, string? instanceSessionToken = null)
     {
         return new
         {
             instanceId,
-            password = password ?? InstancePassword
+            instanceSessionToken = instanceSessionToken ?? "validation-instance-token"
         };
     }
 

@@ -81,12 +81,53 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
+    {
+        var handler = new HubGetVersionHandler(
+            Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0-preview.1+build.2"),
+            Mock.Of<ILogger<HubGetVersionHandler>>());
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1.1-get-version",
+            Method = "hub.getVersion"
+        }, CancellationToken.None);
+
+        Assert.Null(response.Error);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.Equal("0.7.0-preview.1+build.2", result.GetProperty("version").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    {
+        var handler = new HubGetVersionHandler(
+            Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0"),
+            Mock.Of<ILogger<HubGetVersionHandler>>());
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.3.1.1-get-version-invalid",
+            Method = "hub.getVersion",
+            Params = JsonSerializer.SerializeToElement(new { verbose = true })
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.3")]
     public async Task Spec_6_3_3_ListDefinitions_ShouldReturnDefinitions()
     {
-        WriteJson("spec-6.3.3-target.json", new
+        WriteDefinition(new
         {
             appId = "spec-6.3.3-target",
+            scope = ScopeContract.Global,
             displayName = "Spec 6.3.3 Target"
         });
 
@@ -95,7 +136,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.3-list",
             Method = "hub.apps.listDefinitions",
-            Params = JsonSerializer.SerializeToElement(new { })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null })
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -109,9 +150,10 @@ public class CoreRpcSpecTests : IDisposable
     [Trait("SpecRef", "6.3.4")]
     public async Task Spec_6_3_4_GetDefinition_ShouldReturnDefinitionWhenExists()
     {
-        WriteJson("spec-6.3.4-target.json", new
+        WriteDefinition(new
         {
             appId = "spec-6.3.4-target",
+            scope = ScopeContract.Global,
             displayName = "Spec 6.3.4 Target"
         });
 
@@ -120,7 +162,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.4-get",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-target" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-target", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
@@ -138,7 +180,7 @@ public class CoreRpcSpecTests : IDisposable
         {
             Id = "spec-6.3.4-get-missing",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-missing" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "spec-6.3.4-missing", scope = ScopeContract.Global })
         }, CancellationToken.None);
 
         Assert.NotNull(response.Error);
@@ -163,7 +205,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-instance",
                 appId = "spec-6.3.5.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6101,
                 invoke = new
                 {
@@ -202,7 +244,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-refresh-instance",
                 appId = "spec-6.3.5.refresh.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6103,
                 invoke = new
                 {
@@ -229,7 +271,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.5-refresh-instance",
                 appId = "spec-6.3.5.refresh.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6103,
                 invoke = new
                 {
@@ -288,7 +330,7 @@ public class CoreRpcSpecTests : IDisposable
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
 
-        await handler.HandleAsync(new JsonRpcRequest
+        var registerResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.7-register",
             Method = "hub.apps.registerInstance",
@@ -296,7 +338,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId = "spec-6.3.7-instance",
                 appId = "spec-6.3.7.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 6201,
                 invoke = new
                 {
@@ -305,19 +347,21 @@ public class CoreRpcSpecTests : IDisposable
                 }
             }))
         }, CancellationToken.None);
+        Assert.Null(registerResponse.Error);
+        var instanceSessionToken = ExtractInstanceSessionToken(registerResponse);
 
         var firstResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.7-unregister-first",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance", instanceSessionToken))
         }, CancellationToken.None);
 
         var secondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "spec-6.3.7-unregister-second",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("spec-6.3.7-instance", instanceSessionToken))
         }, CancellationToken.None);
 
         Assert.Null(firstResponse.Error);
@@ -328,19 +372,19 @@ public class CoreRpcSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_DefaultGlobalScopeAndIncludeOfflineFalse_ShouldApply()
+    public async Task Spec_6_3_8_ListInstances_GlobalScopeAndIncludeOfflineFalse_ShouldApply()
     {
         var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, clock, _instancesLogger.Object);
 
-        await RegisterInstanceAsync(handler, "spec-6.3.8-global-online", "spec-6.3.8.app", null, 6301);
+        var globalOnlineToken = await RegisterInstanceAsync(handler, "spec-6.3.8-global-online", "spec-6.3.8.app", null, 6301);
         await RegisterInstanceAsync(handler, "spec-6.3.8-global-offline", "spec-6.3.8.app", null, 6302);
-        await RegisterInstanceAsync(handler, "spec-6.3.8-scoped-online", "spec-6.3.8.app", "workspace-A", 6303);
+        var scopedOnlineToken = await RegisterInstanceAsync(handler, "spec-6.3.8-scoped-online", "spec-6.3.8.app", "workspace-A", 6303);
 
         clock.Advance(TimeSpan.FromSeconds(31));
-        await HeartbeatInstanceAsync(handler, "spec-6.3.8-global-online");
-        await HeartbeatInstanceAsync(handler, "spec-6.3.8-scoped-online");
+        await HeartbeatInstanceAsync(handler, "spec-6.3.8-global-online", globalOnlineToken);
+        await HeartbeatInstanceAsync(handler, "spec-6.3.8-scoped-online", scopedOnlineToken);
 
         var defaultResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -348,7 +392,8 @@ public class CoreRpcSpecTests : IDisposable
             Method = "hub.apps.listInstances",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "spec-6.3.8.app"
+                appId = "spec-6.3.8.app",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
 
@@ -381,6 +426,7 @@ public class CoreRpcSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.8.app",
+                scope = ScopeContract.Global,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -392,7 +438,7 @@ public class CoreRpcSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScope()
+    public async Task Spec_6_3_8_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -407,8 +453,7 @@ public class CoreRpcSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "spec-6.3.8.scope-all.app",
-                scope = "workspace-C",
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -435,8 +480,9 @@ public class CoreRpcSpecTests : IDisposable
         return new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>());
     }
 
-    private async Task RegisterInstanceAsync(AppInstancesHandler handler, string instanceId, string appId, string? scope, int pid)
+    private async Task<string> RegisterInstanceAsync(AppInstancesHandler handler, string instanceId, string appId, string? scope, int pid)
     {
+        var normalizedScope = scope ?? ScopeContract.Global;
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "register-" + instanceId,
@@ -445,7 +491,7 @@ public class CoreRpcSpecTests : IDisposable
             {
                 instanceId,
                 appId,
-                scope,
+                scope = normalizedScope,
                 pid,
                 invoke = new
                 {
@@ -456,9 +502,10 @@ public class CoreRpcSpecTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Null(response.Error);
+        return ExtractInstanceSessionToken(response);
     }
 
-    private async Task HeartbeatInstanceAsync(AppInstancesHandler handler, string instanceId)
+    private async Task HeartbeatInstanceAsync(AppInstancesHandler handler, string instanceId, string instanceSessionToken)
     {
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -466,7 +513,8 @@ public class CoreRpcSpecTests : IDisposable
             Method = "hub.apps.heartbeat",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId
+                instanceId,
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -482,12 +530,17 @@ public class CoreRpcSpecTests : IDisposable
         };
     }
 
-    private static object CreateUnregisterParams(string instanceId)
+    private static string ExtractInstanceSessionToken(JsonRpcResponse response)
+    {
+        return JsonSerializer.SerializeToElement(response.Result).GetProperty("instanceSessionToken").GetString()!;
+    }
+
+    private static object CreateUnregisterParams(string instanceId, string instanceSessionToken)
     {
         return new
         {
             instanceId,
-            password = InstancePassword
+            instanceSessionToken
         };
     }
 
@@ -506,9 +559,14 @@ public class CoreRpcSpecTests : IDisposable
         }
     }
 
-    private void WriteJson(string fileName, object payload)
+    private void WriteDefinition(object payload)
     {
-        var fullPath = Path.Combine(_tempDirectory, fileName);
+        var json = JsonSerializer.SerializeToElement(payload);
+        var appId = json.GetProperty("appId").GetString();
+        var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
+            ? scopeElement.GetString()
+            : ScopeContract.Global;
+        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName());
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 }

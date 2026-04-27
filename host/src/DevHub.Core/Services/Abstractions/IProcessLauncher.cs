@@ -37,6 +37,14 @@ public sealed class ProcessLauncher : IProcessLauncher
             startInfo.WorkingDirectory = launchConfig.WorkingDirectory;
         }
 
+        if (launchConfig.EnvironmentVariables is not null)
+        {
+            foreach (var (key, value) in launchConfig.EnvironmentVariables)
+            {
+                startInfo.Environment[key] = value ?? string.Empty;
+            }
+        }
+
         return Process.Start(startInfo);
     }
 }

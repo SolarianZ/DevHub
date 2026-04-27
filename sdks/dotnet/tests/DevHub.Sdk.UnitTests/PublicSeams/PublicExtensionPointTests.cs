@@ -266,6 +266,16 @@ public sealed class PublicExtensionPointTests
             return Task.CompletedTask;
         }
 
+        public int GetAbandonedRequestCount(AbandonedRequestFilter? filter = null)
+        {
+            return 0;
+        }
+
+        public int ClearAbandonedRequests(AbandonedRequestFilter? filter = null)
+        {
+            return 0;
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;

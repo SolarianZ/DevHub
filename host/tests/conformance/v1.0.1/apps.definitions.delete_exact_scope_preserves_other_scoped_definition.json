@@ -1,0 +1,95 @@
+{
+  "id": "apps.definitions.delete_exact_scope_preserves_other_scoped_definition",
+  "caseId": "CONF-003",
+  "description": "删除某个 scoped Definition 时，hub.apps.deleteDefinition 必须只删除对应 appId + scope，并保留同 appId 的其他 Definition。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "fileName": "apps.delete.exact-scope.app--global.json",
+        "definition": {
+          "appId": "apps.delete.exact-scope.app",
+          "scope": "",
+          "displayName": "Apps Delete Exact Scope Global"
+        }
+      },
+      {
+        "fileName": "apps.delete.exact-scope.app--scope-scope-a.json",
+        "definition": {
+          "appId": "apps.delete.exact-scope.app",
+          "scope": "scope-a",
+          "displayName": "Apps Delete Exact Scope A"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.getDefinition",
+        "requestId": "apps-definitions-delete-global-missing",
+        "params": {
+          "appId": "apps.delete.exact-scope.app",
+          "scope": ""
+        },
+        "expectedError": {
+          "code": -32014,
+          "message": "app_definition_not_found",
+          "data": {
+            "appId": "apps.delete.exact-scope.app",
+            "scope": ""
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.getDefinition",
+        "requestId": "apps-definitions-get-scoped-remaining",
+        "params": {
+          "appId": "apps.delete.exact-scope.app",
+          "scope": "scope-a"
+        },
+        "expectedResult": {
+          "definition": {
+            "appId": "apps.delete.exact-scope.app",
+            "scope": "scope-a",
+            "displayName": "Apps Delete Exact Scope A"
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000124"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-delete-exact-scope",
+    "method": "hub.apps.deleteDefinition",
+    "params": {
+      "appId": "apps.delete.exact-scope.app",
+      "scope": ""
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-delete-exact-scope",
+    "result": {
+      "ok": true
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "scope",
+    "success"
+  ]
+}

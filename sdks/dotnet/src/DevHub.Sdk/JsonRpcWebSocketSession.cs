@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net.WebSockets;
 using DevHub.Sdk.Internal;
+using DevHub.Sdk.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -74,6 +76,20 @@ public interface IDevHubWebSocketSession : IAsyncDisposable
     /// <param name="reason">关闭原因。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     Task DisconnectAsync(string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 获取当前会话内匹配条件的已放弃请求数量。
+    /// </summary>
+    /// <param name="filter">可选过滤条件。</param>
+    /// <returns>当前匹配的已放弃请求数量。</returns>
+    int GetAbandonedRequestCount(AbandonedRequestFilter? filter = null);
+
+    /// <summary>
+    /// 清理当前会话内匹配条件的已放弃请求记录。
+    /// </summary>
+    /// <param name="filter">可选过滤条件。</param>
+    /// <returns>本次实际移除的记录数量。</returns>
+    int ClearAbandonedRequests(AbandonedRequestFilter? filter = null);
 }
 
 /// <summary>
@@ -112,7 +128,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     private readonly IWebSocketConnectionFactory _connectionFactory;
     private readonly Func<string> _requestIdFactory;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JObject>> _pendingRequests;
-    private readonly ConcurrentDictionary<string, DateTimeOffset> _abandonedRequests;
+    private readonly ConcurrentDictionary<string, AbandonedRequestEntry> _abandonedRequests;
     private readonly SemaphoreSlim _connectionLock;
     private readonly SemaphoreSlim _sendLock;
     private readonly CancellationTokenSource _disposeCts;
@@ -141,10 +157,45 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _requestIdFactory = requestIdFactory ?? CreateRequestId;
         _pendingRequests = new ConcurrentDictionary<string, TaskCompletionSource<JObject>>(StringComparer.Ordinal);
-        _abandonedRequests = new ConcurrentDictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+        _abandonedRequests = new ConcurrentDictionary<string, AbandonedRequestEntry>(StringComparer.Ordinal);
         _connectionLock = new SemaphoreSlim(1, 1);
         _sendLock = new SemaphoreSlim(1, 1);
         _disposeCts = new CancellationTokenSource();
+    }
+
+    /// <inheritdoc />
+    public int GetAbandonedRequestCount(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        ValidateAbandonedRequestFilter(filter);
+        CleanupExpiredAbandonedRequests();
+        var now = DateTimeOffset.UtcNow;
+        return _abandonedRequests.Values.Count(entry => MatchesAbandonedRequest(entry, filter, now));
+    }
+
+    /// <inheritdoc />
+    public int ClearAbandonedRequests(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        ValidateAbandonedRequestFilter(filter);
+        CleanupExpiredAbandonedRequests();
+        var now = DateTimeOffset.UtcNow;
+        var removed = 0;
+
+        foreach (var abandonedRequest in _abandonedRequests.ToArray())
+        {
+            if (!MatchesAbandonedRequest(abandonedRequest.Value, filter, now))
+            {
+                continue;
+            }
+
+            if (_abandonedRequests.TryRemove(abandonedRequest.Key, out _))
+            {
+                removed++;
+            }
+        }
+
+        return removed;
     }
 
     /// <inheritdoc />
@@ -216,7 +267,7 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         }
         catch (OperationCanceledException)
         {
-            MarkPendingRequestAsAbandoned(requestId);
+            MarkPendingRequestAsAbandoned(requestId, method, parameters);
             throw;
         }
         catch
@@ -580,11 +631,15 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         return false;
     }
 
-    private void MarkPendingRequestAsAbandoned(string requestId)
+    private void MarkPendingRequestAsAbandoned(string requestId, string method, object? parameters)
     {
         if (_pendingRequests.TryRemove(requestId, out _))
         {
-            _abandonedRequests[requestId] = DateTimeOffset.UtcNow.Add(AbandonedRequestRetention);
+            _abandonedRequests[requestId] = new AbandonedRequestEntry(
+                requestId,
+                method,
+                DateTimeOffset.UtcNow,
+                TryExtractAppId(parameters));
         }
     }
 
@@ -598,10 +653,87 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         var now = DateTimeOffset.UtcNow;
         foreach (var abandonedRequest in _abandonedRequests)
         {
-            if (abandonedRequest.Value <= now)
+            if (abandonedRequest.Value.AbandonedAt + AbandonedRequestRetention <= now)
             {
                 _abandonedRequests.TryRemove(abandonedRequest.Key, out _);
             }
+        }
+    }
+
+    private static bool MatchesAbandonedRequest(
+        AbandonedRequestEntry entry,
+        AbandonedRequestFilter? filter,
+        DateTimeOffset now)
+    {
+        if (filter is null)
+        {
+            return true;
+        }
+
+        if (filter.OlderThan is { } olderThan && now - entry.AbandonedAt < olderThan)
+        {
+            return false;
+        }
+
+        if (filter.AppId is { Length: > 0 } appId && !string.Equals(entry.AppId, appId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (filter.Method is { Length: > 0 } method && !string.Equals(entry.Method, method, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void ValidateAbandonedRequestFilter(AbandonedRequestFilter? filter)
+    {
+        if (filter is null)
+        {
+            return;
+        }
+
+        if (filter.OlderThan < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(filter), "OlderThan 不能小于零。");
+        }
+
+        if (filter.AppId is not null && string.IsNullOrWhiteSpace(filter.AppId))
+        {
+            throw new ArgumentException("AppId 不能为空白字符串。", nameof(filter));
+        }
+
+        if (filter.Method is not null && string.IsNullOrWhiteSpace(filter.Method))
+        {
+            throw new ArgumentException("Method 不能为空白字符串。", nameof(filter));
+        }
+    }
+
+    private static string? TryExtractAppId(object? parameters)
+    {
+        if (parameters is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var token = DevHubJson.SerializeToToken(parameters);
+            if (token is not JObject payload ||
+                !payload.TryGetValue("appId", out var appIdToken) ||
+                appIdToken.Type != JTokenType.String)
+            {
+                return null;
+            }
+
+            var appId = (string?)appIdToken;
+            return ProtocolIdentifier.IsValidAppId(appId) ? appId : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -658,6 +790,25 @@ public sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     private static string CreateRequestId()
     {
         return $"ws-{Guid.NewGuid():N}";
+    }
+
+    private sealed class AbandonedRequestEntry
+    {
+        public AbandonedRequestEntry(string requestId, string method, DateTimeOffset abandonedAt, string? appId)
+        {
+            RequestId = requestId;
+            Method = method;
+            AbandonedAt = abandonedAt;
+            AppId = appId;
+        }
+
+        public string RequestId { get; }
+
+        public string Method { get; }
+
+        public DateTimeOffset AbandonedAt { get; }
+
+        public string? AppId { get; }
     }
 
     private sealed class JsonRpcRequestEnvelope

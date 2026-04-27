@@ -7,6 +7,13 @@ internal sealed class OkOnlyContract
     public bool Ok { get; set; }
 }
 
+internal sealed class GetHostVersionContract
+{
+    public bool Ok { get; set; }
+
+    public string Version { get; set; } = string.Empty;
+}
+
 internal sealed class ListDefinitionsContract
 {
     public bool Ok { get; set; }
@@ -19,6 +26,13 @@ internal sealed class GetDefinitionContract
     public bool Ok { get; set; }
 
     public AppDefinition Definition { get; set; } = new();
+}
+
+internal sealed class GetInstanceContract
+{
+    public bool Ok { get; set; }
+
+    public AppInstance Instance { get; set; } = new();
 }
 
 internal sealed class DefinitionValidationContract
@@ -35,6 +49,8 @@ internal sealed class RegisterInstanceContract
     public bool Ok { get; set; }
 
     public AppInstance Instance { get; set; } = new();
+
+    public string InstanceSessionToken { get; set; } = string.Empty;
 }
 
 internal sealed class HeartbeatContract

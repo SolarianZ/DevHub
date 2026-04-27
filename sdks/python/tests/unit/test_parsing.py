@@ -11,10 +11,12 @@ from devhub_sdk._parsing import (
     parse_definition_validation_result,
     parse_event,
     parse_hub_runtime,
+    parse_instance_result,
     parse_invocation,
     parse_launch_result,
     parse_notify_result,
     parse_ping_result,
+    parse_register_instance_result,
     parse_request_result,
 )
 
@@ -24,6 +26,7 @@ def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> Non
         parse_app_definition(
             {
                 "appId": "test.app",
+                "scope": "",
                 "displayName": "Test App",
                 "launch": {},
             },
@@ -35,7 +38,43 @@ def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_app_definition(
             {
-                "appId": "Test.App",
+                "appId": ".Test.App",
+                "scope": "",
+                "displayName": "Test App",
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_scope_missing_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "displayName": "Test App",
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_scope_is_blank_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": "workspace ",
+                "displayName": "Test App",
+            },
+            path="app.definition",
+        )
+
+
+def test_parse_app_definition_when_scope_is_null_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": None,
                 "displayName": "Test App",
             },
             path="app.definition",
@@ -46,6 +85,7 @@ def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": "",
             "displayName": "Test App",
         },
         path="app.definition",
@@ -54,12 +94,28 @@ def test_parse_app_definition_when_capabilities_missing_should_apply_rpc_default
     assert definition.capabilities is not None
     assert definition.capabilities.rpc is True
     assert definition.capabilities.events is None
+    assert definition.scope == ""
+
+
+def test_parse_app_definition_should_preserve_case_sensitive_canonical_identifier() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "Sample.App",
+            "scope": "Workspace-A.v2",
+            "displayName": "Sample App",
+        },
+        path="app.definition",
+    )
+
+    assert definition.app_id == "Sample.App"
+    assert definition.scope == "Workspace-A.v2"
 
 
 def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_default() -> None:
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": "",
             "displayName": "Test App",
             "capabilities": {
                 "events": False,
@@ -77,6 +133,7 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
     definition = parse_app_definition(
         {
             "appId": "test.app",
+            "scope": "",
             "displayName": "Test App",
             "launch": {
                 "exePath": "",
@@ -87,6 +144,28 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
 
     assert definition.launch is not None
     assert definition.launch.exe_path == ""
+
+
+def test_parse_app_definition_should_preserve_literal_global_scope_distinction() -> None:
+    global_definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Global App",
+        },
+        path="app.definition.global",
+    )
+    literal_global_definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "global",
+            "displayName": "Literal Global App",
+        },
+        path="app.definition.literal",
+    )
+
+    assert global_definition.scope == ""
+    assert literal_global_definition.scope == "global"
 
 
 def test_parse_hub_runtime_when_http_base_url_empty_should_raise() -> None:
@@ -118,7 +197,7 @@ def test_parse_definition_validation_result_should_round_trip_issues() -> None:
                 {
                     "path": "definition.appId",
                     "code": "invalid_app_id",
-                    "message": "appId must match ^[a-z0-9][a-z0-9.-]*$",
+                    "message": "appId must match ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$",
                 }
             ],
         },
@@ -163,6 +242,7 @@ def test_parse_definition_validation_result_when_valid_contains_errors_should_ra
 def test_parse_app_definition_when_optional_non_nullable_field_is_null_should_raise(mutator) -> None:
     payload = {
         "appId": "test.app",
+        "scope": "",
         "displayName": "Test App",
         "capabilities": {
             "rpc": True,
@@ -237,6 +317,81 @@ def test_parse_app_instance_when_password_present_should_raise() -> None:
         parse_app_instance(payload, path="hub.apps.registerInstance.result.instance")
 
 
+def test_parse_app_instance_when_instance_session_token_present_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["instanceSessionToken"] = "token-1"
+
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_app_instance(payload, path="hub.apps.registerInstance.result.instance")
+
+
+def test_parse_register_instance_result_should_attach_instance_session_token() -> None:
+    instance = parse_register_instance_result(
+        {
+            "ok": True,
+            "instance": _app_instance_payload(),
+            "instanceSessionToken": "token-1",
+        },
+        path="hub.apps.registerInstance.result",
+    )
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token == "token-1"
+
+
+def test_parse_instance_result_should_return_exact_instance() -> None:
+    instance = parse_instance_result(
+        {
+            "ok": True,
+            "instance": _app_instance_payload(),
+        },
+        path="hub.apps.getInstance.result",
+    )
+
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token is None
+
+
+def test_parse_instance_result_when_password_present_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"password"):
+        parse_instance_result(
+            {
+                "ok": True,
+                "password": "secret-1",
+                "instance": _app_instance_payload(),
+            },
+            path="hub.apps.getInstance.result",
+        )
+
+
+def test_parse_instance_result_when_instance_session_token_present_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_instance_result(
+            {
+                "ok": True,
+                "instanceSessionToken": "token-1",
+                "instance": _app_instance_payload(),
+            },
+            path="hub.apps.getInstance.result",
+        )
+
+
+def test_parse_app_instance_when_scope_is_null_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["scope"] = None
+
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
+def test_parse_app_instance_when_scope_violates_canonical_grammar_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["scope"] = ".workspace"
+
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -270,6 +425,14 @@ def test_parse_invocation_when_wait_timeout_exceeds_ttl_should_raise() -> None:
     payload["options"]["waitTimeoutMs"] = 1001
 
     with pytest.raises(RuntimeError, match=r"waitTimeoutMs 必须小于等于 .*ttlMs"):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+def test_parse_invocation_when_target_scope_is_null_should_raise() -> None:
+    payload = _invocation_payload()
+    payload["target"]["scope"] = None
+
+    with pytest.raises(RuntimeError, match=r"scope"):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
@@ -370,8 +533,10 @@ def test_parse_event_should_accept_definition_lifecycle_type() -> None:
             "timeUtc": "2026-03-09T00:00:00Z",
             "payload": {
                 "appId": "test.app",
+                "scope": "",
                 "definition": {
                     "appId": "test.app",
+                    "scope": "",
                     "displayName": "Test App",
                 },
             },
@@ -391,6 +556,28 @@ def test_parse_event_when_definition_payload_missing_required_shape_should_raise
                 "timeUtc": "2026-03-09T00:00:00Z",
                 "payload": {
                     "appId": "test.app",
+                    "scope": "",
+                },
+            },
+            path="hub.event.params",
+        )
+
+
+def test_parse_event_when_definition_event_scope_mismatches_definition_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"definition\.scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.definition.upserted",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "scope": "",
+                    "definition": {
+                        "appId": "test.app",
+                        "scope": "workspace-a",
+                        "displayName": "Test App",
+                    },
                 },
             },
             path="hub.event.params",
@@ -407,8 +594,46 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
                 "payload": {
                     "appId": "test.app",
                     "instanceId": "inst-1",
-                    "scope": None,
+                    "scope": "",
                     "password": "secret-1",
+                },
+            },
+            path="hub.event.params",
+        )
+
+
+def test_parse_event_when_instance_payload_omits_scope_should_accept() -> None:
+    event = parse_event(
+        {
+            "subscriptionId": "sub-1",
+            "type": "app.instance.registered",
+            "timeUtc": "2026-03-09T00:00:00Z",
+            "payload": {
+                "appId": "test.app",
+                "instanceId": "inst-1",
+            },
+        },
+        path="hub.event.params",
+    )
+
+    assert event.type is DevHubEventType.APP_INSTANCE_REGISTERED
+    assert event.payload == {
+        "appId": "test.app",
+        "instanceId": "inst-1",
+    }
+
+
+def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.unregistered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                    "scope": None,
                 },
             },
             path="hub.event.params",
@@ -419,7 +644,8 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
     ("mutator",),
     [
         (lambda payload: payload.__setitem__("invocationId", "request-1"),),
-        (lambda payload: payload["target"].__setitem__("instanceId", "inst/1"),),
+        (lambda payload: payload["target"].__setitem__("instanceId", "inst-1."),),
+        (lambda payload: payload["target"].__setitem__("scope", ".workspace"),),
         (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
     ],
 )
@@ -429,6 +655,50 @@ def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) ->
 
     with pytest.raises(RuntimeError):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+@pytest.mark.parametrize(
+    ("event_type", "payload"),
+    [
+        (
+            "app.definition.deleted",
+            {
+                "appId": "Sample.App-",
+                "scope": "",
+            },
+        ),
+        (
+            "app.instance.registered",
+            {
+                "appId": "Sample.App",
+                "instanceId": ".node-01",
+                "scope": "",
+            },
+        ),
+        (
+            "app.instance.unregistered",
+            {
+                "appId": "Sample.App",
+                "instanceId": "NODE_01.alpha",
+                "scope": "workspace.",
+            },
+        ),
+    ],
+)
+def test_parse_event_when_identifier_violates_canonical_grammar_should_raise(
+    event_type: str,
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(RuntimeError):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": event_type,
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": payload,
+            },
+            path="hub.event.params",
+        )
 
 
 @pytest.mark.parametrize(
@@ -473,7 +743,7 @@ def _app_instance_payload() -> dict[str, object]:
     return {
         "instanceId": "inst-1",
         "appId": "test.app",
-        "scope": None,
+        "scope": "",
         "pid": 12345,
         "registeredAtUtc": "2026-03-09T00:00:00Z",
         "lastSeenUtc": "2026-03-09T00:00:01Z",
@@ -489,7 +759,7 @@ def _invocation_payload() -> dict[str, object]:
         "invocationId": "invk-1",
         "appId": "test.app",
         "target": {
-            "scope": None,
+            "scope": "",
             "instanceId": "inst-1",
         },
         "method": "test.method",

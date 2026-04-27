@@ -27,7 +27,7 @@ public class ScopeRoutingSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Register_WhenScopeOmittedNullOrEmpty_ShouldBeGlobalEffectiveScope()
+    public async Task Spec_5_5_Register_WhenScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldBeGlobal()
     {
         const string appId = "spec-5.5-register-global";
 
@@ -38,15 +38,19 @@ public class ScopeRoutingSpecTests : IDisposable
         var withNull = await RegisterInstanceAsync(handler, "spec-5.5-null", appId, scopeValue: null, includeScopeProperty: true, pid: 8102);
         var withEmpty = await RegisterInstanceAsync(handler, "spec-5.5-empty", appId, scopeValue: string.Empty, includeScopeProperty: true, pid: 8103);
 
-        AssertSuccess(omitted);
-        AssertSuccess(withNull);
+        AssertError(omitted, -32602, "invalid_params");
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(omitted.Error!.Data).GetProperty("reason").GetString());
+
+        AssertError(withNull, -32602, "invalid_params");
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(withNull.Error!.Data).GetProperty("reason").GetString());
+
         AssertSuccess(withEmpty);
 
-        var listDefault = await handler.HandleAsync(new JsonRpcRequest
+        var listAllScopes = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "spec-5.5-list-default",
+            Id = "spec-5.5-list-all-scopes",
             Method = "hub.apps.listInstances",
-            Params = JsonSerializer.SerializeToElement(new { appId })
+            Params = JsonSerializer.SerializeToElement(new { appId, scope = (string?)null })
         }, CancellationToken.None);
 
         var listEmpty = await handler.HandleAsync(new JsonRpcRequest
@@ -56,18 +60,16 @@ public class ScopeRoutingSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new { appId, scope = string.Empty })
         }, CancellationToken.None);
 
-        AssertSuccess(listDefault);
+        AssertSuccess(listAllScopes);
         AssertSuccess(listEmpty);
 
-        var defaultIds = ExtractInstanceIds(listDefault);
+        var allScopeIds = ExtractInstanceIds(listAllScopes);
         var emptyScopeIds = ExtractInstanceIds(listEmpty);
 
-        Assert.Contains("spec-5.5-omitted", defaultIds);
-        Assert.Contains("spec-5.5-null", defaultIds);
-        Assert.Contains("spec-5.5-empty", defaultIds);
+        Assert.DoesNotContain("spec-5.5-omitted", allScopeIds);
+        Assert.DoesNotContain("spec-5.5-null", allScopeIds);
+        Assert.Contains("spec-5.5-empty", allScopeIds);
 
-        Assert.Contains("spec-5.5-omitted", emptyScopeIds);
-        Assert.Contains("spec-5.5-null", emptyScopeIds);
         Assert.Contains("spec-5.5-empty", emptyScopeIds);
     }
 
@@ -81,16 +83,16 @@ public class ScopeRoutingSpecTests : IDisposable
         var handler = CreateAppInstancesHandler(appRegistry);
 
         var explicitGlobal = await RegisterInstanceAsync(handler, "spec-5.5-explicit-global", appId, scopeValue: "global", includeScopeProperty: true, pid: 8111);
-        var defaultGlobal = await RegisterInstanceAsync(handler, "spec-5.5-default-global", appId, scopeValue: null, includeScopeProperty: true, pid: 8112);
+        var defaultGlobal = await RegisterInstanceAsync(handler, "spec-5.5-default-global", appId, scopeValue: string.Empty, includeScopeProperty: true, pid: 8112);
 
         AssertSuccess(explicitGlobal);
         AssertSuccess(defaultGlobal);
 
-        var listDefault = await handler.HandleAsync(new JsonRpcRequest
+        var listGlobal = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "spec-5.5-global-list-default",
+            Id = "spec-5.5-global-list-global",
             Method = "hub.apps.listInstances",
-            Params = JsonSerializer.SerializeToElement(new { appId })
+            Params = JsonSerializer.SerializeToElement(new { appId, scope = string.Empty })
         }, CancellationToken.None);
         var listExplicit = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -99,14 +101,14 @@ public class ScopeRoutingSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new { appId, scope = "global" })
         }, CancellationToken.None);
 
-        AssertSuccess(listDefault);
+        AssertSuccess(listGlobal);
         AssertSuccess(listExplicit);
 
-        var defaultIds = ExtractInstanceIds(listDefault);
+        var globalIds = ExtractInstanceIds(listGlobal);
         var explicitIds = ExtractInstanceIds(listExplicit);
 
-        Assert.Contains("spec-5.5-default-global", defaultIds);
-        Assert.DoesNotContain("spec-5.5-explicit-global", defaultIds);
+        Assert.Contains("spec-5.5-default-global", globalIds);
+        Assert.DoesNotContain("spec-5.5-explicit-global", globalIds);
 
         Assert.Contains("spec-5.5-explicit-global", explicitIds);
         Assert.DoesNotContain("spec-5.5-default-global", explicitIds);
@@ -114,7 +116,7 @@ public class ScopeRoutingSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Launch_WhenScopeEmptyOrNull_ShouldResolveToSameEffectiveGlobalScope()
+    public async Task Spec_5_5_Launch_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
         const string appId = "spec-5.5-launch-scope";
         WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
@@ -128,12 +130,11 @@ public class ScopeRoutingSpecTests : IDisposable
 
         var first = await handler.HandleAsync(new JsonRpcRequest
         {
-            Id = "spec-5.5-launch-empty",
+            Id = "spec-5.5-launch-omitted",
             Method = "hub.apps.launch",
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                scope = string.Empty,
                 waitForRegisterMs = 0
             })
         }, CancellationToken.None);
@@ -150,19 +151,40 @@ public class ScopeRoutingSpecTests : IDisposable
             })
         }, CancellationToken.None);
 
-        AssertSuccess(first);
-        AssertSuccess(second);
+        AssertError(first, -32602, "invalid_params");
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(first.Error!.Data).GetProperty("reason").GetString());
 
-        var firstResult = JsonSerializer.SerializeToElement(first.Result);
-        var secondResult = JsonSerializer.SerializeToElement(second.Result);
-
-        Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
-        Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
+        AssertError(second, -32602, "invalid_params");
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(second.Error!.Data).GetProperty("reason").GetString());
     }
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Invoke_WhenTargetScopeOmittedNullOrEmpty_ShouldRouteOnlyToGlobal()
+    public async Task Spec_5_5_Launch_WhenScopeEmpty_ShouldLaunchGlobalDefinition()
+    {
+        const string appId = "spec-5.5-launch-empty";
+        WriteDefinition(appId, includeLaunch: true);
+
+        var response = await CreateLaunchHandler().HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-5.5-launch-empty-invalid",
+            Method = "hub.apps.launch",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                scope = string.Empty,
+                waitForRegisterMs = 0
+            })
+        }, CancellationToken.None);
+
+        AssertSuccess(response);
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.Equal("started", result.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "5.5")]
+    public async Task Spec_5_5_Invoke_WhenTargetScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldRouteOnlyToGlobal()
     {
         const string appId = "spec-5.5-target-default";
         WriteDefinition(appId, rpcEnabled: true);
@@ -173,50 +195,82 @@ public class ScopeRoutingSpecTests : IDisposable
 
         var handler = CreateInvocationHandler(appRegistry);
 
-        var cases = new (string Name, object Target)[]
+        var omitted = await handler.HandleAsync(new JsonRpcRequest
         {
-            ("omitted", new { }),
-            ("null", new { scope = (string?)null }),
-            ("empty", new { scope = string.Empty })
-        };
-
-        foreach (var testCase in cases)
-        {
-            var notify = await handler.HandleAsync(new JsonRpcRequest
+            Id = "spec-5.5-target-default-omitted",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
             {
-                Id = $"spec-5.5-target-default-{testCase.Name}",
-                Method = "hub.invoke.notify",
-                Params = JsonSerializer.SerializeToElement(new
+                appId,
+                target = new { },
+                method = "asset.rebuild",
+                args = new { caseName = "omitted" },
+                options = new
                 {
-                    appId,
-                    target = testCase.Target,
-                    method = "asset.rebuild",
-                    args = new { caseName = testCase.Name },
-                    options = new
-                    {
-                        ttlMs = 60000,
-                        queueIfOffline = false,
-                        autoLaunch = false
-                    }
-                })
-            }, CancellationToken.None);
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        AssertError(omitted, -32602, "invalid_params");
+        Assert.Equal("invalid_target_scope", JsonSerializer.SerializeToElement(omitted.Error!.Data).GetProperty("reason").GetString());
 
-            AssertSuccess(notify);
-            var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
+        var withNull = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-5.5-target-default-null",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = (string?)null, instanceId = (string?)null },
+                method = "asset.rebuild",
+                args = new { caseName = "null" },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        AssertError(withNull, -32602, "invalid_params");
+        Assert.Equal("invalid_target_scope", JsonSerializer.SerializeToElement(withNull.Error!.Data).GetProperty("reason").GetString());
 
-            var globalPoll = await PollAsync(handler, "spec-5.5-target-global", maxCount: 1, waitMs: 120);
-            var scopedPoll = await PollAsync(handler, "spec-5.5-target-scoped", maxCount: 1, waitMs: 0);
+        var withEmpty = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-5.5-target-default-empty",
+            Method = "hub.invoke.notify",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = string.Empty, instanceId = (string?)null },
+                method = "asset.rebuild",
+                args = new { caseName = "empty" },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
 
-            AssertSuccess(globalPoll);
-            AssertSuccess(scopedPoll);
+        AssertSuccess(withEmpty);
+        var invocationId = JsonSerializer.SerializeToElement(withEmpty.Result).GetProperty("invocationId").GetString();
 
-            var globalItems = JsonSerializer.SerializeToElement(globalPoll.Result).GetProperty("items").EnumerateArray().ToList();
-            var scopedItems = JsonSerializer.SerializeToElement(scopedPoll.Result).GetProperty("items").EnumerateArray().ToList();
+        var globalPoll = await PollAsync(handler, appRegistry, "spec-5.5-target-global", maxCount: 1, waitMs: 120);
+        var scopedPoll = await PollAsync(handler, appRegistry, "spec-5.5-target-scoped", maxCount: 1, waitMs: 0);
 
-            Assert.Single(globalItems);
-            Assert.Equal(invocationId, globalItems[0].GetProperty("invocationId").GetString());
-            Assert.Empty(scopedItems);
-        }
+        AssertSuccess(globalPoll);
+        AssertSuccess(scopedPoll);
+
+        var globalItems = JsonSerializer.SerializeToElement(globalPoll.Result).GetProperty("items").EnumerateArray().ToList();
+        var scopedItems = JsonSerializer.SerializeToElement(scopedPoll.Result).GetProperty("items").EnumerateArray().ToList();
+
+        Assert.Single(globalItems);
+        Assert.Equal(invocationId, globalItems[0].GetProperty("invocationId").GetString());
+        Assert.Empty(scopedItems);
     }
 
     [Fact]
@@ -350,8 +404,8 @@ public class ScopeRoutingSpecTests : IDisposable
             AssertSuccess(notify);
             var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
 
-            var expectedPoll = await PollAsync(handler, testCase.ExpectedInstance, maxCount: 1, waitMs: 120);
-            var unexpectedPoll = await PollAsync(handler, testCase.UnexpectedInstance, maxCount: 1, waitMs: 0);
+            var expectedPoll = await PollAsync(handler, appRegistry, testCase.ExpectedInstance, maxCount: 1, waitMs: 120);
+            var unexpectedPoll = await PollAsync(handler, appRegistry, testCase.UnexpectedInstance, maxCount: 1, waitMs: 0);
 
             AssertSuccess(expectedPoll);
             AssertSuccess(unexpectedPoll);
@@ -397,7 +451,7 @@ public class ScopeRoutingSpecTests : IDisposable
 
         AssertError(notify, -32010, "instance_not_found");
 
-        var globalPoll = await PollAsync(handler, "spec-5.5-no-fallback-global-inst", maxCount: 1, waitMs: 0);
+        var globalPoll = await PollAsync(handler, appRegistry, "spec-5.5-no-fallback-global-inst", maxCount: 1, waitMs: 0);
         AssertSuccess(globalPoll);
         var globalItems = JsonSerializer.SerializeToElement(globalPoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(globalItems);
@@ -425,7 +479,7 @@ public class ScopeRoutingSpecTests : IDisposable
                 appId,
                 target = new
                 {
-                    scope = "workspace-B",
+                    scope = "workspace-A",
                     instanceId = "spec-7.1-target-instance"
                 },
                 method = "asset.rebuild",
@@ -441,8 +495,8 @@ public class ScopeRoutingSpecTests : IDisposable
         AssertSuccess(notify);
         var invocationId = JsonSerializer.SerializeToElement(notify.Result).GetProperty("invocationId").GetString();
 
-        var targetPoll = await PollAsync(handler, "spec-7.1-target-instance", maxCount: 1, waitMs: 120);
-        var otherPoll = await PollAsync(handler, "spec-7.1-other-instance", maxCount: 1, waitMs: 0);
+        var targetPoll = await PollAsync(handler, appRegistry, "spec-7.1-target-instance", maxCount: 1, waitMs: 120);
+        var otherPoll = await PollAsync(handler, appRegistry, "spec-7.1-other-instance", maxCount: 1, waitMs: 0);
 
         AssertSuccess(targetPoll);
         AssertSuccess(otherPoll);
@@ -556,9 +610,11 @@ public class ScopeRoutingSpecTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled = true, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
+        const string definitionScope = ScopeContract.Global;
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = definitionScope,
             ["displayName"] = appId,
             ["capabilities"] = new Dictionary<string, object?>
             {
@@ -583,7 +639,7 @@ public class ScopeRoutingSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, $"{appId}.json");
+        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
     }
 
@@ -633,11 +689,12 @@ public class ScopeRoutingSpecTests : IDisposable
         bool respond,
         int pid)
     {
+        var normalizedScope = scope ?? ScopeContract.Global;
         return appRegistry.RegisterInstance(new AppInstance
         {
             InstanceId = instanceId,
             AppId = appId,
-            Scope = scope,
+            Scope = normalizedScope,
             Pid = pid,
             Invoke = new InvokeCapability
             {
@@ -647,7 +704,7 @@ public class ScopeRoutingSpecTests : IDisposable
         });
     }
 
-    private static async Task<JsonRpcResponse> PollAsync(InvocationHandler handler, string instanceId, int maxCount, int waitMs)
+    private static async Task<JsonRpcResponse> PollAsync(InvocationHandler handler, AppRegistry appRegistry, string instanceId, int maxCount, int waitMs)
     {
         return await handler.HandleAsync(new JsonRpcRequest
         {
@@ -656,10 +713,17 @@ public class ScopeRoutingSpecTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId,
+                instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
                 maxCount,
                 waitMs
             })
         }, CancellationToken.None);
+    }
+
+    private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)
+    {
+        return appRegistry.GetCurrentInstanceSessionToken(instanceId)
+               ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 
     private static HashSet<string?> ExtractInstanceIds(JsonRpcResponse response)

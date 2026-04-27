@@ -10,5 +10,14 @@
     <AssemblyVersion>$(DevHubAssemblyVersion)</AssemblyVersion>
     <FileVersion>$(DevHubFileVersion)</FileVersion>
     <InformationalVersion>$(DevHubInformationalVersion)</InformationalVersion>
+    <!-- 并行测试若把 BaseIntermediateOutputPath 指到同一个仓库外绝对路径，多个项目会共享 restore 资产与生成文件。
+         这里统一按项目名切分外部 obj 根目录，避免多项目/多目标框架互相覆盖。 -->
+    <DevHubExternalIntermediateRoot Condition="$([System.IO.Path]::IsPathRooted('$(BaseIntermediateOutputPath)'))">$([MSBuild]::EnsureTrailingSlash('$(BaseIntermediateOutputPath)'))</DevHubExternalIntermediateRoot>
+    <DevHubExternalIntermediateProjectRoot Condition="'$(DevHubExternalIntermediateRoot)' != ''">$(DevHubExternalIntermediateRoot)$(MSBuildProjectName)\</DevHubExternalIntermediateProjectRoot>
+    <MSBuildProjectExtensionsPath Condition="'$(DevHubExternalIntermediateProjectRoot)' != ''">$(DevHubExternalIntermediateProjectRoot)</MSBuildProjectExtensionsPath>
+    <IntermediateOutputPath Condition="'$(DevHubExternalIntermediateProjectRoot)' != ''">$(DevHubExternalIntermediateProjectRoot)$(Configuration)\</IntermediateOutputPath>
+    <!-- 当测试把 BaseIntermediateOutputPath 重定向到外部目录时，仍需显式排除项目目录下残留的 obj/ 生成文件，
+         否则这些旧的 AssemblyInfo 会被默认通配符再次编译，导致重复程序集特性错误。 -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-get",
+  "result": {
+    "ok": true,
+    "instance": {
+      "instanceId": "NODE_01.alpha",
+      "appId": "Sample.App",
+      "scope": "",
+      "pid": 32001,
+      "registeredAtUtc": "2026-03-28T12:35:01Z",
+      "lastSeenUtc": "2026-03-28T12:35:16Z",
+      "invoke": {
+        "poll": true,
+        "respond": true
+      }
+    }
+  }
+}

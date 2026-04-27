@@ -1,4 +1,5 @@
 import { AsyncQueue } from "./async-utils.js";
+import { DevHubConnectionError } from "./errors.js";
 import {
   ensureSupportedEventType,
   type DevHubEventType
@@ -9,19 +10,24 @@ import {
 } from "./models.js";
 import type {
   AppDefinition,
+  AppDefinitionIdentity,
   AppInstance,
   DevHubClientOptions,
   DevHubEvent,
   JsonValue,
+  ListDefinitionsRequest,
   ListInstancesRequest,
   PingResult,
-  NormalizedDevHubClientOptions
+  NormalizedDevHubClientOptions,
+  VersionCompatibilityResult
 } from "./models.js";
 import {
   parseAuthenticateResult,
   parseDefinitionResult,
   parseDefinitionsResult,
   parseEvent,
+  parseHostVersionResult,
+  parseInstanceResult,
   parseInstancesResult,
   parsePingResult,
   parseSubscriptionResult,
@@ -29,6 +35,8 @@ import {
 } from "./parsers.js";
 import {
   buildGetDefinitionParams,
+  buildGetInstanceParams,
+  buildListDefinitionsParams,
   buildListInstancesParams
 } from "./payloads.js";
 import { getRuntimeResolver } from "./default-runtime-resolver.js";
@@ -38,11 +46,25 @@ import {
   type DevHubRuntimeView
 } from "./runtime-view.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
+import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
+import { checkVersionCompatibilityWithFallback } from "./versioning.js";
+
+export type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 
 export interface JsonRpcEventSession {
   ensureConnected(): Promise<void>;
   sendRequest(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>>;
+
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number;
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number;
   disconnect(reason: string): Promise<void>;
   dispose(reason?: string): Promise<void>;
 }
@@ -56,12 +78,15 @@ export interface DevHubEventsClientDependencies {
 
 export class DevHubEventsClient {
   readonly options: NormalizedDevHubClientOptions;
-  #eventQueue = new AsyncQueue<DevHubEvent>();
+  #eventStream = createEventStreamGeneration();
   readonly #connection: RuntimeConnectionInfo;
   readonly #session: JsonRpcEventSession;
   #authenticated = false;
   #eventStreamAvailable = false;
+  #eventStreamInvalidated = false;
+  #activeReaderLease: EventReaderLease | null = null;
   #disposed = false;
+  #terminationError: DevHubConnectionError | null = null;
 
   private constructor(
     options: NormalizedDevHubClientOptions,
@@ -75,6 +100,24 @@ export class DevHubEventsClient {
 
   get runtime(): DevHubRuntimeView {
     return createRuntimeView(this.#connection.runtime);
+  }
+
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   * 该操作只读取本地维护状态，不会发送网络请求，也不会修改认证或订阅状态。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    return this.#session.getAbandonedRequestCount(filter);
+  }
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   * 该操作只修改本地维护状态，不会发送网络请求，也不会修改认证或订阅状态。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    return this.#session.clearAbandonedRequests(filter);
   }
 
   static async fromRuntime(
@@ -91,7 +134,7 @@ export class DevHubEventsClient {
       requestTimeoutMs: normalized.requestTimeoutMs,
       onEvent: (params) => {
         if (client) {
-          client.#eventQueue.push(parseEvent(params, "hub.event.params"));
+          client.#eventStream.queue.push(client.parseEventPayload(params));
         }
       },
       onTerminate: (error) => {
@@ -119,11 +162,19 @@ export class DevHubEventsClient {
         clientSessionId: this.options.clientSessionId
       });
 
-      parseAuthenticateResult(result);
-      this.#eventQueue = new AsyncQueue<DevHubEvent>();
+      parseProtocolPayload("hub.ws.authenticate.result", () => parseAuthenticateResult(result));
+      this.invalidateReaderLease();
+      this.#eventStream = createEventStreamGeneration();
       this.#authenticated = true;
       this.#eventStreamAvailable = true;
+      this.#eventStreamInvalidated = false;
+      this.#terminationError = null;
     } catch (error) {
+      this.invalidateReaderLease();
+      this.#authenticated = false;
+      this.#eventStreamAvailable = false;
+      this.#eventStreamInvalidated = true;
+      this.#terminationError = createEventStreamTerminationError(error);
       await this.#session.disconnect("authenticate_failed");
       throw error;
     }
@@ -131,31 +182,78 @@ export class DevHubEventsClient {
 
   async subscribe(types?: readonly DevHubEventType[]): Promise<string> {
     this.ensureAuthenticated();
-    return parseSubscriptionResult(await this.#session.sendRequest("hub.events.subscribe", buildSubscribeParams(types)));
+    return await this.sendAndParse(
+      "hub.events.subscribe.result",
+      buildSubscribeParams(types),
+      "hub.events.subscribe",
+      parseSubscriptionResult
+    );
   }
 
   async ping(echo?: JsonValue): Promise<PingResult> {
     this.ensureAuthenticated();
     const params = echo === undefined ? undefined : { echo: ensureJsonValue(echo, "echo") };
-    return parsePingResult(await this.#session.sendRequest("hub.ping", params));
+    return await this.sendAndParse("hub.ping.result", params, "hub.ping", parsePingResult);
   }
 
-  async listDefinitions(): Promise<AppDefinition[]> {
+  /**
+   * 读取当前连接 Host 的运行时版本。
+   * 该操作复用已认证 WebSocket 只读 RPC 通道。
+   */
+  async getHostVersion(): Promise<string> {
     this.ensureAuthenticated();
-    return parseDefinitionsResult(await this.#session.sendRequest("hub.apps.listDefinitions"));
+    return await this.sendAndParse("hub.getVersion.result", undefined, "hub.getVersion", parseHostVersionResult);
   }
 
-  async getDefinition(appId: string): Promise<AppDefinition> {
+  /**
+   * 检查当前 SDK 与 Host 的版本兼容状态。
+   * 优先调用 hub.getVersion；旧 Host 返回 method_not_found 时回退到 runtime.hubVersion。
+   */
+  async checkVersionCompatibility(): Promise<VersionCompatibilityResult> {
     this.ensureAuthenticated();
-    return parseDefinitionResult(
-      await this.#session.sendRequest("hub.apps.getDefinition", buildGetDefinitionParams(appId))
+    return checkVersionCompatibilityWithFallback(
+      () => this.getHostVersion(),
+      this.#connection.runtime.hubVersion
     );
   }
 
-  async listInstances(request?: ListInstancesRequest): Promise<AppInstance[]> {
+  async listDefinitions(request: ListDefinitionsRequest): Promise<AppDefinition[]> {
     this.ensureAuthenticated();
-    return parseInstancesResult(
-      await this.#session.sendRequest("hub.apps.listInstances", buildListInstancesParams(request))
+    return await this.sendAndParse(
+      "hub.apps.listDefinitions.result",
+      buildListDefinitionsParams(request),
+      "hub.apps.listDefinitions",
+      parseDefinitionsResult
+    );
+  }
+
+  async getDefinition(identity: AppDefinitionIdentity): Promise<AppDefinition> {
+    this.ensureAuthenticated();
+    return await this.sendAndParse(
+      "hub.apps.getDefinition.result",
+      buildGetDefinitionParams(identity),
+      "hub.apps.getDefinition",
+      parseDefinitionResult
+    );
+  }
+
+  async listInstances(request: ListInstancesRequest): Promise<AppInstance[]> {
+    this.ensureAuthenticated();
+    return await this.sendAndParse(
+      "hub.apps.listInstances.result",
+      buildListInstancesParams(request),
+      "hub.apps.listInstances",
+      parseInstancesResult
+    );
+  }
+
+  async getInstance(instanceId: string): Promise<AppInstance> {
+    this.ensureAuthenticated();
+    return await this.sendAndParse(
+      "hub.apps.getInstance.result",
+      buildGetInstanceParams(instanceId),
+      "hub.apps.getInstance",
+      parseInstanceResult
     );
   }
 
@@ -165,12 +263,19 @@ export class DevHubEventsClient {
       throw new Error("subscriptionId cannot be empty.");
     }
 
-    parseUnsubscribeResult(await this.#session.sendRequest("hub.events.unsubscribe", { subscriptionId }));
+    await this.sendAndParse(
+      "hub.events.unsubscribe.result",
+      { subscriptionId },
+      "hub.events.unsubscribe",
+      (payload) => parseUnsubscribeResult(payload)
+    );
   }
 
   readEvents(): AsyncIterable<DevHubEvent> {
     this.ensureEventStreamAvailable();
-    return this.#eventQueue;
+    return {
+      [Symbol.asyncIterator]: () => this.createEventIterator()
+    };
   }
 
   async dispose(): Promise<void> {
@@ -179,9 +284,12 @@ export class DevHubEventsClient {
     }
 
     this.#disposed = true;
+    this.invalidateReaderLease();
     this.#authenticated = false;
     this.#eventStreamAvailable = false;
-    this.#eventQueue.close();
+    this.#eventStreamInvalidated = true;
+    this.#terminationError = createEventStreamTerminationError();
+    this.#eventStream.queue.close();
 
     await this.#session.dispose("client_dispose");
   }
@@ -192,7 +300,16 @@ export class DevHubEventsClient {
     }
 
     this.#authenticated = false;
-    this.#eventQueue.close(error);
+    this.#eventStreamAvailable = false;
+    this.#eventStreamInvalidated = true;
+    this.#terminationError = createEventStreamTerminationError(error);
+    this.invalidateReaderLease();
+    if (error instanceof DevHubConnectionError && error.kind === "invalid_response") {
+      this.#eventStream.queue.close(error);
+      return;
+    }
+
+    this.#eventStream.queue.close();
   }
 
   private ensureAuthenticated(): void {
@@ -205,6 +322,10 @@ export class DevHubEventsClient {
   private ensureEventStreamAvailable(): void {
     this.throwIfDisposed();
     if (!this.#eventStreamAvailable) {
+      if (this.#eventStreamInvalidated) {
+        throw this.#terminationError ?? createEventStreamTerminationError();
+      }
+
       this.ensureAuthenticated();
     }
   }
@@ -214,6 +335,134 @@ export class DevHubEventsClient {
       throw new Error("The events client has been disposed.");
     }
   }
+
+  private parseEventPayload(payload: Record<string, unknown>): DevHubEvent {
+    return parseProtocolPayload("hub.event.params", () => parseEvent(payload, "hub.event.params"));
+  }
+
+  private async sendAndParse<TResult>(
+    responseLocation: string,
+    params: Record<string, unknown> | undefined,
+    method: string,
+    parser: (payload: Record<string, unknown>) => TResult
+  ): Promise<TResult> {
+    const payload = await this.#session.sendRequest(method, params);
+    return parseProtocolPayload(responseLocation, () => parser(payload));
+  }
+
+  private createEventIterator(): AsyncIterableIterator<DevHubEvent> {
+    this.ensureEventStreamAvailable();
+    const eventStream = this.#eventStream;
+    const readerLease = this.acquireReaderLease(eventStream.generationToken);
+
+    const queueIterator = eventStream.queue[Symbol.asyncIterator]();
+    let finished = false;
+    const releaseReaderLease = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      this.releaseReaderLease(readerLease);
+    };
+
+    return {
+      next: async () => {
+        if (finished) {
+          return { value: undefined as unknown as DevHubEvent, done: true };
+        }
+
+        try {
+          const result = await queueIterator.next();
+          if (result.done) {
+            releaseReaderLease();
+          }
+
+          return result;
+        } catch (error) {
+          releaseReaderLease();
+          throw error;
+        }
+      },
+      return: async (value?: DevHubEvent) => {
+        releaseReaderLease();
+        return {
+          value: value as DevHubEvent,
+          done: true
+        };
+      },
+      throw: async (error?: unknown) => {
+        releaseReaderLease();
+        throw error;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      }
+    };
+  }
+
+  private acquireReaderLease(generationToken: symbol): EventReaderLease {
+    if (this.#activeReaderLease) {
+      throw new Error("Only one active readEvents() iterator is allowed per DevHubEventsClient instance.");
+    }
+
+    const lease = {
+      generationToken,
+      leaseToken: Symbol("event_reader_lease")
+    };
+    this.#activeReaderLease = lease;
+    return lease;
+  }
+
+  private releaseReaderLease(lease: EventReaderLease): void {
+    if (
+      this.#activeReaderLease?.generationToken === lease.generationToken
+      && this.#activeReaderLease.leaseToken === lease.leaseToken
+    ) {
+      this.#activeReaderLease = null;
+    }
+  }
+
+  private invalidateReaderLease(): void {
+    this.#activeReaderLease = null;
+  }
+}
+
+function parseProtocolPayload<TResult>(location: string, parser: () => TResult): TResult {
+  try {
+    return parser();
+  } catch (error) {
+    throw toInvalidResponseError(error, location);
+  }
+}
+
+function toInvalidResponseError(error: unknown, location: string): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError) {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    kind: "invalid_response",
+    message: error instanceof Error ? error.message : `${location} is invalid.`,
+    cause: error
+  });
+}
+
+interface EventStreamGeneration {
+  queue: AsyncQueue<DevHubEvent>;
+  generationToken: symbol;
+}
+
+interface EventReaderLease {
+  generationToken: symbol;
+  leaseToken: symbol;
+}
+
+function createEventStreamGeneration(): EventStreamGeneration {
+  return {
+    queue: new AsyncQueue<DevHubEvent>(),
+    generationToken: Symbol("event_stream_generation")
+  };
 }
 
 function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string, unknown> | undefined {
@@ -244,4 +493,16 @@ function buildSubscribeParams(types?: readonly DevHubEventType[]): Record<string
   }
 
   return { types: normalizedTypes };
+}
+
+function createEventStreamTerminationError(error?: unknown): DevHubConnectionError {
+  if (error instanceof DevHubConnectionError && error.kind === "invalid_response") {
+    return error;
+  }
+
+  return new DevHubConnectionError({
+    kind: "session_terminated",
+    message: "The event stream is unavailable. Re-authenticate and subscribe again.",
+    cause: error
+  });
 }

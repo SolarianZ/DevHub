@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,21 @@ def test_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: 
     assert connection_info.runtime.http_base_url == "http://127.0.0.1:47231"
     assert connection_info.runtime.ws_url == "ws://127.0.0.1:47231/ws"
     assert connection_info.runtime.token_file == str(token_file)
+
+
+def test_runtime_discovery_should_return_immutable_connection_info(tmp_path: Path) -> None:
+    data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
+    token_file.write_text("token-immutable", encoding="utf-8")
+    _write_hub_json(runtime_dir, token_file=token_file)
+
+    connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
+
+    with pytest.raises(FrozenInstanceError):
+        connection_info.token = "token-other"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        connection_info.runtime.http_base_url = "http://127.0.0.1:9"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        connection_info.runtime.runtime_tuning.lease_seconds = 99  # type: ignore[misc]
 
 
 def test_runtime_discovery_when_environment_override_provided_should_use_environment_data_dir(

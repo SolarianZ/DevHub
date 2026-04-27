@@ -5,6 +5,7 @@
   "required": [
     "instanceId",
     "appId",
+    "scope",
     "pid",
     "invoke"
   ],
@@ -12,16 +13,16 @@
     "instanceId": {
       "type": "string",
       "maxLength": 256,
-      "pattern": "^[a-zA-Z0-9._:-]+$"
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "appId": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "scope": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "description": "Registration scope. Use the empty string for the Global scope. Any other scope must satisfy the canonical DevHub identifier grammar and is preserved verbatim.",
+      "type": "string",
+      "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "pid": {
       "type": "integer",
@@ -45,5 +46,21 @@
     "meta": {
       "type": "object"
     }
-  }
+  },
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "password"
+        ]
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "instanceSessionToken"
+        ]
+      }
+    }
+  ]
 }

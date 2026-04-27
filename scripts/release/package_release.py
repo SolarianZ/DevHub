@@ -23,9 +23,9 @@ import tomllib
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSION_SYNC_SCRIPT = REPO_ROOT / "scripts" / "release" / "sync_versions.py"
 HOST_PROJECT = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
-DOTNET_SDK_PROJECT = REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj"
-DOTNET_SDK_DI_PROJECT = (
-    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk.DependencyInjection" / "DevHub.Sdk.DependencyInjection.csproj"
+DOTNET_SDK_PROJECTS = (
+    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk" / "DevHub.Sdk.csproj",
+    REPO_ROOT / "sdks" / "dotnet" / "src" / "DevHub.Sdk.DependencyInjection" / "DevHub.Sdk.DependencyInjection.csproj",
 )
 JS_SDK_DIR = REPO_ROOT / "sdks" / "javascript"
 PYTHON_SDK_DIR = REPO_ROOT / "sdks" / "python"
@@ -41,6 +41,51 @@ class ValidationRecord:
     cwd: str
     logPath: str
     status: str
+
+
+@dataclass(frozen=True)
+class HostVariant:
+    name: str
+    archive_name_suffix: str
+    publish_arguments: tuple[str, ...]
+
+    def archive_name(self, rid: str) -> str:
+        return f"devhub-host-{rid}{self.archive_name_suffix}.zip"
+
+    def archive_root_name(self, rid: str) -> str:
+        return f"devhub-host-{rid}{self.archive_name_suffix}"
+
+
+@dataclass(frozen=True)
+class ReleaseAsset:
+    path: Path
+    category: str
+    target: str
+    variant: str | None = None
+
+
+HOST_VARIANTS = (
+    HostVariant(
+        name="multi-file",
+        archive_name_suffix="",
+        publish_arguments=(
+            "--self-contained",
+            "false",
+            "-p:PublishSingleFile=false",
+        ),
+    ),
+    HostVariant(
+        name="single-file",
+        archive_name_suffix="-single-file",
+        publish_arguments=(
+            "--self-contained",
+            "false",
+            "-p:PublishSingleFile=true",
+            "-p:EnableCompressionInSingleFile=true",
+        ),
+    ),
+)
+HOST_VARIANT_ORDER = {variant.name: index for index, variant in enumerate(HOST_VARIANTS)}
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,14 +135,14 @@ def main() -> int:
 
     versions = {
         "host": read_msbuild_version(HOST_PROJECT),
-        "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECT),
-        "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_DI_PROJECT),
+        "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECTS[0]),
+        "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_PROJECTS[1]),
         "javascriptSdk": read_json_version(JS_SDK_DIR / "package.json"),
         "pythonSdk": read_toml_version(PYTHON_SDK_DIR / "pyproject.toml"),
     }
 
     run_release_validation(checks_dir, validation_records)
-    asset_paths = build_release_assets(output_dir, checks_dir, host_rids, validation_records)
+    assets = build_release_assets(output_dir, checks_dir, host_rids, validation_records)
 
     validation_summary = {
         "schemaVersion": 1,
@@ -108,7 +153,7 @@ def main() -> int:
 
     manifest = build_manifest(
         output_dir=output_dir,
-        asset_paths=asset_paths,
+        assets=assets,
         versions=versions,
         release_id=release_id,
         channel=args.channel,
@@ -124,7 +169,7 @@ def main() -> int:
         release_name=release_name,
     )
 
-    ensure_asset_integrity(output_dir, host_rids, validation_records)
+    ensure_asset_integrity(output_dir, manifest, host_rids, validation_records)
     write_json(checks_dir / "validation-summary.json", validation_summary_with_integrity(validation_records))
 
     print(f"Release assets ready: {output_dir}")
@@ -247,7 +292,7 @@ def build_release_assets(
     checks_dir: Path,
     host_rids: Sequence[str],
     validation_records: list[ValidationRecord],
-) -> list[Path]:
+) -> list[ReleaseAsset]:
     host_dir = output_dir / "host"
     dotnet_dir = output_dir / "sdk" / "dotnet"
     javascript_dir = output_dir / "sdk" / "javascript"
@@ -260,11 +305,11 @@ def build_release_assets(
     python_dir.mkdir(parents=True, exist_ok=True)
     staging_dir.mkdir(parents=True, exist_ok=True)
 
-    asset_paths: list[Path] = []
+    assets: list[ReleaseAsset] = []
 
     for rid in host_rids:
-        publish_dir = staging_dir / "host" / rid
-        publish_dir.mkdir(parents=True, exist_ok=True)
+        restore_dir = staging_dir / "host" / rid
+        restore_dir.mkdir(parents=True, exist_ok=True)
         run_logged_command(
             name=f"Host restore ({rid})",
             command=["dotnet", "restore", str(HOST_PROJECT), "-r", rid],
@@ -272,60 +317,62 @@ def build_release_assets(
             log_path=checks_dir / f"host-restore-{rid}.log",
             validation_records=validation_records,
         )
+        for variant in HOST_VARIANTS:
+            publish_dir = staging_dir / "host" / rid / variant.name
+            publish_dir.mkdir(parents=True, exist_ok=True)
+            run_logged_command(
+                name=f"Host publish ({rid}, {variant.name})",
+                command=[
+                    "dotnet",
+                    "publish",
+                    str(HOST_PROJECT),
+                    "-c",
+                    "Release",
+                    "-r",
+                    rid,
+                    *variant.publish_arguments,
+                    "--no-restore",
+                    "-o",
+                    str(publish_dir),
+                ],
+                cwd=REPO_ROOT,
+                log_path=checks_dir / f"host-publish-{rid}-{variant.name}.log",
+                validation_records=validation_records,
+            )
+            archive_path = host_dir / variant.archive_name(rid)
+            create_zip_archive(
+                source_dir=publish_dir,
+                archive_path=archive_path,
+                root_name=variant.archive_root_name(rid),
+            )
+            assets.append(
+                ReleaseAsset(
+                    path=archive_path,
+                    category="host",
+                    target=rid,
+                    variant=variant.name,
+                )
+            )
+
+    for name, project, log_name in (
+        (".NET SDK core pack", DOTNET_SDK_PROJECTS[0], "dotnet-sdk-core-pack.log"),
+        (".NET SDK DI pack", DOTNET_SDK_PROJECTS[1], "dotnet-sdk-dependency-injection-pack.log"),
+    ):
         run_logged_command(
-            name=f"Host publish ({rid})",
+            name=name,
             command=[
                 "dotnet",
-                "publish",
-                str(HOST_PROJECT),
+                "pack",
+                str(project),
                 "-c",
                 "Release",
-                "-r",
-                rid,
-                "--self-contained",
-                "false",
-                "-p:PublishSingleFile=true",
-                "--no-restore",
-                "-o",
-                str(publish_dir),
+                f"-p:PackageOutputPath={dotnet_dir}",
             ],
             cwd=REPO_ROOT,
-            log_path=checks_dir / f"host-publish-{rid}.log",
+            log_path=checks_dir / log_name,
             validation_records=validation_records,
         )
-        archive_path = host_dir / f"devhub-host-{rid}.zip"
-        create_zip_archive(source_dir=publish_dir, archive_path=archive_path, root_name=f"devhub-host-{rid}")
-        asset_paths.append(archive_path)
-
-    run_logged_command(
-        name=".NET SDK core pack",
-        command=[
-            "dotnet",
-            "pack",
-            str(DOTNET_SDK_PROJECT),
-            "-c",
-            "Release",
-            f"-p:PackageOutputPath={dotnet_dir}",
-        ],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "dotnet-sdk-pack.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name=".NET SDK dependency-injection pack",
-        command=[
-            "dotnet",
-            "pack",
-            str(DOTNET_SDK_DI_PROJECT),
-            "-c",
-            "Release",
-            f"-p:PackageOutputPath={dotnet_dir}",
-        ],
-        cwd=REPO_ROOT,
-        log_path=checks_dir / "dotnet-sdk-di-pack.log",
-        validation_records=validation_records,
-    )
-    asset_paths.extend(sorted(dotnet_dir.glob("*")))
+    assets.extend(describe_release_assets(sorted(dotnet_dir.glob("*"))))
 
     run_logged_command(
         name="JS SDK install for pack",
@@ -348,7 +395,7 @@ def build_release_assets(
         log_path=checks_dir / "javascript-pack.log",
         validation_records=validation_records,
     )
-    asset_paths.extend(sorted(javascript_dir.glob("*")))
+    assets.extend(describe_release_assets(sorted(javascript_dir.glob("*"))))
 
     run_logged_command(
         name="Python build backend install",
@@ -364,17 +411,17 @@ def build_release_assets(
         log_path=checks_dir / "python-pack.log",
         validation_records=validation_records,
     )
-    asset_paths.extend(sorted(python_dir.glob("*")))
+    assets.extend(describe_release_assets(sorted(python_dir.glob("*"))))
 
     if staging_dir.exists():
         remove_tree(staging_dir)
 
-    return asset_paths
+    return assets
 
 
 def build_manifest(
     output_dir: Path,
-    asset_paths: Sequence[Path],
+    assets: Sequence[ReleaseAsset],
     versions: dict[str, str],
     release_id: str,
     channel: str,
@@ -383,19 +430,20 @@ def build_manifest(
     commit: str,
     generated_at: str,
 ) -> dict[str, object]:
-    assets = []
-    for asset_path in sorted(asset_paths):
-        relative_path = asset_path.relative_to(output_dir).as_posix()
-        assets.append(
-            {
-                "name": asset_path.name,
-                "category": categorize_asset(asset_path),
-                "target": asset_target(asset_path),
-                "path": relative_path,
-                "sha256": sha256_file(asset_path),
-                "sizeBytes": asset_path.stat().st_size,
-            }
-        )
+    manifest_assets = []
+    for asset in sorted(assets, key=release_asset_sort_key):
+        relative_path = asset.path.relative_to(output_dir).as_posix()
+        asset_entry = {
+            "name": asset.path.name,
+            "category": asset.category,
+            "target": asset.target,
+            "path": relative_path,
+            "sha256": sha256_file(asset.path),
+            "sizeBytes": asset.path.stat().st_size,
+        }
+        if asset.variant is not None:
+            asset_entry["variant"] = asset.variant
+        manifest_assets.append(asset_entry)
 
     return {
         "schemaVersion": 1,
@@ -406,7 +454,7 @@ def build_manifest(
         "commit": commit,
         "generatedAtUtc": generated_at,
         "versions": versions,
-        "assets": assets,
+        "assets": manifest_assets,
         "validation": {
             "executed": True,
             "summaryPath": "checks/validation-summary.json",
@@ -431,13 +479,14 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
         "",
         "## Assets",
         "",
-        "| Name | Category | Target | SHA256 |",
-        "| --- | --- | --- | --- |",
+        "| Name | Category | Target | Variant | SHA256 |",
+        "| --- | --- | --- | --- | --- |",
     ]
 
     for asset in manifest["assets"]:
+        variant = asset.get("variant", "-")
         lines.append(
-            f"| `{asset['name']}` | `{asset['category']}` | `{asset['target']}` | `{asset['sha256']}` |"
+            f"| `{asset['name']}` | `{asset['category']}` | `{asset['target']}` | `{variant}` | `{asset['sha256']}` |"
         )
 
     lines.extend(
@@ -463,11 +512,17 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
 
 def ensure_asset_integrity(
     output_dir: Path,
+    manifest: dict[str, object],
     host_rids: Sequence[str],
     validation_records: list[ValidationRecord],
 ) -> None:
     required_paths = [output_dir / "release-manifest.json", output_dir / "release-notes.md"]
-    required_paths.extend(output_dir / "host" / f"devhub-host-{rid}.zip" for rid in host_rids)
+    expected_host_asset_names = {
+        variant.archive_name(rid)
+        for rid in host_rids
+        for variant in HOST_VARIANTS
+    }
+    required_paths.extend(output_dir / "host" / asset_name for asset_name in sorted(expected_host_asset_names))
     required_paths.extend(
         [
             output_dir / "checks" / "validation-summary.json",
@@ -484,6 +539,47 @@ def ensure_asset_integrity(
     for path in required_paths:
         if not path.exists():
             raise RuntimeError(f"Missing required release asset: {path}")
+
+    actual_host_asset_names = {path.name for path in sorted((output_dir / "host").glob("*.zip"))}
+    missing_host_asset_names = sorted(expected_host_asset_names - actual_host_asset_names)
+    unexpected_host_asset_names = sorted(actual_host_asset_names - expected_host_asset_names)
+    if missing_host_asset_names:
+        raise RuntimeError(f"Missing Host variants: {', '.join(missing_host_asset_names)}")
+    if unexpected_host_asset_names:
+        raise RuntimeError(f"Unexpected Host variants: {', '.join(unexpected_host_asset_names)}")
+
+    manifest_assets = manifest.get("assets")
+    if not isinstance(manifest_assets, list):
+        raise RuntimeError("release-manifest.json 缺少 assets 数组。")
+
+    expected_manifest_variants = {
+        (rid, variant.name)
+        for rid in host_rids
+        for variant in HOST_VARIANTS
+    }
+    actual_manifest_variants: set[tuple[str, str]] = set()
+    for asset in manifest_assets:
+        if not isinstance(asset, dict) or asset.get("category") != "host":
+            continue
+        target = asset.get("target")
+        variant = asset.get("variant")
+        if not isinstance(target, str) or not isinstance(variant, str):
+            raise RuntimeError("Host 资产缺少 target 或 variant 字段。")
+        actual_manifest_variants.add((target, variant))
+
+    if actual_manifest_variants != expected_manifest_variants:
+        raise RuntimeError(
+            "Host manifest 变体矩阵不完整。"
+            f" expected={sorted(expected_manifest_variants)!r}"
+            f" actual={sorted(actual_manifest_variants)!r}"
+        )
+
+    release_notes_text = (output_dir / "release-notes.md").read_text(encoding="utf-8")
+    if "| Name | Category | Target | Variant | SHA256 |" not in release_notes_text:
+        raise RuntimeError("release-notes.md 未输出 Host variant 列。")
+    for asset_name in expected_host_asset_names:
+        if asset_name not in release_notes_text:
+            raise RuntimeError(f"release-notes.md 缺少 Host 资产条目：{asset_name}")
 
     validation_records.append(
         ValidationRecord(
@@ -722,6 +818,35 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def describe_release_assets(paths: Sequence[Path]) -> list[ReleaseAsset]:
+    return [describe_release_asset(path) for path in paths]
+
+
+def describe_release_asset(path: Path) -> ReleaseAsset:
+    return ReleaseAsset(
+        path=path,
+        category=categorize_asset(path),
+        target=asset_target(path),
+    )
+
+
+def release_asset_sort_key(asset: ReleaseAsset) -> tuple[int, str, int, str]:
+    category_order = {
+        "host": 0,
+        "sdk-dotnet": 1,
+        "sdk-javascript": 2,
+        "sdk-python-sdist": 3,
+        "sdk-python-wheel": 4,
+        "auxiliary": 5,
+    }
+    return (
+        category_order.get(asset.category, 99),
+        asset.target,
+        HOST_VARIANT_ORDER.get(asset.variant or "", 99),
+        asset.path.name,
+    )
 
 
 def categorize_asset(path: Path) -> str:

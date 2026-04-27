@@ -1,14 +1,15 @@
 {
   "id": "errors.rate_limited_pending_invocations_limit_returns_reason",
   "caseId": "CONF-008",
-  "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。", 
+  "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.rate-limited.pending.json",
+        "fileName": "errors.rate-limited.pending--global.json",
         "definition": {
           "appId": "errors.rate-limited.pending",
+          "scope": "",
           "displayName": "errors.rate-limited.pending"
         }
       }
@@ -22,7 +23,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -46,7 +47,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -70,7 +71,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -94,7 +95,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -118,7 +119,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -142,7 +143,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -166,7 +167,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -190,7 +191,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -214,7 +215,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -238,7 +239,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -262,7 +263,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -286,7 +287,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -310,7 +311,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -334,7 +335,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -358,7 +359,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -382,7 +383,7 @@
         "params": {
           "appId": "errors.rate-limited.pending",
           "target": {
-            "scope": null,
+            "scope": "",
             "instanceId": null
           },
           "method": "demo.notify.pending-limit",
@@ -408,7 +409,7 @@
         "instance": {
           "instanceId": "errors-rate-limit-drain-inst",
           "appId": "errors.rate-limited.pending",
-          "scope": null,
+          "scope": "",
           "pid": 33006,
           "invoke": {
             "poll": true,
@@ -722,7 +723,7 @@
     "params": {
       "appId": "errors.rate-limited.pending",
       "target": {
-        "scope": null,
+        "scope": "",
         "instanceId": null
       },
       "method": "demo.notify.pending-limit",

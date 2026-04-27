@@ -2,6 +2,7 @@ namespace DevHub.Tests;
 
 using System.Diagnostics;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
@@ -80,7 +81,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-notify-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -98,7 +99,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-notify-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -124,7 +125,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-request-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = 1
             })
@@ -138,7 +139,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "invocation-request-options",
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -267,18 +268,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     public async Task Impl_Respond_WhenInvocationMissing_ShouldReturnInvocationExpired()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        appRegistry.RegisterInstance(new DevHub.Core.Models.AppInstance
-        {
-            InstanceId = "respond-missing-inst",
-            AppId = "respond-missing-app",
-            Scope = null,
-            Pid = 6001,
-            Invoke = new DevHub.Core.Models.InvokeCapability
-            {
-                Poll = true,
-                Respond = true
-            }
-        });
+        var instanceToken = RegisterInstance(appRegistry, "respond-missing-app", "respond-missing-inst", pid: 6001);
 
         var handler = CreateHandler(appRegistry);
 
@@ -289,6 +279,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "respond-missing-inst",
+                instanceSessionToken = instanceToken,
                 invocationId = "invk-not-exists",
                 value = new { ok = true }
             })
@@ -320,7 +311,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -352,7 +343,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -385,7 +376,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -422,7 +413,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.queue.first",
                 options = new
                 {
@@ -441,7 +432,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.queue.second",
                 options = new
                 {
@@ -483,7 +474,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 Params = JsonSerializer.SerializeToElement(new
                 {
                     appId,
-                    target = new { scope = (string?)null, instanceId = (string?)null },
+                    target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                     method = methodName,
                     options = new
                     {
@@ -531,7 +522,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_Request_WhenCanceledBeforeTtlReached_ShouldReturnInvocationTimeout()
+    public async Task Impl_Request_WhenCanceledBeforeTtlReached_ShouldCancelWait()
     {
         const string appId = "invocation-cancel-timeout";
         WriteDefinition(appId, rpcEnabled: true);
@@ -543,14 +534,14 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         using var canceledTokenSource = new CancellationTokenSource();
         canceledTokenSource.Cancel();
 
-        var response = await handler.HandleAsync(new JsonRpcRequest
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
         {
             Id = "request-cancel-timeout",
             Method = HubRpcMethods.HubInvokeRequest,
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = (string?)null },
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
                 method = "task.run",
                 options = new
                 {
@@ -562,7 +553,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, canceledTokenSource.Token);
 
-        AssertError(response, -32012, "invocation_timeout");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
     }
 
     [Fact]
@@ -572,31 +563,8 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         WriteDefinition(appId, rpcEnabled: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        appRegistry.RegisterInstance(new DevHub.Core.Models.AppInstance
-        {
-            InstanceId = "holder-instance",
-            AppId = appId,
-            Scope = null,
-            Pid = 6002,
-            Invoke = new DevHub.Core.Models.InvokeCapability
-            {
-                Poll = true,
-                Respond = true
-            }
-        });
-
-        appRegistry.RegisterInstance(new DevHub.Core.Models.AppInstance
-        {
-            InstanceId = "other-instance",
-            AppId = appId,
-            Scope = null,
-            Pid = 6003,
-            Invoke = new DevHub.Core.Models.InvokeCapability
-            {
-                Poll = true,
-                Respond = true
-            }
-        });
+        var holderToken = RegisterInstance(appRegistry, appId, "holder-instance", pid: 6002);
+        var otherToken = RegisterInstance(appRegistry, appId, "other-instance", pid: 6003);
 
         var handler = CreateHandler(appRegistry);
 
@@ -607,7 +575,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId,
-                target = new { scope = (string?)null, instanceId = "holder-instance" },
+                target = new { scope = ScopeContract.Global, instanceId = "holder-instance" },
                 method = "task.run",
                 options = new
                 {
@@ -629,6 +597,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "holder-instance",
+                instanceSessionToken = holderToken,
                 maxCount = 1,
                 waitMs = 0
             })
@@ -642,6 +611,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 instanceId = "other-instance",
+                instanceSessionToken = otherToken,
                 invocationId,
                 value = new { ok = true }
             })
@@ -722,10 +692,11 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
-        var path = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
+            ["scope"] = ScopeContract.Global,
             ["displayName"] = appId,
             ["capabilities"] = new
             {
@@ -744,6 +715,29 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         }
 
         File.WriteAllText(path, JsonSerializer.Serialize(payload));
+    }
+
+    private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)
+    {
+        var registered = appRegistry.TryRegisterInstance(
+            new DevHub.Core.Models.AppInstance
+            {
+                InstanceId = instanceId,
+                AppId = appId,
+                Scope = ScopeContract.Global,
+                Pid = pid,
+                Invoke = new DevHub.Core.Models.InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            $"{instanceId}-password",
+            out _,
+            out var instanceToken,
+            out _);
+        Assert.True(registered);
+        return instanceToken;
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message)

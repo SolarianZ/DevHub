@@ -19,6 +19,7 @@
     "params": {
       "definition": {
         "appId": "apps.validate.valid.app",
+        "scope": "",
         "displayName": "Apps Validate Valid"
       }
     }

@@ -14,6 +14,7 @@ from ._validation import (
     require_instance_id as validate_instance_id,
     require_invocation_id as validate_invocation_id,
     require_optional_instance_id as validate_optional_instance_id,
+    require_scoped_string as validate_scope_string,
     require_uuid_string as validate_uuid_string,
 )
 from .models import (
@@ -110,6 +111,16 @@ def parse_ping_result(value: Any, *, path: str) -> PingResult:
     return PingResult(ok=ok, server_time_utc=server_time_utc, echo=echo)
 
 
+def parse_host_version_result(value: Any, *, path: str) -> str:
+    """解析 `hub.getVersion` 结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    return require_non_empty_string(root, "version", path)
+
+
 def parse_definitions_result(value: Any, *, path: str) -> list[AppDefinition]:
     """解析应用定义列表结果。"""
 
@@ -185,6 +196,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
         display_name=require_string_allow_empty(root, "displayName", path),
+        scope=require_scope_string(root, "scope", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
         launch=launch,
@@ -208,6 +220,8 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     root = require_mapping(value, path)
     if "password" in root:
         raise RuntimeError(f"{path}.password 不得出现。")
+    if "instanceSessionToken" in root:
+        raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
     invoke_root = require_mapping(root.get("invoke"), f"{path}.invoke")
     meta = None
     if "meta" in root:
@@ -215,7 +229,7 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
     return AppInstance(
         instance_id=require_validated_string(root, "instanceId", path, validate_instance_id),
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        scope=optional_str(root.get("scope"), f"{path}.scope"),
+        scope=require_scope_string(root, "scope", path),
         pid=require_positive_int(root, "pid", path),
         registered_at_utc=require_datetime(root, "registeredAtUtc", path),
         last_seen_utc=require_datetime(root, "lastSeenUtc", path),
@@ -225,6 +239,32 @@ def parse_app_instance(value: Any, *, path: str) -> AppInstance:
         ),
         meta=meta,
     )
+
+
+def parse_register_instance_result(value: Any, *, path: str) -> AppInstance:
+    """解析实例注册结果。"""
+
+    root = require_mapping(value, path)
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    instance = parse_app_instance(root.get("instance"), path=f"{path}.instance")
+    instance.instance_session_token = require_non_empty_string(root, "instanceSessionToken", path)
+    return instance
+
+
+def parse_instance_result(value: Any, *, path: str) -> AppInstance:
+    """解析单个实例结果。"""
+
+    root = require_mapping(value, path)
+    if "password" in root:
+        raise RuntimeError(f"{path}.password 不得出现。")
+    if "instanceSessionToken" in root:
+        raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
+    ok = require_bool(root, "ok", path)
+    if not ok:
+        raise RuntimeError(f"{path} 返回结果非法。")
+    return parse_app_instance(root.get("instance"), path=f"{path}.instance")
 
 
 def parse_instances_result(value: Any, *, path: str) -> list[AppInstance]:
@@ -315,7 +355,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
     root = require_mapping(value, path)
     target_root = require_mapping(root.get("target"), f"{path}.target")
     target = InvocationTarget(
-        scope=optional_str(target_root.get("scope"), f"{path}.target.scope"),
+        scope=require_scope_string(target_root, "scope", f"{path}.target"),
         instance_id=optional_validated_string(
             target_root.get("instanceId"),
             f"{path}.target.instanceId",
@@ -451,16 +491,21 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
         payload_root = require_mapping(payload, path)
         if event_type == "app.definition.upserted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
-            parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
+            payload_scope = require_scope_string(payload_root, "scope", path)
+            definition = parse_app_definition(payload_root.get("definition"), path=f"{path}.definition")
+            if definition.scope != payload_scope:
+                raise RuntimeError(f"{path}.definition.scope 必须与 {path}.scope 一致。")
             return
 
         if event_type == "app.definition.deleted":
             require_validated_string(payload_root, "appId", path, validate_app_id)
+            require_scope_string(payload_root, "scope", path)
             return
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
         require_validated_string(payload_root, "instanceId", path, validate_instance_id)
-        optional_str(payload_root.get("scope"), f"{path}.scope")
+        if "scope" in payload_root:
+            require_scope_string(payload_root, "scope", path)
         if "password" in payload_root:
             raise RuntimeError(f"{path}.password 不得出现。")
 
@@ -495,6 +540,14 @@ def optional_property_int_at_least(
     if parsed < minimum_value:
         raise RuntimeError(f"{path}.{name} 必须大于等于 {minimum_value}。")
     return parsed
+
+
+def require_scope_string(root: Mapping[str, Any], name: str, path: str) -> str:
+    """读取必须存在的显式字符串 scope 属性。"""
+
+    if name not in root:
+        raise RuntimeError(f"{path}.{name} 必须存在。")
+    return parse_scope_string(root.get(name), f"{path}.{name}")
 
 
 def _require_json_value(value: Any, path: str) -> Any:
@@ -543,6 +596,15 @@ def optional_str(value: Any, path: str) -> str | None:
     if not isinstance(value, str):
         raise RuntimeError(f"{path} 类型非法。")
     return value
+
+
+def parse_scope_string(value: Any, path: str) -> str:
+    """读取显式字符串 scope。"""
+
+    try:
+        return validate_scope_string(value, path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def require_int(root: Mapping[str, Any], name: str, path: str) -> int:

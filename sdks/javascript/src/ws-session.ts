@@ -1,4 +1,10 @@
 import { Mutex } from "./async-utils.js";
+import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
+import {
+  DevHubConnectionError,
+  normalizeConnectionError,
+} from "./errors.js";
+import type { JsonRpcEventSession } from "./events-client.js";
 import {
   buildRpcError,
   createPendingRequest,
@@ -8,7 +14,7 @@ import {
   tryGetResponse,
   validateIncomingEnvelope
 } from "./jsonrpc.js";
-import { ensureRecord, isRecord } from "./validation.js";
+import { ensureAppId, ensureRecord, isRecord, isValidAppId } from "./validation.js";
 
 export interface JsonRpcWsSessionOptions {
   websocketEndpoint: string;
@@ -17,11 +23,21 @@ export interface JsonRpcWsSessionOptions {
   onTerminate?: (error?: Error) => void;
 }
 
-export class JsonRpcWsSession {
+interface AbandonedRequestEntry {
+  requestId: string;
+  method: string;
+  abandonedAt: number;
+  appId?: string;
+}
+
+export class JsonRpcWsSession implements JsonRpcEventSession {
   private socket: WebSocketLike | null = null;
   private socketCleanup: Array<() => void> = [];
+  private connectPromise: Promise<void> | null = null;
   private readonly pendingRequests = new Map<string, PendingRequest>();
+  private readonly abandonedRequests = new Map<string, AbandonedRequestEntry>();
   private readonly sendLock = new Mutex();
+  private socketOpen = false;
   private disposed = false;
 
   constructor(private readonly options: JsonRpcWsSessionOptions) {
@@ -29,20 +45,20 @@ export class JsonRpcWsSession {
 
   async ensureConnected(): Promise<void> {
     this.throwIfDisposed();
-    if (this.socket) {
+    if (this.socket && this.socketOpen) {
       return;
     }
 
-    const ctor = await resolveWebSocketConstructor();
-    const socket = new ctor(this.options.websocketEndpoint);
-    this.socket = socket;
-    this.attachSocketHandlers(socket);
-
     try {
-      await waitForWebSocketOpen(socket, this.options.requestTimeoutMs);
-    } catch (error) {
-      await this.disconnect("connect_failed");
-      throw error;
+      if (!this.connectPromise) {
+        this.connectPromise = this.connect();
+      }
+
+      await this.connectPromise;
+    } finally {
+      if (this.connectPromise && (this.socketOpen || this.socket === null)) {
+        this.connectPromise = null;
+      }
     }
   }
 
@@ -54,8 +70,11 @@ export class JsonRpcWsSession {
 
     await this.ensureConnected();
     const socket = this.socket;
-    if (!socket) {
-      throw new Error("WebSocket connection is not established.");
+    if (!socket || !this.socketOpen) {
+      throw new DevHubConnectionError({
+        kind: "session_terminated",
+        message: "WebSocket connection is not established."
+      });
     }
 
     const requestId = createWebSocketRequestId();
@@ -69,8 +88,9 @@ export class JsonRpcWsSession {
       payload.params = params;
     }
 
+    const abandonedRequestAppId = tryExtractAppId(params);
     const waiter = createPendingRequest(this.options.requestTimeoutMs, () => {
-      this.pendingRequests.delete(requestId);
+      this.markPendingRequestAsAbandoned(requestId, method, abandonedRequestAppId);
     });
     this.pendingRequests.set(requestId, waiter);
 
@@ -81,16 +101,57 @@ export class JsonRpcWsSession {
 
       return await waiter.promise;
     } catch (error) {
-      this.pendingRequests.delete(requestId);
-      if (waiter.timeoutId) {
+      if (this.pendingRequests.delete(requestId) && waiter.timeoutId) {
         clearTimeout(waiter.timeoutId);
       }
       throw error;
     }
   }
 
+  /**
+   * 获取当前会话内匹配条件的已放弃请求数量。
+   * 该操作只读取本地维护状态，不会触发网络交互或连接状态变化。
+   */
+  getAbandonedRequestCount(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    const normalizedFilter = normalizeAbandonedRequestFilter(filter);
+    const now = Date.now();
+    let count = 0;
+
+    for (const entry of this.abandonedRequests.values()) {
+      if (matchesAbandonedRequest(entry, normalizedFilter, now)) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * 清理当前会话内匹配条件的已放弃请求记录。
+   * 该操作只修改本地维护状态，不会触发网络交互或连接状态变化。
+   */
+  clearAbandonedRequests(filter?: AbandonedRequestFilter): number {
+    this.throwIfDisposed();
+    const normalizedFilter = normalizeAbandonedRequestFilter(filter);
+    const now = Date.now();
+    let removed = 0;
+
+    for (const [requestId, entry] of this.abandonedRequests) {
+      if (!matchesAbandonedRequest(entry, normalizedFilter, now)) {
+        continue;
+      }
+
+      this.abandonedRequests.delete(requestId);
+      removed += 1;
+    }
+
+    return removed;
+  }
+
   async disconnect(reason: string): Promise<void> {
-    this.rejectPending(new Error("WebSocket connection closed."));
+    this.rejectPending(createSessionTerminatedError("WebSocket connection closed."));
+    this.abandonedRequests.clear();
     await this.closeSocket(reason);
   }
 
@@ -104,16 +165,28 @@ export class JsonRpcWsSession {
   }
 
   private attachSocketHandlers(socket: WebSocketLike): void {
+    this.socketCleanup.push(addSocketListener(socket, "open", () => {
+      if (this.socket === socket) {
+        this.socketOpen = true;
+      }
+    }));
+
     this.socketCleanup.push(addSocketListener(socket, "message", (event, ...args) => {
       void this.handleMessage(event, args);
     }));
 
     this.socketCleanup.push(addSocketListener(socket, "close", (event, ...args) => {
+      if (this.socket === socket) {
+        this.socketOpen = false;
+      }
       this.terminate(resolveCloseError(event, args));
     }));
 
     this.socketCleanup.push(addSocketListener(socket, "error", (event) => {
-      const error = event instanceof Error ? event : new Error("WebSocket error.");
+      if (this.socket === socket) {
+        this.socketOpen = false;
+      }
+      const error = createTransportError("WebSocket transport failed.", event);
       this.terminate(error);
     }));
   }
@@ -143,7 +216,10 @@ export class JsonRpcWsSession {
 
       throw new Error("WebSocket JSON-RPC message is not a supported response or hub.event notification.");
     } catch (error) {
-      this.terminate(error instanceof Error ? error : new Error("WebSocket message handling failed."));
+      this.terminate(normalizeConnectionError(error, {
+        kind: "invalid_response",
+        message: error instanceof Error ? error.message : "WebSocket message handling failed."
+      }));
     }
   }
 
@@ -154,7 +230,14 @@ export class JsonRpcWsSession {
   ): void {
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
-      this.terminate(new Error("WebSocket JSON-RPC response id does not match any pending request."));
+      if (this.abandonedRequests.has(requestId)) {
+        return;
+      }
+
+      this.terminate(new DevHubConnectionError({
+        kind: "invalid_response",
+        message: "WebSocket JSON-RPC response id does not match any pending request."
+      }));
       return;
     }
 
@@ -174,13 +257,17 @@ export class JsonRpcWsSession {
   private terminate(error?: Error): void {
     const hadSocket = this.socket !== null;
     const hadPending = this.pendingRequests.size > 0;
-    const rejectionError = error ?? new Error("WebSocket connection closed.");
+    const rejectionError = normalizeConnectionError(error, {
+      kind: "session_terminated",
+      message: "WebSocket connection closed."
+    });
 
     this.rejectPending(rejectionError);
+    this.abandonedRequests.clear();
     void this.closeSocket("connection_closed");
 
     if (hadSocket || hadPending) {
-      this.options.onTerminate?.(error);
+      this.options.onTerminate?.(rejectionError);
     }
   }
 
@@ -191,6 +278,7 @@ export class JsonRpcWsSession {
     }
 
     this.socket = null;
+    this.socketOpen = false;
     this.cleanupSocketHandlers();
 
     try {
@@ -222,11 +310,118 @@ export class JsonRpcWsSession {
       throw new Error("WebSocket session has been disposed.");
     }
   }
+
+  private async connect(): Promise<void> {
+    const ctor = await resolveWebSocketConstructor();
+    const socket = new ctor(this.options.websocketEndpoint);
+    this.socket = socket;
+    this.socketOpen = false;
+    this.attachSocketHandlers(socket);
+
+    try {
+      await waitForWebSocketOpen(socket, this.options.requestTimeoutMs);
+      if (this.socket !== socket || !this.socketOpen) {
+        throw new DevHubConnectionError({
+          kind: "transport",
+          message: "WebSocket connection is not established."
+        });
+      }
+    } catch (error) {
+      this.connectPromise = null;
+      await this.disconnect("connect_failed");
+      throw error;
+    }
+
+    this.connectPromise = null;
+  }
+
+  private markPendingRequestAsAbandoned(requestId: string, method: string, appId?: string): void {
+    if (this.pendingRequests.delete(requestId)) {
+      this.abandonedRequests.set(requestId, {
+        requestId,
+        method,
+        abandonedAt: Date.now(),
+        appId
+      });
+    }
+  }
+}
+
+function normalizeAbandonedRequestFilter(filter?: AbandonedRequestFilter | null): AbandonedRequestFilter | undefined {
+  if (filter === undefined || filter === null) {
+    return undefined;
+  }
+
+  if (!isRecord(filter)) {
+    throw new Error("filter 必须为对象。");
+  }
+
+  const filterRecord = filter as Record<string, unknown>;
+  const normalizedFilter: AbandonedRequestFilter = {};
+  const olderThanMs = filterRecord.olderThanMs;
+  const appId = filterRecord.appId;
+  const method = filterRecord.method;
+
+  if (olderThanMs !== undefined) {
+    if (typeof olderThanMs !== "number" || !Number.isFinite(olderThanMs) || olderThanMs < 0) {
+      throw new Error("filter.olderThanMs 必须为大于等于 0 的有限数字。");
+    }
+
+    normalizedFilter.olderThanMs = olderThanMs;
+  }
+
+  if (appId !== undefined) {
+    normalizedFilter.appId = ensureAppId(appId, "filter.appId");
+  }
+
+  if (method !== undefined) {
+    if (typeof method !== "string" || !method.trim()) {
+      throw new Error("filter.method 必须为非空字符串。");
+    }
+
+    normalizedFilter.method = method;
+  }
+
+  return normalizedFilter;
+}
+
+function matchesAbandonedRequest(
+  entry: AbandonedRequestEntry,
+  filter: AbandonedRequestFilter | undefined,
+  now: number
+): boolean {
+  if (!filter) {
+    return true;
+  }
+
+  if (filter.olderThanMs !== undefined && now - entry.abandonedAt < filter.olderThanMs) {
+    return false;
+  }
+
+  if (filter.appId !== undefined && entry.appId !== filter.appId) {
+    return false;
+  }
+
+  if (filter.method !== undefined && entry.method !== filter.method) {
+    return false;
+  }
+
+  return true;
+}
+
+function tryExtractAppId(params?: Record<string, unknown>): string | undefined {
+  const appId = params?.appId;
+  if (!isValidAppId(appId)) {
+    return undefined;
+  }
+
+  return appId;
 }
 
 interface WebSocketLike {
   send(data: string): void;
   close(code?: number, reason?: string): void;
+  readyState?: number;
   addEventListener?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
   removeEventListener?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
   on?: (type: string, listener: (event: unknown, ...args: unknown[]) => void) => void;
@@ -235,6 +430,7 @@ interface WebSocketLike {
 
 type WebSocketConstructor = new (url: string) => WebSocketLike;
 const TEXT_DECODER = new TextDecoder();
+const WEB_SOCKET_MODULE_NAME = "ws";
 let webSocketConstructorPromise: Promise<WebSocketConstructor> | undefined;
 
 async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
@@ -249,7 +445,9 @@ async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
 
 async function loadWebSocketConstructor(): Promise<WebSocketConstructor> {
   try {
-    const wsModule = await import("ws");
+    const wsModule = await import(
+      /* @vite-ignore */ WEB_SOCKET_MODULE_NAME
+    );
     const ctor = (wsModule.WebSocket ?? wsModule.default ?? wsModule) as unknown;
     if (typeof ctor !== "function") {
       throw new Error("ws module did not export a WebSocket constructor.");
@@ -284,10 +482,14 @@ function addSocketListener(
 }
 
 function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promise<void> {
+  if (socket.readyState === 1) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     const cleanup: Array<() => void> = [];
 
-    const finish = (error?: Error) => {
+    const finish = (error?: unknown) => {
       for (const item of cleanup) {
         item();
       }
@@ -301,15 +503,18 @@ function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promis
 
     cleanup.push(addSocketListener(socket, "open", () => finish()));
     cleanup.push(addSocketListener(socket, "error", (event) => {
-      finish(event instanceof Error ? event : new Error("WebSocket connection failed."));
+      finish(createTransportError("WebSocket connection failed.", event));
     }));
     cleanup.push(addSocketListener(socket, "close", () => {
-      finish(new Error("WebSocket connection closed."));
+      finish(createSessionTerminatedError("WebSocket connection closed."));
     }));
 
     if (timeoutMs && timeoutMs > 0) {
       const timeoutId = setTimeout(() => {
-        finish(new Error("WebSocket connection timed out."));
+        finish(new DevHubConnectionError({
+          kind: "timeout",
+          message: "WebSocket connection timed out."
+        }));
       }, timeoutMs);
       cleanup.push(() => clearTimeout(timeoutId));
     }
@@ -349,9 +554,9 @@ function readMessageText(event: unknown, args: readonly unknown[] = []): string 
   throw new Error("WebSocket JSON-RPC message must be a text frame.");
 }
 
-function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
+function resolveCloseError(event: unknown, args: unknown[]): DevHubConnectionError | undefined {
   if (typeof event === "number") {
-    return event === 1000 ? undefined : new Error("WebSocket connection closed.");
+    return event === 1000 ? undefined : createSessionTerminatedError("WebSocket connection closed.");
   }
 
   if (isRecord(event)) {
@@ -360,7 +565,7 @@ function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
     }
 
     if (typeof event.code === "number") {
-      return event.code === 1000 ? undefined : new Error("WebSocket connection closed.");
+      return event.code === 1000 ? undefined : createSessionTerminatedError("WebSocket connection closed.");
     }
   }
 
@@ -368,5 +573,19 @@ function resolveCloseError(event: unknown, args: unknown[]): Error | undefined {
     return undefined;
   }
 
-  return new Error("WebSocket connection closed.");
+  return createSessionTerminatedError("WebSocket connection closed.");
+}
+
+function createTransportError(message: string, cause?: unknown): DevHubConnectionError {
+  return normalizeConnectionError(cause, {
+    kind: "transport",
+    message
+  });
+}
+
+function createSessionTerminatedError(message: string, cause?: unknown): DevHubConnectionError {
+  return normalizeConnectionError(cause, {
+    kind: "session_terminated",
+    message
+  });
 }

@@ -236,6 +236,7 @@ class TestWsEvents:
     def _definition_payload(app_id, display_name=None):
         return {
             "appId": app_id,
+            "scope": "",
             "displayName": display_name or app_id,
         }
 
@@ -395,6 +396,34 @@ class TestWsEvents:
 
                 if not ws.wait_for_close(timeout=2):
                     result.mark_failure("❌ 首条非鉴权请求返回 unauthorized 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_001a_first_get_version_message_must_authenticate(self):
+        """WS-001A: 首条 hub.getVersion 请求也应先完成鉴权。"""
+        result = TestResult("WS-001A 首条 hub.getVersion 请求应返回 unauthorized")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_json({
+                    "jsonrpc": "2.0",
+                    "id": "pre-auth-get-version",
+                    "method": "hub.getVersion",
+                    "params": {}
+                })
+                response = ws.recv_json(timeout=3)
+
+                if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-get-version"):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("❌ hub.getVersion 未鉴权请求返回 unauthorized 后连接未关闭")
                     return result
 
             result.mark_success()
@@ -580,7 +609,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=6201,
@@ -592,7 +621,7 @@ class TestWsEvents:
                     app_id=app_id,
                     method="demo.notify",
                     args={"k": 1},
-                    target_scope=None,
+                    target_scope="",
                     target_instance_id=instance_id,
                     ttl_ms=60000,
                     queue_if_offline=True,
@@ -718,7 +747,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=6203,
@@ -797,7 +826,7 @@ class TestWsEvents:
                 register_response = rpc_client.register_instance(
                     instance_id=instance_id,
                     app_id=app_id,
-                    scope=None,
+                    scope="",
                     poll=True,
                     respond=True,
                     pid=62031,
@@ -830,8 +859,8 @@ class TestWsEvents:
                         result.mark_failure(f"❌ fan-out 事件 payload 不匹配: {payload}")
                         return result
 
-                    if payload.get("scope", "__missing__") is not None:
-                        result.mark_failure(f"❌ fan-out 事件 payload.scope 应为 null: {payload}")
+                    if payload.get("scope") != "":
+                        result.mark_failure(f"❌ fan-out 事件 payload.scope 应为 \"\": {payload}")
                         return result
 
                     received_subscription_ids.append(event_params.get("subscriptionId"))
@@ -1180,6 +1209,10 @@ class TestWsEvents:
                     result.mark_failure(f"❌ upserted payload.appId 不匹配: {payload}")
                     return result
 
+                if payload.get("scope") != "":
+                    result.mark_failure(f"❌ upserted payload.scope 应为 \"\": {payload}")
+                    return result
+
                 event_definition = payload.get("definition")
                 if not isinstance(event_definition, dict):
                     result.mark_failure(f"❌ upserted payload.definition 非对象: {payload}")
@@ -1187,6 +1220,10 @@ class TestWsEvents:
 
                 if event_definition.get("appId") != app_id:
                     result.mark_failure(f"❌ upserted payload.definition.appId 不匹配: {payload}")
+                    return result
+
+                if event_definition.get("scope") != "":
+                    result.mark_failure(f"❌ upserted payload.definition.scope 应为 \"\": {payload}")
                     return result
 
                 if event_definition.get("displayName") != definition["displayName"]:
@@ -1199,7 +1236,11 @@ class TestWsEvents:
         finally:
             try:
                 http_base_url, _, token = self._runtime_hub_info()
-                RpcClient(http_base_url, token).call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="cleanup-12d")
+                RpcClient(http_base_url, token).call(
+                    "hub.apps.deleteDefinition",
+                    {"appId": app_id, "scope": ""},
+                    request_id="cleanup-12d",
+                )
             except Exception:
                 pass
 
@@ -1237,7 +1278,11 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                delete_response = rpc_client.call("hub.apps.deleteDefinition", {"appId": app_id}, request_id="delete-12e")
+                delete_response = rpc_client.call(
+                    "hub.apps.deleteDefinition",
+                    {"appId": app_id, "scope": ""},
+                    request_id="delete-12e",
+                )
                 if not RpcAssertions.expect_success(result, delete_response):
                     return result
 
@@ -1254,6 +1299,10 @@ class TestWsEvents:
                 payload = event_params.get("payload", {})
                 if payload.get("appId") != app_id:
                     result.mark_failure(f"❌ deleted payload.appId 不匹配: {payload}")
+                    return result
+
+                if payload.get("scope") != "":
+                    result.mark_failure(f"❌ deleted payload.scope 应为 \"\": {payload}")
                     return result
 
             result.mark_success()

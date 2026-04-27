@@ -16,7 +16,7 @@
 python -m pip install -e "./sdks/python[test]"
 ```
 
-如果你希望更贴近“发布资产消费”，可先准备 wheel 和 sdist：
+如需更贴近“发布资产消费”，可先准备 wheel 和 sdist：
 
 ```bash
 python -m pip install build
@@ -30,7 +30,8 @@ python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 - 运行时发现：读取 `hub.json` 与 `token.txt`，仅支持标准数据根目录布局。
 - HTTP 客户端：覆盖 `ping`、应用定义查询 / 校验 / 写入 / 删除、实例管理、`launch`、`notify`、`request`、`poll`、`respond`。
 - WebSocket 事件客户端：覆盖鉴权、订阅、取消订阅、事件流读取与定义生命周期事件解析。
-- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`list_instances` 复用同一套本地参数构造与防御式校验规则。
+- 已放弃请求本地维护：`DevHubEventsClient` 提供 `get_abandoned_request_count(filter=None)` 与 `clear_abandoned_requests(filter=None)`，可按过滤器统计或清理本地已放弃请求记录。
+- 共享参数构造：HTTP 与 WebSocket 对 `ping`、`get_definition`、`get_instance`、`list_instances` 复用同一套本地参数构造与防御式校验规则。
 - 统一错误模型：`DevHubRpcException`，并提供 `DevHubRpcErrorCode`、`known_code`、`is_code(...)`、`reason`、`invocation_id`、`callee_error` 等辅助能力。
 
 ## 4. 运行时发现
@@ -45,6 +46,8 @@ SDK 固定从以下位置发现运行时信息：
 
 - `<dataDir>/runtime/hub.json`
 - `hub.json.tokenFile` 指向的令牌文件
+
+`discover_runtime(...)` 返回的 `RuntimeConnectionInfo` 以及 `DevHubClient.runtime`、`DevHubEventsClient.runtime` 暴露的 `HubRuntime` 都是不可变 dataclass。公开运行时视图用于读取连接信息；字段赋值会触发 `FrozenInstanceError`，后续 HTTP / WebSocket 连接端点与令牌保持稳定。
 
 不支持以下输入：
 
@@ -66,7 +69,7 @@ print(ping.ok, ping.server_time_utc)
 
 ## 6. 常见交互场景
 
-定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。
 
 ```python
 from devhub_sdk import (
@@ -82,6 +85,7 @@ client = DevHubClient.from_runtime(DevHubClientOptions(client_id="admin-client")
 
 definition = AppDefinition(
     app_id="sample.app",
+    scope="",
     display_name="Sample App",
     launch=LaunchConfiguration(
         exe_path="python3",
@@ -93,21 +97,78 @@ validation = client.validate_definition(definition)
 if validation.valid:
     client.upsert_definition(definition)
 
-instance = client.register_instance(
+registered = client.register_instance(
     AppInstanceRegistration(
         instance_id="sample-inst-1",
         app_id="sample.app",
+        scope="",
         pid=12345,
         invoke=InvokeCapability(poll=True, respond=True),
     ),
     password="sample-instance-secret",
 )
 
-client.unregister_instance(instance.instance_id, "sample-instance-secret")
-client.delete_definition(definition.app_id)
+exact_instance = client.get_instance("sample-inst-1")
+
+client.unregister_instance(registered.instance_id, registered.instance_session_token)
+client.delete_definition(definition.app_id, definition.scope)
 ```
 
-## 7. 高级扩展
+`get_instance(...)` 按精确 `instance_id` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则透传 `instance_not_found`。
+
+## 7. WebSocket 事件流约定
+
+```python
+from devhub_sdk import APP_INSTANCE_REGISTERED, DevHubClientOptions, DevHubEventsClient
+
+events_client = await DevHubEventsClient.from_runtime(
+    DevHubClientOptions(client_id="events-client")
+)
+
+await events_client.authenticate()
+subscription_id = await events_client.subscribe([APP_INSTANCE_REGISTERED])
+
+reader = events_client.read_events()
+try:
+    event = await anext(reader)
+    print(event.type, event.payload)
+finally:
+    await reader.aclose()
+
+await events_client.unsubscribe(subscription_id)
+```
+
+`DevHubEventsClient` 同一时刻只允许一个活动中的 `read_events()` 读取器。若业务需要多个消费者，应在调用方内部对读取到的事件做扇出。
+
+底层 WebSocket 终止时，当前活动读取器只排空终止前已经进入本地缓冲的事件，然后结束。后续新的读取前需要重新执行 `authenticate()`，并重新执行 `subscribe()` 恢复订阅；旧订阅不会自动恢复。
+
+## 8. 已放弃请求维护
+
+```python
+from devhub_sdk import AbandonedRequestFilter
+
+total = events_client.get_abandoned_request_count()
+
+app_scoped = events_client.get_abandoned_request_count(
+    AbandonedRequestFilter(
+        app_id="sample.app",
+        method="hub.apps.getDefinition",
+    )
+)
+
+removed = events_client.clear_abandoned_requests(
+    AbandonedRequestFilter(older_than_seconds=120)
+)
+```
+
+- `get_abandoned_request_count(filter=None)` 返回当前匹配过滤条件的已放弃请求数量。
+- `clear_abandoned_requests(filter=None)` 只移除匹配条件的本地记录，并返回本次实际移除数量。
+- `AbandonedRequestFilter` 支持 `older_than_seconds`、`app_id`、`method` 三个可选字段；同时提供多个字段时按逻辑与匹配。
+- 两个接口都只读取或修改当前 `DevHubEventsClient` 关联 WebSocket 会话中的本地 tombstone 记录，不发送 JSON-RPC 请求，不隐式重连，也不改变当前认证或订阅状态。
+- `app_id` 匹配采用最佳努力规则：只有请求进入已放弃状态时能稳定识别 `app_id` 的记录才会命中 `app_id` 过滤条件。
+- 某条记录被手动清理后，如果服务端随后返回同一 `id` 的迟到响应，该响应会回到既有 unknown `response id` 故障语义，而不是继续被忽略。
+
+## 9. 高级扩展
 
 默认情况下，推荐使用 `DevHubClient.from_runtime(...)` 与 `DevHubEventsClient.from_runtime(...)`。
 
@@ -144,7 +205,9 @@ events_client = await DevHubEventsClient.from_runtime(
 - `session_factory` 负责基于 `options + connection_info` 创建 WebSocket session。
 - `DevHubEventsClient` 负责把原始 `hub.event.params` 解析为 `DevHubEvent`，并复用与 HTTP 客户端相同的参数 builder。
 
-## 8. 最小验证方式
+自定义 `JsonRpcWsSession` / `WebSocketJsonRpcSession` 实现需要提供 `get_abandoned_request_count(filter=None)` 与 `clear_abandoned_requests(filter=None)` 两个同步本地维护接口。这组接口属于当前公开 session 合同的一部分。
+
+## 10. 最小验证方式
 
 - 直接运行上面的 `client.ping(...)` 示例，确认返回 `ok=True`。
 - 若要验证 `Python SDK` 工作区自身的测试基线，可执行：
@@ -162,7 +225,7 @@ python -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 
 - 若要查看工作区安装、集成测试隔离或仓库级联调要求，请阅读 [`../../developer/guides/development.md`](../../developer/guides/development.md)。
 
-## 9. 相关文档
+## 11. 相关文档
 
 - [`./README.md`](./README.md)
 - [`../../../sdks/python/README.md`](../../../sdks/python/README.md)

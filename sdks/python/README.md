@@ -15,3 +15,21 @@ sdks/python/
     ├── conformance/                         # 协议符合性测试
     └── assets/                              # 测试静态资源
 ```
+
+## 版本能力
+
+SDK 对外公开包版本常量 `SDK_VERSION` 与 `__version__`，可用于记录调用侧使用的 Python SDK 版本。
+
+同步 `DevHubClient` 与异步 `DevHubEventsClient` 都提供以下版本相关 API：
+
+- `get_host_version()`：调用 `hub.getVersion` 并返回当前 Host 版本字符串。
+- `check_version_compatibility()`：返回 `VersionCompatibilityResult`，包含 `sdk_version`、`host_version` 与 `status`。
+
+`VersionCompatibilityStatus` 的取值与判定规则如下：
+
+- `compatible`：`major` 与 `minor` 相同。
+- `update_recommended`：`major` 相同但 `minor` 不同。
+- `incompatible`：`major` 不同。
+- `unknown`：无法得到可比较的 Host 版本。
+
+`check_version_compatibility()` 优先使用 `hub.getVersion` 的返回值；当 Host 返回 `method_not_found` 时，读取 `runtime.hub_version` 作为回退来源。`patch`、预发布标签和构建元数据差异不会单独触发提示。

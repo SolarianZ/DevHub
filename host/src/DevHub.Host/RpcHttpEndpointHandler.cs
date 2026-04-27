@@ -191,6 +191,17 @@ public class RpcHttpEndpointHandler
                 return FinalizeResponse(Results.Json(response, JsonOptions));
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "RPC请求已取消，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
+                method,
+                requestId,
+                clientId,
+                stopwatch.ElapsedMilliseconds);
+            throw;
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();

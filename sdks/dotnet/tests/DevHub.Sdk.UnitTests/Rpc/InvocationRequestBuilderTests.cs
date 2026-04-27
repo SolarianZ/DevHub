@@ -24,7 +24,8 @@ public sealed class InvocationRequestBuilderTests
         Assert.Equal(60000, (int)options["ttlMs"]!);
         Assert.True((bool)options["queueIfOffline"]!);
         Assert.True((bool)options["autoLaunch"]!);
-        Assert.Null(document["target"]);
+        Assert.Equal(string.Empty, (string?)document["target"]!["scope"]!);
+        Assert.Equal(JTokenType.Null, document["target"]!["instanceId"]!.Type);
     }
 
     [Fact]
@@ -157,10 +158,12 @@ public sealed class InvocationRequestBuilderTests
     {
         var payload = RequestPayloadFactory.BuildPollParams(new PollRequest
         {
-            InstanceId = "inst-1"
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
         });
 
         var document = ToJObject(payload);
+        Assert.Equal("session-1", (string?)document["instanceSessionToken"]!);
         Assert.Equal(10, (int)document["maxCount"]!);
         Assert.Equal(25000, (int)document["waitMs"]!);
     }
@@ -175,7 +178,7 @@ public sealed class InvocationRequestBuilderTests
 
         var document = ToJObject(payload);
         Assert.Equal("test.app", (string?)document["appId"]!);
-        Assert.Null(document["scope"]);
+        Assert.Equal(string.Empty, (string?)document["scope"]!);
         Assert.Null(document["dedupeKey"]);
         Assert.Null(document["waitForRegisterMs"]);
     }
@@ -211,11 +214,13 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void M5_DN_UT_006_ListInstancesBuilder_WhenNoFilterSpecified_ShouldReturnNull()
+    public void M5_DN_UT_006_ListInstancesBuilder_WhenNoFilterSpecified_ShouldEmitExplicitNullScope()
     {
         var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest());
 
-        Assert.Null(payload);
+        var document = ToJObject(payload);
+        Assert.NotNull(document.Property("scope"));
+        Assert.Equal(JTokenType.Null, document["scope"]!.Type);
     }
 
     [Fact]
@@ -225,14 +230,12 @@ public sealed class InvocationRequestBuilderTests
         {
             AppId = "test.app",
             Scope = string.Empty,
-            IncludeAllScopes = true,
             IncludeOffline = true
         });
 
         var document = ToJObject(payload!);
         Assert.Equal("test.app", (string?)document["appId"]!);
         Assert.Equal(string.Empty, (string?)document["scope"]!);
-        Assert.True((bool)document["includeAllScopes"]!);
         Assert.True((bool)document["includeOffline"]!);
     }
 
@@ -242,6 +245,7 @@ public sealed class InvocationRequestBuilderTests
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Value = null
         });
@@ -257,6 +261,7 @@ public sealed class InvocationRequestBuilderTests
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Value = new Dictionary<string, object?>
             {
@@ -282,6 +287,7 @@ public sealed class InvocationRequestBuilderTests
         var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Value = new Dictionary<string, object?>
             {
@@ -348,7 +354,7 @@ public sealed class InvocationRequestBuilderTests
 
         var document = ToJObject(payload);
         Assert.Equal("inst-1", (string?)document["instanceId"]!);
-        Assert.Equal("secret-1", (string?)document["password"]!);
+        Assert.Equal("secret-1", (string?)document["instanceSessionToken"]!);
     }
 
     [Fact]
@@ -372,6 +378,7 @@ public sealed class InvocationRequestBuilderTests
         var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
             Error = new DevHubCalleeError
             {

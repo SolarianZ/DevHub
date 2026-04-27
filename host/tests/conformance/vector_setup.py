@@ -10,6 +10,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,13 +68,14 @@ class CleanupLedger:
     vector_temp_dir: Path
     definition_paths: list[Path] = field(default_factory=list)
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
+    instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
     def cleanup(self, host_context: HostRuntimeContext) -> None:
         client = host_context.create_rpc_client()
 
-        for instance_id, password in reversed(self.registered_instances):
+        for instance_id, instance_session_token in reversed(self.registered_instances):
             try:
-                client.unregister_instance(instance_id, password=password)
+                client.unregister_instance(instance_id, instance_session_token=instance_session_token)
             except Exception:
                 pass
 
@@ -253,6 +255,7 @@ def materialize_vector(
                 "VECTOR_DATA_DIR": str(data_dir),
                 "VECTOR_RUNTIME_DIR": str(runtime_dir),
                 "VECTOR_TOKEN_FILE": str(token_file),
+                "VECTOR_PYTHON_EXE": sys.executable or "python3",
             }
         )
 
@@ -270,6 +273,8 @@ def materialize_vector(
             require_optional_list(resolved_setup.get("instances"), "setup.instances"),
             ledger,
         )
+        placeholders.update(build_instance_session_token_placeholders(ledger.instance_session_tokens))
+        resolved_vector = substitute_placeholders(resolved_vector, placeholders)
 
         request = resolved_vector.get("request")
         request_mapping = require_mapping(request, "request") if isinstance(request, dict) else {}
@@ -324,6 +329,20 @@ def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
         "HOST_HTTP_BASE_URL": host_context.http_base_url,
         "HOST_WS_URL": host_context.ws_url,
     }
+
+
+def build_instance_session_token_placeholders(instance_session_tokens: dict[str, str]) -> dict[str, str]:
+    """根据 setup 注册结果生成 instanceSessionToken 占位符。"""
+    placeholders: dict[str, str] = {}
+
+    if len(instance_session_tokens) == 1:
+        placeholders["REGISTERED_INSTANCE_SESSION_TOKEN"] = next(iter(instance_session_tokens.values()))
+
+    for instance_id, instance_session_token in instance_session_tokens.items():
+        normalized_instance_id = re.sub(r"[^A-Z0-9]+", "_", instance_id.upper()).strip("_")
+        placeholders[f"INSTANCE_SESSION_TOKEN_{normalized_instance_id}"] = instance_session_token
+
+    return placeholders
 
 
 def substitute_placeholders(value: Any, placeholders: dict[str, str]) -> Any:
@@ -438,7 +457,7 @@ def register_instance(
     password: str | None = None,
     request_id: str,
     error_path: str,
-) -> None:
+) -> str:
     """注册实例并记录到清理账本。"""
 
     instance_id = require_string(instance.get("instanceId"), f"{error_path}.instance.instanceId")
@@ -462,7 +481,10 @@ def register_instance(
     if not isinstance(result, dict) or result.get("ok") is not True:
         raise RuntimeError(f"{error_path} 预置失败：响应缺少 result.ok=true。")
 
-    ledger.registered_instances.append((instance_id, resolved_password))
+    instance_session_token = require_string(result.get("instanceSessionToken"), f"{error_path}.result.instanceSessionToken")
+    ledger.registered_instances.append((instance_id, instance_session_token))
+    ledger.instance_session_tokens[instance_id] = instance_session_token
+    return instance_session_token
 
 
 def build_file_content(

@@ -1,24 +1,40 @@
-import { DevHubRpcError, DevHubRpcErrorCode, type AppDefinition, type AppInstance, type DevHubClient } from "@devhub/sdk";
-import { startTransition, useEffect, useEffectEvent, useState } from "react";
+import {
+  DevHubRpcError,
+  DevHubRpcErrorCode,
+  type AppDefinition,
+  type AppDefinitionIdentity,
+  type AppInstance,
+  type DevHubClient,
+} from "@devhub/sdk";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   areDefinitionFormsEqual,
   createEmptyDefinitionForm,
   definitionFormToModel,
   definitionToForm,
   mapValidationIssues,
+  validateDefinitionIdentifiers,
   type DefinitionFormState,
 } from "../lib/definition-form";
 import type { FrontendLogInput } from "../lib/models";
 import {
+  createDefinitionIdentity,
+  formatDefinitionIdentity,
   type DefinitionWorkspaceState,
   createMissingDefinitionForm,
   toErrorMessage,
 } from "../lib/monitor-ui";
+import {
+  deleteDefinitionCompat,
+  getDefinitionCompat,
+  upsertDefinitionCompat,
+  validateDefinitionCompat,
+} from "../lib/sdk-compat";
 import type { ConfirmDialogRequest } from "./useConfirmDialog";
 
 interface DefinitionEditorOptions {
   confirmAction: (request: ConfirmDialogRequest) => Promise<boolean>;
-  onRemoveDefinition: (appId: string) => void;
+  onRemoveDefinition: (identity: AppDefinitionIdentity) => void;
   onReplaceDefinition: (definition: AppDefinition) => void;
   recordFrontendLog: (entry: FrontendLogInput) => void;
   runHostAction: <T>(action: string, execute: (client: DevHubClient) => Promise<T>) => Promise<T>;
@@ -31,6 +47,9 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const [definitionWorkspace, setDefinitionWorkspace] = useState<DefinitionWorkspaceState | null>(null);
   const [definitionBaseline, setDefinitionBaseline] = useState<DefinitionFormState | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
+  const latestWorkspaceRequestIdRef = useRef(0);
+  const sessionResetVersionRef = useRef(sessionResetVersion);
+  sessionResetVersionRef.current = sessionResetVersion;
   const definitionDirty = definitionWorkspace !== null
     && !definitionWorkspace.readOnly
     && !definitionWorkspace.loading
@@ -38,7 +57,31 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     && definitionBaseline !== null
     && !areDefinitionFormsEqual(definitionWorkspace.form, definitionBaseline);
 
+  function invalidateWorkspaceRequest(): void {
+    latestWorkspaceRequestIdRef.current += 1;
+  }
+
+  function beginWorkspaceRequest(): {
+    requestId: number;
+    sessionResetVersion: number;
+  } {
+    latestWorkspaceRequestIdRef.current += 1;
+    return {
+      requestId: latestWorkspaceRequestIdRef.current,
+      sessionResetVersion: sessionResetVersionRef.current,
+    };
+  }
+
+  function isWorkspaceRequestCurrent(request: {
+    requestId: number;
+    sessionResetVersion: number;
+  }): boolean {
+    return latestWorkspaceRequestIdRef.current === request.requestId
+      && sessionResetVersionRef.current === request.sessionResetVersion;
+  }
+
   useEffect(() => {
+    invalidateWorkspaceRequest();
     startTransition(() => {
       setDefinitionWorkspace(null);
       setDefinitionBaseline(null);
@@ -46,6 +89,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   }, [sessionResetVersion]);
 
   const closeDefinitionWorkspace = useEffectEvent(() => {
+    invalidateWorkspaceRequest();
     startTransition(() => {
       setDefinitionWorkspace(null);
       setDefinitionBaseline(null);
@@ -84,6 +128,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
   const openCreateDefinitionWorkspace = useEffectEvent(async () => {
     setDefinitionError(null);
     const initialForm = createEmptyDefinitionForm();
+    invalidateWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -109,8 +154,9 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     });
   });
 
-  const openEditDefinitionWorkspace = useEffectEvent(async (appId: string) => {
+  const openEditDefinitionWorkspace = useEffectEvent(async (identity: AppDefinitionIdentity) => {
     setDefinitionError(null);
+    const request = beginWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -118,7 +164,8 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       action: "open_edit",
       result: "requested",
       context: {
-        appId,
+        appId: identity.appId,
+        scope: identity.scope,
       },
     });
 
@@ -127,7 +174,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       setDefinitionWorkspace({
         mode: "edit",
         title: "编辑 App Definition",
-        form: createMissingDefinitionForm(appId),
+        form: createMissingDefinitionForm(identity),
         fieldErrors: {},
         loading: true,
         saving: false,
@@ -140,8 +187,12 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       const definition = await runHostAction("open_edit_definition", (client) =>
-        client.getDefinition(appId),
+        getDefinitionCompat(client, identity),
       );
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       const nextForm = definitionToForm(definition);
 
       startTransition(() => {
@@ -160,19 +211,23 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         setDefinitionBaseline(nextForm);
       });
     } catch (dialogError) {
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
           setDefinitionBaseline(null);
           setDefinitionWorkspace({
             mode: "edit",
             title: "定义已不可用",
-            form: createMissingDefinitionForm(appId),
+            form: createMissingDefinitionForm(identity),
             fieldErrors: {},
             loading: false,
             saving: false,
             readOnly: true,
             missing: true,
-            emptyStateMessage: `定义 ${appId} 已不存在或已被删除。`,
+            emptyStateMessage: `定义 ${formatDefinitionIdentity(identity)} 已不存在或已被删除。`,
             submitError: null,
           });
         });
@@ -186,6 +241,8 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
   const openInstanceDefinitionWorkspace = useEffectEvent(async (instance: AppInstance) => {
     setDefinitionError(null);
+    const identity = createDefinitionIdentity(instance.appId, instance.scope);
+    const request = beginWorkspaceRequest();
 
     recordFrontendLog({
       level: "info",
@@ -195,6 +252,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       context: {
         appId: instance.appId,
         instanceId: instance.instanceId,
+        scope: identity.scope,
       },
     });
 
@@ -203,7 +261,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       setDefinitionWorkspace({
         mode: "view",
         title: "实例关联定义",
-        form: createMissingDefinitionForm(instance.appId),
+        form: createMissingDefinitionForm(identity),
         fieldErrors: {},
         loading: true,
         saving: false,
@@ -216,8 +274,12 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
     try {
       const definition = await runHostAction("open_view_definition", (client) =>
-        client.getDefinition(instance.appId),
+        getDefinitionCompat(client, identity),
       );
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       const nextForm = definitionToForm(definition);
 
       startTransition(() => {
@@ -235,19 +297,23 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         });
       });
     } catch (dialogError) {
+      if (!isWorkspaceRequestCurrent(request)) {
+        return;
+      }
+
       if (dialogError instanceof DevHubRpcError && dialogError.is(DevHubRpcErrorCode.AppDefinitionNotFound)) {
         startTransition(() => {
           setDefinitionBaseline(null);
           setDefinitionWorkspace({
             mode: "view",
             title: "定义不存在",
-            form: createMissingDefinitionForm(instance.appId),
+            form: createMissingDefinitionForm(identity),
             fieldErrors: {},
             loading: false,
             saving: false,
             readOnly: true,
             missing: true,
-            emptyStateMessage: `实例 ${instance.instanceId} 对应的定义 ${instance.appId} 不存在或已被删除。`,
+            emptyStateMessage: `实例 ${instance.instanceId} 对应的定义 ${formatDefinitionIdentity(identity)} 不存在或已被删除。`,
             submitError: null,
           });
         });
@@ -265,6 +331,36 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
     }
 
     const candidateDefinition = definitionFormToModel(definitionWorkspace.form);
+    const identifierIssues = validateDefinitionIdentifiers(candidateDefinition);
+    if (Object.keys(identifierIssues).length > 0) {
+      setDefinitionError(null);
+
+      recordFrontendLog({
+        level: "warn",
+        category: "frontend.definition",
+        action: "submit",
+        result: "validation_failed",
+        context: {
+          appId: candidateDefinition.appId,
+          mode: definitionWorkspace.mode,
+          scope: candidateDefinition.scope,
+        },
+      });
+
+      startTransition(() => {
+        setDefinitionWorkspace((current) =>
+          current
+            ? {
+                ...current,
+                saving: false,
+                fieldErrors: identifierIssues,
+                submitError: "预校验未通过，请修正下列字段错误后再提交。",
+              }
+            : current,
+        );
+      });
+      return false;
+    }
 
     startTransition(() => {
       setDefinitionWorkspace((current) =>
@@ -287,12 +383,13 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       context: {
         appId: candidateDefinition.appId,
         mode: definitionWorkspace.mode,
+        scope: candidateDefinition.scope,
       },
     });
 
     try {
       const validation = await runHostAction("validate_definition", (client) =>
-        client.validateDefinition(candidateDefinition),
+        validateDefinitionCompat(client, candidateDefinition),
       );
 
       if (!validation.valid) {
@@ -314,7 +411,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       }
 
       const savedDefinition = await runHostAction("upsert_definition", (client) =>
-        client.upsertDefinition(candidateDefinition),
+        upsertDefinitionCompat(client, candidateDefinition),
       );
 
       onReplaceDefinition(savedDefinition);
@@ -327,6 +424,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         result: "saved",
         context: {
           appId: savedDefinition.appId,
+          scope: savedDefinition.scope,
         },
       });
 
@@ -347,6 +445,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         message,
         context: {
           appId: candidateDefinition.appId,
+          scope: candidateDefinition.scope,
         },
       });
 
@@ -370,9 +469,12 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       return false;
     }
 
-    const appId = definitionWorkspace.form.appId;
+    const identity = createDefinitionIdentity(
+      definitionWorkspace.form.appId,
+      definitionWorkspace.form.scope === "" ? null : definitionWorkspace.form.scope,
+    );
     const confirmed = await confirmAction({
-      message: `确认删除 App Definition “${appId}” 吗？`,
+      message: `确认删除 App Definition “${formatDefinitionIdentity(identity)}” 吗？`,
       variant: "danger",
     });
 
@@ -398,16 +500,17 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
       action: "delete",
       result: "requested",
       context: {
-        appId,
+        appId: identity.appId,
+        scope: identity.scope,
       },
     });
 
     try {
       await runHostAction("delete_definition", (client) =>
-        client.deleteDefinition(appId),
+        deleteDefinitionCompat(client, identity),
       );
 
-      onRemoveDefinition(appId);
+      onRemoveDefinition(identity);
       setDefinitionError(null);
 
       recordFrontendLog({
@@ -416,7 +519,8 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         action: "delete",
         result: "deleted",
         context: {
-          appId,
+          appId: identity.appId,
+          scope: identity.scope,
         },
       });
 
@@ -436,7 +540,8 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
         result: "failed",
         message,
         context: {
-          appId,
+          appId: identity.appId,
+          scope: identity.scope,
         },
       });
 

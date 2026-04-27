@@ -78,7 +78,7 @@ class TestInvocationNotify(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=22001,
@@ -183,7 +183,7 @@ class TestInvocationNotify(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=22002,
@@ -365,7 +365,7 @@ class TestInvocationNotify(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=callee_instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=22021,
@@ -379,7 +379,9 @@ class TestInvocationNotify(unittest.TestCase):
                 "method": "hub.invoke.notify",
                 "params": {
                     "appId": app_id,
-                    "target": {},
+                    "target": {
+                        "scope": "",
+                    },
                     "method": "asset.defaults.notify",
                     "args": {"case": "no-options"}
                 }
@@ -411,6 +413,7 @@ class TestInvocationNotify(unittest.TestCase):
                 "params": {
                     "appId": app_id,
                     "target": {
+                        "scope": "",
                         "instanceId": callee_instance_id,
                     },
                     "method": "asset.defaults.target-instance",
@@ -428,6 +431,7 @@ class TestInvocationNotify(unittest.TestCase):
                 "params": {
                     "appId": app_id,
                     "target": {
+                        "scope": "",
                         "instanceId": callee_instance_id,
                     },
                     "method": "asset.defaults.target-instance-auto",

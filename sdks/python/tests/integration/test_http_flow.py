@@ -14,7 +14,10 @@ from devhub_sdk import (
     DevHubRpcErrorCode,
     DevHubRpcException,
     InvokeCapability,
+    ListDefinitionsRequest,
     ListInstancesRequest,
+    SDK_VERSION,
+    VersionCompatibilityStatus,
 )
 from devhub_sdk.models import LaunchRequest
 
@@ -37,11 +40,12 @@ def test_ping_and_apps_flow_should_succeed() -> None:
         assert ping.ok is True
         assert ping.echo["value"] == 1
 
-        definitions = client.list_definitions()
+        definitions = client.list_definitions(ListDefinitionsRequest(scope=None))
         assert any(definition.app_id == "http.flow.app" for definition in definitions)
 
-        definition = client.get_definition("http.flow.app")
+        definition = client.get_definition("http.flow.app", "")
         assert definition.display_name == "HTTP Flow App"
+        assert definition.scope == ""
 
         registered = client.register_instance(
             AppInstanceRegistration(
@@ -49,28 +53,103 @@ def test_ping_and_apps_flow_should_succeed() -> None:
                 app_id="http.flow.app",
                 pid=99999,
                 invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
                 meta={"source": "integration"},
             ),
             _instance_password("http-flow-inst-1"),
         )
         assert registered.instance_id == "http-flow-inst-1"
+        instance_session_token = registered.instance_session_token
+        assert instance_session_token is not None
 
-        instances = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
+        exact_instance = client.get_instance("http-flow-inst-1")
+        assert exact_instance.instance_id == "http-flow-inst-1"
+        assert exact_instance.meta == {"source": "integration"}
+        assert exact_instance.instance_session_token is None
+
+        instances = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert len(instances) == 1
 
-        last_seen_utc = client.heartbeat("http-flow-inst-1")
+        last_seen_utc = client.heartbeat("http-flow-inst-1", instance_session_token)
         assert last_seen_utc is not None
 
-        client.unregister_instance("http-flow-inst-1", _instance_password("http-flow-inst-1"))
-        instances_after_unregister = client.list_instances(ListInstancesRequest(app_id="http.flow.app"))
+        client.unregister_instance("http-flow-inst-1", instance_session_token)
+        instances_after_unregister = client.list_instances(ListInstancesRequest(scope=None, app_id="http.flow.app"))
         assert instances_after_unregister == []
+
+
+def test_version_methods_should_use_rpc_or_runtime_fallback() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("http-version-client")
+
+        rpc_version: str | None = None
+        try:
+            rpc_version = client.get_host_version()
+        except DevHubRpcException as exc:
+            assert exc.code == DevHubRpcErrorCode.METHOD_NOT_FOUND
+
+        compatibility = client.check_version_compatibility()
+
+    expected_host_version = rpc_version if rpc_version is not None else client.runtime.hub_version
+    assert compatibility.sdk_version == SDK_VERSION
+    assert compatibility.host_version == expected_host_version
+    assert compatibility.status == _expected_version_status(SDK_VERSION, expected_host_version)
+
+
+def test_instance_session_token_mismatch_should_surface_forbidden_reason() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition(
+            {
+                "appId": "http.token.app",
+                "displayName": "HTTP Token App",
+            }
+        )
+
+        client = host.create_client("http-token-client")
+        registered = client.register_instance(
+            AppInstanceRegistration(
+                instance_id="http-token-inst-1",
+                app_id="http.token.app",
+                pid=99998,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            _instance_password("http-token-inst-1"),
+        )
+
+        with pytest.raises(DevHubRpcException) as heartbeat_error:
+            client.heartbeat("http-token-inst-1", "wrong-token")
+        assert heartbeat_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+        assert heartbeat_error.value.reason == "instance_session_token_mismatch"
+
+        with pytest.raises(DevHubRpcException) as unregister_error:
+            client.unregister_instance("http-token-inst-1", "wrong-token")
+        assert unregister_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+        assert unregister_error.value.reason == "instance_session_token_mismatch"
+
+        instance_session_token = registered.instance_session_token
+        assert instance_session_token is not None
+        client.unregister_instance("http-token-inst-1", instance_session_token)
+
+
+def test_get_instance_missing_should_surface_instance_not_found() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("http-get-instance-client")
+
+        with pytest.raises(DevHubRpcException) as exc_info:
+            client.get_instance("missing-http-inst")
+
+    assert exc_info.value.code == DevHubRpcErrorCode.INSTANCE_NOT_FOUND
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-http-inst"
 
 
 def test_definition_management_should_round_trip_and_surface_host_validation() -> None:
     with DevHubHostFixture.start() as host:
         client = host.create_client("http-definition-client")
 
-        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ")
+        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ", scope="")
         invalid = client.validate_definition(invalid_definition)
         assert invalid.ok is True
         assert invalid.valid is False
@@ -80,6 +159,7 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         definition = AppDefinition(
             app_id="http.manage.app",
             display_name="Managed HTTP App",
+            scope="",
             description="通过 Python SDK 写入。",
         )
         valid = client.validate_definition(definition)
@@ -88,7 +168,8 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
 
         upserted = client.upsert_definition(definition)
         assert upserted.app_id == "http.manage.app"
-        assert client.get_definition("http.manage.app").display_name == "Managed HTTP App"
+        assert upserted.scope == ""
+        assert client.get_definition("http.manage.app", "").display_name == "Managed HTTP App"
 
         with pytest.raises(DevHubRpcException) as upsert_error:
             client.upsert_definition(invalid_definition)
@@ -96,9 +177,9 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         assert upsert_error.value.reason == "definition_invalid"
         assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
 
-        client.delete_definition("http.manage.app")
+        client.delete_definition("http.manage.app", "")
         with pytest.raises(DevHubRpcException) as deleted_error:
-            client.get_definition("http.manage.app")
+            client.get_definition("http.manage.app", "")
         assert deleted_error.value.code == DevHubRpcErrorCode.APP_DEFINITION_NOT_FOUND
 
 
@@ -120,6 +201,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         first = client.launch(
             LaunchRequest(
                 app_id="http.launch.app",
+                scope="",
                 dedupe_key="python-sdk-launch-dedupe",
                 wait_for_register_ms=800,
             )
@@ -127,6 +209,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
         second = client.launch(
             LaunchRequest(
                 app_id="http.launch.app",
+                scope="",
                 dedupe_key="python-sdk-launch-dedupe",
                 wait_for_register_ms=0,
             )
@@ -162,6 +245,7 @@ def test_host_fixture_close_should_cleanup_launch_process_tree_and_temp_dir() ->
         result = client.launch(
             LaunchRequest(
                 app_id="http.launch.cleanup.app",
+                scope="",
                 dedupe_key="python-sdk-launch-cleanup",
                 wait_for_register_ms=0,
             )
@@ -202,8 +286,8 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
 
         assert client_a.ping().ok is True
         assert client_b.ping().ok is True
-        assert client_a.get_definition("parallel.http.app").display_name == "Parallel HTTP App A"
-        assert client_b.get_definition("parallel.http.app").display_name == "Parallel HTTP App B"
+        assert client_a.get_definition("parallel.http.app", "").display_name == "Parallel HTTP App A"
+        assert client_b.get_definition("parallel.http.app", "").display_name == "Parallel HTTP App B"
 
         client_a.register_instance(
             AppInstanceRegistration(
@@ -211,12 +295,13 @@ def test_two_hosts_with_different_data_dirs_should_isolate_http_state() -> None:
                 app_id="parallel.http.app",
                 pid=99994,
                 invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
             ),
             _instance_password("parallel-http-inst-a"),
         )
 
-        instances_a = client_a.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
-        instances_b = client_b.list_instances(ListInstancesRequest(app_id="parallel.http.app"))
+        instances_a = client_a.list_instances(ListInstancesRequest(scope=None, app_id="parallel.http.app"))
+        instances_b = client_b.list_instances(ListInstancesRequest(scope=None, app_id="parallel.http.app"))
 
         assert [instance.instance_id for instance in instances_a] == ["parallel-http-inst-a"]
         assert instances_b == []
@@ -287,3 +372,28 @@ def _kill_process(pid: int) -> None:
         os.kill(pid, 9)
     except OSError:
         return
+
+
+def _expected_version_status(
+    sdk_version: str,
+    host_version: str | None,
+) -> VersionCompatibilityStatus:
+    sdk_parts = _parse_major_minor(sdk_version)
+    host_parts = _parse_major_minor(host_version)
+    if sdk_parts is None or host_parts is None:
+        return VersionCompatibilityStatus.UNKNOWN
+    if sdk_parts[0] != host_parts[0]:
+        return VersionCompatibilityStatus.INCOMPATIBLE
+    if sdk_parts[1] != host_parts[1]:
+        return VersionCompatibilityStatus.UPDATE_RECOMMENDED
+    return VersionCompatibilityStatus.COMPATIBLE
+
+
+def _parse_major_minor(version: str | None) -> tuple[int, int] | None:
+    if not isinstance(version, str):
+        return None
+
+    parts = version.split(".", 2)
+    if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return int(parts[0]), int(parts[1])

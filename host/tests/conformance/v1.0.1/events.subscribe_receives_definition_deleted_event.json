@@ -16,6 +16,7 @@
         "client": "http",
         "definition": {
           "appId": "events.definition.deleted",
+          "scope": "",
           "displayName": "Events Definition Deleted"
         }
       },
@@ -38,7 +39,8 @@
       {
         "action": "delete_definition",
         "client": "http",
-        "appId": "events.definition.deleted"
+        "appId": "events.definition.deleted",
+        "scope": ""
       },
       {
         "action": "read_event",
@@ -56,7 +58,8 @@
         "subscriptionId": "${ANY_NON_EMPTY_STRING}",
         "type": "app.definition.deleted",
         "payload": {
-          "appId": "events.definition.deleted"
+          "appId": "events.definition.deleted",
+          "scope": ""
         }
       }
     }

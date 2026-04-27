@@ -92,7 +92,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=False,
                 respond=True,
                 pid=23005,
@@ -132,7 +132,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=False,
                 pid=23006,
@@ -145,6 +145,116 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             if not RpcAssertions.expect_error_data_fields(result, respond_response, {"reason": "respond_not_enabled"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+            safe_remove(definition_path)
+
+        return result
+
+    def test_poll_with_wrong_instance_session_token_should_fail(self):
+        """POLL-OWN-001: 错误 instanceSessionToken 的 poll 必须被拒绝"""
+        result = TestResult("POLL-OWN-001 错误 instanceSessionToken 的 poll 被拒绝")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = self._new_app_id("poll-token-guard-app")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("poll-token-guard")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope="",
+                poll=True,
+                respond=True,
+                pid=23007,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance", "instanceSessionToken"]):
+                return result
+
+            poll_response = client.poll_once(
+                instance_id,
+                max_count=1,
+                wait_ms=0,
+                instance_session_token="wrong-instance-session-token",
+            )
+            if not RpcAssertions.expect_error(result, poll_response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, poll_response, {"reason": "instance_session_token_mismatch"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+            safe_remove(definition_path)
+
+        return result
+
+    def test_respond_with_wrong_instance_session_token_should_fail(self):
+        """RESP-OWN-001: 错误 instanceSessionToken 的 respond 必须被拒绝"""
+        result = TestResult("RESP-OWN-001 错误 instanceSessionToken 的 respond 被拒绝")
+        definition_path = None
+        instance_id = None
+
+        try:
+            app_id = self._new_app_id("respond-token-guard-app")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            instance_id = self._instance_id("respond-token-guard")
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope="",
+                poll=True,
+                respond=True,
+                pid=23008,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance", "instanceSessionToken"]):
+                return result
+
+            notify_response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.refresh",
+                args={"mode": "token-guard"},
+                auto_launch=False,
+                request_id="respond-token-guard-notify",
+            )
+            if not RpcAssertions.expect_success(result, notify_response, ["invocationId"]):
+                return result
+
+            poll_response = client.poll_once(instance_id, max_count=1, wait_ms=100)
+            if not RpcAssertions.expect_success(result, poll_response, ["items"]):
+                return result
+
+            items = poll_response.get("result", {}).get("items", [])
+            if len(items) != 1:
+                result.mark_failure(f"❌ 未拿到待 respond 的 invocation: {poll_response}")
+                return result
+
+            invocation_id = items[0].get("invocationId")
+            respond_response = client.respond_value(
+                instance_id,
+                invocation_id,
+                {"ok": True},
+                instance_session_token="wrong-instance-session-token",
+            )
+            if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
+                return result
+
+            if not RpcAssertions.expect_error_data_fields(result, respond_response, {"reason": "instance_session_token_mismatch"}):
                 return result
 
             result.mark_success()
@@ -172,7 +282,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23001,
@@ -238,7 +348,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_a = client.register_instance(
                 instance_id=instance_a,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23011,
@@ -249,7 +359,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_b = client.register_instance(
                 instance_id=instance_b,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23012,
@@ -306,7 +416,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23031,
@@ -397,7 +507,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23020,
@@ -484,7 +594,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_a = client.register_instance(
                 instance_id=instance_a,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23021,
@@ -495,7 +605,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             register_b = client.register_instance(
                 instance_id=instance_b,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=23022,
@@ -578,6 +688,8 @@ class TestInvocationPollRespond(unittest.TestCase):
             self.test_poll_with_invalid_max_count_should_fail(),
             self.test_poll_with_poll_disabled_instance_should_fail(),
             self.test_respond_with_respond_disabled_instance_should_fail(),
+            self.test_poll_with_wrong_instance_session_token_should_fail(),
+            self.test_respond_with_wrong_instance_session_token_should_fail(),
             self.test_respond_duplicate_should_conflict(),
             self.test_respond_by_non_lease_holder_should_conflict(),
             self.test_respond_value_error_xor_validation_should_invalid_params(),

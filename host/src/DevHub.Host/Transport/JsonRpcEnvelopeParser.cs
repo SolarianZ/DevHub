@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services;
 
 namespace DevHub.Host.Transport;
 
@@ -42,9 +43,11 @@ internal static class JsonRpcEnvelopeParser
         }
 
         object? requestParams = null;
+        var method = methodElement.GetString()!;
+
         if (root.TryGetProperty("params", out var paramsElement))
         {
-            if (paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Array)
+            if (!IsAcceptedParamsValue(method, paramsElement))
             {
                 errorResponse = TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", requestId);
                 return false;
@@ -56,7 +59,7 @@ internal static class JsonRpcEnvelopeParser
         request = new JsonRpcRequest
         {
             Id = requestId,
-            Method = methodElement.GetString()!,
+            Method = method,
             Params = requestParams
         };
 
@@ -75,6 +78,16 @@ internal static class JsonRpcEnvelopeParser
         }
 
         return request.Params is JsonElement paramsElement && paramsElement.ValueKind == JsonValueKind.Array;
+    }
+
+    private static bool IsAcceptedParamsValue(string method, JsonElement paramsElement)
+    {
+        if (string.Equals(method, HubRpcMethods.HubGetVersion, StringComparison.Ordinal))
+        {
+            return paramsElement.ValueKind != JsonValueKind.Undefined;
+        }
+
+        return paramsElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
     }
 
     private static bool TryExtractRequestId(JsonElement root, out object? requestId)

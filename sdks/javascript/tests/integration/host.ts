@@ -14,6 +14,8 @@ const SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY"
 const SingleInstanceSlotEnvironmentVariable = "DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS";
 const TestLiveStatusEnvironmentVariable = "DEVHUB_TEST_LIVE_STATUS";
 const LongWaitStatusThresholdSeconds = 8;
+const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
 let sharedHostAssemblyPromise: Promise<string> | undefined;
 let sharedHostBuildRoot: string | undefined;
 let sharedHostCleanupRegistered = false;
@@ -151,12 +153,14 @@ export class DevHubHostFixture {
   }
 
   async writeDefinition(definition: Record<string, unknown>): Promise<void> {
-    const appId = definition.appId;
-    if (typeof appId !== "string" || !appId.trim()) {
-      throw new Error("appId 不能为空。");
-    }
-    const target = path.join(this.definitionsDirectory, `${appId}.json`);
-    await fsPromises.writeFile(target, JSON.stringify(definition), "utf-8");
+    const payload = { ...definition };
+    const appId = ensureCanonicalIdentifier(payload.appId, "definition.appId");
+
+    const scope = normalizeDefinitionScope(payload.scope);
+    payload.scope = scope;
+
+    const target = path.join(this.definitionsDirectory, buildDefinitionFileName(appId, scope));
+    await fsPromises.writeFile(target, JSON.stringify(payload), "utf-8");
   }
 
   async close(): Promise<void> {
@@ -369,6 +373,33 @@ function ensureTrailingSeparator(value: string): string {
   return value.endsWith(path.sep)
     ? value
     : `${value}${path.sep}`;
+}
+
+function normalizeDefinitionScope(value: unknown): string {
+  if (value === undefined) {
+    return "";
+  }
+
+  if (typeof value !== "string" || (value.length > 0 && !CANONICAL_IDENTIFIER_REGEX.test(value))) {
+    throw new Error(`definition.scope 必须为 "" 或匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
+  return value;
+}
+
+function buildDefinitionFileName(appId: string, scope: string): string {
+  const scopeSegment = scope === ""
+    ? "global"
+    : `scope-${scope}`;
+  return `${appId}--${scopeSegment}.json`;
+}
+
+function ensureCanonicalIdentifier(value: unknown, propertyName: string): string {
+  if (typeof value !== "string" || !CANONICAL_IDENTIFIER_REGEX.test(value)) {
+    throw new Error(`${propertyName} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
+  }
+
+  return value;
 }
 
 function registerSharedHostCleanup(): void {

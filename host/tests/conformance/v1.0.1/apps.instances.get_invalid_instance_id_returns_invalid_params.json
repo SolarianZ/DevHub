@@ -1,0 +1,37 @@
+{
+  "id": "apps.instances.get_invalid_instance_id_returns_invalid_params",
+  "caseId": "CONF-003",
+  "description": "hub.apps.getInstance 的 instanceId 缺失或格式非法时，必须返回 invalid_params。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000034"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get-invalid-instance-id",
+    "method": "hub.apps.getInstance",
+    "params": {
+      "instanceId": ".invalid.instance"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get-invalid-instance-id",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params"
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "error"
+  ]
+}

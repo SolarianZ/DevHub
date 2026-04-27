@@ -1,6 +1,7 @@
 namespace DevHub.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
@@ -30,21 +31,32 @@ public class SpecConformanceTests : IDisposable
         WriteJson("valid-app.json", new
         {
             appId = "valid-app",
+            scope = ScopeContract.Global,
             displayName = "Valid App"
         });
 
         WriteJson("invalid app id.json", new
         {
             appId = "invalid app id",
+            scope = ScopeContract.Global,
             displayName = "Invalid AppId"
         });
 
-        // 文件名与 appId 不一致
-        WriteJson("mismatch-name.json", new
+        WriteJson("missing-scope.json", new
         {
-            appId = "real-name",
-            displayName = "Mismatch Name"
+            appId = "missing-scope",
+            displayName = "Missing Scope"
         });
+
+        // 文件名与 appId 不一致
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "mismatch-name.json"),
+            JsonSerializer.Serialize(new
+            {
+                appId = "real-name",
+                scope = ScopeContract.Global,
+                displayName = "Mismatch Name"
+            }));
 
         var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
 
@@ -63,6 +75,7 @@ public class SpecConformanceTests : IDisposable
         WriteJson("list-target.json", new
         {
             appId = "list-target",
+            scope = ScopeContract.Global,
             displayName = "List Target"
         });
 
@@ -76,7 +89,7 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-list",
             Method = "hub.apps.listDefinitions",
-            Params = JsonSerializer.SerializeToElement(new { })
+            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null })
         };
 
         var response = await handler.HandleAsync(request, CancellationToken.None);
@@ -96,6 +109,7 @@ public class SpecConformanceTests : IDisposable
         WriteJson("get-target.json", new
         {
             appId = "get-target",
+            scope = ScopeContract.Global,
             displayName = "Get Target"
         });
 
@@ -109,7 +123,7 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-get",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "get-target" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "get-target", scope = ScopeContract.Global })
         };
 
         var response = await handler.HandleAsync(request, CancellationToken.None);
@@ -136,7 +150,7 @@ public class SpecConformanceTests : IDisposable
         {
             Id = "req-get-missing",
             Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new { appId = "missing-app" })
+            Params = JsonSerializer.SerializeToElement(new { appId = "missing-app", scope = ScopeContract.Global })
         };
 
         var response = await handler.HandleAsync(request, CancellationToken.None);
@@ -163,7 +177,7 @@ public class SpecConformanceTests : IDisposable
             {
                 instanceId = "test-instance-001",
                 appId = "test-app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 12345,
                 invoke = new { poll = true, respond = true }
             }))
@@ -269,19 +283,21 @@ public class SpecConformanceTests : IDisposable
             {
                 instanceId = "test-instance-unregister",
                 appId = "test-app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 45678,
                 invoke = new { poll = true, respond = true }
             }))
         };
 
-        await handler.HandleAsync(registerRequest, CancellationToken.None);
+        var registerResponse = await handler.HandleAsync(registerRequest, CancellationToken.None);
+        Assert.Null(registerResponse.Error);
+        var instanceSessionToken = ExtractInstanceSessionToken(registerResponse);
 
         var unregisterRequest = new JsonRpcRequest
         {
             Id = "req-unregister-1",
             Method = "hub.apps.unregisterInstance",
-            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("test-instance-unregister"))
+            Params = JsonSerializer.SerializeToElement(CreateUnregisterParams("test-instance-unregister", instanceSessionToken))
         };
 
         var firstResponse = await handler.HandleAsync(unregisterRequest, CancellationToken.None);
@@ -302,7 +318,7 @@ public class SpecConformanceTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "test-app",
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -328,7 +344,7 @@ public class SpecConformanceTests : IDisposable
             {
                 instanceId = "instance-offline",
                 appId = "list-offline-default.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 5102,
                 invoke = new { poll = true, respond = true }
             }))
@@ -344,7 +360,7 @@ public class SpecConformanceTests : IDisposable
             {
                 instanceId = "instance-online",
                 appId = "list-offline-default.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 5101,
                 invoke = new { poll = true, respond = true }
             }))
@@ -356,7 +372,8 @@ public class SpecConformanceTests : IDisposable
             Method = "hub.apps.listInstances",
             Params = JsonSerializer.SerializeToElement(new
             {
-                appId = "list-offline-default.app"
+                appId = "list-offline-default.app",
+                scope = ScopeContract.Global
             })
         }, CancellationToken.None);
 
@@ -369,7 +386,7 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_AppInstancesHandler_ListInstances_WhenIncludeAllScopesTrue_ShouldIgnoreScopeFilter()
+    public async Task Impl_AppInstancesHandler_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -382,7 +399,7 @@ public class SpecConformanceTests : IDisposable
             {
                 instanceId = "instance-global",
                 appId = "list-all-scopes.app",
-                scope = (string?)null,
+                scope = ScopeContract.Global,
                 pid = 5201,
                 invoke = new { poll = true, respond = true }
             }))
@@ -409,8 +426,7 @@ public class SpecConformanceTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new
             {
                 appId = "list-all-scopes.app",
-                scope = "workspace-B",
-                includeAllScopes = true,
+                scope = (string?)null,
                 includeOffline = true
             })
         }, CancellationToken.None);
@@ -433,7 +449,15 @@ public class SpecConformanceTests : IDisposable
 
     private void WriteJson(string fileName, object payload)
     {
-        var fullPath = Path.Combine(_tempDirectory, fileName);
+        var json = JsonSerializer.SerializeToElement(payload);
+        var appId = json.GetProperty("appId").GetString()!;
+        var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
+            ? scopeElement.GetString()!
+            : ScopeContract.Global;
+        var resolvedFileName = ProtocolIdentifier.IsValidAppId(appId) && ProtocolIdentifier.IsValidScope(scope)
+            ? AppDefinitionIdentity.Create(appId, scope).GetFileName()
+            : fileName;
+        var fullPath = Path.Combine(_tempDirectory, resolvedFileName);
         File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
     }
 
@@ -461,14 +485,17 @@ public class SpecConformanceTests : IDisposable
         };
     }
 
-    private static object CreateUnregisterParams(string instanceId)
+    private static string ExtractInstanceSessionToken(JsonRpcResponse response)
+    {
+        return JsonSerializer.SerializeToElement(response.Result).GetProperty("instanceSessionToken").GetString()!;
+    }
+
+    private static object CreateUnregisterParams(string instanceId, string instanceSessionToken)
     {
         return new
         {
             instanceId,
-            password = InstancePassword
+            instanceSessionToken
         };
     }
 }
-
-

@@ -8,6 +8,7 @@ mod picker;
 mod runtime;
 mod settings;
 mod snapshot;
+mod versioning;
 
 use crate::models::{
     BootstrapSnapshot, FrontendLogInput, LaunchHostResult, LogKind, MonitorSettings,

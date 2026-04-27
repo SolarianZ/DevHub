@@ -79,6 +79,7 @@ public sealed class TransportAdapterImplTests
                 """
                 {
                   "appId": "transport.parser",
+                  "scope": "",
                   "displayName": "Transport Parser",
                   "launch": null,
                   "capabilities": "bad"
@@ -101,6 +102,7 @@ public sealed class TransportAdapterImplTests
                 """
                 {
                   "appId": "transport.parser",
+                  "scope": "",
                   "displayName": "Transport Parser",
                   "description": "adapter test",
                   "launch": {
@@ -180,34 +182,43 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "5.5")]
-    public void Impl_RpcParamReader_TryGetOptionalScope_ShouldNormalizeEmptyStringAndRejectInvalidType()
+    public void Impl_RpcParamReader_ScopeHelpers_ShouldRequireExplicitScopeAndSeparateListFilters()
     {
-        var missingOk = RpcParamReader.TryGetOptionalScope(
+        var requiredMissingOk = RpcParamReader.TryGetRequiredScope(
             ParseElement("""{}"""),
             "scope",
             "invalid_scope",
-            out var missingScope,
-            out var missingError);
+            out _,
+            out var requiredMissingError);
 
-        var emptyOk = RpcParamReader.TryGetOptionalScope(
+        var emptyOk = RpcParamReader.TryGetRequiredScope(
             ParseElement("""{ "scope": "" }"""),
             "scope",
             "invalid_scope",
             out var emptyScope,
             out _);
 
-        var invalidOk = RpcParamReader.TryGetOptionalScope(
+        var listFilterNullOk = RpcParamReader.TryGetRequiredListScope(
+            ParseElement("""{ "scope": null }"""),
+            "scope",
+            "invalid_scope",
+            out var listFilterScope,
+            out var listFilterError);
+
+        var invalidOk = RpcParamReader.TryGetRequiredScope(
             ParseElement("""{ "scope": 1 }"""),
             "scope",
             "invalid_scope",
             out _,
             out var invalidError);
 
-        Assert.True(missingOk);
-        Assert.Null(missingScope);
-        Assert.Null(missingError);
+        Assert.False(requiredMissingOk);
+        Assert.Equal("invalid_scope", JsonSerializer.SerializeToElement(requiredMissingError).GetProperty("reason").GetString());
         Assert.True(emptyOk);
-        Assert.Null(emptyScope);
+        Assert.Equal(string.Empty, emptyScope);
+        Assert.True(listFilterNullOk);
+        Assert.Null(listFilterScope);
+        Assert.Null(listFilterError);
         Assert.False(invalidOk);
 
         var errorData = JsonSerializer.SerializeToElement(invalidError);
@@ -217,11 +228,11 @@ public sealed class TransportAdapterImplTests
     [Fact]
     [Trait("SpecRef", "5.5")]
     [Trait("SpecRef", "6.3.13")]
-    public void Impl_RpcParamReader_TryParseInvocationTarget_ShouldHandleMissingTargetAndInvalidMembers()
+    public void Impl_RpcParamReader_TryParseInvocationTarget_ShouldRequireTargetAndExplicitScope()
     {
         var missingTargetOk = RpcParamReader.TryParseInvocationTarget(
             ParseElement("""{}"""),
-            out var defaultTarget,
+            out _,
             out var defaultError);
 
         var invalidTargetOk = RpcParamReader.TryParseInvocationTarget(
@@ -235,7 +246,7 @@ public sealed class TransportAdapterImplTests
             out var invalidScopeError);
 
         var invalidInstanceOk = RpcParamReader.TryParseInvocationTarget(
-            ParseElement("""{ "target": { "instanceId": "   " } }"""),
+            ParseElement("""{ "target": { "scope": "", "instanceId": "   " } }"""),
             out _,
             out var invalidInstanceError);
 
@@ -244,10 +255,8 @@ public sealed class TransportAdapterImplTests
             out var validTarget,
             out var validError);
 
-        Assert.True(missingTargetOk);
-        Assert.Null(defaultTarget.Scope);
-        Assert.Null(defaultTarget.InstanceId);
-        Assert.Null(defaultError);
+        Assert.False(missingTargetOk);
+        Assert.Equal("invalid_target", JsonSerializer.SerializeToElement(defaultError).GetProperty("reason").GetString());
 
         Assert.False(invalidTargetOk);
         Assert.Equal("invalid_target", JsonSerializer.SerializeToElement(invalidTargetError).GetProperty("reason").GetString());

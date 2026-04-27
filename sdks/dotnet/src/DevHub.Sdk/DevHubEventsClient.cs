@@ -157,12 +157,30 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        object? parameters = echo is null ? null : new Dictionary<string, object?> { ["echo"] = echo };
-        var result = await _session.SendRequestAsync("hub.ping", parameters, cancellationToken);
-        var payload = ResponsePayloadReader.DeserializeRequired<PingResult>(result, "hub.ping.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.ping.result");
-        ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.ping.result", "serverTimeUtc");
-        return payload;
+        return await ReadOnlyRpcExecutor.PingAsync(_session.SendRequestAsync, echo, cancellationToken);
+    }
+
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.getVersion</c> 获取当前 Host 版本。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>Host 返回的版本字符串。</returns>
+    public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken);
+    }
+
+    /// <summary>
+    /// 检查当前 SDK 与 Host 的版本兼容性。
+    /// 优先调用 <c>hub.getVersion</c>；若 Host 返回 <c>method_not_found</c>，则回退到 <see cref="Runtime"/>.<see cref="HubRuntime.HubVersion"/>。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>兼容性检查结果。</returns>
+    public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken);
     }
 
     /// <summary>
@@ -173,20 +191,21 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        var result = await _session.SendRequestAsync("hub.apps.listDefinitions", null, cancellationToken);
-        var definitionsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listDefinitions.result", "definitions", JTokenType.Array);
-        var payload = ResponsePayloadReader.DeserializeRequired<ListDefinitionsContract>(result, "hub.apps.listDefinitions.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listDefinitions.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Definitions, "hub.apps.listDefinitions.result", "definitions");
+        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken);
+    }
 
-        var index = 0;
-        foreach (var definitionElement in definitionsElement.Children())
-        {
-            ResponsePayloadReader.ValidateAppDefinitionElement(definitionElement, $"hub.apps.listDefinitions.result.definitions[{index}]");
-            index++;
-        }
-
-        return payload.Definitions;
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.listDefinitions</c>。
+    /// </summary>
+    /// <param name="request">过滤参数。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义列表。</returns>
+    public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(
+        ListDefinitionsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken);
     }
 
     /// <summary>
@@ -197,22 +216,23 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
+        return await GetDefinitionAsync(appId, string.Empty, cancellationToken);
+    }
+
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.getDefinition</c>。
+    /// </summary>
+    /// <param name="appId">应用标识。</param>
+    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>应用定义。</returns>
+    public async Task<AppDefinition> GetDefinitionAsync(
+        string appId,
+        string scope,
+        CancellationToken cancellationToken = default)
+    {
         EnsureAuthenticated();
-        var result = await _session.SendRequestAsync(
-            "hub.apps.getDefinition",
-            RequestPayloadFactory.BuildGetDefinitionParams(appId),
-            cancellationToken);
-
-        ResponsePayloadReader.ValidateAppDefinitionElement(
-            ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.getDefinition.result", "definition", JTokenType.Object),
-            "hub.apps.getDefinition.result.definition");
-
-        var payload = ResponsePayloadReader.DeserializeRequired<GetDefinitionContract>(result, "hub.apps.getDefinition.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
-        return payload.Definition;
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken);
     }
 
     /// <summary>
@@ -226,24 +246,46 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        var result = await _session.SendRequestAsync(
-            "hub.apps.listInstances",
-            RequestPayloadFactory.BuildListInstancesParams(request),
+        return await ReadOnlyRpcExecutor.ListInstancesAsync(
+            _session.SendRequestAsync,
+            request ?? new ListInstancesRequest(),
             cancellationToken);
+    }
 
-        var instancesElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.listInstances.result", "instances", JTokenType.Array);
-        var payload = ResponsePayloadReader.DeserializeRequired<ListInstancesContract>(result, "hub.apps.listInstances.result");
-        ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.listInstances.result");
-        ResponsePayloadReader.EnsureNotNull(payload.Instances, "hub.apps.listInstances.result", "instances");
+    /// <summary>
+    /// 通过 WebSocket 调用 <c>hub.apps.getInstance</c>。
+    /// </summary>
+    /// <param name="instanceId">实例标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>实例快照。</returns>
+    public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken);
+    }
 
-        var index = 0;
-        foreach (var instanceElement in instancesElement.Children())
-        {
-            ResponsePayloadReader.ValidateAppInstanceElement(instanceElement, $"hub.apps.listInstances.result.instances[{index}]");
-            index++;
-        }
+    /// <summary>
+    /// 获取当前会话内匹配条件的已放弃请求数量。
+    /// 该操作仅维护本地状态，不会发送网络请求，也不会修改认证或订阅状态。
+    /// </summary>
+    /// <param name="filter">可选过滤条件。</param>
+    /// <returns>当前匹配的已放弃请求数量。</returns>
+    public int GetAbandonedRequestCount(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        return _session.GetAbandonedRequestCount(filter);
+    }
 
-        return payload.Instances;
+    /// <summary>
+    /// 清理当前会话内匹配条件的已放弃请求记录。
+    /// 该操作仅维护本地状态，不会发送网络请求，也不会修改认证或订阅状态。
+    /// </summary>
+    /// <param name="filter">可选过滤条件。</param>
+    /// <returns>本次实际移除的记录数量。</returns>
+    public int ClearAbandonedRequests(AbandonedRequestFilter? filter = null)
+    {
+        ThrowIfDisposed();
+        return _session.ClearAbandonedRequests(filter);
     }
 
     /// <summary>

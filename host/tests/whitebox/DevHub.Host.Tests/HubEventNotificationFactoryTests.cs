@@ -3,6 +3,7 @@ namespace DevHub.Host.Tests;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DevHub.Core.Models;
 using DevHub.Core.Services.Events;
 using DevHub.Host.Transport;
 
@@ -81,7 +82,7 @@ public class HubEventNotificationFactoryTests
             {
                 appId = "event.global.app",
                 instanceId = "inst-event-global",
-                scope = (string?)null
+                scope = ScopeContract.Global
             }
         };
 
@@ -94,7 +95,8 @@ public class HubEventNotificationFactoryTests
 
         var payload = json.GetProperty("params").GetProperty("payload");
         Assert.True(payload.TryGetProperty("scope", out var scope));
-        Assert.Equal(JsonValueKind.Null, scope.ValueKind);
+        Assert.Equal(JsonValueKind.String, scope.ValueKind);
+        Assert.Equal(ScopeContract.Global, scope.GetString());
     }
 
     [Fact]
@@ -109,9 +111,11 @@ public class HubEventNotificationFactoryTests
             Payload = new
             {
                 appId = "definition.app",
+                scope = ScopeContract.Global,
                 definition = new
                 {
                     appId = "definition.app",
+                    scope = ScopeContract.Global,
                     displayName = "Definition App",
                     description = (string?)null
                 }
@@ -125,7 +129,45 @@ public class HubEventNotificationFactoryTests
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
-        var definition = json.GetProperty("params").GetProperty("payload").GetProperty("definition");
+        var payload = json.GetProperty("params").GetProperty("payload");
+        Assert.True(payload.TryGetProperty("scope", out var scope));
+        Assert.Equal(JsonValueKind.String, scope.ValueKind);
+        Assert.Equal(ScopeContract.Global, scope.GetString());
+
+        var definition = payload.GetProperty("definition");
+        Assert.True(definition.TryGetProperty("scope", out var definitionScope));
+        Assert.Equal(JsonValueKind.String, definitionScope.ValueKind);
+        Assert.Equal(ScopeContract.Global, definitionScope.GetString());
         Assert.False(definition.TryGetProperty("description", out _));
     }
+
+    [Fact]
+    public void Impl_HubEventNotification_WhenDefinitionDeletedPayloadContainsNullScope_ShouldPreserveScope()
+    {
+        var delivery = new HubEventDelivery
+        {
+            ConnectionId = "conn-5",
+            SubscriptionId = "sub-5",
+            Type = "app.definition.deleted",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                appId = "definition.app",
+                scope = ScopeContract.Global
+            }
+        };
+
+        var json = JsonSerializer.SerializeToElement(
+            HubEventNotificationFactory.Create(delivery),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+        var payload = json.GetProperty("params").GetProperty("payload");
+        Assert.True(payload.TryGetProperty("scope", out var scope));
+        Assert.Equal(JsonValueKind.String, scope.ValueKind);
+        Assert.Equal(ScopeContract.Global, scope.GetString());
+    }
 }
+

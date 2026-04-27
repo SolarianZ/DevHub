@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from devhub_sdk import DevHubClient, DevHubClientOptions, DevHubEventsClient
+from devhub_sdk._validation import require_app_id, require_scoped_string
 
 PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_PYTHON_SDK_HOST_ASSEMBLY"
 SHARED_PREBUILT_HOST_ASSEMBLY_ENVIRONMENT_VARIABLE = "DEVHUB_SDK_HOST_ASSEMBLY"
@@ -137,8 +138,14 @@ class DevHubHostFixture:
         return fixture
 
     def write_definition(self, definition: Mapping[str, Any]) -> None:
-        path = self.definitions_directory / f"{definition['appId']}.json"
-        path.write_text(json.dumps(definition), encoding="utf-8")
+        payload = dict(definition)
+        app_id = require_app_id(payload.get("appId"), "definition.appId")
+
+        scope = _normalize_definition_scope(payload.get("scope"))
+        payload["scope"] = scope
+
+        path = self.definitions_directory / _build_definition_file_name(app_id, scope)
+        path.write_text(json.dumps(payload), encoding="utf-8")
 
     def create_client(self, client_id: str) -> DevHubClient:
         return DevHubClient.from_runtime(
@@ -365,6 +372,17 @@ def _build_host_assembly(repo_root: Path, build_root: Path) -> None:
 def _ensure_trailing_separator(path_value: Path) -> str:
     value = str(path_value)
     return value if value.endswith(os.sep) else f"{value}{os.sep}"
+
+
+def _normalize_definition_scope(value: Any) -> str:
+    if value is None:
+        return ""
+    return require_scoped_string(value, "definition.scope")
+
+
+def _build_definition_file_name(app_id: str, scope: str) -> str:
+    scope_segment = "global" if scope == "" else f"scope-{scope}"
+    return f"{app_id}--{scope_segment}.json"
 
 
 def _create_isolated_process_kwargs() -> dict[str, Any]:

@@ -23,6 +23,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   try {
     await host.writeDefinition({
       appId: "host.cleanup.app",
+      scope: "",
       displayName: "host.cleanup.app",
       launch: {
         exePath: process.execPath,
@@ -38,6 +39,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
     try {
       const launchResult = await client.launch({
         appId: "host.cleanup.app",
+        scope: "",
         waitForRegisterMs: 0
       });
 
@@ -66,6 +68,42 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
 
   if (launchedProcessId !== undefined) {
     await waitForProcessState(launchedProcessId, false);
+  }
+}, 120_000);
+
+it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范化 scope", async () => {
+  const host = await DevHubHostFixture.start();
+
+  try {
+    await host.writeDefinition({
+      appId: "fixture.scope.app",
+      scope: "",
+      displayName: "fixture.scope.app.global"
+    });
+    await host.writeDefinition({
+      appId: "fixture.scope.app",
+      scope: "workspace-A",
+      displayName: "fixture.scope.app.workspace-A"
+    });
+
+    const fileNames = await fsPromises.readdir(host.definitionsDirectory);
+    expect(fileNames).toContain("fixture.scope.app--global.json");
+    expect(fileNames).toContain("fixture.scope.app--scope-workspace-A.json");
+
+    const globalDefinition = JSON.parse(
+      await fsPromises.readFile(
+        path.join(host.definitionsDirectory, "fixture.scope.app--global.json"),
+        "utf-8"
+      )
+    ) as { appId: string; scope: string; displayName: string };
+
+    expect(globalDefinition).toEqual({
+      appId: "fixture.scope.app",
+      scope: "",
+      displayName: "fixture.scope.app.global"
+    });
+  } finally {
+    await host.close();
   }
 }, 120_000);
 

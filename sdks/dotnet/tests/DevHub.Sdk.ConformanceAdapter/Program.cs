@@ -171,12 +171,17 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
 async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector, JsonElement request)
 {
     var dataDir = ReadString(context, "dataDir");
+    var rawRpcConnection = await new FileSystemDevHubRuntimeResolver().ResolveAsync(new DevHubClientOptions
+    {
+        ClientId = "ConformanceRawDefinitionRpc",
+        DataDir = dataDir
+    });
     var steps = ReadRequiredArray(request, "steps");
     var eventClients = new Dictionary<string, DevHubEventsClient>(StringComparer.Ordinal);
     var eventEnumerators = new Dictionary<string, IAsyncEnumerator<DevHubEvent>>(StringComparer.Ordinal);
     var httpClients = new Dictionary<string, DevHubClient>(StringComparer.Ordinal);
     var captures = new Dictionary<string, object?>(StringComparer.Ordinal);
-    var registeredInstances = new List<(string ClientName, string InstanceId, string Password)>();
+    var registeredInstances = new List<(string ClientName, string InstanceId, string InstanceSessionToken)>();
 
     try
     {
@@ -245,48 +250,75 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var instance = BuildAppInstanceRegistration(step.GetProperty("instance"));
                     var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
-                    await client.RegisterInstanceAsync(instance, password);
-                    registeredInstances.Add((clientName, instance.InstanceId, password));
+                    var registered = await client.RegisterInstanceAsync(instance, password);
+                    var instanceSessionToken = registered.InstanceSessionToken;
+                    registeredInstances.Add((clientName, registered.Instance.InstanceId, instanceSessionToken));
+                    if (step.TryGetProperty("captureAs", out var captureElement))
+                    {
+                        captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] = instanceSessionToken;
+                    }
                     break;
                 }
                 case "unregister_instance":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
+                    var clientName = ReadString(step, "client");
+                    var client = RequireValue(httpClients, clientName, index, "http client");
                     var instanceId = Convert.ToString(ResolveCaptureValue(step, captures, index, "instanceId"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].instanceId 不能为空。");
-                    var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
-                        ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
-                    await client.UnregisterInstanceAsync(instanceId, password);
+                    var instanceSessionToken = ResolveInstanceSessionToken(step, captures, registeredInstances, index, clientName, instanceId);
+                    await client.UnregisterInstanceAsync(instanceId, instanceSessionToken);
+                    RemoveRegisteredInstance(registeredInstances, clientName, instanceId);
                     break;
                 }
                 case "validate_definition":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
-                    var validation = await client.ValidateDefinitionAsync(BuildAppDefinition(step.GetProperty("definition")));
+                    var validationResponse = await CallRawRpcAsync(
+                        rawRpcConnection,
+                        $"sdk-events-validate-definition-{index}",
+                        "hub.apps.validateDefinition",
+                        new Dictionary<string, object?>
+                        {
+                            ["definition"] = DeserializeToObject(step.GetProperty("definition"))
+                        });
+                    var validation = ReadRawResultOrThrow(validationResponse, $"request.steps[{index}].definition");
                     if (step.TryGetProperty("captureAs", out var captureElement))
                     {
                         captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] =
-                            NormalizeDefinitionValidationResult(validation);
+                            ConvertJsonElement(validation);
                     }
                     break;
                 }
                 case "upsert_definition":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
-                    var definition = await client.UpsertDefinitionAsync(BuildAppDefinition(step.GetProperty("definition")));
+                    var upsertResponse = await CallRawRpcAsync(
+                        rawRpcConnection,
+                        $"sdk-events-upsert-definition-{index}",
+                        "hub.apps.upsertDefinition",
+                        new Dictionary<string, object?>
+                        {
+                            ["definition"] = DeserializeToObject(step.GetProperty("definition"))
+                        });
+                    var upsertResult = ReadRawResultOrThrow(upsertResponse, $"request.steps[{index}].definition");
                     if (step.TryGetProperty("captureAs", out var captureElement))
                     {
                         captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] =
-                            NormalizeDefinition(definition);
+                            ConvertJsonElement(
+                                EnsureJsonProperty(
+                                    upsertResult,
+                                    $"request.steps[{index}].captureAs",
+                                    "definition",
+                                    JsonValueKind.Object));
                     }
                     break;
                 }
                 case "delete_definition":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
-                    var appId = Convert.ToString(ResolveCaptureValue(step, captures, index, "appId"))
-                        ?? throw new InvalidOperationException($"request.steps[{index}].appId 不能为空。");
-                    await client.DeleteDefinitionAsync(appId);
+                    var deleteResponse = await CallRawRpcAsync(
+                        rawRpcConnection,
+                        $"sdk-events-delete-definition-{index}",
+                        "hub.apps.deleteDefinition",
+                        BuildDefinitionIdentityParams(step, captures, index));
+                    ReadRawResultOrThrow(deleteResponse, $"request.steps[{index}].appId");
                     if (step.TryGetProperty("captureAs", out var captureElement))
                     {
                         captures[ReadRequiredString(captureElement, $"request.steps[{index}].captureAs")] = new { ok = true };
@@ -295,18 +327,53 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                 }
                 case "get_definition":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
-                    var appId = Convert.ToString(ResolveCaptureValue(step, captures, index, "appId"))
-                        ?? throw new InvalidOperationException($"request.steps[{index}].appId 不能为空。");
-                    var definition = await client.GetDefinitionAsync(appId);
-                    captures[ReadString(step, "captureAs")] = NormalizeDefinition(definition);
+                    var definitionResponse = await CallRawRpcAsync(
+                        rawRpcConnection,
+                        $"sdk-events-get-definition-{index}",
+                        "hub.apps.getDefinition",
+                        BuildDefinitionIdentityParams(step, captures, index));
+                    var definitionResult = ReadRawResultOrThrow(definitionResponse, $"request.steps[{index}].appId");
+                    captures[ReadString(step, "captureAs")] = ConvertJsonElement(
+                        EnsureJsonProperty(
+                            definitionResult,
+                            $"request.steps[{index}].captureAs",
+                            "definition",
+                            JsonValueKind.Object));
+                    break;
+                }
+                case "get_instance":
+                {
+                    var clientName = ReadString(step, "client");
+                    var captureAs = ReadString(step, "captureAs");
+                    var instanceId = Convert.ToString(ResolveCaptureValue(step, captures, index, "instanceId"))
+                        ?? throw new InvalidOperationException($"request.steps[{index}].instanceId 不能为空。");
+
+                    if (eventClients.TryGetValue(clientName, out var eventsClient))
+                    {
+                        captures[captureAs] = NormalizeAppInstance(await eventsClient.GetInstanceAsync(instanceId));
+                    }
+                    else
+                    {
+                        var httpClient = RequireValue(httpClients, clientName, index, "http client");
+                        captures[captureAs] = NormalizeAppInstance(await httpClient.GetInstanceAsync(instanceId));
+                    }
+
                     break;
                 }
                 case "list_definitions":
                 {
-                    var client = RequireValue(httpClients, ReadString(step, "client"), index, "http client");
-                    var definitions = await client.ListDefinitionsAsync();
-                    captures[ReadString(step, "captureAs")] = definitions.Select(NormalizeDefinition).ToArray();
+                    var listResponse = await CallRawRpcAsync(
+                        rawRpcConnection,
+                        $"sdk-events-list-definitions-{index}",
+                        "hub.apps.listDefinitions",
+                        new Dictionary<string, object?>());
+                    var listResult = ReadRawResultOrThrow(listResponse, $"request.steps[{index}].captureAs");
+                    captures[ReadString(step, "captureAs")] = ConvertJsonElement(
+                        EnsureJsonProperty(
+                            listResult,
+                            $"request.steps[{index}].captureAs",
+                            "definitions",
+                            JsonValueKind.Array));
                     break;
                 }
                 case "read_event":
@@ -382,7 +449,7 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
 
             try
             {
-                await client.UnregisterInstanceAsync(registered.InstanceId, registered.Password);
+                await client.UnregisterInstanceAsync(registered.InstanceId, registered.InstanceSessionToken);
             }
             catch
             {
@@ -531,6 +598,125 @@ async Task<AdapterResult> RunRpcAsync(JsonElement context, JsonElement vector, J
         null);
 }
 
+async Task<JsonElement> CallRawRpcAsync(
+    DevHubRuntimeConnectionInfo connection,
+    string requestId,
+    string method,
+    object? paramsPayload)
+{
+    using var client = new HttpClient();
+    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, connection.RpcEndpoint);
+    requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", connection.Token);
+    requestMessage.Headers.TryAddWithoutValidation("X-DevHub-Protocol", "1");
+    requestMessage.Headers.TryAddWithoutValidation("X-DevHub-ClientId", "ConformanceRawDefinitionRpc");
+    requestMessage.Headers.TryAddWithoutValidation("X-DevHub-ClientSessionId", "00000000-0000-0000-0000-000000000099");
+
+    var payload = new Dictionary<string, object?>
+    {
+        ["jsonrpc"] = "2.0",
+        ["id"] = requestId,
+        ["method"] = method,
+        ["params"] = paramsPayload ?? new Dictionary<string, object?>()
+    };
+    requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload, jsonOptions), Encoding.UTF8, "application/json");
+
+    using var response = await client.SendAsync(requestMessage);
+    response.EnsureSuccessStatusCode();
+    using var responseDocument = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    return responseDocument.RootElement.Clone();
+}
+
+JsonElement ReadRawResultOrThrow(JsonElement response, string location)
+{
+    if (response.TryGetProperty("error", out var errorElement))
+    {
+        throw new InvalidOperationException($"{location} 定义 RPC 返回错误：{errorElement.GetRawText()}");
+    }
+
+    var result = EnsureJsonProperty(response, location, "result", JsonValueKind.Object);
+    if (!result.TryGetProperty("ok", out var okElement) || okElement.ValueKind is not JsonValueKind.True)
+    {
+        throw new InvalidOperationException($"{location} 定义 RPC 缺少 result.ok=true：{response.GetRawText()}");
+    }
+
+    return result;
+}
+
+JsonElement EnsureJsonProperty(JsonElement element, string location, string propertyName, JsonValueKind expectedKind)
+{
+    if (!element.TryGetProperty(propertyName, out var propertyValue))
+    {
+        throw new InvalidOperationException($"{location}.{propertyName} 不能为空。");
+    }
+
+    if (propertyValue.ValueKind != expectedKind)
+    {
+        throw new InvalidOperationException($"{location}.{propertyName} 类型非法。");
+    }
+
+    return propertyValue;
+}
+
+Dictionary<string, object?> BuildDefinitionIdentityParams(
+    JsonElement step,
+    IReadOnlyDictionary<string, object?> captures,
+    int stepIndex)
+{
+    var appId = Convert.ToString(ResolveCaptureValue(step, captures, stepIndex, "appId"))
+        ?? throw new InvalidOperationException($"request.steps[{stepIndex}].appId 不能为空。");
+
+    return new Dictionary<string, object?>
+    {
+        ["appId"] = appId,
+        ["scope"] = ResolveCaptureValue(step, captures, stepIndex, "scope")
+    };
+}
+
+string ResolveInstanceSessionToken(
+    JsonElement step,
+    IReadOnlyDictionary<string, object?> captures,
+    IReadOnlyList<(string ClientName, string InstanceId, string InstanceSessionToken)> registeredInstances,
+    int stepIndex,
+    string clientName,
+    string instanceId)
+{
+    var explicitToken = TryResolveCapturedString(step, captures, stepIndex, "instanceSessionToken")
+        ?? TryResolveCapturedString(step, captures, stepIndex, "password");
+    if (!string.IsNullOrWhiteSpace(explicitToken))
+    {
+        return explicitToken;
+    }
+
+    for (var index = registeredInstances.Count - 1; index >= 0; index--)
+    {
+        var registered = registeredInstances[index];
+        if (string.Equals(registered.ClientName, clientName, StringComparison.Ordinal) &&
+            string.Equals(registered.InstanceId, instanceId, StringComparison.Ordinal))
+        {
+            return registered.InstanceSessionToken;
+        }
+    }
+
+    throw new InvalidOperationException($"request.steps[{stepIndex}].instanceSessionToken 不能为空。");
+}
+
+void RemoveRegisteredInstance(
+    List<(string ClientName, string InstanceId, string InstanceSessionToken)> registeredInstances,
+    string clientName,
+    string instanceId)
+{
+    for (var index = registeredInstances.Count - 1; index >= 0; index--)
+    {
+        var registered = registeredInstances[index];
+        if (string.Equals(registered.ClientName, clientName, StringComparison.Ordinal) &&
+            string.Equals(registered.InstanceId, instanceId, StringComparison.Ordinal))
+        {
+            registeredInstances.RemoveAt(index);
+            return;
+        }
+    }
+}
+
 InvokeRequest BuildInvokeRequest(JsonElement payload)
 {
     if (payload.ValueKind != JsonValueKind.Object)
@@ -557,11 +743,17 @@ InvokeRequest BuildInvokeRequest(JsonElement payload)
         }
         else
         {
-            request.Target = new InvocationTarget
+            var target = new InvocationTarget
             {
-                Scope = ReadOptionalString(targetElement, "scope"),
                 InstanceId = ReadOptionalString(targetElement, "instanceId")
             };
+
+            if (targetElement.TryGetProperty("scope", out _))
+            {
+                target.Scope = ReadOptionalString(targetElement, "scope")!;
+            }
+
+            request.Target = target;
         }
     }
 
@@ -596,17 +788,6 @@ InvokeRequest BuildInvokeRequest(JsonElement payload)
     return request;
 }
 
-AppDefinition BuildAppDefinition(JsonElement payload)
-{
-    if (payload.ValueKind != JsonValueKind.Object)
-    {
-        throw new InvalidOperationException("definition 必须为对象。");
-    }
-
-    return JsonSerializer.Deserialize<AppDefinition>(payload.GetRawText(), jsonOptions)
-           ?? throw new InvalidOperationException("definition 无法解析为 AppDefinition。");
-}
-
 AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
 {
     if (payload.ValueKind != JsonValueKind.Object)
@@ -620,11 +801,10 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
         throw new InvalidOperationException("instance.invoke 必须为对象。");
     }
 
-    return new AppInstanceRegistration
+    var instance = new AppInstanceRegistration
     {
         InstanceId = ReadString(payload, "instanceId"),
         AppId = ReadString(payload, "appId"),
-        Scope = ReadOptionalString(payload, "scope"),
         Pid = ReadInt32(payload, "pid"),
         Invoke = new InvokeCapability
         {
@@ -635,18 +815,13 @@ AppInstanceRegistration BuildAppInstanceRegistration(JsonElement payload)
             ? DeserializeToObject(metaElement)
             : null
     };
-}
 
-object NormalizeDefinition(AppDefinition definition)
-{
-    return JsonSerializer.Deserialize<object>(JsonSerializer.Serialize(definition, jsonOptions), jsonOptions)
-           ?? new Dictionary<string, object?>();
-}
+    if (payload.TryGetProperty("scope", out _))
+    {
+        instance.Scope = ReadOptionalString(payload, "scope")!;
+    }
 
-object NormalizeDefinitionValidationResult(DefinitionValidationResult result)
-{
-    return JsonSerializer.Deserialize<object>(JsonSerializer.Serialize(result, jsonOptions), jsonOptions)
-           ?? new Dictionary<string, object?>();
+    return instance;
 }
 
 IAsyncEnumerator<DevHubEvent> GetOrCreateEventEnumerator(
@@ -692,6 +867,11 @@ object NormalizeEvent(DevHubEvent @event)
         ["type"] = @event.Type.Value,
         ["payload"] = ConvertJToken(@event.Payload)
     };
+}
+
+object NormalizeAppInstance(AppInstance instance)
+{
+    return ConvertJsonElement(JsonSerializer.SerializeToElement(instance, jsonOptions))!;
 }
 
 async Task SendTextAsync(ClientWebSocket socket, string payload)
@@ -839,6 +1019,12 @@ object? ResolveCaptureValue(JsonElement step, IReadOnlyDictionary<string, object
     return step.TryGetProperty(fieldName, out var fieldElement)
         ? DeserializeToObject(fieldElement)
         : null;
+}
+
+string? TryResolveCapturedString(JsonElement step, IReadOnlyDictionary<string, object?> captures, int stepIndex, string fieldName)
+{
+    var value = ResolveCaptureValue(step, captures, stepIndex, fieldName);
+    return value is null ? null : Convert.ToString(value);
 }
 
 object? ParseWsPayload(string payload)

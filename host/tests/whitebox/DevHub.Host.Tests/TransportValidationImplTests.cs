@@ -167,6 +167,7 @@ public class TransportValidationImplTests
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.deleteDefinition"));
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.invoke.request"));
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.launch"));
+        Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.getVersion"));
         Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.events.subscribe"));
         Assert.False(TransportMethodPolicy.IsHttpOnlyMethod("hub.ws.authenticate"));
     }
@@ -177,6 +178,7 @@ public class TransportValidationImplTests
         Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ws.authenticate"));
         Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.events.subscribe"));
         Assert.True(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.events.unsubscribe"));
+        Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.getVersion"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ping"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.invoke.request"));
     }

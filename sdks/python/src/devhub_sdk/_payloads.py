@@ -19,6 +19,8 @@ from ._validation import (
     require_optional_instance_id,
     require_optional_string,
     require_protocol_version,
+    require_scope_filter,
+    require_scoped_string,
     require_uuid_string,
 )
 from .models import (
@@ -29,6 +31,7 @@ from .models import (
     DevHubCalleeError,
     InvokeRequest,
     InvocationTarget,
+    ListDefinitionsRequest,
     LaunchConfiguration,
     LaunchRequest,
     ListInstancesRequest,
@@ -41,10 +44,21 @@ from .models import (
 _MISSING = object()
 
 
-def build_get_definition_params(app_id: str) -> dict[str, Any]:
+def build_get_definition_params(app_id: str, scope: str) -> dict[str, Any]:
     """构造 `hub.apps.getDefinition` 参数。"""
 
-    return {"appId": require_app_id(app_id, "app_id")}
+    return {
+        "appId": require_app_id(app_id, "app_id"),
+        "scope": require_scoped_string(scope, "scope"),
+    }
+
+
+def build_get_instance_params(instance_id: str) -> dict[str, Any]:
+    """构造 `hub.apps.getInstance` 参数。"""
+
+    return {
+        "instanceId": require_instance_id(instance_id, "instance_id"),
+    }
 
 
 def build_ping_params(echo: Any = _MISSING) -> dict[str, Any] | None:
@@ -65,10 +79,13 @@ def build_upsert_definition_params(definition: AppDefinition) -> dict[str, Any]:
     return {"definition": _build_definition_payload(definition)}
 
 
-def build_delete_definition_params(app_id: str) -> dict[str, Any]:
+def build_delete_definition_params(app_id: str, scope: str) -> dict[str, Any]:
     """构造 `hub.apps.deleteDefinition` 参数。"""
 
-    return {"appId": require_app_id(app_id, "app_id")}
+    return {
+        "appId": require_app_id(app_id, "app_id"),
+        "scope": require_scoped_string(scope, "scope"),
+    }
 
 
 def build_register_instance_params(instance: AppInstanceRegistration, password: str) -> dict[str, Any]:
@@ -80,7 +97,7 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     normalized_password = require_non_empty_string(password, "password")
     instance_id = require_instance_id(instance.instance_id, "instance.instance_id")
     app_id = require_app_id(instance.app_id, "instance.app_id")
-    scope = require_optional_string(instance.scope, "instance.scope")
+    scope = require_scoped_string(instance.scope, "instance.scope")
     if not isinstance(instance.pid, int) or isinstance(instance.pid, bool) or instance.pid < 1:
         raise ValueError("instance.pid 必须大于等于 1。")
 
@@ -91,14 +108,13 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     payload: dict[str, Any] = {
         "instanceId": instance_id,
         "appId": app_id,
+        "scope": scope,
         "pid": instance.pid,
         "invoke": {
             "poll": poll,
             "respond": respond,
         },
     }
-    if scope is not None:
-        payload["scope"] = scope
     if instance.meta is not None:
         meta = _ensure_json_object(instance.meta, "meta")
         payload["meta"] = meta
@@ -108,42 +124,56 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     }
 
 
-def build_heartbeat_params(instance_id: str) -> dict[str, Any]:
+def build_heartbeat_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:
     """构造 `hub.apps.heartbeat` 参数。"""
 
-    return {"instanceId": require_instance_id(instance_id, "instance_id")}
+    return {
+        "instanceId": require_instance_id(instance_id, "instance_id"),
+        "instanceSessionToken": require_non_empty_string(instance_session_token, "instance_session_token"),
+    }
 
 
-def build_unregister_params(instance_id: str, password: str) -> dict[str, Any]:
+def build_unregister_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:
     """构造 `hub.apps.unregisterInstance` 参数。"""
 
     return {
         "instanceId": require_instance_id(instance_id, "instance_id"),
-        "password": require_non_empty_string(password, "password"),
+        "instanceSessionToken": require_non_empty_string(instance_session_token, "instance_session_token"),
     }
 
 
-def build_list_instances_params(request: ListInstancesRequest | None) -> dict[str, Any] | None:
+def build_list_definitions_params(request: ListDefinitionsRequest) -> dict[str, Any]:
+    """构造 `hub.apps.listDefinitions` 参数。"""
+
+    if request is None:
+        raise ValueError("request 不能为空。")
+
+    payload: dict[str, Any] = {
+        "scope": require_scope_filter(request.scope, "scope"),
+    }
+    app_id = require_optional_app_id(request.app_id, "app_id")
+    if app_id is not None:
+        payload["appId"] = app_id
+    return payload
+
+
+def build_list_instances_params(request: ListInstancesRequest) -> dict[str, Any]:
     """构造 `hub.apps.listInstances` 参数。"""
 
     if request is None:
-        return None
+        raise ValueError("request 不能为空。")
 
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = {
+        "scope": require_scope_filter(request.scope, "scope"),
+    }
     app_id = require_optional_app_id(request.app_id, "app_id")
-    scope = require_optional_string(request.scope, "scope")
-    include_all_scopes = require_optional_bool(request.include_all_scopes, "include_all_scopes")
     include_offline = require_optional_bool(request.include_offline, "include_offline")
 
     if app_id is not None:
         payload["appId"] = app_id
-    if scope is not None:
-        payload["scope"] = scope
-    if include_all_scopes:
-        payload["includeAllScopes"] = True
     if include_offline:
         payload["includeOffline"] = True
-    return payload or None
+    return payload
 
 
 def build_ws_authenticate_params(
@@ -200,7 +230,7 @@ def build_launch_params(request: LaunchRequest) -> dict[str, Any]:
         raise ValueError("request 不能为空。")
 
     app_id = require_app_id(request.app_id, "request.app_id")
-    scope = require_optional_string(request.scope, "request.scope")
+    scope = require_scoped_string(request.scope, "request.scope")
     dedupe_key = require_optional_string(request.dedupe_key, "request.dedupe_key")
     wait_for_register_ms = require_optional_int_at_least(
         request.wait_for_register_ms,
@@ -208,9 +238,10 @@ def build_launch_params(request: LaunchRequest) -> dict[str, Any]:
         "wait_for_register_ms 必须为大于等于 0 的整数。",
     )
 
-    payload: dict[str, Any] = {"appId": app_id}
-    if scope is not None:
-        payload["scope"] = scope
+    payload: dict[str, Any] = {
+        "appId": app_id,
+        "scope": scope,
+    }
     if dedupe_key is not None:
         payload["dedupeKey"] = dedupe_key
     if wait_for_register_ms is not None:
@@ -242,6 +273,10 @@ def build_poll_params(request: PollRequest) -> dict[str, Any]:
 
     return {
         "instanceId": instance_id,
+        "instanceSessionToken": require_non_empty_string(
+            request.instance_session_token,
+            "request.instance_session_token",
+        ),
         "maxCount": 10 if max_count is None else max_count,
         "waitMs": 25000 if wait_ms is None else wait_ms,
     }
@@ -263,6 +298,10 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
 
     payload: dict[str, Any] = {
         "instanceId": instance_id,
+        "instanceSessionToken": require_non_empty_string(
+            request.instance_session_token,
+            "request.instance_session_token",
+        ),
         "invocationId": invocation_id,
     }
     if has_error:
@@ -277,12 +316,14 @@ def _build_definition_payload(definition: AppDefinition) -> dict[str, Any]:
         raise ValueError("definition 不能为空。")
 
     app_id = require_app_id(definition.app_id, "definition.app_id")
+    scope = require_scoped_string(definition.scope, "definition.scope")
     display_name = require_optional_string(definition.display_name, "definition.display_name")
     if display_name is None:
         raise ValueError("definition.display_name 类型非法。")
 
     payload: dict[str, Any] = {
         "appId": app_id,
+        "scope": scope,
         "displayName": display_name,
     }
     description = require_optional_string(definition.description, "definition.description")
@@ -338,15 +379,14 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
 
     app_id = require_app_id(request.app_id, "request.app_id")
     method = require_non_empty_string(request.method, "request.method")
+    if request.target is None:
+        raise ValueError("request.target 不能为空。")
 
-    target_scope = None
-    target_instance_id = None
-    if request.target is not None:
-        target_scope = require_optional_string(getattr(request.target, "scope", _MISSING), "target.scope")
-        target_instance_id = require_optional_instance_id(
-            getattr(request.target, "instance_id", _MISSING),
-            "target.instance_id",
-        )
+    target_scope = require_scoped_string(getattr(request.target, "scope", _MISSING), "target.scope")
+    target_instance_id = require_optional_instance_id(
+        getattr(request.target, "instance_id", _MISSING),
+        "target.instance_id",
+    )
 
     options = request.options
     ttl_ms = require_optional_int_at_least(
@@ -399,11 +439,10 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
         payload["args"] = ensure_json_value(request.args, "args")
     if is_request:
         payload["options"]["waitTimeoutMs"] = wait_timeout_ms
-    if request.target is not None:
-        payload["target"] = {
-            "scope": target_scope,
-            "instanceId": target_instance_id,
-        }
+    payload["target"] = {
+        "scope": target_scope,
+        "instanceId": target_instance_id,
+    }
     return payload
 
 

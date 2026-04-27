@@ -53,7 +53,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=6401,
@@ -104,7 +104,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=6402,
@@ -148,7 +148,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
             list_response = client.call(
                 "hub.apps.listInstances",
-                {"appId": app_id, "includeAllScopes": True, "includeOffline": True},
+                {"appId": app_id, "scope": None, "includeOffline": True},
                 request_id="invoke-edge-002-list",
             )
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
@@ -197,7 +197,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=6403,
@@ -269,7 +269,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=6404,
@@ -289,7 +289,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
 
             list_response = client.call(
                 "hub.apps.listInstances",
-                {"appId": app_id, "includeAllScopes": True, "includeOffline": True},
+                {"appId": app_id, "scope": None, "includeOffline": True},
                 request_id="invoke-edge-004-list",
             )
             if not RpcAssertions.expect_success(result, list_response, ["instances"]):
@@ -336,7 +336,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             register_response = client.register_instance(
                 instance_id=instance_id,
                 app_id=app_id,
-                scope=None,
+                scope="",
                 poll=True,
                 respond=True,
                 pid=6406,

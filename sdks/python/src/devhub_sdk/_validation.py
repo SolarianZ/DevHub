@@ -6,8 +6,7 @@ from typing import Any
 from uuid import UUID
 
 
-_APP_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
-_INSTANCE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9._:-]+$")
+_CANONICAL_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$")
 _INVOCATION_ID_PATTERN = re.compile(r"^invk-[a-zA-Z0-9._:-]+$")
 _CANONICAL_UUID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-"
@@ -30,7 +29,7 @@ def require_app_id(value: Any, name: str) -> str:
     """要求值必须符合 Spec 定义的 appId 格式。"""
 
     normalized = require_non_empty_string(value, name)
-    if _APP_ID_PATTERN.fullmatch(normalized) is None:
+    if _CANONICAL_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
         raise ValueError(f"{name} 必须符合 appId 格式要求。")
     return normalized
 
@@ -47,7 +46,7 @@ def require_instance_id(value: Any, name: str) -> str:
     """要求值必须符合 Spec 定义的 instanceId 格式。"""
 
     normalized = require_non_empty_string(value, name)
-    if len(normalized) > 256 or _INSTANCE_ID_PATTERN.fullmatch(normalized) is None:
+    if _CANONICAL_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
         raise ValueError(f"{name} 必须符合 instanceId 格式要求。")
     return normalized
 
@@ -98,6 +97,24 @@ def require_optional_string(
     if not allow_empty and not value.strip():
         raise ValueError(error_message or f"{name} 不能为空。")
     return value
+
+
+def require_scoped_string(value: Any, name: str) -> str:
+    """要求值必须为显式字符串 scope。"""
+
+    if not isinstance(value, str):
+        raise ValueError(f"{name} 必须符合 scope 格式要求。")
+    if value and _CANONICAL_IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise ValueError(f"{name} 必须符合 scope 格式要求。")
+    return value
+
+
+def require_scope_filter(value: Any, name: str) -> str | None:
+    """要求值必须为列表查询中的 scope 过滤器。"""
+
+    if value is None:
+        return None
+    return require_scoped_string(value, name)
 
 
 def require_bool(value: Any, name: str) -> bool:

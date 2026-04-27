@@ -4,11 +4,13 @@ DevHub WebSocket 传输矩阵补充测试
 """
 
 import os
+import time
 import uuid
 import unittest
 
 
 from tests.blackbox.test_base import (
+    build_definition_identity_params,
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -103,6 +105,32 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
+    def test_ws_matrix_001a_get_version_should_work_after_auth(self):
+        """WS-MATRIX-001A: 鉴权后 hub.getVersion 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-001A 鉴权后 WS hub.getVersion")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-001a")
+                if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
+                    return result
+
+                response = self._ws_call(ws, "matrix-get-version-001a", "hub.getVersion", {})
+                if not RpcAssertions.expect_success(result, response, ["version"]):
+                    return result
+
+                version = response.get("result", {}).get("version")
+                if not isinstance(version, str) or not version.strip():
+                    result.mark_failure(f"❌ version 非法: {response}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_matrix_002_list_definitions_should_work_after_auth(self):
         """WS-MATRIX-002: 鉴权后 hub.apps.listDefinitions 可在 WS 调用。"""
         result = TestResult("WS-MATRIX-002 鉴权后 WS hub.apps.listDefinitions")
@@ -114,7 +142,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                response = self._ws_call(ws, "matrix-list-def-002", "hub.apps.listDefinitions", {})
+                response = self._ws_call(ws, "matrix-list-def-002", "hub.apps.listDefinitions", {"scope": None})
                 if not RpcAssertions.expect_success(result, response, ["definitions"]):
                     return result
 
@@ -144,7 +172,12 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                response = self._ws_call(ws, "matrix-get-def-003", "hub.apps.getDefinition", {"appId": app_id})
+                response = self._ws_call(
+                    ws,
+                    "matrix-get-def-003",
+                    "hub.apps.getDefinition",
+                    build_definition_identity_params(app_id),
+                )
                 if not RpcAssertions.expect_success(result, response, ["definition"]):
                     return result
 
@@ -195,7 +228,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                     "hub.apps.listInstances",
                     {
                         "appId": app_id,
-                        "includeAllScopes": True,
+                        "scope": None,
                         "includeOffline": True,
                     },
                 )
@@ -205,6 +238,74 @@ class TestWsTransportMatrix(unittest.TestCase):
                 instances = response.get("result", {}).get("instances", [])
                 if not any(item.get("instanceId") == instance_id for item in instances):
                     result.mark_failure(f"❌ WS listInstances 未返回目标实例: {instances}")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+
+        return result
+
+    def test_ws_matrix_004a_get_instance_should_work_after_auth(self):
+        """WS-MATRIX-004A: 鉴权后 hub.apps.getInstance 可在 WS 调用。"""
+        result = TestResult("WS-MATRIX-004A 鉴权后 WS hub.apps.getInstance")
+        instance_id = None
+
+        try:
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            http_client = RpcClient(http_base_url, token)
+
+            app_id = self._new_app_id("get-instance")
+            instance_id = self._new_instance_id("get-instance")
+
+            register_response = http_client.register_instance(
+                instance_id=instance_id,
+                app_id=app_id,
+                scope="workspace-ws-get",
+                poll=True,
+                respond=True,
+                pid=6302,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance"]):
+                return result
+
+            registered_last_seen = register_response.get("result", {}).get("instance", {}).get("lastSeenUtc")
+            time.sleep(1)
+
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-004a")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                response = self._ws_call(
+                    ws,
+                    "matrix-get-inst-004a",
+                    "hub.apps.getInstance",
+                    {
+                        "instanceId": instance_id,
+                    },
+                )
+                if not RpcAssertions.expect_success(result, response, ["instance"]):
+                    return result
+
+                response_result = response.get("result", {})
+                if "instanceSessionToken" in response_result:
+                    result.mark_failure(f"❌ WS getInstance 顶层结果不应泄漏 instanceSessionToken: {response_result}")
+                    return result
+
+                instance = response_result.get("instance", {})
+                if instance.get("instanceId") != instance_id:
+                    result.mark_failure(f"❌ WS getInstance 返回了错误实例: {instance}")
+                    return result
+
+                if instance.get("lastSeenUtc") != registered_last_seen:
+                    result.mark_failure("❌ WS getInstance 不应刷新 lastSeenUtc")
+                    return result
+
+                if "instanceSessionToken" in instance:
+                    result.mark_failure(f"❌ WS getInstance.instance 不应泄漏 instanceSessionToken: {instance}")
                     return result
 
             result.mark_success()
@@ -228,9 +329,11 @@ class TestWsTransportMatrix(unittest.TestCase):
 
                 cases = [
                     ("matrix-invalid-ping-array", "hub.ping"),
+                    ("matrix-invalid-get-version-array", "hub.getVersion"),
                     ("matrix-invalid-list-def-array", "hub.apps.listDefinitions"),
                     ("matrix-invalid-get-def-array", "hub.apps.getDefinition"),
                     ("matrix-invalid-list-instances-array", "hub.apps.listInstances"),
+                    ("matrix-invalid-get-instance-array", "hub.apps.getInstance"),
                     ("matrix-invalid-subscribe-array", "hub.events.subscribe"),
                     ("matrix-invalid-unsubscribe-array", "hub.events.unsubscribe"),
                 ]
@@ -271,7 +374,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                             "instance": {
                                 "instanceId": "matrix-ws-http-only-register-instance",
                                 "appId": "matrix-ws-http-only-register-app",
-                                "scope": None,
+                                "scope": "",
                                 "pid": 6311,
                                 "invoke": {"poll": True, "respond": True},
                             }
@@ -292,7 +395,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.apps.launch",
                         {
                             "appId": "matrix-ws-http-only-launch-app",
-                            "scope": None,
+                            "scope": "",
                             "waitForRegisterMs": 0,
                         },
                     ),
@@ -301,7 +404,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.invoke.notify",
                         {
                             "appId": "matrix-ws-http-only-notify-app",
-                            "target": {"scope": None, "instanceId": None},
+                            "target": {"scope": "", "instanceId": None},
                             "method": "test.ping",
                             "args": {"from": "ws"},
                             "options": {
@@ -316,7 +419,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.invoke.request",
                         {
                             "appId": "matrix-ws-http-only-request-app",
-                            "target": {"scope": None, "instanceId": None},
+                            "target": {"scope": "", "instanceId": None},
                             "method": "test.ping",
                             "args": {"from": "ws"},
                             "options": {
@@ -351,6 +454,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.validate",
+                                "scope": "",
                                 "displayName": "WS HTTP-only Validate",
                             }
                         },
@@ -361,6 +465,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         {
                             "definition": {
                                 "appId": "matrix.ws.http.only.upsert",
+                                "scope": "",
                                 "displayName": "WS HTTP-only Upsert",
                             }
                         },
@@ -370,6 +475,7 @@ class TestWsTransportMatrix(unittest.TestCase):
                         "hub.apps.deleteDefinition",
                         {
                             "appId": "matrix.ws.http.only.delete",
+                            "scope": "",
                         },
                     ),
                 ]
@@ -434,6 +540,7 @@ class TestWsTransportMatrix(unittest.TestCase):
             self.test_ws_matrix_002_list_definitions_should_work_after_auth(),
             self.test_ws_matrix_003_get_definition_should_work_after_auth(),
             self.test_ws_matrix_004_list_instances_should_work_after_auth(),
+            self.test_ws_matrix_004a_get_instance_should_work_after_auth(),
             self.test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
             self.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
             self.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),

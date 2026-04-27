@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.list.preloaded.app.json",
+        "fileName": "apps.list.preloaded.app--global.json",
         "definition": {
           "appId": "apps.list.preloaded.app",
+          "scope": "",
           "displayName": "Apps List Preloaded",
           "description": "用于 conformance AppDefinition 列表向量。",
           "capabilities": {
@@ -32,7 +33,9 @@
     "jsonrpc": "2.0",
     "id": "apps-definitions-list",
     "method": "hub.apps.listDefinitions",
-    "params": {}
+    "params": {
+      "scope": null
+    }
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
@@ -42,6 +45,7 @@
       "definitions": [
         {
           "appId": "apps.list.preloaded.app",
+          "scope": "",
           "displayName": "Apps List Preloaded",
           "description": "用于 conformance AppDefinition 列表向量。",
           "capabilities": {

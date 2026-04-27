@@ -1,5 +1,4 @@
 using DevHub.Core.Models.Rpc;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace DevHub.Core.Services.Rpc;
@@ -58,7 +57,7 @@ public class RpcRouter
     public async Task<JsonRpcResponse> RouteAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("尝试路由RPC请求: {Method}, RequestId: {RequestId}, 参数: {Params}",
-            request.Method, request.Id, JsonSerializer.Serialize(request.Params));
+            request.Method, request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
         if (_faultInjectionPolicy?.ShouldForceInternalError(request.Id) == true)
         {
@@ -79,7 +78,7 @@ public class RpcRouter
                 {
                     var response = await handler.HandleAsync(request, cancellationToken);
                     _logger.LogInformation("RPC请求处理成功: {Method}, RequestId: {RequestId}", request.Method, request.Id);
-                    _logger.LogDebug("RPC响应内容: {Response}", JsonSerializer.Serialize(response));
+                    _logger.LogDebug("RPC响应内容: {Response}", RpcLogJsonSerializer.Serialize(response));
                     return response;
                 }
                 catch (Exception ex)
@@ -87,7 +86,7 @@ public class RpcRouter
                     firstException ??= ex;
                     firstFailedMatch ??= $"exact:{handler.Method}";
                     _logger.LogError(ex, "处理RPC请求失败: {Method}, RequestId: {RequestId}, 参数: {Params}",
-                        request.Method, request.Id, JsonSerializer.Serialize(request.Params));
+                        request.Method, request.Id, RpcLogJsonSerializer.Serialize(request.Params));
                 }
             }
 
@@ -127,7 +126,7 @@ public class RpcRouter
                     prefixException ??= ex;
                     firstFailedPrefixMatch ??= $"{prefix}->{handler.Method}";
                     _logger.LogError(ex, "处理RPC请求失败: {Method}, RequestId: {RequestId}, 参数: {Params}",
-                        request.Method, request.Id, JsonSerializer.Serialize(request.Params));
+                        request.Method, request.Id, RpcLogJsonSerializer.Serialize(request.Params));
                 }
             }
         }
@@ -138,7 +137,7 @@ public class RpcRouter
         }
 
         _logger.LogWarning("未找到RPC方法: {Method}, RequestId: {RequestId}, 可用前缀: {AvailablePrefixes}, 参数: {Params}",
-            request.Method, request.Id, string.Join(", ", _handlers.Keys), JsonSerializer.Serialize(request.Params));
+            request.Method, request.Id, string.Join(", ", _handlers.Keys), RpcLogJsonSerializer.Serialize(request.Params));
         return RpcErrorFactory.Create(request.Id, -32601, "method_not_found");
     }
 

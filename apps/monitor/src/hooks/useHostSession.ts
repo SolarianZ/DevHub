@@ -6,7 +6,9 @@ import {
   DevHubClient,
   DevHubEventsClient,
   type AppDefinition,
+  type AppDefinitionIdentity,
   type AppInstance,
+  type VersionCompatibilityResult,
 } from "@devhub/sdk";
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import { createStaticRuntimeResolver, resumeDiscovery } from "../lib/monitor-api";
@@ -15,12 +17,15 @@ import {
   type HostSessionStatus,
   disposeSessionResources,
   getRuntimePort,
+  removeDefinition,
   shouldRecoverHostSession,
   sortDefinitions,
   sortInstances,
   toErrorMessage,
   upsertDefinition,
 } from "../lib/monitor-ui";
+import { checkVersionCompatibilityCompat, listAllDefinitions } from "../lib/sdk-compat";
+import { createProtectiveIncompatibleBootstrap } from "../lib/version-guidance";
 
 const HTTP_CLIENT_ID = "devhub-monitor-ui";
 const EVENTS_CLIENT_ID = "devhub-monitor-ui-events";
@@ -41,11 +46,13 @@ export function useHostSession(options: HostSessionOptions) {
   const [hostSessionStatus, setHostSessionStatus] = useState<HostSessionStatus>("idle");
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionResetVersion, setSessionResetVersion] = useState(0);
+  const [versionCompatibility, setVersionCompatibility] = useState<VersionCompatibilityResult | null>(null);
 
   const recoveryInFlightRef = useRef(false);
   const hostClientRef = useRef<DevHubClient | null>(null);
   const eventsClientRef = useRef<DevHubEventsClient | null>(null);
   const subscriptionIdRef = useRef<string | null>(null);
+  const sessionVersionRef = useRef(0);
 
   const disposeHostSession = useEffectEvent(async () => {
     const hostClient = hostClientRef.current;
@@ -83,6 +90,7 @@ export function useHostSession(options: HostSessionOptions) {
       setHostSessionStatus("recovering");
       setSessionError(null);
       setSessionResetVersion((current) => current + 1);
+      setVersionCompatibility(null);
     });
 
     await disposeHostSession();
@@ -123,31 +131,44 @@ export function useHostSession(options: HostSessionOptions) {
     });
   });
 
-  const removeDefinitionFromState = useEffectEvent((appId: string) => {
+  const removeDefinitionFromState = useEffectEvent((identity: AppDefinitionIdentity) => {
     startTransition(() => {
-      setDefinitions((current) => current.filter((definition) => definition.appId !== appId));
+      setDefinitions((current) => removeDefinition(current, identity));
     });
   });
 
   useEffect(() => {
     if (!bootstrap?.connection || bootstrap.phase !== "host_available") {
+      sessionVersionRef.current += 1;
       startTransition(() => {
+        setDefinitions([]);
+        setInstances([]);
         setHostSessionStatus((current) => (current === "recovering" ? current : "idle"));
+        setSessionError(null);
+        setVersionCompatibility(null);
       });
       void disposeHostSession();
       return;
     }
 
     let disposed = false;
+    const activeBootstrap = bootstrap;
+    const sessionVersion = sessionVersionRef.current + 1;
+    sessionVersionRef.current = sessionVersion;
     let localHostClient: DevHubClient | null = null;
     let localEventsClient: DevHubEventsClient | null = null;
     let localSubscriptionId: string | null = null;
-    const connection = bootstrap.connection;
+    const nextConnection = activeBootstrap.connection;
+    if (!nextConnection) {
+      void disposeHostSession();
+      return;
+    }
+    const connection = nextConnection;
     const runtimeResolver = createStaticRuntimeResolver(connection);
 
     async function refreshDefinitions(trigger: string, hostClient: DevHubClient): Promise<void> {
       try {
-        const refreshedDefinitions = await hostClient.listDefinitions();
+        const refreshedDefinitions = await listAllDefinitions(hostClient);
         if (disposed) {
           return;
         }
@@ -179,7 +200,7 @@ export function useHostSession(options: HostSessionOptions) {
     async function refreshInstances(trigger: string, hostClient: DevHubClient): Promise<void> {
       try {
         const refreshedInstances = await hostClient.listInstances({
-          includeAllScopes: true,
+          scope: null,
           includeOffline: true,
         });
         if (disposed) {
@@ -213,6 +234,7 @@ export function useHostSession(options: HostSessionOptions) {
     startTransition(() => {
       setHostSessionStatus("connecting");
       setSessionError(null);
+      setVersionCompatibility(null);
     });
 
     async function connectHostSession() {
@@ -252,16 +274,43 @@ export function useHostSession(options: HostSessionOptions) {
           ...INSTANCE_REFRESH_EVENT_TYPES,
         ]);
 
-        const [nextDefinitions, nextInstances] = await Promise.all([
-          hostClient.listDefinitions(),
+        const [nextDefinitions, nextInstances, nextVersionCompatibility] = await Promise.all([
+          listAllDefinitions(hostClient),
           hostClient.listInstances({
-            includeAllScopes: true,
+            scope: null,
             includeOffline: true,
           }),
+          checkVersionCompatibilityCompat(hostClient),
         ]);
 
-        if (disposed) {
+        if (disposed || sessionVersionRef.current !== sessionVersion) {
           await disposeSessionResources(hostClient, eventsClient, localSubscriptionId);
+          return;
+        }
+
+        recordFrontendLog({
+          level: nextVersionCompatibility.status === "compatible" ? "info" : "warn",
+          category: "frontend.version",
+          action: "check_compatibility",
+          result: nextVersionCompatibility.status,
+          context: {
+            sdkVersion: nextVersionCompatibility.sdkVersion,
+            hostVersion: nextVersionCompatibility.hostVersion,
+          },
+        });
+
+        if (nextVersionCompatibility.status === "incompatible") {
+          startTransition(() => {
+            setDefinitions([]);
+            setInstances([]);
+            setHostSessionStatus("idle");
+            setSessionError(null);
+            setSessionResetVersion((current) => current + 1);
+            setVersionCompatibility(null);
+          });
+
+          await disposeSessionResources(hostClient, eventsClient, localSubscriptionId);
+          onReplaceBootstrap(createProtectiveIncompatibleBootstrap(activeBootstrap, nextVersionCompatibility));
           return;
         }
 
@@ -274,6 +323,7 @@ export function useHostSession(options: HostSessionOptions) {
           setInstances(sortInstances(nextInstances));
           setHostSessionStatus("connected");
           setSessionError(null);
+          setVersionCompatibility(nextVersionCompatibility);
         });
 
         recordFrontendLog({
@@ -315,6 +365,9 @@ export function useHostSession(options: HostSessionOptions) {
 
     return () => {
       disposed = true;
+      if (sessionVersionRef.current === sessionVersion) {
+        sessionVersionRef.current += 1;
+      }
 
       if (hostClientRef.current === localHostClient) {
         hostClientRef.current = null;
@@ -345,5 +398,6 @@ export function useHostSession(options: HostSessionOptions) {
     runHostAction,
     sessionError,
     sessionResetVersion,
+    versionCompatibility,
   };
 }

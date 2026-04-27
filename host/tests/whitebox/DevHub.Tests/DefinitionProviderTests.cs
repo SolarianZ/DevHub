@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -33,7 +34,7 @@ public class DefinitionProviderTests : IDisposable
         WriteDefinition("provider.app");
 
         provider.Refresh();
-        var definition = provider.GetDefinition("provider.app");
+        var definition = provider.GetDefinition("provider.app", ScopeContract.Global);
         Assert.NotNull(definition);
         Assert.Equal("provider.app", definition!.AppId);
         Assert.Single(provider.GetAllDefinitions());
@@ -46,7 +47,7 @@ public class DefinitionProviderTests : IDisposable
         var provider = new DefinitionProvider(loader);
         provider.Refresh();
 
-        var missing = provider.GetDefinition("missing.app");
+        var missing = provider.GetDefinition("missing.app", ScopeContract.Global);
         Assert.Null(missing);
     }
 
@@ -59,6 +60,7 @@ public class DefinitionProviderTests : IDisposable
         var payload = """
         {
           "appId": "broken.launch.app",
+          "scope": "",
           "displayName": "broken.launch.app",
           "launch": {
             "argsTemplate": "--serve"
@@ -66,11 +68,13 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(Path.Combine(_tempDirectory, "broken.launch.app.json"), payload);
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", ScopeContract.Global).GetFileName()),
+            payload);
 
         provider.Refresh();
 
-        Assert.Null(provider.GetDefinition("broken.launch.app"));
+        Assert.Null(provider.GetDefinition("broken.launch.app", ScopeContract.Global));
         Assert.Empty(provider.GetAllDefinitions());
     }
 
@@ -89,7 +93,37 @@ public class DefinitionProviderTests : IDisposable
         provider.Refresh();
 
         Assert.Empty(provider.GetAllDefinitions());
-        Assert.Null(provider.GetDefinition("provider.app"));
+        Assert.Null(provider.GetDefinition("provider.app", ScopeContract.Global));
+    }
+
+    [Fact]
+    public void Impl_Refresh_WithMixedAppIdsAndScopes_ShouldExposeStableOrderedSnapshot()
+    {
+        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        WriteDefinition("provider.zeta", "workspace-z");
+        WriteDefinition("provider.alpha", "workspace-z");
+        WriteDefinition("provider.zeta");
+        WriteDefinition("provider.zeta", "workspace-a");
+        WriteDefinition("provider.alpha");
+
+        provider.Refresh();
+
+        var orderedDefinitions = provider.GetAllDefinitions()
+            .Select(definition => $"{definition.AppId}|{definition.Scope}")
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "provider.alpha|",
+                "provider.alpha|workspace-z",
+                "provider.zeta|",
+                "provider.zeta|workspace-a",
+                "provider.zeta|workspace-z"
+            },
+            orderedDefinitions);
     }
 
     /// <inheritdoc />
@@ -107,18 +141,21 @@ public class DefinitionProviderTests : IDisposable
         }
     }
 
-    private void WriteDefinition(string appId)
+    private void WriteDefinition(string appId, string scope = ScopeContract.Global)
     {
         var payload = $$"""
         {
           "appId": "{{appId}}",
-          "displayName": "{{appId}}",
+          "scope": "{{scope}}",
+          "displayName": "{{appId}} {{(scope.Length == 0 ? "global" : scope)}}",
           "entry": {
             "type": "stdio"
           }
         }
         """;
 
-        File.WriteAllText(Path.Combine(_tempDirectory, $"{appId}.json"), payload);
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
+            payload);
     }
 }

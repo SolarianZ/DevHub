@@ -56,6 +56,24 @@ internal static class RpcParamReader
     }
 
     /// <summary>
+    /// 尝试读取必填的 canonical `appId` 字段。
+    /// </summary>
+    public static bool TryGetRequiredAppId(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        return TryGetRequiredString(element, propertyName, out value) && ProtocolIdentifier.IsValidAppId(value);
+    }
+
+    /// <summary>
+    /// 尝试读取必填的 canonical `instanceId` 字段。
+    /// </summary>
+    public static bool TryGetRequiredInstanceId(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        return TryGetRequiredString(element, propertyName, out value) && ProtocolIdentifier.IsValidInstanceId(value);
+    }
+
+    /// <summary>
     /// 尝试读取可选字符串字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
@@ -86,15 +104,56 @@ internal static class RpcParamReader
     }
 
     /// <summary>
-    /// 尝试读取可选的 scope 字段。
+    /// 尝试读取必填的显式字符串 scope 字段。
     /// </summary>
     /// <param name="element">参数对象。</param>
     /// <param name="propertyName">字段名。</param>
     /// <param name="invalidReason">非法时使用的 reason。</param>
-    /// <param name="scope">解析成功时的 scope 值（null 表示 Global）。空字符串会被归一化为 null。</param>
+    /// <param name="scope">解析成功时返回的 scope 值。</param>
     /// <param name="errorData">解析失败时的错误附加数据。</param>
     /// <returns>解析成功返回 true，否则返回 false。</returns>
-    public static bool TryGetOptionalScope(
+    public static bool TryGetRequiredScope(
+        JsonElement element,
+        string propertyName,
+        string invalidReason,
+        out string scope,
+        out object? errorData)
+    {
+        scope = string.Empty;
+        errorData = null;
+
+        if (!element.TryGetProperty(propertyName, out var scopeElement))
+        {
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
+        }
+
+        if (scopeElement.ValueKind != JsonValueKind.String)
+        {
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
+        }
+
+        scope = scopeElement.GetString() ?? string.Empty;
+        if (!ScopeContract.IsValidScopedString(scope))
+        {
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 尝试读取仅用于列表过滤的 scope 字段。
+    /// </summary>
+    /// <param name="element">参数对象。</param>
+    /// <param name="propertyName">字段名。</param>
+    /// <param name="invalidReason">非法时使用的 reason。</param>
+    /// <param name="scope">解析成功时的 scope 过滤值；<see langword="null"/> 表示不按 scope 过滤。</param>
+    /// <param name="errorData">解析失败时的错误附加数据。</param>
+    /// <returns>解析成功返回 true，否则返回 false。</returns>
+    public static bool TryGetRequiredListScope(
         JsonElement element,
         string propertyName,
         string invalidReason,
@@ -106,7 +165,8 @@ internal static class RpcParamReader
 
         if (!element.TryGetProperty(propertyName, out var scopeElement))
         {
-            return true;
+            errorData = BuildInvalidScopeErrorData(invalidReason);
+            return false;
         }
 
         if (scopeElement.ValueKind == JsonValueKind.Null)
@@ -121,15 +181,10 @@ internal static class RpcParamReader
         }
 
         scope = scopeElement.GetString();
-        if (scope is null)
+        if (!ScopeContract.IsValidScopedString(scope))
         {
             errorData = BuildInvalidScopeErrorData(invalidReason);
             return false;
-        }
-
-        if (scope == string.Empty)
-        {
-            scope = null;
         }
 
         return true;
@@ -154,21 +209,16 @@ internal static class RpcParamReader
     /// <returns>解析成功返回 true，否则返回 false。</returns>
     public static bool TryParseInvocationTarget(JsonElement paramsElement, out InvocationTarget target, out object? errorData)
     {
-        target = new InvocationTarget { Scope = null, InstanceId = null };
+        target = null!;
         errorData = null;
 
-        if (!paramsElement.TryGetProperty("target", out var targetElement))
-        {
-            return true;
-        }
-
-        if (targetElement.ValueKind != JsonValueKind.Object)
+        if (!paramsElement.TryGetProperty("target", out var targetElement) || targetElement.ValueKind != JsonValueKind.Object)
         {
             errorData = new { reason = "invalid_target" };
             return false;
         }
 
-        if (!TryGetOptionalScope(targetElement, "scope", "invalid_target_scope", out var scope, out errorData))
+        if (!TryGetRequiredScope(targetElement, "scope", "invalid_target_scope", out var scope, out errorData))
         {
             return false;
         }
@@ -183,7 +233,7 @@ internal static class RpcParamReader
             else if (instanceIdElement.ValueKind == JsonValueKind.String)
             {
                 instanceId = instanceIdElement.GetString();
-                if (string.IsNullOrWhiteSpace(instanceId))
+                if (!ProtocolIdentifier.IsValidInstanceId(instanceId))
                 {
                     errorData = new { reason = "invalid_target_instance" };
                     return false;

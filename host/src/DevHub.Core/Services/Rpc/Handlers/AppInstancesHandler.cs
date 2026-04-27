@@ -3,10 +3,11 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Events;
+using DevHub.Core.Services.Invocation;
 using DevHub.Core.Services.Rpc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace DevHub.Core.Services.Rpc.Handlers;
 
@@ -15,9 +16,9 @@ namespace DevHub.Core.Services.Rpc.Handlers;
 /// </summary>
 public class AppInstancesHandler : IRpcHandler
 {
-    private static readonly Regex InstanceIdPattern = new("^[a-zA-Z0-9._:-]+$", RegexOptions.Compiled);
-
     private readonly AppRegistry _appRegistry;
+    private readonly IDefinitionProvider _definitionProvider;
+    private readonly ILaunchRegistrationTracker _launchRegistrationTracker;
     private readonly IHubEventPublisher? _eventPublisher;
     private readonly IClock _clock;
     private readonly ILogger<AppInstancesHandler> _logger;
@@ -26,14 +27,38 @@ public class AppInstancesHandler : IRpcHandler
     /// 初始化应用实例 RPC 处理器。
     /// </summary>
     /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="definitionProvider">Definition 快照提供器。</param>
+    /// <param name="launchRegistrationTracker">启动绑定跟踪器。</param>
+    /// <param name="clock">系统时钟。</param>
     /// <param name="logger">日志记录器。</param>
     /// <param name="eventPublisher">Hub 事件发布器。</param>
-    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, IHubEventPublisher? eventPublisher = null)
+    [ActivatorUtilitiesConstructor]
+    public AppInstancesHandler(
+        AppRegistry appRegistry,
+        IDefinitionProvider definitionProvider,
+        ILaunchRegistrationTracker launchRegistrationTracker,
+        IClock clock,
+        ILogger<AppInstancesHandler> logger,
+        IHubEventPublisher? eventPublisher = null)
     {
         _appRegistry = appRegistry;
+        _definitionProvider = definitionProvider;
+        _launchRegistrationTracker = launchRegistrationTracker;
         _clock = clock;
         _eventPublisher = eventPublisher;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 初始化应用实例 RPC 处理器。
+    /// </summary>
+    /// <param name="appRegistry">应用实例注册表。</param>
+    /// <param name="clock">系统时钟。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="eventPublisher">Hub 事件发布器。</param>
+    public AppInstancesHandler(AppRegistry appRegistry, IClock clock, ILogger<AppInstancesHandler> logger, IHubEventPublisher? eventPublisher = null)
+        : this(appRegistry, EmptyDefinitionProvider.Instance, NullLaunchRegistrationTracker.Instance, clock, logger, eventPublisher)
+    {
     }
 
     /// <inheritdoc />
@@ -50,6 +75,7 @@ public class AppInstancesHandler : IRpcHandler
             HubRpcMethods.HubAppsHeartbeat => await HeartbeatAsync(request, cancellationToken),
             HubRpcMethods.HubAppsUnregisterInstance => await UnregisterInstanceAsync(request, cancellationToken),
             HubRpcMethods.HubAppsListInstances => await ListInstancesAsync(request, cancellationToken),
+            HubRpcMethods.HubAppsGetInstance => await GetInstanceAsync(request, cancellationToken),
             _ => RpcErrorFactory.MethodNotFound(request.Id)
         };
     }
@@ -61,7 +87,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.registerInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.registerInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -89,7 +115,26 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
-            if (!_appRegistry.TryRegisterInstance(instance, password, out var registeredInstance, out var passwordMismatch))
+            var launchId = TryGetLaunchId(instance.Meta);
+            var launchBindingValidation = _launchRegistrationTracker.ValidateRegistration(launchId, instance.AppId, instance.Scope);
+            if (launchBindingValidation.Status == LaunchRegistrationValidationStatus.Mismatched)
+            {
+                _logger.LogWarning(
+                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, LaunchId: {LaunchId}, RequestId: {RequestId}",
+                    instance.InstanceId,
+                    instance.AppId,
+                    instance.Scope,
+                    launchId,
+                    request.Id);
+                return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, launchBindingValidation.ErrorData));
+            }
+
+            if (!_appRegistry.TryRegisterInstance(
+                    instance,
+                    password,
+                    out var registeredInstance,
+                    out var instanceSessionToken,
+                    out var passwordMismatch))
             {
                 if (passwordMismatch)
                 {
@@ -104,6 +149,7 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
             }
 
+            _launchRegistrationTracker.RecordSuccessfulRegistration(launchId, registeredInstance);
             PublishInstanceEvent(HubEventTypes.AppInstanceRegistered, registeredInstance.AppId, registeredInstance.InstanceId, registeredInstance.Scope);
 
             _logger.LogInformation("成功注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
@@ -115,16 +161,17 @@ public class AppInstancesHandler : IRpcHandler
                 Result = new
                 {
                     ok = true,
-                    instance = registeredInstance
+                    instance = registeredInstance,
+                    instanceSessionToken
                 }
             };
 
-            _logger.LogDebug("hub.apps.registerInstance方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.registerInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.registerInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.registerInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -136,7 +183,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.heartbeat方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.heartbeat方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -144,22 +191,31 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!paramsElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
             {
-                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceId、类型错误或格式非法, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            var instanceId = instanceIdProperty.GetString();
-            if (string.IsNullOrWhiteSpace(instanceId))
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
             {
-                _logger.LogWarning("hub.apps.heartbeat参数无效: instanceId 为空, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.heartbeat参数无效: 缺少 instanceSessionToken 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             _logger.LogDebug("尝试更新实例心跳，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            if (!_appRegistry.Heartbeat(instanceId, out var lastSeenUtc))
+            if (!_appRegistry.TryHeartbeat(instanceId, instanceSessionToken, out var lastSeenUtc, out var validationStatus))
             {
+                if (validationStatus == InstanceSessionValidationStatus.TokenMismatch)
+                {
+                    _logger.LogWarning("实例心跳更新失败: 实例会话凭据不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_session_token_mismatch",
+                        instanceId
+                    }));
+                }
+
                 _logger.LogWarning("实例心跳更新失败: 未找到实例 {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
                 return Task.FromResult(new JsonRpcResponse
                 {
@@ -188,12 +244,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.heartbeat方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.heartbeat方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.heartbeat方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.heartbeat方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -205,7 +261,7 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.unregisterInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.unregisterInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             if (request.Params is not JsonElement paramsElement || paramsElement.ValueKind != JsonValueKind.Object)
             {
@@ -213,32 +269,27 @@ public class AppInstancesHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceId", out var instanceId))
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
             {
                 _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
-            if (!RpcParamReader.TryGetRequiredString(paramsElement, "password", out var password))
+            if (!RpcParamReader.TryGetRequiredString(paramsElement, "instanceSessionToken", out var instanceSessionToken))
             {
-                _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 password 或非字符串, RequestId: {RequestId}", request.Id);
+                _logger.LogWarning("hub.apps.unregisterInstance参数无效: 缺少 instanceSessionToken 或非字符串, RequestId: {RequestId}", request.Id);
                 return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
             }
 
             _logger.LogDebug("尝试注销应用程序实例，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-            if (!_appRegistry.TryUnregisterInstance(instanceId, password, out var removedInstance, out var passwordMismatch))
+            if (!_appRegistry.TryUnregisterInstance(instanceId, instanceSessionToken, out var removedInstance, out var validationStatus))
             {
-                if (passwordMismatch)
+                _logger.LogWarning("注销应用程序实例失败: 实例会话凭据不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
                 {
-                    _logger.LogWarning("注销应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
-                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
-                    {
-                        reason = "instance_password_mismatch",
-                        instanceId
-                    }));
-                }
-
-                return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
+                    reason = "instance_session_token_mismatch",
+                    instanceId
+                }));
             }
 
             if (removedInstance is not null)
@@ -257,12 +308,12 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.unregisterInstance方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.unregisterInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.unregisterInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.unregisterInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -274,82 +325,60 @@ public class AppInstancesHandler : IRpcHandler
     {
         try
         {
-            _logger.LogDebug("处理hub.apps.listInstances方法，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogDebug("处理hub.apps.listInstances方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
             string? appId = null;
             string? scope = null;
-            var includeAllScopes = false;
             var includeOffline = false;
 
-            if (request.Params is JsonElement paramsElement)
+            if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {
-                if (paramsElement.ValueKind != JsonValueKind.Object)
+                _logger.LogWarning("hub.apps.listInstances参数无效: params 不是对象, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(invalidParams);
+            }
+
+            if (paramsElement.TryGetProperty("appId", out var appIdProperty))
+            {
+                if (appIdProperty.ValueKind != JsonValueKind.String)
                 {
-                    _logger.LogWarning("hub.apps.listInstances参数无效: params 不是对象, RequestId: {RequestId}", request.Id);
+                    _logger.LogWarning("hub.apps.listInstances参数无效: appId 不是字符串, RequestId: {RequestId}", request.Id);
                     return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
                 }
 
-                if (paramsElement.TryGetProperty("appId", out var appIdProperty))
+                appId = appIdProperty.GetString();
+                if (!ProtocolIdentifier.IsValidAppId(appId))
                 {
-                    if (appIdProperty.ValueKind != JsonValueKind.String)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: appId 不是字符串, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    appId = appIdProperty.GetString();
-                }
-
-                if (paramsElement.TryGetProperty("includeAllScopes", out var includeAllScopesProperty))
-                {
-                    if (includeAllScopesProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: includeAllScopes 必须为布尔值, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    includeAllScopes = includeAllScopesProperty.GetBoolean();
-                }
-
-                if (!RpcParamReader.TryGetOptionalScope(
-                        paramsElement,
-                        "scope",
-                        "invalid_scope",
-                        out scope,
-                        out var scopeErrorData))
-                {
-                    if (includeAllScopes)
-                    {
-                        scope = null;
-                    }
-                    else
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
-                    }
-                }
-
-                if (includeAllScopes)
-                {
-                    scope = null;
-                }
-
-                if (paramsElement.TryGetProperty("includeOffline", out var includeOfflineProperty))
-                {
-                    if (includeOfflineProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-                    {
-                        _logger.LogWarning("hub.apps.listInstances参数无效: includeOffline 必须为布尔值, RequestId: {RequestId}", request.Id);
-                        return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
-                    }
-
-                    includeOffline = includeOfflineProperty.GetBoolean();
+                    _logger.LogWarning("hub.apps.listInstances参数无效: appId 不符合格式要求, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
                 }
             }
 
-            _logger.LogDebug("尝试获取应用程序实例列表，AppId: {AppId}, Scope: {Scope}, IncludeAllScopes: {IncludeAllScopes}, IncludeOffline: {IncludeOffline}, RequestId: {RequestId}",
-                appId, scope, includeAllScopes, includeOffline, request.Id);
+            if (!RpcParamReader.TryGetRequiredListScope(
+                    paramsElement,
+                    "scope",
+                    "invalid_scope",
+                    out scope,
+                    out var scopeErrorData))
+            {
+                _logger.LogWarning("hub.apps.listInstances参数无效: scope 非法, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
+            }
 
-            var instances = _appRegistry.ListInstances(appId, scope, includeAllScopes, includeOffline);
+            if (paramsElement.TryGetProperty("includeOffline", out var includeOfflineProperty))
+            {
+                if (includeOfflineProperty.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                {
+                    _logger.LogWarning("hub.apps.listInstances参数无效: includeOffline 必须为布尔值, RequestId: {RequestId}", request.Id);
+                    return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+                }
+
+                includeOffline = includeOfflineProperty.GetBoolean();
+            }
+
+            _logger.LogDebug("尝试获取应用程序实例列表，AppId: {AppId}, Scope: {Scope}, IncludeOffline: {IncludeOffline}, RequestId: {RequestId}",
+                appId, scope, includeOffline, request.Id);
+
+            var instances = _appRegistry.ListInstances(appId, scope, includeOffline);
             var instancesList = instances.ToList();
 
             _logger.LogInformation("成功获取应用程序实例列表，数量: {Count}, RequestId: {RequestId}", instancesList.Count, request.Id);
@@ -364,12 +393,62 @@ public class AppInstancesHandler : IRpcHandler
                 }
             };
 
-            _logger.LogDebug("hub.apps.listInstances方法响应: {Response}, RequestId: {RequestId}", JsonSerializer.Serialize(response), request.Id);
+            _logger.LogDebug("hub.apps.listInstances方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
             return Task.FromResult(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "处理hub.apps.listInstances方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, JsonSerializer.Serialize(request.Params));
+            _logger.LogError(ex, "处理hub.apps.listInstances方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
+            return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
+        }
+    }
+
+    /// <summary>
+    /// 处理hub.apps.getInstance方法
+    /// </summary>
+    private Task<JsonRpcResponse> GetInstanceAsync(JsonRpcRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogDebug("处理hub.apps.getInstance方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
+
+            if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
+            {
+                _logger.LogWarning("hub.apps.getInstance参数无效: params 不是对象, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(invalidParams);
+            }
+
+            if (!RpcParamReader.TryGetRequiredInstanceId(paramsElement, "instanceId", out var instanceId))
+            {
+                _logger.LogWarning("hub.apps.getInstance参数无效: 缺少 instanceId 或非字符串, RequestId: {RequestId}", request.Id);
+                return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+            }
+
+            _logger.LogDebug("尝试获取应用程序实例快照，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+            var instance = _appRegistry.GetInstance(instanceId);
+            if (instance is null)
+            {
+                _logger.LogWarning("未找到应用程序实例快照，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+                return Task.FromResult(InstanceNotFound(request.Id, instanceId));
+            }
+
+            _logger.LogInformation("成功获取应用程序实例快照，InstanceId: {InstanceId}, RequestId: {RequestId}", instanceId, request.Id);
+            var response = new JsonRpcResponse
+            {
+                Id = request.Id,
+                Result = new
+                {
+                    ok = true,
+                    instance
+                }
+            };
+
+            _logger.LogDebug("hub.apps.getInstance方法响应: {Response}, RequestId: {RequestId}", RpcLogJsonSerializer.Serialize(response), request.Id);
+            return Task.FromResult(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "处理hub.apps.getInstance方法失败，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
             return Task.FromResult(RpcErrorFactory.InternalError(request.Id));
         }
     }
@@ -393,7 +472,7 @@ public class AppInstancesHandler : IRpcHandler
         }
 
         var instanceId = instanceIdProperty.GetString();
-        if (string.IsNullOrWhiteSpace(instanceId) || instanceId.Length > 256 || !InstanceIdPattern.IsMatch(instanceId))
+        if (!ProtocolIdentifier.IsValidInstanceId(instanceId))
         {
             _logger.LogWarning("hub.apps.registerInstance参数无效: instanceId 不合法, RequestId: {RequestId}", requestId);
             return false;
@@ -406,9 +485,9 @@ public class AppInstancesHandler : IRpcHandler
         }
 
         var appId = appIdProperty.GetString();
-        if (string.IsNullOrWhiteSpace(appId))
+        if (!ProtocolIdentifier.IsValidAppId(appId))
         {
-            _logger.LogWarning("hub.apps.registerInstance参数无效: appId 为空, RequestId: {RequestId}", requestId);
+            _logger.LogWarning("hub.apps.registerInstance参数无效: appId 不符合格式要求, RequestId: {RequestId}", requestId);
             return false;
         }
 
@@ -418,7 +497,7 @@ public class AppInstancesHandler : IRpcHandler
             return false;
         }
 
-        if (!RpcParamReader.TryGetOptionalScope(
+        if (!RpcParamReader.TryGetRequiredScope(
                 instanceElement,
                 "scope",
                 "invalid_scope",
@@ -458,9 +537,9 @@ public class AppInstancesHandler : IRpcHandler
 
         instance = new AppInstance
         {
-            InstanceId = instanceId,
-            AppId = appId,
-            Scope = scope,
+            InstanceId = instanceId!,
+            AppId = appId!,
+            Scope = scope!,
             Pid = pid,
             Invoke = new InvokeCapability
             {
@@ -473,7 +552,7 @@ public class AppInstancesHandler : IRpcHandler
         return true;
     }
 
-    private void PublishInstanceEvent(string eventType, string appId, string instanceId, string? scope)
+    private void PublishInstanceEvent(string eventType, string appId, string instanceId, string scope)
     {
         if (_eventPublisher is null)
         {
@@ -491,6 +570,54 @@ public class AppInstancesHandler : IRpcHandler
                 scope
             }
         });
+    }
+
+    private static string? TryGetLaunchId(Dictionary<string, object?>? meta)
+    {
+        if (meta is null || !meta.TryGetValue(LaunchCoordinator.LaunchIdMetaKey, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            string launchId when !string.IsNullOrWhiteSpace(launchId) => launchId,
+            JsonElement { ValueKind: JsonValueKind.String } element when !string.IsNullOrWhiteSpace(element.GetString()) => element.GetString(),
+            _ => null
+        };
+    }
+
+    private static JsonRpcResponse InstanceNotFound(object? id, string instanceId)
+    {
+        return RpcErrorFactory.Create(id, -32010, "instance_not_found", new
+        {
+            reason = "unknown_instance",
+            instanceId
+        });
+    }
+
+    private sealed class EmptyDefinitionProvider : IDefinitionProvider
+    {
+        public static EmptyDefinitionProvider Instance { get; } = new();
+
+        public void Refresh()
+        {
+        }
+
+        public IReadOnlyList<AppDefinition> GetAllDefinitions()
+        {
+            return Array.Empty<AppDefinition>();
+        }
+
+        public AppDefinition? GetDefinition(string appId, string scope)
+        {
+            return null;
+        }
+
+        public bool HasDefinitions(string appId)
+        {
+            return false;
+        }
     }
 
 }

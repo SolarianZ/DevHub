@@ -34,12 +34,12 @@ public class LaunchHandler : IRpcHandler
             return invalidParams;
         }
 
-        if (!RpcParamReader.TryGetRequiredString(paramsElement, "appId", out var appId))
+        if (!RpcParamReader.TryGetRequiredAppId(paramsElement, "appId", out var appId))
         {
             return RpcErrorFactory.InvalidParams(request.Id);
         }
 
-        if (!RpcParamReader.TryGetOptionalScope(
+        if (!RpcParamReader.TryGetRequiredScope(
                 paramsElement,
                 "scope",
                 "invalid_scope",

@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DevHub.Sdk.ConformanceAdapter/DevHub.Sdk.ConformanceAdapter.csproj" />
+    <Project Path="tests/DevHub.Sdk.DependencyInjection.UnitTests/DevHub.Sdk.DependencyInjection.UnitTests.csproj" />
     <Project Path="tests/DevHub.Sdk.IntegrationTests/DevHub.Sdk.IntegrationTests.csproj" />
     <Project Path="tests/DevHub.Sdk.UnitTests/DevHub.Sdk.UnitTests.csproj" />
   </Folder>

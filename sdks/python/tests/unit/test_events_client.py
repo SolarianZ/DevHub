@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import FrozenInstanceError, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -11,6 +11,7 @@ import pytest
 import websockets
 
 from devhub_sdk import (
+    AbandonedRequestFilter,
     DevHubClientOptions,
     DevHubEventsClient,
     DevHubEventsClientDependencies,
@@ -18,6 +19,7 @@ from devhub_sdk import (
     HubRuntime,
     HubRuntimeTuning,
     INVOCATION_COMPLETED,
+    ListDefinitionsRequest,
     ListInstancesRequest,
     RuntimeConnectionInfo,
 )
@@ -43,6 +45,10 @@ class FakeWsSession:
     events: list[dict[str, Any]]
     requests: list[dict[str, Any]] = field(default_factory=list)
     disconnect_reasons: list[str] = field(default_factory=list)
+    abandoned_request_count_result: int = 0
+    clear_abandoned_requests_result: int = 0
+    abandoned_request_count_filters: list[AbandonedRequestFilter | None] = field(default_factory=list)
+    clear_abandoned_request_filters: list[AbandonedRequestFilter | None] = field(default_factory=list)
     closed: bool = False
 
     async def send_request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
@@ -61,6 +67,14 @@ class FakeWsSession:
 
     async def close(self) -> None:
         self.closed = True
+
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self.abandoned_request_count_filters.append(filter)
+        return self.abandoned_request_count_result
+
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        self.clear_abandoned_request_filters.append(filter)
+        return self.clear_abandoned_requests_result
 
 
 @dataclass(slots=True)
@@ -138,15 +152,33 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
         responses={
             "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
             "hub.ping": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z", "echo": {"value": 1}},
-            "hub.apps.listDefinitions": {"ok": True, "definitions": [{"appId": "ws.app", "displayName": "WS App"}]},
-            "hub.apps.getDefinition": {"ok": True, "definition": {"appId": "ws.app", "displayName": "WS App"}},
+            "hub.apps.listDefinitions": {
+                "ok": True,
+                "definitions": [{"appId": "ws.app", "scope": "", "displayName": "WS App"}],
+            },
+            "hub.apps.getDefinition": {
+                "ok": True,
+                "definition": {"appId": "ws.app", "scope": "", "displayName": "WS App"},
+            },
+            "hub.apps.getInstance": {
+                "ok": True,
+                "instance": {
+                    "instanceId": "inst-1",
+                    "appId": "ws.app",
+                    "scope": "",
+                    "pid": 12345,
+                    "registeredAtUtc": "2026-03-09T00:00:00Z",
+                    "lastSeenUtc": "2026-03-09T00:00:01Z",
+                    "invoke": {"poll": True, "respond": True},
+                },
+            },
             "hub.apps.listInstances": {
                 "ok": True,
                 "instances": [
                     {
                         "instanceId": "inst-1",
                         "appId": "ws.app",
-                        "scope": None,
+                        "scope": "",
                         "pid": 12345,
                         "registeredAtUtc": "2026-03-09T00:00:00Z",
                         "lastSeenUtc": "2026-03-09T00:00:01Z",
@@ -169,23 +201,65 @@ async def test_events_client_with_injected_session_should_support_ws_readable_me
     try:
         await client.authenticate()
         ping = await client.ping({"value": 1})
-        definitions = await client.list_definitions()
-        definition = await client.get_definition("ws.app")
-        instances = await client.list_instances()
+        definitions = await client.list_definitions(ListDefinitionsRequest(scope=None))
+        definition = await client.get_definition("ws.app", "")
+        instance = await client.get_instance("inst-1")
+        instances = await client.list_instances(ListInstancesRequest(scope=None))
     finally:
         await client.close()
 
     assert ping.ok is True
     assert definitions[0].app_id == "ws.app"
+    assert definitions[0].scope == ""
     assert definition.app_id == "ws.app"
+    assert definition.scope == ""
+    assert instance.instance_id == "inst-1"
+    assert instance.instance_session_token is None
     assert instances[0].instance_id == "inst-1"
+    assert instances[0].scope == ""
     assert [request["method"] for request in session.requests] == [
         "hub.ws.authenticate",
         "hub.ping",
         "hub.apps.listDefinitions",
         "hub.apps.getDefinition",
+        "hub.apps.getInstance",
         "hub.apps.listInstances",
     ]
+    assert session.requests[2]["params"] == {"scope": None}
+    assert session.requests[3]["params"] == {"appId": "ws.app", "scope": ""}
+    assert session.requests[4]["params"] == {"instanceId": "inst-1"}
+    assert session.requests[5]["params"] == {"scope": None}
+
+
+@pytest.mark.asyncio
+async def test_events_client_should_delegate_local_abandoned_request_maintenance_to_session() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={},
+        events=[],
+        abandoned_request_count_result=3,
+        clear_abandoned_requests_result=2,
+    )
+    session_factory = FakeWsSessionFactory(session)
+    request_filter = AbandonedRequestFilter(older_than_seconds=5, app_id="ws.app", method="hub.apps.getDefinition")
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        assert client.get_abandoned_request_count(request_filter) == 3
+        assert client.clear_abandoned_requests(request_filter) == 2
+    finally:
+        await client.close()
+
+    assert session.requests == []
+    assert session.abandoned_request_count_filters == [request_filter]
+    assert session.clear_abandoned_request_filters == [request_filter]
 
 
 @pytest.mark.asyncio
@@ -210,7 +284,36 @@ async def test_events_client_get_definition_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.get_definition("Test.App")
+            await client.get_definition(".Test.App", "")
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
+
+
+@pytest.mark.asyncio
+async def test_events_client_get_instance_should_reuse_shared_payload_builder_validation() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+        },
+        events=[],
+    )
+    session_factory = FakeWsSessionFactory(session)
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(ValueError, match="instance_id"):
+            await client.get_instance("inst-1.")
     finally:
         await client.close()
 
@@ -239,11 +342,98 @@ async def test_events_client_list_instances_should_reuse_shared_payload_builder_
     try:
         await client.authenticate()
         with pytest.raises(ValueError, match="appId 格式要求"):
-            await client.list_instances(ListInstancesRequest(app_id="Test.App"))
+            await client.list_instances(ListInstancesRequest(scope=None, app_id="Test.App-"))
     finally:
         await client.close()
 
     assert [request["method"] for request in session.requests] == ["hub.ws.authenticate"]
+
+
+@pytest.mark.asyncio
+async def test_events_client_get_instance_should_propagate_remote_instance_not_found() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.apps.getInstance": DevHubRpcException(
+                code=-32010,
+                message="instance_not_found",
+                data={"reason": "unknown_instance", "instanceId": "missing-inst"},
+                request_id="ws-get-instance-fake",
+            ),
+        },
+        events=[],
+    )
+    session_factory = FakeWsSessionFactory(session)
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(DevHubRpcException) as exc_info:
+            await client.get_instance("missing-inst")
+    finally:
+        await client.close()
+
+    assert exc_info.value.code == -32010
+    assert exc_info.value.message == "instance_not_found"
+    assert exc_info.value.reason == "unknown_instance"
+    assert exc_info.value.try_get_data_string("instanceId") == "missing-inst"
+    assert [request["method"] for request in session.requests] == [
+        "hub.ws.authenticate",
+        "hub.apps.getInstance",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_events_client_get_instance_when_result_contains_sensitive_fields_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(
+        responses={
+            "hub.ws.authenticate": {"ok": True, "protocolVersion": 1},
+            "hub.apps.getInstance": {
+                "ok": True,
+                "password": "secret-1",
+                "instance": {
+                    "instanceId": "inst-1",
+                    "appId": "ws.app",
+                    "scope": "",
+                    "pid": 12345,
+                    "registeredAtUtc": "2026-03-09T00:00:00Z",
+                    "lastSeenUtc": "2026-03-09T00:00:01Z",
+                    "invoke": {"poll": True, "respond": True},
+                },
+            },
+        },
+        events=[],
+    )
+    session_factory = FakeWsSessionFactory(session)
+
+    client = await DevHubEventsClient.from_runtime(
+        DevHubClientOptions(client_id="ws-client"),
+        DevHubEventsClientDependencies(
+            runtime_resolver=resolver,
+            session_factory=session_factory,
+        ),
+    )
+    try:
+        await client.authenticate()
+        with pytest.raises(RuntimeError, match="password"):
+            await client.get_instance("inst-1")
+    finally:
+        await client.close()
+
+    assert [request["method"] for request in session.requests] == [
+        "hub.ws.authenticate",
+        "hub.apps.getInstance",
+    ]
 
 
 @pytest.mark.asyncio
@@ -386,6 +576,42 @@ async def test_events_client_authenticate_subscribe_and_read_event(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_events_client_runtime_view_should_be_immutable_and_keep_original_endpoint(tmp_path: Path) -> None:
+    authenticate_calls = 0
+
+    async def handler(websocket) -> None:
+        nonlocal authenticate_calls
+        raw = await websocket.recv()
+        message = json.loads(raw)
+        authenticate_calls += 1
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {"ok": True, "protocolVersion": 1},
+                }
+            )
+        )
+        await websocket.wait_closed()
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        data_dir = _write_data_directory(tmp_path, port)
+
+        client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
+        try:
+            with pytest.raises(FrozenInstanceError):
+                client.runtime.ws_url = "ws://127.0.0.1:1/ws"  # type: ignore[misc]
+
+            await client.authenticate()
+        finally:
+            await client.close()
+
+    assert authenticate_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_events_client_when_unknown_notification_received_should_fail_stream(tmp_path: Path) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
@@ -428,9 +654,11 @@ async def test_events_client_when_unknown_notification_received_should_fail_stre
         client = await DevHubEventsClient.from_runtime(DevHubClientOptions(client_id="ws-client", data_dir=str(data_dir)))
         try:
             await client.authenticate()
+            iterator = client.read_events()
+            event_task = asyncio.create_task(anext(iterator))
             await client.subscribe([INVOCATION_COMPLETED])
             with pytest.raises(RuntimeError, match="hub.event|响应"):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
+                await asyncio.wait_for(event_task, timeout=2)
 
             with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await client.subscribe([INVOCATION_COMPLETED])
@@ -439,7 +667,9 @@ async def test_events_client_when_unknown_notification_received_should_fail_stre
 
 
 @pytest.mark.asyncio
-async def test_events_client_when_connection_closes_after_queued_event_should_end_stream_repeatedly(tmp_path: Path) -> None:
+async def test_events_client_when_connection_closes_after_buffered_event_should_end_active_reader_and_reject_new_reads(
+    tmp_path: Path,
+) -> None:
     async def handler(websocket) -> None:
         async for raw in websocket:
             message = json.loads(raw)
@@ -488,15 +718,16 @@ async def test_events_client_when_connection_closes_after_queued_event_should_en
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
+            iterator = client.read_events()
 
-            event = await asyncio.wait_for(anext(client.read_events()), timeout=2)
+            event = await asyncio.wait_for(anext(iterator), timeout=2)
 
             assert event.type == INVOCATION_COMPLETED
             assert event.subscription_id == "sub-1"
 
             with pytest.raises(StopAsyncIteration):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
-            with pytest.raises(StopAsyncIteration):
+                await asyncio.wait_for(anext(iterator), timeout=2)
+            with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await asyncio.wait_for(anext(client.read_events()), timeout=2)
         finally:
             await client.close()
@@ -562,9 +793,10 @@ async def test_events_client_when_connection_terminated_should_allow_reauthentic
         try:
             await client.authenticate()
             await client.subscribe([INVOCATION_COMPLETED])
+            iterator = client.read_events()
 
             with pytest.raises(StopAsyncIteration):
-                await asyncio.wait_for(anext(client.read_events()), timeout=2)
+                await asyncio.wait_for(anext(iterator), timeout=2)
 
             with pytest.raises(RuntimeError, match="尚未通过鉴权"):
                 await client.subscribe([INVOCATION_COMPLETED])

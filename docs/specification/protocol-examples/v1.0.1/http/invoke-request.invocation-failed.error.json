@@ -5,7 +5,7 @@
     "code": -32050,
     "message": "invocation_failed",
     "data": {
-      "invocationId": "${INVOCATION_ID}",
+      "invocationId": "invk-sample-request-001",
       "calleeError": {
         "code": 1001,
         "message": "app_error",

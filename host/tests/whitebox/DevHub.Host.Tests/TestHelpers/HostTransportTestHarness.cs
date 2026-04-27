@@ -1,5 +1,6 @@
 namespace DevHub.Host.Tests.TestHelpers;
 
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Events;
 using DevHub.Host.Extensions;
@@ -71,6 +72,25 @@ internal sealed class HostTransportTestHarness : IDisposable
     internal Task InvokeWebSocketConnectionAsync(ScriptedWebSocket socket, CancellationToken cancellationToken = default)
     {
         return WebSocketHandler.HandleWebSocketConnectionAsync(socket, cancellationToken);
+    }
+
+    /// <summary>
+    /// 直接向测试 Host 注册实例。
+    /// </summary>
+    internal string RegisterInstance(AppInstance instance, string password)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+
+        var appRegistry = _serviceProvider.GetRequiredService<AppRegistry>();
+        if (!appRegistry.TryRegisterInstance(instance, password, out _, out var instanceSessionToken, out var passwordMismatch))
+        {
+            throw new InvalidOperationException(passwordMismatch
+                ? $"测试夹具注册实例失败：instanceId={instance.InstanceId} 的 password 不匹配。"
+                : $"测试夹具注册实例失败：instanceId={instance.InstanceId}。");
+        }
+
+        return instanceSessionToken;
     }
 
     /// <inheritdoc />

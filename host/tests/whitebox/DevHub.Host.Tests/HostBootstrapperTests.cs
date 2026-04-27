@@ -1,6 +1,7 @@
 namespace DevHub.Host.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Host.Runtime;
@@ -50,7 +51,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var tokenFilePath = Path.Combine(_runtimeDirectory, "token.txt");
         Assert.True(File.Exists(tokenFilePath));
 
-        var definition = context.DefinitionProvider.GetDefinition("bootstrap.init.app");
+        var definition = context.DefinitionProvider.GetDefinition("bootstrap.init.app", ScopeContract.Global);
         Assert.NotNull(definition);
     }
 
@@ -183,6 +184,7 @@ public sealed class HostBootstrapperTests : IDisposable
         var payload = new
         {
             appId,
+            scope = ScopeContract.Global,
             displayName = appId,
             capabilities = new
             {
@@ -191,7 +193,7 @@ public sealed class HostBootstrapperTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, $"{appId}.json");
+        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
     }
 

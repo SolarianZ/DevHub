@@ -72,7 +72,7 @@ public class NegativeTests : IDisposable
         var definitionLoader = new DefinitionLoader(_testDirectory, _mockDefinitionLogger.Object);
 
         // Act
-        var result = definitionLoader.GetDefinition("non-existent-app-id");
+        var result = definitionLoader.GetDefinition("non-existent-app-id", ScopeContract.Global);
 
         // Assert
         Assert.Null(result);
@@ -214,5 +214,4 @@ public class NegativeTests : IDisposable
         }
     }
 }
-
 

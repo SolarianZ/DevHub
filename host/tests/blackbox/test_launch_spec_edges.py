@@ -42,9 +42,10 @@ class TestLaunchSpecEdges(unittest.TestCase):
             launch_config["dedupeKeyTemplate"] = dedupe_key_template
         return launch_config
 
-    def _create_definition(self, app_id, launch_config):
+    def _create_definition(self, app_id, launch_config, scope=""):
         return write_app_definition(
             app_id,
+            scope=scope,
             rpc=True,
             events=False,
             launch=launch_config,
@@ -67,7 +68,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             first = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-001-first",
             )
@@ -76,7 +77,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             second = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-001-second",
             )
@@ -119,6 +120,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             definition_path = self._create_definition(
                 app_id,
                 self._build_launch_config("{appId}:{scopeOrGlobal}:{httpBaseUrl}"),
+                scope="workspace-explicit",
             )
 
             base_url, token = DiscoveryService.get_hub_info()
@@ -179,7 +181,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             start_ts = time.monotonic()
             response = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=1200,
                 request_id="launch-edge-003",
             )
@@ -209,21 +211,27 @@ class TestLaunchSpecEdges(unittest.TestCase):
     def test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(self):
         """SCOPE-LAUNCH-EDGE-004: dedupeKeyTemplate 作用域占位符应隔离。"""
         result = TestResult("SCOPE-LAUNCH-EDGE-004 dedupe 模板 scope 隔离")
-        definition_path = None
+        definition_paths = []
 
         try:
             app_id = self._new_app_id("scope-template")
-            definition_path = self._create_definition(
+            definition_paths.append(self._create_definition(
                 app_id,
                 self._build_launch_config("{appId}:{scope}:{scopeOrGlobal}"),
-            )
+                scope="",
+            ))
+            definition_paths.append(self._create_definition(
+                app_id,
+                self._build_launch_config("{appId}:{scope}:{scopeOrGlobal}"),
+                scope="workspace-a",
+            ))
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
             global_launch = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-004-global",
             )
@@ -268,7 +276,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            for definition_path in definition_paths:
+                safe_remove(definition_path)
 
         return result
 
@@ -304,7 +313,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
             response = client.launch_app(
                 app_id=app_id,
-                scope=None,
+                scope="",
                 dedupe_key="manual-key",
                 wait_for_register_ms=0,
                 request_id="launch-edge-005",

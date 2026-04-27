@@ -24,6 +24,7 @@ if str(PYTHON_SDK_ROOT) not in sys.path:
 from devhub_sdk import (  # type: ignore  # noqa: E402
     AppCapabilities,
     AppDefinition,
+    AppInstance,
     AppInstanceRegistration,
     DevHubClient,
     DevHubClientOptions,
@@ -215,6 +216,12 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
     request = require_mapping(vector["request"], "request")
     steps = require_list(request.get("steps"), "request.steps")
     data_dir = str(context["dataDir"])
+    raw_rpc_connection = discover_runtime(
+        DevHubClientOptions(
+            client_id="ConformanceRawDefinitionRpc",
+            data_dir=data_dir,
+        )
+    )
 
     event_clients: dict[str, DevHubEventsClient] = {}
     event_iterators: dict[str, Any] = {}
@@ -275,52 +282,123 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                     index,
                     default=_default_instance_password(instance.instance_id),
                 )
-                require_http_client(http_clients, client_name, index).register_instance(instance, password)
-                registered_instances[instance.instance_id] = (client_name, password)
+                registered = require_http_client(http_clients, client_name, index).register_instance(instance, password)
+                instance_session_token = require_string(
+                    registered.instance_session_token,
+                    f"request.steps[{index}].registerInstance.instanceSessionToken",
+                )
+                registered_instances[instance.instance_id] = (client_name, instance_session_token)
                 continue
 
             if action == "unregister_instance":
                 client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 instance_id = resolve_capture_value(step, captures, index, "instanceId")
-                registered_password = registered_instances.get(str(instance_id), (client_name, _default_instance_password(str(instance_id))))[1]
-                password = resolve_password(step, captures, index, default=registered_password)
-                require_http_client(http_clients, client_name, index).unregister_instance(str(instance_id), password)
+                registered_token = registered_instances.get(str(instance_id), (client_name, ""))[1]
+                instance_session_token = resolve_instance_session_token(
+                    step,
+                    captures,
+                    index,
+                    default=registered_token,
+                )
+                require_http_client(http_clients, client_name, index).unregister_instance(
+                    str(instance_id),
+                    instance_session_token,
+                )
                 registered_instances.pop(str(instance_id), None)
                 continue
 
             if action == "validate_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
-                result = require_http_client(http_clients, client_name, index).validate_definition(
-                    build_app_definition(definition_payload)
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-validate-definition-{index}",
+                        method="hub.apps.validateDefinition",
+                        params={"definition": definition_payload},
+                    ),
+                    path=f"request.steps[{index}]",
                 )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
-                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = (
-                        normalize_definition_validation_result(result)
-                    )
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = result
                 continue
 
             if action == "upsert_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 definition_payload = require_mapping(step.get("definition"), f"request.steps[{index}].definition")
-                definition = require_http_client(http_clients, client_name, index).upsert_definition(
-                    build_app_definition(definition_payload)
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-upsert-definition-{index}",
+                        method="hub.apps.upsertDefinition",
+                        params={"definition": definition_payload},
+                    ),
+                    path=f"request.steps[{index}]",
                 )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
-                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = normalize_app_definition(
-                        definition
+                    captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = require_mapping(
+                        result.get("definition"),
+                        f"request.steps[{index}].captureAs",
                     )
                 continue
 
             if action == "delete_definition":
-                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
-                app_id = resolve_capture_value(step, captures, index, "appId")
-                require_http_client(http_clients, client_name, index).delete_definition(str(app_id))
+                read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-delete-definition-{index}",
+                        method="hub.apps.deleteDefinition",
+                        params=build_definition_identity_params(step, captures, index),
+                    ),
+                    path=f"request.steps[{index}]",
+                )
                 capture_as = step.get("captureAs")
                 if capture_as is not None:
                     captures[require_string(capture_as, f"request.steps[{index}].captureAs")] = {"ok": True}
+                continue
+
+            if action == "get_definition":
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-get-definition-{index}",
+                        method="hub.apps.getDefinition",
+                        params=build_definition_identity_params(step, captures, index),
+                    ),
+                    path=f"request.steps[{index}]",
+                )
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                captures[capture_as] = require_mapping(result.get("definition"), f"request.steps[{index}].captureAs")
+                continue
+
+            if action == "get_instance":
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                instance_id = resolve_capture_value(step, captures, index, "instanceId")
+                events_client = event_clients.get(client_name)
+                if events_client is not None:
+                    instance = await events_client.get_instance(str(instance_id))
+                else:
+                    instance = require_http_client(http_clients, client_name, index).get_instance(str(instance_id))
+                captures[capture_as] = normalize_app_instance(instance)
+                continue
+
+            if action == "list_definitions":
+                params: dict[str, Any] = {"scope": resolve_capture_value(step, captures, index, "scope")}
+                app_id = resolve_capture_value(step, captures, index, "appId")
+                if app_id is not None:
+                    params["appId"] = require_string(app_id, f"request.steps[{index}].appId")
+                result = read_raw_result(
+                    send_raw_rpc(
+                        raw_rpc_connection,
+                        request_id=f"sdk-events-list-definitions-{index}",
+                        method="hub.apps.listDefinitions",
+                        params=params,
+                    ),
+                    path=f"request.steps[{index}]",
+                )
+                capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
+                captures[capture_as] = require_list(result.get("definitions"), f"request.steps[{index}].captureAs")
                 continue
 
             if action == "read_event":
@@ -384,9 +462,9 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
             "error": None,
         }
     finally:
-        for instance_id, (client_name, password) in reversed(list(registered_instances.items())):
+        for instance_id, (client_name, instance_session_token) in reversed(list(registered_instances.items())):
             try:
-                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id, password)
+                require_http_client(http_clients, client_name, -1).unregister_instance(instance_id, instance_session_token)
             except Exception:
                 pass
         for client in http_clients.values():
@@ -536,6 +614,7 @@ def build_app_definition(payload: dict[str, Any]) -> AppDefinition:
     return AppDefinition(
         app_id=require_string(payload.get("appId"), "definition.appId"),
         display_name=require_string(payload.get("displayName"), "definition.displayName"),
+        scope=payload.get("scope"),
         description=payload.get("description"),
         capabilities=capabilities,
         launch=launch,
@@ -590,6 +669,7 @@ def normalize_definition_validation_result(result) -> dict[str, Any]:
 def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
     actual: dict[str, Any] = {
         "appId": definition.app_id,
+        "scope": definition.scope,
         "displayName": definition.display_name,
     }
     if definition.description is not None:
@@ -611,6 +691,69 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
             launch["dedupeKeyTemplate"] = definition.launch.dedupe_key_template
         actual["launch"] = launch
     return actual
+
+
+def normalize_app_instance(instance: AppInstance) -> dict[str, Any]:
+    actual: dict[str, Any] = {
+        "instanceId": instance.instance_id,
+        "appId": instance.app_id,
+        "scope": instance.scope,
+        "pid": instance.pid,
+        "registeredAtUtc": instance.registered_at_utc.isoformat().replace("+00:00", "Z"),
+        "lastSeenUtc": instance.last_seen_utc.isoformat().replace("+00:00", "Z"),
+        "invoke": {
+            "poll": instance.invoke.poll,
+            "respond": instance.invoke.respond,
+        },
+    }
+    if instance.meta is not None:
+        actual["meta"] = instance.meta
+    return actual
+
+
+def send_raw_rpc(
+    connection,
+    *,
+    request_id: str,
+    method: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    response = requests.post(
+        f"{connection.runtime.http_base_url}/rpc",
+        data=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {connection.token}",
+            "X-DevHub-Protocol": "1",
+            "X-DevHub-ClientId": "ConformanceRawDefinitionRpc",
+            "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000099",
+        },
+        timeout=30,
+    )
+    return json.loads(response.text)
+
+
+def read_raw_result(response: dict[str, Any], *, path: str) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        raise ValueError(f"{path} 定义 RPC 响应非法。")
+
+    if isinstance(response.get("error"), dict):
+        raise ValueError(f"{path} 定义 RPC 返回错误：{json.dumps(response['error'], ensure_ascii=False)}")
+
+    result = require_mapping(response.get("result"), f"{path}.result")
+    if result.get("ok") is not True:
+        raise ValueError(f"{path} 定义 RPC 缺少 result.ok=true。")
+
+    return result
 
 
 def normalize_event(event: Any) -> dict[str, Any]:
@@ -645,7 +788,16 @@ def resolve_capture_value(step: dict[str, Any], captures: dict[str, Any], index:
         if capture_key not in captures:
             raise ValueError(f"request.steps[{index}].{reference_field} 引用不存在：{capture_key}")
         return captures[capture_key]
+
     return step.get(field_name)
+
+
+def build_definition_identity_params(step: dict[str, Any], captures: dict[str, Any], index: int) -> dict[str, Any]:
+    app_id = require_string(resolve_capture_value(step, captures, index, "appId"), f"request.steps[{index}].appId")
+    return {
+        "appId": app_id,
+        "scope": resolve_capture_value(step, captures, index, "scope"),
+    }
 
 
 def resolve_password(
@@ -659,6 +811,21 @@ def resolve_password(
     if value is None:
         return default
     return require_string(value, f"request.steps[{index}].password")
+
+
+def resolve_instance_session_token(
+    step: dict[str, Any],
+    captures: dict[str, Any],
+    index: int,
+    *,
+    default: str,
+) -> str:
+    value = resolve_capture_value(step, captures, index, "instanceSessionToken")
+    if value is None:
+        if not default:
+            raise ValueError(f"request.steps[{index}].instanceSessionToken 不能为空。")
+        return default
+    return require_string(value, f"request.steps[{index}].instanceSessionToken")
 
 
 def _default_instance_password(instance_id: str) -> str:

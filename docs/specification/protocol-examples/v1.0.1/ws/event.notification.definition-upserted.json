@@ -2,13 +2,15 @@
   "jsonrpc": "2.0",
   "method": "hub.event",
   "params": {
-    "subscriptionId": "${SUBSCRIPTION_ID}",
+    "subscriptionId": "sub-sample-001",
     "type": "app.definition.upserted",
-    "timeUtc": "${EVENT_TIME_UTC}",
+    "timeUtc": "2026-03-28T12:36:00Z",
     "payload": {
-      "appId": "sample.app",
+      "appId": "Sample.App",
+      "scope": "Workspace-A.v2",
       "definition": {
-        "appId": "sample.app",
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
         "displayName": "Sample App"
       }
     }

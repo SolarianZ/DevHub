@@ -18,7 +18,8 @@
     "method": "hub.apps.validateDefinition",
     "params": {
       "definition": {
-        "appId": "Invalid App",
+        "appId": ".Invalid.App",
+        "scope": null,
         "displayName": "Broken Definition"
       }
     }
@@ -33,7 +34,12 @@
         {
           "path": "definition.appId",
           "code": "invalid_app_id",
-          "message": "appId must match ^[a-z0-9][a-z0-9.-]*$"
+          "message": "appId must match ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
+        },
+        {
+          "path": "definition.scope",
+          "code": "invalid_field_type",
+          "message": "scope must be a string"
         }
       ]
     }

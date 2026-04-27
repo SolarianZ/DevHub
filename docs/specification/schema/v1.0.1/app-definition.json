@@ -1,15 +1,23 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://devhub.spec/v1/app-definition.json",
+  "description": "Canonical payload for one AppDefinition. Public identity is the exact composite key (appId, scope), where the empty string means Global and any other legal string is preserved verbatim.",
   "type": "object",
   "required": [
     "appId",
+    "scope",
     "displayName"
   ],
   "properties": {
     "appId": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+      "description": "Application identifier. Together with scope it uniquely identifies one AppDefinition.",
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
+    },
+    "scope": {
+      "description": "Definition scope. Use the empty string for the Global Definition. Any other scope must satisfy the canonical DevHub identifier grammar and is preserved verbatim.",
+      "type": "string",
+      "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "displayName": {
       "type": "string"

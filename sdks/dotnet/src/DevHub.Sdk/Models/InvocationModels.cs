@@ -30,19 +30,57 @@ public sealed class PingResult
 }
 
 /// <summary>
+/// Definition 列表请求。
+/// </summary>
+public sealed class ListDefinitionsRequest
+{
+    private string? _appId;
+    private string? _scope;
+
+    /// <summary>
+    /// 应用标识过滤。
+    /// </summary>
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
+
+    /// <summary>
+    /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
+    /// </summary>
+    public string? Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopeFilter(value, nameof(Scope));
+    }
+}
+
+/// <summary>
 /// Launch 请求。
 /// </summary>
 public sealed class LaunchRequest
 {
+    private string _appId = string.Empty;
+    private string _scope = string.Empty;
+
     /// <summary>
     /// 应用标识。
     /// </summary>
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
-    /// 作用域。
+    /// 作用域。空字符串表示 Global Definition。
     /// </summary>
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopedString(value ?? string.Empty, nameof(Scope));
+    }
 
     /// <summary>
     /// 启动去重键。
@@ -90,25 +128,58 @@ public sealed class LaunchResult
 /// </summary>
 public sealed class ListInstancesRequest
 {
+    private string? _appId;
+    private string? _scope;
+
     /// <summary>
     /// 应用标识过滤。
     /// </summary>
-    public string? AppId { get; set; }
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
 
     /// <summary>
-    /// 作用域过滤。
+    /// 作用域过滤；<see langword="null"/> 表示不按 scope 过滤。
     /// </summary>
-    public string? Scope { get; set; }
+    public string? Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopeFilter(value, nameof(Scope));
+    }
 
     /// <summary>
     /// 是否包含离线实例。
     /// </summary>
     public bool IncludeOffline { get; set; }
+}
+
+/// <summary>
+/// 已放弃请求过滤器。
+/// </summary>
+public sealed class AbandonedRequestFilter
+{
+    private string? _appId;
 
     /// <summary>
-    /// 是否忽略当前作用域限制并返回所有作用域实例。
+    /// 仅匹配已放弃时长达到该阈值的记录。
     /// </summary>
-    public bool IncludeAllScopes { get; set; }
+    public TimeSpan? OlderThan { get; set; }
+
+    /// <summary>
+    /// 仅匹配已记录到相同应用标识的请求。
+    /// </summary>
+    public string? AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureOptionalAppId(value, nameof(AppId));
+    }
+
+    /// <summary>
+    /// 仅匹配相同 JSON-RPC 方法名的请求。
+    /// </summary>
+    public string? Method { get; set; }
 }
 
 /// <summary>
@@ -116,10 +187,16 @@ public sealed class ListInstancesRequest
 /// </summary>
 public sealed class InvokeRequest
 {
+    private string _appId = string.Empty;
+
     /// <summary>
     /// 目标应用标识。
     /// </summary>
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 调用目标。
@@ -190,10 +267,21 @@ public sealed class RequestResult
 /// </summary>
 public sealed class PollRequest
 {
+    private string _instanceId = string.Empty;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
+
+    /// <summary>
+    /// 实例会话令牌。
+    /// </summary>
+    public string InstanceSessionToken { get; set; } = string.Empty;
 
     /// <summary>
     /// 单次最多拉取条数。
@@ -235,11 +323,22 @@ public sealed class PollResult
 /// </summary>
 public sealed class RespondRequest
 {
+    private string _instanceId = string.Empty;
     private object? _value;
+
     /// <summary>
     /// 实例标识。
     /// </summary>
-    public string InstanceId { get; set; } = string.Empty;
+    public string InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureInstanceId(value, nameof(InstanceId));
+    }
+
+    /// <summary>
+    /// 实例会话令牌。
+    /// </summary>
+    public string InstanceSessionToken { get; set; } = string.Empty;
 
     /// <summary>
     /// 调用标识。
@@ -272,6 +371,8 @@ public sealed class RespondRequest
 /// </summary>
 public sealed class Invocation
 {
+    private string _appId = string.Empty;
+
     /// <summary>
     /// 调用标识。
     /// </summary>
@@ -282,7 +383,11 @@ public sealed class Invocation
     /// 应用标识。
     /// </summary>
     [JsonProperty("appId")]
-    public string AppId { get; set; } = string.Empty;
+    public string AppId
+    {
+        get => _appId;
+        set => _appId = ProtocolIdentifier.EnsureAppId(value, nameof(AppId));
+    }
 
     /// <summary>
     /// 调用目标。
@@ -339,17 +444,28 @@ public sealed class Invocation
 /// </summary>
 public sealed class InvocationTarget
 {
+    private string _scope = string.Empty;
+    private string? _instanceId;
+
     /// <summary>
-    /// 目标作用域。
+    /// 目标作用域。空字符串表示 Global。
     /// </summary>
     [JsonProperty("scope")]
-    public string? Scope { get; set; }
+    public string Scope
+    {
+        get => _scope;
+        set => _scope = ScopeContract.EnsureScopedString(value ?? string.Empty, nameof(Scope));
+    }
 
     /// <summary>
     /// 目标实例标识。
     /// </summary>
     [JsonProperty("instanceId", NullValueHandling = NullValueHandling.Ignore)]
-    public string? InstanceId { get; set; }
+    public string? InstanceId
+    {
+        get => _instanceId;
+        set => _instanceId = ProtocolIdentifier.EnsureOptionalInstanceId(value, nameof(InstanceId));
+    }
 }
 
 /// <summary>

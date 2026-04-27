@@ -158,16 +158,16 @@ public class TestGovernanceTests
                 break;
             }
 
-            var clause = $"{tokens[index]}.{tokens[index + 1]}";
+            var clauseParts = new List<string> { tokens[index], tokens[index + 1] };
             index += 2;
 
-            if (index < tokens.Length && IsClauseToken(tokens[index]))
+            while (index < tokens.Length && IsClauseToken(tokens[index]))
             {
-                clause += $".{tokens[index]}";
+                clauseParts.Add(tokens[index]);
                 index += 1;
             }
 
-            results.Add(clause);
+            results.Add(string.Join(".", clauseParts));
 
             if (index >= tokens.Length || !string.Equals(tokens[index], "And", StringComparison.Ordinal))
             {

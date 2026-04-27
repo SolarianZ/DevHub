@@ -24,11 +24,13 @@
 
 - 工作区位于 `apps/monitor/`，前端 WebView 与 `src-tauri/` 原生后端必须保持边界清晰，前端不直接访问本地文件。
 - 与 Monitor 相关的改动，至少执行 `npm --prefix apps/monitor run verify`，并同步检查 `apps/monitor/README.md`、`docs/README.md`、`docs/developer/guides/development.md` 与运维文档是否一致。
-- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入，该依赖固定指向仓库 GitHub Release 产出的 `devhub-sdk-javascript-<version>.tgz` 资产，对应 `sdks/javascript/` 工作区生成的 `@devhub/sdk-javascript` 包。
+- `host/`、`sdks/javascript/` 与 `apps/monitor/` 的职责不可混用；Monitor 对 Host 的通信统一通过 `apps/monitor/` 中声明的 `@devhub/sdk` 依赖接入。依赖声明保持 release tarball 形式，但 `apps/monitor/` 内的本地开发与验证命令默认解析 `sdks/javascript/src`，需要核对正式 SDK 包路径时再显式设置 `DEVHUB_MONITOR_SDK_SOURCE=release`。
+- 独立 `monitor.yml` workflow 以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 运行仓库内 Monitor 验证；该验证必须在只安装 `apps/monitor` 依赖的前提下成立，不得依赖 `sdks/javascript/node_modules`。`package_monitor.py` 仍通过 `--sdk-source` 明确区分正式打包路径与源码联调包。
 
 `JS/TS SDK` 的额外开发约束：
 
 - `@devhub/sdk-javascript` 根入口必须保持可在 `Node.js 20+` 与浏览器 / WebView 中直接导入；根入口可达模块不得重新引入顶层 `node:*`、`ws` 或其他 Node.js 专有依赖。
+- 若 `JsonRpcWsSession` 或 `DevHubEventsClient` 需要 Node 专用 `ws` 回退，只能通过运行时懒加载实现；不得让 `ws` / `@types/ws` 成为根入口源码消费、浏览器构建或 `local-src` 联调阶段的静态前置依赖。
 - `discoverRuntime`、`resolveDataDirectory`、`FileSystemRuntimeResolver` 等 Node.js 文件系统相关能力统一通过 `@devhub/sdk-javascript/runtime` 子路径暴露，不得重新挂回根入口。
 - 浏览器 / WebView 场景的示例、测试与接入代码必须显式注入自定义 `runtimeResolver`；Node.js 文件系统发现示例必须使用 `@devhub/sdk-javascript/runtime`。
 - 修改 `JS/TS SDK` 的公开面、包导出或运行时装载逻辑时，同步检查 `sdks/javascript/package.json`、`sdks/javascript/README.md`、`docs/user/sdk/javascript.md` 和相关测试资产是否一致。
@@ -52,7 +54,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 - Host 白盒测试与最小 smoke 验证
 - `.NET SDK`、`JS/TS SDK`、`Python SDK` 测试
-- Host 多平台发布包、三套 SDK 包、manifest 与发布说明生成
+- Host 双变体多平台发布包、三套 SDK 包、manifest 与发布说明生成
 - 资产完整性检查
 
 若改动涉及 `apps/monitor/`，在运行该打包入口前额外执行：
@@ -67,7 +69,7 @@ npm --prefix apps/monitor run verify
 python scripts/release/package_monitor.py --release-id local-dry-run
 ```
 
-该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程。
+该脚本只负责 Monitor 工作区的本地打包与产物归档，不参与当前仓库的 GitHub Release 自动发布流程；如需本地 SDK 联调包，可额外传入 `--sdk-source local-src`，但该产物不作为正式发布来源。
 
 ## 3. 外部协作者常用入口
 

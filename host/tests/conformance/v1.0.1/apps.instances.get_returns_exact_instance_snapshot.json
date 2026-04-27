@@ -1,0 +1,66 @@
+{
+  "id": "apps.instances.get_returns_exact_instance_snapshot",
+  "caseId": "CONF-003",
+  "description": "按精确 instanceId 调用 hub.apps.getInstance 时，必须返回对应 AppInstance 快照。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "apps-instance-get-1",
+          "appId": "apps.instance.get.app",
+          "scope": "workspace-a",
+          "pid": 32009,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000033"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get",
+    "method": "hub.apps.getInstance",
+    "params": {
+      "instanceId": "apps-instance-get-1"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-get",
+    "result": {
+      "ok": true,
+      "instance": {
+        "instanceId": "apps-instance-get-1",
+        "appId": "apps.instance.get.app",
+        "scope": "workspace-a",
+        "pid": 32009,
+        "registeredAtUtc": "${ANY_ISO_UTC}",
+        "lastSeenUtc": "${ANY_ISO_UTC}",
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "success"
+  ]
+}

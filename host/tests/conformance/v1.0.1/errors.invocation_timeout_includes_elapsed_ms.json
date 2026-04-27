@@ -1,14 +1,15 @@
 {
   "id": "errors.invocation_timeout_includes_elapsed_ms",
   "caseId": "CONF-008",
-  "description": "原始 HTTP request 在 waitTimeoutMs 到期时，必须返回 invocation_timeout，并包含 invocationId 与 elapsedMs。", 
+  "description": "原始 HTTP request 在 waitTimeoutMs 到期时，必须返回 invocation_timeout，并包含 invocationId 与 elapsedMs。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.timeout.json",
+        "fileName": "errors.invocation.timeout--global.json",
         "definition": {
           "appId": "errors.invocation.timeout",
+          "scope": "",
           "displayName": "errors.invocation.timeout"
         }
       }
@@ -22,7 +23,7 @@
         "instance": {
           "instanceId": "errors-request-timeout-inst",
           "appId": "errors.invocation.timeout",
-          "scope": null,
+          "scope": "",
           "pid": 33005,
           "invoke": {
             "poll": true,
@@ -67,7 +68,7 @@
     "params": {
       "appId": "errors.invocation.timeout",
       "target": {
-        "scope": null,
+        "scope": "",
         "instanceId": null
       },
       "method": "demo.request.timeout",

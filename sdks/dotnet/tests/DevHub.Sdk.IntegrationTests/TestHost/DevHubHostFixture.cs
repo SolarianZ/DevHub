@@ -127,7 +127,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     public async Task WriteDefinitionAsync(AppDefinition definition)
     {
         Directory.CreateDirectory(DefinitionsDirectory);
-        var path = Path.Combine(DefinitionsDirectory, $"{definition.AppId}.json");
+        var path = Path.Combine(DefinitionsDirectory, BuildDefinitionFileName(definition));
         var content = JsonConvert.SerializeObject(
             definition,
             new JsonSerializerSettings
@@ -135,8 +135,18 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
                 ContractResolver = new CamelCasePropertyNamesContractResolver(),
                 NullValueHandling = NullValueHandling.Ignore,
                 DateParseHandling = DateParseHandling.None
-            });
+        });
         await File.WriteAllTextAsync(path, content);
+    }
+
+    private static string BuildDefinitionFileName(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var scopeSegment = string.IsNullOrEmpty(definition.Scope)
+            ? "global"
+            : $"scope-{definition.Scope}";
+        return $"{definition.AppId}--{scopeSegment}.json";
     }
 
     public Task<DevHubClient> CreateClientAsync(string clientId)

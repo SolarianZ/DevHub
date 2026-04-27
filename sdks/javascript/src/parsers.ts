@@ -10,6 +10,7 @@ import type {
   NotifyResult,
   PingResult,
   PollResult,
+  RegisteredAppInstance,
   RequestResult,
   ValidationIssue
 } from "./models.js";
@@ -28,6 +29,8 @@ import {
   readArray,
   readBoolean,
   readDate,
+  readOptionalScopeString,
+  readScopeString,
   readInstanceId,
   readInvocationId,
   readNumber,
@@ -37,10 +40,10 @@ import {
   readOptionalIntAtLeast,
   readOptionalObject,
   readOptionalString,
-  readOptionalStringOrNull,
   readPositiveInt,
   readStringValue,
-  readString
+  readString,
+  readUuidString
 } from "./validation.js";
 
 export function parsePingResult(payload: unknown): PingResult {
@@ -54,6 +57,12 @@ export function parsePingResult(payload: unknown): PingResult {
   };
 }
 
+export function parseHostVersionResult(payload: unknown): string {
+  const record = ensureRecord(payload, "hub.getVersion.result");
+  ensureOk(record, "hub.getVersion.result");
+  return readString(record, "hub.getVersion.result", "version");
+}
+
 export function parseDefinitionsResult(payload: unknown): AppDefinition[] {
   const record = ensureRecord(payload, "hub.apps.listDefinitions.result");
   ensureOk(record, "hub.apps.listDefinitions.result");
@@ -63,6 +72,15 @@ export function parseDefinitionsResult(payload: unknown): AppDefinition[] {
 
 export function parseDefinitionResult(payload: unknown): AppDefinition {
   return parseDefinitionEnvelope(payload, "hub.apps.getDefinition.result");
+}
+
+export function parseInstanceResult(payload: unknown): AppInstance {
+  const record = ensureRecord(payload, "hub.apps.getInstance.result");
+  ensureOk(record, "hub.apps.getInstance.result");
+  return parseAppInstance(
+    readObject(record, "hub.apps.getInstance.result", "instance"),
+    "hub.apps.getInstance.result.instance"
+  );
 }
 
 export function parseDefinitionValidationResult(payload: unknown): DefinitionValidationResult {
@@ -91,13 +109,16 @@ export function parseUpsertDefinitionResult(payload: unknown): AppDefinition {
   return parseDefinitionEnvelope(payload, "hub.apps.upsertDefinition.result");
 }
 
-export function parseRegisterInstanceResult(payload: unknown): AppInstance {
+export function parseRegisterInstanceResult(payload: unknown): RegisteredAppInstance {
   const record = ensureRecord(payload, "hub.apps.registerInstance.result");
   ensureOk(record, "hub.apps.registerInstance.result");
-  return parseAppInstance(
-    readObject(record, "hub.apps.registerInstance.result", "instance"),
-    "hub.apps.registerInstance.result.instance"
-  );
+  return {
+    ...parseAppInstance(
+      readObject(record, "hub.apps.registerInstance.result", "instance"),
+      "hub.apps.registerInstance.result.instance"
+    ),
+    instanceSessionToken: readString(record, "hub.apps.registerInstance.result", "instanceSessionToken")
+  };
 }
 
 function parseDefinitionEnvelope(payload: unknown, location: string): AppDefinition {
@@ -247,6 +268,7 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
   return {
     appId,
+    scope: readScopeString(record, location, "scope"),
     displayName,
     description,
     capabilities,
@@ -256,13 +278,13 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
 
 export function parseAppInstance(payload: unknown, location: string): AppInstance {
   const record = ensureRecord(payload, location);
-  ensureNoPasswordField(record, location);
+  ensureNoSensitiveInstanceFields(record, location);
   const invokePayload = readObject(record, location, "invoke");
 
   return {
     instanceId: readInstanceId(record, location, "instanceId"),
     appId: readAppId(record, location, "appId"),
-    scope: readOptionalStringOrNull(record, location, "scope"),
+    scope: readScopeString(record, location, "scope"),
     pid: readPositiveInt(record, location, "pid"),
     registeredAtUtc: readDate(record, location, "registeredAtUtc"),
     lastSeenUtc: readDate(record, location, "lastSeenUtc"),
@@ -319,7 +341,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
     invocationId: readInvocationId(record, location, "invocationId"),
     appId: readAppId(record, location, "appId"),
     target: {
-      scope: readOptionalStringOrNull(targetPayload, `${location}.target`, "scope"),
+      scope: readScopeString(targetPayload, `${location}.target`, "scope"),
       instanceId: readOptionalInstanceIdOrNull(targetPayload, `${location}.target`, "instanceId")
     },
     method: readString(record, location, "method"),
@@ -330,7 +352,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
     delivery,
     caller: {
       clientId: readString(callerPayload, `${location}.caller`, "clientId"),
-      clientSessionId: readString(callerPayload, `${location}.caller`, "clientSessionId")
+      clientSessionId: readUuidString(callerPayload, `${location}.caller`, "clientSessionId")
     }
   };
 }
@@ -394,27 +416,39 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
   }
 
   if (type === APP_DEFINITION_UPSERTED) {
-    readAppId(payload, location, "appId");
-    parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
+    const appId = readAppId(payload, location, "appId");
+    const scope = readScopeString(payload, location, "scope");
+    const definition = parseAppDefinition(readObject(payload, location, "definition"), `${location}.definition`);
+    if (definition.appId !== appId) {
+      throw new Error(`${location}.definition.appId must match ${location}.appId.`);
+    }
+    if (definition.scope !== scope) {
+      throw new Error(`${location}.definition.scope must match ${location}.scope.`);
+    }
     return;
   }
 
   if (type === APP_DEFINITION_DELETED) {
     readAppId(payload, location, "appId");
+    readScopeString(payload, location, "scope");
     return;
   }
 
   if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
-    readOptionalStringOrNull(payload, location, "scope");
-    ensureNoPasswordField(payload, location);
+    readOptionalScopeString(payload, location, "scope");
+    ensureNoSensitiveInstanceFields(payload, location);
   }
 }
 
-function ensureNoPasswordField(payload: Record<string, unknown>, location: string): void {
+function ensureNoSensitiveInstanceFields(payload: Record<string, unknown>, location: string): void {
   if ("password" in payload) {
     throw new Error(`${location}.password must not be present.`);
+  }
+
+  if ("instanceSessionToken" in payload) {
+    throw new Error(`${location}.instanceSessionToken must not be present.`);
   }
 }
 

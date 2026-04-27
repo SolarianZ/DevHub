@@ -1,3 +1,4 @@
+using System.Net;
 using DevHub.Sdk.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -184,9 +185,21 @@ internal static class RuntimeDiscovery
 
     private static bool IsLoopbackHost(string host)
     {
-        return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return false;
+        }
+
+        if (Uri.CheckHostName(host) == UriHostNameType.Dns)
+        {
+            return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var ipLiteral = host.Length > 2 && host[0] == '[' && host[host.Length - 1] == ']'
+            ? host.Substring(1, host.Length - 2)
+            : host;
+
+        return IPAddress.TryParse(ipLiteral, out var address) && IPAddress.IsLoopback(address);
     }
 
     private static string GetUserHomePath()

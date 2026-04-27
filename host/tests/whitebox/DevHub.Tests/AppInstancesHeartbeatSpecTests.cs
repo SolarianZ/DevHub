@@ -27,16 +27,22 @@ public class AppInstancesHeartbeatSpecTests
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var initialLastSeen = clock.UtcNow.AddSeconds(-10);
 
-        appRegistry.RegisterInstance(new AppInstance
-        {
-            InstanceId = "heartbeat-spec-inst",
-            AppId = "heartbeat-spec.app",
-            Scope = null,
-            Pid = 7011,
-            RegisteredAtUtc = clock.UtcNow.AddSeconds(-20),
-            LastSeenUtc = initialLastSeen,
-            Invoke = new InvokeCapability { Poll = true, Respond = true }
-        });
+        var registered = appRegistry.TryRegisterInstance(
+            new AppInstance
+            {
+                InstanceId = "heartbeat-spec-inst",
+                AppId = "heartbeat-spec.app",
+                Scope = ScopeContract.Global,
+                Pid = 7011,
+                RegisteredAtUtc = clock.UtcNow.AddSeconds(-20),
+                LastSeenUtc = initialLastSeen,
+                Invoke = new InvokeCapability { Poll = true, Respond = true }
+            },
+            "heartbeat-spec-password",
+            out _,
+            out var instanceSessionToken,
+            out _);
+        Assert.True(registered);
 
         var handler = new AppInstancesHandler(appRegistry, clock, _handlerLogger.Object);
 
@@ -46,7 +52,8 @@ public class AppInstancesHeartbeatSpecTests
             Method = "hub.apps.heartbeat",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId = "heartbeat-spec-inst"
+                instanceId = "heartbeat-spec-inst",
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -65,7 +72,8 @@ public class AppInstancesHeartbeatSpecTests
             Method = "hub.apps.heartbeat",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId = "heartbeat-spec-inst"
+                instanceId = "heartbeat-spec-inst",
+                instanceSessionToken
             })
         }, CancellationToken.None);
 
@@ -90,7 +98,8 @@ public class AppInstancesHeartbeatSpecTests
             Method = "hub.apps.heartbeat",
             Params = JsonSerializer.SerializeToElement(new
             {
-                instanceId = "missing-inst"
+                instanceId = "missing-inst",
+                instanceSessionToken = "missing-inst-token"
             })
         }, CancellationToken.None);
 

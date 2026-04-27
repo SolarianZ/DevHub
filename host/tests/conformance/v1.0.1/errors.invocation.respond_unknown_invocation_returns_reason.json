@@ -11,7 +11,7 @@
         "instance": {
           "instanceId": "errors-respond-unknown-inst-1",
           "appId": "errors.respond.unknown",
-          "scope": null,
+          "scope": "",
           "pid": 33102,
           "invoke": {
             "poll": true,
@@ -36,6 +36,7 @@
     "method": "hub.invoke.respond",
     "params": {
       "instanceId": "errors-respond-unknown-inst-1",
+      "instanceSessionToken": "${REGISTERED_INSTANCE_SESSION_TOKEN}",
       "invocationId": "invk-unknown",
       "value": {
         "ok": true

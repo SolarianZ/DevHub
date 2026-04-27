@@ -476,7 +476,7 @@ class TestConformanceRunner(unittest.TestCase):
                     "payload": {
                         "appId": "events.subscribe.registered",
                         "instanceId": "events-register-inst-1",
-                        "scope": None,
+                        "scope": "",
                     },
                 }
             },
@@ -524,7 +524,7 @@ class TestConformanceRunner(unittest.TestCase):
                     "payload": {
                         "appId": "events.subscribe.registered",
                         "instanceId": "events-register-inst-1",
-                        "scope": None,
+                        "scope": "",
                         "extra": True,
                     },
                 }

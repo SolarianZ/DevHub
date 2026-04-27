@@ -4,10 +4,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
+from . import _versioning
 from ._parsing import (
     parse_definition_result,
     parse_definitions_result,
     parse_event,
+    parse_host_version_result,
+    parse_instance_result,
     parse_instances_result,
     parse_ping_result,
     require_bool,
@@ -16,6 +19,8 @@ from ._parsing import (
 )
 from ._payloads import (
     build_get_definition_params,
+    build_get_instance_params,
+    build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
     build_subscribe_params,
@@ -23,16 +28,20 @@ from ._payloads import (
     build_ws_authenticate_params,
 )
 from .constants import DevHubEventType
+from .exceptions import DevHubRpcErrorCode, DevHubRpcException
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
+    AbandonedRequestFilter,
     AppDefinition,
     AppInstance,
     DevHubClientOptions,
     DevHubEvent,
     HubRuntime,
+    ListDefinitionsRequest,
     ListInstancesRequest,
     PingResult,
     RuntimeConnectionInfo,
+    VersionCompatibilityResult,
 )
 from .runtime import FileSystemRuntimeResolver, RuntimeResolver
 
@@ -144,25 +153,62 @@ class DevHubEventsClient:
         result = await self._send_request("hub.ping", params, require_authenticated=True)
         return parse_ping_result(result, path="hub.ping.result")
 
-    async def list_definitions(self) -> list[AppDefinition]:
+    async def get_host_version(self) -> str:
+        """通过 WebSocket 调用 `hub.getVersion` 并返回当前 Host 版本。"""
+
+        self._ensure_authenticated()
+        result = await self._send_request("hub.getVersion", None, require_authenticated=True)
+        return parse_host_version_result(result, path="hub.getVersion.result")
+
+    async def check_version_compatibility(self) -> VersionCompatibilityResult:
+        """检查当前 SDK 与已连接 Host 的版本兼容性。"""
+
+        try:
+            host_version = await self.get_host_version()
+        except DevHubRpcException as exc:
+            if not exc.is_code(DevHubRpcErrorCode.METHOD_NOT_FOUND):
+                raise
+            host_version = self.runtime.hub_version
+
+        return _versioning.evaluate_version_compatibility(
+            _versioning.get_sdk_version(),
+            host_version,
+        )
+
+    async def list_definitions(self, request: ListDefinitionsRequest) -> list[AppDefinition]:
         """通过 WebSocket 调用 `hub.apps.listDefinitions`。"""
 
         self._ensure_authenticated()
-        result = await self._send_request("hub.apps.listDefinitions", None, require_authenticated=True)
+        result = await self._send_request(
+            "hub.apps.listDefinitions",
+            build_list_definitions_params(request),
+            require_authenticated=True,
+        )
         return parse_definitions_result(result, path="hub.apps.listDefinitions.result")
 
-    async def get_definition(self, app_id: str) -> AppDefinition:
-        """通过 WebSocket 调用 `hub.apps.getDefinition`。"""
+    async def get_definition(self, app_id: str, scope: str) -> AppDefinition:
+        """通过 WebSocket 调用 `hub.apps.getDefinition`，按 `appId + scope` 精确读取 Definition。"""
 
         self._ensure_authenticated()
         result = await self._send_request(
             "hub.apps.getDefinition",
-            build_get_definition_params(app_id),
+            build_get_definition_params(app_id, scope),
             require_authenticated=True,
         )
         return parse_definition_result(result, path="hub.apps.getDefinition.result")
 
-    async def list_instances(self, request: ListInstancesRequest | None = None) -> list[AppInstance]:
+    async def get_instance(self, instance_id: str) -> AppInstance:
+        """通过 WebSocket 调用 `hub.apps.getInstance`，按 `instanceId` 精确读取实例快照。"""
+
+        self._ensure_authenticated()
+        result = await self._send_request(
+            "hub.apps.getInstance",
+            build_get_instance_params(instance_id),
+            require_authenticated=True,
+        )
+        return parse_instance_result(result, path="hub.apps.getInstance.result")
+
+    async def list_instances(self, request: ListInstancesRequest) -> list[AppInstance]:
         """通过 WebSocket 调用 `hub.apps.listInstances`。"""
 
         self._ensure_authenticated()
@@ -212,6 +258,25 @@ class DevHubEventsClient:
             aclose = getattr(iterator, "aclose", None)
             if aclose is not None:
                 await aclose()
+            self._refresh_session_state()
+
+    def get_abandoned_request_count(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """返回当前会话内匹配条件的已放弃请求数量。
+
+        该操作仅维护当前客户端持有的本地会话状态，不会发送网络请求。
+        """
+
+        self._ensure_not_closed()
+        return self._session.get_abandoned_request_count(filter)
+
+    def clear_abandoned_requests(self, filter: AbandonedRequestFilter | None = None) -> int:
+        """清理当前会话内匹配条件的已放弃请求记录。
+
+        该操作仅维护当前客户端持有的本地会话状态，不会发送网络请求。
+        """
+
+        self._ensure_not_closed()
+        return self._session.clear_abandoned_requests(filter)
 
     async def close(self) -> None:
         """关闭 WebSocket 客户端。"""
@@ -268,6 +333,7 @@ class DevHubEventsClient:
         is_terminated = getattr(self._session, "is_terminated", None)
         if callable(is_terminated) and is_terminated():
             self._authenticated = False
+            self._event_stream_available = False
 
     def _reopen_session(self) -> None:
         reopen = getattr(self._session, "reopen", None)

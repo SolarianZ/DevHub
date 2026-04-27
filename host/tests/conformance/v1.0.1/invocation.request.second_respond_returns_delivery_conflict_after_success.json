@@ -6,9 +6,10 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.delivery-conflict.json",
+        "fileName": "invoke.request.delivery-conflict--global.json",
         "definition": {
           "appId": "invoke.request.delivery-conflict",
+          "scope": "",
           "displayName": "invoke.request.delivery-conflict"
         }
       }
@@ -22,7 +23,7 @@
         "instance": {
           "instanceId": "request-delivery-conflict-inst",
           "appId": "invoke.request.delivery-conflict",
-          "scope": null,
+          "scope": "",
           "pid": 32009,
           "invoke": {
             "poll": true,
@@ -73,6 +74,9 @@
         "waitTimeoutMs": 3000,
         "queueIfOffline": true,
         "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
       }
     }
   },

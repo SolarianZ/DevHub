@@ -2,6 +2,7 @@ namespace DevHub.Host.Tests;
 
 using System.Text;
 using System.Text.Json;
+using DevHub.Core.Models;
 using DevHub.Host.Tests.TestHelpers;
 using DevHub.Host.Transport;
 using Microsoft.AspNetCore.Http;
@@ -131,6 +132,44 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
         var error = document.RootElement.GetProperty("error");
         Assert.Equal(-32099, error.GetProperty("code").GetInt32());
         Assert.Equal("not_supported", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Impl_RpcHttpEndpointHandler_AppDefinitionNotFoundError_ShouldPreserveExplicitGlobalScopeInJson()
+    {
+        using var harness = new HostTransportTestHarness(_tempRoot);
+
+        var httpContext = CreatePostContext(
+            harness.Token,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "definition-missing-null-scope",
+                "method": "hub.apps.getDefinition",
+                "params": {
+                  "appId": "missing.definition",
+                  "scope": ""
+                }
+              }
+            """,
+            includeProtocolHeader: true);
+
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+
+        httpContext.Response.Body.Position = 0;
+        using var document = JsonDocument.Parse(httpContext.Response.Body);
+        var error = document.RootElement.GetProperty("error");
+        Assert.Equal(-32014, error.GetProperty("code").GetInt32());
+        Assert.Equal("app_definition_not_found", error.GetProperty("message").GetString());
+
+        var errorData = error.GetProperty("data");
+        Assert.Equal("missing.definition", errorData.GetProperty("appId").GetString());
+        Assert.True(errorData.TryGetProperty("scope", out var scopeProperty));
+        Assert.Equal(JsonValueKind.String, scopeProperty.ValueKind);
+        Assert.Equal(ScopeContract.Global, scopeProperty.GetString());
     }
 
     /// <inheritdoc />

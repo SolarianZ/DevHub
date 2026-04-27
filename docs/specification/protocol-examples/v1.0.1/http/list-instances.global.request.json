@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": "apps-instances-list-global",
+  "method": "hub.apps.listInstances",
+  "params": {
+    "appId": "Sample.App",
+    "scope": "",
+    "includeOffline": false
+  }
+}

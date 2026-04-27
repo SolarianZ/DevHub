@@ -1,7 +1,7 @@
 {
   "id": "errors.http.invalid_request_missing_client_id_header",
   "caseId": "CONF-008",
-  "description": "HTTP 缺失 X-DevHub-ClientId 头时，必须返回 invalid_request 并带 reason/header。", 
+  "description": "HTTP 缺失 X-DevHub-ClientId 头时，必须返回 invalid_request 并带 reason/header。",
   "transport": "http",
   "http": {
     "headers": {

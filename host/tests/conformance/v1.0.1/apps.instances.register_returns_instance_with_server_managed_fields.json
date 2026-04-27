@@ -1,7 +1,7 @@
 {
   "id": "apps.instances.register_returns_instance_with_server_managed_fields",
   "caseId": "CONF-003",
-  "description": "注册实例成功时，hub.apps.registerInstance 必须返回带服务端时间戳的 AppInstance。",
+  "description": "注册实例成功时，hub.apps.registerInstance 必须返回带服务端时间戳的 AppInstance 和 instanceSessionToken。",
   "transport": "http",
   "http": {
     "headers": {
@@ -21,7 +21,7 @@
       "instance": {
         "instanceId": "apps-instance-register-1",
         "appId": "apps.instance.registered.app",
-        "scope": null,
+        "scope": "",
         "pid": 32001,
         "invoke": {
           "poll": true,
@@ -35,9 +35,11 @@
     "id": "apps-instances-register",
     "result": {
       "ok": true,
+      "instanceSessionToken": "${ANY_NON_EMPTY_STRING}",
       "instance": {
         "instanceId": "apps-instance-register-1",
         "appId": "apps.instance.registered.app",
+        "scope": "",
         "pid": 32001,
         "registeredAtUtc": "${ANY_ISO_UTC}",
         "lastSeenUtc": "${ANY_ISO_UTC}",
