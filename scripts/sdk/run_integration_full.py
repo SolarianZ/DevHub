@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -13,8 +14,37 @@ HOST_TARGET_FRAMEWORK = "net10.0"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOST_PROJECT_PATH = REPO_ROOT / "host" / "src" / "DevHub.Host" / "DevHub.Host.csproj"
 
+HELP_TEXT = """python scripts/sdk/run_integration_full.py --help
 
-def main() -> int:
+Build DevHub Host once into an isolated output directory, then reuse that Host assembly to run the repository .NET, JS/TS, and Python SDK test suites.
+
+Parameters:
+  --help  Print this capability and parameter summary without building Host or running tests.
+"""
+
+
+def maybe_print_help(argv: list[str]) -> bool:
+    if "--help" not in argv:
+        return False
+
+    print(HELP_TEXT)
+    return True
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build a shared DevHub Host artifact and run the repository-wide SDK integration suites.",
+        add_help=False,
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if maybe_print_help(args_list):
+        return 0
+
+    parse_args(args_list)
     temp_root = Path(tempfile.mkdtemp(prefix="devhub-sdk-full-")).resolve()
 
     try:

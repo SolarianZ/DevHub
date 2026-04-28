@@ -16,6 +16,7 @@
 - Python `3.11+`
 - Python 依赖：`requests`
 - Windows ACL 严格校验场景额外需要：`pywin32`
+- GitHub workflow 官方 action 基线：`actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v5`
 
 示例安装命令：
 
@@ -71,6 +72,11 @@ npm --prefix apps/monitor run test:native
 npm --prefix apps/monitor run tauri:check
 npm --prefix apps/monitor run verify
 python3 scripts/release/package_monitor.py --release-id local-dry-run
+python3 scripts/release/package_release.py --release-id local-dry-run --channel local
+python3 scripts/release/package_host.py --release-id host-local-check --verify-only
+python3 scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python3 scripts/release/package_js_sdk.py --release-id js-local-check --verify-only
+python3 scripts/release/package_py_sdk.py --release-id py-local-check --verify-only
 python3 host/tests/conformance/vector_runner.py
 python3 scripts/sdk/run_integration_full.py
 python3 scripts/docs/check_markdown_links.py
@@ -88,8 +94,12 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `npm --prefix apps/monitor run test:native` 用于执行 Monitor 原生后端单元测试。
 - `npm --prefix apps/monitor run tauri:check` 用于执行 Tauri 原生侧的非平台特定编译校验。
 - `npm --prefix apps/monitor run verify` 是 Monitor 工作区与 CI 对齐的本地验证入口，会串联前端构建/测试、原生单元测试和 `tauri:check`。
-- `DEVHUB_MONITOR_SDK_SOURCE` 控制 Monitor 的 JS SDK 来源；`apps/monitor/` 内的本地开发与验证命令默认使用 `local-src` 直连 `sdks/javascript/src`，显式设置为 `release` 时再回到安装好的 SDK tarball。独立 `monitor.yml` workflow 同样使用 `local-src` 作为仓库内 Monitor/SDK 联调门禁，该门禁以“只安装 `apps/monitor` 依赖即可完成验证”为前提，不得依赖 `sdks/javascript/node_modules`。
-- `python3 scripts/release/package_monitor.py --release-id local-dry-run` 用于执行 Monitor 本地打包校验；脚本默认以 `release` 生成正式打包路径校验，可通过 `--sdk-source local-src` 生成源码联调用途的开发包。
+- Monitor 的 JS SDK 来源固定为当前仓库 `sdks/javascript/src`；`@devhub/sdk` 与 `@devhub/sdk/runtime` 分别解析到 SDK 源码公开入口和 runtime 子路径。该路径以“只安装 `apps/monitor` 依赖即可完成验证”为前提，不依赖 `sdks/javascript/node_modules`。
+- `python3 scripts/release/package_release.py --release-id local-dry-run --channel local` 用于执行 release 级 dry-run，并在 `artifacts/release/<release-id>/` 下汇总 Host、SDK 与按渠道决定是否纳入的 Monitor 资产。
+- `python3 scripts/release/package_host.py --release-id host-local-check --verify-only`、`python3 scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only`、`python3 scripts/release/package_js_sdk.py --release-id js-local-check --verify-only`、`python3 scripts/release/package_py_sdk.py --release-id py-local-check --verify-only` 用于按产物域执行与工作流同级别的局部验证。
+- `python3 scripts/release/package_monitor.py --release-id local-dry-run` 用于执行 Monitor 本地打包校验，并在 manifest 中记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。
+- `python3 scripts/release/resolve_release_metadata.py --release-ref refs/heads/preview` 用于解析 `preview` / `main` / `v*` 对应的发布通道元数据，供 workflow 或本地排障核对。
+- 所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，只输出脚本用途和参数摘要，不执行验证、目录删除或打包逻辑。
 - Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
 - Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
 - `python3 host/tests/conformance/vector_runner.py` 用于运行仓库级 v1.0.1 符合性向量；默认会调度位于各 SDK `tests/` 目录下的官方 `.NET` / `JS/TS` / `Python` 适配器，也支持通过 `--adapter-manifest` 挂接第三方自研适配器，前置构建与输出说明见 [`host/tests/conformance/README.md`](../../../host/tests/conformance/README.md)。
@@ -133,7 +143,7 @@ npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 说明：
 
 - `JS/TS SDK` 根入口必须保持 `Node.js 20+` 与浏览器 / WebView 双运行时可导入；Node.js 文件系统发现能力统一通过 `@devhub/sdk-javascript/runtime` 暴露。
-- `JsonRpcWsSession` / `DevHubEventsClient` 在缺少全局 `WebSocket` 时允许以运行时懒加载方式回退到 Node 专用 `ws`；该回退不得让根入口源码在类型检查、浏览器构建或 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 的源码消费阶段静态解析 `ws` / `@types/ws`。
+- `JsonRpcWsSession` / `DevHubEventsClient` 在缺少全局 `WebSocket` 时允许以运行时懒加载方式回退到 Node 专用 `ws`；该回退不得让根入口源码在类型检查、浏览器构建或 Monitor 源码消费阶段静态解析 `ws` / `@types/ws`。
 - `npm --prefix sdks/javascript test` 中的集成测试会自行构建并启动临时 DevHub Host，为当前测试文件分配独立临时 `dataDir`，不会连接开发机默认数据目录下的常驻 Hub。
 - 如果需要关闭 Host 的默认临时构建，或希望与其他语言 SDK 并行复用同一份 Host 产物，请优先设置 `DEVHUB_SDK_HOST_ASSEMBLY`；如需只覆盖 `JS/TS SDK`，可改用 `DEVHUB_JS_SDK_HOST_ASSEMBLY`。
 
@@ -165,6 +175,7 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 3. 使用 `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release` 启动本地 Hub。
 4. 从数据根目录下的 `<dataDir>/runtime/hub.json` 动态读取 `httpBaseUrl`、`wsUrl` 与 `tokenFile`，禁止硬编码端口或地址。
 5. 完成改动后，至少执行单元测试与 smoke 集成测试；若涉及官方 SDK 集成测试夹具、SDK 维护脚本或多语言一致性，再执行 `python3 scripts/sdk/run_integration_full.py` 或最小相关 SDK 测试。
+6. 涉及 `.github/workflows/`、`scripts/release/` 或发布链路文档时，按 workflow 同级别执行本地验证，并同步核对 `preview` / `main` / `v*` 与普通分支 / PR 的路由条件、artifact 复用路径和手动发布入口说明。
 
 涉及 `apps/monitor/` 的改动时，额外执行：
 
@@ -172,7 +183,7 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 npm --prefix apps/monitor run verify
 ```
 
-若改动同时涉及 `apps/monitor/` 与 `sdks/javascript/` 的联调链路，再额外以 `DEVHUB_MONITOR_SDK_SOURCE=local-src` 执行最小相关 Monitor 构建或验证，并确认该命令在只安装 `apps/monitor` 依赖的前提下仍能通过。
+若改动同时涉及 `apps/monitor/` 与 `sdks/javascript/` 的联调链路，再额外执行最小相关 Monitor 构建或验证，并确认该命令在只安装 `apps/monitor` 依赖的前提下仍能通过。
 
 ## 7. 本地联调
 

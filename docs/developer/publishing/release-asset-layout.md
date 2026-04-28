@@ -26,6 +26,14 @@ artifacts/release/<release-id>/
 │   └── python/
 │       ├── devhub_sdk_python-<version>.tar.gz
 │       └── devhub_sdk_python-<version>-py3-none-any.whl
+├── monitor/
+│   └── <targetPlatform>/
+│       ├── bundle/
+│       │   └── ...
+│       ├── checks/
+│       │   └── validation-summary.json
+│       ├── release-manifest.json
+│       └── release-notes.md
 ├── checks/
 │   ├── validation-summary.json
 │   ├── smoke-host.stdout.log
@@ -34,6 +42,15 @@ artifacts/release/<release-id>/
 ├── release-manifest.json
 └── release-notes.md
 ```
+
+## 1.1 CI 复用 artifact
+
+发布意图路径会把最终 GitHub Release 所需输入先上传为 workflow artifact，再由发布 workflow 下载复用：
+
+- core release 资产：`release-core-<release-id>`
+- Monitor 平台资产：`monitor-assets-ubuntu-latest-<release-id>`、`monitor-assets-windows-latest-<release-id>`、`monitor-assets-macos-latest-<release-id>`
+
+`release-reusable.yml` 下载这些 artifact 后，会把 core 资产还原到 `artifacts/release/<release-id>/`，把三平台 Monitor 资产汇总到 `monitor/<targetPlatform>/`，再刷新 release-level manifest 与 release notes。
 
 ## 2. `release-id` 规则
 
@@ -63,7 +80,16 @@ artifacts/release/<release-id>/
 - `Python SDK` 保留 `python -m build` 产出的 wheel 和 sdist 文件名。
 - GitHub Release 当前只承载这些打包结果，不向外部包注册中心发布。
 
-## 5. Manifest 结构
+## 5. Monitor App 资产规则
+
+- preview 与 main 快照预发布包含 Monitor App 资产。
+- 稳定版发布的资产集合包含 Host 与三套 SDK。
+- CI 发布通过 Linux、Windows、macOS runner 生成 Monitor bundle，并在最终发布前汇总到 `monitor/<targetPlatform>/`。
+- 本地 `preview` 与 `main-snapshot` 打包会为当前机器生成一个 `monitor/<targetPlatform>/` 目录。
+- 每个 Monitor 平台目录包含该平台的 bundle、Monitor manifest、Monitor release notes 和验证摘要。
+- release-level manifest 中的 Monitor App 资产使用 `category = monitor-app`，`target` 使用 Monitor manifest 中的 `targetPlatform`，`variant` 使用 Monitor bundle 分类。
+
+## 6. Manifest 结构
 
 `release-manifest.json` 至少包含以下字段：
 
@@ -91,6 +117,26 @@ artifacts/release/<release-id>/
       "variant": "single-file",
       "path": "host/devhub-host-win-x64-single-file.zip",
       "sha256": "..."
+    },
+    {
+      "name": "DevHub Monitor_0.1.0_x64.AppImage",
+      "category": "monitor-app",
+      "target": "linux-x64",
+      "variant": "bundle-appimage",
+      "path": "monitor/linux-x64/bundle/appimage/DevHub Monitor_0.1.0_x64.AppImage",
+      "monitorVersion": "0.1.0",
+      "javascriptSdkVersion": "0.7.0",
+      "sha256": "..."
+    }
+  ],
+  "monitorPackages": [
+    {
+      "targetPlatform": "linux-x64",
+      "monitorVersion": "0.1.0",
+      "javascriptSdkVersion": "0.7.0",
+      "manifestPath": "monitor/linux-x64/release-manifest.json",
+      "releaseNotesPath": "monitor/linux-x64/release-notes.md",
+      "validationSummaryPath": "monitor/linux-x64/checks/validation-summary.json"
     }
   ],
   "validation": {
@@ -105,14 +151,17 @@ artifacts/release/<release-id>/
 - `assets[].path` 使用相对 `artifacts/release/<release-id>/` 的相对路径。
 - `assets[].sha256` 用于发布后人工核对或自动校验。
 - Host 资产条目必须包含 `assets[].variant`，取值限定为 `multi-file` 或 `single-file`。
+- Monitor App 资产条目必须包含 `target`、`variant`、`monitorVersion` 与 `javascriptSdkVersion`。
+- 包含 Monitor App 资产的发布必须提供 `monitorPackages[]`，用于定位各平台 Monitor manifest、release notes 与验证摘要。
 - `validation.executed=false` 仅允许出现在显式声明“已由外部流程完成门禁”的受控场景，默认本地打包必须自行执行验证。
 
-## 6. 发布说明文件
+## 7. 发布说明文件
 
 `release-notes.md` 应至少包含：
 
 - 发布通道、release id、release tag、提交 SHA
 - 资产摘要；同一 RID 的 Host multi-file / single-file 资产通过独立条目与 `Variant` 列区分
+- Monitor Packages 表格；包含目标平台、Monitor 版本、JS SDK 版本、平台 manifest 和验证摘要路径
 - 验证摘要
 - 面向用户的相关入口链接
 

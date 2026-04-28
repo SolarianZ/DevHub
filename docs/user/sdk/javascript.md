@@ -25,7 +25,7 @@ npm --prefix sdks/javascript run build
 npm --prefix sdks/javascript pack --pack-destination temp/sdk-pack
 ```
 
-`DEVHUB_MONITOR_SDK_SOURCE=local-src` 是仓库内 `apps/monitor/` 与 `sdks/javascript/` 的源码联调机制，不属于外部调用方安装或消费 `JS/TS SDK` 的正式方式。面向发布包的调用方应优先使用已构建的 SDK 资产或 release tarball。
+仓库内 `apps/monitor/` 直接映射到 `sdks/javascript/src` 进行源码联调。该机制不属于外部调用方安装或消费 `JS/TS SDK` 的正式方式。面向发布包的调用方应优先使用已构建的 SDK 资产。
 
 ## 3. 入口分工
 

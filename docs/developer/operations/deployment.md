@@ -68,7 +68,19 @@
 python scripts/release/package_release.py --release-id local-dry-run --channel local
 ```
 
-该入口会先执行发布门禁，再在 `artifacts/release/<release-id>/` 下生成 Host 双变体多平台压缩包、SDK 包、`release-manifest.json` 与 `release-notes.md`。正式对外交付、发布候选验证和维护者本地打包都应优先使用这一入口。
+该入口会先执行发布门禁，再在 `artifacts/release/<release-id>/` 下生成 Host 双变体多平台压缩包、SDK 包、`release-manifest.json` 与 `release-notes.md`。`preview` 与 `main-snapshot` 渠道还会生成当前平台 Monitor App 资产。正式对外交付、发布候选验证和维护者本地打包都应优先使用这一入口。
+
+仓库同时提供组件级入口，用于单独验证或打包某一产物域：
+
+```bash
+python scripts/release/package_host.py --release-id host-local-check --verify-only
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python scripts/release/package_js_sdk.py --release-id js-local-check --verify-only
+python scripts/release/package_py_sdk.py --release-id py-local-check --verify-only
+python scripts/release/package_monitor.py --release-id monitor-local-check --verify-only
+```
+
+所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，只输出脚本用途和参数摘要，不执行验证、目录删除或打包逻辑。
 
 `artifacts/release/<release-id>/host/` 下会为每个默认 RID 同时生成 `devhub-host-<rid>.zip` 与 `devhub-host-<rid>-single-file.zip`。两类 Host ZIP 都保持 framework-dependent；multi-file 版解压后需保留整目录，single-file 版启用 single-file compression，不生成 trimmed 变体。
 

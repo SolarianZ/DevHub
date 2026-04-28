@@ -30,6 +30,14 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 然后在消费项目中引用输出目录里的 `.nupkg`。正式发布后的主包 `PackageId` 为 `DevHub.Sdk.DotNet`；若需要 `AddDevHubSdk()`、`IDevHubClientFactory` 或 `IDevHubEventsClientFactory`，再额外引用 `DevHub.Sdk.DotNet.DependencyInjection`。生成的资产文件名会与 [`../../developer/publishing/release-asset-layout.md`](../../developer/publishing/release-asset-layout.md) 保持一致。
 
+如需生成与仓库发布流程同结构的本地 SDK 资产目录，可执行：
+
+```powershell
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check
+```
+
+该命令会把主包与 DI companion package 输出到 `artifacts/sdk/dotnet/<release-id>/sdk/dotnet/`，并生成同级验证摘要。Unity DLL 输出路径仍由 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 单独负责。
+
 ### 2.3 Unity 场景
 
 Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生成 DLL，并引用脚本输出目录中的 DLL；不要直接引用 SDK `.csproj`，也不要把 `dotnet pack` 生成的 `.nupkg` 作为 Unity 接入入口。脚本参数与输出说明见 [`../../../sdks/dotnet/README.md`](../../../sdks/dotnet/README.md)。

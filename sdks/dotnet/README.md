@@ -101,6 +101,15 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 
 生成本地包后，按上面的核心 SDK 或 DI companion package 边界引用对应包即可。`DevHub.Sdk.DotNet.DependencyInjection` 会直接依赖 `DevHub.Sdk.DotNet`。仓库内联调也按包边界消费。
 
+如需按仓库发布流程的标准目录输出并执行同级验证，可使用组件级打包脚本：
+
+```powershell
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-verify --verify-only
+```
+
+该脚本会把主包与 DI companion package 输出到 `artifacts/sdk/dotnet/<release-id>/sdk/dotnet/`，并在 `checks/validation-summary.json` 记录验证结果。Unity DLL 目录仍只通过 `publish_unity_dotnet_sdk.py` 生成。
+
 ### 正式发布占位
 
 ```xml
@@ -522,6 +531,8 @@ dotnet build host/DevHub.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet test sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Debug --no-restore
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only
+python scripts/release/package_dotnet_sdk.py --release-id dotnet-local-pack
 python3 scripts/sdk/publish_unity_dotnet_sdk.py --output artifacts/sdk/dotnet-for-unity
 dotnet pack sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj -c Release -o temp/sdk-pack
 dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.DependencyInjection.csproj -c Release -o temp/sdk-pack

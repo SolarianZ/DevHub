@@ -13,7 +13,7 @@ on:
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
-      - "docs/spec/**"
+      - "docs/specification/**"
   pull_request:
     paths:
       - "eng/**"
@@ -22,10 +22,269 @@ on:
       - "scripts/**"
       - "sdks/**"
       - ".github/workflows/**"
-      - "docs/spec/**"
+      - "docs/specification/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  route:
+    runs-on: ubuntu-latest
+    outputs:
+      changed_scopes: ${{ steps.plan.outputs.changed_scopes }}
+      release_channel: ${{ steps.plan.outputs.release_channel }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+      release_name: ${{ steps.plan.outputs.release_name }}
+      is_release_intent: ${{ steps.plan.outputs.is_release_intent }}
+      run_primary_validation: ${{ steps.plan.outputs.run_primary_validation }}
+      run_sdk_dotnet: ${{ steps.plan.outputs.run_sdk_dotnet }}
+      run_sdk_js: ${{ steps.plan.outputs.run_sdk_js }}
+      run_sdk_python: ${{ steps.plan.outputs.run_sdk_python }}
+      run_sdk_conformance: ${{ steps.plan.outputs.run_sdk_conformance }}
+      run_monitor_validation: ${{ steps.plan.outputs.run_monitor_validation }}
+      run_integration_full_gate: ${{ steps.plan.outputs.run_integration_full_gate }}
+      run_cross_platform_smoke: ${{ steps.plan.outputs.run_cross_platform_smoke }}
+      prepare_release_core_assets: ${{ steps.plan.outputs.prepare_release_core_assets }}
+      prepare_monitor_release_assets: ${{ steps.plan.outputs.prepare_monitor_release_assets }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve routing and change scopes
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_channel="none"
+          case "${REF}" in
+            refs/heads/preview)
+              release_channel="preview"
+              ;;
+            refs/heads/main)
+              release_channel="main-snapshot"
+              ;;
+            refs/tags/v*)
+              release_channel="stable"
+              ;;
+          esac
+
+          is_release_intent="false"
+          if [[ "${EVENT_NAME}" == "push" && "${release_channel}" != "none" ]]; then
+            is_release_intent="true"
+          fi
+
+          base_sha=""
+          head_sha="${SHA}"
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            base_sha="${PR_BASE_SHA}"
+            head_sha="${PR_HEAD_SHA}"
+          elif [[ -n "${EVENT_BEFORE}" && "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
+            base_sha="${EVENT_BEFORE}"
+          fi
+
+          if [[ -n "${base_sha}" ]]; then
+            git diff --name-only "${base_sha}" "${head_sha}" > "${RUNNER_TEMP}/devhub-changed-files.txt"
+          else
+            git show --pretty="" --name-only "${head_sha}" > "${RUNNER_TEMP}/devhub-changed-files.txt"
+          fi
+
+          changed_host="false"
+          changed_sdk_dotnet="false"
+          changed_sdk_js="false"
+          changed_sdk_python="false"
+          changed_monitor="false"
+          changed_release="false"
+          changed_workflow="false"
+          changed_docs_specification="false"
+
+          while IFS= read -r file; do
+            [[ -z "${file}" ]] && continue
+            case "${file}" in
+              eng/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_monitor="true"
+                changed_release="true"
+                ;;
+              host/*)
+                changed_host="true"
+                ;;
+              sdks/dotnet/*)
+                changed_sdk_dotnet="true"
+                ;;
+              sdks/javascript/*)
+                changed_sdk_js="true"
+                changed_monitor="true"
+                ;;
+              sdks/python/*)
+                changed_sdk_python="true"
+                ;;
+              apps/monitor/*)
+                changed_monitor="true"
+                ;;
+              apps/*)
+                changed_monitor="true"
+                ;;
+              scripts/release/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_monitor="true"
+                changed_release="true"
+                ;;
+              scripts/sdk/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                ;;
+              scripts/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_monitor="true"
+                changed_release="true"
+                ;;
+              .github/workflows/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_monitor="true"
+                changed_release="true"
+                changed_workflow="true"
+                ;;
+              docs/specification/*)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_docs_specification="true"
+                ;;
+              *)
+                changed_host="true"
+                changed_sdk_dotnet="true"
+                changed_sdk_js="true"
+                changed_sdk_python="true"
+                changed_monitor="true"
+                changed_release="true"
+                changed_workflow="true"
+                ;;
+            esac
+          done < "${RUNNER_TEMP}/devhub-changed-files.txt"
+
+          if [[ "${is_release_intent}" == "true" ]]; then
+            run_primary_validation="true"
+            run_sdk_dotnet="true"
+            run_sdk_js="true"
+            run_sdk_python="true"
+            run_sdk_conformance="true"
+            run_integration_full_gate="true"
+            run_cross_platform_smoke="true"
+            prepare_release_core_assets="true"
+            if [[ "${release_channel}" == "stable" ]]; then
+              run_monitor_validation="false"
+              prepare_monitor_release_assets="false"
+            else
+              run_monitor_validation="true"
+              prepare_monitor_release_assets="true"
+            fi
+          else
+            run_primary_validation="false"
+            run_sdk_dotnet="false"
+            run_sdk_js="false"
+            run_sdk_python="false"
+            run_sdk_conformance="false"
+            run_monitor_validation="false"
+            run_integration_full_gate="false"
+            run_cross_platform_smoke="false"
+            prepare_release_core_assets="false"
+            prepare_monitor_release_assets="false"
+
+            if [[ "${changed_host}" == "true" || "${changed_sdk_dotnet}" == "true" || "${changed_sdk_js}" == "true" || "${changed_sdk_python}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ]]; then
+              run_primary_validation="true"
+            fi
+            if [[ "${changed_host}" == "true" || "${changed_sdk_dotnet}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ]]; then
+              run_sdk_dotnet="true"
+            fi
+            if [[ "${changed_host}" == "true" || "${changed_sdk_js}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ]]; then
+              run_sdk_js="true"
+            fi
+            if [[ "${changed_host}" == "true" || "${changed_sdk_python}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ]]; then
+              run_sdk_python="true"
+            fi
+            if [[ "${changed_host}" == "true" || "${changed_sdk_dotnet}" == "true" || "${changed_sdk_js}" == "true" || "${changed_sdk_python}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ]]; then
+              run_sdk_conformance="true"
+            fi
+            if [[ "${changed_monitor}" == "true" || "${changed_sdk_js}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" ]]; then
+              run_monitor_validation="true"
+            fi
+          fi
+
+          changed_scopes=()
+          if [[ "${changed_host}" == "true" ]]; then changed_scopes+=("host"); fi
+          if [[ "${changed_sdk_dotnet}" == "true" ]]; then changed_scopes+=("sdk-dotnet"); fi
+          if [[ "${changed_sdk_js}" == "true" ]]; then changed_scopes+=("sdk-js"); fi
+          if [[ "${changed_sdk_python}" == "true" ]]; then changed_scopes+=("sdk-python"); fi
+          if [[ "${changed_monitor}" == "true" ]]; then changed_scopes+=("monitor"); fi
+          if [[ "${changed_release}" == "true" ]]; then changed_scopes+=("release"); fi
+          if [[ "${changed_workflow}" == "true" ]]; then changed_scopes+=("workflow"); fi
+          if [[ "${changed_docs_specification}" == "true" ]]; then changed_scopes+=("docs-specification"); fi
+
+          changed_scopes_value="none"
+          if [[ "${#changed_scopes[@]}" -gt 0 ]]; then
+            changed_scopes_value="$(IFS=,; echo "${changed_scopes[*]}")"
+          fi
+
+          release_id=""
+          release_tag=""
+          release_name=""
+          if [[ "${is_release_intent}" == "true" ]]; then
+            metadata_json="$(python3 scripts/release/resolve_release_metadata.py --release-ref "${REF}" --commit "${head_sha}")"
+            release_id="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseId'])")"
+            release_tag="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseTag'])")"
+            release_name="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseName'])")"
+          fi
+
+          {
+            echo "changed_scopes=${changed_scopes_value}"
+            echo "release_channel=${release_channel}"
+            echo "release_id=${release_id}"
+            echo "release_tag=${release_tag}"
+            echo "release_name=${release_name}"
+            echo "is_release_intent=${is_release_intent}"
+            echo "run_primary_validation=${run_primary_validation}"
+            echo "run_sdk_dotnet=${run_sdk_dotnet}"
+            echo "run_sdk_js=${run_sdk_js}"
+            echo "run_sdk_python=${run_sdk_python}"
+            echo "run_sdk_conformance=${run_sdk_conformance}"
+            echo "run_monitor_validation=${run_monitor_validation}"
+            echo "run_integration_full_gate=${run_integration_full_gate}"
+            echo "run_cross_platform_smoke=${run_cross_platform_smoke}"
+            echo "prepare_release_core_assets=${prepare_release_core_assets}"
+            echo "prepare_monitor_release_assets=${prepare_monitor_release_assets}"
+          } >> "${GITHUB_OUTPUT}"
+
   build-and-test:
+    needs: route
+    if: needs.route.outputs.run_primary_validation == 'true'
     runs-on: ubuntu-latest
 
     env:
@@ -33,7 +292,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -162,9 +421,16 @@ jobs:
 
           python3 host/tests/blackbox/test_runner.py --fast --no-header --use-existing-host --no-build-host 2>&1 | tee "$runner_log"
 
+      - name: Upload shared Host artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdk-host-release
+          path: host/src/DevHub.Host/bin/Release/net10.0
+          if-no-files-found: error
+
       - name: Upload build-and-test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-and-test-diagnostics
           path: |
@@ -177,41 +443,16 @@ jobs:
             host/**/TestResults/**
           if-no-files-found: warn
 
-  sdk-host-artifact:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Build shared Host artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          host_output_root="$RUNNER_TEMP/devhub-sdk-host"
-          dotnet build host/src/DevHub.Host/DevHub.Host.csproj -c Release --nologo \
-            -p:BaseOutputPath="${host_output_root}/bin/"
-          test -f "${host_output_root}/bin/Release/net10.0/DevHub.Host.dll"
-
-      - name: Upload shared Host artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: sdk-host-release
-          path: ${{ runner.temp }}/devhub-sdk-host/bin/Release/net10.0
-          if-no-files-found: error
-
   sdk-dotnet-tests:
-    needs: sdk-host-artifact
+    needs:
+      - route
+      - build-and-test
+    if: needs.route.outputs.run_sdk_dotnet == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -219,7 +460,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v5
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -247,12 +488,15 @@ jobs:
           test -f host/src/DevHub.Host/bin/Debug/net10.0/DevHub.Host.dll
 
   sdk-ts-tests:
-    needs: sdk-host-artifact
+    needs:
+      - route
+      - build-and-test
+    if: needs.route.outputs.run_sdk_js == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -260,7 +504,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -273,7 +517,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v5
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -284,12 +528,15 @@ jobs:
         run: npm --prefix sdks/javascript test
 
   sdk-python-tests:
-    needs: sdk-host-artifact
+    needs:
+      - route
+      - build-and-test
+    if: needs.route.outputs.run_sdk_python == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -307,7 +554,7 @@ jobs:
           python -m pip install -e './sdks/python[test]' requests
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v5
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -318,12 +565,15 @@ jobs:
         run: python -m pytest sdks/python/tests
 
   sdk-conformance:
-    needs: sdk-host-artifact
+    needs:
+      - route
+      - build-and-test
+    if: needs.route.outputs.run_sdk_conformance == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -331,7 +581,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -354,7 +604,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v5
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -376,7 +626,7 @@ jobs:
 
       - name: Upload conformance diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sdk-conformance-diagnostics
           path: |
@@ -384,8 +634,62 @@ jobs:
             temp/conformance_snapshots/**
           if-no-files-found: warn
 
+  monitor-validation:
+    needs: route
+    if: needs.route.outputs.run_monitor_validation == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/monitor/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Run Monitor packaging verification
+        run: python3 scripts/release/package_monitor.py --release-id monitor-ci --verify-only
+
+      - name: Upload Monitor diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: monitor-diagnostics-${{ github.run_id }}
+          path: |
+            artifacts/monitor/**
+            apps/monitor/src-tauri/target/release/bundle/**
+          if-no-files-found: warn
+
   integration-full-gate:
-    needs: build-and-test
+    needs:
+      - route
+      - build-and-test
+    if: needs.route.outputs.run_integration_full_gate == 'true'
     runs-on: ubuntu-latest
 
     env:
@@ -393,7 +697,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -509,7 +813,7 @@ jobs:
 
       - name: Upload integration-full diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: integration-full-diagnostics
           path: |
@@ -521,6 +825,8 @@ jobs:
           if-no-files-found: warn
 
   cross-platform-smoke:
+    needs: route
+    if: needs.route.outputs.run_cross_platform_smoke == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -533,7 +839,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -674,7 +980,7 @@ jobs:
 
       - name: Upload cross-platform smoke diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cross-platform-smoke-${{ matrix.os }}-diagnostics
           path: |
@@ -684,13 +990,9 @@ jobs:
             temp/test_log.txt
           if-no-files-found: warn
 
-  publish-release:
-    if: >
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/preview' ||
-       github.ref == 'refs/heads/main' ||
-       startsWith(github.ref, 'refs/tags/v'))
+  prepare-release-core-assets:
     needs:
+      - route
       - build-and-test
       - sdk-dotnet-tests
       - sdk-ts-tests
@@ -698,6 +1000,145 @@ jobs:
       - sdk-conformance
       - integration-full-gate
       - cross-platform-smoke
+    if: needs.route.outputs.prepare_release_core_assets == 'true'
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdks/javascript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Prepare core release assets
+        run: |
+          python3 scripts/release/package_release.py \
+            --release-id "${{ needs.route.outputs.release_id }}" \
+            --channel "${{ needs.route.outputs.release_channel }}" \
+            --release-tag "${{ needs.route.outputs.release_tag }}" \
+            --release-name "${{ needs.route.outputs.release_name }}" \
+            --commit "${{ github.sha }}" \
+            --skip-monitor \
+            --validated-externally
+
+      - name: Upload core release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-core-${{ needs.route.outputs.release_id }}
+          path: artifacts/release/${{ needs.route.outputs.release_id }}
+          if-no-files-found: error
+
+      - name: Upload core release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-core-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
+
+  prepare-monitor-release-assets:
+    needs:
+      - route
+      - monitor-validation
+    if: needs.route.outputs.prepare_monitor_release_assets == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.runner }}
+
+    env:
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/monitor/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies for Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Prepare Monitor App assets
+        run: python3 scripts/release/package_monitor.py --release-id "${{ needs.route.outputs.release_id }}" --output-root artifacts/monitor --validated-externally
+
+      - name: Upload Monitor App assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: monitor-assets-${{ matrix.runner }}-${{ needs.route.outputs.release_id }}
+          path: artifacts/monitor/${{ needs.route.outputs.release_id }}
+          if-no-files-found: error
+
+      - name: Upload Monitor diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: monitor-diagnostics-${{ matrix.runner }}-${{ github.run_id }}
+          path: |
+            artifacts/monitor/**
+            apps/monitor/src-tauri/target/release/bundle/**
+          if-no-files-found: warn
+
+  publish-release:
+    if: >
+      always() &&
+      needs.route.outputs.is_release_intent == 'true' &&
+      needs.prepare-release-core-assets.result == 'success' &&
+      (needs.route.outputs.release_channel == 'stable' ||
+       needs.prepare-monitor-release-assets.result == 'success')
+    needs:
+      - route
+      - prepare-release-core-assets
+      - prepare-monitor-release-assets
     permissions:
       actions: read
       contents: write
@@ -706,4 +1147,5 @@ jobs:
       target_ref: ${{ github.sha }}
       release_ref: ${{ github.ref }}
       verify_ci_success: false
+      ci_run_id: ${{ github.run_id }}
     secrets: inherit
