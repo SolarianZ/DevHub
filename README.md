@@ -1,5 +1,7 @@
 # DevHub
 
+**注意**：当前分支 .NET SDK 为适配 Unity 2019 而作了大量修改，若要使用通用版本 .NET SDK ，请查看 main 分支。
+
 DevHub 是面向本机单用户场景的守护进程（Local Per-user Daemon），为各类工具提供实例注册、发现、调用编排与事件订阅能力。
 
 本仓库包含协议规范、Host 核心实现、多语言 SDK、官方桌面 `DevHub Monitor` 以及白盒、黑盒和 conformance 测试套件。所有公开行为、字段命名、状态转换、错误语义与序列化契约均以 [`docs/specification/protocol/Specification.md`](docs/specification/protocol/Specification.md) 为唯一权威标准。

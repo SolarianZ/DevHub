@@ -21,6 +21,7 @@ scripts/
 │   ├── resolve_release_metadata.py          # 统一解析 preview/main/stable 发布元数据
 │   └── sync_versions.py                     # 版本号同步脚本
 └── sdk/                                     # SDK 验证辅助脚本
+    ├── publish_unity_dotnet_sdk.py          # Unity 版 .NET SDK 专用发布脚本
     └── run_integration_full.py              # 运行完整 SDK 集成测试
 ```
 
