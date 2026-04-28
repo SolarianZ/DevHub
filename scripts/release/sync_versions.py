@@ -9,6 +9,7 @@ from xml.etree import ElementTree
 
 import tomllib
 
+from console_output import console_print
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERSION_PROPS = REPO_ROOT / "eng" / "Version.props"
@@ -37,12 +38,12 @@ def main() -> int:
     if args.check:
         mismatches = collect_mismatches(package_version)
         if mismatches:
-            print("Version metadata drift detected:", file=sys.stderr)
+            console_print("Version metadata drift detected:", file=sys.stderr)
             for mismatch in mismatches:
-                print(f"- {mismatch}", file=sys.stderr)
+                console_print(f"- {mismatch}", file=sys.stderr)
             return 1
 
-        print(f"Version metadata is consistent with {VERSION_PROPS.relative_to(REPO_ROOT)} ({package_version}).")
+        console_print(f"Version metadata is consistent with {VERSION_PROPS.relative_to(REPO_ROOT)} ({package_version}).")
         return 0
 
     changed_paths: list[Path] = []
@@ -58,11 +59,11 @@ def main() -> int:
         raise RuntimeError("同步后仍检测到版本漂移：" + "; ".join(mismatches))
 
     if changed_paths:
-        print(f"Synchronized package metadata to {package_version}:")
+        console_print(f"Synchronized package metadata to {package_version}:")
         for path in changed_paths:
-            print(f"- {path.relative_to(REPO_ROOT)}")
+            console_print(f"- {path.relative_to(REPO_ROOT)}")
     else:
-        print(f"Package metadata already matches {VERSION_PROPS.relative_to(REPO_ROOT)} ({package_version}).")
+        console_print(f"Package metadata already matches {VERSION_PROPS.relative_to(REPO_ROOT)} ({package_version}).")
 
     return 0
 
@@ -169,5 +170,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Version synchronization failed: {exc}", file=sys.stderr)
+        console_print(f"Version synchronization failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

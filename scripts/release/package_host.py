@@ -7,6 +7,7 @@ import sys
 import time
 from pathlib import Path
 
+from console_output import console_print
 from package_models import (
     HostPackageOptions,
     HostPackageResult,
@@ -314,9 +315,9 @@ def main(argv: list[str] | None = None) -> int:
     write_json(checks_dir / "validation-summary.json", build_validation_summary(result.validation_records))
 
     if args.verify_only:
-        print(f"Host validation ready: {checks_dir}")
+        console_print(f"Host validation ready: {checks_dir}")
     else:
-        print(f"Host release assets ready: {result.output_dir}")
+        console_print(f"Host release assets ready: {result.output_dir}")
     return 0
 
 
@@ -324,5 +325,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Host packaging failed: {exc}", file=sys.stderr)
+        console_print(f"Host packaging failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 
+from console_output import console_print
 from package_shared import read_git_output
 
 
@@ -81,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         "commit": commit,
         **resolve_release_metadata(release_ref=args.release_ref, commit=commit),
     }
-    print(json.dumps(payload, ensure_ascii=False))
+    console_print(json.dumps(payload, ensure_ascii=False))
     return 0
 
 
@@ -89,5 +90,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Release metadata resolution failed: {exc}", file=sys.stderr)
+        console_print(f"Release metadata resolution failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

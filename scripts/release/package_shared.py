@@ -19,6 +19,7 @@ from xml.etree import ElementTree
 
 import tomllib
 
+from console_output import console_print, write_console_text
 from package_models import HOST_VARIANTS, HOST_VARIANT_ORDER, PackageHelp, ReleaseAsset, ValidationRecord
 
 
@@ -69,7 +70,7 @@ def maybe_print_help(argv: Sequence[str], help_info: PackageHelp) -> bool:
     if "--help" not in argv:
         return False
 
-    print(render_package_help(help_info))
+    console_print(render_package_help(help_info))
     return True
 
 
@@ -198,8 +199,8 @@ def run_logged_command(
     env_overrides: dict[str, str] | None = None,
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"==> {name}")
-    print(f"    {format_command(command)}")
+    console_print(f"==> {name}")
+    console_print(f"    {format_command(command)}")
 
     command_env = os.environ.copy()
     if env_overrides:
@@ -218,8 +219,9 @@ def run_logged_command(
         )
         assert process.stdout is not None
         for line in process.stdout:
-            sys.stdout.write(line)
+            write_console_text(line)
             log_handle.write(line)
+        process.stdout.close()
         return_code = process.wait()
 
     status = "passed" if return_code == 0 else "failed"

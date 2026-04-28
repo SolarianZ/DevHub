@@ -10,6 +10,7 @@ from typing import Sequence
 
 import tomllib
 
+from console_output import console_print
 from package_models import (
     MonitorPackageOptions,
     MonitorPackageResult,
@@ -525,9 +526,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.verify_only:
-        print(f"Monitor validation ready: {checks_dir}")
+        console_print(f"Monitor validation ready: {checks_dir}")
     else:
-        print(f"Monitor release assets ready: {result.output_dir}")
+        console_print(f"Monitor release assets ready: {result.output_dir}")
     return 0
 
 
@@ -535,5 +536,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Monitor packaging failed: {exc}", file=sys.stderr)
+        console_print(f"Monitor packaging failed: {exc}", file=sys.stderr)
         raise SystemExit(1)
