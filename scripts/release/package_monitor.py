@@ -125,6 +125,7 @@ def package_monitor(options: MonitorPackageOptions) -> MonitorPackageResult:
     versions = ensure_monitor_version_consistency()
 
     prepare_monitor_workspace(options.checks_dir, validation_records)
+    sync_monitor_version_metadata(options.checks_dir, validation_records)
     if not options.skip_validation:
         run_monitor_validation(options.checks_dir, validation_records)
     versions.update(read_monitor_version_metadata(expected_monitor_version=versions["monitor"]))
@@ -242,6 +243,16 @@ def prepare_monitor_workspace(checks_dir: Path, validation_records: list[Validat
         command=[NPM_COMMAND, "ci"],
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-install.log",
+        validation_records=validation_records,
+    )
+
+
+def sync_monitor_version_metadata(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
+    run_logged_command(
+        name="Monitor sync version metadata",
+        command=[NPM_COMMAND, "run", "sync:version-metadata"],
+        cwd=MONITOR_DIR,
+        log_path=checks_dir / "monitor-sync-version-metadata.log",
         validation_records=validation_records,
     )
 

@@ -78,7 +78,7 @@ Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录
 - `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动发布入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经存在成功的 `ci` push run。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
 - `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、成功 `ci` run 查询、workflow artifact 下载、release manifest 汇总与 GitHub Release 发布；该 workflow 不会为同一提交重新执行 Host / SDK / Monitor 的同级验证。
 - 当前发布流程只生成并上传 GitHub Release 资产，不会同步把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，或把 `Python SDK` 发布到 PyPI。
-- `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码。
+- `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码，并在打包前执行 `npm run sync:version-metadata`，保证 `--validated-externally` 路径在干净工作区内也具备完整输入。
 
 ## 5. 发布说明与 TODO 占位
 
