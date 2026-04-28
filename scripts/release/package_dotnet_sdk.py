@@ -82,13 +82,14 @@ def package_dotnet_sdk(options: DotNetSdkPackageOptions) -> DotNetSdkPackageResu
         "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_PROJECTS[1]),
     }
 
-    run_logged_command(
-        name=".NET SDK tests",
-        command=["dotnet", "test", str(REPO_ROOT / "sdks" / "dotnet" / "DevHub.DotNetSdk.slnx"), "-c", "Release"],
-        cwd=REPO_ROOT,
-        log_path=options.checks_dir / "dotnet-sdk-tests.log",
-        validation_records=validation_records,
-    )
+    if not options.skip_validation:
+        run_logged_command(
+            name=".NET SDK tests",
+            command=["dotnet", "test", str(REPO_ROOT / "sdks" / "dotnet" / "DevHub.DotNetSdk.slnx"), "-c", "Release"],
+            cwd=REPO_ROOT,
+            log_path=options.checks_dir / "dotnet-sdk-tests.log",
+            validation_records=validation_records,
+        )
 
     assets = []
     if not options.verify_only:

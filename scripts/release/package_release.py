@@ -87,6 +87,10 @@ def build_help() -> PackageHelp:
                     ),
                     PackageHelpOption("--skip-monitor", "Skip local Monitor packaging for preview/main-snapshot channels."),
                     PackageHelpOption(
+                        "--validated-externally",
+                        "Assume same-grade Host/SDK/Monitor verification already completed upstream and only run packaging/assembly steps.",
+                    ),
+                    PackageHelpOption(
                         "--monitor-assets-root <dir>",
                         "Merge Monitor package outputs from an external root instead of building them locally.",
                     ),
@@ -126,6 +130,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--skip-monitor",
         action="store_true",
         help="Do not run local Monitor packaging for preview/main-snapshot channels.",
+    )
+    parser.add_argument(
+        "--validated-externally",
+        action="store_true",
+        help="Assume same-grade verification already completed upstream and only perform packaging/assembly steps.",
     )
     parser.add_argument(
         "--monitor-assets-root",
@@ -168,6 +177,7 @@ def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
             checks_dir=checks_dir,
             host_rids=options.host_rids,
             validation_records=validation_records,
+            skip_validation=options.validated_externally,
         )
 
     include_local_monitor = options.channel in {"preview", "main-snapshot"} and not options.skip_monitor
@@ -180,6 +190,7 @@ def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
         local_monitor_assets, monitor_records = package_local_monitor_assets(
             output_dir=output_dir,
             release_id=options.release_id,
+            skip_validation=options.validated_externally,
         )
         monitor_assets.extend(local_monitor_assets)
         validation_records.extend(monitor_records)
@@ -242,6 +253,7 @@ def build_core_release_assets(
     checks_dir: Path,
     host_rids: tuple[str, ...],
     validation_records: list[ValidationRecord],
+    skip_validation: bool,
 ) -> tuple[list[ReleaseAsset], dict[str, str]]:
     assets: list[ReleaseAsset] = []
     versions: dict[str, str] = {}
@@ -251,6 +263,7 @@ def build_core_release_assets(
             output_dir=output_dir,
             checks_dir=checks_dir,
             host_rids=host_rids,
+            skip_validation=skip_validation,
         )
     )
     assets.extend(host_result.assets)
@@ -261,6 +274,7 @@ def build_core_release_assets(
         DotNetSdkPackageOptions(
             output_dir=output_dir,
             checks_dir=checks_dir,
+            skip_validation=skip_validation,
         )
     )
     assets.extend(dotnet_result.assets)
@@ -271,6 +285,7 @@ def build_core_release_assets(
         JavaScriptSdkPackageOptions(
             output_dir=output_dir,
             checks_dir=checks_dir,
+            skip_validation=skip_validation,
         )
     )
     assets.extend(javascript_result.assets)
@@ -281,6 +296,7 @@ def build_core_release_assets(
         PythonSdkPackageOptions(
             output_dir=output_dir,
             checks_dir=checks_dir,
+            skip_validation=skip_validation,
         )
     )
     assets.extend(python_result.assets)
@@ -319,6 +335,7 @@ def package_local_monitor_assets(
     *,
     output_dir: Path,
     release_id: str,
+    skip_validation: bool,
 ) -> tuple[list[ReleaseAsset], tuple[ValidationRecord, ...]]:
     monitor_staging_root = output_dir / ".monitor-staging"
     if monitor_staging_root.exists():
@@ -331,6 +348,7 @@ def package_local_monitor_assets(
                 release_id=release_id,
                 output_dir=monitor_output_dir,
                 checks_dir=monitor_output_dir / "checks",
+                skip_validation=skip_validation,
             )
         )
         return copy_monitor_package_outputs(output_dir, monitor_staging_root), monitor_result.validation_records
@@ -479,8 +497,8 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
             "",
             "## Validation",
             "",
-            "- Validation executed locally through `python scripts/release/package_release.py`.",
-            "- Summary file: `checks/validation-summary.json`.",
+            "- Packaging and integrity steps for this output are recorded in `checks/validation-summary.json`.",
+            "- Workflow-driven releases may satisfy same-grade verification in upstream CI jobs before asset assembly.",
             "",
             "## Next Steps",
             "",
@@ -642,6 +660,7 @@ def main(argv: list[str] | None = None) -> int:
             skip_monitor=bool(args.skip_monitor),
             monitor_assets_root=Path(args.monitor_assets_root).resolve() if args.monitor_assets_root else None,
             reuse_existing_output=bool(args.reuse_existing_output),
+            validated_externally=bool(args.validated_externally),
         )
     )
     print(f"Release assets ready: {result.output_dir}")

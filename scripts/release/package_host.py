@@ -98,7 +98,8 @@ def package_host(options: HostPackageOptions) -> HostPackageResult:
         "host": read_msbuild_version(HOST_PROJECT),
     }
 
-    run_host_validation(options.checks_dir, validation_records)
+    if not options.skip_validation:
+        run_host_validation(options.checks_dir, validation_records)
 
     assets = []
     if not options.verify_only:

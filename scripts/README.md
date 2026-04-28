@@ -18,6 +18,7 @@ scripts/
 │   ├── package_monitor.py                   # Monitor 单平台验证与打包入口
 │   ├── package_models.py                    # 发布脚本共享数据模型
 │   ├── package_shared.py                    # 发布脚本共享 CLI / 日志 / 路径 / JSON 辅助
+│   ├── resolve_release_metadata.py          # 统一解析 preview/main/stable 发布元数据
 │   └── sync_versions.py                     # 版本号同步脚本
 └── sdk/                                     # SDK 验证辅助脚本
     └── run_integration_full.py              # 运行完整 SDK 集成测试
@@ -27,5 +28,6 @@ scripts/
 
 - `scripts/release/package_release.py` 负责 release 级元数据、组件打包编排、manifest、release notes 和最终完整性检查。
 - `scripts/release/package_host.py`、`package_dotnet_sdk.py`、`package_js_sdk.py`、`package_py_sdk.py`、`package_monitor.py` 负责各自产物域的独立验证或打包。
+- `scripts/release/resolve_release_metadata.py` 负责把 `preview`、`main` 与 `v*` ref 解析为统一的 channel、release id、release tag 与 release name。
 - 所有 package 脚本都支持 `--release-id` 和 `--output-root` 参数。
 - 具备“只验证不产物化”语义的脚本提供 `--verify-only` 参数，用于执行对应工作流同级别的本地校验而不写出完整产物。

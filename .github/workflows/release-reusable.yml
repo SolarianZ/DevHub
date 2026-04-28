@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       target_ref:
-        description: Git ref or commit SHA to package and publish.
+        description: Git ref or commit SHA to publish.
         required: true
         type: string
       release_ref:
@@ -16,6 +16,15 @@ on:
         required: false
         default: false
         type: boolean
+      ci_run_id:
+        description: Existing ci run id that already prepared the verified release assets.
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.release_ref }}
+  cancel-in-progress: ${{ !(startsWith(inputs.release_ref, 'refs/tags/v') || startsWith(inputs.release_ref, 'v')) }}
 
 jobs:
   resolve_release_metadata:
@@ -31,10 +40,11 @@ jobs:
       release_name: ${{ steps.meta.outputs.release_name }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
       should_publish: ${{ steps.gate.outputs.should_publish }}
+      ci_run_id: ${{ steps.meta.outputs.ci_run_id }}
 
     steps:
       - name: Checkout target
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.target_ref }}
@@ -43,6 +53,7 @@ jobs:
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_CI_RUN_ID: ${{ inputs.ci_run_id }}
           RELEASE_REF: ${{ inputs.release_ref }}
           REPOSITORY: ${{ github.repository }}
           VERIFY_CI_SUCCESS: ${{ inputs.verify_ci_success }}
@@ -51,57 +62,13 @@ jobs:
           set -euo pipefail
 
           commit_sha="$(git rev-parse HEAD)"
-          short_sha="${commit_sha::7}"
-          commit_stamp="$(git show -s --date=format:%Y%m%dT%H%M%SZ --format=%cd "$commit_sha")"
-          channel=""
-          release_tag=""
-          release_id=""
-          release_name=""
-          prerelease="true"
-
-          case "${RELEASE_REF}" in
-            preview|refs/heads/preview)
-              channel="preview"
-              release_tag="preview-latest"
-              release_id="preview-latest"
-              release_name="DevHub Preview"
-              prerelease="true"
-              ;;
-            main|refs/heads/main)
-              channel="main-snapshot"
-              release_tag="main-${commit_stamp}-${short_sha}"
-              release_id="${release_tag}"
-              release_name="DevHub Main Snapshot ${commit_stamp} ${short_sha}"
-              prerelease="true"
-              ;;
-            v*)
-              channel="stable"
-              release_tag="${RELEASE_REF}"
-              release_id="${release_tag}"
-              release_name="DevHub ${release_tag}"
-              prerelease="false"
-              ;;
-            refs/tags/v*)
-              channel="stable"
-              release_tag="${RELEASE_REF#refs/tags/}"
-              release_id="${release_tag}"
-              release_name="DevHub ${release_tag}"
-              prerelease="false"
-              ;;
-            *)
-              mapfile -t version_tags < <(git tag --points-at "${commit_sha}" --list 'v*' | sort)
-              if [[ ${#version_tags[@]} -eq 1 ]]; then
-                channel="stable"
-                release_tag="${version_tags[0]}"
-                release_id="${release_tag}"
-                release_name="DevHub ${release_tag}"
-                prerelease="false"
-              else
-                echo "release_ref must resolve to preview, main, or a unique v* tag." >&2
-                exit 1
-              fi
-              ;;
-          esac
+          metadata_json="$(python3 scripts/release/resolve_release_metadata.py --release-ref "${RELEASE_REF}" --commit "${commit_sha}")"
+          channel="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['channel'])")"
+          release_tag="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseTag'])")"
+          release_id="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseId'])")"
+          release_name="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print(json.load(sys.stdin)['releaseName'])")"
+          prerelease="$(printf '%s' "${metadata_json}" | python3 -c "import json,sys; print('true' if json.load(sys.stdin)['prerelease'] else 'false')")"
+          ci_run_id="${INPUT_CI_RUN_ID}"
 
           if [[ "${VERIFY_CI_SUCCESS}" == "true" ]]; then
             ci_runs_json="$(
@@ -112,14 +79,17 @@ jobs:
                 -f head_sha="${commit_sha}"
             )"
 
-            has_successful_ci="$(
-              printf '%s' "${ci_runs_json}" | python3 -c "import json, sys; data = json.load(sys.stdin); print('true' if any(run.get('conclusion') == 'success' for run in data.get('workflow_runs', [])) else 'false')"
+            ci_run_id="$(
+              CI_RUNS_JSON="${ci_runs_json}" python3 -c 'import json, os, sys; release_ref = sys.argv[1]; ref_name = release_ref.removeprefix("refs/heads/").removeprefix("refs/tags/"); scored_runs = [((2 if run.get("head_branch") == ref_name else 1 if release_ref.startswith("refs/tags/") and not run.get("head_branch") else 0), run.get("run_number") or 0, str(run.get("id", ""))) for run in json.loads(os.environ["CI_RUNS_JSON"]).get("workflow_runs", []) if run.get("conclusion") == "success"]; scored_runs.sort(reverse=True); print(scored_runs[0][2] if scored_runs else "")' "${RELEASE_REF}"
             )"
 
-            if [[ "${has_successful_ci}" != "true" ]]; then
-              echo "target commit has no successful ci push run: ${commit_sha}" >&2
+            if [[ -z "${ci_run_id}" ]]; then
+              echo "target commit has no matching successful ci push run: ${commit_sha}" >&2
               exit 1
             fi
+          elif [[ -z "${ci_run_id}" ]]; then
+            echo "ci_run_id is required when verify_ci_success is false." >&2
+            exit 1
           fi
 
           {
@@ -129,6 +99,7 @@ jobs:
             echo "release_id=${release_id}"
             echo "release_name=${release_name}"
             echo "prerelease=${prerelease}"
+            echo "ci_run_id=${ci_run_id}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Decide publish eligibility
@@ -158,156 +129,17 @@ jobs:
 
           echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
 
-  package_core_assets:
+  publish_github_release:
     needs: resolve_release_metadata
     if: needs.resolve_release_metadata.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
-
-    env:
-      PYTHONUNBUFFERED: "1"
-
-    steps:
-      - name: Checkout target
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.target_ref }}
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: sdks/javascript/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Package Host and SDK release assets
-        run: |
-          python scripts/release/package_release.py \
-            --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" \
-            --channel "${{ needs.resolve_release_metadata.outputs.channel }}" \
-            --release-tag "${{ needs.resolve_release_metadata.outputs.release_tag }}" \
-            --release-name "${{ needs.resolve_release_metadata.outputs.release_name }}" \
-            --commit "${{ needs.resolve_release_metadata.outputs.commit_sha }}" \
-            --skip-monitor
-
-      - name: Upload core release assets
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-core-${{ needs.resolve_release_metadata.outputs.release_id }}
-          path: artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}
-          if-no-files-found: error
-
-      - name: Upload core release diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-core-diagnostics-${{ github.run_id }}
-          path: artifacts/release/**
-          if-no-files-found: warn
-
-  package_monitor_assets:
-    needs: resolve_release_metadata
-    if: >
-      needs.resolve_release_metadata.outputs.should_publish == 'true' &&
-      (needs.resolve_release_metadata.outputs.channel == 'preview' ||
-       needs.resolve_release_metadata.outputs.channel == 'main-snapshot')
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
-    runs-on: ${{ matrix.runner }}
-
-    env:
-      PYTHONUNBUFFERED: "1"
-
-    steps:
-      - name: Checkout target
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.target_ref }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: apps/monitor/package-lock.json
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux dependencies for Tauri
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
-
-      - name: Package Monitor App assets
-        run: python scripts/release/package_monitor.py --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" --output-root artifacts/monitor
-
-      - name: Upload Monitor App assets
-        uses: actions/upload-artifact@v6
-        with:
-          name: monitor-assets-${{ matrix.runner }}
-          path: artifacts/monitor/${{ needs.resolve_release_metadata.outputs.release_id }}
-          if-no-files-found: error
-
-      - name: Upload Monitor diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: monitor-diagnostics-${{ matrix.runner }}-${{ github.run_id }}
-          path: |
-            artifacts/monitor/**
-            apps/monitor/src-tauri/target/release/bundle/**
-          if-no-files-found: warn
-
-  publish_github_release:
-    needs:
-      - resolve_release_metadata
-      - package_core_assets
-      - package_monitor_assets
-    if: >
-      always() &&
-      needs.resolve_release_metadata.outputs.should_publish == 'true' &&
-      needs.package_core_assets.result == 'success' &&
-      (needs.resolve_release_metadata.outputs.channel == 'stable' ||
-       needs.package_monitor_assets.result == 'success')
-    runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
 
     steps:
       - name: Checkout target
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.target_ref }}
@@ -322,24 +154,74 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Download core release assets
-        uses: actions/download-artifact@v7
-        with:
-          name: release-core-${{ needs.resolve_release_metadata.outputs.release_id }}
-          path: artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}
+      - name: Download core release assets from ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Download Monitor App assets
+          release_dir="artifacts/release/${{ needs.resolve_release_metadata.outputs.release_id }}"
+          download_root="${RUNNER_TEMP}/release-core-download"
+          rm -rf "${release_dir}"
+          mkdir -p "${release_dir}"
+          rm -rf "${download_root}"
+          mkdir -p "${download_root}"
+
+          gh run download "${{ needs.resolve_release_metadata.outputs.ci_run_id }}" \
+            --repo "${{ github.repository }}" \
+            --name "release-core-${{ needs.resolve_release_metadata.outputs.release_id }}" \
+            --dir "${download_root}"
+
+          artifact_dir="${download_root}/release-core-${{ needs.resolve_release_metadata.outputs.release_id }}"
+          if [[ ! -d "${artifact_dir}" ]]; then
+            artifact_dir="${download_root}"
+          fi
+
+          shopt -s dotglob
+          mv "${artifact_dir}"/* "${release_dir}/"
+          shopt -u dotglob
+
+      - name: Download Monitor App assets from ci
         if: needs.resolve_release_metadata.outputs.channel != 'stable'
-        uses: actions/download-artifact@v7
-        with:
-          pattern: monitor-assets-*
-          path: ${{ runner.temp }}/monitor-assets
-          merge-multiple: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          monitor_root="${RUNNER_TEMP}/monitor-assets"
+          rm -rf "${monitor_root}"
+          mkdir -p "${monitor_root}"
+
+          for artifact_name in \
+            "monitor-assets-ubuntu-latest-${{ needs.resolve_release_metadata.outputs.release_id }}" \
+            "monitor-assets-windows-latest-${{ needs.resolve_release_metadata.outputs.release_id }}" \
+            "monitor-assets-macos-latest-${{ needs.resolve_release_metadata.outputs.release_id }}"
+          do
+            download_dir="${monitor_root}/.downloads/${artifact_name}"
+            artifact_dir="${monitor_root}/${artifact_name}"
+            rm -rf "${download_dir}" "${artifact_dir}"
+            mkdir -p "${download_dir}" "${artifact_dir}"
+            gh run download "${{ needs.resolve_release_metadata.outputs.ci_run_id }}" \
+              --repo "${{ github.repository }}" \
+              --name "${artifact_name}" \
+              --dir "${download_dir}"
+
+            extracted_dir="${download_dir}/${artifact_name}"
+            if [[ ! -d "${extracted_dir}" ]]; then
+              extracted_dir="${download_dir}"
+            fi
+
+            shopt -s dotglob
+            mv "${extracted_dir}"/* "${artifact_dir}/"
+            shopt -u dotglob
+          done
 
       - name: Refresh release manifest with Monitor assets
         if: needs.resolve_release_metadata.outputs.channel != 'stable'
         run: |
-          python scripts/release/package_release.py \
+          python3 scripts/release/package_release.py \
             --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" \
             --channel "${{ needs.resolve_release_metadata.outputs.channel }}" \
             --release-tag "${{ needs.resolve_release_metadata.outputs.release_tag }}" \
@@ -406,7 +288,7 @@ jobs:
 
       - name: Upload release diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-diagnostics-${{ github.run_id }}
           path: artifacts/release/**

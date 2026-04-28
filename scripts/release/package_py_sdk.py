@@ -81,20 +81,21 @@ def package_py_sdk(options: PythonSdkPackageOptions) -> PythonSdkPackageResult:
         "pythonSdk": read_toml_version(PYTHON_SDK_DIR / "pyproject.toml"),
     }
 
-    run_logged_command(
-        name="Python SDK install",
-        command=[sys.executable, "-m", "pip", "install", "-e", "./sdks/python[test]"],
-        cwd=REPO_ROOT,
-        log_path=options.checks_dir / "python-install.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
-        name="Python SDK tests",
-        command=[sys.executable, "-m", "pytest", "sdks/python/tests"],
-        cwd=REPO_ROOT,
-        log_path=options.checks_dir / "python-tests.log",
-        validation_records=validation_records,
-    )
+    if not options.skip_validation:
+        run_logged_command(
+            name="Python SDK install",
+            command=[sys.executable, "-m", "pip", "install", "-e", "./sdks/python[test]"],
+            cwd=REPO_ROOT,
+            log_path=options.checks_dir / "python-install.log",
+            validation_records=validation_records,
+        )
+        run_logged_command(
+            name="Python SDK tests",
+            command=[sys.executable, "-m", "pytest", "sdks/python/tests"],
+            cwd=REPO_ROOT,
+            log_path=options.checks_dir / "python-tests.log",
+            validation_records=validation_records,
+        )
 
     assets = []
     if not options.verify_only:

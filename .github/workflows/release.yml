@@ -8,6 +8,10 @@ on:
         type: string
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.target_ref }}
+  cancel-in-progress: ${{ !(startsWith(inputs.target_ref, 'v') || startsWith(inputs.target_ref, 'refs/tags/v')) }}
+
 jobs:
   resolve-target:
     runs-on: ubuntu-latest

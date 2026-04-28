@@ -16,6 +16,7 @@
 - Python `3.11+`
 - Python 依赖：`requests`
 - Windows ACL 严格校验场景额外需要：`pywin32`
+- GitHub workflow 官方 action 基线：`actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v5`
 
 示例安装命令：
 
@@ -97,6 +98,7 @@ python3 host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bra
 - `python3 scripts/release/package_release.py --release-id local-dry-run --channel local` 用于执行 release 级 dry-run，并在 `artifacts/release/<release-id>/` 下汇总 Host、SDK 与按渠道决定是否纳入的 Monitor 资产。
 - `python3 scripts/release/package_host.py --release-id host-local-check --verify-only`、`python3 scripts/release/package_dotnet_sdk.py --release-id dotnet-local-check --verify-only`、`python3 scripts/release/package_js_sdk.py --release-id js-local-check --verify-only`、`python3 scripts/release/package_py_sdk.py --release-id py-local-check --verify-only` 用于按产物域执行与工作流同级别的局部验证。
 - `python3 scripts/release/package_monitor.py --release-id local-dry-run` 用于执行 Monitor 本地打包校验，并在 manifest 中记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。
+- `python3 scripts/release/resolve_release_metadata.py --release-ref refs/heads/preview` 用于解析 `preview` / `main` / `v*` 对应的发布通道元数据，供 workflow 或本地排障核对。
 - 所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，只输出脚本用途和参数摘要，不执行验证、目录删除或打包逻辑。
 - Monitor 设置页中的 `dataDirOverride` 与 `hostExecutablePath` 只接受绝对路径；相对路径会被前端和 Tauri command 同时拒绝。
 - Monitor 壳层按单实例运行；重复启动时会唤醒已有主窗口，不会并行拉起新的桌面进程。
@@ -173,6 +175,7 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 3. 使用 `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release` 启动本地 Hub。
 4. 从数据根目录下的 `<dataDir>/runtime/hub.json` 动态读取 `httpBaseUrl`、`wsUrl` 与 `tokenFile`，禁止硬编码端口或地址。
 5. 完成改动后，至少执行单元测试与 smoke 集成测试；若涉及官方 SDK 集成测试夹具、SDK 维护脚本或多语言一致性，再执行 `python3 scripts/sdk/run_integration_full.py` 或最小相关 SDK 测试。
+6. 涉及 `.github/workflows/`、`scripts/release/` 或发布链路文档时，按 workflow 同级别执行本地验证，并同步核对 `preview` / `main` / `v*` 与普通分支 / PR 的路由条件、artifact 复用路径和手动发布入口说明。
 
 涉及 `apps/monitor/` 的改动时，额外执行：
 

@@ -96,13 +96,14 @@ def package_js_sdk(options: JavaScriptSdkPackageOptions) -> JavaScriptSdkPackage
         log_path=options.checks_dir / "javascript-build.log",
         validation_records=validation_records,
     )
-    run_logged_command(
-        name="JS SDK tests",
-        command=[NPM_COMMAND, "test"],
-        cwd=JS_SDK_DIR,
-        log_path=options.checks_dir / "javascript-tests.log",
-        validation_records=validation_records,
-    )
+    if not options.skip_validation:
+        run_logged_command(
+            name="JS SDK tests",
+            command=[NPM_COMMAND, "test"],
+            cwd=JS_SDK_DIR,
+            log_path=options.checks_dir / "javascript-tests.log",
+            validation_records=validation_records,
+        )
 
     assets = []
     if not options.verify_only:

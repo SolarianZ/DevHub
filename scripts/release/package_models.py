@@ -85,6 +85,7 @@ class HostPackageOptions:
     checks_dir: Path
     host_rids: tuple[str, ...]
     verify_only: bool = False
+    skip_validation: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ class DotNetSdkPackageOptions:
     output_dir: Path
     checks_dir: Path
     verify_only: bool = False
+    skip_validation: bool = False
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,7 @@ class JavaScriptSdkPackageOptions:
     output_dir: Path
     checks_dir: Path
     verify_only: bool = False
+    skip_validation: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,7 @@ class PythonSdkPackageOptions:
     output_dir: Path
     checks_dir: Path
     verify_only: bool = False
+    skip_validation: bool = False
 
 
 @dataclass(frozen=True)
@@ -147,6 +151,7 @@ class MonitorPackageOptions:
     checks_dir: Path
     tauri_args: tuple[str, ...] = ()
     verify_only: bool = False
+    skip_validation: bool = False
 
 
 @dataclass(frozen=True)
@@ -171,6 +176,7 @@ class ReleasePackageOptions:
     skip_monitor: bool = False
     monitor_assets_root: Path | None = None
     reuse_existing_output: bool = False
+    validated_externally: bool = False
 
 
 @dataclass(frozen=True)

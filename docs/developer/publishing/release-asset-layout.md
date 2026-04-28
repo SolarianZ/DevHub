@@ -43,6 +43,15 @@ artifacts/release/<release-id>/
 └── release-notes.md
 ```
 
+## 1.1 CI 复用 artifact
+
+发布意图路径会把最终 GitHub Release 所需输入先上传为 workflow artifact，再由发布 workflow 下载复用：
+
+- core release 资产：`release-core-<release-id>`
+- Monitor 平台资产：`monitor-assets-ubuntu-latest-<release-id>`、`monitor-assets-windows-latest-<release-id>`、`monitor-assets-macos-latest-<release-id>`
+
+`release-reusable.yml` 下载这些 artifact 后，会把 core 资产还原到 `artifacts/release/<release-id>/`，把三平台 Monitor 资产汇总到 `monitor/<targetPlatform>/`，再刷新 release-level manifest 与 release notes。
+
 ## 2. `release-id` 规则
 
 - `preview` 通道：使用 `preview-latest`

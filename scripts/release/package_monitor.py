@@ -71,6 +71,10 @@ def build_help() -> PackageHelp:
                         "Run version checks and Monitor validation, then stop before Tauri bundle generation.",
                     ),
                     PackageHelpOption(
+                        "--validated-externally",
+                        "Assume Monitor verification already completed upstream and only install dependencies plus build the bundle.",
+                    ),
+                    PackageHelpOption(
                         "-- <tauri-args...>",
                         "Forward the remaining arguments to `npm run tauri:build -- ...`.",
                     ),
@@ -91,6 +95,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--verify-only",
         action="store_true",
         help="Only run Monitor validation without invoking tauri build.",
+    )
+    parser.add_argument(
+        "--validated-externally",
+        action="store_true",
+        help="Assume Monitor verification already completed upstream and only perform packaging steps.",
     )
     parser.add_argument(
         "tauri_args",
@@ -115,7 +124,9 @@ def package_monitor(options: MonitorPackageOptions) -> MonitorPackageResult:
     validation_records: list[ValidationRecord] = []
     versions = ensure_monitor_version_consistency()
 
-    run_monitor_validation(options.checks_dir, validation_records)
+    prepare_monitor_workspace(options.checks_dir, validation_records)
+    if not options.skip_validation:
+        run_monitor_validation(options.checks_dir, validation_records)
     versions.update(read_monitor_version_metadata(expected_monitor_version=versions["monitor"]))
     write_json(options.checks_dir / "validation-summary.json", build_validation_summary(validation_records))
 
@@ -217,17 +228,20 @@ def read_monitor_version_metadata(expected_monitor_version: str) -> dict[str, st
 
 def run_monitor_validation(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
     run_logged_command(
-        name="Monitor install",
-        command=[NPM_COMMAND, "ci"],
-        cwd=MONITOR_DIR,
-        log_path=checks_dir / "monitor-install.log",
-        validation_records=validation_records,
-    )
-    run_logged_command(
         name="Monitor verify",
         command=[NPM_COMMAND, "run", "verify"],
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-verify.log",
+        validation_records=validation_records,
+    )
+
+
+def prepare_monitor_workspace(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
+    run_logged_command(
+        name="Monitor install",
+        command=[NPM_COMMAND, "ci"],
+        cwd=MONITOR_DIR,
+        log_path=checks_dir / "monitor-install.log",
         validation_records=validation_records,
     )
 
@@ -354,8 +368,8 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object]) -> None:
             "",
             "## Validation",
             "",
-            "- Validation executed locally through `python scripts/release/package_monitor.py`.",
-            "- Summary file: `checks/validation-summary.json`.",
+            "- Packaging and integrity steps for this output are recorded in `checks/validation-summary.json`.",
+            "- Workflow-driven releases may satisfy same-grade verification in upstream CI jobs before bundling.",
             "",
             "## Next Steps",
             "",
@@ -481,6 +495,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     args = parse_args(args_list)
+    if args.verify_only and args.validated_externally:
+        raise RuntimeError("`--verify-only` 与 `--validated-externally` 不能同时使用。")
     output_root = Path(args.output_root).resolve()
     release_id = validate_release_label(args.release_id, field_name="release-id")
     output_dir = resolve_release_output_dir(output_root, release_id)
@@ -493,6 +509,7 @@ def main(argv: list[str] | None = None) -> int:
             checks_dir=checks_dir,
             tauri_args=normalize_tauri_args(args.tauri_args),
             verify_only=bool(args.verify_only),
+            skip_validation=bool(args.validated_externally),
         )
     )
 
