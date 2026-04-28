@@ -194,7 +194,8 @@ namespace DevHubDispatcher.Editor
                 return LogFailure(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, clientError));
             }
 
-            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out InvokeRequest request, out string requestError))
+            JObject envelope = DevHubDispatcherHostRequestFactory.BuildEnvelope(toolId, payload);
+            if (!DevHubDispatcherHostRequestFactory.TryBuildInvokeRequest(appId, method, envelope, options, out InvokeRequest request, out string requestError))
             {
                 return LogFailure(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, requestError));
             }
@@ -238,7 +239,8 @@ namespace DevHubDispatcher.Editor
                 return LogFailure<JToken>(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, clientError));
             }
 
-            if (!TryBuildInvokeRequest(appId, method, BuildEnvelope(toolId, payload), options, out InvokeRequest request, out string requestError))
+            JObject envelope = DevHubDispatcherHostRequestFactory.BuildEnvelope(toolId, payload);
+            if (!DevHubDispatcherHostRequestFactory.TryBuildInvokeRequest(appId, method, envelope, options, out InvokeRequest request, out string requestError))
             {
                 return LogFailure<JToken>(OutboundLogCategory, BuildOutboundFailureMessage(toolId, method, requestError));
             }
@@ -469,8 +471,13 @@ namespace DevHubDispatcher.Editor
                 }, cancellationToken);
 
                 await client.UpsertDefinitionAsync(BuildAppDefinition(identity, editorContext), cancellationToken);
-                AppInstance instance = await client.RegisterInstanceAsync(BuildAppInstanceRegistration(identity, editorContext), identity.InstancePassword, cancellationToken);
-                return Result<RuntimeConnection>.Ok(new RuntimeConnection(client, instance, client.Runtime.RuntimeTuning), string.Empty);
+                RegisterInstanceResult registerResult = await client.RegisterInstanceAsync(
+                    BuildAppInstanceRegistration(identity, editorContext),
+                    identity.InstancePassword,
+                    cancellationToken);
+                return Result<RuntimeConnection>.Ok(
+                    new RuntimeConnection(client, registerResult.Instance, client.Runtime.RuntimeTuning),
+                    string.Empty);
             }
             catch (OperationCanceledException ex)
             {
@@ -1077,148 +1084,24 @@ namespace DevHubDispatcher.Editor
             }
         }
 
-        private static JObject BuildEnvelope(string toolId, JToken payload)
-        {
-            return new JObject
-            {
-                ["toolId"] = toolId,
-                ["payload"] = payload == null ? JValue.CreateNull() : payload.DeepClone()
-            };
-        }
-
-        private static bool TryBuildInvokeRequest(string appId, string method, JObject envelope, DevHubDispatcherSendOptions options, out InvokeRequest request, out string error)
-        {
-            request = null;
-            error = null;
-
-            if (string.IsNullOrWhiteSpace(appId))
-            {
-                error = "appId 不能为空。";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(method))
-            {
-                error = "method 不能为空。";
-                return false;
-            }
-
-            request = new InvokeRequest
-            {
-                AppId = appId,
-                Method = method,
-                Args = envelope
-            };
-
-            if (options == null)
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrEmpty(options.Scope) || !string.IsNullOrEmpty(options.InstanceId))
-            {
-                if (!TryNormalizeOptionalString(options.Scope, "options.Scope", out string scope, out error))
-                {
-                    request = null;
-                    return false;
-                }
-
-                if (!TryNormalizeOptionalString(options.InstanceId, "options.InstanceId", out string instanceId, out error))
-                {
-                    request = null;
-                    return false;
-                }
-
-                request.Target = new InvocationTarget
-                {
-                    Scope = scope,
-                    InstanceId = instanceId
-                };
-            }
-
-            if (options.TtlMs.HasValue || options.WaitTimeoutMs.HasValue || options.QueueIfOffline.HasValue || options.AutoLaunch.HasValue)
-            {
-                request.Options = new InvocationOptions
-                {
-                    TtlMs = options.TtlMs,
-                    WaitTimeoutMs = options.WaitTimeoutMs,
-                    QueueIfOffline = options.QueueIfOffline,
-                    AutoLaunch = options.AutoLaunch
-                };
-            }
-
-            return true;
-        }
-
-        private static bool TryNormalizeOptionalString(string value, string parameterName, out string normalizedValue, out string error)
-        {
-            if (value == null)
-            {
-                normalizedValue = null;
-                error = null;
-                return true;
-            }
-
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                normalizedValue = null;
-                error = parameterName + " 不能是空白字符串。";
-                return false;
-            }
-
-            normalizedValue = value;
-            error = null;
-            return true;
-        }
-
         private static AppDefinition BuildAppDefinition(DevHubDispatcherIdentity identity, RuntimeEditorContext context)
         {
-            return new AppDefinition
-            {
-                AppId = identity.AppId,
-                DisplayName = "Unity Editor - " + context.ProjectName,
-                Description = "DevHub dispatcher for Unity project " + context.ProjectName,
-                Capabilities = new AppCapabilities
-                {
-                    Rpc = true
-                },
-                Launch = new LaunchConfiguration
-                {
-                    ExePath = context.UnityEditorPath,
-                    WorkingDirectory = context.ProjectPath,
-                    ArgsTemplate = "-projectPath " + QuoteArgument(context.ProjectPath) + " -devhubAppId {appId}",
-                    DedupeKeyTemplate = "{appId}:{scopeOrGlobal}"
-                }
-            };
+            return DevHubDispatcherAppContractFactory.BuildAppDefinition(
+                identity.AppId,
+                context.ProjectName,
+                context.ProjectPath,
+                context.UnityEditorPath);
         }
 
         private static AppInstanceRegistration BuildAppInstanceRegistration(DevHubDispatcherIdentity identity, RuntimeEditorContext context)
         {
-            return new AppInstanceRegistration
-            {
-                InstanceId = identity.InstanceId,
-                AppId = identity.AppId,
-                Scope = context.ProjectPath,
-                Pid = context.ProcessId,
-                Invoke = new InvokeCapability
-                {
-                    Poll = true,
-                    Respond = true
-                },
-                Meta = new JObject
-                {
-                    ["projectPath"] = context.ProjectPath,
-                    ["unityVersion"] = context.UnityVersion,
-                    ["unityEditorPath"] = context.UnityEditorPath,
-                    ["dispatcherPackage"] = "devhub.dispatcher",
-                    ["dispatcherRole"] = "unity-editor"
-                }
-            };
-        }
-
-        private static string QuoteArgument(string value)
-        {
-            return "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
+            return DevHubDispatcherAppContractFactory.BuildAppInstanceRegistration(
+                identity.InstanceId,
+                identity.AppId,
+                context.ProjectPath,
+                context.UnityVersion,
+                context.UnityEditorPath,
+                context.ProcessId);
         }
 
         private static TimeSpan ResolveHeartbeatInterval(HubRuntimeTuning tuning)

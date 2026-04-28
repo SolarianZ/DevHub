@@ -97,6 +97,8 @@ Thumbs.db
 # Temporary files
 [Tt]emp/
 **/.tests/
+!apps/unity-devhub-dispatcher/.tests/
+!apps/unity-devhub-dispatcher/.tests/**
 **/__pycache__/
 *.tmp
 *.temp

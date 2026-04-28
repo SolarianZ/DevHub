@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DevHubDispatcher.Tests</RootNamespace>
+    <AssemblyName>DevHubDispatcher.Tests</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.TestPlatform.TestHost" Version="17.14.1" ExcludeAssets="compile" PrivateAssets="all" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../sdks/dotnet/src/DevHub.Sdk/DevHub.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Editor/Core/DevHubDispatcherAppContractFactory.cs" Link="Shared/DevHubDispatcherAppContractFactory.cs" />
+    <Compile Include="../../Editor/Core/DevHubDispatcherIdentityLogic.cs" Link="Shared/DevHubDispatcherIdentityLogic.cs" />
+    <Compile Include="../../Editor/Core/DevHubDispatcherHostRequestFactory.cs" Link="Shared/DevHubDispatcherHostRequestFactory.cs" />
+    <Compile Include="../../Editor/Core/DevHubDispatcherSendOptions.cs" Link="Shared/DevHubDispatcherSendOptions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

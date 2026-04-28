@@ -160,7 +160,7 @@ Request 路由失败时 dispatcher 返回固定 callee error：`1001 invalid_dis
 
 ## 生命周期
 
-Dispatcher 在 Unity Editor 加载后自动读取 DevHub runtime discovery，upsert 当前 Unity 项目的 `AppDefinition`，并注册一个具备 `poll/respond` 能力的 `AppInstance`。`appId` 优先使用命令行 `-devhubAppId <value>`，否则读取 `EditorUserSettings`，首次运行时生成并保存。`instanceId` 与 `instancePassword` 同样保存到 `EditorUserSettings`，用于 Domain Reload 后保持同一逻辑实例身份。
+Dispatcher 在 Unity Editor 加载后自动读取 DevHub runtime discovery，upsert 当前 Unity 项目的 `AppDefinition`，并注册一个具备 `poll/respond` 能力的 `AppInstance`。Definition 与 Instance 都使用显式 Global scope `""`；真实 Unity `projectPath` 通过 launch `argsTemplate` 与 instance `meta.projectPath` 传递。`appId` 优先使用命令行 `-devhubAppId <value>` 的 canonical override；当该参数缺少值或不满足 canonical `appId` grammar 时，会忽略 override 并回退到 `EditorUserSettings` 中已存储的身份，首次运行时生成并保存。`instanceId` 与 `instancePassword` 同样保存到 `EditorUserSettings`，用于 Domain Reload 后保持同一逻辑实例身份。
 
 Tool 注册表不持久化。Domain Reload 后，内置 Tool 会自动重新注册；自定义 Tool 仍需要自行调用 `RegisterTool`。
 
@@ -170,16 +170,30 @@ Unity 菜单 `Window/DevHub/Dispatcher Status` 会打开只读状态窗口，显
 
 ## 验证
 
-最小可重复行为验证命令如下：
+默认自动化验证入口为 `.tests` 工程。该工程的职责边界限定为 dispatcher 与 `.NET SDK` / Host 交界面的非 Unity seam 回归，适合纳入的内容包括：
+
+- `-devhubAppId` 解析、canonical grammar 校验与缺省回退。
+- dispatcher 面向 `.NET SDK` / Host 的纯逻辑契约整形，例如消息信封、invoke request 选项映射、`AppDefinition` / `AppInstanceRegistration` 构造。
+- 为上述契约整形提供的纯 helper、value object 或 mapper。
+
+以下内容归入其他验证路径，不作为 `.tests` 的默认覆盖目标：
+
+- `UnityEditor` / `UnityEngine` 运行时采集、Editor hooks、Domain Reload、状态窗口与内置 Tool 路由。
+- Unity 工程导入、`Assets/Plugins` 依赖布局、asmdef 解析、批处理编译与其他 Unity 专属集成问题。
+- 与 Host / `.NET SDK` 契约无直接关系的 Unity-only 生命周期、界面或编辑器行为。
+
+当改动仅影响 Unity 专属路径且不改变 Host / `.NET SDK` 契约时，优先走人工 Unity 校验或后续专项测试，而不是扩张 `.tests` 的职责范围。
+
+当前 `.tests` 的最小自动化命令如下：
 
 ```powershell
 dotnet test apps/unity-devhub-dispatcher/.tests/DevHubDispatcher.Tests/DevHubDispatcher.Tests.csproj -c Release
 ```
 
-如果需要补做 Unity Editor 侧的最小编译验证，可在真实 Unity 工程中执行类似 batch mode 命令：
+以下 Unity Editor 专属检查属于按需人工验证路径，不作为 dispatcher 最小自动化验收前置条件，可在真实 Unity 工程中执行类似 batch mode 命令：
 
 ```powershell
 "D:\GameEngines\Unity\2019.4.40f1\Editor\Unity.exe" -batchMode -quit -projectPath "D:\Projects\UnityToolProject2019" -logFile "D:\Projects\DevHub\temp\unity-dispatcher-batchmode.log"
 ```
 
-如果 batch mode 日志表明根因是外部 DLL 缺失、版本冲突或引用布局错误，应先人工修复 Unity 工程 `Assets/Plugins/Editor` 的依赖布局，再继续实施。
+若 batch mode 日志表明根因是外部 DLL 缺失、版本冲突或引用布局错误，应先人工修复 Unity 工程 `Assets/Plugins/Editor` 的依赖布局，再继续排查。

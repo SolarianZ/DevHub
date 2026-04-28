@@ -1,3 +1,5 @@
-.tests/
+.tests/**/bin/
+.tests/**/obj/
+.tests/**/TestResults/
 
 !*.meta
