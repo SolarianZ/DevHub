@@ -1041,6 +1041,8 @@ public sealed class WsLifecycleTests : IDisposable
     {
         var dataDir = await CreateDataDirectoryAsync();
         var loggerFactory = new RecordingLoggerFactory();
+        var overflowLogTask = loggerFactory.WaitForEntryAsync(
+            entry => entry.Message.Contains("event buffer overflowed", StringComparison.Ordinal));
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -1084,6 +1086,7 @@ public sealed class WsLifecycleTests : IDisposable
         }
 
         await WaitUntilAsync(() => connection.CloseCallCount == 1);
+        await overflowLogTask;
 
         var exception = await AssertReadEventsThrowsInvalidOperationAsync(client);
         Assert.Contains("事件流不可用", exception.Message, StringComparison.Ordinal);
@@ -1462,9 +1465,10 @@ public sealed class WsLifecycleTests : IDisposable
 
     private sealed class FakeWebSocketConnection : IWebSocketConnection
     {
-        private readonly Queue<WebSocketReceiveMessage> _messages = new();
+        private readonly ConcurrentQueue<WebSocketReceiveMessage> _messages = new();
         private readonly SemaphoreSlim _messageSignal = new(0);
         private readonly TaskCompletionSource<bool> _closeObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _closeCallCount;
 
         public List<string> SentTexts { get; } = [];
 
@@ -1472,9 +1476,9 @@ public sealed class WsLifecycleTests : IDisposable
 
         public WebSocketState State { get; private set; } = WebSocketState.Open;
 
-        public int CloseCallCount { get; private set; }
+        public int CloseCallCount => Volatile.Read(ref _closeCallCount);
 
-        public List<string?> CloseStatusDescriptions { get; } = [];
+        public ConcurrentQueue<string?> CloseStatusDescriptions { get; } = [];
 
         public void Enqueue(WebSocketReceiveMessage message)
         {
@@ -1500,7 +1504,11 @@ public sealed class WsLifecycleTests : IDisposable
         public async Task<WebSocketReceiveMessage> ReceiveAsync(CancellationToken cancellationToken)
         {
             await _messageSignal.WaitAsync(cancellationToken);
-            var message = _messages.Dequeue();
+            if (!_messages.TryDequeue(out var message))
+            {
+                throw new InvalidOperationException("测试消息队列状态非法。");
+            }
+
             if (message.MessageType == WebSocketMessageType.Close)
             {
                 _closeObserved.TrySetResult(true);
@@ -1517,8 +1525,8 @@ public sealed class WsLifecycleTests : IDisposable
         public Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
         {
             State = WebSocketState.Closed;
-            CloseCallCount++;
-            CloseStatusDescriptions.Add(statusDescription);
+            Interlocked.Increment(ref _closeCallCount);
+            CloseStatusDescriptions.Enqueue(statusDescription);
             return Task.CompletedTask;
         }
 
@@ -1559,6 +1567,9 @@ public sealed class WsLifecycleTests : IDisposable
 
     private sealed class RecordingLoggerFactory : ILoggerFactory
     {
+        private readonly object _waitersLock = new();
+        private readonly List<LogWaiter> _waiters = [];
+
         public ConcurrentQueue<LogEntry> Entries { get; } = [];
 
         public void AddProvider(ILoggerProvider provider)
@@ -1567,18 +1578,83 @@ public sealed class WsLifecycleTests : IDisposable
 
         public ILogger CreateLogger(string categoryName)
         {
-            return new RecordingLogger(categoryName, Entries);
+            return new RecordingLogger(categoryName, this);
         }
 
         public void Dispose()
         {
         }
+
+        public async Task WaitForEntryAsync(Predicate<LogEntry> predicate, int timeoutMilliseconds = 1000)
+        {
+            if (Entries.Any(entry => predicate(entry)))
+            {
+                return;
+            }
+
+            Task waiterTask;
+            lock (_waitersLock)
+            {
+                if (Entries.Any(entry => predicate(entry)))
+                {
+                    return;
+                }
+
+                var waiter = new LogWaiter(predicate);
+                _waiters.Add(waiter);
+                waiterTask = waiter.Task;
+            }
+
+            try
+            {
+                await waiterTask.WaitAsync(TimeSpan.FromMilliseconds(timeoutMilliseconds));
+            }
+            catch (TimeoutException exception)
+            {
+                var snapshot = string.Join(" | ", Entries.Select(static entry => entry.Message));
+                throw new TimeoutException($"等待日志超时。当前日志快照：{snapshot}", exception);
+            }
+        }
+
+        public void Record(LogEntry entry)
+        {
+            Entries.Enqueue(entry);
+
+            lock (_waitersLock)
+            {
+                for (var index = _waiters.Count - 1; index >= 0; index--)
+                {
+                    var waiter = _waiters[index];
+                    if (!waiter.Predicate(entry))
+                    {
+                        continue;
+                    }
+
+                    _waiters.RemoveAt(index);
+                    waiter.Complete();
+                }
+            }
+        }
+
+        private sealed class LogWaiter(Predicate<LogEntry> predicate)
+        {
+            private readonly TaskCompletionSource _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public Predicate<LogEntry> Predicate { get; } = predicate;
+
+            public Task Task => _tcs.Task;
+
+            public void Complete()
+            {
+                _tcs.TrySetResult();
+            }
+        }
     }
 
-    private sealed class RecordingLogger(string categoryName, ConcurrentQueue<LogEntry> entries) : ILogger
+    private sealed class RecordingLogger(string categoryName, RecordingLoggerFactory factory) : ILogger
     {
         private readonly string _categoryName = categoryName;
-        private readonly ConcurrentQueue<LogEntry> _entries = entries;
+        private readonly RecordingLoggerFactory _factory = factory;
 
         public IDisposable BeginScope<TState>(TState state)
             where TState : notnull
@@ -1593,7 +1669,7 @@ public sealed class WsLifecycleTests : IDisposable
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            _entries.Enqueue(new LogEntry(_categoryName, logLevel, formatter(state, exception)));
+            _factory.Record(new LogEntry(_categoryName, logLevel, formatter(state, exception)));
         }
     }
 
