@@ -74,11 +74,11 @@ Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录
 - 本地维护者通过 `python scripts/release/package_release.py --release-id <id> --channel <channel>` 生成完整发布候选资产；该入口会在同一进程内依次调用 Host、`.NET SDK`、`JS/TS SDK`、`Python SDK` 和按渠道决定是否纳入的 Monitor 组件打包函数，为每个默认 Host RID 同时生成 multi-file 与 single-file compression 两类 ZIP，不生成 trimmed Host 资产。`preview` 与 `main-snapshot` 渠道还会在当前机器生成 Monitor App 资产，并写入 `monitor/<targetPlatform>/`。
 - 仓库提供以下组件级入口，用于单域验证或局部打包：`python scripts/release/package_host.py --release-id <id>`、`python scripts/release/package_dotnet_sdk.py --release-id <id>`、`python scripts/release/package_js_sdk.py --release-id <id>`、`python scripts/release/package_py_sdk.py --release-id <id>`、`python scripts/release/package_monitor.py --release-id <id>`。
 - 所有 package 脚本共用 `--help`、`--release-id` 和 `--output-root` 参数约定；命令行中出现 `--help` 时直接输出能力和参数摘要，不执行验证、目录删除或打包逻辑。具备“只验证不产物化”语义的脚本支持 `--verify-only`。
-- `.github/workflows/ci.yml` 在入口先解析 ref 与改动范围。普通分支 / PR 只运行按范围裁剪的验证路径；`preview` / `main` / `v*` tag push 进入发布意图路径。该路径在门禁通过后使用 `package_release.py --validated-externally` 与 `package_monitor.py --validated-externally` 准备可复用 release 资产，并将其上传为 workflow artifact。
+- `.github/workflows/ci.yml` 在入口先解析 ref 与改动范围。普通分支 / PR 只运行按范围裁剪的验证路径；`preview` / `main` / `v*` tag push 进入发布意图路径。该路径在门禁通过后使用 `package_release.py --validated-externally` 与 `package_monitor.py --validated-externally` 准备可复用 release 资产，并将其上传为 workflow artifact。Monitor release artifact 必须保留隐藏文件，保证 Linux AppImage bundle 在跨 job 下载后仍与平台 `release-manifest.json` 保持一致。
 - `.github/workflows/release.yml` 只保留 `workflow_dispatch` 手动发布入口，负责把 `target_ref` 归一化后再调用 `.github/workflows/release-reusable.yml`；调用前会校验目标提交已经存在成功的 `ci` push run。若需要在 GitHub UI / CLI 中手动触发，还必须保证该 workflow 文件存在于仓库默认分支。
 - `.github/workflows/release-reusable.yml` 集中承载发布通道解析、preview 防陈旧保护、成功 `ci` run 查询、workflow artifact 下载、release manifest 汇总与 GitHub Release 发布；该 workflow 不会为同一提交重新执行 Host / SDK / Monitor 的同级验证。
 - 当前发布流程只生成并上传 GitHub Release 资产，不会同步把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，或把 `Python SDK` 发布到 PyPI。
-- `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码。
+- `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码，并在打包前执行 `npm run sync:version-metadata`，保证 `--validated-externally` 路径在干净工作区内也具备完整输入。
 
 ## 5. 发布说明与 TODO 占位
 

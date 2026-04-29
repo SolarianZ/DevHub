@@ -23,7 +23,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.release_ref }}
+  group: release-publish-${{ inputs.release_ref }}
   cancel-in-progress: ${{ !(startsWith(inputs.release_ref, 'refs/tags/v') || startsWith(inputs.release_ref, 'v')) }}
 
 jobs:
@@ -292,4 +292,5 @@ jobs:
         with:
           name: release-diagnostics-${{ github.run_id }}
           path: artifacts/release/**
+          include-hidden-files: true
           if-no-files-found: warn

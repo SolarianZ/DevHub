@@ -460,7 +460,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -517,7 +517,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -554,7 +554,7 @@ jobs:
           python -m pip install -e './sdks/python[test]' requests
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -604,7 +604,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -657,6 +657,13 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Monitor Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: monitor-tauri-${{ runner.os }}-${{ runner.arch }}
+          workspaces: |
+            apps/monitor/src-tauri
 
       - name: Install Linux dependencies for Tauri
         run: |
@@ -1058,7 +1065,6 @@ jobs:
   prepare-monitor-release-assets:
     needs:
       - route
-      - monitor-validation
     if: needs.route.outputs.prepare_monitor_release_assets == 'true'
     strategy:
       fail-fast: false
@@ -1093,6 +1099,13 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Restore Monitor Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: monitor-tauri-${{ runner.os }}-${{ runner.arch }}
+          workspaces: |
+            apps/monitor/src-tauri
+
       - name: Install Linux dependencies for Tauri
         if: runner.os == 'Linux'
         run: |
@@ -1116,6 +1129,7 @@ jobs:
         with:
           name: monitor-assets-${{ matrix.runner }}-${{ needs.route.outputs.release_id }}
           path: artifacts/monitor/${{ needs.route.outputs.release_id }}
+          include-hidden-files: true
           if-no-files-found: error
 
       - name: Upload Monitor diagnostics
@@ -1126,6 +1140,7 @@ jobs:
           path: |
             artifacts/monitor/**
             apps/monitor/src-tauri/target/release/bundle/**
+          include-hidden-files: true
           if-no-files-found: warn
 
   publish-release:
@@ -1134,9 +1149,11 @@ jobs:
       needs.route.outputs.is_release_intent == 'true' &&
       needs.prepare-release-core-assets.result == 'success' &&
       (needs.route.outputs.release_channel == 'stable' ||
-       needs.prepare-monitor-release-assets.result == 'success')
+       (needs.monitor-validation.result == 'success' &&
+        needs.prepare-monitor-release-assets.result == 'success'))
     needs:
       - route
+      - monitor-validation
       - prepare-release-core-assets
       - prepare-monitor-release-assets
     permissions:

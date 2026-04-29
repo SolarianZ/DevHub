@@ -10,6 +10,7 @@ from typing import Sequence
 
 import tomllib
 
+from console_output import console_print
 from package_models import (
     MonitorPackageOptions,
     MonitorPackageResult,
@@ -125,6 +126,7 @@ def package_monitor(options: MonitorPackageOptions) -> MonitorPackageResult:
     versions = ensure_monitor_version_consistency()
 
     prepare_monitor_workspace(options.checks_dir, validation_records)
+    sync_monitor_version_metadata(options.checks_dir, validation_records)
     if not options.skip_validation:
         run_monitor_validation(options.checks_dir, validation_records)
     versions.update(read_monitor_version_metadata(expected_monitor_version=versions["monitor"]))
@@ -242,6 +244,16 @@ def prepare_monitor_workspace(checks_dir: Path, validation_records: list[Validat
         command=[NPM_COMMAND, "ci"],
         cwd=MONITOR_DIR,
         log_path=checks_dir / "monitor-install.log",
+        validation_records=validation_records,
+    )
+
+
+def sync_monitor_version_metadata(checks_dir: Path, validation_records: list[ValidationRecord]) -> None:
+    run_logged_command(
+        name="Monitor sync version metadata",
+        command=[NPM_COMMAND, "run", "sync:version-metadata"],
+        cwd=MONITOR_DIR,
+        log_path=checks_dir / "monitor-sync-version-metadata.log",
         validation_records=validation_records,
     )
 
@@ -514,9 +526,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.verify_only:
-        print(f"Monitor validation ready: {checks_dir}")
+        console_print(f"Monitor validation ready: {checks_dir}")
     else:
-        print(f"Monitor release assets ready: {result.output_dir}")
+        console_print(f"Monitor release assets ready: {result.output_dir}")
     return 0
 
 
@@ -524,5 +536,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Monitor packaging failed: {exc}", file=sys.stderr)
+        console_print(f"Monitor packaging failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

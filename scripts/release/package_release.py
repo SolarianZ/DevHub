@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from console_output import console_print
 from package_dotnet_sdk import package_dotnet_sdk
 from package_host import package_host
 from package_js_sdk import package_js_sdk
@@ -665,7 +666,7 @@ def main(argv: list[str] | None = None) -> int:
             validated_externally=bool(args.validated_externally),
         )
     )
-    print(f"Release assets ready: {result.output_dir}")
+    console_print(f"Release assets ready: {result.output_dir}")
     return 0
 
 
@@ -673,5 +674,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f"Release packaging failed: {exc}", file=sys.stderr)
+        console_print(f"Release packaging failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

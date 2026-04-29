@@ -26,21 +26,22 @@
 
 - `npm ci`
 
-与主 CI `monitor-validation` job 对齐的验证命令：
+Monitor 验收相关命令：
 
 - `npm run build:web`：构建前端并执行类型检查。
 - `npm test`：执行前端侧边栏导航、主页 phase 切换、帮助/设置页面、Definition 页面工作流，以及基于真实 Host fixture 的前端回归。
 - `npm run test:native`：执行 `src-tauri/` 原生后端单元测试。
-- `npm run tauri:check`：执行 Tauri 原生侧非平台特定编译校验。
-- `npm run verify`：串联上述全部验证入口。
+- `npm run verify`：执行默认 Monitor 验收链，串联 `build:web`、`test` 与 `test:native`。
+- `npm run tauri:check`：提供独立的 Tauri 原生侧非平台特定编译校验入口。
 
-仓库主 `ci.yml` 中的 `monitor-validation` job 运行上述验证，并执行 `python scripts/release/package_monitor.py --release-id monitor-ci --verify-only`。Monitor 的构建、测试、类型检查、版本元数据和打包脚本均解析当前仓库 `sdks/javascript` 源码。
+仓库主 `ci.yml` 中的 `monitor-validation` job 通过 `python scripts/release/package_monitor.py --release-id monitor-ci --verify-only` 执行版本检查、依赖安装、版本元数据同步和 `npm run verify`。需要独立覆盖 Tauri 原生侧非平台特定编译校验时，可额外执行 `npm run tauri:check`。Monitor 的构建、测试、类型检查、版本元数据和打包脚本均解析当前仓库 `sdks/javascript` 源码。
 
 对齐该 workflow 的本地验收入口：
 
 - `npm run verify`
+- `npm run tauri:check`
 
-验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该路径不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
+验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test`、`verify` 与 `tauri:check`。该路径不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
 
 ## SDK 来源
 
@@ -72,7 +73,7 @@
 - 底层 Tauri 构建命令：`npm run tauri:build`
 - 安装包与桌面快捷方式按单实例运行；重复启动时会唤醒已有主窗口，不会创建新的 Monitor 进程。
 
-`package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 与共享版本元数据的一致性，再串联 `npm ci`、`npm run verify`、`npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。产物 manifest 记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。命令行中出现 `--help` 时，脚本只输出能力与参数摘要，不执行版本检查、验证或打包逻辑；`--verify-only` 只执行版本与验证检查，不生成 bundle。
+`package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml` 的版本一致性，再执行 `npm ci` 和 `npm run sync:version-metadata`，确保共享版本元数据在干净工作区内也可生成。默认打包路径会继续串联 `npm run verify` 与 `npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。`--validated-externally` 只跳过重复验证，仍会执行安装、版本元数据同步和 bundle 构建。产物 manifest 记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。命令行中出现 `--help` 时，脚本只输出能力与参数摘要，不执行版本检查、验证或打包逻辑；`--verify-only` 只执行版本与验证检查，不生成 bundle。
 
 preview/main 发布链通过主 CI 验证 Monitor，并在 `.github/workflows/release-reusable.yml` 的 Linux、Windows、macOS 矩阵中生成 Monitor App 资产。稳定版发布资产集合维持 Host 与 SDK 资产。
 

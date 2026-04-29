@@ -16,7 +16,7 @@
 - Python `3.11+`
 - Python 依赖：`requests`
 - Windows ACL 严格校验场景额外需要：`pywin32`
-- GitHub workflow 官方 action 基线：`actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v5`
+- GitHub workflow 官方 action 基线：`actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v7`
 
 示例安装命令：
 

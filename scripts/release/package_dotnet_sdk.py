@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from console_output import console_print
 from package_models import (
     DotNetSdkPackageOptions,
     DotNetSdkPackageResult,
@@ -166,9 +167,9 @@ def main(argv: list[str] | None = None) -> int:
     write_json(checks_dir / "validation-summary.json", build_validation_summary(result.validation_records))
 
     if args.verify_only:
-        print(f".NET SDK validation ready: {checks_dir}")
+        console_print(f".NET SDK validation ready: {checks_dir}")
     else:
-        print(f".NET SDK release assets ready: {result.output_dir}")
+        console_print(f".NET SDK release assets ready: {result.output_dir}")
     return 0
 
 
@@ -176,5 +177,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
-        print(f".NET SDK packaging failed: {exc}", file=sys.stderr)
+        console_print(f".NET SDK packaging failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

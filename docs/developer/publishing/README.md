@@ -17,7 +17,7 @@
 - 发布意图路径在 `ci.yml` 内完成发布级门禁后准备可复用 release 资产，并把这些资产上传为 workflow artifact，供后续发布阶段复用。
 - `.github/workflows/release.yml` 的 `workflow_dispatch` 只接受 `preview`、`main` 与 `v*` tag，发布前会先确认目标提交存在成功的 `ci` push run，然后复用该 run 产出的资产完成发布。
 - `.github/workflows/release-reusable.yml` 负责解析发布元数据、校验 `preview` HEAD 防陈旧条件、下载成功 `ci` run 的资产、刷新最终 manifest/release notes 并执行 GitHub Release 发布。
-- GitHub 官方 action 基线统一为 `actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7` 与 `actions/download-artifact@v5`。该组合保持 Node 24 兼容，并继续使用默认压缩 artifact 流程。
+- GitHub 官方 action 基线统一为 `actions/checkout@v6`、`actions/setup-node@v6`、`actions/setup-dotnet@v5`、`actions/setup-python@v6`、`actions/upload-artifact@v7` 与 `actions/download-artifact@v7`。该组合保持 Node 24 兼容，并继续使用默认压缩 artifact 流程。
 
 ## 发布资产占位规范
 
