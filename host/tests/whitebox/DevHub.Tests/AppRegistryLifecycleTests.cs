@@ -5,6 +5,7 @@ using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Reflection;
 
 /// <summary>
 /// AppRegistry 生命周期与清理行为测试。
@@ -78,6 +79,89 @@ public sealed class AppRegistryLifecycleTests
     }
 
     [Fact]
+    public void Impl_AppRegistry_NoCredentialWriteMethods_ShouldNotBePublic()
+    {
+        Assert.Null(typeof(AppRegistry).GetMethod(
+            "RegisterInstance",
+            BindingFlags.Instance | BindingFlags.Public,
+            binder: null,
+            types: [typeof(AppInstance)],
+            modifiers: null));
+        Assert.Null(typeof(AppRegistry).GetMethod(
+            "Heartbeat",
+            BindingFlags.Instance | BindingFlags.Public,
+            binder: null,
+            types: [typeof(string), typeof(DateTime).MakeByRefType()],
+            modifiers: null));
+        Assert.Null(typeof(AppRegistry).GetMethod(
+            "UnregisterInstance",
+            BindingFlags.Instance | BindingFlags.Public,
+            binder: null,
+            types: [typeof(string)],
+            modifiers: null));
+    }
+
+    [Fact]
+    public void Impl_TryRegisterInstance_WhenLegacyNoPasswordStateExists_ShouldRebuildRecordWithoutPreservingState()
+    {
+        var startedAt = DateTime.UtcNow;
+        var clock = new MutableClock(startedAt);
+        using var registry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
+
+        var legacy = registry.RegisterInstance(CreateInstance("inst-legacy", "app.legacy", null, 301));
+        var legacySessionToken = registry.GetCurrentInstanceSessionToken("inst-legacy");
+        Assert.NotNull(legacySessionToken);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var registered = registry.TryRegisterInstance(
+            CreateInstance("inst-legacy", "app.claimed", "workspace-claimed", 302),
+            "new-password",
+            out var claimed,
+            out var newSessionToken,
+            out var passwordMismatch);
+
+        Assert.True(registered);
+        Assert.False(passwordMismatch);
+        Assert.NotEqual(legacy.RegisteredAtUtc, claimed.RegisteredAtUtc);
+        Assert.Equal(clock.UtcNow, claimed.RegisteredAtUtc);
+        Assert.Equal("app.claimed", claimed.AppId);
+        Assert.Equal("workspace-claimed", claimed.Scope);
+        Assert.Equal(302, claimed.Pid);
+        Assert.False(string.IsNullOrWhiteSpace(newSessionToken));
+        Assert.NotEqual(legacySessionToken, newSessionToken);
+        Assert.False(registry.TryHeartbeat("inst-legacy", legacySessionToken!, out _, out var oldTokenStatus));
+        Assert.Equal(InstanceSessionValidationStatus.TokenMismatch, oldTokenStatus);
+    }
+
+    [Fact]
+    public void Impl_TryRegisterInstance_WhenPasswordMismatch_ShouldKeepStoredInstance()
+    {
+        using var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var initial = registry.TryRegisterInstance(
+            CreateInstance("inst-password", "app.original", null, 401),
+            "correct-password",
+            out var original,
+            out _,
+            out var initialPasswordMismatch);
+        Assert.True(initial);
+        Assert.False(initialPasswordMismatch);
+
+        var updated = registry.TryRegisterInstance(
+            CreateInstance("inst-password", "app.claimed", "workspace-claimed", 402),
+            "wrong-password",
+            out var stored,
+            out _,
+            out var passwordMismatch);
+
+        Assert.False(updated);
+        Assert.True(passwordMismatch);
+        Assert.Equal(original.AppId, stored.AppId);
+        Assert.Equal(original.Scope, stored.Scope);
+        Assert.Equal(original.Pid, stored.Pid);
+        Assert.Equal("app.original", registry.GetInstance("inst-password")!.AppId);
+    }
+
+    [Fact]
     public void Impl_Dispose_CalledMultipleTimes_ShouldBeIdempotent()
     {
         var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -122,4 +206,3 @@ public sealed class AppRegistryLifecycleTests
         }
     }
 }
-

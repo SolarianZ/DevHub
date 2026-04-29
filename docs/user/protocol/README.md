@@ -80,7 +80,7 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 
 JSON-RPC 信封约束：
 
-- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或可无损往返的 `number`。无法无损保留的数字 `id` 属于非法请求。
 - 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
 - notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
 - `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
@@ -206,6 +206,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
 - `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 在 `instanceSessionToken` 不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_session_token_mismatch"`。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 查找未知 Definition 时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 与 `error.data.scope` 中回传请求目标。
+- `hub.apps.launch` 在 `launch.exePath` 缺失或为空白字符串时返回 `-32020 launch_failed`，并携带 `error.data.reason="launch_config_missing"`；Definition 校验与写入接口允许保存这种启动配置。
 
 ### 5.3 客户端兼容建议
 
@@ -213,6 +214,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - 必须将未知错误码按通用错误处理，而不是直接崩溃。
 - 必须把 HTTP 状态码 `200 OK` 与 JSON-RPC `error` 区分开看：HTTP 成功不代表 RPC 成功。
 - 必须区分“HTTP 空 `200` notification 响应”和“带 JSON-RPC `result` 或 `error` 的普通 request 响应”；`hub.invoke.notify` 若省略 `id`，空响应体仅表示 notification 路径已结束，不能据此判断业务成功或失败。
+- 运行时数据只服务当前版本 Host 的本机运行态。改动前版本生成的 `runtime/token.txt`、`runtime/hub.json`、单实例锁状态、无凭据实例注册状态和未完成 invocation 状态不提供兼容或迁移保证。
 
 ## 6. Schema 与原始协议示例
 

@@ -98,7 +98,7 @@ public class TransportValidationImplTests
     }
 
     [Fact]
-    public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
+    public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldReturnInvalidRequestWithNullId()
     {
         var root = ParseJsonElement("""
         {
@@ -110,9 +110,9 @@ public class TransportValidationImplTests
 
         var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
-        Assert.True(ok);
-        Assert.Null(errorResponse);
-        Assert.Equal(1.5, Assert.IsType<double>(request.Id));
+        Assert.False(ok);
+        Assert.Null(request);
+        AssertError(errorResponse, -32600, "invalid_request", null);
     }
 
     [Fact]

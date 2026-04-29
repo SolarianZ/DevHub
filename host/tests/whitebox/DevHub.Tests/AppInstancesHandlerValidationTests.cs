@@ -90,6 +90,21 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
 
         AssertError(response, -32602, "invalid_params");
+
+        var overlongResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1),
+                appId = "app.validation",
+                pid = 100,
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+
+        AssertError(overlongResponse, -32602, "invalid_params");
     }
 
     [Fact]
@@ -343,6 +358,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { instanceId = ".invalid" })
         }, CancellationToken.None);
         AssertError(leadingDotInstanceId, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "heartbeat-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsHeartbeat,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -358,6 +381,15 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
 
         AssertError(response, -32602, "invalid_params");
+
+        var overlongResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "unregister-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsUnregisterInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+
+        AssertError(overlongResponse, -32602, "invalid_params");
     }
 
     [Fact]
@@ -437,6 +469,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { instanceId = "invalid-instance-" })
         }, CancellationToken.None);
         AssertError(trailingHyphenInstanceId, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]

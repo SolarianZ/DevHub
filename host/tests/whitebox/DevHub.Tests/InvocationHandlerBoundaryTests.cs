@@ -182,6 +182,14 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-1", waitMs = -1 })
         }, CancellationToken.None);
         AssertError(invalidWaitMs, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-overlong-instance-id",
+            Method = HubRpcMethods.HubInvokePoll,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1), waitMs = 0 })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -262,6 +270,19 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, CancellationToken.None);
         AssertError(invalidErrorData, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-overlong-instance-id",
+            Method = HubRpcMethods.HubInvokeRespond,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1),
+                invocationId = "invk-1",
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]

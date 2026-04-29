@@ -600,6 +600,80 @@ public class TransportValidationTests
     }
 
     [Fact]
+    [Trait("SpecRef", "6.1")]
+    public void Spec_6_1_TryBuildRpcRequest_IntegerId_ShouldRoundTripWithoutPrecisionLoss()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": 9007199254740991,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
+
+        Assert.True(ok);
+        Assert.Null(errorResponse);
+        Assert.Equal(9007199254740991L, Assert.IsType<long>(request.Id));
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public void Spec_6_1_TryBuildRpcRequest_StringId_ShouldRoundTrip()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": "req-string-id",
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
+
+        Assert.True(ok);
+        Assert.Null(errorResponse);
+        Assert.Equal("req-string-id", request.Id);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public void Spec_6_1_TryBuildRpcRequest_NullId_ShouldReturnInvalidRequestWithNullId()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": null,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", null);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public void Spec_6_1_TryBuildRpcRequest_PrecisionLossNumericId_ShouldReturnInvalidRequestWithNullId()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": 9007199254740993.1,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
+
+        Assert.False(ok);
+        AssertError(errorResponse, -32600, "invalid_request", null);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.14")]
     public void Spec_6_3_14_Subscribe_UnsupportedEventType_ShouldReturnInvalidParams()
     {

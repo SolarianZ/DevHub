@@ -184,9 +184,9 @@ public class HttpNotificationSpecTests : IDisposable
 
     [Theory]
     [Trait("SpecRef", "6.1")]
-    [InlineData("7", 7d)]
-    [InlineData("1.5", 1.5d)]
-    public async Task Spec_6_1_HttpRequest_WhenIdIsNumber_ShouldKeepIdCorrelation(string requestIdLiteral, double expectedId)
+    [InlineData("7", 7L)]
+    [InlineData("9007199254740991", 9007199254740991L)]
+    public async Task Spec_6_1_HttpRequest_WhenIdIsSupportedInteger_ShouldKeepIdCorrelation(string requestIdLiteral, long expectedId)
     {
         using var harness = CreateHarness();
 
@@ -196,8 +196,26 @@ public class HttpNotificationSpecTests : IDisposable
         var responseId = root.GetProperty("id");
 
         Assert.Equal(JsonValueKind.Number, responseId.ValueKind);
-        Assert.Equal(expectedId, responseId.GetDouble(), precision: 6);
+        Assert.Equal(expectedId, responseId.GetInt64());
         Assert.True(root.GetProperty("result").GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public async Task Spec_6_1_HttpRequest_WhenNumericIdLosesPrecision_ShouldReturnInvalidRequestWithNullId()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":9007199254740993.1,"method":"hub.ping","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-lossy-id-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
     }
 
     [Fact]

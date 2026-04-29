@@ -119,7 +119,8 @@ public sealed class AppDefinitionValidator
             issues,
             "definition.launch.exePath",
             "missing_launch_exe_path",
-            "launch.exePath is required when launch is provided");
+            "launch.exePath is required when launch is provided",
+            allowWhiteSpace: true);
 
         var argsTemplate = ReadOptionalString(launchElement, "argsTemplate", issues, "definition.launch.argsTemplate");
         var workingDirectory = ReadOptionalString(launchElement, "workingDirectory", issues, "definition.launch.workingDirectory");
@@ -174,7 +175,8 @@ public sealed class AppDefinitionValidator
         ICollection<ValidationIssue> issues,
         string path,
         string code,
-        string missingMessage)
+        string missingMessage,
+        bool allowWhiteSpace = false)
     {
         if (!element.TryGetProperty(propertyName, out var property))
         {
@@ -189,7 +191,7 @@ public sealed class AppDefinitionValidator
         }
 
         var value = property.GetString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (value is null || (!allowWhiteSpace && string.IsNullOrWhiteSpace(value)))
         {
             issues.Add(CreateIssue(path, code, missingMessage));
             return null;

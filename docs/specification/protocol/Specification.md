@@ -591,7 +591,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ### 5.5 协议标识符规则（规范性）
 
 - **IDENT-01（`appId` canonical grammar）**：所有公开 `appId` **必须**是满足 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$` 的非空字符串。`.` 与 `-` 只允许出现在内部位置，首尾**必须**是字母、数字或 `_`。Host、Schema、示例与客户端 **不得**对合法值执行大小写折叠、空白修剪或其他隐式规范化。
-- **IDENT-02（`instanceId` canonical grammar）**：所有公开 `instanceId` **必须**是满足 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$` 的非空字符串。内部 `.` **可以**存在；以 `.` 或 `-` 开头或结尾、包含 `:`、空白或其他非法字符的值**必须**被拒绝。
+- **IDENT-02（`instanceId` canonical grammar）**：所有公开 `instanceId` **必须**是长度不超过 256 且满足 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$` 的非空字符串。内部 `.` **可以**存在；以 `.` 或 `-` 开头或结尾、包含 `:`、空白或其他非法字符的值**必须**被拒绝。
 - **IDENT-03（`scope` canonical grammar）**：当 `scope` 或 `target.scope` 以字符串出现时，合法值**必须**满足以下之一：字面量 `""`；或满足 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$` 的非空字符串。字面量 `""` 是唯一用于显式表示 Global 的值；字面量 `"global"` 只是普通显式作用域字符串。
 - **IDENT-04（值按校验后原样保留）**：成功结果、错误载荷、事件载荷与持久化 Definition payload 中的 `appId`、`scope`、`instanceId` **必须**回传通过校验后的原始字符串，不得替换成其他“规范化”值或文件名编码。
 - **IDENT-05（Definition 与注册类接口）**：`hub.apps.validateDefinition`、`hub.apps.upsertDefinition`、`hub.apps.getDefinition`、`hub.apps.deleteDefinition` 与 `hub.apps.registerInstance` **必须**要求显式提供合法字符串 `scope`。`scope = null` 或省略 `scope` 在 `validateDefinition` / `upsertDefinition` 中**必须**表现为 `definition_invalid`，在 `getDefinition` / `deleteDefinition` / `registerInstance` 中**必须**返回 `-32602 invalid_params`。
@@ -958,7 +958,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 上述集合之外的 token（例如 `{dedupeKey}`）**不得**获得隐藏运行时语义；Hub **必须**将其保留为字面量文本。
 - 如果 `AppDefinition.launch.dedupeKeyTemplate` 被省略或为 null，Hub **必须**使用默认模板：`{appId}:{scopeOrGlobal}`。
 - `waitForRegisterMs` 若省略则默认为 `0`，且**必须**为 ≥ 0 的整数（超出范围 => `-32602 invalid_params`）。
-- 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空，Hub **必须**返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。
+- 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空白字符串，Hub **必须**在 `hub.apps.launch` 阶段返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` **不得**仅因 `launch.exePath` 是空白字符串而拒绝候选 Definition。
 - Hub **必须**读取精确命中的 `AppDefinition.launch.exePath`。若该 `appId + scope` 对应的 Definition 缺失：返回 `-32014 app_definition_not_found`，且 `error.data` **必须**至少包含 `appId` 与原始 canonical `scope`。若进程创建失败：返回 `-32020`。
 - 如果 `waitForRegisterMs > 0`，Hub **必须**只允许被跟踪 `launchId` 对应的注册满足等待中的启动；无关实例或缺少该 `launchId` 的同 scope 注册**不得**完成这次等待。
 - 如果 `waitForRegisterMs > 0` 且被启动的进程在等待窗口内尝试注册到不同于启动 Definition 的 `scope`，Hub **必须**让该次启动以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；`error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope`。

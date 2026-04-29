@@ -206,6 +206,53 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 
     [Fact]
     [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.5")]
+    [Trait("SpecRef", "6.3.6")]
+    [Trait("SpecRef", "6.3.12")]
+    public async Task Spec_6_3_5_And_6_3_6_And_6_3_12_AppDefinitionsAndLaunch_WhenLaunchExePathBlank_ShouldStoreDefinitionAndReturnLaunchConfigMissing()
+    {
+        using var context = CreateDefinitionContext();
+        var definitionsHandler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
+        var launchHandler = CreateLaunchHandler(context);
+
+        var definitionParams = new
+        {
+            definition = new
+            {
+                appId = "blank-launch-config",
+                scope = ScopeContract.Global,
+                displayName = "Blank Launch Config",
+                launch = new
+                {
+                    exePath = "   ",
+                    argsTemplate = "--info"
+                }
+            }
+        };
+
+        var validateResponse = await definitionsHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsValidateDefinition, "validate-blank-launch", definitionParams),
+            CancellationToken.None);
+        Assert.Null(validateResponse.Error);
+        Assert.True(JsonSerializer.SerializeToElement(validateResponse.Result).GetProperty("valid").GetBoolean());
+
+        var upsertResponse = await definitionsHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsUpsertDefinition, "upsert-blank-launch", definitionParams),
+            CancellationToken.None);
+        Assert.Null(upsertResponse.Error);
+        var upsertDefinition = JsonSerializer.SerializeToElement(upsertResponse.Result).GetProperty("definition");
+        Assert.Equal("   ", upsertDefinition.GetProperty("launch").GetProperty("exePath").GetString());
+
+        var launchResponse = await launchHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-blank-launch", new { appId = "blank-launch-config", scope = ScopeContract.Global }),
+            CancellationToken.None);
+
+        AssertError(launchResponse, -32020, "launch_failed", "launch-blank-launch");
+        Assert.Equal("launch_config_missing", JsonSerializer.SerializeToElement(launchResponse.Error!.Data).GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.3")]
     public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
     {

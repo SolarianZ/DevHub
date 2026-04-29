@@ -93,9 +93,9 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 注册或更新应用程序实例
+    /// 注册或更新应用程序实例（仅供白盒测试构造运行态）。
     /// </summary>
-    public AppInstance RegisterInstance(AppInstance instance)
+    internal AppInstance RegisterInstance(AppInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ValidateInstance(instance);
@@ -136,22 +136,35 @@ public class AppRegistry : IDisposable
         {
             if (_instances.TryGetValue(instance.InstanceId, out var existing))
             {
-                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState) && !MatchesSecret(passwordState, password))
+                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState))
                 {
-                    registeredInstance = CloneInstance(existing);
-                    passwordMismatch = true;
-                    return false;
+                    if (!MatchesSecret(passwordState, password))
+                    {
+                        registeredInstance = CloneInstance(existing);
+                        passwordMismatch = true;
+                        return false;
+                    }
+
+                    var updatedInstance = RegisterOrUpdateInstance(instance);
+                    instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
+                    registeredInstance = CloneInstance(updatedInstance);
+                    passwordMismatch = false;
+                    return true;
                 }
 
-                if (!_passwordStates.ContainsKey(instance.InstanceId))
+                if (_instances.TryRemove(instance.InstanceId, out var removedLegacyInstance))
                 {
-                    _passwordStates[instance.InstanceId] = CreateSecretState(password);
+                    _sessionStates.TryRemove(instance.InstanceId, out _);
+                    _logger.LogInformation(
+                        "已丢弃无密码状态的应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+                        instance.InstanceId,
+                        removedLegacyInstance.AppId,
+                        removedLegacyInstance.Scope,
+                        removedLegacyInstance.Pid);
                 }
             }
-            else
-            {
-                _passwordStates[instance.InstanceId] = CreateSecretState(password);
-            }
+
+            _passwordStates[instance.InstanceId] = CreateSecretState(password);
 
             var storedInstance = RegisterOrUpdateInstance(instance);
             instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
@@ -162,9 +175,9 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 更新实例的最后更新时间（心跳）
+    /// 更新实例的最后更新时间（仅供白盒测试构造运行态）。
     /// </summary>
-    public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
+    internal bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
         ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试更新实例心跳: {InstanceId}", instanceId);
@@ -187,9 +200,9 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 注销应用程序实例
+    /// 注销应用程序实例（仅供白盒测试构造运行态）。
     /// </summary>
-    public bool UnregisterInstance(string instanceId)
+    internal bool UnregisterInstance(string instanceId)
     {
         ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试注销应用程序实例: {InstanceId}", instanceId);

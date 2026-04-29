@@ -278,6 +278,25 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ 合法定义校验结果不正确: {valid_response}")
                 return result
 
+            blank_launch_app_id = self._new_app_id("blank-launch-validate")
+            blank_launch_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": blank_launch_app_id,
+                    "scope": "",
+                    "displayName": "Blank Launch Validate App",
+                    "launch": {
+                        "exePath": "   ",
+                        "argsTemplate": "hello"
+                    }
+                }
+            })
+            if not RpcAssertions.expect_success(result, blank_launch_response, ["valid", "errors"]):
+                return result
+
+            if blank_launch_response["result"].get("valid") is not True or blank_launch_response["result"].get("errors") != []:
+                result.mark_failure(f"❌ 空白 launch.exePath 应在定义校验阶段通过: {blank_launch_response}")
+                return result
+
             invalid_response = client.call("hub.apps.validateDefinition", {
                 "definition": {
                     "appId": "Invalid App",
@@ -300,6 +319,56 @@ class TestAppDefinitions(unittest.TestCase):
 
         except Exception as e:
             result.mark_failure(str(e))
+
+        return result
+
+    def test_blank_launch_exepath_should_store_definition(self):
+        """测试空白 launch.exePath 可通过 upsertDefinition 持久化"""
+        result = TestResult("测试空白 launch.exePath 可持久化")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = self._new_app_id("blank-launch-store")
+
+            upsert_response = client.call("hub.apps.upsertDefinition", {
+                "definition": {
+                    "appId": app_id,
+                    "scope": "",
+                    "displayName": "Blank Launch Store App",
+                    "launch": {
+                        "exePath": "   ",
+                        "argsTemplate": "managed"
+                    }
+                }
+            })
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
+
+            definition = upsert_response["result"]["definition"]
+            if definition.get("launch", {}).get("exePath") != "   ":
+                result.mark_failure(f"❌ upsertDefinition 未保留空白 launch.exePath: {definition}")
+                return result
+
+            get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
+            if not RpcAssertions.expect_success(result, get_response, ["definition"]):
+                return result
+
+            stored_definition = get_response["result"]["definition"]
+            if stored_definition.get("launch", {}).get("exePath") != "   ":
+                result.mark_failure(f"❌ getDefinition 未返回空白 launch.exePath: {stored_definition}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            except Exception:
+                pass
 
         return result
 
@@ -656,6 +725,7 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_app_definition_appid_format_validation(),
             self.test_definition_filename_must_match_appid(),
             self.test_validate_definition(),
+            self.test_blank_launch_exepath_should_store_definition(),
             self.test_upsert_definition_and_delete_definition(),
             self.test_scoped_definitions_should_use_composite_identity(),
             self.test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(),

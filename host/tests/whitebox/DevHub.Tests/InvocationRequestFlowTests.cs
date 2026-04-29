@@ -6,6 +6,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
+using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -388,6 +389,75 @@ public class InvocationRequestFlowTests : IDisposable
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "respond-canceled",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = instanceToken,
+                invocationId,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(respondResponse.Error);
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenRoutedCallerCanceled_ShouldPropagateCancellationAndKeepInvocationActive()
+    {
+        const string appId = "request-routed-canceled.app";
+        const string instanceId = "request-routed-canceled-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6111);
+
+        var handler = CreateHandler(appRegistry);
+        var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "req-routed-canceled",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.routed.cancel",
+                args = new { x = 3 },
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 3000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-routed-canceled",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var invocationId = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("invocationId")
+            .GetString();
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
+
+        var respondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-routed-canceled",
             Method = "hub.invoke.respond",
             Params = JsonSerializer.SerializeToElement(new
             {

@@ -116,12 +116,6 @@ internal static class JsonRpcEnvelopeParser
                     return true;
                 }
 
-                if (idElement.TryGetDouble(out var doubleValue))
-                {
-                    id = doubleValue;
-                    return true;
-                }
-
                 id = null;
                 return false;
             case JsonValueKind.Null:

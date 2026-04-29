@@ -135,6 +135,32 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
+    [Trait("SpecRef", "5.1.1")]
+    public void Impl_AppDefinitionValidator_WhenLaunchExePathBlank_ShouldParseModelAndPreserveValue()
+    {
+        var ok = _validator.TryParseAndValidate(
+            ParseElement(
+                """
+                {
+                  "appId": "transport.blank-launch",
+                  "scope": "",
+                  "displayName": "Blank Launch",
+                  "launch": {
+                    "exePath": "   ",
+                    "argsTemplate": "--info"
+                  }
+                }
+                """),
+            out var definition,
+            out var validationResult);
+
+        Assert.True(ok);
+        Assert.True(validationResult.Valid);
+        Assert.NotNull(definition);
+        Assert.Equal("   ", definition.Launch!.ExePath);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.1")]
     public void Impl_RpcParamReader_StringHelpers_ShouldFollowObjectAndWhitespaceRules()
     {

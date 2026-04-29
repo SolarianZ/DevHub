@@ -166,6 +166,74 @@ public sealed class RpcRouterFaultInjectionTests
     }
 
     [Fact]
+    public async Task Impl_RouteAsync_WhenExactHandlerThrowsActiveCancellation_ShouldPropagateCancellation()
+    {
+        var callOrder = new List<string>();
+        var handler = new TestHandler(
+            "hub.ping",
+            "exact-canceled",
+            callOrder,
+            _ => throw new OperationCanceledException());
+        var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
+        using var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "exact-canceled",
+            Method = "hub.ping",
+            Params = null
+        }, cancellationTokenSource.Token));
+
+        Assert.Equal(["exact-canceled"], callOrder);
+    }
+
+    [Fact]
+    public async Task Impl_RouteAsync_WhenExactHandlerThrowsInactiveCancellation_ShouldReturnInternalError()
+    {
+        var callOrder = new List<string>();
+        var handler = new TestHandler(
+            "hub.ping",
+            "exact-inactive-canceled",
+            callOrder,
+            _ => throw new OperationCanceledException());
+        var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
+
+        var response = await router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "exact-inactive-canceled",
+            Method = "hub.ping",
+            Params = null
+        }, CancellationToken.None);
+
+        AssertInternalError(response, "exact-inactive-canceled");
+        Assert.Equal(["exact-inactive-canceled"], callOrder);
+    }
+
+    [Fact]
+    public async Task Impl_RouteAsync_WhenPrefixHandlerThrowsActiveCancellation_ShouldPropagateCancellation()
+    {
+        var callOrder = new List<string>();
+        var handler = new TestHandler(
+            "hub.apps",
+            "prefix-canceled",
+            callOrder,
+            _ => throw new OperationCanceledException());
+        var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
+        using var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "prefix-canceled",
+            Method = "hub.apps.listDefinitions",
+            Params = null
+        }, cancellationTokenSource.Token));
+
+        Assert.Equal(["prefix-canceled"], callOrder);
+    }
+
+    [Fact]
     public async Task Impl_RouteAsync_WhenMatchedPrefixHandlerThrowsAndOthersOnlyReturnMethodNotFound_ShouldReturnInternalError()
     {
         var callOrder = new List<string>();

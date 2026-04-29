@@ -502,7 +502,7 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
         }
 
-        var items = await _store.PollAsync(instance, maxCount, waitMs, cancellationToken);
+        var items = await _store.PollAsync(instance, maxCount, waitMs, cancellationToken, _requestWaiter);
         return new JsonRpcResponse
         {
             Id = request.Id,

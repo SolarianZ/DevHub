@@ -349,6 +349,43 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(self):
+        """LAUNCH-EDGE-006: 空白 launch.exePath 在 launch 阶段返回 launch_config_missing。"""
+        result = TestResult("LAUNCH-EDGE-006 空白 exePath 启动失败阶段")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("blank-exepath")
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": "   ",
+                    "argsTemplate": "ignored",
+                },
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.launch_app(
+                app_id=app_id,
+                scope="",
+                wait_for_register_ms=0,
+                request_id="launch-edge-006",
+            )
+            if not RpcAssertions.expect_error(result, response, -32020, "launch_failed"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "launch_config_missing"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
@@ -356,6 +393,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_003_wait_for_register_positive_should_return_started_or_starting(),
             self.test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(),
             self.test_launch_edge_005_undocumented_placeholder_should_remain_literal(),
+            self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),
         ]
 
 

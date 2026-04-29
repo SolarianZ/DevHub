@@ -687,6 +687,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 12345}},
                 {"name": "instanceId 为 null", "payload": {"instanceId": None}},
                 {"name": "instanceId 以 . 开头", "payload": {"instanceId": ".invalid"}},
+                {"name": "instanceId 长度超过256", "payload": {"instanceId": "a" * 257}},
             ]
 
             for case in cases:
@@ -715,6 +716,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 12345}},
                 {"name": "instanceId 为 null", "payload": {"instanceId": None}},
                 {"name": "instanceId 以 - 结尾", "payload": {"instanceId": "invalid-"}},
+                {"name": "instanceId 长度超过256", "payload": {"instanceId": "a" * 257}},
             ]
 
             for case in cases:
@@ -790,6 +792,32 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_invoke_poll_invalid_instanceid(self):
+        """测试 hub.invoke.poll instanceId 非法"""
+        result = TestResult("测试 hub.invoke.poll instanceId 非法")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "instanceId 非字符串", "payload": {"instanceId": 123, "maxCount": 1, "waitMs": 0}},
+                {"name": "instanceId 含空格", "payload": {"instanceId": "invalid instance id", "maxCount": 1, "waitMs": 0}},
+                {"name": "instanceId 长度超过256", "payload": {"instanceId": "a" * 257, "maxCount": 1, "waitMs": 0}},
+            ]
+
+            for case in cases:
+                response = client.call("hub.invoke.poll", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_invoke_respond_missing_instance_session_token(self):
         """测试 hub.invoke.respond 缺少 instanceSessionToken 参数"""
         result = TestResult("测试 hub.invoke.respond 缺少 instanceSessionToken 参数")
@@ -814,6 +842,32 @@ class TestInvalidParams(unittest.TestCase):
             )
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="missing-respond-token"):
                 return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_hub_invoke_respond_invalid_instanceid(self):
+        """测试 hub.invoke.respond instanceId 非法"""
+        result = TestResult("测试 hub.invoke.respond instanceId 非法")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "instanceId 非字符串", "payload": {"instanceId": 123, "invocationId": "invk-invalid-instance", "value": {"ok": True}}},
+                {"name": "instanceId 含空格", "payload": {"instanceId": "invalid instance id", "invocationId": "invk-invalid-instance", "value": {"ok": True}}},
+                {"name": "instanceId 长度超过256", "payload": {"instanceId": "a" * 257, "invocationId": "invk-invalid-instance", "value": {"ok": True}}},
+            ]
+
+            for case in cases:
+                response = client.call("hub.invoke.respond", case["payload"])
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                    return result
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
 
             result.mark_success()
         except Exception as e:
@@ -862,6 +916,7 @@ class TestInvalidParams(unittest.TestCase):
                 {"name": "instanceId 非字符串", "payload": {"instanceId": 123}},
                 {"name": "instanceId 格式非法", "payload": {"instanceId": "invalid instance id"}},
                 {"name": "instanceId 以 . 开头", "payload": {"instanceId": ".invalid.instance"}},
+                {"name": "instanceId 长度超过256", "payload": {"instanceId": "a" * 257}},
             ]
 
             for case in cases:
@@ -900,7 +955,9 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_unregister_instance_missing_instance_session_token(),
             self.test_hub_apps_list_instances_invalid_params(),
             self.test_hub_invoke_poll_missing_instance_session_token(),
+            self.test_hub_invoke_poll_invalid_instanceid(),
             self.test_hub_invoke_respond_missing_instance_session_token(),
+            self.test_hub_invoke_respond_invalid_instanceid(),
         ]
 
 

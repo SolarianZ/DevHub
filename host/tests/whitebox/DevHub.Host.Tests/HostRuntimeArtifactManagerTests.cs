@@ -9,6 +9,7 @@ using DevHub.Host.Runtime;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
+using static DevHub.Host.Tests.TestHelpers.RuntimeFilePermissionAssertions;
 
 /// <summary>
 /// HostRuntimeArtifactManager 基础行为测试。
@@ -32,7 +33,7 @@ public sealed class HostRuntimeArtifactManagerTests
 
             Assert.False(string.IsNullOrWhiteSpace(token));
             Assert.True(File.Exists(tokenPath));
-            AssertUserOnlyAccess(tokenPath);
+            AssertCurrentUserOnlyAccess(tokenPath);
         }
         finally
         {
@@ -97,7 +98,7 @@ public sealed class HostRuntimeArtifactManagerTests
             var token = manager.GetToken();
 
             Assert.False(string.IsNullOrWhiteSpace(token));
-            AssertWindowsUserOnlyAcl(tokenPath);
+            AssertCurrentUserOnlyAccess(tokenPath);
         }
         finally
         {
@@ -156,6 +157,41 @@ public sealed class HostRuntimeArtifactManagerTests
     }
 
     [Fact]
+    public void Impl_GetToken_WhenPublishingToken_ShouldRestrictTempFileBeforeWritingContent()
+    {
+        var testRoot = CreateTestDirectory();
+
+        try
+        {
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
+            var tempRestrictedBeforeContent = false;
+
+            var manager = new HostRuntimeArtifactManager(
+                Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
+                RuntimePathOptions.Resolve(),
+                RuntimeTuningOptions.Default,
+                defaultHubVersion: null,
+                filePath =>
+                {
+                    if (Path.GetFileName(filePath).StartsWith(".token.txt.", StringComparison.Ordinal)
+                        && File.Exists(filePath)
+                        && new FileInfo(filePath).Length == 0)
+                    {
+                        tempRestrictedBeforeContent = true;
+                    }
+                });
+
+            _ = manager.GetToken();
+
+            Assert.True(tempRestrictedBeforeContent);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(testRoot);
+        }
+    }
+
+    [Fact]
     public void Impl_WriteHubJson_ShouldWriteSpecCompliantRuntimeFile()
     {
         var testRoot = CreateTestDirectory();
@@ -189,8 +225,8 @@ public sealed class HostRuntimeArtifactManagerTests
             Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
             Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
 
-            AssertUserOnlyAccess(hubJsonPath);
-            AssertUserOnlyAccess(tokenFile!);
+            AssertCurrentUserOnlyAccess(hubJsonPath);
+            AssertCurrentUserOnlyAccess(tokenFile!);
         }
         finally
         {
@@ -217,11 +253,48 @@ public sealed class HostRuntimeArtifactManagerTests
             var hubJsonPath = Path.Combine(runtimeDirectory, "hub.json");
             Assert.True(File.Exists(hubJsonPath));
             Assert.False(File.Exists(hubJsonPath + ".tmp"));
+            Assert.Empty(Directory.EnumerateFiles(runtimeDirectory, ".hub.json.*.tmp"));
 
             var hubJson = JsonDocument.Parse(File.ReadAllText(hubJsonPath)).RootElement;
             Assert.Equal("v2", hubJson.GetProperty("hubVersion").GetString());
             Assert.Equal("http://127.0.0.1:48002", hubJson.GetProperty("httpBaseUrl").GetString());
             Assert.Equal("ws://127.0.0.1:48002/ws", hubJson.GetProperty("wsUrl").GetString());
+            AssertCurrentUserOnlyAccess(hubJsonPath);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(testRoot);
+        }
+    }
+
+    [Fact]
+    public void Impl_WriteHubJson_WhenPublishingRuntimeFile_ShouldRestrictTempFileBeforeWritingContent()
+    {
+        var testRoot = CreateTestDirectory();
+
+        try
+        {
+            using var dataScope = new EnvironmentVariableScope(RuntimePathOptions.DataDirEnvironmentVariable, testRoot);
+            var tempRestrictedBeforeContent = false;
+
+            var manager = new HostRuntimeArtifactManager(
+                Mock.Of<ILogger<HostRuntimeArtifactManager>>(),
+                RuntimePathOptions.Resolve(),
+                RuntimeTuningOptions.Default,
+                defaultHubVersion: null,
+                filePath =>
+                {
+                    if (Path.GetFileName(filePath).StartsWith(".hub.json.", StringComparison.Ordinal)
+                        && File.Exists(filePath)
+                        && new FileInfo(filePath).Length == 0)
+                    {
+                        tempRestrictedBeforeContent = true;
+                    }
+                });
+
+            manager.WriteHubJson(49003, "runtime-publication");
+
+            Assert.True(tempRestrictedBeforeContent);
         }
         finally
         {
@@ -318,47 +391,4 @@ public sealed class HostRuntimeArtifactManagerTests
         }
     }
 
-    private static void AssertUserOnlyAccess(string filePath)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            AssertWindowsUserOnlyAcl(filePath);
-            return;
-        }
-
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return;
-        }
-
-        var mode = File.GetUnixFileMode(filePath);
-        var effective = mode &
-            (UnixFileMode.UserRead
-            | UnixFileMode.UserWrite
-            | UnixFileMode.UserExecute
-            | UnixFileMode.GroupRead
-            | UnixFileMode.GroupWrite
-            | UnixFileMode.GroupExecute
-            | UnixFileMode.OtherRead
-            | UnixFileMode.OtherWrite
-            | UnixFileMode.OtherExecute);
-
-        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, effective);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static void AssertWindowsUserOnlyAcl(string filePath)
-    {
-        var security = new FileInfo(filePath).GetAccessControl(AccessControlSections.Access);
-        var rules = security
-            .GetAccessRules(true, true, typeof(SecurityIdentifier))
-            .Cast<FileSystemAccessRule>()
-            .Where(rule => rule.AccessControlType == AccessControlType.Allow)
-            .ToList();
-
-        var currentUserSid = WindowsIdentity.GetCurrent().User;
-        Assert.NotNull(currentUserSid);
-        Assert.Contains(rules, rule => Equals(rule.IdentityReference, currentUserSid));
-        Assert.DoesNotContain(rules, rule => !Equals(rule.IdentityReference, currentUserSid));
-    }
 }

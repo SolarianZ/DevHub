@@ -6,6 +6,7 @@ using DevHub.Host.Runtime;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
+using static DevHub.Host.Tests.TestHelpers.RuntimeFilePermissionAssertions;
 
 /// <summary>
 /// HostRuntimeArtifactManager 恢复与自愈行为测试。
@@ -66,6 +67,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 
         Assert.True(File.Exists(tokenPath));
         Assert.Equal(token, File.ReadAllText(tokenPath));
+        AssertCurrentUserOnlyAccess(tokenPath);
     }
 
     [Fact]
@@ -93,6 +95,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         Assert.Equal(DefaultHubVersion, document.RootElement.GetProperty("hubVersion").GetString());
         Assert.Equal("http://127.0.0.1:47999", document.RootElement.GetProperty("httpBaseUrl").GetString());
         Assert.Equal("ws://127.0.0.1:47999/ws", document.RootElement.GetProperty("wsUrl").GetString());
+        AssertCurrentUserOnlyAccess(hubJsonPath);
     }
 
     [Fact]

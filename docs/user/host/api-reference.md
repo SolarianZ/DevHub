@@ -18,7 +18,7 @@
 
 JSON-RPC 信封约束：
 
-- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或可无损往返的 `number`。无法无损保留的数字 `id` 会返回 `-32600 invalid_request`。
 - 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
 - notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
 - `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
@@ -139,7 +139,8 @@ JSON-RPC 信封约束：
 约束：
 
 - `definition`、`definition.capabilities`、`definition.launch` 如果出现，都必须是对象，不能是 `null`。
-- `definition.displayName`、`definition.launch.exePath` 在当前 Host 中都要求非空字符串。
+- `definition.displayName` 在当前 Host 中要求非空字符串。
+- `definition.launch.exePath` 必须是字符串；空白字符串可被校验和写入接口保存，并在 `hub.apps.launch` 阶段按启动配置缺失处理。
 
 ### 3.8 `hub.apps.upsertDefinition`
 
@@ -194,8 +195,8 @@ JSON-RPC 信封约束：
 约束：
 
 - `password` 必须是非空字符串。
-- `instance.instanceId` 最大长度为 `256`，并且必须匹配 `^[a-zA-Z0-9._:-]+$`。
-- `instance.appId` 必须匹配 `^[a-z0-9][a-z0-9.-]*$`。
+- `instance.instanceId` 最大长度为 `256`，并且必须匹配 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$`。
+- `instance.appId` 必须匹配 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$`。
 - `instance.scope` 必须是显式字符串，不能传 `null`。
 - `instance.pid` 必须是大于等于 `1` 的整数。
 - `instance.invoke.poll` 与 `instance.invoke.respond` 都必须显式提供布尔值。
@@ -242,7 +243,7 @@ JSON-RPC 信封约束：
 约束：
 
 - `params` 必须是对象。
-- `instanceId` 必须是非空字符串，并且必须匹配 `^[a-zA-Z0-9._:-]+$`。
+- `instanceId` 必须是最大长度为 `256` 的非空字符串，并且必须匹配 `^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$`。
 - 该接口只按 `instanceId` 做精确匹配；命中时返回当前仍保留在注册表中的 `AppInstance` 快照。
 - 对于已经离线但尚未被显式注销或过期清理移除的实例，仍会返回该保留快照。
 - 该接口不会刷新 `lastSeenUtc`，也不要求 `instanceSessionToken`。
@@ -407,13 +408,6 @@ JSON-RPC 信封约束：
 
 `hub.invoke.request` 的同步错误响应使用 `error.data.calleeError`，但 `invocation.failed` 事件在当前 Host 中使用 `payload.error`。
 
-## 4. 核对结果
+## 4. 运行时数据兼容口径
 
-### 4.1 Specification 与 Host 实现未完全对齐的点
-
-- `hub.ws.authenticate.clientSessionId`
-  Specification 的方法参数表（`§6.3.2`）只写为 `string`；当前 Host 实现在 [`host/src/DevHub.Host/Transport/WebSocketAuthenticationProcessor.cs`](../../../host/src/DevHub.Host/Transport/WebSocketAuthenticationProcessor.cs) 中要求带连字符的 UUID 字符串（`D` 格式），不满足时返回 `-32602 invalid_params`。
-- `hub.apps.listDefinitions` / `hub.apps.getDefinition` / `hub.apps.deleteDefinition` / `hub.apps.listInstances` 的 `appId`
-  Specification 的对应接口段落聚焦于 `string` 与 `appId + scope` 的查找语义；当前 Host 实现在 [`host/src/DevHub.Core/Services/Rpc/Handlers/AppDefinitionsHandler.cs`](../../../host/src/DevHub.Core/Services/Rpc/Handlers/AppDefinitionsHandler.cs) 和 [`host/src/DevHub.Core/Services/Rpc/Handlers/AppInstancesHandler.cs`](../../../host/src/DevHub.Core/Services/Rpc/Handlers/AppInstancesHandler.cs) 中额外执行 `^[a-z0-9][a-z0-9.-]*$` 格式校验，非法格式会返回 `-32602 invalid_params`。
-- `hub.event` 中 `invocation.failed` 的错误载荷字段名
-  Specification 当前没有单独固定 `invocation.failed` 事件负载里的错误字段名；当前 Host 实现在 [`host/src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs`](../../../host/src/DevHub.Core/Services/Rpc/Handlers/InvocationHandler.cs) 中发布的是 `payload.error`，不是请求错误响应里的 `calleeError` 命名。
+运行时数据只服务当前版本 Host 的本机运行态。改动前版本生成的 `runtime/token.txt`、`runtime/hub.json`、单实例锁状态、无凭据实例注册状态和未完成 invocation 状态不提供兼容或迁移保证。

@@ -12,6 +12,11 @@ public static partial class ProtocolIdentifier
     /// </summary>
     public const string CanonicalPattern = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
 
+    /// <summary>
+    /// `instanceId` 最大长度。
+    /// </summary>
+    public const int MaxInstanceIdLength = 256;
+
     private static readonly Regex CanonicalRegex = CanonicalIdentifierRegex();
 
     /// <summary>
@@ -27,7 +32,7 @@ public static partial class ProtocolIdentifier
     /// </summary>
     public static bool IsValidInstanceId(string? instanceId)
     {
-        return IsValidRequiredIdentifier(instanceId);
+        return IsValidRequiredIdentifier(instanceId) && instanceId!.Length <= MaxInstanceIdLength;
     }
 
     /// <summary>
@@ -64,7 +69,7 @@ public static partial class ProtocolIdentifier
     {
         if (!IsValidInstanceId(instanceId))
         {
-            throw new ArgumentException($"instanceId must match {CanonicalPattern}.", paramName);
+            throw new ArgumentException($"instanceId must match {CanonicalPattern} and be at most {MaxInstanceIdLength} characters.", paramName);
         }
     }
 
