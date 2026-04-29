@@ -292,4 +292,5 @@ jobs:
         with:
           name: release-diagnostics-${{ github.run_id }}
           path: artifacts/release/**
+          include-hidden-files: true
           if-no-files-found: warn

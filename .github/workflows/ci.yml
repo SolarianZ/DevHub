@@ -1129,6 +1129,7 @@ jobs:
         with:
           name: monitor-assets-${{ matrix.runner }}-${{ needs.route.outputs.release_id }}
           path: artifacts/monitor/${{ needs.route.outputs.release_id }}
+          include-hidden-files: true
           if-no-files-found: error
 
       - name: Upload Monitor diagnostics
@@ -1139,6 +1140,7 @@ jobs:
           path: |
             artifacts/monitor/**
             apps/monitor/src-tauri/target/release/bundle/**
+          include-hidden-files: true
           if-no-files-found: warn
 
   publish-release:
