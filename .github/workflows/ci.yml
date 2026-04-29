@@ -460,7 +460,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -517,7 +517,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -554,7 +554,7 @@ jobs:
           python -m pip install -e './sdks/python[test]' requests
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
@@ -604,7 +604,7 @@ jobs:
         run: npm --prefix sdks/javascript run build
 
       - name: Download shared Host artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: sdk-host-release
           path: ${{ runner.temp }}/sdk-host-release
