@@ -66,7 +66,7 @@
 
 `app-definition.json` 只描述单个 Definition payload 的结构；持久化文件名与 Definition 公开身份仍以 [`Specification.md`](../../protocol/Specification.md) §4.1.4 / §5.1.1 为准，即精确 `(appId, scope)` 复合身份与 `{appId}--{scopeKey}.json` 的 canonical 存储形状，其中 `scopeKey = "global"` 对应 Global，`scopeKey = "scope-" + scope` 对应显式 scope。
 
-[`protocol-examples/v1.0.1`](../../protocol-examples/v1.0.1/README.md) 中的原始协议示例使用固定合法字面值，可直接作为本目录 schema 的结构校验样例。
+[`protocol-examples/v1.0.1`](../../protocol-examples/v1.0.1/README.md) 中的原始协议示例可直接作为对应 JSON-RPC 信封与事件通知 schema 的结构校验样例；其中演示失败路径的业务载荷应按具体方法语义理解，不作为通用数据模型 schema 的正向样例。
 
 如果需要请求/响应示例，请同时参考：
 

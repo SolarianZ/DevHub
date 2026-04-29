@@ -217,7 +217,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 规范性要求：
 - 本规范的 `protocolVersion` **必须**为 `1`。
 - 在当前基线下，Host 与客户端 **必须**使用 §5.4 定义的 `hub.json` 架构。若 `hub.json` 字段集合为纠正核心目标偏差而确需变更，**必须**同步更新 §5.4、Schema、协议示例、SDK、测试与接入文档；兼容性处理规则见 §9.2。
-- `hubVersion` 若存在，**必须**为字符串；该字段用于发现阶段诊断，已连接状态下的权威运行版本查询以 §6.3.1.1 `hub.getVersion` 为准。
+- `hubVersion` 若存在，**必须**为字符串；该字段用于发现阶段诊断，已连接状态下的权威运行版本查询以 §6.3.1A `hub.getVersion` 为准。
 - `httpBaseUrl` **禁止**包含末尾斜杠。
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
@@ -605,7 +605,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ## 6. RPC 方法
 
 ### 6.1 约定（规范性）
-- 所有 `hub.*` 方法**必须**使用**对象**参数（具名参数）。如果参数是数组，Hub **必须**返回 `-32602 invalid_params`。
+- 除非对应方法定义另有说明，`hub.*` 方法的 `params` 在显式提供时**必须**是**对象**参数（具名参数）。允许省略 `params` 或传 `null` 的情形，**必须**由对应方法定义显式声明；如果参数是数组，Hub **必须**返回 `-32602 invalid_params`。
 - `hub.invoke.notify` / `hub.invoke.request` 的 `args` **可以**是任意 JSON 值（`object | array | string | number | boolean | null`）。
 - 对于所有成功的 `hub.*` 调用，`result` **必须**是一个至少包含以下内容的 JSON 对象：
   ```json
@@ -659,7 +659,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 { "ok": true, "serverTimeUtc": "2026-01-30T12:34:56Z", "echo": "..." }
 ```
 
-#### 6.3.1.1 `hub.getVersion`
+#### 6.3.1A `hub.getVersion`
 **参数（可选）**：可以省略 `params`，也可以传 `null` 或空对象 `{}`
 **结果**：
 ```json

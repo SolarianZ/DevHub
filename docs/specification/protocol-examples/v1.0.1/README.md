@@ -11,7 +11,7 @@
 
 ## 2. 样例值约定
 
-本目录中的 JSON 文件统一使用固定字面值，目的是提供可直接消费、可直接校验的合法样例。涉及运行时生成或返回的字段时，示例统一采用以下样例值：
+本目录中的 JSON 文件统一使用固定字面值，目的是提供可直接消费、可直接校验的协议报文样例。正向样例使用合法业务值；用于演示校验失败或错误路径的样例，会在保持 JSON-RPC 报文形状合法的前提下包含故意构造的业务无效值。涉及运行时生成或返回的字段时，示例统一采用以下样例值：
 
 - Host token：`devhub-host-token-sample`
 - Host version：`1.0.1`
@@ -118,7 +118,7 @@ WebSocket：
 
 ## 5. 与 Schema / Conformance 的关系
 
-- 本目录中的 JSON 文件本身使用固定合法字面值，可直接作为对应 schema 的结构校验输入。
+- 本目录中的 JSON 文件本身可直接作为对应 JSON-RPC 信封 schema 的结构校验输入；其中演示失败路径的业务载荷，应按具体方法语义解释，不作为通用数据模型 schema 的正向样例。
 - 带 `id` 的 HTTP / WS 请求示例对应 [`rpc-request.json`](../../schema/v1.0.1/rpc-request.json)。
 - 省略 `id` 的 [`http/invoke-notify.notification.request.json`](./http/invoke-notify.notification.request.json) 对应 [`rpc-notification.json`](../../schema/v1.0.1/rpc-notification.json)。
 - 所有 `*.success.json` 响应示例对应 [`rpc-response.json`](../../schema/v1.0.1/rpc-response.json)。
