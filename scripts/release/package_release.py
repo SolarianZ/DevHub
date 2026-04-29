@@ -24,7 +24,7 @@ from package_models import (
     ReleasePackageResult,
     ValidationRecord,
 )
-from package_monitor import copy_monitor_package_outputs, package_monitor
+from package_monitor import copy_monitor_package_outputs, describe_monitor_release_assets, package_monitor
 from package_py_sdk import package_py_sdk
 from package_shared import (
     DEFAULT_HOST_RIDS,
@@ -448,6 +448,129 @@ def build_monitor_package_entries(output_dir: Path) -> list[dict[str, object]]:
     return packages
 
 
+def load_release_manifest(output_dir: Path) -> dict[str, object]:
+    manifest_path = output_dir / "release-manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"release-manifest.json 不是合法对象：{manifest_path}")
+    return payload
+
+
+def parse_release_payload_assets(output_dir: Path, manifest: dict[str, object]) -> list[ReleaseAsset]:
+    manifest_assets = manifest.get("assets")
+    if not isinstance(manifest_assets, list):
+        raise RuntimeError("release-manifest.json 缺少 assets 数组。")
+
+    resolved_output_dir = output_dir.resolve()
+    assets: list[ReleaseAsset] = []
+    seen_names: dict[str, str] = {}
+    for asset in manifest_assets:
+        if not isinstance(asset, dict):
+            raise RuntimeError("release-manifest.json 包含无效资产条目。")
+
+        name = asset.get("name")
+        category = asset.get("category")
+        target = asset.get("target")
+        relative_path = asset.get("path")
+        variant = asset.get("variant")
+        monitor_version = asset.get("monitorVersion")
+        javascript_sdk_version = asset.get("javascriptSdkVersion")
+
+        if not isinstance(name, str) or not isinstance(category, str) or not isinstance(target, str) or not isinstance(relative_path, str):
+            raise RuntimeError("release-manifest.json 资产缺少 name、category、target 或 path 字段。")
+        if variant is not None and not isinstance(variant, str):
+            raise RuntimeError(f"release-manifest.json 资产 variant 字段无效：{name}")
+        if monitor_version is not None and not isinstance(monitor_version, str):
+            raise RuntimeError(f"release-manifest.json 资产 monitorVersion 字段无效：{name}")
+        if javascript_sdk_version is not None and not isinstance(javascript_sdk_version, str):
+            raise RuntimeError(f"release-manifest.json 资产 javascriptSdkVersion 字段无效：{name}")
+
+        asset_path = (resolved_output_dir / relative_path).resolve()
+        try:
+            asset_path.relative_to(resolved_output_dir)
+        except ValueError as exc:
+            raise RuntimeError(f"release-manifest.json 资产路径超出发布目录：{relative_path}") from exc
+
+        if not asset_path.is_file():
+            raise RuntimeError(f"release-manifest.json 资产文件不存在：{relative_path}")
+        if asset_path.name != name:
+            raise RuntimeError(
+                "release-manifest.json 资产名与实际文件名不一致："
+                f" manifest={name!r}, actual={asset_path.name!r}"
+            )
+        if name in seen_names:
+            raise RuntimeError(
+                "release-manifest.json 包含重复的发布资产文件名："
+                f" {name!r}, first={seen_names[name]!r}, second={relative_path!r}"
+            )
+        seen_names[name] = relative_path
+        assets.append(
+            ReleaseAsset(
+                path=asset_path,
+                category=category,
+                target=target,
+                variant=variant,
+                monitorVersion=monitor_version,
+                javascriptSdkVersion=javascript_sdk_version,
+            )
+        )
+
+    return assets
+
+
+def resolve_release_upload_files(output_dir: Path) -> list[Path]:
+    resolved_output_dir = output_dir.resolve()
+    manifest = load_release_manifest(resolved_output_dir)
+    payload_assets = parse_release_payload_assets(resolved_output_dir, manifest)
+
+    release_files = [asset.path for asset in payload_assets]
+    seen_names = {path.name: path.relative_to(resolved_output_dir).as_posix() for path in release_files}
+    for relative_path in ("release-manifest.json", "release-notes.md"):
+        path = (resolved_output_dir / relative_path).resolve()
+        if not path.is_file():
+            raise RuntimeError(f"发布辅助文件不存在：{relative_path}")
+        if path.name in seen_names:
+            raise RuntimeError(
+                "发布辅助文件名与发布资产重复："
+                f" {path.name!r}, asset={seen_names[path.name]!r}, auxiliary={relative_path!r}"
+            )
+        seen_names[path.name] = relative_path
+        release_files.append(path)
+
+    return release_files
+
+
+def build_expected_monitor_release_assets(output_dir: Path) -> list[ReleaseAsset]:
+    monitor_root = output_dir / "monitor"
+    if not monitor_root.exists():
+        return []
+
+    assets: list[ReleaseAsset] = []
+    for manifest_path in sorted(monitor_root.glob("*/release-manifest.json")):
+        monitor_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        package_assets = describe_monitor_release_assets(
+            manifest_path.parent,
+            monitor_manifest,
+            publishable_only=True,
+        )
+        if not package_assets:
+            raise RuntimeError(f"Monitor 平台包缺少可发布资产：{manifest_path}")
+        assets.extend(package_assets)
+
+    return assets
+
+
+def release_asset_identity(asset: ReleaseAsset, output_dir: Path) -> tuple[str, str, str, str | None, str | None, str | None]:
+    return (
+        asset.path.relative_to(output_dir).as_posix(),
+        asset.category,
+        asset.target,
+        asset.variant,
+        asset.monitorVersion,
+        asset.javascriptSdkVersion,
+    )
+
+
 def write_release_notes(output_dir: Path, manifest: dict[str, object], release_name: str) -> None:
     lines = [
         f"# {release_name}",
@@ -476,6 +599,9 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
             [
                 "",
                 "## Monitor Packages",
+                "",
+                "The entries below remain in the assembled release directory and workflow artifact for verification and diagnostics.",
+                "They are not additional GitHub Release assets.",
                 "",
                 "| Target Platform | Monitor Version | JS SDK Version | Manifest | Validation |",
                 "| --- | --- | --- | --- | --- |",
@@ -547,20 +673,34 @@ def ensure_asset_integrity(
     if unexpected_host_asset_names:
         raise RuntimeError(f"Unexpected Host variants: {', '.join(unexpected_host_asset_names)}")
 
-    manifest_assets = manifest.get("assets")
-    if not isinstance(manifest_assets, list):
-        raise RuntimeError("release-manifest.json 缺少 assets 数组。")
+    manifest_payload_assets = parse_release_payload_assets(output_dir, manifest)
+    expected_payload_assets = discover_core_release_assets(output_dir, host_rids)
+    if require_monitor:
+        expected_payload_assets.extend(build_expected_monitor_release_assets(output_dir))
+
+    actual_payload_identities = {
+        release_asset_identity(asset, output_dir)
+        for asset in manifest_payload_assets
+    }
+    expected_payload_identities = {
+        release_asset_identity(asset, output_dir)
+        for asset in expected_payload_assets
+    }
+    if actual_payload_identities != expected_payload_identities:
+        raise RuntimeError(
+            "release-manifest.json 发布资产集合不完整。"
+            f" expected={sorted(expected_payload_identities)!r}"
+            f" actual={sorted(actual_payload_identities)!r}"
+        )
 
     expected_manifest_variants = {(rid, variant.name) for rid in host_rids for variant in HOST_VARIANTS}
     actual_manifest_variants: set[tuple[str, str]] = set()
-    for asset in manifest_assets:
-        if not isinstance(asset, dict) or asset.get("category") != "host":
+    for asset in manifest_payload_assets:
+        if asset.category != "host":
             continue
-        target = asset.get("target")
-        variant = asset.get("variant")
-        if not isinstance(target, str) or not isinstance(variant, str):
+        if asset.variant is None:
             raise RuntimeError("Host 资产缺少 target 或 variant 字段。")
-        actual_manifest_variants.add((target, variant))
+        actual_manifest_variants.add((asset.target, asset.variant))
 
     if actual_manifest_variants != expected_manifest_variants:
         raise RuntimeError(
@@ -569,11 +709,7 @@ def ensure_asset_integrity(
             f" actual={sorted(actual_manifest_variants)!r}"
         )
 
-    monitor_assets = [
-        asset
-        for asset in manifest_assets
-        if isinstance(asset, dict) and asset.get("category") == "monitor-app"
-    ]
+    monitor_assets = [asset for asset in manifest_payload_assets if asset.category == "monitor-app"]
     if require_monitor:
         monitor_packages = manifest.get("monitorPackages")
         if not isinstance(monitor_packages, list) or not monitor_packages:
@@ -585,11 +721,7 @@ def ensure_asset_integrity(
             for package in monitor_packages
             if isinstance(package, dict) and isinstance(package.get("targetPlatform"), str)
         }
-        asset_platforms = {
-            asset.get("target")
-            for asset in monitor_assets
-            if isinstance(asset.get("target"), str)
-        }
+        asset_platforms = {asset.target for asset in monitor_assets}
         if platforms != asset_platforms:
             raise RuntimeError(
                 "Monitor manifest 平台集合不完整。"
@@ -615,9 +747,10 @@ def ensure_asset_integrity(
     if require_monitor and "## Monitor Packages" not in release_notes_text:
         raise RuntimeError("release-notes.md 缺少 Monitor 平台包说明。")
     for asset in monitor_assets:
-        asset_name = asset.get("name")
-        if isinstance(asset_name, str) and asset_name not in release_notes_text:
-            raise RuntimeError(f"release-notes.md 缺少 Monitor 资产条目：{asset_name}")
+        if asset.path.name not in release_notes_text:
+            raise RuntimeError(f"release-notes.md 缺少 Monitor 资产条目：{asset.path.name}")
+
+    resolve_release_upload_files(output_dir)
 
     validation_records.append(
         ValidationRecord(

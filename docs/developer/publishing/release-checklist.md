@@ -69,7 +69,7 @@ python scripts/release/package_release.py --release-id preview-local-dry-run --c
 - `artifacts/release/<release-id>/sdk/` 下包含 `.NET`、`JS/TS`、`Python` 三套 SDK 资产。
 - preview 与 main 快照预发布在 `artifacts/release/<release-id>/monitor/<targetPlatform>/` 下包含 Monitor bundle、`release-manifest.json`、`release-notes.md` 与 `checks/validation-summary.json`。
 - `release-manifest.json` 已为每条 Host 资产写入 `variant = multi-file | single-file`。
-- preview 与 main 快照预发布的 `release-manifest.json` 已写入 `monitorPackages`，并为 Monitor App 资产写入 `category = monitor-app`、目标平台、Monitor 版本与 JS SDK 版本。
+- preview 与 main 快照预发布的 `release-manifest.json` 已写入 `monitorPackages`，并为最终发布的 Monitor 分发包写入 `category = monitor-app`、目标平台、Monitor 版本与 JS SDK 版本。
 - `release-notes.md` 已把同一 RID 的 Host multi-file / single-file 资产分开展示。
 - preview 与 main 快照预发布的 `release-notes.md` 已展示 Monitor Packages 表格。
 - `checks/validation-summary.json` 记录了本次验证结果。
@@ -100,7 +100,7 @@ python scripts/release/package_release.py --release-id preview-local-dry-run --c
 
 发布完成后至少执行以下核验：
 
-- 打开 GitHub Release 页面，确认资产名称、数量与 `release-manifest.json` 一致。
+- 打开 GitHub Release 页面，确认 Host、SDK 与 Monitor 分发包的资产名称、数量与 `release-manifest.json` 的 `assets[]` 一致，并确认根目录 `release-manifest.json`、`release-notes.md` 作为发布辅助文件存在。
 - 下载同一 RID 的 multi-file 与 single-file Host ZIP 各一份，确认：
   - multi-file 版解压后包含 `DevHub.Host.dll`、`DevHub.Core.dll` 与依赖侧车文件，且目录整体可直接用于运行。
   - single-file 版解压后包含平台启动文件与必要配置侧车文件，不以多文件 DLL 图形式暴露 Host 主体。

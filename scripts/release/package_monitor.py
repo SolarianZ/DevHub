@@ -34,6 +34,7 @@ from package_shared import (
     build_validation_summary,
     create_argument_parser,
     current_utc_timestamp,
+    is_publishable_monitor_asset,
     maybe_print_help,
     read_json_version,
     remove_tree,
@@ -447,7 +448,10 @@ def copy_monitor_package_outputs(output_dir: Path, monitor_assets_root: Path) ->
 
         destination_dir = monitor_output_root / target_platform
         shutil.copytree(package_dir, destination_dir)
-        assets.extend(describe_monitor_release_assets(destination_dir, manifest))
+        package_assets = describe_monitor_release_assets(destination_dir, manifest, publishable_only=True)
+        if not package_assets:
+            raise RuntimeError(f"Monitor 平台包缺少可发布资产：{manifest_path}")
+        assets.extend(package_assets)
 
     return assets
 
@@ -460,7 +464,12 @@ def find_monitor_package_dirs(monitor_assets_root: Path) -> list[Path]:
     return sorted({manifest.parent.resolve() for manifest in manifests})
 
 
-def describe_monitor_release_assets(package_dir: Path, manifest: dict[str, object]) -> list[ReleaseAsset]:
+def describe_monitor_release_assets(
+    package_dir: Path,
+    manifest: dict[str, object],
+    *,
+    publishable_only: bool = False,
+) -> list[ReleaseAsset]:
     target_platform = str(manifest["targetPlatform"])
     versions = manifest.get("versions")
     if not isinstance(versions, dict):
@@ -487,6 +496,8 @@ def describe_monitor_release_assets(package_dir: Path, manifest: dict[str, objec
             asset_path.relative_to(package_dir.resolve())
         except ValueError as exc:
             raise RuntimeError(f"Monitor 资产路径超出平台目录：{asset_path}") from exc
+        if publishable_only and not is_publishable_monitor_asset(category=category, name=asset_path.name):
+            continue
         assets.append(
             ReleaseAsset(
                 path=asset_path,
