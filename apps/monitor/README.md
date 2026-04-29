@@ -26,21 +26,22 @@
 
 - `npm ci`
 
-与主 CI `monitor-validation` job 对齐的验证命令：
+Monitor 验收相关命令：
 
 - `npm run build:web`：构建前端并执行类型检查。
 - `npm test`：执行前端侧边栏导航、主页 phase 切换、帮助/设置页面、Definition 页面工作流，以及基于真实 Host fixture 的前端回归。
 - `npm run test:native`：执行 `src-tauri/` 原生后端单元测试。
-- `npm run tauri:check`：执行 Tauri 原生侧非平台特定编译校验。
-- `npm run verify`：串联上述全部验证入口。
+- `npm run verify`：执行默认 Monitor 验收链，串联 `build:web`、`test` 与 `test:native`。
+- `npm run tauri:check`：提供独立的 Tauri 原生侧非平台特定编译校验入口。
 
-仓库主 `ci.yml` 中的 `monitor-validation` job 运行上述验证，并执行 `python scripts/release/package_monitor.py --release-id monitor-ci --verify-only`。Monitor 的构建、测试、类型检查、版本元数据和打包脚本均解析当前仓库 `sdks/javascript` 源码。
+仓库主 `ci.yml` 中的 `monitor-validation` job 通过 `python scripts/release/package_monitor.py --release-id monitor-ci --verify-only` 执行版本检查、依赖安装、版本元数据同步和 `npm run verify`。需要独立覆盖 Tauri 原生侧非平台特定编译校验时，可额外执行 `npm run tauri:check`。Monitor 的构建、测试、类型检查、版本元数据和打包脚本均解析当前仓库 `sdks/javascript` 源码。
 
 对齐该 workflow 的本地验收入口：
 
 - `npm run verify`
+- `npm run tauri:check`
 
-验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test` 与 `verify`。该路径不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
+验证前提是：只在 `apps/monitor/` 执行 `npm ci`，也能完成 `build:web`、`test`、`verify` 与 `tauri:check`。该路径不要求额外执行 `npm --prefix sdks/javascript ci`，也不依赖预先存在的 `sdks/javascript/node_modules`。
 
 ## SDK 来源
 
