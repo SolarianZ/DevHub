@@ -145,11 +145,16 @@ class DiscoveryService:
         return hub_info["httpBaseUrl"], token
 
 
-def get_definitions_dir() -> str:
-    """获取应用定义目录（按 Spec 与环境变量约定）。"""
-    definitions_dir = os.path.join(DiscoveryService.get_data_directory(), "apps", "definitions")
-    os.makedirs(definitions_dir, exist_ok=True)
-    return definitions_dir
+def get_apps_dir() -> str:
+    """获取应用目录（按 Spec 与环境变量约定）。"""
+    apps_dir = os.path.join(DiscoveryService.get_data_directory(), "apps")
+    os.makedirs(apps_dir, exist_ok=True)
+    return apps_dir
+
+
+def get_definitions_catalog_path() -> str:
+    """获取 Definition 目录索引文件路径。"""
+    return os.path.join(get_apps_dir(), "definitions.json")
 
 
 def get_data_directory() -> str:
@@ -694,18 +699,59 @@ def validate_current_user_only_file_access(path: str) -> Tuple[bool, str]:
     return True, f"权限位为 0o{permission:o}"
 
 
+def _read_definition_catalog() -> Dict[str, Any]:
+    """读取 Definition 目录索引。"""
+    catalog_path = get_definitions_catalog_path()
+    if not os.path.exists(catalog_path):
+        return {"version": 1, "definitions": []}
+
+    with open(catalog_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_definition_catalog(catalog: Dict[str, Any]) -> None:
+    """写回 Definition 目录索引。"""
+    catalog_path = get_definitions_catalog_path()
+    with open(catalog_path, "w", encoding="utf-8") as f:
+        json.dump(catalog, f, ensure_ascii=False, indent=2)
+
+
+def _find_definition_entry(catalog: Dict[str, Any], app_id: str) -> Optional[Dict[str, Any]]:
+    """按 appId 查找目录索引中的应用分组。"""
+    for app_entry in catalog.get("definitions", []):
+        if app_entry.get("appId") == app_id:
+            return app_entry
+
+    return None
+
+
 def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
-    """写入测试 AppDefinition 并返回文件路径。"""
+    """写入测试 AppDefinition 并返回目录索引路径。"""
     normalized_scope = normalize_definition_scope(payload.get("scope"))
     payload = dict(payload)
     payload["scope"] = normalized_scope
-    definition_path = os.path.join(
-        get_definitions_dir(),
-        build_definition_file_name(app_id, normalized_scope),
-    )
-    with open(definition_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    return definition_path
+    catalog = _read_definition_catalog()
+    app_entry = _find_definition_entry(catalog, app_id)
+    if app_entry is None:
+        app_entry = {"appId": app_id, "scopes": []}
+        catalog["definitions"].append(app_entry)
+
+    scope_entries = app_entry.setdefault("scopes", [])
+    scope_entries[:] = [entry for entry in scope_entries if entry.get("scope") != normalized_scope]
+
+    scope_entry = dict(payload)
+    scope_entry.pop("appId", None)
+    scope_entries.append(scope_entry)
+
+    catalog["definitions"].sort(key=lambda item: item.get("appId", ""))
+    for entry in catalog["definitions"]:
+        entry["scopes"] = sorted(
+            entry.get("scopes", []),
+            key=lambda item: (0 if item.get("scope", "") == "" else 1, item.get("scope", "")),
+        )
+
+    _write_definition_catalog(catalog)
+    return get_definitions_catalog_path()
 
 
 def normalize_definition_scope(scope: Optional[str]) -> str:
@@ -713,19 +759,6 @@ def normalize_definition_scope(scope: Optional[str]) -> str:
     if scope in (None, ""):
         return ""
     return scope
-
-
-def encode_definition_scope_segment(scope: str) -> str:
-    """把 Definition scope 编码为无冲突文件名片段。"""
-    if scope == "":
-        return "global"
-
-    return f"scope-{scope}"
-
-
-def build_definition_file_name(app_id: str, scope: Optional[str] = "") -> str:
-    """构造 Definition 复合键文件名。"""
-    return f"{app_id}--{encode_definition_scope_segment(normalize_definition_scope(scope))}.json"
 
 
 def build_definition_identity_params(app_id: str, scope: Optional[str] = "") -> Dict[str, Any]:

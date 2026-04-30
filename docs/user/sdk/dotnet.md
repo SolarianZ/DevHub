@@ -61,8 +61,7 @@ SDK 会按以下优先级解析数据根目录：
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 

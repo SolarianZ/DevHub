@@ -61,7 +61,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<RuntimeTuningOptions>()));
         services.AddSingleton<DefinitionLoader>(sp =>
             new DefinitionLoader(
-                sp.GetRequiredService<RuntimePathOptions>().DefinitionsPath,
+                sp.GetRequiredService<RuntimePathOptions>().DefinitionsCatalogPath,
                 sp.GetRequiredService<ILogger<DefinitionLoader>>(),
                 sp.GetRequiredService<AppDefinitionValidator>()));
         services.AddSingleton<IDefinitionProvider, DefinitionProvider>();

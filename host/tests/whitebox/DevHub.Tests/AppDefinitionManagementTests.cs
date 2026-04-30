@@ -55,7 +55,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
             && issue.GetProperty("code").GetString() == "invalid_app_id");
         Assert.Contains(errors, issue => issue.GetProperty("path").GetString() == "definition.displayName");
 
-        Assert.Empty(Directory.GetFiles(context.RuntimePathOptions.DefinitionsPath, "*.json", SearchOption.TopDirectoryOnly));
+        Assert.False(File.Exists(context.RuntimePathOptions.DefinitionsCatalogPath));
     }
 
     [Fact]
@@ -120,9 +120,7 @@ public sealed class AppDefinitionManagementTests : IDisposable
         var upsertResult = JsonSerializer.SerializeToElement(upsertResponse.Result);
         Assert.True(upsertResult.GetProperty("ok").GetBoolean());
         Assert.Equal("managed.definition.app", upsertResult.GetProperty("definition").GetProperty("appId").GetString());
-        Assert.True(File.Exists(Path.Combine(
-            context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.definition.app", ScopeContract.Global).GetFileName())));
+        Assert.True(File.Exists(context.RuntimePathOptions.DefinitionsCatalogPath));
 
         var getResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
@@ -140,9 +138,8 @@ public sealed class AppDefinitionManagementTests : IDisposable
         }, CancellationToken.None);
 
         Assert.Null(deleteResponse.Error);
-        Assert.False(File.Exists(Path.Combine(
-            context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.definition.app", ScopeContract.Global).GetFileName())));
+        Assert.True(File.Exists(context.RuntimePathOptions.DefinitionsCatalogPath));
+        Assert.Empty(DefinitionCatalogTestHelper.ReadDefinitions(context.RuntimePathOptions.DefinitionsCatalogPath));
         Assert.Null(context.DefinitionProvider.GetDefinition("managed.definition.app", ScopeContract.Global));
 
         var getMissingResponse = await context.Handler.HandleAsync(new JsonRpcRequest
@@ -171,13 +168,29 @@ public sealed class AppDefinitionManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_UpsertDefinition_WhenScopeLiteralGlobal_ShouldUseDistinctScopeKeyAndEchoCanonicalIdentifiers()
+    public async Task Impl_UpsertDefinition_WhenScopeLiteralGlobal_ShouldRemainDistinctFromGlobalAndEchoCanonicalIdentifiers()
     {
         using var context = CreateContext();
         const string appId = "Sample.App_01";
         const string scope = "global";
 
-        var response = await context.Handler.HandleAsync(new JsonRpcRequest
+        var globalResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "upsert-global-definition",
+            Method = HubRpcMethods.HubAppsUpsertDefinition,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                definition = new
+                {
+                    appId,
+                    scope = ScopeContract.Global,
+                    displayName = "Sample Global Definition"
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(globalResponse.Error);
+
+        var explicitGlobalResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
             Id = "upsert-explicit-global-definition",
             Method = HubRpcMethods.HubAppsUpsertDefinition,
@@ -192,23 +205,20 @@ public sealed class AppDefinitionManagementTests : IDisposable
             })
         }, CancellationToken.None);
 
-        Assert.Null(response.Error);
-        var definition = JsonSerializer.SerializeToElement(response.Result).GetProperty("definition");
+        Assert.Null(explicitGlobalResponse.Error);
+        var definition = JsonSerializer.SerializeToElement(explicitGlobalResponse.Result).GetProperty("definition");
         Assert.Equal(appId, definition.GetProperty("appId").GetString());
         Assert.Equal(scope, definition.GetProperty("scope").GetString());
 
-        var scopedGlobalPath = Path.Combine(
-            context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create(appId, scope).GetFileName());
-        var defaultGlobalPath = Path.Combine(
-            context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
+        using var catalog = JsonDocument.Parse(File.ReadAllText(context.RuntimePathOptions.DefinitionsCatalogPath));
+        var appEntry = Assert.Single(catalog.RootElement.GetProperty("definitions").EnumerateArray());
+        Assert.Equal(appId, appEntry.GetProperty("appId").GetString());
 
-        Assert.Equal($"{appId}--scope-global.json", Path.GetFileName(scopedGlobalPath));
-        Assert.Equal($"{appId}--global.json", Path.GetFileName(defaultGlobalPath));
-        Assert.NotEqual(scopedGlobalPath, defaultGlobalPath);
-        Assert.True(File.Exists(scopedGlobalPath));
-        Assert.False(File.Exists(defaultGlobalPath));
+        var scopes = appEntry.GetProperty("scopes")
+            .EnumerateArray()
+            .Select(entry => entry.GetProperty("scope").GetString())
+            .ToArray();
+        Assert.Equal(new[] { ScopeContract.Global, scope }, scopes);
 
         var getResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
@@ -221,6 +231,18 @@ public sealed class AppDefinitionManagementTests : IDisposable
         var storedDefinition = JsonSerializer.SerializeToElement(getResponse.Result).GetProperty("definition");
         Assert.Equal(appId, storedDefinition.GetProperty("appId").GetString());
         Assert.Equal(scope, storedDefinition.GetProperty("scope").GetString());
+
+        var getGlobalResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-global-definition",
+            Method = HubRpcMethods.HubAppsGetDefinition,
+            Params = JsonSerializer.SerializeToElement(new { appId, scope = ScopeContract.Global })
+        }, CancellationToken.None);
+
+        Assert.Null(getGlobalResponse.Error);
+        var storedGlobalDefinition = JsonSerializer.SerializeToElement(getGlobalResponse.Result).GetProperty("definition");
+        Assert.Equal(appId, storedGlobalDefinition.GetProperty("appId").GetString());
+        Assert.Equal(ScopeContract.Global, storedGlobalDefinition.GetProperty("scope").GetString());
     }
 
     [Fact]
@@ -244,17 +266,17 @@ public sealed class AppDefinitionManagementTests : IDisposable
         Assert.True(upsertValidationResult.Valid);
         Assert.Empty(upsertValidationResult.Errors);
 
-        var path = Path.Combine(
-            context.RuntimePathOptions.DefinitionsPath,
-            AppDefinitionIdentity.Create("managed.nullable.app", ScopeContract.Global).GetFileName());
+        var path = context.RuntimePathOptions.DefinitionsCatalogPath;
         Assert.True(File.Exists(path));
 
         using var persisted = JsonDocument.Parse(File.ReadAllText(path));
-        Assert.Equal("managed.nullable.app", persisted.RootElement.GetProperty("appId").GetString());
-        Assert.Equal(ScopeContract.Global, persisted.RootElement.GetProperty("scope").GetString());
-        Assert.False(persisted.RootElement.TryGetProperty("description", out _));
-        Assert.False(persisted.RootElement.TryGetProperty("launch", out _));
-        Assert.False(persisted.RootElement.TryGetProperty("capabilities", out _));
+        var appEntry = Assert.Single(persisted.RootElement.GetProperty("definitions").EnumerateArray());
+        Assert.Equal("managed.nullable.app", appEntry.GetProperty("appId").GetString());
+        var scopeEntry = Assert.Single(appEntry.GetProperty("scopes").EnumerateArray());
+        Assert.Equal(ScopeContract.Global, scopeEntry.GetProperty("scope").GetString());
+        Assert.False(scopeEntry.TryGetProperty("description", out _));
+        Assert.False(scopeEntry.TryGetProperty("launch", out _));
+        Assert.False(scopeEntry.TryGetProperty("capabilities", out _));
     }
 
     [Fact]
@@ -332,10 +354,10 @@ public sealed class AppDefinitionManagementTests : IDisposable
     private TestContext CreateContext()
     {
         var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempDirectory, Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(runtimePathOptions.DefinitionsPath);
+        Directory.CreateDirectory(runtimePathOptions.AppsPath);
 
         var validator = new AppDefinitionValidator();
-        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
+        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsCatalogPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         var eventBus = new HubEventBus(Mock.Of<ILogger<HubEventBus>>());
         var clock = new SystemClock();

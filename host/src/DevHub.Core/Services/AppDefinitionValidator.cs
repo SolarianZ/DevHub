@@ -24,13 +24,11 @@ public sealed class AppDefinitionValidator
     /// <param name="definitionElement">定义 JSON 对象。</param>
     /// <param name="definition">校验成功时返回解析后的定义。</param>
     /// <param name="validationResult">结构化校验结果。</param>
-    /// <param name="actualFileName">加载已有文件时使用的文件名；为空时跳过文件名约束。</param>
     /// <returns>校验通过返回 <c>true</c>。</returns>
     public bool TryParseAndValidate(
         JsonElement definitionElement,
         out AppDefinition? definition,
-        out AppDefinitionValidationResult validationResult,
-        string? actualFileName = null)
+        out AppDefinitionValidationResult validationResult)
     {
         var issues = new List<ValidationIssue>();
         definition = null;
@@ -49,17 +47,6 @@ public sealed class AppDefinitionValidator
         }
 
         var scope = ReadRequiredScope(definitionElement, issues);
-
-        if (!string.IsNullOrWhiteSpace(actualFileName)
-            && ProtocolIdentifier.IsValidAppId(appId)
-            && ProtocolIdentifier.IsValidScope(scope))
-        {
-            var expectedFileName = AppDefinitionIdentity.Create(appId!, scope!).GetFileName();
-            if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
-            {
-                issues.Add(CreateIssue("definition.appId", "file_name_mismatch", $"definition file name must be {expectedFileName}"));
-            }
-        }
 
         var displayName = ReadRequiredString(definitionElement, "displayName", issues, "definition.displayName", "missing_display_name", "displayName is required");
         var description = ReadOptionalString(definitionElement, "description", issues, "definition.description");

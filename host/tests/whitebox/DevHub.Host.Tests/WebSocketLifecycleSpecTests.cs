@@ -27,7 +27,7 @@ public class WebSocketLifecycleSpecTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostWsSpecTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
+        _definitionsDirectory = Path.Combine(_tempRoot, "apps");
 
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
@@ -1315,18 +1315,19 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     private void WriteDefinition(string appId)
     {
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(new
-        {
-            appId,
-            scope = ScopeContract.Global,
-            displayName = appId,
-            capabilities = new
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(new
             {
-                rpc = true,
-                events = false
-            }
-        }));
+                appId,
+                scope = ScopeContract.Global,
+                displayName = appId,
+                capabilities = new
+                {
+                    rpc = true,
+                    events = false
+                }
+            }));
     }
 
 }

@@ -47,7 +47,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -76,7 +76,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeTreatedAsGlobal()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -105,7 +105,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -147,7 +147,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -181,7 +181,7 @@ public class LaunchScopeTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -266,7 +266,7 @@ public class LaunchScopeTests : IDisposable
             definitionScope: targetScope);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -377,7 +377,7 @@ public class LaunchScopeTests : IDisposable
 
     private LaunchCoordinator CreateCoordinator(IProcessLauncher? processLauncher = null)
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -428,8 +428,9 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static void WaitForProcessExit(int pid, TimeSpan timeout)
@@ -456,4 +457,3 @@ public class LaunchScopeTests : IDisposable
         throw new TimeoutException($"等待进程退出超时，PID={pid}");
     }
 }
-

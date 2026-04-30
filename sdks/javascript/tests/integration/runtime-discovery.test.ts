@@ -30,22 +30,21 @@ it("运行时发现应返回有效连接信息", async () => {
   expect(info.websocketEndpoint).toBe(info.runtime.wsUrl);
 });
 
-it("集成 Host 应写入独立目录树", async () => {
+it("集成 Host 应写入当前公开目录树", async () => {
   const info = await discoverRuntime(getHost().dataDirectory);
 
-  const [dataDirStat, runtimeStat, definitionsStat, instancesStat, logsStat] = await Promise.all([
+  const [dataDirStat, runtimeStat, appsStat, logsStat] = await Promise.all([
     fsPromises.stat(getHost().dataDirectory),
     fsPromises.stat(getHost().runtimeDirectory),
-    fsPromises.stat(getHost().definitionsDirectory),
-    waitForDirectory(getHost().instancesDirectory),
+    fsPromises.stat(getHost().appsDirectory),
     waitForDirectory(getHost().logsDirectory)
   ]);
 
   expect(dataDirStat.isDirectory()).toBe(true);
   expect(runtimeStat.isDirectory()).toBe(true);
-  expect(definitionsStat.isDirectory()).toBe(true);
-  expect(instancesStat.isDirectory()).toBe(true);
+  expect(appsStat.isDirectory()).toBe(true);
   expect(logsStat.isDirectory()).toBe(true);
+  expect(getHost().definitionsCatalogPath).toBe(path.join(getHost().appsDirectory, "definitions.json"));
   expect(path.dirname(info.runtime.tokenFile)).toBe(getHost().runtimeDirectory);
 
   const logFiles = await waitForLogFiles(getHost().logsDirectory);

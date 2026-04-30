@@ -338,7 +338,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6104);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -482,7 +482,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6105);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -626,7 +626,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(clock, _registryLogger.Object, runtimeTuningOptions);
         _ = RegisterInstance(appRegistry, appId, "request-default-options-instance", pid: 6110);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -667,7 +667,7 @@ public class InvocationRequestFlowTests : IDisposable
 
     private InvocationHandler CreateHandler(AppRegistry appRegistry)
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -680,18 +680,19 @@ public class InvocationRequestFlowTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(new
-        {
-            appId,
-            scope = ScopeContract.Global,
-            displayName = appId,
-            capabilities = new
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(new
             {
-                rpc = rpcEnabled,
-                events = false
-            }
-        }));
+                appId,
+                scope = ScopeContract.Global,
+                displayName = appId,
+                capabilities = new
+                {
+                    rpc = rpcEnabled,
+                    events = false
+                }
+            }));
     }
 
     private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)

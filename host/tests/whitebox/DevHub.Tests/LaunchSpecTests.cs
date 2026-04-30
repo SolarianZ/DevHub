@@ -532,7 +532,7 @@ public class LaunchSpecTests : IDisposable
         ILogger<LaunchHandler>? logger = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var effectiveAppRegistry = appRegistry ?? new AppRegistry(effectiveClock, Mock.Of<ILogger<AppRegistry>>());
@@ -589,8 +589,9 @@ public class LaunchSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
-        File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static void AssertSuccess(JsonRpcResponse response)

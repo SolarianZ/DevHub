@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { DevHubClient } from "../../src/client.js";
 
 const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
@@ -87,8 +88,8 @@ export class DevHubHostFixture {
   readonly repoRoot: string;
   readonly dataDirectory: string;
   readonly runtimeDirectory: string;
-  readonly definitionsDirectory: string;
-  readonly instancesDirectory: string;
+  readonly appsDirectory: string;
+  readonly definitionsCatalogPath: string;
   readonly logsDirectory: string;
 
   private readonly tempRoot: string;
@@ -102,8 +103,8 @@ export class DevHubHostFixture {
     tempRoot: string,
     dataDirectory: string,
     runtimeDirectory: string,
-    definitionsDirectory: string,
-    instancesDirectory: string,
+    appsDirectory: string,
+    definitionsCatalogPath: string,
     logsDirectory: string,
     hostAssemblyPath: string
   ) {
@@ -111,8 +112,8 @@ export class DevHubHostFixture {
     this.tempRoot = tempRoot;
     this.dataDirectory = dataDirectory;
     this.runtimeDirectory = runtimeDirectory;
-    this.definitionsDirectory = definitionsDirectory;
-    this.instancesDirectory = instancesDirectory;
+    this.appsDirectory = appsDirectory;
+    this.definitionsCatalogPath = definitionsCatalogPath;
     this.logsDirectory = logsDirectory;
     this.hostAssemblyPath = hostAssemblyPath;
   }
@@ -128,13 +129,12 @@ export class DevHubHostFixture {
     );
     const dataDirectory = tempRoot;
     const runtimeDirectory = path.join(dataDirectory, "runtime");
-    const definitionsDirectory = path.join(dataDirectory, "apps", "definitions");
-    const instancesDirectory = path.join(dataDirectory, "apps", "instances");
+    const appsDirectory = path.join(dataDirectory, "apps");
+    const definitionsCatalogPath = path.join(appsDirectory, "definitions.json");
     const logsDirectory = path.join(dataDirectory, "logs");
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
-    await fsPromises.mkdir(definitionsDirectory, { recursive: true });
-    await fsPromises.mkdir(instancesDirectory, { recursive: true });
+    await fsPromises.mkdir(appsDirectory, { recursive: true });
     await fsPromises.mkdir(logsDirectory, { recursive: true });
     const hostAssemblyPath = await resolveHostAssemblyPath(repoRoot);
 
@@ -143,8 +143,8 @@ export class DevHubHostFixture {
       tempRoot,
       dataDirectory,
       runtimeDirectory,
-      definitionsDirectory,
-      instancesDirectory,
+      appsDirectory,
+      definitionsCatalogPath,
       logsDirectory,
       hostAssemblyPath
     );
@@ -155,12 +155,24 @@ export class DevHubHostFixture {
   async writeDefinition(definition: Record<string, unknown>): Promise<void> {
     const payload = { ...definition };
     const appId = ensureCanonicalIdentifier(payload.appId, "definition.appId");
-
     const scope = normalizeDefinitionScope(payload.scope);
-    payload.scope = scope;
+    const catalog = await readDefinitionsCatalog(this.definitionsCatalogPath);
 
-    const target = path.join(this.definitionsDirectory, buildDefinitionFileName(appId, scope));
-    await fsPromises.writeFile(target, JSON.stringify(payload), "utf-8");
+    const scopeEntry = toCatalogScopeEntry(payload, scope);
+    const existingAppEntry = catalog.definitions.find((entry) => entry.appId === appId);
+    if (existingAppEntry) {
+      existingAppEntry.scopes = existingAppEntry.scopes.filter((entry) => entry.scope !== scope);
+      existingAppEntry.scopes.push(scopeEntry);
+    } else {
+      catalog.definitions.push({
+        appId,
+        scopes: [scopeEntry]
+      });
+    }
+
+    sortDefinitionsCatalog(catalog);
+    await writeDefinitionsCatalog(this.definitionsCatalogPath, catalog);
+    await this.refreshDefinitionsSnapshot();
   }
 
   async close(): Promise<void> {
@@ -231,6 +243,21 @@ export class DevHubHostFixture {
     }
 
     throw new Error("等待 hub.json 超时。");
+  }
+
+  private async refreshDefinitionsSnapshot(): Promise<void> {
+    const client = await DevHubClient.fromRuntime({
+      clientId: `host-fixture-refresh-${randomUUID()}`,
+      dataDir: this.dataDirectory
+    });
+
+    try {
+      await client.listDefinitions({
+        scope: null
+      });
+    } finally {
+      await client.dispose();
+    }
   }
 }
 
@@ -387,13 +414,6 @@ function normalizeDefinitionScope(value: unknown): string {
   return value;
 }
 
-function buildDefinitionFileName(appId: string, scope: string): string {
-  const scopeSegment = scope === ""
-    ? "global"
-    : `scope-${scope}`;
-  return `${appId}--${scopeSegment}.json`;
-}
-
 function ensureCanonicalIdentifier(value: unknown, propertyName: string): string {
   if (typeof value !== "string" || !CANONICAL_IDENTIFIER_REGEX.test(value)) {
     throw new Error(`${propertyName} 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}。`);
@@ -479,4 +499,110 @@ function isMissingProcessError(error: unknown): boolean {
     && error !== null
     && "code" in error
     && (error as NodeJS.ErrnoException).code === "ESRCH";
+}
+
+type DefinitionCatalog = {
+  version: number;
+  definitions: DefinitionCatalogAppEntry[];
+};
+
+type DefinitionCatalogAppEntry = {
+  appId: string;
+  scopes: DefinitionCatalogScopeEntry[];
+};
+
+type DefinitionCatalogScopeEntry = Record<string, unknown> & {
+  scope: string;
+};
+
+async function readDefinitionsCatalog(catalogPath: string): Promise<DefinitionCatalog> {
+  if (!(await fileExists(catalogPath))) {
+    return createEmptyDefinitionsCatalog();
+  }
+
+  const rawCatalog = JSON.parse(await fsPromises.readFile(catalogPath, "utf-8")) as unknown;
+  if (!isDefinitionCatalog(rawCatalog)) {
+    throw new Error(`definitions catalog 结构无效：${catalogPath}`);
+  }
+
+  return {
+    version: rawCatalog.version,
+    definitions: rawCatalog.definitions.map((entry) => ({
+      appId: entry.appId,
+      scopes: entry.scopes.map((scopeEntry) => ({ ...scopeEntry }))
+    }))
+  };
+}
+
+async function writeDefinitionsCatalog(catalogPath: string, catalog: DefinitionCatalog): Promise<void> {
+  const tempPath = path.join(
+    path.dirname(catalogPath),
+    `.definitions.${randomUUID().replaceAll("-", "")}.tmp`
+  );
+
+  try {
+    await fsPromises.writeFile(tempPath, JSON.stringify(catalog, null, 2), "utf-8");
+    await fsPromises.rename(tempPath, catalogPath);
+  } finally {
+    await fsPromises.rm(tempPath, { force: true });
+  }
+}
+
+function createEmptyDefinitionsCatalog(): DefinitionCatalog {
+  return {
+    version: 1,
+    definitions: []
+  };
+}
+
+function toCatalogScopeEntry(definition: Record<string, unknown>, scope: string): DefinitionCatalogScopeEntry {
+  const scopeEntry: DefinitionCatalogScopeEntry = { scope };
+
+  for (const [key, value] of Object.entries(definition)) {
+    if (key === "appId" || key === "scope" || value === undefined) {
+      continue;
+    }
+
+    scopeEntry[key] = value;
+  }
+
+  return scopeEntry;
+}
+
+function sortDefinitionsCatalog(catalog: DefinitionCatalog): void {
+  catalog.definitions.sort((left, right) => compareOrdinal(left.appId, right.appId));
+  for (const appEntry of catalog.definitions) {
+    appEntry.scopes.sort((left, right) => {
+      const globalOrder = Number(right.scope === "") - Number(left.scope === "");
+      return globalOrder !== 0
+        ? globalOrder
+        : compareOrdinal(left.scope, right.scope);
+    });
+  }
+}
+
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function isDefinitionCatalog(value: unknown): value is DefinitionCatalog {
+  return isRecord(value)
+    && value.version === 1
+    && Array.isArray(value.definitions)
+    && value.definitions.every(isDefinitionCatalogAppEntry);
+}
+
+function isDefinitionCatalogAppEntry(value: unknown): value is DefinitionCatalogAppEntry {
+  return isRecord(value)
+    && typeof value.appId === "string"
+    && Array.isArray(value.scopes)
+    && value.scopes.every(isDefinitionCatalogScopeEntry);
+}
+
+function isDefinitionCatalogScopeEntry(value: unknown): value is DefinitionCatalogScopeEntry {
+  return isRecord(value) && typeof value.scope === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

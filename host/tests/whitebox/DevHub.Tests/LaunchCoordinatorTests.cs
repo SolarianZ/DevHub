@@ -39,7 +39,7 @@ public class LaunchCoordinatorTests : IDisposable
     [Fact]
     public async Task Impl_LaunchAsync_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -65,7 +65,7 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-missing.app", includeLaunch: false);
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -254,7 +254,7 @@ public class LaunchCoordinatorTests : IDisposable
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
         var clock = new MutableClock(DateTime.UtcNow);
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(clock, _registryLogger.Object, tuningOptions);
@@ -624,7 +624,7 @@ public class LaunchCoordinatorTests : IDisposable
         AppRegistry? appRegistry = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var effectiveAppRegistry = appRegistry ?? new AppRegistry(effectiveClock, _registryLogger.Object);
@@ -701,8 +701,9 @@ public class LaunchCoordinatorTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private void WriteDefinitionWithoutArgsTemplate(string appId)
@@ -723,8 +724,9 @@ public class LaunchCoordinatorTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private sealed class MutableClock : IClock
@@ -742,4 +744,3 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 }
-

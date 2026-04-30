@@ -25,6 +25,7 @@ HOST_BUILD_CONFIGURATION = "Release"
 HOST_TARGET_FRAMEWORK = "net10.0"
 TEST_LIVE_STATUS_ENV_VAR = "DEVHUB_TEST_LIVE_STATUS"
 LONG_WAIT_STATUS_THRESHOLD_SECONDS = 8
+DEFINITIONS_CATALOG_VERSION = 1
 
 _shared_host_assembly_path: Path | None = None
 _shared_host_build_root: Path | None = None
@@ -95,6 +96,7 @@ class DevHubHostFixture:
         data_directory: Path,
         runtime_directory: Path,
         definitions_directory: Path,
+        definitions_catalog_path: Path,
         instances_directory: Path,
         logs_directory: Path,
     ) -> None:
@@ -103,6 +105,7 @@ class DevHubHostFixture:
         self.data_directory = data_directory
         self.runtime_directory = runtime_directory
         self.definitions_directory = definitions_directory
+        self.definitions_catalog_path = definitions_catalog_path
         self.instances_directory = instances_directory
         self.logs_directory = logs_directory
         self._process: subprocess.Popen[str] | None = None
@@ -117,7 +120,8 @@ class DevHubHostFixture:
         temp_root = TemporaryDirectory(prefix="devhub-python-sdk-")
         data_directory = Path(temp_root.name).resolve()
         runtime_directory = data_directory / "runtime"
-        definitions_directory = data_directory / "apps" / "definitions"
+        definitions_directory = data_directory / "apps"
+        definitions_catalog_path = definitions_directory / "definitions.json"
         instances_directory = data_directory / "apps" / "instances"
         logs_directory = data_directory / "logs"
         runtime_directory.mkdir(parents=True, exist_ok=True)
@@ -131,6 +135,7 @@ class DevHubHostFixture:
             data_directory,
             runtime_directory,
             definitions_directory,
+            definitions_catalog_path,
             instances_directory,
             logs_directory,
         )
@@ -144,8 +149,21 @@ class DevHubHostFixture:
         scope = _normalize_definition_scope(payload.get("scope"))
         payload["scope"] = scope
 
-        path = self.definitions_directory / _build_definition_file_name(app_id, scope)
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        catalog = _read_definition_catalog(self.definitions_catalog_path)
+        app_entry = _find_definition_app_entry(catalog, app_id)
+        if app_entry is None:
+            app_entry = {"appId": app_id, "scopes": []}
+            catalog["definitions"].append(app_entry)
+
+        scopes = _require_scope_entries(app_entry, app_id)
+        scopes[:] = [entry for entry in scopes if entry.get("scope") != scope]
+
+        scope_entry = dict(payload)
+        scope_entry.pop("appId", None)
+        scopes.append(scope_entry)
+
+        _sort_definition_catalog(catalog)
+        _write_definition_catalog(self.definitions_catalog_path, catalog)
 
     def create_client(self, client_id: str) -> DevHubClient:
         return DevHubClient.from_runtime(
@@ -380,9 +398,80 @@ def _normalize_definition_scope(value: Any) -> str:
     return require_scoped_string(value, "definition.scope")
 
 
-def _build_definition_file_name(app_id: str, scope: str) -> str:
-    scope_segment = "global" if scope == "" else f"scope-{scope}"
-    return f"{app_id}--{scope_segment}.json"
+def _read_definition_catalog(catalog_path: Path) -> dict[str, Any]:
+    if not catalog_path.is_file():
+        return {"version": DEFINITIONS_CATALOG_VERSION, "definitions": []}
+
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    if not isinstance(catalog, dict):
+        raise RuntimeError(f"Definition catalog 根对象必须是 JSON object：{catalog_path}")
+
+    if catalog.get("version") != DEFINITIONS_CATALOG_VERSION:
+        raise RuntimeError(
+            f"Definition catalog 版本必须为 {DEFINITIONS_CATALOG_VERSION}：{catalog_path}"
+        )
+
+    definitions = catalog.get("definitions")
+    if not isinstance(definitions, list):
+        raise RuntimeError(f"Definition catalog definitions 必须是数组：{catalog_path}")
+
+    return catalog
+
+
+def _find_definition_app_entry(catalog: Mapping[str, Any], app_id: str) -> dict[str, Any] | None:
+    definitions = catalog.get("definitions")
+    if not isinstance(definitions, list):
+        raise RuntimeError("Definition catalog definitions 必须是数组。")
+
+    for entry in definitions:
+        if not isinstance(entry, dict):
+            raise RuntimeError("Definition catalog app 分组必须是对象。")
+
+        if entry.get("appId") == app_id:
+            return entry
+
+    return None
+
+
+def _require_scope_entries(app_entry: dict[str, Any], app_id: str) -> list[dict[str, Any]]:
+    scope_entries = app_entry.setdefault("scopes", [])
+    if not isinstance(scope_entries, list):
+        raise RuntimeError(f"Definition catalog 中 {app_id} 的 scopes 必须是数组。")
+
+    for entry in scope_entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError(f"Definition catalog 中 {app_id} 的 scope 条目必须是对象。")
+
+    return scope_entries
+
+
+def _sort_definition_catalog(catalog: dict[str, Any]) -> None:
+    definitions = catalog.get("definitions")
+    if not isinstance(definitions, list):
+        raise RuntimeError("Definition catalog definitions 必须是数组。")
+
+    definitions.sort(key=lambda item: item.get("appId", ""))
+    for app_entry in definitions:
+        if not isinstance(app_entry, dict):
+            raise RuntimeError("Definition catalog app 分组必须是对象。")
+
+        scope_entries = _require_scope_entries(app_entry, str(app_entry.get("appId", "")))
+        scope_entries.sort(
+            key=lambda item: (
+                0 if item.get("scope", "") == "" else 1,
+                item.get("scope", ""),
+            )
+        )
+
+
+def _write_definition_catalog(catalog_path: Path, catalog: Mapping[str, Any]) -> None:
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = catalog_path.with_name(f"{catalog_path.name}.{uuid4().hex}.tmp")
+    temp_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temp_path.replace(catalog_path)
 
 
 def _create_isolated_process_kwargs() -> dict[str, Any]:

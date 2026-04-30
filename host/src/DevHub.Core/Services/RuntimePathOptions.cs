@@ -17,8 +17,8 @@ public sealed class RuntimePathOptions
     {
         RootPath = rootPath;
         RuntimePath = Path.Combine(rootPath, "runtime");
-        DefinitionsPath = Path.Combine(rootPath, "apps", "definitions");
-        InstancesPath = Path.Combine(rootPath, "apps", "instances");
+        AppsPath = Path.Combine(rootPath, "apps");
+        DefinitionsCatalogPath = Path.Combine(AppsPath, "definitions.json");
         LogsPath = Path.Combine(rootPath, "logs");
         TokenFilePath = Path.Combine(RuntimePath, "token.txt");
         HubJsonPath = Path.Combine(RuntimePath, "hub.json");
@@ -36,14 +36,14 @@ public sealed class RuntimePathOptions
     public string RuntimePath { get; }
 
     /// <summary>
-    /// 应用定义目录。
+    /// 应用运行时目录。
     /// </summary>
-    public string DefinitionsPath { get; }
+    public string AppsPath { get; }
 
     /// <summary>
-    /// 实例目录。
+    /// 应用定义目录索引文件路径。
     /// </summary>
-    public string InstancesPath { get; }
+    public string DefinitionsCatalogPath { get; }
 
     /// <summary>
     /// 日志目录。

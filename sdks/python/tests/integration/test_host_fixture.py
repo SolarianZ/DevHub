@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -67,6 +68,53 @@ def test_resolve_host_assembly_path_should_skip_local_build_when_prebuilt_host_p
     finally:
         _host._cleanup_shared_host_build_root()
         shutil.rmtree(repo_root, ignore_errors=True)
+
+
+def test_write_definition_should_persist_catalog_by_explicit_app_id_and_scope() -> None:
+    with _host.DevHubHostFixture.start() as host:
+        host.write_definition(
+            {
+                "appId": "fixture.scope.app",
+                "displayName": "fixture.scope.app.global",
+            }
+        )
+        host.write_definition(
+            {
+                "appId": "fixture.scope.app",
+                "scope": "global",
+                "displayName": "fixture.scope.app.literal-global",
+            }
+        )
+        host.write_definition(
+            {
+                "appId": "fixture.scope.app",
+                "scope": "workspace.a",
+                "displayName": "fixture.scope.app.workspace-a",
+            }
+        )
+
+        catalog = json.loads(host.definitions_catalog_path.read_text(encoding="utf-8"))
+
+    assert catalog["version"] == 1
+    assert catalog["definitions"] == [
+        {
+            "appId": "fixture.scope.app",
+            "scopes": [
+                {
+                    "scope": "",
+                    "displayName": "fixture.scope.app.global",
+                },
+                {
+                    "scope": "global",
+                    "displayName": "fixture.scope.app.literal-global",
+                },
+                {
+                    "scope": "workspace.a",
+                    "displayName": "fixture.scope.app.workspace-a",
+                },
+            ],
+        }
+    ]
 
 
 def _create_fake_repository_root() -> Path:

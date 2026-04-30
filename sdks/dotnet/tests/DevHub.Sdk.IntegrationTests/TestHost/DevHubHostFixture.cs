@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
-using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
@@ -100,9 +99,9 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public string RuntimeDirectory => Path.Combine(DataDirectory, "runtime");
 
-    public string DefinitionsDirectory => Path.Combine(DataDirectory, "apps", "definitions");
+    public string AppsDirectory => Path.Combine(DataDirectory, "apps");
 
-    public string InstancesDirectory => Path.Combine(DataDirectory, "apps", "instances");
+    public string DefinitionsCatalogPath => Path.Combine(AppsDirectory, "definitions.json");
 
     public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
@@ -128,15 +127,14 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     public async Task WriteDefinitionAsync(AppDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        Directory.CreateDirectory(DefinitionsDirectory);
-        var path = Path.Combine(DefinitionsDirectory, GetDefinitionFileName(definition));
-        var content = JsonSerializer.Serialize(
-            definition,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            {
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            });
-        await File.WriteAllTextAsync(path, content);
+        _ = definition.AppId;
+        _ = definition.Scope;
+
+        Directory.CreateDirectory(AppsDirectory);
+
+        var definitionsByIdentity = await ReadDefinitionsAsync();
+        definitionsByIdentity[GetDefinitionIdentity(definition)] = CloneDefinition(definition);
+        await WriteDefinitionsAsync(definitionsByIdentity.Values);
     }
 
     public Task<DevHubClient> CreateClientAsync(string clientId)
@@ -465,13 +463,112 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
     }
 
-    private static string GetDefinitionFileName(AppDefinition definition)
+    private async Task<Dictionary<string, AppDefinition>> ReadDefinitionsAsync()
     {
-        var appId = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(definition.AppId));
-        var scopeSegment = definition.Scope.Length == 0
-            ? "global"
-            : $"scope-{ScopeContract.EnsureScopedString(definition.Scope, nameof(definition.Scope))}";
-        return $"{appId}--{scopeSegment}.json";
+        if (!File.Exists(DefinitionsCatalogPath))
+        {
+            return new Dictionary<string, AppDefinition>(StringComparer.Ordinal);
+        }
+
+        await using var stream = File.OpenRead(DefinitionsCatalogPath);
+        var catalog = await JsonSerializer.DeserializeAsync<AppDefinitionsCatalogDocument>(stream, CreateJsonOptions())
+            ?? new AppDefinitionsCatalogDocument();
+
+        var definitions = new Dictionary<string, AppDefinition>(StringComparer.Ordinal);
+        foreach (var appEntry in catalog.Definitions)
+        {
+            if (string.IsNullOrWhiteSpace(appEntry.AppId))
+            {
+                continue;
+            }
+
+            foreach (var scopeEntry in appEntry.Scopes)
+            {
+                var definition = new AppDefinition
+                {
+                    AppId = appEntry.AppId,
+                    Scope = scopeEntry.Scope ?? string.Empty,
+                    DisplayName = scopeEntry.DisplayName ?? string.Empty,
+                    Description = scopeEntry.Description,
+                    Launch = scopeEntry.Launch,
+                    Capabilities = scopeEntry.Capabilities
+                };
+                definitions[GetDefinitionIdentity(definition)] = definition;
+            }
+        }
+
+        return definitions;
+    }
+
+    private async Task WriteDefinitionsAsync(IEnumerable<AppDefinition> definitions)
+    {
+        ArgumentNullException.ThrowIfNull(definitions);
+
+        var orderedDefinitions = definitions
+            .Select(CloneDefinition)
+            .OrderBy(static definition => definition.AppId, StringComparer.Ordinal)
+            .ThenBy(static definition => definition.Scope.Length == 0 ? 0 : 1)
+            .ThenBy(static definition => definition.Scope, StringComparer.Ordinal)
+            .ToArray();
+
+        var catalog = new AppDefinitionsCatalogDocument
+        {
+            Definitions = orderedDefinitions
+                .GroupBy(static definition => definition.AppId, StringComparer.Ordinal)
+                .Select(static group => new AppDefinitionsCatalogAppEntryDocument
+                {
+                    AppId = group.Key,
+                    Scopes = group
+                        .Select(static definition => new AppDefinitionsCatalogScopeEntryDocument
+                        {
+                            Scope = definition.Scope,
+                            DisplayName = definition.DisplayName,
+                            Description = definition.Description,
+                            Launch = definition.Launch,
+                            Capabilities = definition.Capabilities
+                        })
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        var tempPath = Path.Combine(AppsDirectory, $".definitions.{Guid.NewGuid():N}.json.tmp");
+        await using (var stream = File.Create(tempPath))
+        {
+            await JsonSerializer.SerializeAsync(stream, catalog, CreateJsonOptions());
+        }
+
+        File.Move(tempPath, DefinitionsCatalogPath, overwrite: true);
+    }
+
+    private static AppDefinition CloneDefinition(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return new AppDefinition
+        {
+            AppId = definition.AppId,
+            Scope = definition.Scope,
+            DisplayName = definition.DisplayName,
+            Description = definition.Description,
+            Launch = definition.Launch,
+            Capabilities = definition.Capabilities
+        };
+    }
+
+    private static string GetDefinitionIdentity(AppDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        return $"{definition.AppId}\n{definition.Scope}";
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        return new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true
+        };
     }
 
     private static string? ReadEnvironmentVariable(
@@ -548,5 +645,41 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
             .Assembly
             .GetCustomAttribute<AssemblyConfigurationAttribute>()?
             .Configuration;
+    }
+
+    private sealed class AppDefinitionsCatalogDocument
+    {
+        [JsonPropertyName("version")]
+        public int Version { get; set; } = 1;
+
+        [JsonPropertyName("definitions")]
+        public List<AppDefinitionsCatalogAppEntryDocument> Definitions { get; set; } = [];
+    }
+
+    private sealed class AppDefinitionsCatalogAppEntryDocument
+    {
+        [JsonPropertyName("appId")]
+        public string AppId { get; set; } = string.Empty;
+
+        [JsonPropertyName("scopes")]
+        public List<AppDefinitionsCatalogScopeEntryDocument> Scopes { get; set; } = [];
+    }
+
+    private sealed class AppDefinitionsCatalogScopeEntryDocument
+    {
+        [JsonPropertyName("scope")]
+        public string? Scope { get; set; }
+
+        [JsonPropertyName("displayName")]
+        public string? DisplayName { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("launch")]
+        public LaunchConfiguration? Launch { get; set; }
+
+        [JsonPropertyName("capabilities")]
+        public AppCapabilities? Capabilities { get; set; }
     }
 }

@@ -40,12 +40,11 @@
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 
-其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: ""` 与 `scopeKey = global`；显式作用域 Definition 使用首尾均不含空白字符的非空 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、`scope: null` 或首尾包含空白字符的 `scope` 都不属于合法 Definition 资产。
+其中 `apps/definitions.json` 是唯一公开的 Definition 持久化入口。该文件保存版本化目录索引：顶层包含固定 `version: 1` 与 `definitions` 数组；数组按 `appId` 分组，每个分组通过 `scopes` 数组持有多个显式 `scope` Definition 条目。Global Definition 使用 `scope: ""`；显式作用域 Definition 直接按原值保留 `scope`，例如 `scope: "global"` 与 Global Definition 可并存且按精确 `appId + scope` 定位。
 
 `hub.json` 至少需要读取这些字段：
 
@@ -125,7 +124,7 @@ JSON-RPC 信封约束：
 
 其中：
 
-- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`。
+- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`，字面量 `scope: "global"` 属于独立显式作用域。
 - `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
 - `hub.apps.listDefinitions` 支持可选 `appId` 过滤，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global Definition，其他合法字符串按精确作用域过滤。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
@@ -290,7 +289,7 @@ python host/tests/conformance/vector_runner.py \
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
 
-当前 v1.x 的 `scope` 基线已经固定为：Definition 持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，其中 `scope: ""` 是 Global 的唯一显式表示；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch` 与 `hub.invoke.*` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope: null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段。
+当前 v1.x 的 `scope` 基线已经固定为：Definition 持久化只承认 `apps/definitions.json` 中的显式 `appId + scope` 复合身份，其中 `scope: ""` 是 Global 的唯一显式表示；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch` 与 `hub.invoke.*` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope: null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段。
 
 `Specification.md` §9 中允许的兼容扩展包括：
 

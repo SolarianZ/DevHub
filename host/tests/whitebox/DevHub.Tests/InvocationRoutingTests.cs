@@ -42,7 +42,7 @@ public class InvocationRoutingTests : IDisposable
         WriteDefinition("disabled-app", rpcEnabled: false);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -150,7 +150,7 @@ public class InvocationRoutingTests : IDisposable
             Invoke = new InvokeCapability { Poll = false, Respond = true }
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -215,7 +215,7 @@ public class InvocationRoutingTests : IDisposable
             Invoke = new InvokeCapability { Poll = true, Respond = false }
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -277,7 +277,7 @@ public class InvocationRoutingTests : IDisposable
     public async Task Impl_InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -334,7 +334,7 @@ public class InvocationRoutingTests : IDisposable
         WriteDefinition("notify-launch-missing", rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -1005,7 +1005,7 @@ public class InvocationRoutingTests : IDisposable
     {
         runtimeTuningOptions ??= RuntimeTuningOptions.Default;
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -1049,7 +1049,6 @@ public class InvocationRoutingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
@@ -1078,7 +1077,9 @@ public class InvocationRoutingTests : IDisposable
             payload["launch"] = launch;
         }
 
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)

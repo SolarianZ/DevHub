@@ -12,13 +12,15 @@ namespace DevHub.Core.Services;
 /// </summary>
 public sealed class DefinitionManager : IDefinitionManager
 {
-    private readonly string _definitionsPath;
+    private readonly string _appsPath;
+    private readonly string _definitionsCatalogPath;
     private readonly IDefinitionProvider _definitionProvider;
     private readonly AppDefinitionValidator _validator;
     private readonly IClock _clock;
     private readonly ILogger<DefinitionManager> _logger;
     private readonly IHubEventPublisher? _eventPublisher;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly object _syncRoot = new();
 
     /// <summary>
     /// 初始化定义管理服务。
@@ -41,7 +43,8 @@ public sealed class DefinitionManager : IDefinitionManager
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _definitionsPath = runtimePathOptions.DefinitionsPath;
+        _appsPath = runtimePathOptions.AppsPath;
+        _definitionsCatalogPath = runtimePathOptions.DefinitionsCatalogPath;
         _definitionProvider = definitionProvider;
         _validator = validator;
         _clock = clock;
@@ -108,14 +111,20 @@ public sealed class DefinitionManager : IDefinitionManager
         ScopeContract.EnsureScopedString(scope, nameof(scope));
 
         var identity = AppDefinitionIdentity.Create(appId, scope);
-        var path = Path.Combine(_definitionsPath, identity.GetFileName());
-        if (!File.Exists(path))
+        lock (_syncRoot)
         {
-            return false;
+            var definitionsByIdentity = _definitionProvider
+                .GetAllDefinitions()
+                .ToDictionary(AppDefinitionIdentity.FromDefinition);
+            if (!definitionsByIdentity.Remove(identity))
+            {
+                return false;
+            }
+
+            PersistCatalog(definitionsByIdentity.Values);
+            _definitionProvider.Refresh();
         }
 
-        File.Delete(path);
-        _definitionProvider.Refresh();
         PublishDefinitionDeleted(identity);
         _logger.LogInformation("已删除应用定义: {AppId}, Scope: {Scope}", appId, identity.Scope);
         return true;
@@ -123,22 +132,34 @@ public sealed class DefinitionManager : IDefinitionManager
 
     private AppDefinition UpsertCore(AppDefinition definition)
     {
-        Directory.CreateDirectory(_definitionsPath);
-
         var identity = AppDefinitionIdentity.FromDefinition(definition);
-        var targetPath = Path.Combine(_definitionsPath, identity.GetFileName());
-        var tempPath = Path.Combine(_definitionsPath, $".{definition.AppId}.{Guid.NewGuid():N}.tmp");
+        lock (_syncRoot)
+        {
+            var definitionsByIdentity = _definitionProvider
+                .GetAllDefinitions()
+                .ToDictionary(AppDefinitionIdentity.FromDefinition);
+            definitionsByIdentity[identity] = definition;
+            PersistCatalog(definitionsByIdentity.Values);
+            _definitionProvider.Refresh();
+        }
+
+        var storedDefinition = _definitionProvider.GetDefinition(definition.AppId, definition.Scope) ?? definition;
+        PublishDefinitionUpserted(storedDefinition);
+        _logger.LogInformation("已写入应用定义: {AppId}, Scope: {Scope}", definition.AppId, identity.Scope);
+        return storedDefinition;
+    }
+
+    private void PersistCatalog(IEnumerable<AppDefinition> definitions)
+    {
+        Directory.CreateDirectory(_appsPath);
+
+        var tempPath = Path.Combine(_appsPath, $".definitions.{Guid.NewGuid():N}.tmp");
         try
         {
-            var content = JsonSerializer.Serialize(definition, _jsonOptions);
+            var catalog = AppDefinitionsCatalogMapper.BuildCatalog(definitions);
+            var content = JsonSerializer.Serialize(catalog, _jsonOptions);
             File.WriteAllText(tempPath, content);
-            File.Move(tempPath, targetPath, overwrite: true);
-
-            _definitionProvider.Refresh();
-            var storedDefinition = _definitionProvider.GetDefinition(definition.AppId, definition.Scope) ?? definition;
-            PublishDefinitionUpserted(storedDefinition);
-            _logger.LogInformation("已写入应用定义: {AppId}, Scope: {Scope}", definition.AppId, identity.Scope);
-            return storedDefinition;
+            File.Move(tempPath, _definitionsCatalogPath, overwrite: true);
         }
         finally
         {
@@ -151,7 +172,7 @@ public sealed class DefinitionManager : IDefinitionManager
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "清理定义临时文件失败: {TempPath}", tempPath);
+                _logger.LogDebug(ex, "清理定义目录索引临时文件失败: {TempPath}", tempPath);
             }
         }
     }

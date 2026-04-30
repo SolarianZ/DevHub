@@ -71,7 +71,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
   }
 }, 120_000);
 
-it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范化 scope", async () => {
+it("writeDefinition 应写入单文件 catalog 并保留显式 scope 身份", async () => {
   const host = await DevHubHostFixture.start();
 
   try {
@@ -86,21 +86,33 @@ it("writeDefinition 应按 appId + scope 生成复合键文件名并写入规范
       displayName: "fixture.scope.app.workspace-A"
     });
 
-    const fileNames = await fsPromises.readdir(host.definitionsDirectory);
-    expect(fileNames).toContain("fixture.scope.app--global.json");
-    expect(fileNames).toContain("fixture.scope.app--scope-workspace-A.json");
+    const catalog = JSON.parse(
+      await fsPromises.readFile(host.definitionsCatalogPath, "utf-8")
+    ) as {
+      version: number;
+      definitions: Array<{
+        appId: string;
+        scopes: Array<{ scope: string; displayName: string }>;
+      }>;
+    };
 
-    const globalDefinition = JSON.parse(
-      await fsPromises.readFile(
-        path.join(host.definitionsDirectory, "fixture.scope.app--global.json"),
-        "utf-8"
-      )
-    ) as { appId: string; scope: string; displayName: string };
-
-    expect(globalDefinition).toEqual({
-      appId: "fixture.scope.app",
-      scope: "",
-      displayName: "fixture.scope.app.global"
+    expect(catalog).toEqual({
+      version: 1,
+      definitions: [
+        {
+          appId: "fixture.scope.app",
+          scopes: [
+            {
+              scope: "",
+              displayName: "fixture.scope.app.global"
+            },
+            {
+              scope: "workspace-A",
+              displayName: "fixture.scope.app.workspace-A"
+            }
+          ]
+        }
+      ]
     });
   } finally {
     await host.close();

@@ -678,7 +678,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
         var effectiveProcessLauncher = processLauncher ?? new ProcessLauncher();
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -713,7 +713,6 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
-        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
@@ -735,7 +734,9 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             };
         }
 
-        File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)

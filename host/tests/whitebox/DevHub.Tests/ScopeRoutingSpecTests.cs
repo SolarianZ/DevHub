@@ -556,7 +556,7 @@ public class ScopeRoutingSpecTests : IDisposable
     private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry, IClock? clock = null, IProcessLauncher? processLauncher = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -589,7 +589,7 @@ public class ScopeRoutingSpecTests : IDisposable
     private LaunchHandler CreateLaunchHandler(IClock? clock = null, IProcessLauncher? processLauncher = null, AppRegistry? appRegistry = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var effectiveRegistry = appRegistry ?? new AppRegistry(effectiveClock, Mock.Of<ILogger<AppRegistry>>());
@@ -639,8 +639,9 @@ public class ScopeRoutingSpecTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, definitionScope).GetFileName());
-        File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static async Task<JsonRpcResponse> RegisterInstanceAsync(

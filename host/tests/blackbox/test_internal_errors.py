@@ -14,7 +14,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
-    get_definitions_dir,
+    get_definitions_catalog_path,
     safe_remove,
 )
 
@@ -413,8 +413,7 @@ class TestInternalErrors(unittest.TestCase):
         invalid_app_path = None
 
         try:
-            definitions_dir = get_definitions_dir()
-            invalid_app_path = os.path.join(definitions_dir, "invalid-app-definition.json")
+            invalid_app_path = get_definitions_catalog_path()
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid": "json"')
 

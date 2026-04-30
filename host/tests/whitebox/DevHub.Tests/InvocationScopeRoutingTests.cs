@@ -184,7 +184,7 @@ public class InvocationScopeRoutingTests : IDisposable
     public async Task Impl_InvocationHandler_Request_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -227,7 +227,7 @@ public class InvocationScopeRoutingTests : IDisposable
     public async Task Impl_InvocationHandler_Notify_WithMissingTargetInstance_ShouldReturnTargetInstanceMissing()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -271,7 +271,7 @@ public class InvocationScopeRoutingTests : IDisposable
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-notify.app", rpcEnabled: true);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -333,7 +333,7 @@ public class InvocationScopeRoutingTests : IDisposable
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         WriteDefinition("route-log-request.app", rpcEnabled: true);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -407,7 +407,7 @@ public class InvocationScopeRoutingTests : IDisposable
             var scopeName = scopeCase.ScopeName;
             var scopeTag = scopeCase.ScopeTag;
             var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-            var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+            var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
             var definitionProvider = new DefinitionProvider(definitionLoader);
             definitionProvider.Refresh();
             var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -687,7 +687,6 @@ public class InvocationScopeRoutingTests : IDisposable
         string? definitionScope = null)
     {
         var normalizedScope = definitionScope ?? ScopeContract.Global;
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
@@ -716,7 +715,9 @@ public class InvocationScopeRoutingTests : IDisposable
             payload["launch"] = launch;
         }
 
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static Invocation CreateNotify(string appId, string? targetScope, string? targetInstanceId)

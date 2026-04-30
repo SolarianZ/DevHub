@@ -37,7 +37,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     {
         using var context = CreateDefinitionContext();
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "adapter.alpha",
@@ -46,7 +46,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             }
             """);
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "adapter.beta",
@@ -437,7 +437,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         AssertError(missingDefinitionResponse, -32014, "app_definition_not_found", "launch-missing-definition");
 
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "launch.no-config",
@@ -454,7 +454,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         Assert.Equal("launch_config_missing", JsonSerializer.SerializeToElement(missingConfigResponse.Error!.Data).GetProperty("reason").GetString());
 
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "launch.success",
@@ -496,10 +496,10 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     private DefinitionTestContext CreateDefinitionContext(IHubEventPublisher? eventPublisher = null, IClock? clock = null)
     {
         var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempRoot, Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(runtimePathOptions.DefinitionsPath);
+        Directory.CreateDirectory(runtimePathOptions.AppsPath);
 
         var validator = new AppDefinitionValidator();
-        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
+        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsCatalogPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -549,16 +549,9 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         };
     }
 
-    private static void WriteDefinition(string definitionsPath, string json)
+    private static void WriteDefinition(string catalogPath, string json)
     {
-        using var document = JsonDocument.Parse(json);
-        var appId = document.RootElement.GetProperty("appId").GetString();
-        var scope = document.RootElement.TryGetProperty("scope", out var scopeElement)
-            ? scopeElement.ValueKind == JsonValueKind.Null ? ScopeContract.Global : scopeElement.GetString()
-            : ScopeContract.Global;
-        File.WriteAllText(
-            Path.Combine(definitionsPath, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName()),
-            json);
+        DefinitionCatalogTestHelper.UpsertDefinition(catalogPath, json);
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message, object id)

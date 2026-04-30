@@ -184,8 +184,7 @@ ${dataDir}/
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 
@@ -238,17 +237,14 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - 令牌有效期：令牌**应该**在 Hub 启动时重新生成（“每个 Hub 会话一次”）。旧令牌**必须**被拒绝。
 
 #### 4.1.4 AppDefinition 存储 (v1)
-- 默认位置：`${dataDir}/apps/definitions/`
-- 定义目录**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
-- 每个定义**必须**是一个名为 `{appId}--{scopeKey}.json` 的 JSON 文件，其中 `scopeKey` **必须**按以下规则生成：当 `scope = ""` 时，`scopeKey = "global"`；当 `scope` 为其他合法非空字符串时，`scopeKey = "scope-" + scope`。
-- 每个定义文件的 JSON 负载**必须**符合 `AppDefinition` 架构 (§5.1)，且文件名与负载**必须**共同唯一标识同一组 `appId + scope` 复合身份。
-- 公开持久化契约只承认上述复合命名 + 显式 `scope` 的 Definition 形状；其中 `scope = ""` 表示 Global Definition。旧式 `{appId}.json`、省略 `scope`、`scope = null` 与任何未通过 canonical `scope` grammar 的值都**不是**合法 Definition 资产。
-- Hub **必须**忽略不符合复合命名规则、文件名与负载身份不一致或未通过架构验证的文件（并**应该**记录诊断日志）；这些文件**不得**被加载、列出、更新或删除为 live Definition 记录。
-
-#### 4.1.5 AppInstance 镜像目录 (v1)
-- 默认位置：`${dataDir}/apps/instances/`
-- 实例镜像目录**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
-- 当前 v1 仅对目录路径本身建立约定；目录内部文件布局属于 Hub 内部实现，客户端**禁止**依赖其内部结构作为公开契约。
+- 默认位置：`${dataDir}/apps/definitions.json`
+- Definition 目录索引文件**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
+- Definition 目录索引根对象**必须**包含显式 `version` 字段，当前版本固定为 `1`。
+- Definition 目录索引根对象**必须**包含 `definitions` 数组；数组元素按 `appId` 分组，每个分组通过 `scopes` 数组持有多个 Definition 条目。
+- 每个 Definition 条目**必须**通过 payload 中显式的 `appId` 与 `scope` 共同唯一标识同一组 `appId + scope` 复合身份；其中 `scope = ""` 表示 Global Definition，`scope = "global"` 等显式作用域与 Global Definition **必须**保持可并存且可精确寻址。
+- Definition 条目的 JSON 负载**必须**符合 `AppDefinition` 架构 (§5.1)；持久化与读取结果中的 `appId` / `scope` **必须**按 canonical 原值保留，**不得**通过文件名编码、`scopeKey`、路径转义或大小写折叠推导身份。
+- 当 `${dataDir}/apps/definitions.json` 缺失时，Hub **必须**将当前 Definition 清单视为空集合。
+- 当目录索引顶层结构无效时，Hub **必须**将当前 Definition 清单视为空集合；当顶层结构合法但某个 `appId` 分组或某个 `scope` 条目无效时，Hub **必须**仅忽略该无效条目，并继续加载其他合法 Definition。
 
 > 注意：符合性测试假设使用平台默认值，除非显式配置了 `DEVHUB_DATA_DIR` 或等价的数据根目录参数。
 
@@ -345,7 +341,7 @@ sequenceDiagram
 #### 5.1.1 AppDefinition 语义（规范性）
 - `AppDefinition` 的公开身份**必须**是复合键 `(appId, scope)`；其中 Global Definition **必须**使用 `scope = ""` 表示，显式作用域 Definition **必须**使用满足 canonical `scope` grammar 的非空字符串表示。
 - 持久化 Definition payload **必须**显式包含 `scope` 字段；省略 `scope`、使用 `scope = null` 或使用任何未通过 canonical `scope` grammar 的字符串都**不得**视为合法的持久化 Definition 形状。
-- Definition 文件名中的 `scopeKey` **必须**与 `scope` 一一对应：`scope = ""` 时使用字面量 `global`；其他合法字符串使用 `"scope-" + scope`。公开协议中的 `scope` 字段**必须**继续回传原始 canonical `scope`，不得改写为 `scopeKey`。
+- Definition 持久化与读取**必须**以显式 `scope` 字段作为唯一作用域身份，公开协议中的 `scope` 字段**必须**继续回传原始 canonical `scope`，不得改写为其他存储层派生值。
 - `hub.apps.listDefinitions` **必须**支持参数 `{ appId?: string, scope: string|null }`；其中 `scope` 字段**必须**显式出现。`appId` 省略时，结果**必须**覆盖所有应用；当 `scope = null` 时，结果**必须**不按作用域过滤；当 `scope = ""` 时，结果**必须**只包含 Global Definition；当 `scope` 为其他合法字符串时，结果**必须**只包含该精确作用域的 Definition。
 - `hub.apps.getDefinition` 与 `hub.apps.deleteDefinition` **必须**按精确的 `appId + scope` 查找 Definition，**不得**仅按 `appId` 模糊定位；这两个接口都**必须**要求显式提供合法字符串 `scope`。
 - `AppDefinition` 不定义作用域白名单或强制模式；`scope` 的解释与路由行为统一由 §5.5 定义。
@@ -779,7 +775,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 规范性行为：
 - Hub **必须**先执行与 `hub.apps.validateDefinition` 完全一致的定义校验。
-- 当定义校验通过时，Hub **必须**原子写入 `${dataDir}/apps/definitions/{appId}--{scopeKey}.json`，其中 `scopeKey` **必须**按 `scope = "" -> "global"`、`scope != "" -> "scope-" + scope` 编码；Hub **不得**额外写入 `{appId}.json` 等 legacy 别名文件，并在成功后刷新可读取快照。
+- 当定义校验通过时，Hub **必须**原子更新 `${dataDir}/apps/definitions.json`，并在成功后刷新可读取快照。更新后的目录索引**必须**按 `appId` 的 ordinal 升序写出，组内先 Global，再按 `scope` 的 ordinal 升序写出其余条目。
 - 成功的 `upsertDefinition` **必须**发布 `app.definition.upserted` 事件。
 - 成功结果中的 `definition` **必须**等于最新生效的 `AppDefinition`。
 - Hub **必须**以 `definition.appId + definition.scope` 作为写入身份；对同一 `appId` 的其他作用域 Definition **不得**产生隐式覆盖。
@@ -1303,7 +1299,7 @@ stateDiagram-v2
 
 本节定义 v1.x 兼容承诺。若某条兼容承诺与纠正核心协议基线发生冲突，**必须**同步更新实现、测试、SDK、Schema、示例与接入文档，并以收敛后的规范文本为唯一依据。
 
-当前 v1.x 核心基线已经固定包含以下 `scope` 契约：Definition 持久化只承认 `{appId}--{scopeKey}.json` + 显式字符串 `scope`；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch`、`hub.invoke.notify` 与 `hub.invoke.request` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope = null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段；字面量 `""` 始终是 Global 的唯一显式表示。
+当前 v1.x 核心基线已经固定包含以下 `scope` 契约：Definition 持久化只承认 `apps/definitions.json` 中的显式 `appId + scope` 复合身份；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch`、`hub.invoke.notify` 与 `hub.invoke.request` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope = null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段；字面量 `""` 始终是 Global 的唯一显式表示，`scope = "global"` 与其保持独立。
 
 | 变更类型                       | v1.x 允许吗? | 对客户端的影响                     |
 | ------------------------------ | ------------ | ---------------------------------- |

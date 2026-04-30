@@ -25,40 +25,46 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public void Impl_DefinitionLoader_Load_ShouldIgnoreInvalidDefinitionFiles()
+    public void Impl_DefinitionLoader_Load_ShouldIgnoreInvalidDefinitionEntries()
     {
-        // Arrange
-        WriteJson("valid-app.json", new
-        {
-            appId = "valid-app",
-            scope = ScopeContract.Global,
-            displayName = "Valid App"
-        });
-
-        WriteJson("invalid app id.json", new
-        {
-            appId = "invalid app id",
-            scope = ScopeContract.Global,
-            displayName = "Invalid AppId"
-        });
-
-        WriteJson("missing-scope.json", new
-        {
-            appId = "missing-scope",
-            displayName = "Missing Scope"
-        });
-
-        // 文件名与 appId 不一致
-        File.WriteAllText(
-            Path.Combine(_tempDirectory, "mismatch-name.json"),
-            JsonSerializer.Serialize(new
+        DefinitionCatalogTestHelper.WriteCatalogText(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            """
             {
-                appId = "real-name",
-                scope = ScopeContract.Global,
-                displayName = "Mismatch Name"
-            }));
+              "version": 1,
+              "definitions": [
+                {
+                  "appId": "valid-app",
+                  "scopes": [
+                    {
+                      "scope": "",
+                      "displayName": "Valid App"
+                    },
+                    {
+                      "displayName": "Missing Scope"
+                    }
+                  ]
+                },
+                {
+                  "appId": "invalid app id",
+                  "scopes": [
+                    {
+                      "scope": "",
+                      "displayName": "Invalid AppId"
+                    }
+                  ]
+                },
+                {
+                  "appId": "bad-entry",
+                  "scopes": [
+                    "not-an-object"
+                  ]
+                }
+              ]
+            }
+            """);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
 
         // Act
         definitionLoader.Load();
@@ -79,7 +85,7 @@ public class SpecConformanceTests : IDisposable
             displayName = "List Target"
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var handler = new AppDefinitionsHandler(definitionProvider,
@@ -113,7 +119,7 @@ public class SpecConformanceTests : IDisposable
             displayName = "Get Target"
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var handler = new AppDefinitionsHandler(definitionProvider,
@@ -140,7 +146,7 @@ public class SpecConformanceTests : IDisposable
     [Fact]
     public async Task Impl_AppDefinitionsHandler_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var handler = new AppDefinitionsHandler(definitionProvider,
@@ -449,16 +455,10 @@ public class SpecConformanceTests : IDisposable
 
     private void WriteJson(string fileName, object payload)
     {
-        var json = JsonSerializer.SerializeToElement(payload);
-        var appId = json.GetProperty("appId").GetString()!;
-        var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
-            ? scopeElement.GetString()!
-            : ScopeContract.Global;
-        var resolvedFileName = ProtocolIdentifier.IsValidAppId(appId) && ProtocolIdentifier.IsValidScope(scope)
-            ? AppDefinitionIdentity.Create(appId, scope).GetFileName()
-            : fileName;
-        var fullPath = Path.Combine(_tempDirectory, resolvedFileName);
-        File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
+        _ = fileName;
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private sealed class MutableClock : IClock

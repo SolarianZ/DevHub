@@ -14,8 +14,7 @@ public sealed class HostDataDirectoryInitializer
     private readonly ILogger<HostDataDirectoryInitializer> _logger;
     private readonly string _rootPath;
     private readonly string _runtimePath;
-    private readonly string _definitionsPath;
-    private readonly string _instancesPath;
+    private readonly string _appsPath;
     private readonly string _logsPath;
 
     /// <summary>
@@ -30,8 +29,7 @@ public sealed class HostDataDirectoryInitializer
         _logger = logger;
         _rootPath = runtimePathOptions.RootPath;
         _runtimePath = runtimePathOptions.RuntimePath;
-        _definitionsPath = runtimePathOptions.DefinitionsPath;
-        _instancesPath = runtimePathOptions.InstancesPath;
+        _appsPath = runtimePathOptions.AppsPath;
         _logsPath = runtimePathOptions.LogsPath;
     }
 
@@ -44,8 +42,7 @@ public sealed class HostDataDirectoryInitializer
         {
             EnsureDirectory(_rootPath, "根目录");
             EnsureDirectory(_runtimePath, "运行时目录");
-            EnsureDirectory(_definitionsPath, "应用程序定义目录");
-            EnsureDirectory(_instancesPath, "实例目录");
+            EnsureDirectory(_appsPath, "应用目录");
             EnsureDirectory(_logsPath, "日志目录");
         }
         catch (Exception ex)

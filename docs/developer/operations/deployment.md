@@ -27,8 +27,7 @@
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 
@@ -114,7 +113,7 @@ $env:DEVHUB_DATA_DIR = "C:\DevHub"
 dotnet .\artifacts\devhub\DevHub.Host.dll
 ```
 
-启动成功后，应看到 `<dataDir>/runtime/` 中生成 `hub.json` 与 `token.txt`，实例镜像写入 `<dataDir>/apps/instances/`，并且 `<dataDir>/logs/` 开始写入 `devhub-*.log`。
+启动成功后，应看到 `<dataDir>/runtime/` 中生成 `hub.json` 与 `token.txt`，`<dataDir>/apps/` 目录可用于后续写入 `definitions.json`，并且 `<dataDir>/logs/` 开始写入 `devhub-*.log`。
 
 ### 4.3 使用 DevHub Monitor 作为本地桌面入口
 

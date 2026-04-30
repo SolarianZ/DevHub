@@ -15,9 +15,8 @@ from tests.blackbox.test_base import (
     RpcClient,
     TestResult,
     build_app_definition,
-    build_definition_file_name,
     build_definition_identity_params,
-    get_definitions_dir,
+    get_definitions_catalog_path,
     safe_remove,
     write_app_definition,
 )
@@ -144,12 +143,9 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试无效格式的应用程序定义文件")
 
         try:
-            definitions_dir = get_definitions_dir()
             invalid_app_id = f"invalid-app-{uuid.uuid4().hex[:8]}"
-            invalid_filename = build_definition_file_name(invalid_app_id)
-            invalid_app_path = os.path.join(definitions_dir, invalid_filename)
+            invalid_app_path = get_definitions_catalog_path()
 
-            # 缺少 appId/displayName
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid_field": "value"}')
 
@@ -180,16 +176,34 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试应用程序定义 appId 格式验证")
 
         try:
-            definitions_dir = get_definitions_dir()
             invalid_app_id = f"invalid app id {uuid.uuid4().hex[:6]}"
-            invalid_app_path = os.path.join(definitions_dir, build_definition_file_name(invalid_app_id))
+            invalid_app_path = get_definitions_catalog_path()
             invalid_app = build_app_definition(
                 invalid_app_id,
                 display_name="Invalid AppId Application",
             )
 
             with open(invalid_app_path, "w", encoding="utf-8") as f:
-                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
+                json.dump(
+                    {
+                        "version": 1,
+                        "definitions": [
+                            {
+                                "appId": invalid_app_id,
+                                "scopes": [
+                                    {
+                                        "scope": "",
+                                        "displayName": invalid_app["displayName"],
+                                        "capabilities": invalid_app["capabilities"],
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -213,21 +227,34 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
-    def test_definition_filename_must_match_appid(self):
-        """测试文件名与 appId 不一致时应被忽略"""
-        result = TestResult("测试文件名与 appId 不一致时应被忽略")
+    def test_invalid_catalog_envelope_should_be_ignored(self):
+        """测试无效 catalog 顶层结构会被整体忽略"""
+        result = TestResult("测试无效 catalog 顶层结构会被整体忽略")
 
         try:
-            definitions_dir = get_definitions_dir()
-            mismatch_path = os.path.join(definitions_dir, f"mismatch-name-{uuid.uuid4().hex[:8]}.json")
+            mismatch_path = get_definitions_catalog_path()
             real_app_id = f"real-app-id-{uuid.uuid4().hex[:8]}"
-            mismatch_app = build_app_definition(
-                real_app_id,
-                display_name="Mismatch Name Application",
-            )
 
             with open(mismatch_path, "w", encoding="utf-8") as f:
-                json.dump(mismatch_app, f, ensure_ascii=False, indent=2)
+                json.dump(
+                    {
+                        "version": "bad",
+                        "definitions": [
+                            {
+                                "appId": real_app_id,
+                                "scopes": [
+                                    {
+                                        "scope": "",
+                                        "displayName": "Mismatch Name Application",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -238,10 +265,10 @@ class TestAppDefinitions(unittest.TestCase):
             definitions = response["result"]["definitions"]
             found = any(d.get("appId") == real_app_id for d in definitions)
             if found:
-                result.mark_failure("❌ 文件名与 appId 不一致的定义不应被加载")
+                result.mark_failure("❌ 无效目录索引不应暴露任何 Definition")
                 return result
 
-            result.add_detail("✅ 文件名与 appId 不一致的定义被正确忽略")
+            result.add_detail("✅ 无效目录索引被正确按空集合处理")
             result.mark_success()
 
         except Exception as e:
@@ -521,14 +548,24 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
-    def test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(self):
-        """测试 scope='global' 使用独立 scopeKey 且按原值回显"""
-        result = TestResult("测试 scope='global' 文件名与 canonical 回显")
+    def test_explicit_global_scope_should_coexist_with_global_and_echo_canonical_identifiers(self):
+        """测试 scope='global' 与 Global Definition 共存且按原值回显"""
+        result = TestResult("测试 scope='global' 与 Global Definition 共存")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             app_id = f"Sample.App_{uuid.uuid4().hex[:8]}"
+
+            global_response = client.call("hub.apps.upsertDefinition", {
+                "definition": {
+                    "appId": app_id,
+                    "scope": "",
+                    "displayName": "Global App",
+                }
+            })
+            if not RpcAssertions.expect_success(result, global_response, ["definition"]):
+                return result
 
             upsert_response = client.call("hub.apps.upsertDefinition", {
                 "definition": {
@@ -545,13 +582,20 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ upsertDefinition 未按原值回显 canonical 标识符: {definition}")
                 return result
 
-            explicit_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "global"))
-            default_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, ""))
-            if not os.path.exists(explicit_global_path):
-                result.mark_failure(f"❌ 未生成 scope='global' 的独立 Definition 文件: {explicit_global_path}")
+            with open(get_definitions_catalog_path(), "r", encoding="utf-8") as f:
+                catalog = json.load(f)
+
+            matching_app = next(
+                (entry for entry in catalog.get("definitions", []) if entry.get("appId") == app_id),
+                None,
+            )
+            if matching_app is None:
+                result.mark_failure(f"❌ catalog 中未找到目标 appId: {catalog}")
                 return result
-            if os.path.exists(default_global_path):
-                result.mark_failure(f"❌ scope='global' 错误覆盖了 Global Definition 文件: {default_global_path}")
+
+            scopes = [entry.get("scope") for entry in matching_app.get("scopes", [])]
+            if scopes != ["", "global"]:
+                result.mark_failure(f"❌ catalog 中的 scope 集合不正确: {matching_app}")
                 return result
 
             get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "global"))
@@ -564,8 +608,9 @@ class TestAppDefinitions(unittest.TestCase):
             list_global_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": ""})
             if not RpcAssertions.expect_success(result, list_global_response, ["definitions"]):
                 return result
-            if list_global_response["result"]["definitions"]:
-                result.mark_failure(f"❌ Global 过滤错误命中了 scope='global' 定义: {list_global_response}")
+            global_definitions = list_global_response["result"]["definitions"]
+            if len(global_definitions) != 1 or global_definitions[0].get("scope") != "":
+                result.mark_failure(f"❌ Global 过滤结果不正确: {list_global_response}")
                 return result
 
             list_explicit_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": "global"})
@@ -582,8 +627,8 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
                     client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "global"))
-                    safe_remove(os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "")))
             except Exception:
                 pass
 
@@ -723,12 +768,12 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_get_nonexistent_definition(),
             self.test_invalid_app_definition(),
             self.test_app_definition_appid_format_validation(),
-            self.test_definition_filename_must_match_appid(),
+            self.test_invalid_catalog_envelope_should_be_ignored(),
             self.test_validate_definition(),
             self.test_blank_launch_exepath_should_store_definition(),
             self.test_upsert_definition_and_delete_definition(),
             self.test_scoped_definitions_should_use_composite_identity(),
-            self.test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(),
+            self.test_explicit_global_scope_should_coexist_with_global_and_echo_canonical_identifiers(),
             self.test_upsert_invalid_definition(),
             self.test_register_instance_should_allow_undeclared_scope_for_definition_managed_app(),
             self.test_delete_nonexistent_definition()

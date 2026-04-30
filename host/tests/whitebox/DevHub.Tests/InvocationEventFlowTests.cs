@@ -231,7 +231,7 @@ public class InvocationEventFlowTests : IDisposable
 
     private (InvocationHandler Handler, HubEventBus EventBus) CreateHandler(AppRegistry appRegistry)
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -257,7 +257,6 @@ public class InvocationEventFlowTests : IDisposable
                ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 }
-
 
 
 

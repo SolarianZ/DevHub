@@ -474,7 +474,7 @@ public class CoreRpcSpecTests : IDisposable
 
     private AppDefinitionsHandler CreateDefinitionsHandler()
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         return new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -561,12 +561,8 @@ public class CoreRpcSpecTests : IDisposable
 
     private void WriteDefinition(object payload)
     {
-        var json = JsonSerializer.SerializeToElement(payload);
-        var appId = json.GetProperty("appId").GetString();
-        var scope = json.TryGetProperty("scope", out var scopeElement) && scopeElement.ValueKind != JsonValueKind.Null
-            ? scopeElement.GetString()
-            : ScopeContract.Global;
-        var fullPath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName());
-        File.WriteAllText(fullPath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 }

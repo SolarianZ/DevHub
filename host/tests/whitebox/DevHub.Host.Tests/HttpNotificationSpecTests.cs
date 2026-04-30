@@ -25,7 +25,7 @@ public class HttpNotificationSpecTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostHttpNotificationTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
+        _definitionsDirectory = Path.Combine(_tempRoot, "apps");
 
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
@@ -242,8 +242,8 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "5.2")]
     public async Task Spec_5_1_And_5_2_HttpResponses_ShouldOmitOptionalNullFields()
     {
-        File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create("http-null-omit.app", ScopeContract.Global).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
             """
             {
               "appId": "http-null-omit.app",
@@ -357,8 +357,8 @@ public class HttpNotificationSpecTests : IDisposable
         const string scope = "Workspace-A.v2";
         const string instanceId = "NODE_01.alpha";
 
-        File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
             $$"""
             {
               "appId": "{{appId}}",

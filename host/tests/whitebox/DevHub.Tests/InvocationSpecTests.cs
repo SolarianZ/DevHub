@@ -1156,7 +1156,7 @@ public class InvocationSpecTests : IDisposable
     private InvocationHandler CreateInvocationHandler(AppRegistry appRegistry, IClock? clock = null, IProcessLauncher? processLauncher = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -1284,7 +1284,6 @@ public class InvocationSpecTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var path = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new
         {
             appId,
@@ -1297,7 +1296,9 @@ public class InvocationSpecTests : IDisposable
             }
         };
 
-        File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static void AssertSuccess(JsonRpcResponse response)

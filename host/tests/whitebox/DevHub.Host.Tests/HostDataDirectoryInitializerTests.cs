@@ -33,9 +33,9 @@ public sealed class HostDataDirectoryInitializerTests : IDisposable
 
         Assert.True(Directory.Exists(runtimeOptions.RootPath));
         Assert.True(Directory.Exists(runtimeOptions.RuntimePath));
-        Assert.True(Directory.Exists(runtimeOptions.DefinitionsPath));
-        Assert.True(Directory.Exists(runtimeOptions.InstancesPath));
+        Assert.True(Directory.Exists(runtimeOptions.AppsPath));
         Assert.True(Directory.Exists(runtimeOptions.LogsPath));
+        Assert.False(File.Exists(runtimeOptions.DefinitionsCatalogPath));
     }
 
     /// <inheritdoc />

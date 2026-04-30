@@ -1159,7 +1159,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     {
         var effectiveClock = clock ?? new SystemClock();
         var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -1197,7 +1197,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
     private DefinitionProvider CreateDefinitionProvider()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         return definitionProvider;
@@ -1227,8 +1227,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             };
         }
 
-        File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
             JsonSerializer.Serialize(payload));
     }
 

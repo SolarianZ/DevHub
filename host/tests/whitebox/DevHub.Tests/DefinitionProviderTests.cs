@@ -25,7 +25,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_AfterFileAdded_ShouldExposeUpdatedSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         provider.Refresh();
@@ -43,7 +43,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_GetDefinition_WhenMissing_ShouldReturnNull()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
         provider.Refresh();
 
@@ -54,7 +54,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_WhenLaunchExePathMissing_ShouldIgnoreInvalidDefinition()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         var payload = """
@@ -68,9 +68,21 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", ScopeContract.Global).GetFileName()),
-            payload);
+        DefinitionCatalogTestHelper.WriteCatalogText(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            $$"""
+            {
+              "version": 1,
+              "definitions": [
+                {
+                  "appId": "broken.launch.app",
+                  "scopes": [
+                    {{payload}}
+                  ]
+                }
+              ]
+            }
+            """);
 
         provider.Refresh();
 
@@ -81,7 +93,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_WhenDefinitionDirectoryMissing_ShouldClearStaleSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         WriteDefinition("provider.app");
@@ -99,7 +111,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_WithMixedAppIdsAndScopes_ShouldExposeStableOrderedSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         WriteDefinition("provider.zeta", "workspace-z");
@@ -154,8 +166,8 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
             payload);
     }
 }
