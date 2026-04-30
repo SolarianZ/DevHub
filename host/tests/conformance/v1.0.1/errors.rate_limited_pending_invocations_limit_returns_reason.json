@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.rate-limited.pending--global.json",
-        "definition": {
-          "appId": "errors.rate-limited.pending",
+        "appId": "errors.rate-limited.pending",
+        "scopeEntry": {
           "scope": "",
           "displayName": "errors.rate-limited.pending"
         }

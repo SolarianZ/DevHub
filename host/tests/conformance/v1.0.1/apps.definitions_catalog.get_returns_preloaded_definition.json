@@ -1,14 +1,13 @@
 {
-  "id": "apps.definitions.get_returns_preloaded_definition",
+  "id": "apps.definitions_catalog.get_returns_preloaded_definition",
   "caseId": "CONF-003",
   "description": "预置合法 AppDefinition 时，hub.apps.getDefinition 必须返回对应 definition。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.get.preloaded.app--global.json",
-        "definition": {
-          "appId": "apps.get.preloaded.app",
+        "appId": "apps.get.preloaded.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps Get Preloaded",
           "description": "用于 conformance AppDefinition 获取向量。"

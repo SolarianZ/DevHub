@@ -1,21 +1,19 @@
 {
-  "id": "apps.definitions.list_ignores_invalid_definition_files",
+  "id": "apps.definitions_catalog.list_ignores_invalid_app_entries",
   "caseId": "CONF-003",
-  "description": "存在无效定义文件时，hub.apps.listDefinitions 必须忽略它们并仅返回合法定义。",
+  "description": "definitions.json 存在无效 app 分组时，hub.apps.listDefinitions 必须忽略这些无效分组并仅返回合法 Definition。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.list.valid-only.app--global.json",
-        "definition": {
-          "appId": "apps.list.valid-only.app",
+        "appId": "apps.list.valid-only.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps List Valid Only"
         }
       },
       {
-        "fileName": "apps.list.invalid-only.app.json",
-        "rawText": "{\"appId\": \"apps.list.invalid-only.app\","
+        "rawAppEntry": "{\"appId\":null,\"scopes\":[]}"
       }
     ]
   },

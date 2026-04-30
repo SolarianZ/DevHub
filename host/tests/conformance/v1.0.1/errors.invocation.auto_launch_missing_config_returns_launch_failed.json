@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.launch-missing--global.json",
-        "definition": {
-          "appId": "errors.invocation.launch-missing",
+        "appId": "errors.invocation.launch-missing",
+        "scopeEntry": {
           "scope": "",
           "displayName": "errors.invocation.launch-missing"
         }

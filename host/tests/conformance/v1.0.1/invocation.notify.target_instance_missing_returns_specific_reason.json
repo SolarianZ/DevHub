@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.target-missing--global.json",
-        "definition": {
-          "appId": "invoke.notify.target-missing",
+        "appId": "invoke.notify.target-missing",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.notify.target-missing"
         }

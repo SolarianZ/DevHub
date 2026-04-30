@@ -246,17 +246,38 @@ export class DevHubHostFixture {
   }
 
   private async refreshDefinitionsSnapshot(): Promise<void> {
-    const client = await DevHubClient.fromRuntime({
-      clientId: `host-fixture-refresh-${randomUUID()}`,
-      dataDir: this.dataDirectory
+    const runtime = await readRuntimeConnection(this.runtimeDirectory);
+    const response = await fetch(`${runtime.httpBaseUrl}/rpc`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${runtime.token}`,
+        "Content-Type": "application/json",
+        "X-DevHub-Protocol": "1",
+        "X-DevHub-ClientId": `host-fixture-refresh-${randomUUID()}`,
+        "X-DevHub-ClientSessionId": randomUUID()
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `host-fixture-refresh-${randomUUID()}`,
+        method: "hub.apps.listDefinitions",
+        params: {
+          scope: null
+        }
+      })
     });
 
-    try {
-      await client.listDefinitions({
-        scope: null
-      });
-    } finally {
-      await client.dispose();
+    const payload = await response.json() as {
+      error?: {
+        code?: number;
+        message?: string;
+      };
+      result?: {
+        ok?: boolean;
+      };
+    };
+
+    if (!response.ok || payload.error || payload.result?.ok !== true) {
+      throw new Error(`刷新 Host Definition 快照失败: ${JSON.stringify(payload)}`);
     }
   }
 }
@@ -394,6 +415,26 @@ async function fileExists(target: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function readRuntimeConnection(runtimeDirectory: string): Promise<{ httpBaseUrl: string; token: string; }> {
+  const hubJsonPath = path.join(runtimeDirectory, "hub.json");
+  const runtime = JSON.parse(await fsPromises.readFile(hubJsonPath, "utf-8")) as {
+    httpBaseUrl?: string;
+    tokenFile?: string;
+  };
+
+  if (typeof runtime.httpBaseUrl !== "string" || runtime.httpBaseUrl.length === 0) {
+    throw new Error(`Host runtime 缺少有效 httpBaseUrl: ${hubJsonPath}`);
+  }
+  if (typeof runtime.tokenFile !== "string" || runtime.tokenFile.length === 0) {
+    throw new Error(`Host runtime 缺少有效 tokenFile: ${hubJsonPath}`);
+  }
+
+  return {
+    httpBaseUrl: runtime.httpBaseUrl,
+    token: (await fsPromises.readFile(runtime.tokenFile, "utf-8")).trim()
+  };
 }
 
 function ensureTrailingSeparator(value: string): string {

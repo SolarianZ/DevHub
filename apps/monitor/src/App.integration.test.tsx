@@ -6,7 +6,7 @@ import { DevHubClient } from "@devhub/sdk";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
 import App from "./App";
-import { registerInstanceCompat } from "./lib/sdk-compat";
+import { deleteDefinitionCompat, registerInstanceCompat } from "./lib/sdk-compat";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
@@ -171,8 +171,9 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await fs.rm(join(getHost().definitionsDirectory, `${MISSING_APP_ID}--global.json`), {
-      force: true,
+    await deleteDefinitionCompat(setupClient, {
+      appId: MISSING_APP_ID,
+      scope: "",
     });
   } finally {
     await setupClient.dispose();

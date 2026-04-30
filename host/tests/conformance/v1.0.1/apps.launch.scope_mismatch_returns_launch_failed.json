@@ -14,9 +14,8 @@
     },
     "definitions": [
       {
-        "fileName": "apps.launch.bound-scope.app--scope-scope-a.json",
-        "definition": {
-          "appId": "apps.launch.bound-scope.app",
+        "appId": "apps.launch.bound-scope.app",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "Apps Launch Bound Scope A",
           "capabilities": {
@@ -30,9 +29,8 @@
         }
       },
       {
-        "fileName": "apps.launch.bound-scope.app--scope-scope-b.json",
-        "definition": {
-          "appId": "apps.launch.bound-scope.app",
+        "appId": "apps.launch.bound-scope.app",
+        "scopeEntry": {
           "scope": "scope-b",
           "displayName": "Apps Launch Bound Scope B",
           "capabilities": {

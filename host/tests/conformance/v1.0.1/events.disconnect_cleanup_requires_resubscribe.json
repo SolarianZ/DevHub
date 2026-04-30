@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "events.disconnect.cleanup--global.json",
-        "definition": {
-          "appId": "events.disconnect.cleanup",
+        "appId": "events.disconnect.cleanup",
+        "scopeEntry": {
           "scope": "",
           "displayName": "events.disconnect.cleanup"
         }

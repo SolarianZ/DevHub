@@ -6,17 +6,15 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.scope--global.json",
-        "definition": {
-          "appId": "invoke.notify.scope",
+        "appId": "invoke.notify.scope",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.notify.scope"
         }
       },
       {
-        "fileName": "invoke.notify.scope--scope-scope-a.json",
-        "definition": {
-          "appId": "invoke.notify.scope",
+        "appId": "invoke.notify.scope",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "invoke.notify.scope scope-a"
         }

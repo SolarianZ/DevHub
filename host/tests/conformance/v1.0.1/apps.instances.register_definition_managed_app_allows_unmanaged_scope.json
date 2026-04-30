@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.instance.managed-scope.app--scope-scope-a.json",
-        "definition": {
-          "appId": "apps.instance.managed-scope.app",
+        "appId": "apps.instance.managed-scope.app",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "Apps Instance Managed Scope A"
         }

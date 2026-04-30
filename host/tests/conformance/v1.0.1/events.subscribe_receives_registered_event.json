@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "events.subscribe.registered--global.json",
-        "definition": {
-          "appId": "events.subscribe.registered",
+        "appId": "events.subscribe.registered",
+        "scopeEntry": {
           "scope": "",
           "displayName": "events.subscribe.registered"
         }

@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.target-missing--global.json",
-        "definition": {
-          "appId": "invoke.request.target-missing",
+        "appId": "invoke.request.target-missing",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.request.target-missing"
         }

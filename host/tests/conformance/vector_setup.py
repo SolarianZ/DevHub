@@ -54,8 +54,12 @@ class HostRuntimeContext:
         return str(self.hub_info["wsUrl"])
 
     @property
-    def definitions_dir(self) -> Path:
-        return self.data_dir / "apps" / "definitions"
+    def apps_dir(self) -> Path:
+        return self.data_dir / "apps"
+
+    @property
+    def definitions_catalog_path(self) -> Path:
+        return self.apps_dir / "definitions.json"
 
     def create_rpc_client(self) -> RpcClient:
         return RpcClient(self.http_base_url, self.token)
@@ -66,7 +70,9 @@ class CleanupLedger:
     """记录每条向量创建的临时资产，便于统一清理。"""
 
     vector_temp_dir: Path
-    definition_paths: list[Path] = field(default_factory=list)
+    definitions_catalog_was_modified: bool = False
+    definitions_catalog_original_exists: bool = False
+    definitions_catalog_original_content: str | None = None
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
     instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
@@ -79,9 +85,15 @@ class CleanupLedger:
             except Exception:
                 pass
 
-        for definition_path in reversed(self.definition_paths):
+        if self.definitions_catalog_was_modified:
+            catalog_path = host_context.definitions_catalog_path
             try:
-                definition_path.unlink()
+                if self.definitions_catalog_original_exists:
+                    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+                    catalog_path.write_text(self.definitions_catalog_original_content or "", encoding="utf-8")
+                else:
+                    catalog_path.unlink()
+                refresh_definitions_snapshot(host_context, request_id="cleanup-refresh-definitions")
             except FileNotFoundError:
                 pass
             except Exception:
@@ -322,6 +334,8 @@ def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
 
     return {
         "HOST_DATA_DIR": str(host_context.data_dir),
+        "HOST_APPS_DIR": str(host_context.apps_dir),
+        "HOST_DEFINITIONS_CATALOG": str(host_context.definitions_catalog_path),
         "HOST_RUNTIME_DIR": str(host_context.runtime_dir),
         "HOST_HUB_JSON": str(host_context.hub_json_path),
         "HOST_TOKEN_FILE": str(host_context.token_file),
@@ -384,6 +398,56 @@ def validate_setup_shape(setup: dict[str, Any]) -> None:
         if unknown_data_dir_keys:
             raise ValueError(f"setup.dataDir 包含未支持字段：{unknown_data_dir_keys}")
 
+    definitions = require_optional_list(setup.get("definitions"), "setup.definitions")
+    validate_definitions_setup(definitions)
+
+
+def validate_definitions_setup(definitions: list[Any]) -> None:
+    """校验 setup.definitions 的 catalog 条目模型。"""
+
+    allowed_keys = {"appId", "scopeEntry", "rawScopeEntry", "appEntry", "rawAppEntry"}
+    for index, item in enumerate(definitions):
+        definition_setup = require_mapping(item, f"setup.definitions[{index}]")
+        unknown_keys = sorted(key for key in definition_setup if key not in allowed_keys)
+        if unknown_keys:
+            raise ValueError(f"setup.definitions[{index}] 包含未支持字段：{unknown_keys}")
+
+        has_app_id = "appId" in definition_setup
+        has_scope_entry = "scopeEntry" in definition_setup
+        has_raw_scope_entry = "rawScopeEntry" in definition_setup
+        has_app_entry = "appEntry" in definition_setup
+        has_raw_app_entry = "rawAppEntry" in definition_setup
+
+        if has_app_id or has_scope_entry or has_raw_scope_entry:
+            if not has_app_id:
+                raise ValueError(f"setup.definitions[{index}].appId 缺失。")
+            require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+            if has_scope_entry == has_raw_scope_entry:
+                raise ValueError(
+                    f"setup.definitions[{index}] 必须且只能提供 scopeEntry 或 rawScopeEntry 其中之一。"
+                )
+            if has_app_entry or has_raw_app_entry:
+                raise ValueError(
+                    f"setup.definitions[{index}] 使用 appId 预置 scope 条目时，不能同时提供 appEntry / rawAppEntry。"
+                )
+            read_catalog_setup_value(
+                definition_setup.get("scopeEntry") if has_scope_entry else definition_setup.get("rawScopeEntry"),
+                f"setup.definitions[{index}].{'scopeEntry' if has_scope_entry else 'rawScopeEntry'}",
+                require_object=has_scope_entry,
+            )
+            continue
+
+        if has_app_entry == has_raw_app_entry:
+            raise ValueError(
+                f"setup.definitions[{index}] 必须提供 appId + (scopeEntry/rawScopeEntry)，"
+                "或提供 appEntry / rawAppEntry。"
+            )
+        read_catalog_setup_value(
+            definition_setup.get("appEntry") if has_app_entry else definition_setup.get("rawAppEntry"),
+            f"setup.definitions[{index}].{'appEntry' if has_app_entry else 'rawAppEntry'}",
+            require_object=has_app_entry,
+        )
+
 
 def apply_data_dir_setup(data_dir: Path, data_dir_setup: dict[str, Any]) -> None:
     """将 setup.dataDir.files 物化到向量数据根目录。"""
@@ -403,21 +467,108 @@ def apply_definitions_setup(
     definitions: list[Any],
     ledger: CleanupLedger,
 ) -> None:
-    """将 setup.definitions 写入 suite Host 的 definitions 目录。"""
+    """将 setup.definitions 物化为 suite Host 的 definitions.json catalog。"""
 
-    host_context.definitions_dir.mkdir(parents=True, exist_ok=True)
+    if not definitions:
+        return
+
+    capture_original_definitions_catalog(host_context, ledger)
+    catalog = {
+        "version": 1,
+        "definitions": [],
+    }
+    app_entries_by_app_id: dict[str, dict[str, Any]] = {}
+
     for index, item in enumerate(definitions):
         definition_setup = require_mapping(item, f"setup.definitions[{index}]")
-        file_name = require_string(definition_setup.get("fileName"), f"setup.definitions[{index}].fileName")
-        if Path(file_name).name != file_name:
-            raise ValueError(f"setup.definitions[{index}].fileName 必须是文件名，不能包含目录。")
-        if not file_name.lower().endswith(".json"):
-            raise ValueError(f"setup.definitions[{index}].fileName 必须以 .json 结尾。")
+        if "appId" in definition_setup:
+            app_id = require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+            scope_entry_field = "scopeEntry" if "scopeEntry" in definition_setup else "rawScopeEntry"
+            scope_entry = read_catalog_setup_value(
+                definition_setup.get(scope_entry_field),
+                f"setup.definitions[{index}].{scope_entry_field}",
+                require_object=scope_entry_field == "scopeEntry",
+            )
 
-        target_path = host_context.definitions_dir / file_name
-        content = build_file_content(definition_setup, f"setup.definitions[{index}]", text_key="rawText", json_key="definition")
-        target_path.write_text(content, encoding="utf-8")
-        ledger.definition_paths.append(target_path)
+            app_entry = app_entries_by_app_id.get(app_id)
+            if app_entry is None:
+                app_entry = {
+                    "appId": app_id,
+                    "scopes": [],
+                }
+                app_entries_by_app_id[app_id] = app_entry
+                catalog["definitions"].append(app_entry)
+
+            app_entry["scopes"].append(scope_entry)
+            continue
+
+        app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
+        catalog["definitions"].append(
+            read_catalog_setup_value(
+                definition_setup.get(app_entry_field),
+                f"setup.definitions[{index}].{app_entry_field}",
+                require_object=app_entry_field == "appEntry",
+            )
+        )
+
+    catalog_path = host_context.definitions_catalog_path
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
+    refresh_definitions_snapshot(host_context, request_id="setup-refresh-definitions")
+
+
+def capture_original_definitions_catalog(host_context: HostRuntimeContext, ledger: CleanupLedger) -> None:
+    """记录 suite Host 当前 definitions.json，便于向量完成后恢复。"""
+
+    if ledger.definitions_catalog_was_modified:
+        return
+
+    catalog_path = host_context.definitions_catalog_path
+    if catalog_path.is_file():
+        ledger.definitions_catalog_original_exists = True
+        ledger.definitions_catalog_original_content = catalog_path.read_text(encoding="utf-8")
+    else:
+        ledger.definitions_catalog_original_exists = False
+        ledger.definitions_catalog_original_content = None
+
+    ledger.definitions_catalog_was_modified = True
+
+
+def read_catalog_setup_value(value: Any, path: str, *, require_object: bool) -> Any:
+    """读取 setup.definitions 中的 catalog 片段。"""
+
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path} 必须是合法 JSON 文本。") from exc
+    else:
+        parsed = copy.deepcopy(value)
+
+    if require_object and not isinstance(parsed, dict):
+        raise ValueError(f"{path} 必须解析为对象。")
+
+    return parsed
+
+
+def refresh_definitions_snapshot(host_context: HostRuntimeContext, request_id: str) -> None:
+    """通过 listDefinitions 触发 Host 刷新内存中的 Definition 快照。"""
+
+    client = host_context.create_rpc_client()
+    response = client.call(
+        "hub.apps.listDefinitions",
+        {
+            "scope": None,
+        },
+        request_id=request_id,
+    )
+    error = response.get("error")
+    if isinstance(error, dict):
+        raise RuntimeError(
+            "刷新 Definition 快照失败："
+            f"{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
+        )
 
 
 def apply_instances_setup(

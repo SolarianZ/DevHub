@@ -1,22 +1,20 @@
 {
-  "id": "apps.definitions.delete_exact_scope_preserves_other_scoped_definition",
+  "id": "apps.definitions_catalog.delete_exact_scope_preserves_other_scoped_definition",
   "caseId": "CONF-003",
   "description": "删除某个 scoped Definition 时，hub.apps.deleteDefinition 必须只删除对应 appId + scope，并保留同 appId 的其他 Definition。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.delete.exact-scope.app--global.json",
-        "definition": {
-          "appId": "apps.delete.exact-scope.app",
+        "appId": "apps.delete.exact-scope.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps Delete Exact Scope Global"
         }
       },
       {
-        "fileName": "apps.delete.exact-scope.app--scope-scope-a.json",
-        "definition": {
-          "appId": "apps.delete.exact-scope.app",
+        "appId": "apps.delete.exact-scope.app",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "Apps Delete Exact Scope A"
         }
@@ -28,33 +26,33 @@
       {
         "action": "call_rpc",
         "method": "hub.apps.getDefinition",
-        "requestId": "apps-definitions-delete-global-missing",
+        "requestId": "apps-definitions-get-global-remaining",
         "params": {
           "appId": "apps.delete.exact-scope.app",
           "scope": ""
         },
-        "expectedError": {
-          "code": -32014,
-          "message": "app_definition_not_found",
-          "data": {
+        "expectedResult": {
+          "definition": {
             "appId": "apps.delete.exact-scope.app",
-            "scope": ""
+            "scope": "",
+            "displayName": "Apps Delete Exact Scope Global"
           }
         }
       },
       {
         "action": "call_rpc",
         "method": "hub.apps.getDefinition",
-        "requestId": "apps-definitions-get-scoped-remaining",
+        "requestId": "apps-definitions-delete-scoped-missing",
         "params": {
           "appId": "apps.delete.exact-scope.app",
           "scope": "scope-a"
         },
-        "expectedResult": {
-          "definition": {
+        "expectedError": {
+          "code": -32014,
+          "message": "app_definition_not_found",
+          "data": {
             "appId": "apps.delete.exact-scope.app",
-            "scope": "scope-a",
-            "displayName": "Apps Delete Exact Scope A"
+            "scope": "scope-a"
           }
         }
       }
@@ -70,12 +68,13 @@
     }
   },
   "request": {
+    "kind": "raw.rpc.helper",
     "jsonrpc": "2.0",
     "id": "apps-definitions-delete-exact-scope",
     "method": "hub.apps.deleteDefinition",
     "params": {
       "appId": "apps.delete.exact-scope.app",
-      "scope": ""
+      "scope": "scope-a"
     }
   },
   "expectedResponse": {

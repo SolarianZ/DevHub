@@ -1,22 +1,20 @@
 {
-  "id": "apps.definitions.get_exact_scope_returns_matching_definition",
+  "id": "apps.definitions_catalog.get_exact_scope_returns_matching_definition",
   "caseId": "CONF-003",
   "description": "同一 appId 存在多份 scoped Definition 时，hub.apps.getDefinition 必须按精确 appId + scope 返回目标定义。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.get.exact-scope.app--global.json",
-        "definition": {
-          "appId": "apps.get.exact-scope.app",
+        "appId": "apps.get.exact-scope.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps Get Exact Scope Global"
         }
       },
       {
-        "fileName": "apps.get.exact-scope.app--scope-scope-a.json",
-        "definition": {
-          "appId": "apps.get.exact-scope.app",
+        "appId": "apps.get.exact-scope.app",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "Apps Get Exact Scope A",
           "description": "用于 conformance scoped get 向量。"

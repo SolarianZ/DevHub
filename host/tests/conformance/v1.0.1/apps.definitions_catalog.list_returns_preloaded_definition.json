@@ -1,14 +1,13 @@
 {
-  "id": "apps.definitions.list_returns_preloaded_definition",
+  "id": "apps.definitions_catalog.list_returns_preloaded_definition",
   "caseId": "CONF-003",
   "description": "预置合法 AppDefinition 时，hub.apps.listDefinitions 必须返回该定义。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.list.preloaded.app--global.json",
-        "definition": {
-          "appId": "apps.list.preloaded.app",
+        "appId": "apps.list.preloaded.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps List Preloaded",
           "description": "用于 conformance AppDefinition 列表向量。",

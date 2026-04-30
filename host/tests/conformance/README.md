@@ -153,6 +153,8 @@ adapter 启动后会收到一个 `execution-context.json` 路径。该文件至�
 
 - `vector` 中的 `${HOST_*}` / `${VECTOR_*}` 占位符在 runner 调用 adapter 前都已解析完成。
 - adapter 必须把 `dataDir/runtime/hub.json` 当作运行时发现入口，禁止硬编码端口或 URL。
+- 若向量包含 `setup.definitions`，runner 会直接物化 suite Host 的 `${HOST_DEFINITIONS_CATALOG}`，即 `${HOST_APPS_DIR}/definitions.json` 版本化目录索引，而不是创建旧版单 Definition 文件。
+- `setup.definitions` 采用 catalog 条目模型：可通过 `appId + scopeEntry/rawScopeEntry` 追加单个 scope 条目，也可通过 `appEntry/rawAppEntry` 直接写入整个 app 分组，以覆盖无效分组或无效 scope 条目的加载语义。
 
 ### 6.2 输出
 

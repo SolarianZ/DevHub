@@ -668,7 +668,7 @@ def should_use_orchestration(vector: dict[str, Any]) -> bool:
     request = vector.get("request")
     if isinstance(request, dict):
         kind = request.get("kind")
-        if isinstance(kind, str) and kind.startswith("sdk."):
+        if isinstance(kind, str) and (kind.startswith("sdk.") or kind == "raw.rpc.helper"):
             return True
     return isinstance(vector.get("orchestration"), dict)
 

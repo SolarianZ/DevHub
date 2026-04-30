@@ -1,14 +1,13 @@
 {
-  "id": "apps.definitions.delete_existing_returns_ok_and_removes_definition",
+  "id": "apps.definitions_catalog.delete_existing_returns_ok_and_removes_definition",
   "caseId": "CONF-003",
   "description": "删除已存在的 AppDefinition 时，hub.apps.deleteDefinition 必须返回 ok=true，且后续读取返回 app_definition_not_found。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.delete.existing.app--global.json",
-        "definition": {
-          "appId": "apps.delete.existing.app",
+        "appId": "apps.delete.existing.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps Delete Existing"
         }
@@ -46,6 +45,7 @@
     }
   },
   "request": {
+    "kind": "raw.rpc.helper",
     "jsonrpc": "2.0",
     "id": "apps-definitions-delete-existing",
     "method": "hub.apps.deleteDefinition",

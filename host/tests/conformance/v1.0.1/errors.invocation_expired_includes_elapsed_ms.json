@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.expired--global.json",
-        "definition": {
-          "appId": "errors.invocation.expired",
+        "appId": "errors.invocation.expired",
+        "scopeEntry": {
           "scope": "",
           "displayName": "errors.invocation.expired"
         }

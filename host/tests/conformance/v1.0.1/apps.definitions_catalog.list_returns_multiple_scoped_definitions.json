@@ -1,22 +1,20 @@
 {
-  "id": "apps.definitions.list_returns_multiple_scoped_definitions",
+  "id": "apps.definitions_catalog.list_returns_multiple_scoped_definitions",
   "caseId": "CONF-003",
   "description": "同一 appId 预置多份不同 scope Definition 时，hub.apps.listDefinitions 必须返回全部精确作用域记录。",
   "transport": "http",
   "setup": {
     "definitions": [
       {
-        "fileName": "apps.list.multi-scope.app--global.json",
-        "definition": {
-          "appId": "apps.list.multi-scope.app",
+        "appId": "apps.list.multi-scope.app",
+        "scopeEntry": {
           "scope": "",
           "displayName": "Apps List Multi Scope Global"
         }
       },
       {
-        "fileName": "apps.list.multi-scope.app--scope-global.json",
-        "definition": {
-          "appId": "apps.list.multi-scope.app",
+        "appId": "apps.list.multi-scope.app",
+        "scopeEntry": {
           "scope": "global",
           "displayName": "Apps List Multi Scope Explicit Global"
         }
