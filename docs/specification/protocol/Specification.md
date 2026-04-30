@@ -66,13 +66,18 @@
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "string | number",
+  "id": "string | supported integer number",
   "method": "string",
   "params": "object | array (optional)"
 }
 ```
 
-- 期望响应的请求**必须**包含 `id`，且**必须**为 **string** 或 **number**。
+- 期望响应的请求**必须**包含 `id`，且**必须**为 **string** 或受支持的整数 `number`。
+- numeric `id` **必须**满足以下全部条件：
+  - 值语义上是整数，**不得**为小数。
+  - 必须处于 Host 运行时可无损往返的受支持范围内；Host 的运行时边界采用有符号 64 位整数（`Int64`）范围。
+  - Host 对其进行解析、存储并回写响应时，**不得**发生值变化。
+- 若 numeric `id` 为小数、超出 Host 支持范围，或无法被 Host 无损解析并回写，Hub **必须**返回 `-32600 invalid_request`，且 `id = null`。
 - 通知**必须省略** `id`（即**禁止**存在 `id` 字段）。
   - **禁止**使用 `"id": null` 作为“通知标记”。
 - `params` **可以**省略。
@@ -468,6 +473,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `hub.apps.registerInstance` 的 `params.instance.scope` **必须**存在且为合法字符串；省略、`null` 与未通过 canonical `scope` grammar 的字符串都**必须**被拒绝。
 - `AppInstance` 与 `AppInstanceRegistration` 的 `appId` 与 `instanceId` **必须**满足 canonical protocol identifier grammar。
 - `AppInstanceRegistration` 只描述 `params.instance`；`hub.apps.registerInstance` 的顶层 `password` **不属于** `AppInstanceRegistration`。
+- `hub.apps.registerInstance.params.instance.password` 与 `hub.apps.registerInstance.params.instance.instanceSessionToken` **必须**被拒绝；当任一字段出现在 `params.instance` 中时，Hub **必须**返回 `-32602 invalid_params`，且**不得**创建或更新该实例注册状态。
 - `password` 与 `instanceSessionToken` **不得**出现在 `AppInstance`、`AppInstanceRegistration`、`hub.apps.getInstance`、`hub.apps.listInstances` 的返回值或任何 `app.instance.*` 事件载荷中。
 - `instanceSessionToken` 只属于 `hub.apps.registerInstance` 成功结果顶层字段，以及 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的顶层 `params`。
 
@@ -823,6 +829,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `params.password` **必须**是非空字符串。
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
 - `params.instance.appId` 与 `params.instance.instanceId` **必须**满足 canonical protocol identifier grammar。
+- `params.instance.password` 与 `params.instance.instanceSessionToken` **不得**出现；若任一字段存在，Hub **必须**返回 `-32602 invalid_params`，且**不得**创建或更新该实例注册状态。
 - Hub **必须**在服务端设置 `registeredAtUtc` 和 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` / re-register 时生成新的、不透明的 `instanceSessionToken`，并立即使该 `instanceId` 先前持有的旧 token 失效。

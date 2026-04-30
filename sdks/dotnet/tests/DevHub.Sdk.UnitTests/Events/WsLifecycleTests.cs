@@ -882,6 +882,35 @@ public sealed class WsLifecycleTests : IDisposable
         Assert.Contains("jsonrpc", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("1.5")]
+    [InlineData("9223372036854775808")]
+    public async Task EventsClient_WhenAuthenticateResponseIdUsesUnsupportedNumericShape_ShouldThrowInvalidOperationException(string requestIdLiteral)
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            return sent.Contains($"\"id\":\"{requestIdLiteral}\"", StringComparison.Ordinal)
+                ? [CreateTextMessage($"{{\"jsonrpc\":\"2.0\",\"id\":{requestIdLiteral},\"result\":{{\"ok\":true,\"protocolVersion\":1}}}}")]
+                : [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            () => requestIdLiteral);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AuthenticateAsync());
+        Assert.Contains("id", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Int64", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task EventsClient_WhenAuthenticateResponseMissingResultAndError_ShouldThrowInvalidOperationException()
     {

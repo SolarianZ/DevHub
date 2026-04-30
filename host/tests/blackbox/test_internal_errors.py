@@ -172,6 +172,47 @@ class TestInternalErrors(unittest.TestCase):
 
         return result
 
+    def test_invalid_request_numeric_id_must_be_supported_integer(self):
+        """测试 numeric JSON-RPC id 仅允许受支持整数"""
+        result = TestResult("测试 numeric JSON-RPC id 仅允许受支持整数")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "id 为小数", "id": 1.5},
+                {"name": "id 超出 Int64 上界", "id": 9223372036854775808},
+            ]
+
+            for case in cases:
+                status_code, response = client.post_json({
+                    "jsonrpc": "2.0",
+                    "id": case["id"],
+                    "method": "hub.ping",
+                    "params": {},
+                })
+                if not RpcAssertions.expect_http_status(result, status_code):
+                    return result
+
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    expected_code=-32600,
+                    expected_message="invalid_request",
+                    expected_id=None,
+                ):
+                    return result
+
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_request")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_internal_error_handling(self):
         """测试潜在内部错误场景后服务可继续工作"""
         result = TestResult("测试内部错误场景后服务可继续工作")
@@ -398,6 +439,7 @@ class TestInternalErrors(unittest.TestCase):
         tests = [
             self.test_parse_error_invalid_json,
             self.test_invalid_request_envelope,
+            self.test_invalid_request_numeric_id_must_be_supported_integer,
             self.test_internal_error_handling,
             self.test_server_recovery_after_error,
             self.test_concurrent_invalid_requests,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from devhub_sdk import (
@@ -357,6 +359,39 @@ def test_register_instance_builder_should_place_password_at_top_level() -> None:
     assert payload["password"] == "secret-1"
     assert payload["instance"]["instanceId"] == "inst-1"
     assert "password" not in payload["instance"]
+    assert "instanceSessionToken" not in payload["instance"]
+
+
+def test_register_instance_builder_when_instance_payload_carries_password_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"instance\.password"):
+        build_register_instance_params(
+            SimpleNamespace(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+                meta=None,
+                password="secret-1",
+            ),
+            "secret-1",
+        )
+
+
+def test_register_instance_builder_when_instance_payload_carries_instance_session_token_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"instance\.instance_session_token"):
+        build_register_instance_params(
+            SimpleNamespace(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+                meta=None,
+                instance_session_token="token-1",
+            ),
+            "secret-1",
+        )
 
 
 def test_register_instance_builder_when_meta_is_not_object_should_raise() -> None:

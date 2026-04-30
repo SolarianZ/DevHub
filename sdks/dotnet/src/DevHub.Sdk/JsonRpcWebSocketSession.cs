@@ -614,17 +614,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
     private static string ReadResponseId(JsonElement root)
     {
-        if (!root.TryGetProperty("id", out var idElement))
-        {
-            throw new InvalidOperationException("WebSocket JSON-RPC 响应缺少 id 字段。");
-        }
-
-        return idElement.ValueKind switch
-        {
-            JsonValueKind.String => idElement.GetString() ?? string.Empty,
-            JsonValueKind.Number => idElement.GetRawText(),
-            _ => throw new InvalidOperationException("WebSocket JSON-RPC 响应的 id 类型非法。")
-        };
+        return JsonRpcIdReader.ReadRequiredResponseId(root, "WebSocket JSON-RPC 响应");
     }
 
     private void MarkPendingRequestAsAbandoned(string requestId, string method, object? parameters)

@@ -116,6 +116,24 @@ public class TransportValidationImplTests
     }
 
     [Fact]
+    public void Impl_6_1_TryBuildRpcRequest_OutOfRangeIntegerId_ShouldReturnInvalidRequestWithNullId()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": 9223372036854775808,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
+
+        Assert.False(ok);
+        Assert.Null(request);
+        AssertError(errorResponse, -32600, "invalid_request", null);
+    }
+
+    [Fact]
     public void Impl_6_1_TryBuildRpcRequest_ValidEnvelope_ShouldReturnRpcRequest()
     {
         var root = ParseJsonElement("""

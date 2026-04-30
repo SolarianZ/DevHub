@@ -123,6 +123,8 @@ export interface AppInstanceRegistration {
   pid: number;
   invoke: InvokeCapability;
   meta?: JsonObject;
+  password?: never;
+  instanceSessionToken?: never;
 }
 
 export interface LaunchRequest {

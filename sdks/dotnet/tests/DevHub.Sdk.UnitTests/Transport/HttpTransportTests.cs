@@ -295,6 +295,34 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Contains("id", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("1.5")]
+    [InlineData("9223372036854775808")]
+    public async Task HttpTransport_WhenResponseIdUsesUnsupportedNumericShape_ShouldThrowInvalidOperationException(string requestIdLiteral)
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                $"{{\"jsonrpc\":\"2.0\",\"id\":{requestIdLiteral},\"result\":{{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\"}}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "client-a",
+                DataDir = dataDir
+            },
+            handler,
+            () => requestIdLiteral);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Contains("id", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Int64", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task HttpTransport_WhenResponseContainsResultAndError_ShouldThrowInvalidOperationException()
     {

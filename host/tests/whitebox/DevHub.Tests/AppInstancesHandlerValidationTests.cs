@@ -312,6 +312,75 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenInstancePayloadContainsPassword_ShouldReturnInvalidParamsAndNotCreateState()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-nested-password",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-password",
+                appId = "app.validation",
+                scope = ScopeContract.Global,
+                pid = 104,
+                invoke = new { poll = true, respond = true },
+                password = "nested-password"
+            }))
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        Assert.Null(appRegistry.GetInstance("inst-nested-password"));
+    }
+
+    [Fact]
+    public async Task Impl_RegisterInstance_WhenInstancePayloadContainsInstanceSessionToken_ShouldReturnInvalidParamsAndKeepStoredState()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var firstRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-before-nested-token",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-token",
+                appId = "app.original",
+                scope = ScopeContract.Global,
+                pid = 105,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+        Assert.Null(firstRegister.Error);
+
+        var secondRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-nested-token",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-token",
+                appId = "app.updated",
+                scope = "workspace-updated",
+                pid = 106,
+                invoke = new { poll = true, respond = true },
+                instanceSessionToken = "nested-token"
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+
+        AssertError(secondRegister, -32602, "invalid_params");
+        var stored = appRegistry.GetInstance("inst-nested-token");
+        Assert.NotNull(stored);
+        Assert.Equal("app.original", stored!.AppId);
+        Assert.Equal(ScopeContract.Global, stored.Scope);
+        Assert.Equal(105, stored.Pid);
+    }
+
+    [Fact]
     public async Task Impl_Heartbeat_WhenUnknownInstance_ShouldReturnInstanceNotFound()
     {
         var handler = CreateHandler();

@@ -465,6 +465,18 @@ public class AppInstancesHandler : IRpcHandler
         instance = null!;
         errorData = null;
 
+        if (instanceElement.TryGetProperty("password", out _))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: params.instance 不得包含 password, RequestId: {RequestId}", requestId);
+            return false;
+        }
+
+        if (instanceElement.TryGetProperty("instanceSessionToken", out _))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: params.instance 不得包含 instanceSessionToken, RequestId: {RequestId}", requestId);
+            return false;
+        }
+
         if (!instanceElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
         {
             _logger.LogWarning("hub.apps.registerInstance参数无效: 缺少 instanceId 或类型错误, RequestId: {RequestId}", requestId);

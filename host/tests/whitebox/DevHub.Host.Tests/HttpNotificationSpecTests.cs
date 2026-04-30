@@ -186,6 +186,7 @@ public class HttpNotificationSpecTests : IDisposable
     [Trait("SpecRef", "6.1")]
     [InlineData("7", 7L)]
     [InlineData("9007199254740991", 9007199254740991L)]
+    [InlineData("9223372036854775807", 9223372036854775807L)]
     public async Task Spec_6_1_HttpRequest_WhenIdIsSupportedInteger_ShouldKeepIdCorrelation(string requestIdLiteral, long expectedId)
     {
         using var harness = CreateHarness();
@@ -210,6 +211,24 @@ public class HttpNotificationSpecTests : IDisposable
             {"jsonrpc":"2.0","id":9007199254740993.1,"method":"hub.ping","params":{}}
             """;
         using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-lossy-id-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.1")]
+    public async Task Spec_6_1_HttpRequest_WhenNumericIdExceedsInt64_ShouldReturnInvalidRequestWithNullId()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":9223372036854775808,"method":"hub.ping","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-out-of-range-id-client");
         var root = responseDocument.RootElement;
 
         Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);

@@ -93,6 +93,10 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
 
     if instance is None:
         raise ValueError("instance 不能为空。")
+    if getattr(instance, "password", _MISSING) is not _MISSING:
+        raise ValueError("instance.password 不得出现。")
+    if getattr(instance, "instance_session_token", _MISSING) is not _MISSING:
+        raise ValueError("instance.instance_session_token 不得出现。")
 
     normalized_password = require_non_empty_string(password, "password")
     instance_id = require_instance_id(instance.instance_id, "instance.instance_id")

@@ -411,8 +411,30 @@ public sealed class InvocationRequestBuilderTests
         Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
         Assert.Equal(string.Empty, registerDocument.RootElement.GetProperty("instance").GetProperty("scope").GetString());
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
+        Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("instanceSessionToken", out _));
         Assert.Equal("session-1", heartbeatDocument.RootElement.GetProperty("instanceSessionToken").GetString());
         Assert.Equal("session-1", unregisterDocument.RootElement.GetProperty("instanceSessionToken").GetString());
+    }
+
+    [Fact]
+    public void AppInstanceRegistration_ShouldNotSerializeOwnershipCredentials()
+    {
+        var registration = new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "test.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        };
+
+        using var document = Serialize(registration);
+        Assert.False(document.RootElement.TryGetProperty("password", out _));
+        Assert.False(document.RootElement.TryGetProperty("instanceSessionToken", out _));
     }
 
     [Fact]

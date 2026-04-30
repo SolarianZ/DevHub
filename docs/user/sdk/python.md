@@ -116,6 +116,10 @@ client.delete_definition(definition.app_id, definition.scope)
 
 `get_instance(...)` 按精确 `instance_id` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则透传 `instance_not_found`。
 
+内置 HTTP transport 与 WebSocket session 始终生成 string 类型的 JSON-RPC `id`。若自定义 transport / session 直接处理原始 JSON-RPC 信封，只应接受 string `id` 或处于 `Int64` 范围内的整数 numeric `id`；跨语言场景继续优先使用 string `id`。
+
+`register_instance(...)` 的第一个参数固定为 `AppInstanceRegistration`。若已持有 `register_instance(...)` / `get_instance(...)` 返回的 `AppInstance`，应重新构造 `AppInstanceRegistration` 后再注册；返回的 `instance_session_token` 只用于 `heartbeat`、`unregister_instance`、`poll`、`respond` 等后续受保护调用。
+
 ## 7. WebSocket 事件流约定
 
 ```python

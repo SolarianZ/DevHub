@@ -301,6 +301,48 @@ async def test_ws_session_when_response_id_is_unknown_should_fault_session() -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response_id", "message"),
+    [
+        (1.5, "Int64 范围内整数"),
+        (9223372036854775808, "Int64 范围"),
+    ],
+)
+async def test_ws_session_when_numeric_response_id_violates_protocol_should_fault_session(
+    response_id,
+    message: str,
+) -> None:
+    websocket = FakeWebSocket()
+
+    async def connect(*_args, **_kwargs) -> FakeWebSocket:
+        return websocket
+
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=1),
+        connect=connect,
+    )
+
+    request_task = asyncio.create_task(session.send_request("hub.ping", None))
+    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+
+    await websocket.emit_json(
+        {
+            "jsonrpc": "2.0",
+            "id": response_id,
+            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match=message):
+        await request_task
+    with pytest.raises(RuntimeError, match="事件流已终止"):
+        await session.send_request("hub.ping", None)
+
+    await session.close()
+
+
+@pytest.mark.asyncio
 async def test_ws_session_should_enforce_single_active_reader_until_reader_is_closed() -> None:
     websocket = FakeWebSocket()
 

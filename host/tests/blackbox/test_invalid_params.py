@@ -7,7 +7,7 @@ import os
 import unittest
 
 
-from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.blackbox.test_base import DEFAULT_INSTANCE_PASSWORD, DiscoveryService, RpcClient, TestResult, RpcAssertions
 
 
 class TestInvalidParams(unittest.TestCase):
@@ -168,6 +168,70 @@ class TestInvalidParams(unittest.TestCase):
             )
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id="missing-password-register"):
                 return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_hub_apps_register_instance_rejects_credentials_inside_instance(self):
+        """测试 hub.apps.registerInstance 拒绝 instance 内的凭据字段"""
+        result = TestResult("测试 hub.apps.registerInstance 拒绝 instance 内的凭据字段")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {
+                    "name": "instance.password",
+                    "request_id": "nested-password-register",
+                    "payload": {
+                        "password": DEFAULT_INSTANCE_PASSWORD,
+                        "instance": {
+                            "instanceId": "nested-password-register-instance",
+                            "appId": "nested.password.register.app",
+                            "scope": "",
+                            "pid": 12345,
+                            "invoke": {"poll": True, "respond": True},
+                            "password": "nested-password",
+                        },
+                    },
+                },
+                {
+                    "name": "instance.instanceSessionToken",
+                    "request_id": "nested-token-register",
+                    "payload": {
+                        "password": DEFAULT_INSTANCE_PASSWORD,
+                        "instance": {
+                            "instanceId": "nested-token-register-instance",
+                            "appId": "nested.token.register.app",
+                            "scope": "",
+                            "pid": 12346,
+                            "invoke": {"poll": True, "respond": True},
+                            "instanceSessionToken": "nested-token",
+                        },
+                    },
+                },
+            ]
+
+            for case in cases:
+                response = client.call(
+                    "hub.apps.registerInstance",
+                    case["payload"],
+                    request_id=case["request_id"],
+                )
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    -32602,
+                    "invalid_params",
+                    expected_id=case["request_id"],
+                ):
+                    return result
+
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_params")
 
             result.mark_success()
         except Exception as e:
@@ -941,6 +1005,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_get_instance_invalid_params(),
             self.test_hub_apps_register_instance_missing_instance(),
             self.test_hub_apps_register_instance_missing_password(),
+            self.test_hub_apps_register_instance_rejects_credentials_inside_instance(),
             self.test_hub_apps_register_instance_missing_required_fields(),
             self.test_hub_apps_register_instance_invalid_pid(),
             self.test_hub_apps_register_instance_invalid_instanceid(),

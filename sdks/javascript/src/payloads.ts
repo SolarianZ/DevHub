@@ -61,6 +61,18 @@ export function buildRegisterInstanceParams(
     throw new Error("instance cannot be empty.");
   }
 
+  if (typeof instance !== "object" || Array.isArray(instance)) {
+    throw new Error("instance must be an object.");
+  }
+
+  if ("password" in instance) {
+    throw new Error("instance.password must not be present.");
+  }
+
+  if ("instanceSessionToken" in instance) {
+    throw new Error("instance.instanceSessionToken must not be present.");
+  }
+
   const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
   const appId = ensureAppId(instance.appId, "appId");
   const scope = ensureScopedString(instance.scope, "scope");

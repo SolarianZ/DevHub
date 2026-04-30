@@ -31,6 +31,8 @@
 - 显式 `scope = "Workspace-A.v2"`
 - `instanceId = "NODE_01.alpha"` / `NODE_01.beta`
 
+JSON-RPC request `id` 的示例默认优先使用字符串，避免跨语言 numeric 精度差异；如果接入方自行改用 numeric `id`，该值必须是有符号 64 位整数范围内的整数，Hub 会拒绝小数或超出该范围的 numeric `id`。
+
 ## 3. 动态读取规则
 
 以下地址、凭据与运行时返回值由运行中的 Hub 决定；示例中的固定字面值仅用于说明报文形状：

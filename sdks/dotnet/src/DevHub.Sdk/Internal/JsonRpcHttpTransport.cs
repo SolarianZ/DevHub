@@ -202,17 +202,7 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
 
     private static string ReadResponseId(JsonElement root)
     {
-        if (!root.TryGetProperty("id", out var idElement))
-        {
-            throw new InvalidOperationException("JSON-RPC 响应缺少 id 字段。");
-        }
-
-        return idElement.ValueKind switch
-        {
-            JsonValueKind.String => idElement.GetString() ?? string.Empty,
-            JsonValueKind.Number => idElement.GetRawText(),
-            _ => throw new InvalidOperationException("JSON-RPC 响应的 id 类型非法。")
-        };
+        return JsonRpcIdReader.ReadRequiredResponseId(root, "JSON-RPC 响应");
     }
 
     private static void ThrowRpcException(JsonElement errorElement, string requestId)

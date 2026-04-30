@@ -43,6 +43,7 @@ dotnet pack sdks/dotnet/src/DevHub.Sdk.DependencyInjection/DevHub.Sdk.Dependency
 - 公开扩展点：`runtime resolver`、按客户端粒度提供 `HttpClient` 的窄 seam、可选 `ILoggerFactory`；`AddDevHubSdk` 与客户端工厂位于 companion package。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
 - 统一错误模型：`DevHubRpcException`；协议 `error.data` 通过 `ErrorData` 暴露，非对象响应会被视为非法 JSON-RPC 包。
+- 请求标识边界：SDK 默认生成 string 形式的 JSON-RPC `id`；若观察或桥接原始协议载荷，numeric `id` 仅以 Host 可无损处理的 `Int64` 整数为合法范围，小数或越界数值会被 SDK 视为非法响应。
 
 ## 4. 运行时发现
 
@@ -212,6 +213,7 @@ var token = registered.InstanceSessionToken;
 ```
 
 - `RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，其中 `Instance` 为 `AppInstance` 快照，`InstanceSessionToken` 为实例所有权凭据。
+- `password` 只作为 `RegisterInstanceAsync(..., password)` 的独立参数出现；`AppInstanceRegistration`、`AppInstance` 与 `app.instance.*` 事件载荷都不包含 `password` 或 `instanceSessionToken`。
 - `AppInstance`、`GetInstanceAsync(...)`、`ListInstancesAsync(...)` 与 `app.instance.*` 事件载荷都不包含 `instanceSessionToken`。
 - `HeartbeatAsync(...)`、`UnregisterInstanceAsync(...)`、`PollAsync(...)` 与 `RespondAsync(...)` 需要显式使用 `RegisterInstanceResult.InstanceSessionToken`。
 

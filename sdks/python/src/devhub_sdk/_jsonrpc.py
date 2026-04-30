@@ -5,6 +5,9 @@ from typing import Any, Mapping
 from ._validation import ensure_json_object
 from .exceptions import DevHubRpcException
 
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
+
 
 def validate_response_envelope(root: Any, request_id: str) -> dict[str, Any]:
     """校验 JSON-RPC 响应并返回 `result` 对象。"""
@@ -58,9 +61,20 @@ def read_response_id(root: Mapping[str, Any]) -> str:
 
     if "id" not in root:
         raise RuntimeError("JSON-RPC 响应缺少 id 字段。")
-    response_id = root["id"]
-    if isinstance(response_id, str):
-        return response_id
-    if isinstance(response_id, int | float) and not isinstance(response_id, bool):
-        return str(response_id)
-    raise RuntimeError("JSON-RPC 响应的 id 类型非法。")
+    return normalize_jsonrpc_id(root["id"], context="JSON-RPC 响应的 id")
+
+
+def normalize_jsonrpc_id(value: Any, *, context: str) -> str:
+    """读取并校验符合 DevHub 协议边界的 JSON-RPC id。"""
+
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        raise RuntimeError(f"{context} 类型非法。")
+    if isinstance(value, int):
+        if _INT64_MIN <= value <= _INT64_MAX:
+            return str(value)
+        raise RuntimeError(f"{context} 超出 Int64 范围。")
+    if isinstance(value, float):
+        raise RuntimeError(f"{context} 必须为 Int64 范围内整数。")
+    raise RuntimeError(f"{context} 类型非法。")

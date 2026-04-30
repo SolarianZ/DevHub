@@ -1,7 +1,9 @@
 import type {
   AppDefinition,
+  AppInstanceRegistration,
   Invocation,
   InvokeRequest,
+  RegisteredAppInstance,
   RespondRequest,
   VersionCompatibilityResult,
   VersionCompatibilityStatus
@@ -22,6 +24,17 @@ const invokeRequest: InvokeRequest = {
   method: "sample.method",
   target: {
     scope: ""
+  }
+};
+
+const instanceRegistration: AppInstanceRegistration = {
+  instanceId: "inst-1",
+  appId: "sample.app",
+  scope: "",
+  pid: 12345,
+  invoke: {
+    poll: true,
+    respond: true
   }
 };
 
@@ -69,6 +82,13 @@ const unknownCompatibilityResult: VersionCompatibilityResult = {
   sdkVersion: SDK_VERSION,
   hostVersion: null,
   status: "unknown"
+};
+
+const registeredInstance: RegisteredAppInstance = {
+  ...instanceRegistration,
+  registeredAtUtc: new Date("2026-03-15T00:00:00Z"),
+  lastSeenUtc: new Date("2026-03-15T00:00:00Z"),
+  instanceSessionToken: "session-1"
 };
 
 // @ts-expect-error InvokeRequest.target is required.
@@ -122,17 +142,37 @@ const invalidRespondPayload: RespondRequest = {
 // @ts-expect-error VersionCompatibilityStatus must use a known literal.
 const invalidCompatibilityStatus: VersionCompatibilityStatus = "outdated";
 
+const invalidRegistrationWithPassword: AppInstanceRegistration = {
+  ...instanceRegistration,
+  // @ts-expect-error AppInstanceRegistration forbids password inside the instance payload.
+  password: "secret-1"
+};
+
+const invalidRegistrationWithInstanceSessionToken: AppInstanceRegistration = {
+  ...instanceRegistration,
+  // @ts-expect-error AppInstanceRegistration forbids instanceSessionToken inside the instance payload.
+  instanceSessionToken: "session-1"
+};
+
+// @ts-expect-error RegisteredAppInstance is not assignable to AppInstanceRegistration.
+const invalidRegistrationFromRegistered: AppInstanceRegistration = registeredInstance;
+
 void definition;
 void invokeRequest;
+void instanceRegistration;
 void invocation;
 void respondWithValue;
 void respondWithError;
 void compatibilityStatus;
 void compatibilityResult;
 void unknownCompatibilityResult;
+void registeredInstance;
 void missingInvokeTarget;
 void missingLaunchExePath;
 void missingInvocationTarget;
 void missingRespondPayload;
 void invalidRespondPayload;
 void invalidCompatibilityStatus;
+void invalidRegistrationWithPassword;
+void invalidRegistrationWithInstanceSessionToken;
+void invalidRegistrationFromRegistered;
