@@ -95,6 +95,75 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpRequest_WhenAuthorizationMissing_ShouldPreserveRequestId()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-missing-token","method":"hub.ping","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(
+            harness,
+            requestJson,
+            "http-request-missing-token-client",
+            configureRequest: context => context.Request.Headers.Remove("Authorization"));
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-missing-token", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32001, error.GetProperty("code").GetInt32());
+        Assert.Equal("unauthorized", error.GetProperty("message").GetString());
+        Assert.Equal("missing_token", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpRequest_WhenProtocolInvalid_ShouldPreserveRequestId()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-invalid-protocol","method":"hub.ping","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(
+            harness,
+            requestJson,
+            "http-request-invalid-protocol-client",
+            configureRequest: context => context.Request.Headers["X-DevHub-Protocol"] = "2");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-invalid-protocol", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32099, error.GetProperty("code").GetInt32());
+        Assert.Equal("not_supported", error.GetProperty("message").GetString());
+        Assert.Equal("mismatch", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.1")]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_1_And_3_2_HttpRequest_WhenIdInvalidAndAuthorizationMissing_ShouldUseNullId()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":null,"method":"hub.ping","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(
+            harness,
+            requestJson,
+            "http-invalid-id-missing-token-client",
+            configureRequest: context => context.Request.Headers.Remove("Authorization"));
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32001, error.GetProperty("code").GetInt32());
+        Assert.Equal("unauthorized", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
     {

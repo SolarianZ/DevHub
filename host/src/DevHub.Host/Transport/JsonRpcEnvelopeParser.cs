@@ -10,6 +10,17 @@ namespace DevHub.Host.Transport;
 internal static class JsonRpcEnvelopeParser
 {
     /// <summary>
+    /// 尝试提取可安全回传到 JSON-RPC 错误响应的请求 ID。
+    /// </summary>
+    internal static bool TryExtractResponseId(JsonElement root, out object? requestId)
+    {
+        requestId = null;
+
+        return root.ValueKind == JsonValueKind.Object
+            && TryExtractRequestId(root, out requestId);
+    }
+
+    /// <summary>
     /// 将 JSON 根节点解析为 JSON-RPC 请求模型。
     /// </summary>
     internal static bool TryParse(JsonElement root, out JsonRpcRequest request, out JsonRpcResponse errorResponse)

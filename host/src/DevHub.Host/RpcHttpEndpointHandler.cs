@@ -62,29 +62,23 @@ public class RpcHttpEndpointHandler
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
             clientId = clientIdValue;
 
-            var requestHeaders = request.Headers.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value.ToString(),
-                StringComparer.OrdinalIgnoreCase);
-            if (!HttpTransportRequestValidator.TryValidate(
-                    request.ContentType,
-                    requestHeaders,
-                    _runtimeArtifactManager.GetToken,
-                    requestId: null,
-                    out var transportErrorResponse,
-                    out var validatedClientId,
-                    out var validatedClientSessionId,
-                    _logger))
-            {
-                _logger.LogWarning("HTTP 传输层校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                    clientId, transportErrorResponse.Error?.Code, transportErrorResponse.Error?.Message);
-                return FinalizeResponse(Results.Json(transportErrorResponse, JsonOptions));
-            }
-
             using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
             var body = await reader.ReadToEndAsync(cancellationToken);
 
             _logger.LogDebug("收到RPC请求，客户端ID: {ClientId}，请求体长度: {BodyLength}", clientId, body.Length);
+
+            if (!HttpTransportRequestValidator.TryValidateContentType(
+                    request.ContentType,
+                    requestId: null,
+                    out var contentTypeErrorResponse))
+            {
+                _logger.LogWarning(
+                    "HTTP Content-Type 校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    clientId,
+                    contentTypeErrorResponse.Error?.Code,
+                    contentTypeErrorResponse.Error?.Message);
+                return FinalizeResponse(Results.Json(contentTypeErrorResponse, JsonOptions));
+            }
 
             JsonDocument requestDocument;
             try
@@ -110,6 +104,30 @@ public class RpcHttpEndpointHandler
                 {
                     _logger.LogWarning("收到非对象 JSON-RPC 根节点，ClientId: {ClientId}", clientId);
                     return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions));
+                }
+
+                if (JsonRpcEnvelopeParser.TryExtractResponseId(root, out var extractedRequestId))
+                {
+                    requestId = extractedRequestId;
+                }
+
+                var requestHeaders = request.Headers.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value.ToString(),
+                    StringComparer.OrdinalIgnoreCase);
+                if (!HttpTransportRequestValidator.TryValidate(
+                        request.ContentType,
+                        requestHeaders,
+                        _runtimeArtifactManager.GetToken,
+                        requestId,
+                        out var transportErrorResponse,
+                        out var validatedClientId,
+                        out var validatedClientSessionId,
+                        _logger))
+                {
+                    _logger.LogWarning("HTTP 传输层校验失败，ClientId: {ClientId}, RequestId: {RequestId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                        clientId, requestId, transportErrorResponse.Error?.Code, transportErrorResponse.Error?.Message);
+                    return FinalizeResponse(Results.Json(transportErrorResponse, JsonOptions));
                 }
 
                 if (!JsonRpcEnvelopeParser.TryParse(root, out var rpcRequest, out var requestErrorResponse))
