@@ -18,6 +18,7 @@ describe("definition-form helpers", () => {
     form.enableEvents = true;
     form.enableLaunch = true;
     form.launchExePath = " /tmp/devhub ";
+    form.launchArgs = "--app\n{appId}\n\n";
     form.launchArgsTemplate = "   ";
 
     expect(definitionFormToModel(form)).toEqual<AppDefinition>({
@@ -30,6 +31,29 @@ describe("definition-form helpers", () => {
       },
       launch: {
         exePath: "/tmp/devhub",
+        args: ["--app", "{appId}"],
+      },
+    });
+  });
+
+  it("allows launch configuration without exePath and prefers structured args over argsTemplate", () => {
+    const form = createEmptyDefinitionForm();
+    form.appId = "demo.app";
+    form.scope = "";
+    form.displayName = "Demo App";
+    form.enableLaunch = true;
+    form.launchArgs = "--label=Workspace A\n--scope\n{scopeOrGlobal}";
+    form.launchArgsTemplate = "--legacy {scopeOrGlobal}";
+
+    expect(definitionFormToModel(form)).toEqual<AppDefinition>({
+      appId: "demo.app",
+      scope: "",
+      displayName: "Demo App",
+      capabilities: {
+        rpc: true,
+      },
+      launch: {
+        args: ["--label=Workspace A", "--scope", "{scopeOrGlobal}"],
       },
     });
   });
@@ -61,7 +85,7 @@ describe("definition-form helpers", () => {
         events: true,
       },
       launch: {
-        exePath: "/Applications/DevHub.Host",
+        args: ["--app", "{appId}"],
         argsTemplate: "--headless",
         workingDirectory: "/tmp",
         dedupeKeyTemplate: "demo",
@@ -76,7 +100,8 @@ describe("definition-form helpers", () => {
       enableRpc: false,
       enableEvents: true,
       enableLaunch: true,
-      launchExePath: "/Applications/DevHub.Host",
+      launchExePath: "",
+      launchArgs: "--app\n{appId}",
       launchArgsTemplate: "--headless",
       launchWorkingDirectory: "/tmp",
       launchDedupeKeyTemplate: "demo",

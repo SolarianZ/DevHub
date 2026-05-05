@@ -97,6 +97,13 @@ public sealed class LaunchConfiguration
     public string? ExePath { get; set; }
 
     /// <summary>
+    /// 结构化启动参数。
+    /// </summary>
+    [JsonPropertyName("args")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? Args { get; set; }
+
+    /// <summary>
     /// 参数模板。
     /// </summary>
     [JsonPropertyName("argsTemplate")]

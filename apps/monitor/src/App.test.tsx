@@ -2,8 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import {
   APP_DEFINITION_UPSERTED,
+  APP_INSTANCE_REGISTERED,
   DevHubRpcError,
   DevHubRpcErrorCode,
+  INVOCATION_COMPLETED,
   type AppDefinition,
   type AppInstance,
   type DefinitionValidationResult,
@@ -487,6 +489,10 @@ describe("Monitor App", () => {
       "app.definition.deleted",
       "app.instance.registered",
       "app.instance.unregistered",
+      "invocation.queued",
+      "invocation.delivered",
+      "invocation.completed",
+      "invocation.failed",
     ]);
 
     await waitFor(() => {
@@ -919,6 +925,73 @@ describe("Monitor App", () => {
     await screen.findByRole("heading", { name: "主页" });
     screen.getByText("正在搜索 DevHub Host");
     expect(screen.queryByRole("button", { name: "重新扫描" })).toBeNull();
+  });
+
+  it("treats instance events without scope as protocol failures and starts rediscovery", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([]),
+      listInstances: vi.fn().mockResolvedValue([]),
+    });
+    const eventsClient = createEventsClient({
+      readEvents: vi.fn().mockReturnValue(createSingleEventThenPendingStream({
+        type: APP_INSTANCE_REGISTERED,
+        payload: {
+          appId: "demo.app",
+          instanceId: "instance-1",
+        },
+      })),
+    });
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(resumeDiscoveryMock).toHaveBeenCalledWith("host_session_terminated");
+    });
+  });
+
+  it("refreshes instance inventory when invocation lifecycle events arrive", async () => {
+    const firstInstance = createInstance({
+      instanceId: "instance-1",
+    });
+    const refreshedInstance = createInstance({
+      instanceId: "instance-2",
+    });
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn()
+        .mockResolvedValueOnce([firstInstance])
+        .mockResolvedValueOnce([refreshedInstance]),
+    });
+    const eventsClient = createEventsClient({
+      readEvents: vi.fn().mockReturnValue(createSingleEventThenPendingStream({
+        type: INVOCATION_COMPLETED,
+        payload: {
+          invocationId: "invk-1",
+          appId: "demo.app",
+          target: {
+            scope: "",
+          },
+          instanceId: "instance-1",
+        },
+      })),
+    });
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(hostClient.listInstances).toHaveBeenCalledTimes(2);
+    });
+
+    expect(hostClient.listInstances).toHaveBeenLastCalledWith({
+      scope: null,
+      includeOffline: true,
+    });
   });
 
   it("ignores stale compatibility results after a newer session becomes active", async () => {

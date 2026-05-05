@@ -1083,7 +1083,7 @@ class RpcClient:
 
         return self.call_with_timeout("hub.invoke.poll", params, timeout_sec=timeout_sec)
 
-    def respond_value(self, instance_id, invocation_id, value, instance_session_token=None):
+    def respond_value(self, instance_id, invocation_id, value, instance_session_token=None, lease_token=None):
         """回传 value。"""
         params = {
             "instanceId": instance_id,
@@ -1092,10 +1092,12 @@ class RpcClient:
         }
         if instance_session_token is not None:
             params["instanceSessionToken"] = instance_session_token
+        if lease_token is not None:
+            params["leaseToken"] = lease_token
 
         return self.call("hub.invoke.respond", params)
 
-    def respond_error(self, instance_id, invocation_id, error, instance_session_token=None):
+    def respond_error(self, instance_id, invocation_id, error, instance_session_token=None, lease_token=None):
         """回传 error。"""
         params = {
             "instanceId": instance_id,
@@ -1104,6 +1106,8 @@ class RpcClient:
         }
         if instance_session_token is not None:
             params["instanceSessionToken"] = instance_session_token
+        if lease_token is not None:
+            params["leaseToken"] = lease_token
 
         return self.call("hub.invoke.respond", params)
 

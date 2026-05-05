@@ -11,6 +11,7 @@ export interface DefinitionFormState {
   enableEvents: boolean;
   enableLaunch: boolean;
   launchExePath: string;
+  launchArgs: string;
   launchArgsTemplate: string;
   launchWorkingDirectory: string;
   launchDedupeKeyTemplate: string;
@@ -28,6 +29,7 @@ export function createEmptyDefinitionForm(): DefinitionFormState {
     enableEvents: false,
     enableLaunch: false,
     launchExePath: "",
+    launchArgs: "",
     launchArgsTemplate: "",
     launchWorkingDirectory: "",
     launchDedupeKeyTemplate: "",
@@ -44,6 +46,7 @@ export function definitionToForm(definition: AppDefinition): DefinitionFormState
     enableEvents: definition.capabilities?.events ?? false,
     enableLaunch: definition.launch !== undefined,
     launchExePath: definition.launch?.exePath ?? "",
+    launchArgs: definition.launch?.args?.join("\n") ?? "",
     launchArgsTemplate: definition.launch?.argsTemplate ?? "",
     launchWorkingDirectory: definition.launch?.workingDirectory ?? "",
     launchDedupeKeyTemplate: definition.launch?.dedupeKeyTemplate ?? "",
@@ -73,12 +76,18 @@ export function definitionFormToModel(form: DefinitionFormState): AppDefinition 
   }
 
   if (form.enableLaunch) {
-    definition.launch = {
-      exePath: form.launchExePath.trim(),
-    };
+    definition.launch = {};
 
+    const exePath = normalizeOptionalText(form.launchExePath);
+    if (exePath) {
+      definition.launch.exePath = exePath;
+    }
+
+    const args = parseLaunchArgs(form.launchArgs);
     const argsTemplate = normalizeOptionalText(form.launchArgsTemplate);
-    if (argsTemplate) {
+    if (args.length > 0) {
+      definition.launch.args = args;
+    } else if (argsTemplate) {
       definition.launch.argsTemplate = argsTemplate;
     }
 
@@ -137,6 +146,12 @@ export function mapValidationIssues(errors: readonly ValidationIssue[]): Definit
 function normalizeOptionalText(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function parseLaunchArgs(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .filter((item) => item.trim().length > 0);
 }
 
 function createValidationIssue(path: string, code: string, message: string): ValidationIssue {

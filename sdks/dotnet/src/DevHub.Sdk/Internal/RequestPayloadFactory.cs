@@ -237,6 +237,7 @@ internal static class RequestPayloadFactory
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.LeaseToken);
 
         var hasValue = request.HasValue;
         var hasError = request.Error is not null;
@@ -249,7 +250,8 @@ internal static class RequestPayloadFactory
         {
             ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(request.InstanceId, nameof(request.InstanceId)),
             ["instanceSessionToken"] = request.InstanceSessionToken,
-            ["invocationId"] = request.InvocationId
+            ["invocationId"] = request.InvocationId,
+            ["leaseToken"] = request.LeaseToken
         };
 
         if (hasValue)

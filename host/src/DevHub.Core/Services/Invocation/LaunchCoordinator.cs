@@ -166,8 +166,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                     new
                     {
                         reason = "process_start_failed"
-                    });
+                });
             }
+        }
+        catch (FormatException ex)
+        {
+            RemoveLaunchRecordById(launchId);
+            _logger.LogWarning(ex, "启动参数模板解析失败，AppId: {AppId}, Scope: {Scope}", appId, scope);
+            return LaunchOperationResult.CreateError(
+                -32602,
+                "invalid_params",
+                new
+                {
+                    reason = "invalid_launch_args_template"
+                });
         }
         catch (Exception ex)
         {
@@ -295,12 +307,10 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         string httpBaseUrl,
         string launchId)
     {
-        var effectiveLaunchConfig = BuildEffectiveLaunchConfiguration(launchConfig, launchId);
-        var arguments = RenderTemplate(
-            effectiveLaunchConfig.ArgsTemplate,
-            appId,
-            scope,
-            httpBaseUrl);
+        var effectiveLaunchConfig = BuildEffectiveLaunchConfiguration(launchConfig, launchId, appId, scope, httpBaseUrl);
+        var arguments = launchConfig.Args is not null
+            ? null
+            : RenderTemplate(effectiveLaunchConfig.ArgsTemplate, appId, scope, httpBaseUrl);
 
         return _processLauncher.Start(effectiveLaunchConfig, arguments);
     }
@@ -381,6 +391,107 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             .Replace("{httpBaseUrl}", httpBaseUrl, StringComparison.Ordinal);
     }
 
+    private static IReadOnlyList<string> BuildLaunchArgs(
+        LaunchConfiguration launchConfig,
+        string appId,
+        string scope,
+        string httpBaseUrl)
+    {
+        if (launchConfig.Args is not null)
+        {
+            return launchConfig.Args
+                .Select(argument => RenderTemplate(argument, appId, scope, httpBaseUrl) ?? string.Empty)
+                .ToArray();
+        }
+
+        return ParseArgsTemplate(launchConfig.ArgsTemplate, appId, scope, httpBaseUrl);
+    }
+
+    private static IReadOnlyList<string> ParseArgsTemplate(
+        string? argsTemplate,
+        string appId,
+        string scope,
+        string httpBaseUrl)
+    {
+        var rendered = RenderTemplate(argsTemplate, appId, scope, httpBaseUrl);
+        if (string.IsNullOrEmpty(rendered))
+        {
+            return [];
+        }
+
+        var args = new List<string>();
+        var current = new System.Text.StringBuilder();
+        char? quote = null;
+        var escaping = false;
+        var tokenStarted = false;
+
+        foreach (var ch in rendered)
+        {
+            if (escaping)
+            {
+                current.Append(ch);
+                tokenStarted = true;
+                escaping = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaping = true;
+                tokenStarted = true;
+                continue;
+            }
+
+            if (quote.HasValue)
+            {
+                if (ch == quote.Value)
+                {
+                    quote = null;
+                    tokenStarted = true;
+                    continue;
+                }
+
+                current.Append(ch);
+                tokenStarted = true;
+                continue;
+            }
+
+            if (ch is '\'' or '"')
+            {
+                quote = ch;
+                tokenStarted = true;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                if (tokenStarted)
+                {
+                    args.Add(current.ToString());
+                    current.Clear();
+                    tokenStarted = false;
+                }
+
+                continue;
+            }
+
+            current.Append(ch);
+            tokenStarted = true;
+        }
+
+        if (escaping || quote.HasValue)
+        {
+            throw new FormatException("launch argsTemplate has invalid quoting or escaping.");
+        }
+
+        if (tokenStarted)
+        {
+            args.Add(current.ToString());
+        }
+
+        return args;
+    }
+
     private string ResolveDedupeKey(
         AppDefinition definition,
         string appId,
@@ -405,17 +516,24 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             : rendered;
     }
 
-    private LaunchConfiguration BuildEffectiveLaunchConfiguration(LaunchConfiguration launchConfig, string launchId)
+    private LaunchConfiguration BuildEffectiveLaunchConfiguration(
+        LaunchConfiguration launchConfig,
+        string launchId,
+        string appId,
+        string scope,
+        string httpBaseUrl)
     {
         var environmentVariables = launchConfig.EnvironmentVariables is null
             ? new Dictionary<string, string?>(StringComparer.Ordinal)
             : new Dictionary<string, string?>(launchConfig.EnvironmentVariables, StringComparer.Ordinal);
 
         environmentVariables[LaunchIdEnvironmentVariable] = launchId;
+        var args = BuildLaunchArgs(launchConfig, appId, scope, httpBaseUrl);
 
         return new LaunchConfiguration
         {
             ExePath = launchConfig.ExePath,
+            Args = [.. args],
             ArgsTemplate = launchConfig.ArgsTemplate,
             WorkingDirectory = launchConfig.WorkingDirectory,
             DedupeKeyTemplate = launchConfig.DedupeKeyTemplate,

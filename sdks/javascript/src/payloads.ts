@@ -323,6 +323,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
   const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const invocationId = ensureInvocationId(request.invocationId, "invocationId");
+  const leaseToken = ensureRequiredInputString(request.leaseToken, "leaseToken");
 
   const hasValue = request.value !== undefined;
   const hasError = request.error !== undefined;
@@ -333,7 +334,8 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   const payload: Record<string, unknown> = {
     instanceId,
     instanceSessionToken,
-    invocationId
+    invocationId,
+    leaseToken
   };
 
   if (hasValue) {
@@ -394,9 +396,22 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
       throw new Error("definition.launch must be an object.");
     }
 
-    const launchPayload: Record<string, unknown> = {
-      exePath: ensureRequiredInputStringValue(definition.launch.exePath, "definition.launch.exePath")
-    };
+    const launchPayload: Record<string, unknown> = {};
+
+    if (definition.launch.exePath !== undefined) {
+      launchPayload.exePath = ensureRequiredInputStringValue(definition.launch.exePath, "definition.launch.exePath");
+    }
+
+    if (definition.launch.args !== undefined) {
+      if (!Array.isArray(definition.launch.args)) {
+        throw new Error("definition.launch.args must be an array.");
+      }
+
+      launchPayload.args = definition.launch.args.map((item, index) => ensureRequiredInputStringValue(
+        item,
+        `definition.launch.args[${index}]`
+      ));
+    }
 
     if (definition.launch.argsTemplate !== undefined) {
       launchPayload.argsTemplate = ensureRequiredInputStringValue(

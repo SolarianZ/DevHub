@@ -1,4 +1,5 @@
 using DevHub.Core.Services;
+using DevHub.Core.Services.Events;
 using Microsoft.Extensions.Hosting;
 
 namespace DevHub.Host.BackgroundServices;
@@ -11,18 +12,22 @@ public sealed class AppRegistryCleanupBackgroundService : BackgroundService
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(60);
 
     private readonly AppRegistry _appRegistry;
+    private readonly IHubEventPublisher? _eventPublisher;
     private readonly ILogger<AppRegistryCleanupBackgroundService> _logger;
 
     /// <summary>
     /// 初始化实例清理后台服务。
     /// </summary>
     /// <param name="appRegistry">实例注册表。</param>
+    /// <param name="eventPublisher">Hub 事件发布器。</param>
     /// <param name="logger">日志记录器。</param>
     public AppRegistryCleanupBackgroundService(
         AppRegistry appRegistry,
+        IHubEventPublisher? eventPublisher,
         ILogger<AppRegistryCleanupBackgroundService> logger)
     {
         _appRegistry = appRegistry;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -33,7 +38,21 @@ public sealed class AppRegistryCleanupBackgroundService : BackgroundService
     {
         try
         {
-            _appRegistry.CleanupExpiredInstances();
+            var removedInstances = _appRegistry.CleanupExpiredInstances();
+            foreach (var instance in removedInstances)
+            {
+                _eventPublisher?.Publish(new HubEventMessage
+                {
+                    Type = HubEventTypes.AppInstanceUnregistered,
+                    TimeUtc = DateTime.UtcNow,
+                    Payload = new
+                    {
+                        appId = instance.AppId,
+                        instanceId = instance.InstanceId,
+                        scope = instance.Scope
+                    }
+                });
+            }
         }
         catch (Exception ex)
         {

@@ -695,7 +695,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
           events: false
         },
         launch: {
-          exePath: process.execPath
+          exePath: process.execPath,
+          args: ["./app.js", "--scope", "{scope}"]
         }
       }
     });
@@ -711,7 +712,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
           events: false
         },
         launch: {
-          exePath: process.execPath
+          exePath: process.execPath,
+          args: ["./app.js", "--scope", "{scope}"]
         }
       }
     });
@@ -732,7 +734,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
       events: false
     },
     launch: {
-      exePath: process.execPath
+      exePath: process.execPath,
+      args: ["./app.js", "--scope", "{scope}"]
     }
   });
 
@@ -747,6 +750,7 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
     },
     launch: {
       exePath: process.execPath,
+      args: ["./app.js", "--scope", "{scope}"],
       argsTemplate: undefined,
       workingDirectory: undefined,
       dedupeKeyTemplate: undefined
@@ -853,6 +857,7 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
         instanceId: "inst-1",
         instanceSessionToken: "session-1",
         invocationId: "invk-1",
+        leaseToken: "lease-1",
         value: {
           ok: true
         }
@@ -906,6 +911,7 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
     instanceId: "inst-1",
     instanceSessionToken: instance.instanceSessionToken,
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -1422,6 +1428,7 @@ it("poll / respond 应在本地拒绝空 instanceSessionToken", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -1491,19 +1498,43 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
   await expect(client.respond({
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
-    invocationId: "invk-1"
+    invocationId: "invk-1",
+    leaseToken: "lease-1"
   } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
 
   await expect(client.respond({
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: { ok: true },
     error: {
       code: 1001,
       message: "app_error"
     }
   } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond 应在本地要求 leaseToken", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-lease-token-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    instanceSessionToken: "session-1",
+    invocationId: "invk-1",
+    value: {
+      ok: true
+    }
+  } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("leaseToken 不能为空。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1522,6 +1553,7 @@ it("respond should reject an invalid invocationId before sending the request", a
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "bad-id",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -1640,6 +1672,7 @@ it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001,
       message: "app_error",
@@ -1666,6 +1699,7 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001.5,
       message: "app_error"
@@ -1689,6 +1723,7 @@ it("respond 应在本地拒绝非对象 error.data", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001,
       message: "app_error",
@@ -2023,6 +2058,7 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
     },
     launch: {
       exePath: "",
+      args: undefined,
       argsTemplate: undefined,
       workingDirectory: undefined,
       dedupeKeyTemplate: undefined

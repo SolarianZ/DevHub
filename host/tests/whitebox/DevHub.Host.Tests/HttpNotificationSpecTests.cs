@@ -48,6 +48,53 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpNotification_WhenAuthorizationMissing_ShouldReturnUnauthorizedError()
+    {
+        using var harness = CreateHarness();
+
+        const string notificationJson = """
+            {"jsonrpc":"2.0","method":"hub.ping","params":{"echo":"notify"}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(
+            harness,
+            notificationJson,
+            "http-notify-missing-token-client",
+            configureRequest: context => context.Request.Headers.Remove("Authorization"));
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32001, error.GetProperty("code").GetInt32());
+        Assert.Equal("unauthorized", error.GetProperty("message").GetString());
+        Assert.Equal("missing_token", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpNotification_WhenProtocolInvalid_ShouldReturnNotSupportedError()
+    {
+        using var harness = CreateHarness();
+
+        const string notificationJson = """
+            {"jsonrpc":"2.0","method":"hub.ping","params":{"echo":"notify"}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(
+            harness,
+            notificationJson,
+            "http-notify-invalid-protocol-client",
+            configureRequest: context => context.Request.Headers["X-DevHub-Protocol"] = "2");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32099, error.GetProperty("code").GetInt32());
+        Assert.Equal("not_supported", error.GetProperty("message").GetString());
+        Assert.Equal("mismatch", error.GetProperty("data").GetProperty("reason").GetString());
+        Assert.Equal("2", error.GetProperty("data").GetProperty("received").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.2")]
     public async Task Spec_6_2_HttpCallWsOnlyMethod_ShouldReturnNotSupported()
     {
@@ -468,7 +515,8 @@ public class HttpNotificationSpecTests : IDisposable
         string requestJson,
         string clientId,
         string? contentType = "application/json",
-        int localPort = 0)
+        int localPort = 0,
+        Action<DefaultHttpContext>? configureRequest = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.LocalPort = localPort;
@@ -484,6 +532,7 @@ public class HttpNotificationSpecTests : IDisposable
             .BuildServiceProvider();
         httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
         httpContext.Response.Body = new MemoryStream();
+        configureRequest?.Invoke(httpContext);
 
         var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
         await result.ExecuteAsync(httpContext);
@@ -497,9 +546,10 @@ public class HttpNotificationSpecTests : IDisposable
     private static async Task<JsonDocument> ExecuteJsonRequestAsync(
         HostTransportTestHarness harness,
         string requestJson,
-        string clientId = "http-null-omit-client")
+        string clientId = "http-null-omit-client",
+        Action<DefaultHttpContext>? configureRequest = null)
     {
-        var response = await ExecuteHttpRequestAsync(harness, requestJson, clientId);
+        var response = await ExecuteHttpRequestAsync(harness, requestJson, clientId, configureRequest: configureRequest);
         return JsonDocument.Parse(response.BodyText);
     }
 }

@@ -484,6 +484,100 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_StructuredArgs_ShouldRenderEachArgumentAndOverrideArgsTemplate()
+    {
+        WriteDefinition(
+            "launch-structured-args.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "--ignored {appId}",
+            args: ["--app", "{appId}", "--scope", "{scopeOrGlobal}", "{unknown}"]);
+
+        LaunchConfiguration? capturedLaunchConfig = null;
+        string? capturedArguments = "sentinel";
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, args) =>
+            {
+                capturedLaunchConfig = launchConfig;
+                capturedArguments = args;
+            })
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-structured-args.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+        Assert.Null(capturedArguments);
+        Assert.NotNull(capturedLaunchConfig);
+        Assert.Equal(new[] { "--app", "launch-structured-args.app", "--scope", "global", "{unknown}" }, capturedLaunchConfig!.Args);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_ShouldSplitQuotedArgumentsForProcessStart()
+    {
+        WriteDefinition(
+            "launch-args-template-split.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "--name \"hello world\" '--literal value' plain\\ value");
+
+        LaunchConfiguration? capturedLaunchConfig = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) => capturedLaunchConfig = launchConfig)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-split.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal(new[] { "--name", "hello world", "--literal value", "plain value" }, capturedLaunchConfig!.Args);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_WhenMalformed_ShouldReturnInvalidParams()
+    {
+        WriteDefinition(
+            "launch-args-template-malformed.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "\"unterminated");
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-malformed.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32602, result.ErrorCode);
+        Assert.Equal("invalid_params", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("invalid_launch_args_template", errorData.GetProperty("reason").GetString());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
     {
         WriteDefinition("launch-null-process.app", includeLaunch: true);
@@ -669,6 +763,7 @@ public class LaunchCoordinatorTests : IDisposable
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
         string? argsTemplate = null,
+        string[]? args = null,
         string? exePath = null,
         string? definitionScope = ScopeContract.Global)
     {
@@ -692,6 +787,11 @@ public class LaunchCoordinatorTests : IDisposable
                 ["exePath"] = exePath ?? "dotnet",
                 ["argsTemplate"] = argsTemplate ?? "--version"
             };
+
+            if (args is not null)
+            {
+                launch["args"] = args;
+            }
 
             if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))
             {

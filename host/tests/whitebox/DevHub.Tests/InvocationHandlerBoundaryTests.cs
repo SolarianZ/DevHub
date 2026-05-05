@@ -302,6 +302,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 instanceId = "respond-missing-inst",
                 instanceSessionToken = instanceToken,
                 invocationId = "invk-not-exists",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -624,6 +625,13 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, CancellationToken.None);
         Assert.Null(poll.Error);
+        var leaseToken = JsonSerializer.SerializeToElement(poll.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         var conflict = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -634,6 +642,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 instanceId = "other-instance",
                 instanceSessionToken = otherToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);

@@ -548,6 +548,11 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "leaseToken", out var leaseToken))
+        {
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+        }
+
         var hasValue = paramsElement.TryGetProperty("value", out var valueElement);
         var hasError = paramsElement.TryGetProperty("error", out var errorElement);
         if (hasValue == hasError)
@@ -586,7 +591,7 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
         }
 
-        var status = _store.Respond(instanceId, invocationId, value, error);
+        var status = _store.Respond(instanceId, invocationId, leaseToken, value, error);
 
         if (_store.TryGet(invocationId, out var invocation) && invocation is not null)
         {
@@ -677,7 +682,14 @@ public class InvocationHandler : IRpcHandler
                 invocationId = invocation.InvocationId,
                 appId = invocation.AppId,
                 instanceId,
+                target = invocation.Target,
                 scope = invocation.Target.Scope,
+                method = invocation.Method,
+                kind = invocation.Kind.ToString().ToLowerInvariant(),
+                delivery = new
+                {
+                    attempt = invocation.Delivery.Attempt
+                },
                 error
             }
         });

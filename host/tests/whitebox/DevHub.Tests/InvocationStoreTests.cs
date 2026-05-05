@@ -43,7 +43,7 @@ public class InvocationStoreTests
         Assert.Equal(30, polled[0].Delivery.LeaseSeconds);
         Assert.Equal(1, polled[0].Delivery.Attempt);
 
-        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Success, respondStatus);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -131,7 +131,7 @@ public class InvocationStoreTests
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: null, error: new { code = 1001, message = "app_error" });
+        var status = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: null, error: new { code = 1001, message = "app_error" });
         Assert.Equal(InvocationRespondStatus.Success, status);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -158,11 +158,12 @@ public class InvocationStoreTests
         var created = store.CreateInvocation(CreateNotify("timeout.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
+        var leaseToken = polled[0].Delivery.LeaseToken;
 
         var marked = store.MarkTimeout(created.InvocationId, DateTime.UtcNow);
         Assert.True(marked);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Expired, status);
     }
 
@@ -185,11 +186,12 @@ public class InvocationStoreTests
         var created = store.CreateInvocation(CreateNotify("expired.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
+        var leaseToken = polled[0].Delivery.LeaseToken;
 
         var marked = store.MarkExpired(created.InvocationId, DateTime.UtcNow);
         Assert.True(marked);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Expired, status);
     }
 
@@ -411,7 +413,7 @@ public class InvocationStoreTests
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
 
-        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Success, respondStatus);
         Assert.True(store.TryGet(created.InvocationId, out var terminalInvocation));
         Assert.Equal(InvocationState.Completed, terminalInvocation!.State);
@@ -519,5 +521,4 @@ public class InvocationStoreTests
         }
     }
 }
-
 

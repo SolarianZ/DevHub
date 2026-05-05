@@ -140,7 +140,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            respond_response = client.respond_value(instance_id, "invk-not-exists", {"ok": True})
+            respond_response = client.respond_value(instance_id, "invk-not-exists", {"ok": True}, lease_token="missing-lease-token")
             if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
                 return result
 
@@ -245,11 +245,13 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id = items[0].get("invocationId")
+            lease_token = items[0].get("delivery", {}).get("leaseToken")
             respond_response = client.respond_value(
                 instance_id,
                 invocation_id,
                 {"ok": True},
                 instance_session_token="wrong-instance-session-token",
+                lease_token=lease_token,
             )
             if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
                 return result
@@ -305,12 +307,14 @@ class TestInvocationPollRespond(unittest.TestCase):
             poll_response = client.poll_once(instance_id, max_count=10, wait_ms=100)
             if not RpcAssertions.expect_success(result, poll_response, ["items"]):
                 return result
+            items = poll_response.get("result", {}).get("items", [])
+            lease_token = next((item.get("delivery", {}).get("leaseToken") for item in items if item.get("invocationId") == invocation_id), None)
 
-            first_respond = client.respond_value(instance_id, invocation_id, {"ok": True})
+            first_respond = client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_success(result, first_respond):
                 return result
 
-            second_respond = client.respond_value(instance_id, invocation_id, {"ok": True})
+            second_respond = client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_error(result, second_respond, -32030, "delivery_conflict"):
                 return result
 
@@ -383,11 +387,13 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             items = poll_response.get("result", {}).get("items", [])
-            if not any(item.get("invocationId") == invocation_id for item in items):
+            holder_item = next((item for item in items if item.get("invocationId") == invocation_id), None)
+            if holder_item is None:
                 result.mark_failure("❌ lease holder poll 未拉取到 invocation")
                 return result
 
-            non_holder_respond = client.respond_value(instance_b, invocation_id, {"ok": True})
+            lease_token = holder_item.get("delivery", {}).get("leaseToken")
+            non_holder_respond = client.respond_value(instance_b, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_error(result, non_holder_respond, -32030, "delivery_conflict"):
                 return result
 

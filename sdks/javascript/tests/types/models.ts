@@ -15,7 +15,23 @@ const definition: AppDefinition = {
   scope: "",
   displayName: "Sample App",
   launch: {
-    exePath: "node"
+    exePath: "node",
+    args: ["./app.js", "--scope", "{scope}"]
+  }
+};
+
+const definitionWithoutLaunch: AppDefinition = {
+  appId: "sample.app",
+  scope: "",
+  displayName: "Sample App"
+};
+
+const definitionWithoutLaunchExePath: AppDefinition = {
+  appId: "sample.app",
+  scope: "",
+  displayName: "Sample App",
+  launch: {
+    args: ["./app.js"]
   }
 };
 
@@ -47,6 +63,11 @@ const invocation: Invocation = {
   method: "sample.method",
   kind: "request",
   createdAtUtc: new Date("2026-03-15T00:00:00Z"),
+  delivery: {
+    leaseToken: "lease-1",
+    leaseSeconds: 30,
+    attempt: 1
+  },
   caller: {
     clientId: "caller-a",
     clientSessionId: "11111111-1111-4111-8111-111111111111"
@@ -57,6 +78,7 @@ const respondWithValue: RespondRequest = {
   instanceId: "inst-1",
   instanceSessionToken: "session-1",
   invocationId: "invk-1",
+  leaseToken: "lease-1",
   value: {
     ok: true
   }
@@ -66,6 +88,7 @@ const respondWithError: RespondRequest = {
   instanceId: "inst-1",
   instanceSessionToken: "session-1",
   invocationId: "invk-1",
+  leaseToken: "lease-1",
   error: {
     code: 1001,
     message: "callee_failed"
@@ -97,14 +120,6 @@ const missingInvokeTarget: InvokeRequest = {
   method: "sample.method"
 };
 
-const missingLaunchExePath: AppDefinition = {
-  appId: "sample.app",
-  scope: "",
-  displayName: "Sample App",
-  // @ts-expect-error AppDefinition.launch.exePath is required when launch is present.
-  launch: {}
-};
-
 // @ts-expect-error Invocation.target is required.
 const missingInvocationTarget: Invocation = {
   invocationId: "invk-1",
@@ -122,7 +137,18 @@ const missingInvocationTarget: Invocation = {
 const missingRespondPayload: RespondRequest = {
   instanceId: "inst-1",
   instanceSessionToken: "session-1",
+  leaseToken: "lease-1",
   invocationId: "invk-1"
+};
+
+// @ts-expect-error RespondRequest requires leaseToken.
+const missingRespondLeaseToken: RespondRequest = {
+  instanceId: "inst-1",
+  instanceSessionToken: "session-1",
+  invocationId: "invk-1",
+  value: {
+    ok: true
+  }
 };
 
 // @ts-expect-error RespondRequest forbids value and error together.
@@ -130,6 +156,7 @@ const invalidRespondPayload: RespondRequest = {
   instanceId: "inst-1",
   instanceSessionToken: "session-1",
   invocationId: "invk-1",
+  leaseToken: "lease-1",
   value: {
     ok: true
   },
@@ -158,6 +185,8 @@ const invalidRegistrationWithInstanceSessionToken: AppInstanceRegistration = {
 const invalidRegistrationFromRegistered: AppInstanceRegistration = registeredInstance;
 
 void definition;
+void definitionWithoutLaunch;
+void definitionWithoutLaunchExePath;
 void invokeRequest;
 void instanceRegistration;
 void invocation;
@@ -168,9 +197,9 @@ void compatibilityResult;
 void unknownCompatibilityResult;
 void registeredInstance;
 void missingInvokeTarget;
-void missingLaunchExePath;
 void missingInvocationTarget;
 void missingRespondPayload;
+void missingRespondLeaseToken;
 void invalidRespondPayload;
 void invalidCompatibilityStatus;
 void invalidRegistrationWithPassword;

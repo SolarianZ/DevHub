@@ -57,6 +57,7 @@ def test_request_respond_value_should_return_result_and_second_respond_should_co
                 instance_id="request-inst-1",
                 instance_session_token=instance_session_token,
                 invocation_id=invocation.invocation_id,
+                lease_token=_lease_token(invocation),
                 value={"ok": True, "value": 2},
             )
         )
@@ -71,6 +72,7 @@ def test_request_respond_value_should_return_result_and_second_respond_should_co
                     instance_id="request-inst-1",
                     instance_session_token=instance_session_token,
                     invocation_id=invocation.invocation_id,
+                    lease_token=_lease_token(invocation),
                     value={"ok": True},
                 )
             )
@@ -114,6 +116,7 @@ def test_poll_and_respond_with_wrong_instance_session_token_should_surface_forbi
                     instance_id="token-inst-1",
                     instance_session_token="wrong-token",
                     invocation_id=request_invocation.invocation_id,
+                    lease_token=_lease_token(request_invocation),
                     value={"ok": True},
                 )
             )
@@ -125,6 +128,7 @@ def test_poll_and_respond_with_wrong_instance_session_token_should_surface_forbi
                 instance_id="token-inst-1",
                 instance_session_token=instance_session_token,
                 invocation_id=request_invocation.invocation_id,
+                lease_token=_lease_token(request_invocation),
                 value={"ok": True},
             )
         )
@@ -167,6 +171,7 @@ def test_request_respond_error_should_map_invocation_failed() -> None:
                 instance_id="error-inst-1",
                 instance_session_token=instance_session_token,
                 invocation_id=invocation.invocation_id,
+                lease_token=_lease_token(invocation),
                 error=DevHubCalleeError.create(1001, "app_error", {"reason": "boom"}),
             )
         )
@@ -331,3 +336,9 @@ def _wait_for_single_invocation(client, instance_id: str, instance_session_token
         if last_count > 1:
             raise AssertionError("轮询结果返回了多条调用。")
     raise TimeoutError(f"在 {timeout_ms}ms 内未等到实例 {instance_id} 的单条调用，最后一轮返回 {last_count} 项。")
+
+
+def _lease_token(invocation) -> str:
+    if invocation.delivery is None:
+        raise AssertionError("poll item 缺少 delivery。")
+    return invocation.delivery.lease_token

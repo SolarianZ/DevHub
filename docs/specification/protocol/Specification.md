@@ -132,7 +132,10 @@
 
 规范性要求：
 - 当 `POST /rpc` 承载**带 `id`** 的 JSON-RPC request 时，Host **必须**返回 JSON-RPC `result` 或 JSON-RPC `error`。
-- 当 `POST /rpc` 承载**省略 `id`** 的 JSON-RPC notification 时，Host **必须**返回空的 `200 OK` 响应体，**不得**返回 JSON-RPC `result` 或 `error`；若调用方需要错误反馈，**必须**改为发送带 `id` 的普通 request。
+- `POST /rpc` 的处理顺序**必须**固定为：HTTP 传输层校验、JSON-RPC 信封校验、方法分发。`Content-Type`、`Authorization`、`X-DevHub-Protocol`、`X-DevHub-ClientId` 与 `X-DevHub-ClientSessionId` 校验**必须**先于 JSON-RPC notification 空响应语义执行。
+- `Authorization` 校验**必须**先于请求体 JSON 解析执行；当 `Authorization` 缺失或无效时，Host **必须**返回 `-32001 unauthorized` 且 `id = null`，即使请求体不是可解析的 JSON。
+- 当 `POST /rpc` 的 HTTP 传输层校验失败时，Host **必须**返回对应 JSON-RPC `error` 响应，即使请求体是省略 `id` 的 JSON-RPC notification。此类请求**不得**进入 RPC 方法处理；若失败发生在 JSON-RPC 信封解析前，错误响应的 `id` **必须**为 `null`。
+- 当 `POST /rpc` 承载省略 `id` 的 JSON-RPC notification，且 HTTP 传输层校验通过、JSON-RPC 信封合法、方法处理已接受该 notification 时，Host **必须**返回空的 `200 OK` 响应体，**不得**返回 JSON-RPC `result` 或 `error`。
 - `OPTIONS /rpc` **必须**作为浏览器 / WebView 直连 Host 的预检入口单独处理，**不得**进入 JSON-RPC 请求体验证、协议头校验或 Bearer Token 鉴权链路。
 - 当 `OPTIONS /rpc` 请求同时携带 `Origin` 和 `Access-Control-Request-Method: POST` 时，Host **必须**将其视为有效预检，并在响应中声明允许的方法 `POST`、`OPTIONS`。
 - 上述预检成功响应 **必须**返回与请求 `Origin` 完全一致的 `Access-Control-Allow-Origin`，并 **必须**返回 `Vary: Origin`。
@@ -326,9 +329,12 @@ sequenceDiagram
     },
     "launch": {
       "type": "object",
-      "required": ["exePath"],
       "properties": {
         "exePath": { "type": "string" },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "argsTemplate": { "type": "string" },
         "workingDirectory": { "type": "string" },
         "dedupeKeyTemplate": { "type": "string" }
@@ -345,6 +351,9 @@ sequenceDiagram
 - `hub.apps.listDefinitions` **必须**支持参数 `{ appId?: string, scope: string|null }`；其中 `scope` 字段**必须**显式出现。`appId` 省略时，结果**必须**覆盖所有应用；当 `scope = null` 时，结果**必须**不按作用域过滤；当 `scope = ""` 时，结果**必须**只包含 Global Definition；当 `scope` 为其他合法字符串时，结果**必须**只包含该精确作用域的 Definition。
 - `hub.apps.getDefinition` 与 `hub.apps.deleteDefinition` **必须**按精确的 `appId + scope` 查找 Definition，**不得**仅按 `appId` 模糊定位；这两个接口都**必须**要求显式提供合法字符串 `scope`。
 - `AppDefinition` 不定义作用域白名单或强制模式；`scope` 的解释与路由行为统一由 §5.5 定义。
+- `launch` **可以**省略；`launch.exePath` **可以**省略，也**可以**是空字符串或仅包含空白字符的字符串。Definition 校验和写入**不得**仅因 Definition 当前不可启动而失败；启动阶段按 §6.3.12 报告缺失启动配置。
+- 如果提供 `launch.args`，其值**必须**是字符串数组。数组中的每个元素表示一个独立 argv 参数，并按 §6.3.12 的模板规则独立展开。
+- 如果同时提供 `launch.args` 与 `launch.argsTemplate`，启动阶段**必须**使用 `launch.args`，并忽略 `launch.argsTemplate`。
 - 如果省略 `capabilities` 或 `capabilities.rpc`，默认值为 `true`。
   - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - `capabilities.events` 保留供未来使用；在 v1 中，Hub **必须**忽略它。
@@ -523,9 +532,11 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
     },
     "delivery": {
       "type": "object",
+      "required": ["leaseSeconds", "attempt", "leaseToken"],
       "properties": {
         "leaseSeconds": { "type": "integer", "minimum": 1 },
-        "attempt": { "type": "integer", "minimum": 1 }
+        "attempt": { "type": "integer", "minimum": 1 },
+        "leaseToken": { "type": "string", "minLength": 1 }
       }
     },
     "caller": {
@@ -838,6 +849,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 对于上述自主注册路径，若同一 `appId` 已存在其他 scope 的 Definition，Hub **不得**再要求当前 `scope` 也存在精确匹配的 Definition，也**不得**因缺少同 scope Definition 返回 `-32014 app_definition_not_found`。
 - 当某个 `instanceId` 首次成功注册时，Hub **必须**把该次请求中的 `password` 与该 `instanceId` 绑定。
 - 当某个 `instanceId` 已存在时，Hub **必须**只在 `password` 匹配时允许更新该实例；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
+- 只要实例注册记录仍被保留，Hub **必须**保留该 `instanceId` 的密码绑定，包括已离线但仍在注册表中保留的实例记录。
 - `instanceSessionToken` **必须**作为单次注册会话凭据，用于该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权校验；进程重启后的同 `instanceId` 重注册授权**不得**要求提供旧 `instanceSessionToken`。
 - 自主注册成功的实例，即使其 `scope` 未被任何 Definition 覆盖，后续 `hub.apps.listInstances` 与 `hub.apps.getInstance` 仍**必须**返回该实例快照；Hub **不得**因此自动创建、复制或推导新的 Definition。
 - Definition inventory **必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist；没有精确 `AppDefinition(appId, scope)` 时，自主注册只建立在线路由能力，不建立离线队列或 auto-launch 能力。
@@ -884,7 +896,10 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 规范性行为：
 - `params.instanceId` 与 `params.instanceSessionToken` **必须**都是非空字符串。
 - 当 `instanceId` 存在时，Hub **必须**只在 `instanceSessionToken` 匹配时允许注销；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
+- 当注销成功移除现有实例记录时，Hub **必须**同步移除该 `instanceId` 的密码绑定和当前 `instanceSessionToken`。
 - 当 `instanceId` 不存在且请求结构合法时，Hub **必须**继续返回 `{ "ok": true }`。
+
+当 Host 过期清理移除已保留的实例记录时，Hub **必须**同步移除该 `instanceId` 的密码绑定和当前 `instanceSessionToken`。清理产生的 `app.instance.unregistered` 事件**必须**携带被移除实例最后注册快照中的 canonical `scope`。
 
 #### 6.3.11 `hub.apps.listInstances`
 **参数**：
@@ -903,6 +918,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `params` **必须**是对象，且**必须**显式包含 `scope` 字段；若 `params` 省略、为空对象或缺失 `scope`，Hub **必须**返回 `-32602 invalid_params`，并使用 `error.data.reason="invalid_scope"`。
 - 如果 `scope = null`，Hub **必须**返回当前 `appId` 过滤范围内的所有作用域实例。
 - 如果 `scope = ""`，Hub **必须**只返回 Global 作用域实例；如果 `scope` 为其他合法字符串，Hub **必须**只返回该精确作用域实例。
+- 若省略 `appId`，Hub **必须**遍历所有 `appId`。若提供 `appId`，其值**必须**是满足 canonical `appId` grammar 的字符串；非法 `appId` 值**必须**返回 `-32602 invalid_params`，且不得返回部分实例清单。
 - 若提供了 `scope` 字段，Hub **必须**先按 `string|null` 与 canonical grammar 校验其类型和值；非法值（包括对象、数组、布尔值，以及未通过 canonical `scope` grammar 的字符串）**必须**返回 `-32602 invalid_params`，并使用 `error.data.reason="invalid_scope"`。
 - `includeOffline` 默认为 `false`。
 
@@ -964,6 +980,9 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
   - `{httpBaseUrl}`: Hub 的 HTTP 基础 URL（例如 `http://127.0.0.1:47231`）。
 - 上述集合之外的 token（例如 `{dedupeKey}`）**不得**获得隐藏运行时语义；Hub **必须**将其保留为字面量文本。
 - 如果 `AppDefinition.launch.dedupeKeyTemplate` 被省略或为 null，Hub **必须**使用默认模板：`{appId}:{scopeOrGlobal}`。
+- Hub **必须**以 argv 列表启动进程，且**不得**通过 shell 执行启动参数。shell 元字符、命令替换、重定向和管道字符均**必须**作为普通参数文本传递。
+- 当 `launch.args` 存在时，Hub **必须**逐元素执行上述模板替换，并把每个展开后的元素作为恰好一个 argv 参数传递。`launch.args` 存在时，Hub **必须**忽略 `launch.argsTemplate`。
+- 当仅存在 `launch.argsTemplate` 时，Hub **必须**先执行上述模板替换，再按协议定义的 argv 拆分规则生成参数列表：未加引号的 ASCII 空白分隔参数，单引号与双引号仅用于保留其中空白，反斜杠转义其后的单个字符；引号字符本身不进入参数值，未闭合引号或悬空反斜杠**必须**导致 `-32602 invalid_params`。该解析结果仍**必须**作为 argv 传递，**不得**经 shell 执行。
 - `waitForRegisterMs` 若省略则默认为 `0`，且**必须**为 ≥ 0 的整数（超出范围 => `-32602 invalid_params`）。
 - 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空白字符串，Hub **必须**在 `hub.apps.launch` 阶段返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` **不得**仅因 `launch.exePath` 是空白字符串而拒绝候选 Definition。
 - Hub **必须**读取精确命中的 `AppDefinition.launch.exePath`。若该 `appId + scope` 对应的 Definition 缺失：返回 `-32014 app_definition_not_found`，且 `error.data` **必须**至少包含 `appId` 与原始 canonical `scope`。若进程创建失败：返回 `-32020`。
@@ -1069,7 +1088,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
       "kind": "notify",
       "createdAtUtc": "2026-01-30T12:34:56Z",
       "caller": { "clientId": "DevHubUI", "clientSessionId": "..." },
-      "delivery": { "leaseSeconds": 30, "attempt": 1 },
+      "delivery": { "leaseSeconds": 30, "attempt": 1, "leaseToken": "opaque-delivery-token" },
       "options": { "ttlMs": 60000 }
     }
   ]
@@ -1085,7 +1104,9 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `waitMs = 0` **必须**表示“立即返回当前可用项或空列表”，不得进入长轮询等待。
 - 当 `waitMs > 0` 且没有可用项时，Hub **必须**支持长轮询 (Long Polling)：等待最长 `waitMs` 时长后返回当前可用项或空列表。
 - 成功的 `poll` **必须**更新实例的 `lastSeenUtc`。
+- Hub **必须**为每个返回条目签发当前交付租约的 opaque `delivery.leaseToken`。该 token **不得**从调用方可控值派生，且**必须**能区分同一 invocation 的不同交付尝试。
 - 租约时长在每个条目的 `delivery.leaseSeconds` 中返回。
+- 成功授予交付租约后，Hub **必须**发布 `invocation.delivered` 事件，事件 payload **不得**暴露 `delivery.leaseToken`。
 
 #### 6.3.16 `hub.invoke.respond` (仅限 HTTP)
 **参数**（`value` 或 `error` **必须**且只能存在其中之一）：
@@ -1094,6 +1115,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
   "instanceId": "inst-123",
   "instanceSessionToken": "opaque-token",
   "invocationId": "invk-...",
+  "leaseToken": "opaque-delivery-token",
   "value": {}
 }
 ```
@@ -1104,6 +1126,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
   "instanceId": "inst-123",
   "instanceSessionToken": "opaque-token",
   "invocationId": "invk-...",
+  "leaseToken": "opaque-delivery-token",
   "error": { "code": 1001, "message": "app_error", "data": {} }
 }
 ```
@@ -1116,11 +1139,12 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 规范性行为：
 - Hub **必须**要求实例已注册；否则返回 `-32010 instance_not_found`。
 - Hub **必须**要求 `params.instanceSessionToken` 为非空字符串，并校验其与 `instanceId` 当前持有的 token 匹配；不匹配时 **必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_session_token_mismatch"`。
+- Hub **必须**要求 `params.leaseToken` 为非空字符串，并校验其等于该 invocation 当前有效交付租约的 token；缺失或类型非法时**必须**返回 `-32602 invalid_params`。
 - Hub **必须**强制要求实例具有 `invoke.respond==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="respond_not_enabled"`。
 - 成功的 `respond` **必须**更新实例的 `lastSeenUtc`。
 
 **错误**：
-- `-32030 delivery_conflict`：如果租约无效/已过期、错误的实例响应或重复响应。
+- `-32030 delivery_conflict`：如果租约无效/已过期、`leaseToken` 不是当前有效租约、使用旧交付尝试的 token、错误的实例响应或重复响应。
 - `-32011 invocation_expired`：如果调用已过期/被取消/超时；当 `invocationId` 从未存在或已被 Hub 清理时，Hub **必须**继续返回该错误，并在 `error.data.reason="unknown_invocation"` 下提供稳定细分。
 - `-32602 invalid_params`：负载格式错误。
 
@@ -1183,8 +1207,11 @@ Hub **必须**将已订阅的事件作为 JSON-RPC 通知交付：
 规范性事件载荷：
 - `app.definition.upserted` 的 `payload` **必须**至少包含 `appId`、`scope` 与最新 `definition`；其中 `payload.definition.scope` **必须**与 `payload.scope` 一致。
 - `app.definition.deleted` 的 `payload` **必须**至少包含 `appId` 与 `scope`。
-- `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 `appId` 与 `instanceId`，且**不得**包含 `password` 或 `instanceSessionToken`。
-- 如果 `app.instance.*.payload.scope` 存在，其值 **必须**使用实例镜像中的原始 canonical 作用域表示：Global 为 `""`，显式作用域为合法非空字符串。
+- `app.instance.registered` 与 `app.instance.unregistered` 的 `payload` **必须**至少包含 canonical `appId`、canonical `instanceId` 与 canonical `scope`，且**不得**包含 `password` 或 `instanceSessionToken`。Global scope **必须**显式表示为 `""`。
+- `invocation.queued` 的 `payload` **必须**至少包含 `invocationId`、`appId`、`target`、`method` 与 `kind`。
+- `invocation.delivered` 的 `payload` **必须**至少包含 `invocationId`、`appId`、`target`、`instanceId` 与 `delivery.attempt`，且**不得**包含 `delivery.leaseToken`。
+- `invocation.completed` 的 `payload` **必须**至少包含 `invocationId`、`appId`、`target` 与 `instanceId`。
+- `invocation.failed` 的 `payload` **必须**至少包含 `invocationId`、`appId`、`target`、`instanceId` 与 `reason`。
 
 ---
 

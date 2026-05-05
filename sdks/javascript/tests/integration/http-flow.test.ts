@@ -317,13 +317,9 @@ function createLaunchDefinition(appId: string): Record<string, unknown> {
     displayName: appId,
     launch: {
       exePath: process.execPath,
-      argsTemplate: quoteCommandArgument(path.normalize(launchScriptPath))
+      args: [path.normalize(launchScriptPath)]
     }
   };
-}
-
-function quoteCommandArgument(value: string): string {
-  return value.includes(" ") ? `"${value}"` : value;
 }
 
 function getHost(): DevHubHostFixture {

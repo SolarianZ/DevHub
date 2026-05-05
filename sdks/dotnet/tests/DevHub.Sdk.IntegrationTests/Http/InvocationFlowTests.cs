@@ -80,6 +80,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = registered.InstanceSessionToken,
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Value = new { ok = true, value = 2 }
         });
 
@@ -92,6 +93,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = registered.InstanceSessionToken,
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Value = new { ok = true }
         }));
         Assert.Equal(-32030, conflict.Code);
@@ -133,6 +135,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = registered.InstanceSessionToken,
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Value = null
         });
 
@@ -177,6 +180,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = registered.InstanceSessionToken,
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Error = DevHubCalleeError.Create(1001, "app_error", new { reason = "boom" })
         });
 
@@ -348,6 +352,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = $"wrong-{registered.InstanceSessionToken}",
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Value = new { ok = true }
         }));
         Assert.Equal(-32002, respondException.Code);
@@ -358,6 +363,7 @@ public sealed class InvocationFlowTests
             InstanceId = registered.Instance.InstanceId,
             InstanceSessionToken = registered.InstanceSessionToken,
             InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
             Value = new { ok = true, value = 1 }
         });
 
@@ -413,7 +419,9 @@ public sealed class InvocationFlowTests
             lastCount = pollResult.Items.Count;
             if (lastCount == 1)
             {
-                return pollResult.Items[0];
+                var invocation = pollResult.Items[0];
+                Assert.False(string.IsNullOrWhiteSpace(invocation.Delivery?.LeaseToken));
+                return invocation;
             }
 
             if (lastCount > 1)

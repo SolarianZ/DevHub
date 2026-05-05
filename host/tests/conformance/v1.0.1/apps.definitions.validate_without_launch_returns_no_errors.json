@@ -1,0 +1,42 @@
+{
+  "id": "apps.definitions.validate_without_launch_returns_no_errors",
+  "caseId": "CONF-003",
+  "description": "缺少 launch 的 AppDefinition 仍是合法 Definition，启动可用性由 hub.apps.launch 报告。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000205"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-without-launch",
+    "method": "hub.apps.validateDefinition",
+    "params": {
+      "definition": {
+        "appId": "apps.validate.no-launch.app",
+        "scope": "",
+        "displayName": "Apps Validate No Launch"
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-without-launch",
+    "result": {
+      "ok": true,
+      "valid": true,
+      "errors": []
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

@@ -38,12 +38,15 @@
     },
     "launch": {
       "type": "object",
-      "required": [
-        "exePath"
-      ],
       "properties": {
         "exePath": {
           "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "argsTemplate": {
           "type": "string"

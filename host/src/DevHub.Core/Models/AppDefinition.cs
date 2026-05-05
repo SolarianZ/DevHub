@@ -59,6 +59,12 @@ public class LaunchConfiguration
     public string? ExePath { get; set; }
 
     /// <summary>
+    /// 结构化启动参数。
+    /// </summary>
+    [JsonPropertyName("args")]
+    public List<string>? Args { get; set; }
+
+    /// <summary>
     /// 参数模板（支持占位符：{appId}, {scope}, {scopeOrGlobal}, {httpBaseUrl}）
     /// </summary>
     [JsonPropertyName("argsTemplate")]

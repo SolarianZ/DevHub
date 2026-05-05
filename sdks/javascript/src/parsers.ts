@@ -29,7 +29,6 @@ import {
   readArray,
   readBoolean,
   readDate,
-  readOptionalScopeString,
   readScopeString,
   readInstanceId,
   readInvocationId,
@@ -258,8 +257,17 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   let launch: AppDefinition["launch"] | undefined;
   const launchPayload = readOptionalObject(record, location, "launch");
   if (launchPayload) {
+    const argsPayload = "args" in launchPayload
+      ? readArray(launchPayload, `${location}.launch`, "args")
+      : undefined;
     launch = {
-      exePath: readStringValue(launchPayload, `${location}.launch`, "exePath"),
+      exePath: readOptionalString(launchPayload, `${location}.launch`, "exePath"),
+      args: argsPayload?.map((item, index) => {
+        if (typeof item !== "string") {
+          throw new Error(`${location}.launch.args[${index}] must be a string.`);
+        }
+        return item;
+      }),
       argsTemplate: readOptionalString(launchPayload, `${location}.launch`, "argsTemplate"),
       workingDirectory: readOptionalString(launchPayload, `${location}.launch`, "workingDirectory"),
       dedupeKeyTemplate: readOptionalString(launchPayload, `${location}.launch`, "dedupeKeyTemplate")
@@ -332,6 +340,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   const deliveryPayload = readOptionalObject(record, location, "delivery");
   if (deliveryPayload) {
     delivery = {
+      leaseToken: readString(deliveryPayload, `${location}.delivery`, "leaseToken"),
       leaseSeconds: readPositiveInt(deliveryPayload, `${location}.delivery`, "leaseSeconds"),
       attempt: readPositiveInt(deliveryPayload, `${location}.delivery`, "attempt")
     };
@@ -437,7 +446,7 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
   if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
-    readOptionalScopeString(payload, location, "scope");
+    readScopeString(payload, location, "scope");
     ensureNoSensitiveInstanceFields(payload, location);
   }
 }

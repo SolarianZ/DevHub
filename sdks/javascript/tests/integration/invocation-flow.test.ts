@@ -118,6 +118,7 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
     instanceId: "request-inst-1",
     instanceSessionToken,
     invocationId: invocation.invocationId,
+    leaseToken: invocation.delivery?.leaseToken ?? "",
     value: {
       ok: true,
       value: 2
@@ -135,6 +136,7 @@ it("request/respond 成功后再次 respond 应返回 delivery_conflict", async 
     instanceId: "request-inst-1",
     instanceSessionToken,
     invocationId: invocation.invocationId,
+    leaseToken: invocation.delivery?.leaseToken ?? "",
     value: {
       ok: true
     }
@@ -170,6 +172,7 @@ it("request/respond 错误应映射为 invocation_failed", async () => {
     instanceId: "error-inst-1",
     instanceSessionToken,
     invocationId: invocation.invocationId,
+    leaseToken: invocation.delivery?.leaseToken ?? "",
     error: {
       code: 1001,
       message: "app_error",
@@ -310,6 +313,7 @@ it("respond 在 respond_not_enabled 时应映射 forbidden", async () => {
       instanceId: "respond-disabled-inst-1",
       instanceSessionToken,
       invocationId: "invk-missing",
+      leaseToken: "lease-missing",
       value: {
         ok: true
       }
@@ -340,6 +344,7 @@ it("poll / respond 使用错误 instanceSessionToken 时应映射 forbidden", as
       instanceId: "token-mismatch-inst-1",
       instanceSessionToken: `wrong-${instanceSessionToken}`,
       invocationId: "invk-missing",
+      leaseToken: "lease-missing",
       value: {
         ok: true
       }
@@ -434,6 +439,8 @@ async function waitForSingleInvocation(client: DevHubClient, instanceId: string,
   });
 
   expect(result.items).toHaveLength(1);
+  expect(result.items[0]?.delivery?.leaseToken).toEqual(expect.any(String));
+  expect(result.items[0]?.delivery?.leaseToken).not.toBe("");
   return result.items[0];
 }
 

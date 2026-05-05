@@ -193,7 +193,8 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     if "launch" in root:
         launch_root = require_mapping(root["launch"], f"{path}.launch")
         launch = LaunchConfiguration(
-            exe_path=require_string_allow_empty(launch_root, "exePath", f"{path}.launch"),
+            exe_path=optional_property_string(launch_root, "exePath", f"{path}.launch"),
+            args=optional_property_string_list(launch_root, "args", f"{path}.launch"),
             args_template=optional_property_string(launch_root, "argsTemplate", f"{path}.launch"),
             working_directory=optional_property_string(launch_root, "workingDirectory", f"{path}.launch"),
             dedupe_key_template=optional_property_string(launch_root, "dedupeKeyTemplate", f"{path}.launch"),
@@ -389,6 +390,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         delivery = InvocationDelivery(
             lease_seconds=require_positive_int(delivery_root, "leaseSeconds", f"{path}.delivery"),
             attempt=require_positive_int(delivery_root, "attempt", f"{path}.delivery"),
+            lease_token=require_non_empty_string(delivery_root, "leaseToken", f"{path}.delivery"),
         )
 
     caller_root = require_mapping(root.get("caller"), f"{path}.caller")
@@ -510,10 +512,11 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
         require_validated_string(payload_root, "instanceId", path, validate_instance_id)
-        if "scope" in payload_root:
-            require_scope_string(payload_root, "scope", path)
+        require_scope_string(payload_root, "scope", path)
         if "password" in payload_root:
             raise RuntimeError(f"{path}.password 不得出现。")
+        if "instanceSessionToken" in payload_root:
+            raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
 
 
 def optional_property_string(root: Mapping[str, Any], name: str, path: str) -> str | None:
@@ -530,6 +533,22 @@ def optional_property_bool(root: Mapping[str, Any], name: str, path: str) -> boo
     if name not in root:
         return None
     return require_bool(root, name, path)
+
+
+def optional_property_string_list(root: Mapping[str, Any], name: str, path: str) -> list[str] | None:
+    """读取“可省略但不可为 null”的字符串数组属性。"""
+
+    if name not in root:
+        return None
+    value = root.get(name)
+    if not isinstance(value, list):
+        raise RuntimeError(f"{path}.{name} 类型非法。")
+    parsed: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise RuntimeError(f"{path}.{name}[{index}] 类型非法。")
+        parsed.append(item)
+    return parsed
 
 
 def optional_property_int_at_least(

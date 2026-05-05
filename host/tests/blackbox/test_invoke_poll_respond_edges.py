@@ -137,12 +137,13 @@ class TestInvokePollRespondEdges(unittest.TestCase):
                 return result
 
             invocation_id = items[0].get("invocationId")
+            lease_token = items[0].get("delivery", {}).get("leaseToken")
             if not invocation_id:
                 result.mark_failure(f"❌ poll item 缺少 invocationId: {items[0]}")
                 return result
 
             time.sleep(1)
-            respond_response = client.respond_value(instance_id, invocation_id, {"ok": True})
+            respond_response = client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_success(result, respond_response):
                 return result
 
@@ -225,6 +226,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
                 return result
 
             invocation_id = items[0].get("invocationId")
+            lease_token = items[0].get("delivery", {}).get("leaseToken")
             if not invocation_id:
                 result.mark_failure(f"❌ poll item 缺少 invocationId: {items[0]}")
                 return result
@@ -239,6 +241,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
                 respond_instance_id,
                 invocation_id,
                 {"ok": True},
+                lease_token=lease_token,
             )
             if not RpcAssertions.expect_error(result, respond_after_unregister, -32010, "instance_not_found"):
                 return result
@@ -344,7 +347,7 @@ class TestInvokePollRespondEdges(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            response = client.respond_value(instance_id, "invk-unknown", {"ok": True})
+            response = client.respond_value(instance_id, "invk-unknown", {"ok": True}, lease_token="missing-lease-token")
             if not RpcAssertions.expect_error(
                 result,
                 response,

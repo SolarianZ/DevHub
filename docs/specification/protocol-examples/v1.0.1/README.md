@@ -19,6 +19,7 @@
 - `invocationId`：`invk-sample-request-001`
 - `launchId`：`launch-sample-app-global-001`
 - `instanceSessionToken`：`inst-session-node-01-alpha-001`
+- `leaseToken`：`lease-sample-request-001-attempt-1`
 - `serverTimeUtc`：`2026-03-28T12:34:56Z`
 - `registeredAtUtc`：`2026-03-28T12:35:01Z`
 - `lastSeenUtc`：`2026-03-28T12:35:16Z`
@@ -102,6 +103,7 @@ HTTP：
 - [`http/invoke-request.success.json`](./http/invoke-request.success.json)
 - [`http/invoke-request.invocation-failed.error.json`](./http/invoke-request.invocation-failed.error.json)
 - [`http/invoke-poll.request.json`](./http/invoke-poll.request.json)
+- [`http/invoke-poll.success.json`](./http/invoke-poll.success.json)
 - [`http/invoke-respond.request.json`](./http/invoke-respond.request.json)
 
 WebSocket：
@@ -127,9 +129,9 @@ WebSocket：
 - 所有 `*.error.json` 错误示例对应 [`error-response.json`](../../schema/v1.0.1/error-response.json)。
 - 所有 `ws/event.notification*.json` 事件示例对应 [`event-notification.json`](../../schema/v1.0.1/event-notification.json)。
 - `get-instance.*.json` 演示 `hub.apps.getInstance` 的精确实例查询语义；`launch.*.json` 演示 `hub.apps.launch` 的显式 `appId + scope` 启动语义。
-- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。
+- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。包含启动配置的 Definition 示例使用结构化 `launch.args` 表示 argv 参数。
 - `listDefinitions` 与 `listInstances` 都演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅匹配 Global 的语义。除这两个列表查询外，本目录不会用 `scope: null` 表示 Global，也不会省略必须显式存在的 `scope` 字段。
-- `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。
+- `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。`invoke-poll.success.json` 展示 Hub 在 `delivery.leaseToken` 中签发的当前租约 token；`invoke-respond.request.json` 使用同一 token 完成本次交付。
 - `invoke-notify.notification.request.json` 演示的是省略 `id` 的 JSON-RPC notification。该用法在 HTTP 下对应空的 `200 OK` 响应体；如需获得 JSON-RPC `error` 或成功结果，必须改为发送带 `id` 的普通 request。
 - 如需做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
 - 如需验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。

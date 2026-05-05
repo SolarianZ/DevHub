@@ -45,6 +45,10 @@ public sealed class WsLifecycleTests : IDisposable
             "scope"
         },
         {
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1"}}}""",
+            "scope"
+        },
+        {
             """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1.","scope":""}}}""",
             "instanceId"
         },
@@ -718,7 +722,7 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task EventsClient_WhenInstanceLifecycleEventOmitsScope_ShouldAcceptPayload()
+    public async Task EventsClient_WhenInstanceLifecycleEventIncludesScope_ShouldAcceptPayload()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var connection = new FakeWebSocketConnection();
@@ -737,7 +741,7 @@ public sealed class WsLifecycleTests : IDisposable
                 return
                 [
                     CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
-                    CreateTextMessage("""{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1"}}}"""),
+                    CreateTextMessage("""{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.instance.registered","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"test.app","instanceId":"inst-1","scope":""}}}"""),
                     CreateCloseMessage()
                 ];
             }
@@ -762,7 +766,7 @@ public sealed class WsLifecycleTests : IDisposable
 
         Assert.True(await moveNextTask);
         Assert.Equal(DevHubEventTypes.AppInstanceRegistered, enumerator.Current.Type);
-        Assert.False(enumerator.Current.Payload!.Value.TryGetProperty("scope", out _));
+        Assert.Equal(string.Empty, enumerator.Current.Payload!.Value.GetProperty("scope").GetString());
     }
 
     [Fact]

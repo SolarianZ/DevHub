@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
@@ -143,9 +144,10 @@ public class InvocationStore
     /// <summary>
     /// 响应调用。
     /// </summary>
-    public InvocationRespondStatus Respond(string instanceId, string invocationId, object? value, object? error)
+    public InvocationRespondStatus Respond(string instanceId, string invocationId, string leaseToken, object? value, object? error)
     {
         ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseToken);
 
         lock (_syncRoot)
         {
@@ -183,6 +185,11 @@ public class InvocationStore
                 return InvocationRespondStatus.DeliveryConflict;
             }
 
+            if (!string.Equals(invocation.Delivery.LeaseToken, leaseToken, StringComparison.Ordinal))
+            {
+                return InvocationRespondStatus.DeliveryConflict;
+            }
+
             if (invocation.LeaseExpireAtUtc.HasValue && now > invocation.LeaseExpireAtUtc.Value)
             {
                 return InvocationRespondStatus.DeliveryConflict;
@@ -190,6 +197,9 @@ public class InvocationStore
 
             invocation.State = error is null ? InvocationState.Completed : InvocationState.Failed;
             invocation.CompletedAtUtc = now;
+            invocation.LeaseHolderInstanceId = null;
+            invocation.LeaseExpireAtUtc = null;
+            invocation.Delivery.LeaseToken = string.Empty;
             invocation.ResponseValue = value;
             invocation.ResponseError = error;
             return InvocationRespondStatus.Success;
@@ -279,6 +289,7 @@ public class InvocationStore
             invocation.State = InvocationState.Delivered;
             invocation.LeaseHolderInstanceId = instance.InstanceId;
             invocation.LeaseExpireAtUtc = now.AddSeconds(invocation.Delivery.LeaseSeconds);
+            invocation.Delivery.LeaseToken = GenerateLeaseToken();
         }
 
         return candidates;
@@ -302,7 +313,14 @@ public class InvocationStore
                     invocationId = invocation.InvocationId,
                     appId = invocation.AppId,
                     instanceId = instance.InstanceId,
-                    scope = invocation.Target.Scope
+                    target = invocation.Target,
+                    scope = invocation.Target.Scope,
+                    method = invocation.Method,
+                    kind = invocation.Kind.ToString().ToLowerInvariant(),
+                    delivery = new
+                    {
+                        attempt = invocation.Delivery.Attempt
+                    }
                 }
             });
         }
@@ -334,6 +352,7 @@ public class InvocationStore
 
             invocation.LeaseHolderInstanceId = null;
             invocation.LeaseExpireAtUtc = null;
+            invocation.Delivery.LeaseToken = string.Empty;
             invocation.Delivery.Attempt += 1;
 
             var hasOnlineCandidates = _routingService
@@ -393,6 +412,7 @@ public class InvocationStore
         invocation.CompletedAtUtc = now;
         invocation.LeaseHolderInstanceId = null;
         invocation.LeaseExpireAtUtc = null;
+        invocation.Delivery.LeaseToken = string.Empty;
 
         transitions?.Add(new InvocationSweepTransition
         {
@@ -459,8 +479,19 @@ public class InvocationStore
     private InvocationModel CreateInvocationCore(InvocationModel invocation, bool hasOnlineCandidates)
     {
         invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
+        invocation.Delivery.LeaseToken = string.Empty;
         _all[invocation.InvocationId] = invocation;
         return invocation;
+    }
+
+    private static string GenerateLeaseToken()
+    {
+        Span<byte> bytes = stackalloc byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
     }
 
     private int CountActiveInvocationsUnsafe()

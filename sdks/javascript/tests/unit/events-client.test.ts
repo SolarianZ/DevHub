@@ -654,7 +654,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   }
 });
 
-it("实例事件应接受省略 scope 的 payload", async () => {
+it("实例事件应拒绝省略 scope 的 payload", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubEventsClient.fromRuntime(
@@ -706,16 +706,11 @@ it("实例事件应接受省略 scope 的 payload", async () => {
 
   try {
     await client.authenticate();
-    const iterator = client.readEvents()[Symbol.asyncIterator]();
-    await client.subscribe(["app.instance.registered"]);
-
-    const first = await iterator.next();
-    expect(first.done).toBe(false);
-    expect(first.value.type).toBe("app.instance.registered");
-    expect(first.value.payload).toEqual({
-      appId: "test.app",
-      instanceId: "inst-1"
-    });
+    await expect(client.subscribe(["app.instance.registered"]))
+      .rejects
+      .toMatchObject({
+        kind: "invalid_response"
+      });
   } finally {
     await client.dispose();
   }

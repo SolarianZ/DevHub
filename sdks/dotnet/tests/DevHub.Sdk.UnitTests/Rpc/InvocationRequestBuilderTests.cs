@@ -213,6 +213,19 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
+    public void ListInstancesBuilder_WhenAppIdOmitted_ShouldStillSerializeExplicitScope()
+    {
+        var payload = RequestPayloadFactory.BuildListInstancesParams(new ListInstancesRequest
+        {
+            Scope = string.Empty
+        });
+
+        using var document = Serialize(payload);
+        Assert.False(document.RootElement.TryGetProperty("appId", out _));
+        Assert.Equal(string.Empty, document.RootElement.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public void GetInstanceBuilder_ShouldSerializeValidatedInstanceId()
     {
         var payload = RequestPayloadFactory.BuildGetInstanceParams("NODE_01.alpha");
@@ -263,7 +276,11 @@ public sealed class InvocationRequestBuilderTests
         {
             AppId = "test.app",
             Scope = string.Empty,
-            DisplayName = "Test App"
+            DisplayName = "Test App",
+            Launch = new LaunchConfiguration
+            {
+                Args = ["--scope", "{scope}"]
+            }
         };
 
         var validatePayload = RequestPayloadFactory.BuildValidateDefinitionParams(definition);
@@ -281,6 +298,8 @@ public sealed class InvocationRequestBuilderTests
 
         Assert.Equal(string.Empty, validateDefinition.GetProperty("scope").GetString());
         Assert.Equal(string.Empty, upsertDefinition.GetProperty("scope").GetString());
+        Assert.Equal("--scope", validateDefinition.GetProperty("launch").GetProperty("args")[0].GetString());
+        Assert.False(validateDefinition.GetProperty("launch").TryGetProperty("exePath", out _));
         Assert.Equal(string.Empty, getDocument.RootElement.GetProperty("scope").GetString());
         Assert.Equal("scope-a", deleteDocument.RootElement.GetProperty("scope").GetString());
     }
@@ -514,11 +533,13 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Value = null
         });
 
         using var document = Serialize(payload);
         Assert.Equal("session-1", document.RootElement.GetProperty("instanceSessionToken").GetString());
+        Assert.Equal("lease-1", document.RootElement.GetProperty("leaseToken").GetString());
         Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("value").ValueKind);
         Assert.False(document.RootElement.TryGetProperty("error", out _));
     }
@@ -531,6 +552,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Error = new DevHubCalleeError
             {
                 Code = 1001,
@@ -547,6 +569,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Error = new DevHubCalleeError
             {
                 Code = 1001,
@@ -573,6 +596,15 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
+            Value = new { ok = true }
+        }));
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
+            InvocationId = "invk-1",
+            LeaseToken = " ",
             Value = new { ok = true }
         }));
     }

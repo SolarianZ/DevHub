@@ -174,12 +174,6 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
             throw new InvalidOperationException("JSON-RPC 响应的 jsonrpc 版本非法。");
         }
 
-        var responseId = ReadResponseId(root);
-        if (!string.Equals(responseId, requestId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
-        }
-
         var hasResult = root.TryGetProperty("result", out var resultElement);
         var hasError = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind != JsonValueKind.Null;
         if (hasResult == hasError)
@@ -189,7 +183,13 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
 
         if (hasError)
         {
-            ThrowRpcException(errorElement, requestId);
+            ThrowRpcException(errorElement, ReadOptionalResponseId(root) ?? requestId);
+        }
+
+        var responseId = ReadResponseId(root);
+        if (!string.Equals(responseId, requestId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
         }
 
         if (resultElement.ValueKind != JsonValueKind.Object)
@@ -203,6 +203,21 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
     private static string ReadResponseId(JsonElement root)
     {
         return JsonRpcIdReader.ReadRequiredResponseId(root, "JSON-RPC 响应");
+    }
+
+    private static string? ReadOptionalResponseId(JsonElement root)
+    {
+        if (!root.TryGetProperty("id", out var idElement) || idElement.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return idElement.ValueKind switch
+        {
+            JsonValueKind.String => idElement.GetString() ?? string.Empty,
+            JsonValueKind.Number when idElement.TryGetInt64(out var numericId) => numericId.ToString(CultureInfo.InvariantCulture),
+            _ => null
+        };
     }
 
     private static void ThrowRpcException(JsonElement errorElement, string requestId)

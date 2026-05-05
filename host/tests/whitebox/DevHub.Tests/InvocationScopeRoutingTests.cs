@@ -377,7 +377,12 @@ public class InvocationScopeRoutingTests : IDisposable
             var pollResponse = await store.PollAsync(scopedInstance, maxCount: 1, waitMs: 1500, CancellationToken.None);
             if (pollResponse.Count > 0)
             {
-                _ = store.Respond("route-log-request-scoped", pollResponse[0].InvocationId, new { ok = true }, null);
+                _ = store.Respond(
+                    "route-log-request-scoped",
+                    pollResponse[0].InvocationId,
+                    pollResponse[0].Delivery.LeaseToken,
+                    new { ok = true },
+                    null);
                 waiter.CompleteSuccess(pollResponse[0].InvocationId, new { ok = true });
             }
         });

@@ -221,6 +221,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
             capabilities=AppCapabilities(rpc=False, events=True),
             launch=LaunchConfiguration(
                 exe_path="python",
+                args=["-m", "app", "--scope", "{scope}"],
                 args_template="-m app",
                 working_directory="/tmp",
                 dedupe_key_template="Sample.App",
@@ -240,12 +241,60 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
             },
             "launch": {
                 "exePath": "python",
+                "args": ["-m", "app", "--scope", "{scope}"],
                 "argsTemplate": "-m app",
                 "workingDirectory": "/tmp",
                 "dedupeKeyTemplate": "Sample.App",
             },
         }
     }
+
+
+def test_definition_builder_should_allow_missing_launch_and_missing_exe_path() -> None:
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+        }
+    }
+
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+            launch=LaunchConfiguration(args=["--workspace", "{scope}"]),
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "args": ["--workspace", "{scope}"],
+            },
+        }
+    }
+
+
+@pytest.mark.parametrize("args", ["--flag", [1], ["ok", 1]])
+def test_definition_builder_when_launch_args_is_not_string_list_should_raise(args: object) -> None:
+    with pytest.raises(ValueError, match="args"):
+        build_upsert_definition_params(
+            AppDefinition(
+                app_id="test.app",
+                display_name="Test App",
+                scope="",
+                launch=LaunchConfiguration(args=args),  # type: ignore[arg-type]
+            )
+        )
 
 
 def test_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
@@ -512,6 +561,7 @@ def test_respond_builder_when_error_message_missing_should_raise() -> None:
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 error=DevHubCalleeError(code=1001, message=""),
             )
         )
@@ -557,13 +607,28 @@ def test_respond_builder_should_allow_null_value() -> None:
             instance_id="inst-1",
             instance_session_token="token-1",
             invocation_id="invk-1",
+            lease_token="lease-1",
             value=None,
         )
     )
 
     assert payload["instanceSessionToken"] == "token-1"
+    assert payload["leaseToken"] == "lease-1"
     assert payload["value"] is None
     assert "error" not in payload
+
+
+def test_respond_builder_when_lease_token_missing_should_raise() -> None:
+    with pytest.raises(ValueError, match="lease_token"):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                instance_session_token="token-1",
+                invocation_id="invk-1",
+                lease_token="",
+                value={"ok": True},
+            )
+        )
 
 
 def test_respond_builder_when_value_and_error_both_missing_should_raise() -> None:
@@ -573,6 +638,7 @@ def test_respond_builder_when_value_and_error_both_missing_should_raise() -> Non
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
             )
         )
 
@@ -584,6 +650,7 @@ def test_respond_builder_when_invocation_id_violates_spec_should_raise() -> None
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="request-1",
+                lease_token="lease-1",
                 value={"ok": True},
             )
         )
@@ -596,6 +663,7 @@ def test_respond_builder_when_value_and_error_present_should_raise() -> None:
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 value={"ok": True},
                 error=DevHubCalleeError(code=1001, message="app_error"),
             )
@@ -609,6 +677,7 @@ def test_respond_builder_when_value_contains_unsupported_json_type_should_raise(
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 value={"callback": lambda: "ignored"},
             )
         )
@@ -621,6 +690,7 @@ def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> No
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 error=DevHubCalleeError(
                     code=1001,
                     message="app_error",

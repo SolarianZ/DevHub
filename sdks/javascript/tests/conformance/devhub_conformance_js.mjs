@@ -590,9 +590,19 @@ function buildAppDefinition(payload) {
 
   if ("launch" in payload && payload.launch !== undefined) {
     const launch = ensureRecord(payload.launch, "definition.launch");
-    definition.launch = {
-      exePath: ensureStringValue(launch.exePath, "definition.launch.exePath")
-    };
+    definition.launch = {};
+    if ("exePath" in launch && launch.exePath !== undefined) {
+      definition.launch.exePath = ensureStringValue(launch.exePath, "definition.launch.exePath");
+    }
+    if ("args" in launch && launch.args !== undefined) {
+      if (!Array.isArray(launch.args)) {
+        throw new Error("definition.launch.args must be an array.");
+      }
+      definition.launch.args = launch.args.map((item, index) => ensureStringValue(
+        item,
+        `definition.launch.args[${index}]`
+      ));
+    }
     if ("argsTemplate" in launch && launch.argsTemplate !== undefined) {
       definition.launch.argsTemplate = ensureStringValue(launch.argsTemplate, "definition.launch.argsTemplate");
     }

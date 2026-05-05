@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { buildRegisterInstanceParams } from "../../src/payloads.js";
+import {
+  buildListInstancesParams,
+  buildRegisterInstanceParams,
+  buildValidateDefinitionParams
+} from "../../src/payloads.js";
 import type { AppInstanceRegistration } from "../../src/index.js";
 
 it("buildRegisterInstanceParams 应拒绝 instance.password", () => {
@@ -46,6 +50,46 @@ it("buildRegisterInstanceParams 应拒绝空 launchId", () => {
 it("buildRegisterInstanceParams 应拒绝非对象 options", () => {
   expect(() => buildRegisterInstanceParams(createRegistration(), "secret-1", "launch-1" as any))
     .toThrow("options must be an object.");
+});
+
+it("buildValidateDefinitionParams 应允许缺少 launch 和 launch.exePath 并序列化结构化 args", () => {
+  expect(buildValidateDefinitionParams({
+    appId: "sample.app",
+    scope: "",
+    displayName: "Sample App"
+  })).toEqual({
+    definition: {
+      appId: "sample.app",
+      scope: "",
+      displayName: "Sample App"
+    }
+  });
+
+  expect(buildValidateDefinitionParams({
+    appId: "sample.app",
+    scope: "",
+    displayName: "Sample App",
+    launch: {
+      args: ["./app.js", "--scope", "{scope}"]
+    }
+  })).toEqual({
+    definition: {
+      appId: "sample.app",
+      scope: "",
+      displayName: "Sample App",
+      launch: {
+        args: ["./app.js", "--scope", "{scope}"]
+      }
+    }
+  });
+});
+
+it("buildListInstancesParams 应允许省略 appId 但保留显式 scope", () => {
+  expect(buildListInstancesParams({
+    scope: null
+  })).toEqual({
+    scope: null
+  });
 });
 
 function createRegistration(): AppInstanceRegistration {

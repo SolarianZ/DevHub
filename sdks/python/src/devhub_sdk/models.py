@@ -96,6 +96,7 @@ class LaunchConfiguration:
     """应用启动配置。"""
 
     exe_path: str | None = None
+    args: list[str] | None = None
     args_template: str | None = None
     working_directory: str | None = None
     dedupe_key_template: str | None = None
@@ -412,6 +413,7 @@ class InvocationDelivery:
 
     lease_seconds: int
     attempt: int
+    lease_token: str
 
 
 @dataclass(slots=True)
@@ -472,6 +474,7 @@ class RespondRequest:
     instance_id: str
     instance_session_token: str
     invocation_id: str
+    lease_token: str
     value: Any = None
     error: DevHubCalleeError | None = None
     _has_value: bool = field(init=False, repr=False, compare=False)
@@ -481,12 +484,14 @@ class RespondRequest:
         instance_id: str,
         instance_session_token: str,
         invocation_id: str,
+        lease_token: str,
         value: Any = _RESPOND_VALUE_UNSET,
         error: DevHubCalleeError | None = None,
     ) -> None:
         self.instance_id = instance_id
         self.instance_session_token = instance_session_token
         self.invocation_id = invocation_id
+        self.lease_token = lease_token
         self.value = None if value is _RESPOND_VALUE_UNSET else value
         self.error = error
         self._has_value = value is not _RESPOND_VALUE_UNSET

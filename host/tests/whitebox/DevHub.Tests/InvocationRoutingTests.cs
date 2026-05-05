@@ -234,6 +234,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-disabled",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-disabled"),
                 invocationId = "invk-non-existent",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         };
@@ -261,6 +262,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "missing-instance",
                 instanceSessionToken = "missing-instance-token",
                 invocationId = "invk-missing",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -561,7 +563,9 @@ public class InvocationRoutingTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var pollItem = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
         var conflictResponse = await handler.HandleAsync(new JsonRpcRequest
@@ -573,6 +577,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-other",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-other"),
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -858,7 +863,9 @@ public class InvocationRoutingTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var pollItem = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
         var beforeRespond = appRegistry.GetInstance("respond-last-seen")!.LastSeenUtc;
@@ -873,6 +880,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-last-seen",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-last-seen"),
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);

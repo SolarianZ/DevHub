@@ -496,6 +496,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.LeaseToken);
         var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");

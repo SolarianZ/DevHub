@@ -359,6 +359,7 @@ public class InvocationSpecTests : IDisposable
         var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(pollItems);
         var invocationId = pollItems[0].GetProperty("invocationId").GetString();
+        var leaseToken = pollItems[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.Equal(300000, pollItems[0].GetProperty("options").GetProperty("ttlMs").GetInt32());
 
         var respond = await RespondValueAsync(
@@ -367,6 +368,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.11-default-options-online-respond",
             onlineInstanceId,
             invocationId!,
+            leaseToken!,
             new
             {
                 ok = true
@@ -605,6 +607,7 @@ public class InvocationSpecTests : IDisposable
         var pollItems = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(pollItems);
         var invocationId = pollItems[0].GetProperty("invocationId").GetString();
+        var leaseToken = pollItems[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respond = await RespondErrorAsync(
             handler,
@@ -612,6 +615,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.11-invocation-failed-respond",
             instanceId,
             invocationId!,
+            leaseToken!,
             new
             {
                 code = 1001,
@@ -685,6 +689,7 @@ public class InvocationSpecTests : IDisposable
             var globalItems = JsonSerializer.SerializeToElement(pollGlobal.Result).GetProperty("items").EnumerateArray().ToList();
             Assert.Single(globalItems);
             var invocationId = globalItems[0].GetProperty("invocationId").GetString();
+            var leaseToken = globalItems[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
 
             var pollScoped = await PollAsync(handler, appRegistry, "spec-6.3.11-scoped", maxCount: 1, waitMs: 0);
             AssertSuccess(pollScoped);
@@ -697,6 +702,7 @@ public class InvocationSpecTests : IDisposable
                 $"spec-6.3.11-respond-{testCase.Name}",
                 "spec-6.3.11-global",
                 invocationId!,
+                leaseToken!,
                 new { caseName = testCase.Name });
             AssertSuccess(respond);
 
@@ -804,7 +810,9 @@ public class InvocationSpecTests : IDisposable
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var leaseSeconds = items[0].GetProperty("delivery").GetProperty("leaseSeconds").GetInt32();
+        var leaseToken = items[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.True(leaseSeconds >= 1);
+        Assert.False(string.IsNullOrWhiteSpace(leaseToken));
     }
 
     [Fact]
@@ -823,6 +831,7 @@ public class InvocationSpecTests : IDisposable
                 instanceId = "spec-6.3.13-unknown-instance",
                 instanceSessionToken = "missing-instance-token",
                 invocationId = "invk-missing",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -849,6 +858,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-respond-disabled",
             "spec-6.3.13-respond-disabled",
             "invk-missing",
+            "missing-lease-token",
             new { ok = true });
 
         AssertError(response, -32002, "forbidden");
@@ -976,6 +986,7 @@ public class InvocationSpecTests : IDisposable
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var invocationId = items[0].GetProperty("invocationId").GetString();
+        var leaseToken = items[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var nonHolder = await RespondValueAsync(
             handler,
@@ -983,6 +994,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-delivery-conflict-non-holder",
             otherInstanceId,
             invocationId!,
+            leaseToken!,
             new { ok = true });
         AssertError(nonHolder, -32030, "delivery_conflict");
 
@@ -992,6 +1004,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-delivery-conflict-first",
             holderInstanceId,
             invocationId!,
+            leaseToken!,
             new { ok = true });
         AssertSuccess(first);
 
@@ -1001,6 +1014,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-delivery-conflict-duplicate",
             holderInstanceId,
             invocationId!,
+            leaseToken!,
             new { ok = true });
         AssertError(duplicate, -32030, "delivery_conflict");
     }
@@ -1042,6 +1056,7 @@ public class InvocationSpecTests : IDisposable
         var timeoutItems = JsonSerializer.SerializeToElement(timeoutPoll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(timeoutItems);
         var timeoutInvocationId = timeoutItems[0].GetProperty("invocationId").GetString();
+        var timeoutLeaseToken = timeoutItems[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var timeoutResponse = await timeoutRequestTask;
         AssertError(timeoutResponse, -32012, "invocation_timeout");
@@ -1052,6 +1067,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-timeout-late-respond",
             timeoutInstanceId,
             timeoutInvocationId!,
+            timeoutLeaseToken!,
             new { ok = true });
         AssertError(lateTimeoutRespond, -32011, "invocation_expired");
 
@@ -1091,6 +1107,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-expired-late-respond",
             "spec-6.3.13-expired-helper",
             expiredInvocationId!,
+            "expired-lease-token",
             new { ok = true });
 
         AssertError(lateExpiredRespond, -32011, "invocation_expired");
@@ -1133,6 +1150,7 @@ public class InvocationSpecTests : IDisposable
         var items = JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var invocationId = items[0].GetProperty("invocationId").GetString();
+        var leaseToken = items[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respond = await RespondValueAsync(
             handler,
@@ -1140,6 +1158,7 @@ public class InvocationSpecTests : IDisposable
             "spec-6.3.13-last-seen-respond",
             instanceId,
             invocationId!,
+            leaseToken!,
             new { ok = true });
 
         AssertSuccess(respond);
@@ -1214,6 +1233,7 @@ public class InvocationSpecTests : IDisposable
         string requestId,
         string instanceId,
         string invocationId,
+        string leaseToken,
         object value)
     {
         return await handler.HandleAsync(new JsonRpcRequest
@@ -1225,6 +1245,7 @@ public class InvocationSpecTests : IDisposable
                 instanceId,
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
                 invocationId,
+                leaseToken,
                 value
             })
         }, CancellationToken.None);
@@ -1236,6 +1257,7 @@ public class InvocationSpecTests : IDisposable
         string requestId,
         string instanceId,
         string invocationId,
+        string leaseToken,
         object error)
     {
         return await handler.HandleAsync(new JsonRpcRequest
@@ -1247,6 +1269,7 @@ public class InvocationSpecTests : IDisposable
                 instanceId,
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, instanceId),
                 invocationId,
+                leaseToken,
                 error
             })
         }, CancellationToken.None);

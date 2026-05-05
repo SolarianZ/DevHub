@@ -982,6 +982,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var item = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray());
         var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await context.Handler.HandleAsync(
             CreateRequest(
@@ -992,6 +993,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "request.instance",
                     instanceSessionToken = requestToken,
                     invocationId,
+                    leaseToken,
                     value = new
                     {
                         ok = true,
@@ -1061,9 +1063,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var invocationId = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray())
-            .GetProperty("invocationId")
-            .GetString();
+        var item = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray());
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         await context.Handler.HandleAsync(
             CreateRequest(
@@ -1074,6 +1076,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "request.failed.instance",
                     instanceSessionToken = requestFailedToken,
                     invocationId,
+                    leaseToken,
                     error = new
                     {
                         code = 1001,
@@ -1251,6 +1254,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "respond.disabled",
                     instanceSessionToken = respondDisabledToken,
                     invocationId = "invk-any",
+                    leaseToken = "missing-lease-token",
                     value = new { ok = true }
                 }),
             CancellationToken.None);
@@ -1267,6 +1271,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "holder.instance",
                     instanceSessionToken = holderToken,
                     invocationId = "invk-unknown",
+                    leaseToken = "missing-lease-token",
                     value = new { ok = true }
                 }),
             CancellationToken.None);
@@ -1300,7 +1305,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var invocationId = JsonSerializer.SerializeToElement(notifyResponse.Result).GetProperty("invocationId").GetString();
 
-        await context.Handler.HandleAsync(
+        var pollResponse = await context.Handler.HandleAsync(
             CreateRequest(
                 HubRpcMethods.HubInvokePoll,
                 "poll-for-conflict",
@@ -1312,6 +1317,10 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     waitMs = 0
                 }),
             CancellationToken.None);
+        var leaseToken = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray())
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         var conflictResponse = await context.Handler.HandleAsync(
             CreateRequest(
@@ -1322,6 +1331,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "other.instance",
                     instanceSessionToken = otherToken,
                     invocationId,
+                    leaseToken,
                     value = new { ok = true }
                 }),
             CancellationToken.None);

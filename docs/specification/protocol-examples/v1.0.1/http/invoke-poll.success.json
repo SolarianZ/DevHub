@@ -1,0 +1,37 @@
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-poll",
+  "result": {
+    "ok": true,
+    "serverTimeUtc": "2026-03-28T12:34:56Z",
+    "items": [
+      {
+        "invocationId": "invk-sample-request-001",
+        "appId": "Sample.App",
+        "target": {
+          "scope": "",
+          "instanceId": null
+        },
+        "method": "sample.echo",
+        "args": {
+          "message": "hello"
+        },
+        "kind": "request",
+        "createdAtUtc": "2026-03-28T12:34:56Z",
+        "caller": {
+          "clientId": "DevHubUI",
+          "clientSessionId": "00000000-0000-0000-0000-000000000000"
+        },
+        "delivery": {
+          "leaseSeconds": 30,
+          "attempt": 1,
+          "leaseToken": "lease-sample-request-001-attempt-1"
+        },
+        "options": {
+          "ttlMs": 300000,
+          "waitTimeoutMs": 120000
+        }
+      }
+    ]
+  }
+}

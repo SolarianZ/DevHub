@@ -49,7 +49,7 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 清理过期实例（lastSeenUtc 超过 1 小时）
     /// </summary>
-    public void CleanupExpiredInstances()
+    public IReadOnlyList<AppInstance> CleanupExpiredInstances()
     {
         _logger.LogDebug("开始执行过期实例清理任务");
 
@@ -57,6 +57,7 @@ public class AppRegistry : IDisposable
         {
             var now = _clock.UtcNow;
             _logger.LogDebug("当前实例数量: {Count}", _instances.Count);
+            var removedInstances = new List<AppInstance>();
 
             var expiredInstanceIds = _instances.Values
                 .Where(i => now - i.LastSeenUtc > _cleanupThreshold)
@@ -71,6 +72,7 @@ public class AppRegistry : IDisposable
                 {
                     _passwordStates.TryRemove(instanceId, out _);
                     _sessionStates.TryRemove(instanceId, out _);
+                    removedInstances.Add(CloneInstance(removedInstance));
                     _logger.LogInformation("已清理过期应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID}, LastSeen: {LastSeen})",
                         instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid, removedInstance.LastSeenUtc);
                 }
@@ -84,6 +86,8 @@ public class AppRegistry : IDisposable
             {
                 _logger.LogDebug("没有发现过期实例需要清理");
             }
+
+            return removedInstances;
         }
     }
 

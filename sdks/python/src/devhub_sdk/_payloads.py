@@ -319,6 +319,7 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
             "request.instance_session_token",
         ),
         "invocationId": invocation_id,
+        "leaseToken": require_non_empty_string(request.lease_token, "request.lease_token"),
     }
     if has_error:
         payload["error"] = _callee_error_to_dict(request.error)
@@ -370,16 +371,18 @@ def _build_capabilities_payload(capabilities: AppCapabilities) -> dict[str, Any]
 
 def _build_launch_payload(launch: LaunchConfiguration) -> dict[str, Any]:
     exe_path = require_optional_string(launch.exe_path, "definition.launch.exe_path")
-    if exe_path is None:
-        raise ValueError("definition.launch.exe_path 类型非法。")
-
-    payload: dict[str, Any] = {"exePath": exe_path}
+    payload: dict[str, Any] = {}
+    if exe_path is not None:
+        payload["exePath"] = exe_path
+    args = _normalize_optional_string_list(launch.args, "definition.launch.args")
     args_template = require_optional_string(launch.args_template, "definition.launch.args_template")
     working_directory = require_optional_string(launch.working_directory, "definition.launch.working_directory")
     dedupe_key_template = require_optional_string(
         launch.dedupe_key_template,
         "definition.launch.dedupe_key_template",
     )
+    if args is not None:
+        payload["args"] = args
     if args_template is not None:
         payload["argsTemplate"] = args_template
     if working_directory is not None:
@@ -464,6 +467,19 @@ def _build_invoke_params(request: InvokeRequest, *, is_request: bool) -> dict[st
 
 def _ensure_json_object(value: Any, name: str) -> dict[str, Any]:
     return ensure_json_object(value, name)
+
+
+def _normalize_optional_string_list(value: Any, name: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError(f"{name} 类型非法。")
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise ValueError(f"{name}[{index}] 类型非法。")
+        normalized.append(item)
+    return normalized
 
 
 def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:

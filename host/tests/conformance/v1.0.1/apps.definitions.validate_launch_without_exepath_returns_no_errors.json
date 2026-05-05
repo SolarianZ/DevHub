@@ -1,0 +1,48 @@
+{
+  "id": "apps.definitions.validate_launch_without_exepath_returns_no_errors",
+  "caseId": "CONF-003",
+  "description": "包含 launch 但缺少 launch.exePath 的 AppDefinition 仍可通过定义校验。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000206"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-launch-without-exepath",
+    "method": "hub.apps.validateDefinition",
+    "params": {
+      "definition": {
+        "appId": "apps.validate.launch-no-exepath.app",
+        "scope": "",
+        "displayName": "Apps Validate Launch Without ExePath",
+        "launch": {
+          "args": [
+            "--scope",
+            "{scopeOrGlobal}"
+          ]
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-validate-launch-without-exepath",
+    "result": {
+      "ok": true,
+      "valid": true,
+      "errors": []
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

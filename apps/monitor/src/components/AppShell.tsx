@@ -1097,6 +1097,16 @@ function DefinitionWorkspacePage(props: {
                     <FieldIssues issues={workspace.fieldErrors["definition.launch.exePath"]} />
                   </label>
 
+                  <label className="field field-full">
+                    <span>args</span>
+                    <textarea
+                      value={workspace.form.launchArgs}
+                      disabled={disableInputs}
+                      onChange={(event) => onChangeField("launchArgs", event.target.value)}
+                    />
+                    <FieldIssues issues={workspace.fieldErrors["definition.launch.args"]} />
+                  </label>
+
                   <label className="field">
                     <span>argsTemplate</span>
                     <input

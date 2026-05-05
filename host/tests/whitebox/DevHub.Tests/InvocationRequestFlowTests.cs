@@ -84,7 +84,9 @@ public class InvocationRequestFlowTests : IDisposable
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
         var item = pollResult.GetProperty("items").EnumerateArray().Single();
         var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
+        Assert.False(string.IsNullOrWhiteSpace(leaseToken));
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -95,6 +97,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true, version = 1 }
             })
         }, CancellationToken.None);
@@ -158,7 +161,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -169,6 +174,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = (object?)null
             })
         }, CancellationToken.None);
@@ -223,7 +229,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -234,6 +242,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 error = new
                 {
                     code = 1001,
@@ -299,7 +308,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var requestResponse = await requestTask;
         Assert.NotNull(requestResponse.Error);
@@ -319,6 +330,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -378,7 +390,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         cts.Cancel();
 
@@ -395,6 +409,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -450,6 +465,13 @@ public class InvocationRequestFlowTests : IDisposable
             .Single()
             .GetProperty("invocationId")
             .GetString();
+        var leaseToken = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         cts.Cancel();
 
@@ -464,6 +486,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -526,6 +549,13 @@ public class InvocationRequestFlowTests : IDisposable
             .Single()
             .GetProperty("invocationId")
             .GetString();
+        var leaseToken = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
@@ -542,6 +572,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);

@@ -1,0 +1,60 @@
+{
+  "id": "apps.launch.blank_exepath_returns_launch_config_missing",
+  "caseId": "CONF-004",
+  "description": "Definition 的 launch.exePath 为空白字符串时，hub.apps.launch 必须返回 launch_config_missing。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.launch.blank-exepath.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps Launch Blank ExePath",
+          "launch": {
+            "exePath": "   ",
+            "args": [
+              "--scope",
+              "{scopeOrGlobal}"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceLaunch",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000207"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-launch-blank-exepath",
+    "method": "hub.apps.launch",
+    "params": {
+      "appId": "apps.launch.blank-exepath.app",
+      "scope": "",
+      "waitForRegisterMs": 0
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-launch-blank-exepath",
+    "error": {
+      "code": -32020,
+      "message": "launch_failed",
+      "data": {
+        "reason": "launch_config_missing"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "launch",
+    "http",
+    "error"
+  ]
+}

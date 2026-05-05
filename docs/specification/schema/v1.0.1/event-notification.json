@@ -106,12 +106,15 @@
         },
         "launch": {
           "type": "object",
-          "required": [
-            "exePath"
-          ],
           "properties": {
             "exePath": {
               "type": "string"
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "argsTemplate": {
               "type": "string"
@@ -165,7 +168,8 @@
       "type": "object",
       "required": [
         "appId",
-        "instanceId"
+        "instanceId",
+        "scope"
       ],
       "properties": {
         "appId": {

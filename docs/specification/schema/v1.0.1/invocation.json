@@ -79,6 +79,11 @@
     },
     "delivery": {
       "type": "object",
+      "required": [
+        "leaseSeconds",
+        "attempt",
+        "leaseToken"
+      ],
       "properties": {
         "leaseSeconds": {
           "type": "integer",
@@ -87,6 +92,10 @@
         "attempt": {
           "type": "integer",
           "minimum": 1
+        },
+        "leaseToken": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

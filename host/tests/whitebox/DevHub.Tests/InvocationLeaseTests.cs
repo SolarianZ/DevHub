@@ -46,7 +46,7 @@ public class InvocationLeaseTests
         Assert.Single(polled);
         Assert.Equal(created.InvocationId, polled[0].InvocationId);
 
-        var status = store.Respond(instanceB.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instanceB.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.DeliveryConflict, status);
     }
 
@@ -70,9 +70,10 @@ public class InvocationLeaseTests
         var polled = await store.PollAsync(instance, maxCount: 10, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
         Assert.Equal(created.InvocationId, polled[0].InvocationId);
+        var leaseToken = polled[0].Delivery.LeaseToken;
 
-        var first = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
-        var second = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var first = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
+        var second = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
 
         Assert.Equal(InvocationRespondStatus.Success, first);
         Assert.Equal(InvocationRespondStatus.DeliveryConflict, second);
@@ -105,10 +106,12 @@ public class InvocationLeaseTests
 
         var created = store.CreateInvocation(CreateNotify("lease.app", leaseSeconds: 1), hasOnlineCandidates: true);
         var firstPoll = await store.PollAsync(instanceA, maxCount: 1, waitMs: 0, CancellationToken.None);
+        var firstLeaseToken = firstPoll[0].Delivery.LeaseToken;
 
         Assert.Single(firstPoll);
         Assert.Equal(1, firstPoll[0].Delivery.Attempt);
         Assert.Equal(instanceA.InstanceId, firstPoll[0].LeaseHolderInstanceId);
+        Assert.False(string.IsNullOrWhiteSpace(firstLeaseToken));
 
         clock.Advance(TimeSpan.FromSeconds(2));
 
@@ -120,6 +123,11 @@ public class InvocationLeaseTests
         Assert.Equal(2, redelivered.Delivery.Attempt);
         Assert.Equal(InvocationState.Delivered, redelivered.State);
         Assert.Equal(instanceB.InstanceId, redelivered.LeaseHolderInstanceId);
+        Assert.False(string.IsNullOrWhiteSpace(redelivered.Delivery.LeaseToken));
+        Assert.NotEqual(firstLeaseToken, redelivered.Delivery.LeaseToken);
+
+        var staleResponse = store.Respond(instanceA.InstanceId, created.InvocationId, firstLeaseToken, value: new { ok = true }, error: null);
+        Assert.Equal(InvocationRespondStatus.DeliveryConflict, staleResponse);
     }
 
     [Fact]
@@ -145,7 +153,7 @@ public class InvocationLeaseTests
 
         clock.Advance(TimeSpan.FromSeconds(2));
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instance.InstanceId, created.InvocationId, firstPoll[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.DeliveryConflict, status);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -203,7 +211,4 @@ public class InvocationLeaseTests
         };
     }
 }
-
-
-
 

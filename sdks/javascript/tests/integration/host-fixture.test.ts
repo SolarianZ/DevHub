@@ -27,7 +27,7 @@ it("close 应回收 Host 进程树并清理临时目录", async () => {
       displayName: "host.cleanup.app",
       launch: {
         exePath: process.execPath,
-        argsTemplate: quoteCommandArgument(path.normalize(longRunningLaunchScriptPath))
+        args: [path.normalize(longRunningLaunchScriptPath)]
       }
     });
 
@@ -209,9 +209,6 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
-function quoteCommandArgument(value: string): string {
-  return value.includes(" ") ? `"${value}"` : value;
-}
 
 async function createFakeRepositoryRoot(): Promise<string> {
   return await fsPromises.realpath(

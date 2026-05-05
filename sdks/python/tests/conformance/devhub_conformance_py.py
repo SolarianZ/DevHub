@@ -611,6 +611,7 @@ def build_app_definition(payload: dict[str, Any]) -> AppDefinition:
         launch_root = require_mapping(launch_payload, "definition.launch")
         launch = LaunchConfiguration(
             exe_path=launch_root.get("exePath"),
+            args=launch_root.get("args"),
             args_template=launch_root.get("argsTemplate"),
             working_directory=launch_root.get("workingDirectory"),
             dedupe_key_template=launch_root.get("dedupeKeyTemplate"),
@@ -687,7 +688,11 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
             capabilities["events"] = definition.capabilities.events
         actual["capabilities"] = capabilities
     if definition.launch is not None:
-        launch: dict[str, Any] = {"exePath": definition.launch.exe_path}
+        launch: dict[str, Any] = {}
+        if definition.launch.exe_path is not None:
+            launch["exePath"] = definition.launch.exe_path
+        if definition.launch.args is not None:
+            launch["args"] = definition.launch.args
         if definition.launch.args_template is not None:
             launch["argsTemplate"] = definition.launch.args_template
         if definition.launch.working_directory is not None:

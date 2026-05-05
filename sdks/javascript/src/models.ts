@@ -64,7 +64,8 @@ export interface AppCapabilities {
 }
 
 export interface LaunchConfiguration {
-  exePath: string;
+  exePath?: string;
+  args?: string[];
   argsTemplate?: string;
   workingDirectory?: string;
   dedupeKeyTemplate?: string;
@@ -200,6 +201,7 @@ export interface PollRequest extends InstanceOwnedRequest {
 }
 
 export interface InvocationDelivery {
+  leaseToken: string;
   leaseSeconds: number;
   attempt: number;
 }
@@ -232,12 +234,14 @@ export interface PollResult {
 
 export interface RespondValueRequest extends InstanceOwnedRequest {
   invocationId: string;
+  leaseToken: string;
   value: JsonValue;
   error?: never;
 }
 
 export interface RespondErrorRequest extends InstanceOwnedRequest {
   invocationId: string;
+  leaseToken: string;
   value?: never;
   error: DevHubCalleeError;
 }

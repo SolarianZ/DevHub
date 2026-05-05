@@ -100,27 +100,16 @@ public sealed class AppDefinitionValidator
             return null;
         }
 
-        var exePath = ReadRequiredString(
-            launchElement,
-            "exePath",
-            issues,
-            "definition.launch.exePath",
-            "missing_launch_exe_path",
-            "launch.exePath is required when launch is provided",
-            allowWhiteSpace: true);
-
+        var exePath = ReadOptionalString(launchElement, "exePath", issues, "definition.launch.exePath");
+        var args = ReadOptionalStringArray(launchElement, "args", issues, "definition.launch.args");
         var argsTemplate = ReadOptionalString(launchElement, "argsTemplate", issues, "definition.launch.argsTemplate");
         var workingDirectory = ReadOptionalString(launchElement, "workingDirectory", issues, "definition.launch.workingDirectory");
         var dedupeKeyTemplate = ReadOptionalString(launchElement, "dedupeKeyTemplate", issues, "definition.launch.dedupeKeyTemplate");
 
-        if (issues.Count > 0 && exePath is null)
-        {
-            return null;
-        }
-
         return new LaunchConfiguration
         {
             ExePath = exePath,
+            Args = args,
             ArgsTemplate = argsTemplate,
             WorkingDirectory = workingDirectory,
             DedupeKeyTemplate = dedupeKeyTemplate
@@ -211,6 +200,46 @@ public sealed class AppDefinitionValidator
         }
 
         return property.GetString();
+    }
+
+    private static List<string>? ReadOptionalStringArray(
+        JsonElement element,
+        string propertyName,
+        ICollection<ValidationIssue> issues,
+        string path)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            issues.Add(CreateIssue(path, "invalid_field_type", $"{propertyName} must be an array of strings"));
+            return null;
+        }
+
+        if (property.ValueKind != JsonValueKind.Array)
+        {
+            issues.Add(CreateIssue(path, "invalid_field_type", $"{propertyName} must be an array of strings"));
+            return null;
+        }
+
+        var values = new List<string>();
+        var index = 0;
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                issues.Add(CreateIssue($"{path}[{index}]", "invalid_field_type", $"{propertyName} items must be strings"));
+                return null;
+            }
+
+            values.Add(item.GetString() ?? string.Empty);
+            index += 1;
+        }
+
+        return values;
     }
 
     private static string? ReadRequiredScope(

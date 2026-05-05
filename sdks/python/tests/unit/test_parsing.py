@@ -21,17 +21,19 @@ from devhub_sdk._parsing import (
 )
 
 
-def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
-    with pytest.raises(RuntimeError):
-        parse_app_definition(
-            {
-                "appId": "test.app",
-                "scope": "",
-                "displayName": "Test App",
-                "launch": {},
-            },
-            path="app.definition",
-        )
+def test_parse_app_definition_should_allow_launch_without_exe_path() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {},
+        },
+        path="app.definition",
+    )
+
+    assert definition.launch is not None
+    assert definition.launch.exe_path is None
 
 
 def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
@@ -144,6 +146,40 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
 
     assert definition.launch is not None
     assert definition.launch.exe_path == ""
+
+
+def test_parse_app_definition_should_preserve_structured_launch_args() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "args": ["--scope", "{scope}", ""],
+            },
+        },
+        path="app.definition",
+    )
+
+    assert definition.launch is not None
+    assert definition.launch.args == ["--scope", "{scope}", ""]
+    assert definition.launch.exe_path is None
+
+
+@pytest.mark.parametrize("args", [None, "--scope {scope}", [1], ["ok", 1]])
+def test_parse_app_definition_when_launch_args_is_not_string_array_should_raise(args: object) -> None:
+    with pytest.raises(RuntimeError, match=r"args"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": "",
+                "displayName": "Test App",
+                "launch": {
+                    "args": args,
+                },
+            },
+            path="app.definition",
+        )
 
 
 def test_parse_app_definition_should_preserve_literal_global_scope_distinction() -> None:
@@ -451,6 +487,21 @@ def test_parse_invocation_when_delivery_is_not_positive_should_raise(field_name:
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
+def test_parse_invocation_should_expose_delivery_lease_token() -> None:
+    invocation = parse_invocation(_invocation_payload(), path="hub.invoke.poll.result.items[0]")
+
+    assert invocation.delivery is not None
+    assert invocation.delivery.lease_token == "lease-1"
+
+
+def test_parse_invocation_when_delivery_lease_token_missing_should_raise() -> None:
+    payload = _invocation_payload()
+    del payload["delivery"]["leaseToken"]  # type: ignore[index]
+
+    with pytest.raises(RuntimeError, match=r"leaseToken"):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
 def test_parse_notify_result_when_invocation_id_violates_spec_should_raise() -> None:
     with pytest.raises(RuntimeError):
         parse_notify_result(
@@ -602,25 +653,20 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
         )
 
 
-def test_parse_event_when_instance_payload_omits_scope_should_accept() -> None:
-    event = parse_event(
-        {
-            "subscriptionId": "sub-1",
-            "type": "app.instance.registered",
-            "timeUtc": "2026-03-09T00:00:00Z",
-            "payload": {
-                "appId": "test.app",
-                "instanceId": "inst-1",
+def test_parse_event_when_instance_payload_omits_scope_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.registered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                },
             },
-        },
-        path="hub.event.params",
-    )
-
-    assert event.type is DevHubEventType.APP_INSTANCE_REGISTERED
-    assert event.payload == {
-        "appId": "test.app",
-        "instanceId": "inst-1",
-    }
+            path="hub.event.params",
+        )
 
 
 def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
@@ -634,6 +680,24 @@ def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
                     "appId": "test.app",
                     "instanceId": "inst-1",
                     "scope": None,
+                },
+            },
+            path="hub.event.params",
+        )
+
+
+def test_parse_event_when_instance_payload_contains_instance_session_token_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.unregistered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                    "scope": "",
+                    "instanceSessionToken": "token-1",
                 },
             },
             path="hub.event.params",
@@ -774,6 +838,7 @@ def _invocation_payload() -> dict[str, object]:
         "delivery": {
             "leaseSeconds": 30,
             "attempt": 1,
+            "leaseToken": "lease-1",
         },
         "caller": {
             "clientId": "client-1",

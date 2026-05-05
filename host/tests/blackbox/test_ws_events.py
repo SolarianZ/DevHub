@@ -641,7 +641,8 @@ class TestWsEvents:
                     return result
 
                 invocation_id = items[0].get("invocationId")
-                respond_response = rpc_client.respond_value(instance_id, invocation_id, {"ok": True})
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
+                respond_response = rpc_client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
                 if not RpcAssertions.expect_success(result, respond_response):
                     return result
 
@@ -948,11 +949,12 @@ class TestWsEvents:
                     return result
 
                 invocation_id = items[0].get("invocationId")
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
                 respond_response = rpc_client.respond_error(instance_id, invocation_id, {
                     "code": 1001,
                     "message": "app_error",
                     "data": {"reason": "mock"}
-                })
+                }, lease_token=lease_token)
                 if not RpcAssertions.expect_success(result, respond_response):
                     return result
 

@@ -42,6 +42,7 @@ public sealed class TransportAdapterImplTests
                   "displayName": "",
                   "description": null,
                   "launch": {
+                    "args": [1],
                     "argsTemplate": 1,
                     "workingDirectory": null,
                     "dedupeKeyTemplate": false
@@ -62,7 +63,8 @@ public sealed class TransportAdapterImplTests
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.appId" && issue.Code == "invalid_app_id");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.displayName" && issue.Code == "missing_display_name");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.description" && issue.Code == "invalid_field_type");
-        Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.exePath" && issue.Code == "missing_launch_exe_path");
+        Assert.DoesNotContain(validationResult.Errors, issue => issue.Path == "definition.launch.exePath");
+        Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.args[0]" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.argsTemplate" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.workingDirectory" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.dedupeKeyTemplate" && issue.Code == "invalid_field_type");
@@ -107,6 +109,7 @@ public sealed class TransportAdapterImplTests
                   "description": "adapter test",
                   "launch": {
                     "exePath": "dotnet",
+                    "args": ["--app", "{appId}"],
                     "argsTemplate": "--info",
                     "workingDirectory": "/tmp/devhub",
                     "dedupeKeyTemplate": "{appId}:{scopeOrGlobal}"
@@ -127,6 +130,7 @@ public sealed class TransportAdapterImplTests
         Assert.Equal("Transport Parser", definition.DisplayName);
         Assert.Equal("adapter test", definition.Description);
         Assert.Equal("dotnet", definition.Launch!.ExePath);
+        Assert.Equal(new[] { "--app", "{appId}" }, definition.Launch.Args);
         Assert.Equal("--info", definition.Launch.ArgsTemplate);
         Assert.Equal("/tmp/devhub", definition.Launch.WorkingDirectory);
         Assert.Equal("{appId}:{scopeOrGlobal}", definition.Launch.DedupeKeyTemplate);
@@ -158,6 +162,32 @@ public sealed class TransportAdapterImplTests
         Assert.True(validationResult.Valid);
         Assert.NotNull(definition);
         Assert.Equal("   ", definition.Launch!.ExePath);
+    }
+
+    [Fact]
+    [Trait("SpecRef", "5.1.1")]
+    public void Impl_AppDefinitionValidator_WhenLaunchExePathMissing_ShouldParseLaunchModel()
+    {
+        var ok = _validator.TryParseAndValidate(
+            ParseElement(
+                """
+                {
+                  "appId": "transport.optional-launch",
+                  "scope": "",
+                  "displayName": "Optional Launch",
+                  "launch": {
+                    "args": ["--mode", "manual"]
+                  }
+                }
+                """),
+            out var definition,
+            out var validationResult);
+
+        Assert.True(ok);
+        Assert.True(validationResult.Valid);
+        Assert.NotNull(definition);
+        Assert.Null(definition.Launch!.ExePath);
+        Assert.Equal(new[] { "--mode", "manual" }, definition.Launch.Args);
     }
 
     [Fact]

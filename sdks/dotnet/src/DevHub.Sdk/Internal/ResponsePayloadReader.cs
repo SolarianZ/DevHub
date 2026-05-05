@@ -106,7 +106,8 @@ internal static class ResponsePayloadReader
             launchElement.ValueKind != JsonValueKind.Null)
         {
             EnsureElementKind(launchElement, $"{location}.launch", JsonValueKind.Object);
-            EnsureStringProperty(launchElement, $"{location}.launch", "exePath");
+            EnsureOptionalStringProperty(launchElement, $"{location}.launch", "exePath");
+            EnsureOptionalStringArrayProperty(launchElement, $"{location}.launch", "args");
             EnsureOptionalStringProperty(launchElement, $"{location}.launch", "argsTemplate");
             EnsureOptionalStringProperty(launchElement, $"{location}.launch", "workingDirectory");
             EnsureOptionalStringProperty(launchElement, $"{location}.launch", "dedupeKeyTemplate");
@@ -203,7 +204,7 @@ internal static class ResponsePayloadReader
                 EnsureElementKind(payload, $"{location}.payload", JsonValueKind.Object);
                 EnsureAppIdProperty(payload, $"{location}.payload", "appId");
                 EnsureInstanceIdProperty(payload, $"{location}.payload", "instanceId");
-                EnsureOptionalScopeStringProperty(payload, $"{location}.payload", "scope");
+                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (payload.TryGetProperty("password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");
@@ -243,6 +244,7 @@ internal static class ResponsePayloadReader
             deliveryElement.ValueKind != JsonValueKind.Null)
         {
             EnsureElementKind(deliveryElement, $"{location}.delivery", JsonValueKind.Object);
+            EnsureStringProperty(deliveryElement, $"{location}.delivery", "leaseToken");
             EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "leaseSeconds");
             EnsurePositiveIntegerProperty(deliveryElement, $"{location}.delivery", "attempt");
         }
@@ -330,6 +332,30 @@ internal static class ResponsePayloadReader
         if (propertyValue.ValueKind != JsonValueKind.String)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalStringArrayProperty(JsonElement element, string location, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+
+        var index = 0;
+        foreach (var item in propertyValue.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                throw new InvalidOperationException($"{location} 返回结果非法：{propertyName}[{index}] 类型非法。");
+            }
+
+            index++;
         }
     }
 

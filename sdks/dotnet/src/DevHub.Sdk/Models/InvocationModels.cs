@@ -353,6 +353,11 @@ public sealed class RespondRequest
     public string InvocationId { get; set; } = string.Empty;
 
     /// <summary>
+    /// 当前投递租约令牌。
+    /// </summary>
+    public string LeaseToken { get; set; } = string.Empty;
+
+    /// <summary>
     /// 成功返回值。
     /// </summary>
     public object? Value
@@ -518,6 +523,12 @@ public sealed class InvocationOptions
 /// </summary>
 public sealed class InvocationDelivery
 {
+    /// <summary>
+    /// 当前投递租约令牌。
+    /// </summary>
+    [JsonPropertyName("leaseToken")]
+    public string LeaseToken { get; set; } = string.Empty;
+
     /// <summary>
     /// 当前租约时长，单位秒。
     /// </summary>

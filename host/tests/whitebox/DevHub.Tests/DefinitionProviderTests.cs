@@ -52,7 +52,7 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Refresh_WhenLaunchExePathMissing_ShouldIgnoreInvalidDefinition()
+    public void Impl_Refresh_WhenLaunchExePathMissing_ShouldKeepDefinitionForLaunchTimeValidation()
     {
         var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
@@ -86,8 +86,10 @@ public class DefinitionProviderTests : IDisposable
 
         provider.Refresh();
 
-        Assert.Null(provider.GetDefinition("broken.launch.app", ScopeContract.Global));
-        Assert.Empty(provider.GetAllDefinitions());
+        var definition = provider.GetDefinition("broken.launch.app", ScopeContract.Global);
+        Assert.NotNull(definition);
+        Assert.Null(definition.Launch!.ExePath);
+        Assert.Single(provider.GetAllDefinitions());
     }
 
     [Fact]

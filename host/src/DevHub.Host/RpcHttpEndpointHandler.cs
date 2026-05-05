@@ -62,11 +62,23 @@ public class RpcHttpEndpointHandler
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
             clientId = clientIdValue;
 
-            if (!HttpTransportRequestValidator.TryValidateContentType(request.ContentType, requestId: null, out var contentTypeError))
+            var requestHeaders = request.Headers.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            if (!HttpTransportRequestValidator.TryValidate(
+                    request.ContentType,
+                    requestHeaders,
+                    _runtimeArtifactManager.GetToken,
+                    requestId: null,
+                    out var transportErrorResponse,
+                    out var validatedClientId,
+                    out var validatedClientSessionId,
+                    _logger))
             {
-                _logger.LogWarning("HTTP Content-Type 校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                    clientId, contentTypeError.Error?.Code, contentTypeError.Error?.Message);
-                return FinalizeResponse(Results.Json(contentTypeError, JsonOptions));
+                _logger.LogWarning("HTTP 传输层校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    clientId, transportErrorResponse.Error?.Code, transportErrorResponse.Error?.Message);
+                return FinalizeResponse(Results.Json(transportErrorResponse, JsonOptions));
             }
 
             using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
@@ -112,31 +124,6 @@ public class RpcHttpEndpointHandler
 
                 _logger.LogInformation("处理RPC请求: {Method}, RequestId: {RequestId}, ClientId: {ClientId}",
                     rpcRequest.Method, rpcRequest.Id, clientId);
-
-                var requestHeaders = request.Headers.ToDictionary(
-                    pair => pair.Key,
-                    pair => pair.Value.ToString(),
-                    StringComparer.OrdinalIgnoreCase);
-                if (!HttpTransportRequestValidator.TryValidate(
-                        request.ContentType,
-                        requestHeaders,
-                        _runtimeArtifactManager.GetToken,
-                        rpcRequest.Id,
-                        out var errorResponse,
-                        out var validatedClientId,
-                        out var validatedClientSessionId,
-                        _logger))
-                {
-                    _logger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                        rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
-
-                    if (suppressJsonRpcResponse)
-                    {
-                        return FinalizeResponse(Results.Empty);
-                    }
-
-                    return FinalizeResponse(Results.Json(errorResponse, JsonOptions));
-                }
 
                 rpcRequest.ClientId = validatedClientId;
                 rpcRequest.ClientSessionId = validatedClientSessionId;

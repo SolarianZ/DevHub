@@ -110,6 +110,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
         if (field === "enableLaunch" && value === false) {
           nextForm.launchExePath = "";
+          nextForm.launchArgs = "";
           nextForm.launchArgsTemplate = "";
           nextForm.launchWorkingDirectory = "";
           nextForm.launchDedupeKeyTemplate = "";

@@ -255,6 +255,30 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenGetDefinitionLaunchOmitsExePathAndUsesArgs_ShouldReturnDefinition()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-definition\",\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":\"\",\"displayName\":\"Sample App\",\"launch\":{\"args\":[\"--scope\",\"{scope}\"]}}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var definition = await client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None);
+
+        Assert.Null(definition.Launch!.ExePath);
+        Assert.Equal(["--scope", "{scope}"], definition.Launch.Args);
+    }
+
+    [Fact]
     public async Task HttpTransport_WhenResponseJsonRpcVersionInvalid_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -789,6 +813,60 @@ public sealed class HttpTransportTests : IDisposable
         }, CancellationToken.None));
 
         Assert.Contains("clientSessionId", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenPollResultContainsLeaseToken_ShouldExposeDeliveryLeaseToken()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-poll\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"},\"delivery\":{\"leaseToken\":\"lease-1\",\"leaseSeconds\":30,\"attempt\":1}}]}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-poll");
+
+        var result = await client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
+        }, CancellationToken.None);
+
+        Assert.Equal("lease-1", Assert.Single(result.Items).Delivery!.LeaseToken);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenPollResultDeliveryMissingLeaseToken_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-poll\",\"result\":{\"ok\":true,\"serverTimeUtc\":\"2026-03-09T00:00:00Z\",\"items\":[{\"invocationId\":\"invk-1\",\"appId\":\"sample.app\",\"target\":{\"scope\":\"\",\"instanceId\":null},\"method\":\"sample.notify\",\"kind\":\"notify\",\"createdAtUtc\":\"2026-03-09T00:00:00Z\",\"caller\":{\"clientId\":\"caller-a\",\"clientSessionId\":\"11111111-1111-1111-1111-111111111111\"},\"delivery\":{\"leaseSeconds\":30,\"attempt\":1}}]}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-poll");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = "inst-1",
+            InstanceSessionToken = "session-1"
+        }, CancellationToken.None));
+
+        Assert.Contains("leaseToken", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

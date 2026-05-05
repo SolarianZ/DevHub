@@ -46,10 +46,6 @@ MANIFEST_VERSION = 1
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
 WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
-OPTIONAL_APP_INSTANCE_EVENT_TYPES = {
-    "app.instance.registered",
-    "app.instance.unregistered",
-}
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
 CASE_ID_PATTERN = re.compile(r"^CONF-\d{3}$")
 ALLOWED_ADAPTER_OUTCOMES = frozenset({"success", "error"})
@@ -573,7 +569,6 @@ def run_vector(
                 continue
 
             comparable = build_comparable_payload(adapter_result, is_discovery)
-            comparable = normalize_optional_event_payload_fields(comparable, expected)
             diffs = collect_differences(expected, comparable)
             if diffs:
                 failures.append(
@@ -1024,56 +1019,6 @@ def canonicalize_with_expected(actual: Any, expected: Any) -> Any:
         return [
             canonicalize_with_expected(actual[index], expected[index]) if index < len(expected) else actual[index]
             for index in range(len(actual))
-        ]
-
-    return actual
-
-
-def normalize_optional_event_payload_fields(
-    actual: Any,
-    expected: Any,
-    event_type: str | None = None,
-    within_event_payload: bool = False,
-) -> Any:
-    if isinstance(actual, dict):
-        expected_mapping = expected if isinstance(expected, dict) else {}
-        current_event_type = event_type
-        candidate_event_type = actual.get("type")
-        if isinstance(candidate_event_type, str):
-            current_event_type = candidate_event_type
-
-        normalized: dict[str, Any] = {}
-        for key, value in actual.items():
-            if (
-                within_event_payload
-                and key == "scope"
-                and key not in expected_mapping
-                and current_event_type in OPTIONAL_APP_INSTANCE_EVENT_TYPES
-                and (value is None or isinstance(value, str))
-            ):
-                continue
-
-            child_expected = expected_mapping.get(key)
-            child_within_payload = key == "payload" and current_event_type in OPTIONAL_APP_INSTANCE_EVENT_TYPES
-            normalized[key] = normalize_optional_event_payload_fields(
-                value,
-                child_expected,
-                current_event_type,
-                child_within_payload,
-            )
-
-        return normalized
-
-    if isinstance(actual, list):
-        expected_items = expected if isinstance(expected, list) else []
-        return [
-            normalize_optional_event_payload_fields(
-                item,
-                expected_items[index] if index < len(expected_items) else None,
-                event_type,
-                False,
-            )
-            for index, item in enumerate(actual)
         ]
 
     return actual

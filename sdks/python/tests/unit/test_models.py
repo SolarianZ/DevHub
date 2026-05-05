@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from devhub_sdk import AppDefinition, AppInstanceRegistration, InvokeCapability, InvocationTarget
+from devhub_sdk import AppDefinition, AppInstanceRegistration, InvokeCapability, InvocationTarget, LaunchConfiguration
 from devhub_sdk.models import (
     InvokeRequest,
     LaunchRequest,
@@ -14,7 +14,12 @@ from devhub_sdk.models import (
 
 
 def test_public_models_should_preserve_case_sensitive_canonical_identifiers() -> None:
-    definition = AppDefinition(app_id="Sample.App", display_name="Sample", scope="Workspace-A.v2")
+    definition = AppDefinition(
+        app_id="Sample.App",
+        display_name="Sample",
+        scope="Workspace-A.v2",
+        launch=LaunchConfiguration(args=["--scope", "{scope}"]),
+    )
     instance = AppInstanceRegistration(
         instance_id="NODE_01.alpha",
         app_id="Sample.App",
@@ -32,11 +37,14 @@ def test_public_models_should_preserve_case_sensitive_canonical_identifiers() ->
         instance_id="NODE_01.alpha",
         instance_session_token="token-1",
         invocation_id="invk-1",
+        lease_token="lease-1",
         value={"ok": True},
     )
 
     assert definition.app_id == "Sample.App"
     assert definition.scope == "Workspace-A.v2"
+    assert definition.launch is not None
+    assert definition.launch.args == ["--scope", "{scope}"]
     assert instance.instance_id == "NODE_01.alpha"
     assert instance.app_id == "Sample.App"
     assert target.scope == "Workspace-A.v2"
@@ -70,6 +78,7 @@ def test_public_models_should_preserve_case_sensitive_canonical_identifiers() ->
             instance_id=".inst-1",
             instance_session_token="token-1",
             invocation_id="invk-1",
+            lease_token="lease-1",
             value={"ok": True},
         ),
     ],

@@ -1,0 +1,94 @@
+{
+  "id": "invocation.request.respond_without_lease_token_returns_invalid_params",
+  "caseId": "CONF-004",
+  "description": "被调用方 respond 缺少 leaseToken 时，Hub 必须返回 invalid_params，caller 调用保持超时语义。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.missing-lease-token",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.missing-lease-token"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-missing-lease-token-inst",
+          "appId": "invoke.request.missing-lease-token",
+          "scope": "",
+          "pid": 32015,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-missing-lease-token-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.missing-lease-token",
+          "method": "demo.request.missing-lease-token",
+          "kind": "request",
+          "delivery": {
+            "leaseToken": "${ANY_NON_EMPTY_STRING}"
+          }
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-missing-lease-token-inst",
+        "omitLeaseToken": true,
+        "value": {
+          "handledBy": "missing-lease-token"
+        },
+        "expectedError": {
+          "code": -32602,
+          "message": "invalid_params"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestMissingLeaseToken",
+    "invokeRequest": {
+      "appId": "invoke.request.missing-lease-token",
+      "method": "demo.request.missing-lease-token",
+      "options": {
+        "ttlMs": 3000,
+        "waitTimeoutMs": 1000,
+        "queueIfOffline": true,
+        "autoLaunch": false
+      },
+      "target": {
+        "scope": ""
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32012,
+      "message": "invocation_timeout"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "lease-token",
+    "sdk"
+  ]
+}

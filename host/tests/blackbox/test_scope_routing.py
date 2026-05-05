@@ -458,12 +458,14 @@ class TestScopeRouting(unittest.TestCase):
                     return
 
                 invocation_id = items[0].get("invocationId")
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
                 request_holder["invocationId"] = invocation_id
                 if invocation_id:
                     request_holder["respond"] = poll_client.respond_value(
                         global_instance,
                         invocation_id,
                         {"handledBy": "global"},
+                        lease_token=lease_token,
                     )
 
             def poll_scoped_for_request():
