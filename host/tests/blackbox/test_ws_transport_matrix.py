@@ -10,15 +10,14 @@ import unittest
 
 
 from tests.blackbox.test_base import (
+    build_app_definition,
     build_definition_identity_params,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_runtime_hub_info,
     new_instance_id,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
 )
 from tests.blackbox.test_ws_events import SimpleWebSocketClient
 
@@ -39,8 +38,11 @@ class TestWsTransportMatrix(unittest.TestCase):
     def _new_instance_id(suffix):
         return new_instance_id(f"ws-transport-{suffix}")
 
-    def _create_definition(self, app_id):
-        return write_app_definition(app_id, rpc=True, events=False)
+    def _create_definition(self, client, app_id, result):
+        response = client.call("hub.apps.upsertDefinition", {
+            "definition": build_app_definition(app_id, rpc=True, events=False),
+        })
+        return RpcAssertions.expect_success(result, response, ["definition"])
 
     @staticmethod
     def _authenticate(ws, token, request_id):
@@ -160,12 +162,13 @@ class TestWsTransportMatrix(unittest.TestCase):
     def test_ws_matrix_003_get_definition_should_work_after_auth(self):
         """WS-MATRIX-003: 鉴权后 hub.apps.getDefinition 可在 WS 调用。"""
         result = TestResult("WS-MATRIX-003 鉴权后 WS hub.apps.getDefinition")
-        definition_path = None
 
         try:
             app_id = self._new_app_id("get-definition")
-            definition_path = self._create_definition(app_id)
-            _, ws_url, token = self._runtime_hub_info()
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            http_client = RpcClient(http_base_url, token)
+            if not self._create_definition(http_client, app_id, result):
+                return result
 
             with SimpleWebSocketClient(ws_url) as ws:
                 auth_response = self._authenticate(ws, token, "matrix-auth-003")
@@ -190,7 +193,11 @@ class TestWsTransportMatrix(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            try:
+                if "http_client" in locals() and "app_id" in locals():
+                    http_client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            except Exception:
+                pass
 
         return result
 

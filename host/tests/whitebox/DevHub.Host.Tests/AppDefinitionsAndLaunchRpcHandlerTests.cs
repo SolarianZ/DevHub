@@ -55,6 +55,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             }
             """);
 
+        context.DefinitionProvider.Refresh();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var listResponse = await handler.HandleAsync(

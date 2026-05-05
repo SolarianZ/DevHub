@@ -106,9 +106,6 @@ public class AppDefinitionsHandler : IRpcHandler
                 return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", scopeErrorData));
             }
 
-            // 每次查询前重新加载，反映测试期间新增/修改的定义文件
-            _definitionProvider.Refresh();
-
             var definitions = _definitionProvider
                 .GetAllDefinitions()
                 .Where(definition => appId is null || string.Equals(definition.AppId, appId, StringComparison.Ordinal))
@@ -144,9 +141,6 @@ public class AppDefinitionsHandler : IRpcHandler
         try
         {
             _logger.LogDebug("处理hub.apps.getDefinition方法，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
-
-            // 每次查询前重新加载，反映测试期间新增/修改的定义文件
-            _definitionProvider.Refresh();
 
             if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
             {

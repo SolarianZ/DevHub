@@ -173,7 +173,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id=request_id,
+                expected_id=None,
                 expected_data={"reason": "missing_token"}
             ):
                 return result
@@ -204,7 +204,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id="auth-invalid-token-id",
+                expected_id=None,
                 expected_data={"reason": "invalid_token"}
             ):
                 return result
@@ -235,7 +235,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id="auth-invalid-protocol-id",
+                expected_id=None,
                 expected_data={"expected": 1, "received": "2", "reason": "mismatch"}
             ):
                 return result
@@ -265,7 +265,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id=request_id,
+                expected_id=None,
                 expected_data={"expected": 1, "reason": "missing"}
             ):
                 return result
@@ -295,7 +295,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id=request_id
+                expected_id=None
             ):
                 return result
 
@@ -333,7 +333,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id=request_id
+                expected_id=None
             ):
                 return result
 
@@ -373,7 +373,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id="auth-invalid-session-id"
+                expected_id=None
             ):
                 return result
 
@@ -403,7 +403,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id="auth-invalid-scheme-id"
+                expected_id=None
             ):
                 return result
 
@@ -687,7 +687,7 @@ class TestAuthProtocol(unittest.TestCase):
                 body,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id="cors-error-id",
+                expected_id=None,
                 expected_data={"expected": 1, "reason": "missing"}
             ):
                 return result

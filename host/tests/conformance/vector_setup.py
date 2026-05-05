@@ -70,9 +70,7 @@ class CleanupLedger:
     """记录每条向量创建的临时资产，便于统一清理。"""
 
     vector_temp_dir: Path
-    definitions_catalog_was_modified: bool = False
-    definitions_catalog_original_exists: bool = False
-    definitions_catalog_original_content: str | None = None
+    upserted_definitions: list[tuple[str, str]] = field(default_factory=list)
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
     instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
@@ -85,17 +83,16 @@ class CleanupLedger:
             except Exception:
                 pass
 
-        if self.definitions_catalog_was_modified:
-            catalog_path = host_context.definitions_catalog_path
+        for app_id, scope in reversed(self.upserted_definitions):
             try:
-                if self.definitions_catalog_original_exists:
-                    catalog_path.parent.mkdir(parents=True, exist_ok=True)
-                    catalog_path.write_text(self.definitions_catalog_original_content or "", encoding="utf-8")
-                else:
-                    catalog_path.unlink()
-                refresh_definitions_snapshot(host_context, request_id="cleanup-refresh-definitions")
-            except FileNotFoundError:
-                pass
+                client.call(
+                    "hub.apps.deleteDefinition",
+                    {
+                        "appId": app_id,
+                        "scope": scope,
+                    },
+                    request_id=f"cleanup-delete-definition-{sanitize_file_name(app_id)}",
+                )
             except Exception:
                 pass
 
@@ -467,71 +464,72 @@ def apply_definitions_setup(
     definitions: list[Any],
     ledger: CleanupLedger,
 ) -> None:
-    """将 setup.definitions 物化为 suite Host 的 definitions.json catalog。"""
+    """通过公开 RPC 将 setup.definitions 写入 suite Host。"""
 
     if not definitions:
         return
 
-    capture_original_definitions_catalog(host_context, ledger)
-    catalog = {
-        "version": 1,
-        "definitions": [],
-    }
-    app_entries_by_app_id: dict[str, dict[str, Any]] = {}
-
+    client = host_context.create_rpc_client()
     for index, item in enumerate(definitions):
         definition_setup = require_mapping(item, f"setup.definitions[{index}]")
+        materialized = try_materialize_definition_setup(definition_setup)
+        if materialized is None:
+            continue
+
+        response = client.call(
+            "hub.apps.upsertDefinition",
+            {
+                "definition": materialized,
+            },
+            request_id=f"setup-upsert-definition-{index}",
+        )
+        error = response.get("error")
+        if isinstance(error, dict):
+            raise RuntimeError(
+                "预置 Definition 失败："
+                f"{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
+            )
+
+        ledger.upserted_definitions.append((materialized["appId"], materialized["scope"]))
+
+
+def try_materialize_definition_setup(definition_setup: dict[str, Any]) -> dict[str, Any] | None:
+    """将 setup.definitions 条目转换为公开 AppDefinition；非法 raw 条目返回 None。"""
+
+    try:
         if "appId" in definition_setup:
-            app_id = require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+            app_id = require_string(definition_setup.get("appId"), "setup.definitions[].appId")
             scope_entry_field = "scopeEntry" if "scopeEntry" in definition_setup else "rawScopeEntry"
             scope_entry = read_catalog_setup_value(
                 definition_setup.get(scope_entry_field),
-                f"setup.definitions[{index}].{scope_entry_field}",
+                f"setup.definitions[].{scope_entry_field}",
                 require_object=scope_entry_field == "scopeEntry",
             )
+            if not isinstance(scope_entry, dict):
+                return None
 
-            app_entry = app_entries_by_app_id.get(app_id)
-            if app_entry is None:
-                app_entry = {
-                    "appId": app_id,
-                    "scopes": [],
-                }
-                app_entries_by_app_id[app_id] = app_entry
-                catalog["definitions"].append(app_entry)
-
-            app_entry["scopes"].append(scope_entry)
-            continue
+            definition = copy.deepcopy(scope_entry)
+            definition["appId"] = app_id
+            return definition if isinstance(definition.get("scope"), str) else None
 
         app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
-        catalog["definitions"].append(
-            read_catalog_setup_value(
-                definition_setup.get(app_entry_field),
-                f"setup.definitions[{index}].{app_entry_field}",
-                require_object=app_entry_field == "appEntry",
-            )
+        app_entry = read_catalog_setup_value(
+            definition_setup.get(app_entry_field),
+            f"setup.definitions[].{app_entry_field}",
+            require_object=app_entry_field == "appEntry",
         )
+        if not isinstance(app_entry, dict) or not isinstance(app_entry.get("appId"), str):
+            return None
 
-    catalog_path = host_context.definitions_catalog_path
-    catalog_path.parent.mkdir(parents=True, exist_ok=True)
-    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
-    refresh_definitions_snapshot(host_context, request_id="setup-refresh-definitions")
+        scopes = app_entry.get("scopes")
+        if not isinstance(scopes, list) or len(scopes) != 1 or not isinstance(scopes[0], dict):
+            return None
 
-
-def capture_original_definitions_catalog(host_context: HostRuntimeContext, ledger: CleanupLedger) -> None:
-    """记录 suite Host 当前 definitions.json，便于向量完成后恢复。"""
-
-    if ledger.definitions_catalog_was_modified:
-        return
-
-    catalog_path = host_context.definitions_catalog_path
-    if catalog_path.is_file():
-        ledger.definitions_catalog_original_exists = True
-        ledger.definitions_catalog_original_content = catalog_path.read_text(encoding="utf-8")
-    else:
-        ledger.definitions_catalog_original_exists = False
-        ledger.definitions_catalog_original_content = None
-
-    ledger.definitions_catalog_was_modified = True
+        definition = copy.deepcopy(scopes[0])
+        definition["appId"] = app_entry["appId"]
+        return definition if isinstance(definition.get("scope"), str) else None
+    except ValueError:
+        return None
 
 
 def read_catalog_setup_value(value: Any, path: str, *, require_object: bool) -> Any:
@@ -550,25 +548,6 @@ def read_catalog_setup_value(value: Any, path: str, *, require_object: bool) -> 
         raise ValueError(f"{path} 必须解析为对象。")
 
     return parsed
-
-
-def refresh_definitions_snapshot(host_context: HostRuntimeContext, request_id: str) -> None:
-    """通过 listDefinitions 触发 Host 刷新内存中的 Definition 快照。"""
-
-    client = host_context.create_rpc_client()
-    response = client.call(
-        "hub.apps.listDefinitions",
-        {
-            "scope": None,
-        },
-        request_id=request_id,
-    )
-    error = response.get("error")
-    if isinstance(error, dict):
-        raise RuntimeError(
-            "刷新 Definition 快照失败："
-            f"{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
-        )
 
 
 def apply_instances_setup(

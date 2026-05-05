@@ -261,7 +261,10 @@ class TestLaunchSpecEdges(unittest.TestCase):
                         app_id = self._new_app_id("wait-budget")
                         definition_path = self._create_definition(
                             app_id,
-                            self._build_launch_config(),
+                            {
+                                "exePath": get_test_python_executable(),
+                                "args": [self._launch_script_path(), "7"],
+                            },
                         )
 
                         base_url, token = DiscoveryService.get_hub_info()

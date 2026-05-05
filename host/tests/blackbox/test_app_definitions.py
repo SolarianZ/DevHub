@@ -32,8 +32,8 @@ class TestAppDefinitions(unittest.TestCase):
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
         app_id = self._new_app_id("test-app")
-        test_app_path = write_app_definition(
-            app_id,
+        definition = build_app_definition(
+            app_id=app_id,
             display_name="Test Application",
             description="This is a test application",
             rpc=True,
@@ -43,18 +43,20 @@ class TestAppDefinitions(unittest.TestCase):
                 "argsTemplate": "Hello from Test Application",
             },
         )
-        return app_id, test_app_path
+        return app_id, definition
 
     def test_list_definitions(self):
         """测试列出所有应用程序定义"""
         result = TestResult("测试列出所有应用程序定义")
-        test_app_path = None
 
         try:
-            app_id, test_app_path = self.create_test_app_definition()
-
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            app_id, definition = self.create_test_app_definition()
+
+            upsert_response = client.call("hub.apps.upsertDefinition", {"definition": definition})
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
 
             response = client.call("hub.apps.listDefinitions", {"scope": None})
             if not RpcAssertions.expect_success(result, response, ["definitions"]):
@@ -74,20 +76,26 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(test_app_path)
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            except Exception:
+                pass
 
         return result
 
     def test_get_definition(self):
         """测试获取单个应用程序定义"""
         result = TestResult("测试获取单个应用程序定义")
-        test_app_path = None
 
         try:
-            app_id, test_app_path = self.create_test_app_definition()
-
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            app_id, definition = self.create_test_app_definition()
+
+            upsert_response = client.call("hub.apps.upsertDefinition", {"definition": definition})
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
 
             response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_success(result, response, ["definition"]):
@@ -105,7 +113,11 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(test_app_path)
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            except Exception:
+                pass
 
         return result
 

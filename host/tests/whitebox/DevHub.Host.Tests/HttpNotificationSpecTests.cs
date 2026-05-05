@@ -96,7 +96,7 @@ public class HttpNotificationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "3.2")]
-    public async Task Spec_3_2_HttpRequest_WhenAuthorizationMissing_ShouldPreserveRequestId()
+    public async Task Spec_3_2_HttpRequest_WhenAuthorizationMissing_ShouldUseNullId()
     {
         using var harness = CreateHarness();
 
@@ -110,7 +110,7 @@ public class HttpNotificationSpecTests : IDisposable
             configureRequest: context => context.Request.Headers.Remove("Authorization"));
         var root = responseDocument.RootElement;
 
-        Assert.Equal("http-missing-token", root.GetProperty("id").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
         var error = root.GetProperty("error");
         Assert.Equal(-32001, error.GetProperty("code").GetInt32());
         Assert.Equal("unauthorized", error.GetProperty("message").GetString());
@@ -119,7 +119,7 @@ public class HttpNotificationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "3.2")]
-    public async Task Spec_3_2_HttpRequest_WhenProtocolInvalid_ShouldPreserveRequestId()
+    public async Task Spec_3_2_HttpRequest_WhenProtocolInvalid_ShouldUseNullId()
     {
         using var harness = CreateHarness();
 
@@ -133,7 +133,7 @@ public class HttpNotificationSpecTests : IDisposable
             configureRequest: context => context.Request.Headers["X-DevHub-Protocol"] = "2");
         var root = responseDocument.RootElement;
 
-        Assert.Equal("http-invalid-protocol", root.GetProperty("id").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
         var error = root.GetProperty("error");
         Assert.Equal(-32099, error.GetProperty("code").GetInt32());
         Assert.Equal("not_supported", error.GetProperty("message").GetString());

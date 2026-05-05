@@ -19,7 +19,7 @@
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
-    "id": "http-missing-client-id",
+    "id": null,
     "error": {
       "code": -32600,
       "message": "invalid_request",

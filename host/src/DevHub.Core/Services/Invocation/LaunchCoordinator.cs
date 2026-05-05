@@ -352,7 +352,14 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
-        var deadline = _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
+        DateTime deadline;
+        lock (_launchSyncRoot)
+        {
+            deadline = _launchRecordsById.TryGetValue(launchId, out var launchRecord)
+                ? launchRecord.CreatedAtUtc.AddMilliseconds(waitForRegisterMs)
+                : _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
+        }
+
         while (true)
         {
             var now = _clock.UtcNow;
