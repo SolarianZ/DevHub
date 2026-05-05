@@ -714,7 +714,7 @@ def test_respond_builder_when_value_contains_unsupported_json_type_should_raise(
         )
 
 
-def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> None:
+def test_respond_builder_when_error_data_is_not_json_value_should_raise() -> None:
     with pytest.raises(ValueError, match=r"error\.data\.callback 包含不支持的 JSON 类型。"):
         build_respond_params(
             RespondRequest(
@@ -729,3 +729,21 @@ def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> No
                 ),
             )
         )
+
+
+def test_respond_builder_when_error_data_is_scalar_should_preserve_value() -> None:
+    payload = build_respond_params(
+        RespondRequest(
+            instance_id="inst-1",
+            instance_session_token="token-1",
+            invocation_id="invk-1",
+            lease_token="lease-1",
+            error=DevHubCalleeError(
+                code=1001,
+                message="app_error",
+                data="invalid-name",
+            ),
+        )
+    )
+
+    assert payload["error"]["data"] == "invalid-name"

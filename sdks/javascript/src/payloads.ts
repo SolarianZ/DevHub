@@ -352,7 +352,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
     };
 
     if (request.error?.data !== undefined) {
-      errorPayload.data = ensureJsonObject(request.error.data, "error.data");
+      errorPayload.data = ensureJsonValue(request.error.data, "error.data");
     }
 
     payload.error = errorPayload;

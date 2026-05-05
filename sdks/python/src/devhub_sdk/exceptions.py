@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
-from ._validation import ensure_json_object
+from ._validation import ensure_json_value
 from .models import DevHubCalleeError
 
 
@@ -88,7 +88,7 @@ class DevHubRpcException(Exception):
         data = None
         if "data" in value:
             try:
-                data = ensure_json_object(value["data"], "calleeError.data")
+                data = ensure_json_value(value["data"], "calleeError.data")
             except ValueError:
                 return None
         return DevHubCalleeError(code=code, message=message, data=data)

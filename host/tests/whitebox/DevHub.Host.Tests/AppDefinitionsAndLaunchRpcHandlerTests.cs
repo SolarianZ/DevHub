@@ -476,6 +476,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         Assert.Equal("started", successResult.GetProperty("status").GetString());
         Assert.Equal(Process.GetCurrentProcess().Id, successResult.GetProperty("pid").GetInt32());
         Assert.False(string.IsNullOrWhiteSpace(successResult.GetProperty("launchId").GetString()));
+        Assert.Equal("launch.success:global", successResult.GetProperty("dedupeKey").GetString());
     }
 
     /// <inheritdoc />

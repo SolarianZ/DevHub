@@ -593,9 +593,9 @@ public sealed class InvocationRequestBuilderTests
     }
 
     [Fact]
-    public void RespondBuilder_WhenErrorDataIsNotObject_ShouldThrowArgumentException()
+    public void RespondBuilder_WhenErrorDataIsScalar_ShouldPreserveJsonValue()
     {
-        var exception = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
+        var payload = RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
@@ -607,9 +607,10 @@ public sealed class InvocationRequestBuilderTests
                 Message = "app_error",
                 Data = JsonSerializer.SerializeToElement("boom")
             }
-        }));
+        });
 
-        Assert.Contains("Error.Data", exception.Message, StringComparison.Ordinal);
+        using var document = JsonSerializer.SerializeToDocument(payload);
+        Assert.Equal("boom", document.RootElement.GetProperty("error").GetProperty("data").GetString());
     }
 
     [Fact]

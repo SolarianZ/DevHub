@@ -314,7 +314,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal(-32010, requestResponse.Error.Code);
         Assert.Equal("instance_not_found", requestResponse.Error.Message);
         var requestData = JsonSerializer.SerializeToElement(requestResponse.Error.Data);
-        Assert.Equal("offline_no_queue", requestData.GetProperty("reason").GetString());
+        Assert.Equal("definition_not_found", requestData.GetProperty("reason").GetString());
 
         var launchResponse = await launchHandler.HandleAsync(new JsonRpcRequest
         {
@@ -731,7 +731,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal(-32010, response.Error.Code);
         Assert.Equal("instance_not_found", response.Error.Message);
         var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("target_instance_missing", data.GetProperty("reason").GetString());
+        Assert.Equal("definition_not_found", data.GetProperty("reason").GetString());
     }
 
     [Fact]

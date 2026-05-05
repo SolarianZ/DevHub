@@ -1771,9 +1771,13 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond 应在本地拒绝非对象 error.data", async () => {
+it("respond 应允许标量 error.data", async () => {
   const runtimeDir = await createRuntime();
-  const fetchSpy = vi.fn();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.params.error.data).toBe("boom");
+    return createJsonResponse(body.id, { ok: true });
+  });
   vi.stubGlobal("fetch", fetchSpy);
 
   const client = await DevHubClient.fromRuntime({
@@ -1789,21 +1793,22 @@ it("respond 应在本地拒绝非对象 error.data", async () => {
     error: {
       code: 1001,
       message: "app_error",
-      data: "boom" as any
+      data: "boom"
     }
-  })).rejects.toThrow("error.data 必须为 JSON 对象。");
+  })).resolves.toBeUndefined();
 
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
+it("launch 应拒绝 started 缺少 launchId 的成功载荷", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     return createJsonResponse(body.id, {
       ok: true,
       status: "started",
-      pid: 12345
+      pid: 12345,
+      dedupeKey: "test.app:global"
     });
   });
   vi.stubGlobal("fetch", fetchSpy);

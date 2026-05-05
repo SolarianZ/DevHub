@@ -232,12 +232,12 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
-    public async Task HttpTransport_WhenLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
+    public async Task HttpTransport_WhenStartedLaunchResultMissingLaunchId_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-launch\",\"result\":{\"ok\":true,\"status\":\"started\",\"pid\":12345}}", Encoding.UTF8, "application/json")
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-launch\",\"result\":{\"ok\":true,\"status\":\"started\",\"pid\":12345,\"dedupeKey\":\"sample.app:global\"}}", Encoding.UTF8, "application/json")
         });
 
         await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
@@ -252,6 +252,33 @@ public sealed class HttpTransportTests : IDisposable
             Scope = string.Empty
         }, CancellationToken.None));
         Assert.Contains("launchId", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpTransport_WhenAlreadyRunningOnlineInstanceResult_ShouldReturnInstanceId()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"jsonrpc\":\"2.0\",\"id\":\"req-launch\",\"result\":{\"ok\":true,\"status\":\"already_running\",\"pid\":12345,\"instanceId\":\"inst-1\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-launch");
+
+        var result = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "sample.app",
+            Scope = string.Empty
+        }, CancellationToken.None);
+
+        Assert.Equal("already_running", result.Status);
+        Assert.Equal("inst-1", result.InstanceId);
+        Assert.Null(result.LaunchId);
+        Assert.Null(result.DedupeKey);
     }
 
     [Fact]

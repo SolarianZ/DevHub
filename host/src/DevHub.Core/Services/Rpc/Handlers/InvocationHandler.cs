@@ -331,7 +331,12 @@ public class InvocationHandler : IRpcHandler
                         request.Id,
                         -32010,
                         "instance_not_found",
-                        new { reason = ResolveNoCandidateReason(target) }));
+                        new
+                        {
+                            reason = "definition_not_found",
+                            appId,
+                            scope = target.Scope
+                        }));
             }
 
             if (options.AutoLaunch)

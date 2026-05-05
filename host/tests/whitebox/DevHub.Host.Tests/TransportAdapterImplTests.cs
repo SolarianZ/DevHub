@@ -331,12 +331,11 @@ public sealed class TransportAdapterImplTests
 
     [Fact]
     [Trait("SpecRef", "6.3.16")]
-    public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeDataObject()
+    public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeAnyJsonData()
     {
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""1"""), out _));
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "message": "bad" }"""), out _));
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": 1 }"""), out _));
-        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": "bad", "data": "boom" }"""), out _));
 
         var ok = RpcParamReader.TryParseRespondError(
             ParseElement("""{ "code": 1001, "message": "app_error", "data": { "detail": "boom" } }"""),
@@ -350,6 +349,20 @@ public sealed class TransportAdapterImplTests
 
         var data = Assert.IsType<JsonElement>(payload["data"]);
         Assert.Equal("boom", data.GetProperty("detail").GetString());
+
+        Assert.True(RpcParamReader.TryParseRespondError(
+            ParseElement("""{ "code": 1002, "message": "app_error", "data": "boom" }"""),
+            out var scalarError));
+        var scalarPayload = Assert.IsAssignableFrom<IDictionary<string, object?>>(scalarError);
+        var scalarData = Assert.IsType<JsonElement>(scalarPayload["data"]);
+        Assert.Equal("boom", scalarData.GetString());
+
+        Assert.True(RpcParamReader.TryParseRespondError(
+            ParseElement("""{ "code": 1003, "message": "app_error", "data": null }"""),
+            out var nullError));
+        var nullPayload = Assert.IsAssignableFrom<IDictionary<string, object?>>(nullError);
+        Assert.True(nullPayload.ContainsKey("data"));
+        Assert.Null(nullPayload["data"]);
     }
 
     private static JsonElement ParseElement(string json)

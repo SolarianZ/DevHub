@@ -369,11 +369,6 @@ internal static class RequestPayloadFactory
 
         if (error.Data is { } data)
         {
-            if (data.ValueKind != JsonValueKind.Object)
-            {
-                throw new ArgumentException("Error.Data 必须为 JSON 对象。", paramName);
-            }
-
             payload["data"] = JsonSerializer.Deserialize<object>(data.GetRawText(), DevHubJson.SerializerOptions);
         }
 

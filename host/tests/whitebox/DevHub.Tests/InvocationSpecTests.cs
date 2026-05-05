@@ -637,6 +637,76 @@ public class InvocationSpecTests : IDisposable
         Assert.Equal("bad_input", calleeError.GetProperty("data").GetProperty("reason").GetString());
     }
 
+    [Theory]
+    [InlineData("scalar")]
+    [InlineData("null")]
+    [Trait("SpecRef", "6.3.14")]
+    public async Task Spec_6_3_14_Request_WhenCalleeErrorDataIsJsonValue_ShouldPreserveData(string dataCase)
+    {
+        var appId = $"spec-callee-json-value-{dataCase}";
+        var instanceId = $"spec-callee-json-value-{dataCase}-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        RegisterInstance(appRegistry, instanceId, appId, scope: null, poll: true, respond: true, pid: 7201);
+        var handler = CreateInvocationHandler(appRegistry);
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = $"spec-callee-json-value-{dataCase}-request",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.request.failed",
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 2000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        var poll = await PollAsync(handler, appRegistry, instanceId, maxCount: 1, waitMs: 800);
+        AssertSuccess(poll);
+        var pollItem = Assert.Single(JsonSerializer.SerializeToElement(poll.Result).GetProperty("items").EnumerateArray());
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
+
+        var errorElement = dataCase == "null"
+            ? JsonSerializer.SerializeToElement(new { code = 1001, message = "callee_error", data = (object?)null })
+            : JsonSerializer.SerializeToElement(new { code = 1001, message = "callee_error", data = "invalid-name" });
+
+        var respond = await RespondErrorAsync(
+            handler,
+            appRegistry,
+            $"spec-callee-json-value-{dataCase}-respond",
+            instanceId,
+            invocationId!,
+            leaseToken!,
+            errorElement);
+        AssertSuccess(respond);
+
+        var requestResponse = await requestTask;
+        AssertError(requestResponse, -32050, "invocation_failed");
+        var calleeError = JsonSerializer.SerializeToElement(requestResponse.Error!.Data)
+            .GetProperty("calleeError");
+        Assert.Equal(1001, calleeError.GetProperty("code").GetInt32());
+        Assert.Equal("callee_error", calleeError.GetProperty("message").GetString());
+        var data = calleeError.GetProperty("data");
+        if (dataCase == "null")
+        {
+            Assert.Equal(JsonValueKind.Null, data.ValueKind);
+        }
+        else
+        {
+            Assert.Equal("invalid-name", data.GetString());
+        }
+    }
+
     [Fact]
     [Trait("SpecRef", "6.3.11")]
     public async Task Spec_6_3_11_Request_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()

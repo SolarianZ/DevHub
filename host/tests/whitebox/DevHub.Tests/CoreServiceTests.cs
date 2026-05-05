@@ -33,12 +33,14 @@ public class CoreServiceTests
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
         using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
+        using var registerScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchRegisterTimeoutSecondsEnvironmentVariable, "65");
 
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
 
         Assert.Equal(45, tuningOptions.LeaseSeconds);
         Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
         Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
+        Assert.Equal(65, tuningOptions.LaunchRegisterTimeoutSeconds);
     }
 
     [Fact]
@@ -47,12 +49,14 @@ public class CoreServiceTests
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "0");
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "-1");
         using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "abc");
+        using var registerScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchRegisterTimeoutSecondsEnvironmentVariable, "0");
 
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
 
         Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, tuningOptions.LeaseSeconds);
         Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, tuningOptions.OnlineThresholdSeconds);
         Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, tuningOptions.LaunchDedupeWindowSeconds);
+        Assert.Equal(RuntimeTuningOptions.DefaultLaunchRegisterTimeoutSeconds, tuningOptions.LaunchRegisterTimeoutSeconds);
     }
 
     [Fact]

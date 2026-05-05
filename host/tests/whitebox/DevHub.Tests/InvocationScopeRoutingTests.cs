@@ -579,7 +579,9 @@ public class InvocationScopeRoutingTests : IDisposable
             Assert.Equal(-32010, noDefinitionResponse.Error.Code);
             Assert.Equal("instance_not_found", noDefinitionResponse.Error.Message);
             var noDefinitionData = JsonSerializer.SerializeToElement(noDefinitionResponse.Error.Data);
-            Assert.Equal("offline_no_queue", noDefinitionData.GetProperty("reason").GetString());
+            Assert.Equal("definition_not_found", noDefinitionData.GetProperty("reason").GetString());
+            Assert.Equal(noDefinitionAppId, noDefinitionData.GetProperty("appId").GetString());
+            Assert.Equal(targetScope ?? ScopeContract.Global, noDefinitionData.GetProperty("scope").GetString());
         }
     }
 
@@ -734,7 +736,9 @@ public class InvocationScopeRoutingTests : IDisposable
         Assert.Equal(-32010, offlineResponse.Error.Code);
         Assert.Equal("instance_not_found", offlineResponse.Error.Message);
         var errorData = JsonSerializer.SerializeToElement(offlineResponse.Error.Data);
-        Assert.Equal("offline_no_queue", errorData.GetProperty("reason").GetString());
+        Assert.Equal("definition_not_found", errorData.GetProperty("reason").GetString());
+        Assert.Equal(appId, errorData.GetProperty("appId").GetString());
+        Assert.Equal(scope, errorData.GetProperty("scope").GetString());
     }
 
     private sealed class MutableClock : IClock

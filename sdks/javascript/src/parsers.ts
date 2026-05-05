@@ -165,12 +165,34 @@ export function parseLaunchResult(payload: unknown): LaunchResult {
     throw new Error("hub.apps.launch.result.pid is invalid.");
   }
 
-  return {
+  const result: LaunchResult = {
     ok: true,
     status,
-    pid: pidValue === undefined ? undefined : (pidValue as number | null),
-    launchId: readString(record, "hub.apps.launch.result", "launchId")
+    pid: pidValue === undefined ? undefined : (pidValue as number | null)
   };
+
+  const launchId = readOptionalString(record, "hub.apps.launch.result", "launchId");
+  const dedupeKey = readOptionalString(record, "hub.apps.launch.result", "dedupeKey");
+  const instanceId = readOptionalInstanceIdOrNull(record, "hub.apps.launch.result", "instanceId");
+  if (launchId !== undefined) {
+    result.launchId = launchId;
+  }
+  if (dedupeKey !== undefined) {
+    result.dedupeKey = dedupeKey;
+  }
+  if (instanceId !== undefined && instanceId !== null) {
+    result.instanceId = instanceId;
+  }
+
+  if (status === "started" || status === "starting") {
+    if (!launchId || !dedupeKey) {
+      throw new Error("hub.apps.launch.result requires launchId and dedupeKey for started/starting.");
+    }
+  } else if (!instanceId && (!launchId || !dedupeKey)) {
+    throw new Error("hub.apps.launch.result requires instanceId or launchId + dedupeKey for already_running.");
+  }
+
+  return result;
 }
 
 export function parseNotifyResult(payload: unknown): NotifyResult {

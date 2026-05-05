@@ -275,6 +275,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(started.status).toBe("started");
   expect(started.pid).toBeGreaterThan(0);
   expect(started.launchId).toMatch(/^launch-/);
+  expect(started.dedupeKey).toBe("http.launch.started.app:global");
 
   const starting = await client.launch({
     appId: "http.launch.starting.app",
@@ -285,6 +286,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(starting.status).toBe("starting");
   expect(starting.pid).toBeGreaterThan(0);
   expect(starting.launchId).toMatch(/^launch-/);
+  expect(starting.dedupeKey).toBe("http.launch.starting.app:global");
 
   const registered = await client.registerInstance({
     instanceId: "http-launch-running-inst-1",
@@ -304,7 +306,9 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(alreadyRunning.ok).toBe(true);
   expect(alreadyRunning.status).toBe("already_running");
   expect(alreadyRunning.pid).toBe(registered.pid);
-  expect(alreadyRunning.launchId).toMatch(/^launch-/);
+  expect(alreadyRunning.instanceId).toBe("http-launch-running-inst-1");
+  expect(alreadyRunning.launchId).toBeUndefined();
+  expect(alreadyRunning.dedupeKey).toBeUndefined();
 
   await client.unregisterInstance("http-launch-running-inst-1", registered.instanceSessionToken);
   await client.dispose();

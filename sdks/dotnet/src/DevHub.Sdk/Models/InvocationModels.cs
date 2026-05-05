@@ -125,7 +125,19 @@ public sealed class LaunchResult
     /// 启动请求标识。
     /// </summary>
     [JsonPropertyName("launchId")]
-    public string LaunchId { get; set; } = string.Empty;
+    public string? LaunchId { get; set; }
+
+    /// <summary>
+    /// 解析后的启动去重键。
+    /// </summary>
+    [JsonPropertyName("dedupeKey")]
+    public string? DedupeKey { get; set; }
+
+    /// <summary>
+    /// 已在线实例身份。
+    /// </summary>
+    [JsonPropertyName("instanceId")]
+    public string? InstanceId { get; set; }
 }
 
 /// <summary>
@@ -657,13 +669,7 @@ public sealed class DevHubCalleeError
         JsonElement? serializedData = null;
         if (data is not null)
         {
-            var jsonData = JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions);
-            if (jsonData.ValueKind != JsonValueKind.Object)
-            {
-                throw new ArgumentException("data 必须序列化为 JSON 对象。", nameof(data));
-            }
-
-            serializedData = jsonData;
+            serializedData = JsonSerializer.SerializeToElement(data, DevHubJson.SerializerOptions);
         }
 
         return new DevHubCalleeError

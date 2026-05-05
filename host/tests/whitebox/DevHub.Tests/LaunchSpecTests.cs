@@ -212,6 +212,7 @@ public class LaunchSpecTests : IDisposable
         Assert.Equal("started", result.GetProperty("status").GetString());
         Assert.Equal(startedProcess.Id, result.GetProperty("pid").GetInt32());
         Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
+        Assert.Equal($"{appId}:global", result.GetProperty("dedupeKey").GetString());
     }
 
     [Fact]
@@ -250,7 +251,9 @@ public class LaunchSpecTests : IDisposable
         var result = JsonSerializer.SerializeToElement(response.Result);
         Assert.Equal("already_running", result.GetProperty("status").GetString());
         Assert.Equal(7890, result.GetProperty("pid").GetInt32());
-        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
+        Assert.Equal("spec-6.3.9-online-instance-id", result.GetProperty("instanceId").GetString());
+        Assert.False(result.TryGetProperty("launchId", out _));
+        Assert.False(result.TryGetProperty("dedupeKey", out _));
     }
 
     [Fact]
@@ -299,6 +302,7 @@ public class LaunchSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
+        Assert.Equal(firstResult.GetProperty("dedupeKey").GetString(), secondResult.GetProperty("dedupeKey").GetString());
     }
 
     [Fact]
@@ -348,6 +352,7 @@ public class LaunchSpecTests : IDisposable
 
         var result = JsonSerializer.SerializeToElement(response.Result);
         Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
+        Assert.Equal(dedupeKey, result.GetProperty("dedupeKey").GetString());
 
         var logText = string.Join(Environment.NewLine, logger.Entries.Select(entry => entry.Message));
         Assert.DoesNotContain(dedupeKey, logText, StringComparison.Ordinal);
@@ -457,6 +462,7 @@ public class LaunchSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
+        Assert.Equal($"{appId}:global", secondResult.GetProperty("dedupeKey").GetString());
     }
 
     [Fact]
@@ -517,6 +523,7 @@ public class LaunchSpecTests : IDisposable
 
         Assert.Equal("already_running", secondResult.GetProperty("status").GetString());
         Assert.Equal(firstResult.GetProperty("launchId").GetString(), secondResult.GetProperty("launchId").GetString());
+        Assert.Equal($"{appId}:{scope}:{scope}:{httpBaseUrl}", secondResult.GetProperty("dedupeKey").GetString());
     }
 
     public void Dispose()

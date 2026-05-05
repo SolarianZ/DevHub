@@ -306,11 +306,22 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
         pid = root["pid"]
         if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1:
             raise RuntimeError(f"{path}.pid 类型非法。")
+    launch_id = optional_property_string(root, "launchId", path)
+    dedupe_key = optional_property_string(root, "dedupeKey", path)
+    instance_id = optional_property_string(root, "instanceId", path)
+    if status in {"started", "starting"}:
+        if not launch_id or not dedupe_key:
+            raise RuntimeError(f"{path}.launchId 与 {path}.dedupeKey 必须存在。")
+    elif not instance_id and (not launch_id or not dedupe_key):
+        raise RuntimeError(f"{path}.instanceId 或 {path}.launchId + {path}.dedupeKey 必须存在。")
+
     return LaunchResult(
         ok=ok,
         status=status,
-        launch_id=require_non_empty_string(root, "launchId", path),
+        launch_id=launch_id,
         pid=pid,
+        dedupe_key=dedupe_key,
+        instance_id=instance_id,
     )
 
 
@@ -445,7 +456,7 @@ def parse_callee_error(value: Any, *, path: str) -> DevHubCalleeError:
     """解析被调用方错误对象。"""
 
     root = require_mapping(value, path)
-    data = _require_json_object(root["data"], f"{path}.data") if "data" in root else None
+    data = _require_json_value(root["data"], f"{path}.data") if "data" in root else None
     return DevHubCalleeError(
         code=require_int(root, "code", path),
         message=require_non_empty_string(root, "message", path),

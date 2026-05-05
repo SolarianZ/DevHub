@@ -157,7 +157,9 @@ export interface LaunchResult {
   ok: true;
   status: LaunchStatus;
   pid?: number | null;
-  launchId: string;
+  launchId?: string;
+  dedupeKey?: string;
+  instanceId?: string;
 }
 
 export interface ListInstancesRequest {

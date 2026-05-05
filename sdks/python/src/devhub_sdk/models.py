@@ -294,8 +294,10 @@ class LaunchResult:
 
     ok: bool
     status: str
-    launch_id: str
+    launch_id: str | None = None
     pid: int | None = None
+    dedupe_key: str | None = None
+    instance_id: str | None = None
 
 
 @dataclass(slots=True)

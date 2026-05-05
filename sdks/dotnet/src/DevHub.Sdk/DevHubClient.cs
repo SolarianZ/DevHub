@@ -417,12 +417,27 @@ public sealed class DevHubClient : IAsyncDisposable
         var payload = ResponsePayloadReader.DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
-        ResponsePayloadReader.EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
         if (!string.Equals(payload.Status, "started", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "starting", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "already_running", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("hub.apps.launch.result 返回结果非法：status 取值不受支持。");
+        }
+
+        if (string.Equals(payload.Status, "started", StringComparison.Ordinal)
+            || string.Equals(payload.Status, "starting", StringComparison.Ordinal))
+        {
+            ResponsePayloadReader.EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
+            ResponsePayloadReader.EnsureNotEmpty(payload.DedupeKey, "hub.apps.launch.result", "dedupeKey");
+        }
+        else if (string.Equals(payload.Status, "already_running", StringComparison.Ordinal))
+        {
+            var hasInstance = !string.IsNullOrWhiteSpace(payload.InstanceId);
+            var hasLaunchRecord = !string.IsNullOrWhiteSpace(payload.LaunchId) && !string.IsNullOrWhiteSpace(payload.DedupeKey);
+            if (!hasInstance && !hasLaunchRecord)
+            {
+                throw new InvalidOperationException("hub.apps.launch.result 返回结果非法：already_running 必须包含 instanceId 或 launchId + dedupeKey。");
+            }
         }
 
         return payload;

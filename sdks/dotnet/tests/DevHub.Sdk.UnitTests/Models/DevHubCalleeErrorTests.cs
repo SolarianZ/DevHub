@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Sdk.Models;
 
 namespace DevHub.Sdk.UnitTests.Models;
@@ -26,9 +27,13 @@ public sealed class DevHubCalleeErrorTests
     }
 
     [Fact]
-    public void CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
+    public void CalleeErrorCreate_WhenDataIsScalar_ShouldPreserveJsonValue()
     {
-        Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
+        var error = DevHubCalleeError.Create(1001, "app_error", "boom");
+
+        Assert.True(error.Data.HasValue);
+        Assert.Equal(JsonValueKind.String, error.Data!.Value.ValueKind);
+        Assert.Equal("boom", error.Data!.Value.GetString());
     }
 
     private sealed class SampleErrorData

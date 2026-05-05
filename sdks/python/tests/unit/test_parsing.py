@@ -302,6 +302,7 @@ def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
                 "ok": True,
                 "status": "started",
                 "launchId": "launch-1",
+                "dedupeKey": "test.app:global",
                 "pid": True,
             },
             path="hub.apps.launch.result",
@@ -315,10 +316,28 @@ def test_parse_launch_result_when_pid_is_not_positive_should_raise() -> None:
                 "ok": True,
                 "status": "started",
                 "launchId": "launch-1",
+                "dedupeKey": "test.app:global",
                 "pid": 0,
             },
             path="hub.apps.launch.result",
         )
+
+
+def test_parse_launch_result_when_already_running_online_instance_should_accept_instance_id() -> None:
+    result = parse_launch_result(
+        {
+            "ok": True,
+            "status": "already_running",
+            "instanceId": "inst-1",
+            "pid": 12345,
+        },
+        path="hub.apps.launch.result",
+    )
+
+    assert result.status == "already_running"
+    assert result.instance_id == "inst-1"
+    assert result.launch_id is None
+    assert result.dedupe_key is None
 
 
 def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
@@ -799,8 +818,8 @@ def test_parse_invocation_when_args_contains_unsupported_json_should_raise() -> 
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
-@pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
-def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data) -> None:
+@pytest.mark.parametrize("data", [{"callback": lambda: "ignored"}])
+def test_parse_callee_error_when_data_is_not_valid_json_value_should_raise(data) -> None:
     with pytest.raises(RuntimeError):
         parse_callee_error(
             {
@@ -810,6 +829,20 @@ def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data
             },
             path="error.data.calleeError",
         )
+
+
+@pytest.mark.parametrize("data", [None, "invalid-name", ["field", "name"]])
+def test_parse_callee_error_should_preserve_json_value_data(data) -> None:
+    parsed = parse_callee_error(
+        {
+            "code": 1001,
+            "message": "app_error",
+            "data": data,
+        },
+        path="error.data.calleeError",
+    )
+
+    assert parsed.data == data
 
 
 def _app_instance_payload() -> dict[str, object]:

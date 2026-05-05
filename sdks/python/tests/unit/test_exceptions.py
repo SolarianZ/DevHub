@@ -42,6 +42,28 @@ def test_devhub_rpc_exception_should_expose_known_code_and_helpers() -> None:
     assert exception.try_get_data_property("missing") is None
 
 
+def test_devhub_rpc_exception_should_preserve_scalar_callee_error_data() -> None:
+    exception = DevHubRpcException(
+        code=DevHubRpcErrorCode.INVOCATION_FAILED,
+        message="invocation_failed",
+        data={
+            "invocationId": "invk-1",
+            "calleeError": {
+                "code": 1001,
+                "message": "app_error",
+                "data": "invalid-name",
+            },
+        },
+        request_id="req-1",
+    )
+
+    assert exception.callee_error == DevHubCalleeError(
+        code=1001,
+        message="app_error",
+        data="invalid-name",
+    )
+
+
 def test_devhub_rpc_exception_when_code_is_unknown_should_return_none() -> None:
     exception = DevHubRpcException(
         code=-32088,
@@ -68,7 +90,7 @@ def test_devhub_rpc_exception_should_expose_unknown_invocation_reason_and_id() -
     assert exception.try_get_data_string("reason") == "unknown_invocation"
 
 
-def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore_helper() -> None:
+def test_devhub_rpc_exception_when_callee_error_data_is_scalar_should_preserve_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -83,11 +105,14 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_object_should_ignore
         request_id="req-invalid-callee-error",
     )
 
-    assert exception.callee_error is None
+    assert exception.callee_error == DevHubCalleeError(
+        code=1001,
+        message="app_error",
+        data="boom",
+    )
 
 
-@pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
-def test_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_should_ignore_helper(data) -> None:
+def test_devhub_rpc_exception_when_callee_error_data_is_null_should_preserve_helper() -> None:
     exception = DevHubRpcException(
         code=DevHubRpcErrorCode.INVOCATION_FAILED,
         message="invocation_failed",
@@ -96,7 +121,29 @@ def test_devhub_rpc_exception_when_callee_error_data_is_not_valid_json_object_sh
             "calleeError": {
                 "code": 1001,
                 "message": "app_error",
-                "data": data,
+                "data": None,
+            },
+        },
+        request_id="req-invalid-callee-error-data",
+    )
+
+    assert exception.callee_error == DevHubCalleeError(
+        code=1001,
+        message="app_error",
+        data=None,
+    )
+
+
+def test_devhub_rpc_exception_when_callee_error_data_is_not_json_value_should_ignore_helper() -> None:
+    exception = DevHubRpcException(
+        code=DevHubRpcErrorCode.INVOCATION_FAILED,
+        message="invocation_failed",
+        data={
+            "invocationId": "invk-1",
+            "calleeError": {
+                "code": 1001,
+                "message": "app_error",
+                "data": {"callback": lambda: "ignored"},
             },
         },
         request_id="req-invalid-callee-error-data",

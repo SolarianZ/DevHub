@@ -140,6 +140,59 @@ public class DefinitionProviderTests : IDisposable
             orderedDefinitions);
     }
 
+    [Fact]
+    public void Impl_Refresh_WithInvalidRecordAndDuplicateIdentity_ShouldIgnoreInvalidAndExposeOneStableDefinition()
+    {
+        var catalogPath = DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory);
+        var loader = new DefinitionLoader(catalogPath, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        DefinitionCatalogTestHelper.WriteCatalogText(
+            catalogPath,
+            """
+            {
+              "version": 1,
+              "definitions": [
+                {
+                  "appId": "provider.duplicate",
+                  "scopes": [
+                    {
+                      "scope": "workspace-a",
+                      "displayName": "First Definition"
+                    },
+                    {
+                      "scope": "workspace-a",
+                      "displayName": "Second Definition"
+                    },
+                    {
+                      "scope": 1,
+                      "displayName": "Invalid Definition"
+                    }
+                  ]
+                },
+                {
+                  "appId": "provider.valid",
+                  "scopes": [
+                    {
+                      "scope": "",
+                      "displayName": "Valid Definition"
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        provider.Refresh();
+
+        var definitions = provider.GetAllDefinitions();
+        Assert.Equal(2, definitions.Count);
+        var duplicate = Assert.Single(definitions, definition => definition.AppId == "provider.duplicate");
+        Assert.Equal("workspace-a", duplicate.Scope);
+        Assert.Equal("First Definition", duplicate.DisplayName);
+        Assert.Null(provider.GetDefinition("provider.duplicate", "1"));
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

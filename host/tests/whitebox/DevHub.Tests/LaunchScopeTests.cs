@@ -208,7 +208,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
+    public async Task Impl_LaunchAsync_WithExplicitSameDedupeKeyInDifferentScopes_ShouldNotCollide()
     {
         WriteDefinition(
             "launch-scope-isolation.app",
@@ -232,14 +232,14 @@ public class LaunchScopeTests : IDisposable
         var scopeA = await coordinator.LaunchAsync(
             appId: "launch-scope-isolation.app",
             scope: "workspace-A",
-            dedupeKey: null,
+            dedupeKey: "shared",
             waitForRegisterMs: 0,
             CancellationToken.None);
 
         var scopeB = await coordinator.LaunchAsync(
             appId: "launch-scope-isolation.app",
             scope: "workspace-B",
-            dedupeKey: null,
+            dedupeKey: "shared",
             waitForRegisterMs: 0,
             CancellationToken.None);
 
@@ -247,7 +247,49 @@ public class LaunchScopeTests : IDisposable
         Assert.True(scopeB.Ok);
         Assert.Equal("started", scopeA.Status);
         Assert.Equal("started", scopeB.Status);
+        Assert.Equal("shared", scopeA.DedupeKey);
+        Assert.Equal("shared", scopeB.DedupeKey);
         Assert.NotEqual(scopeA.LaunchId, scopeB.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WithExplicitSameDedupeKeyInDifferentApps_ShouldNotCollide()
+    {
+        WriteDefinition(
+            "launch-app-isolation-a.app",
+            rpcEnabled: true,
+            includeLaunch: true);
+        WriteDefinition(
+            "launch-app-isolation-b.app",
+            rpcEnabled: true,
+            includeLaunch: true);
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-app-isolation-a.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "shared",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-app-isolation-b.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "shared",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.True(second.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.Equal("started", second.Status);
+        Assert.NotEqual(first.LaunchId, second.LaunchId);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
     }
 

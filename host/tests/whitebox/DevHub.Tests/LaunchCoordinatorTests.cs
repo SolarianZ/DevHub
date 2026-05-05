@@ -109,6 +109,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        Assert.Equal("launch-started.app:global", result.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -135,6 +136,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        Assert.Equal("launch-starting.app:global", result.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -166,6 +168,9 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(result.Ok);
         Assert.Equal("already_running", result.Status);
         Assert.Equal(6510, result.Pid);
+        Assert.Null(result.LaunchId);
+        Assert.Null(result.DedupeKey);
+        Assert.Equal("launch-online-instance-1", result.InstanceId);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
     }
 
@@ -203,6 +208,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("already_running", second.Status);
         Assert.Equal(first.LaunchId, second.LaunchId);
+        Assert.Equal(first.DedupeKey, second.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -674,6 +680,53 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_WhenRegisterDeadlineElapsed_ShouldReturnLaunchRegisterTimeoutAndReleaseDedupe()
+    {
+        WriteDefinition("launch-register-timeout.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var tuningOptions = RuntimeTuningOptions.Create(
+            leaseSeconds: 30,
+            onlineThresholdSeconds: 30,
+            launchDedupeWindowSeconds: 30,
+            launchRegisterTimeoutSeconds: 1);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object, runtimeTuningOptions: tuningOptions);
+
+        var launchTask = coordinator.LaunchAsync(
+            appId: "launch-register-timeout.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "register-timeout",
+            waitForRegisterMs: 5000,
+            CancellationToken.None);
+
+        await Task.Delay(60);
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        var result = await launchTask;
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("launch_register_timeout", errorData.GetProperty("reason").GetString());
+
+        var retry = await coordinator.LaunchAsync(
+            appId: "launch-register-timeout.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "register-timeout",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(retry.Ok);
+        Assert.Equal("started", retry.Status);
+        Assert.NotEqual(result.LaunchId, retry.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WhenArgsTemplateMissing_ShouldPassNullArgumentsToProcessLauncher()
     {
         WriteDefinitionWithoutArgsTemplate("launch-null-args-template.app");
@@ -715,7 +768,8 @@ public class LaunchCoordinatorTests : IDisposable
     private LaunchCoordinator CreateCoordinator(
         IClock? clock = null,
         IProcessLauncher? processLauncher = null,
-        AppRegistry? appRegistry = null)
+        AppRegistry? appRegistry = null,
+        RuntimeTuningOptions? runtimeTuningOptions = null)
     {
         var effectiveClock = clock ?? new SystemClock();
         var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
@@ -729,6 +783,7 @@ public class LaunchCoordinatorTests : IDisposable
             provider,
             processLauncher ?? new ProcessLauncher(),
             effectiveClock,
+            runtimeTuningOptions ?? RuntimeTuningOptions.Default,
             _launchLogger.Object);
     }
 

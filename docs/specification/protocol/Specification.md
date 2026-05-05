@@ -216,7 +216,8 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
   "runtimeTuning": {
     "leaseSeconds": 30,
     "onlineThresholdSeconds": 30,
-    "launchDedupeWindowSeconds": 30
+    "launchDedupeWindowSeconds": 30,
+    "launchRegisterTimeoutSeconds": 30
   }
 }
 ```
@@ -229,7 +230,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`），路径固定为 `/ws`，只能包含 scheme、回环 host、可选端口与该路径；**禁止**包含 query、fragment、userinfo、自定义路径或末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
 - `tokenFile` **必须**是绝对路径。
-- `runtimeTuning` **必须**存在，且 `leaseSeconds`、`onlineThresholdSeconds`、`launchDedupeWindowSeconds` **必须**为大于等于 1 的整数；未显式配置时默认值均为 `30`。
+- `runtimeTuning` **必须**存在，且 `leaseSeconds`、`onlineThresholdSeconds`、`launchDedupeWindowSeconds`、`launchRegisterTimeoutSeconds` **必须**为大于等于 1 的整数；未显式配置时默认值均为 `30`。
 - Hub **必须**原子化地更新 `hub.json`（先写临时文件再替换）以避免读取不完整。
 - `hub.json` **必须**具有 OS ACL，限制仅当前用户可访问。
 - 客户端**必须**将 `hub.json` 作为权威端点来源，**禁止**假设固定的端口；WebSocket 客户端**必须**原样连接 `wsUrl`，并拒绝不符合固定 `/ws` 端点形状的发现文件。
@@ -243,11 +244,14 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - 默认位置：`${dataDir}/apps/definitions.json`
 - Definition 目录索引文件**必须**由 `${dataDir}` 固定派生，不提供独立覆盖环境变量。
 - Definition 目录索引根对象**必须**包含显式 `version` 字段，当前版本固定为 `1`。
-- Definition 目录索引根对象**必须**包含 `definitions` 数组；数组元素按 `appId` 分组，每个分组通过 `scopes` 数组持有多个 Definition 条目。
-- 每个 Definition 条目**必须**通过 payload 中显式的 `appId` 与 `scope` 共同唯一标识同一组 `appId + scope` 复合身份；其中 `scope = ""` 表示 Global Definition，`scope = "global"` 等显式作用域与 Global Definition **必须**保持可并存且可精确寻址。
+- Definition 目录索引根对象**必须**能够表达零个或多个可加载的 Definition 记录；本规范不要求内部采用固定 `appId` 分组结构，也不要求使用固定 `scopes` 嵌套字段。
+- 每个有效 Definition 记录**必须**通过 payload 中显式的 `appId` 与 `scope` 共同唯一标识同一组 `appId + scope` 复合身份；其中 `scope = ""` 表示 Global Definition，`scope = "global"` 等显式作用域与 Global Definition **必须**保持可并存且可精确寻址。
 - Definition 条目的 JSON 负载**必须**符合 `AppDefinition` 架构 (§5.1)；持久化与读取结果中的 `appId` / `scope` **必须**按 canonical 原值保留，**不得**通过文件名编码、`scopeKey`、路径转义或大小写折叠推导身份。
 - 当 `${dataDir}/apps/definitions.json` 缺失时，Hub **必须**将当前 Definition 清单视为空集合。
-- 当目录索引顶层结构无效时，Hub **必须**将当前 Definition 清单视为空集合；当顶层结构合法但某个 `appId` 分组或某个 `scope` 条目无效时，Hub **必须**仅忽略该无效条目，并继续加载其他合法 Definition。
+- 当目录索引顶层结构无效、缺失 `version` 或无法表达可加载的 Definition 记录集合时，Hub **必须**将当前 Definition 清单视为空集合。
+- 当目录索引顶层结构有效但某个 Definition 记录无效时，Hub **必须**仅忽略该无效记录，并继续加载其他合法 Definition。
+- 当同一 Definition 清单中存在多个有效记录声明相同 `appId + scope` 时，Hub **必须**使用稳定、可重复的规则选择至多一个 live Definition，并且 `hub.apps.listDefinitions` **不得**返回重复的 `appId + scope`。
+- Hub 写入 Definition 清单时**必须**使用原子写入语义，并且后续读取、`hub.apps.listDefinitions` 与 `hub.apps.getDefinition` 的可观察结果**必须**按有效 Definition 的 `appId` ordinal 升序稳定返回；同一 `appId` 内 Global Definition 在前，其余 Definition 按 `scope` ordinal 升序返回。
 
 > 注意：符合性测试假设使用平台默认值，除非显式配置了 `DEVHUB_DATA_DIR` 或等价的数据根目录参数。
 
@@ -589,11 +593,12 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
     "startedAtUtc": { "type": "string", "format": "date-time" },
     "runtimeTuning": {
       "type": "object",
-      "required": ["leaseSeconds", "onlineThresholdSeconds", "launchDedupeWindowSeconds"],
+      "required": ["leaseSeconds", "onlineThresholdSeconds", "launchDedupeWindowSeconds", "launchRegisterTimeoutSeconds"],
       "properties": {
         "leaseSeconds": { "type": "integer", "minimum": 1 },
         "onlineThresholdSeconds": { "type": "integer", "minimum": 1 },
-        "launchDedupeWindowSeconds": { "type": "integer", "minimum": 1 }
+        "launchDedupeWindowSeconds": { "type": "integer", "minimum": 1 },
+        "launchRegisterTimeoutSeconds": { "type": "integer", "minimum": 1 }
       }
     }
   }
@@ -788,7 +793,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 规范性行为：
 - Hub **必须**先执行与 `hub.apps.validateDefinition` 完全一致的定义校验。
-- 当定义校验通过时，Hub **必须**原子更新 `${dataDir}/apps/definitions.json`，并在成功后刷新可读取快照。更新后的目录索引**必须**按 `appId` 的 ordinal 升序写出，组内先 Global，再按 `scope` 的 ordinal 升序写出其余条目。
+- 当定义校验通过时，Hub **必须**原子更新 `${dataDir}/apps/definitions.json` 中与 `definition.appId + definition.scope` 精确匹配的 Definition 记录，并在成功后刷新可读取快照。更新后的可观察 Definition 清单**必须**按 `appId` 的 ordinal 升序返回，组内先 Global，再按 `scope` 的 ordinal 升序返回其余记录。
 - 成功的 `upsertDefinition` **必须**发布 `app.definition.upserted` 事件。
 - 成功结果中的 `definition` **必须**等于最新生效的 `AppDefinition`。
 - Hub **必须**以 `definition.appId + definition.scope` 作为写入身份；对同一 `appId` 的其他作用域 Definition **不得**产生隐式覆盖。
@@ -808,7 +813,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```
 
 规范性行为：
-- Hub **必须**删除与请求 `appId + scope` 精确匹配的 Definition 文件，并在成功后刷新可读取快照。
+- Hub **必须**从 `${dataDir}/apps/definitions.json` 删除与请求 `appId + scope` 精确匹配的 Definition 记录，并在成功后刷新可读取快照。
 - 成功的 `deleteDefinition` **必须**发布 `app.definition.deleted` 事件。
 - 删除成功后，后续对同一 `appId + scope` 的 `hub.apps.getDefinition` **必须**返回 `-32014 app_definition_not_found`。
 
@@ -856,7 +861,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 只要实例注册记录仍被保留，Hub **必须**保留该 `instanceId` 的 `appId + scope + password` 绑定，包括已离线但仍在注册表中保留的实例记录。
 - `instanceSessionToken` **必须**作为单次注册会话凭据，用于该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权校验；进程重启后的同 `instanceId` 重注册授权**不得**要求提供旧 `instanceSessionToken`。
 - 自主注册成功的实例，即使其 `scope` 未被任何 Definition 覆盖，后续 `hub.apps.listInstances` 与 `hub.apps.getInstance` 仍**必须**返回该实例快照；Hub **不得**因此自动创建、复制或推导新的 Definition。
-- Definition inventory **必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist；没有精确 `AppDefinition(appId, scope)` 时，自主注册只建立在线路由能力，不建立离线队列或 auto-launch 能力。
+- Definition 清单**必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist；没有精确 `AppDefinition(appId, scope)` 时，自主注册只建立在线路由能力，不建立离线队列或 auto-launch 能力。
 - 当某次注册可被 Hub 关联到一条尚未完成的启动记录时，该注册**必须**通过顶层 `params.launchId` 绑定回对应启动记录；仅凭“已有同 `appId + scope` 实例在线”**不得**视为该次启动已完成。
 - 若该启动绑定注册的 `appId + scope` 与发起启动的 Definition 不一致，Hub **必须**拒绝本次注册，并返回 `-32002 forbidden` 且 `error.data.reason="definition_scope_mismatch"`；Hub **不得**让同 `appId` 的其他作用域 Definition 吸收该进程。
 - 发生上述启动绑定冲突时，任何等待该启动完成的 `hub.apps.launch` **必须**以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；相关 `error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope` 以便诊断。
@@ -963,19 +968,28 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
   "ok": true,
   "status": "started",
   "pid": 12345,
-  "launchId": "..."
+  "launchId": "...",
+  "dedupeKey": "test.app:global"
 }
 ```
 
 规范性行为：
 - `status` **必须**是以下之一：`started`, `starting`, `already_running`，且**必须**按以下路径稳定映射：
-  - `already_running`：存在匹配请求 `appId + scope` 的**在线**注册实例，或具有相同解析后 `dedupeKey` 的启动正在进行中。
+  - `already_running`：存在匹配请求 `appId + scope` 的**在线**注册实例，或具有相同 `appId + scope + resolvedDedupeKey` 的启动正在进行中。
   - `started`：进程创建成功，且 `waitForRegisterMs = 0`；或 `waitForRegisterMs > 0` 且在等待窗口耗尽前，带有被跟踪 `launchId` 且与请求 `appId + scope` 精确匹配的注册已经满足该启动记录。
   - `starting`：进程创建成功，`waitForRegisterMs > 0`，且等待窗口耗尽前被跟踪的启动记录仍未被满足。
+- 成功结果**必须**始终包含 `{ "ok": true, "status": string }`。
+- 当 `status = "started"` 或 `status = "starting"` 来自新创建进程时，结果**必须**包含该启动记录的 `launchId` 与解析后的 `dedupeKey`，并且在平台可观测时**应该**包含 `pid`。
+- 当 `status = "already_running"` 由在线实例命中产生时，结果**必须**包含命中的 `instanceId`，并且在可用时**应该**包含 `pid`。
+- 当 `status = "already_running"` 由进行中 launch record 命中产生时，结果**必须**包含该启动记录的 `launchId` 与解析后的 `dedupeKey`，并且在可用时**应该**包含 `pid`。
 - Hub **必须**要求请求显式提供合法字符串 `scope`；若 `scope` 缺失、为 `null`、类型非法或未通过 §5.5 字符串验证，**必须**返回 `-32602 invalid_params`。
 - 完成 `scope` 校验后，Hub **必须**按精确 `appId + scope` 解析要启动的 Definition；**不得**从其他显式 scope 或 Global Definition 回退匹配。
-- Hub **必须**为 `dedupeKey` 维护一个去重窗口（默认 30 秒）。在此窗口内，具有相同 key 的并发启动**必须**返回 `already_running`。
-- 对于已经启动进程且该进程仍存活、但尚未完成注册绑定的启动记录，Hub **必须**持续返回 `already_running`，即使已超过 `LaunchDedupeWindowSeconds`；去重窗口只控制已完成或已失败记录的保留时间，**不得**让仍在进行中的同 key 启动脱离 dedupe。
+- Hub **必须**为 `appId + scope + resolvedDedupeKey` 维护一个去重窗口（默认 30 秒）。在此窗口内，具有相同复合去重身份的并发启动**必须**返回 `already_running`；相同 `resolvedDedupeKey` 在不同 `appId` 或不同 `scope` 下**不得**互相命中进行中启动记录。
+- 对于已经启动进程且该进程仍存活、但尚未完成注册绑定的启动记录，Hub **必须**持续返回 `already_running`，即使已超过 `LaunchDedupeWindowSeconds`；去重窗口只控制已完成或已失败记录的保留时间，**不得**让仍在进行中的同 `appId + scope + resolvedDedupeKey` 启动脱离 dedupe。
+- 每条未完成 launch record **必须**具有有限注册截止时间。基础注册截止时间由 `hub.json.runtimeTuning.launchRegisterTimeoutSeconds` 定义，默认 30 秒；有效注册截止时间**不得**早于当前 `hub.apps.launch` 请求的 `waitForRegisterMs` 等待截止点。
+- 当 `waitForRegisterMs = 0` 时，注册截止时间只用于后台终结 launch record 并释放对应 `appId + scope + resolvedDedupeKey` 的进行中 dedupe，**不得**改变本次调用已返回的 `started` 结果。
+- 若被跟踪进程退出、绑定注册失败或在完成匹配注册前达到有效注册截止时间，Hub **必须**将该启动记录推进为终态并释放对应 `appId + scope + resolvedDedupeKey` 的进行中 dedupe。
+- 如果 `waitForRegisterMs > 0` 且 launch record 在匹配注册前达到有效注册截止时间，Hub **必须**让该次启动以 `-32020 launch_failed` 失败，且 `error.data.reason="launch_register_timeout"`。
 - 如果省略 `dedupeKey`，Hub **必须**使用 `AppDefinition.launch.dedupeKeyTemplate` 生成它。
 - **模板替换**：Hub **必须**只支持 `dedupeKeyTemplate` 和 `argsTemplate` 中的以下占位符：
   - `{appId}`: 应用程序 ID。
@@ -1027,7 +1041,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
 - 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
-- 当 auto-launch 或离线队列因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
+- 当 auto-launch 或离线队列因缺少精确 `AppDefinition(appId, scope)` 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data.reason` **必须**为 `"definition_not_found"`，`error.data.appId` 与 `error.data.scope` **必须**分别等于请求中的 `appId` 与 canonical `scope`。
 
 #### 6.3.14 `hub.invoke.request` (仅限 HTTP)
 **参数**：结构与 `hub.invoke.notify` 相同，外加：
@@ -1065,7 +1079,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
 - 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
-- 当 auto-launch 或离线队列因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
+- 当 auto-launch 或离线队列因缺少精确 `AppDefinition(appId, scope)` 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data.reason` **必须**为 `"definition_not_found"`，`error.data.appId` 与 `error.data.scope` **必须**分别等于请求中的 `appId` 与 canonical `scope`。
 - 当 HTTP caller 在 `hub.invoke.request` 完成前主动断连或取消请求时，Hub **必须**终止当前 HTTP 等待流程，但**不得**仅因 caller 断连而把该 invocation 推进到 `invocation_timeout` 或 `invocation_expired`；原有 `ttlMs` / `waitTimeoutMs` 预算 **必须**继续独立生效，因此后续 `poll/respond` 在预算仍有效时**可以**成功，在预算真正耗尽后仍**必须**按既有超时/过期语义拒绝迟到响应。
 
 #### 6.3.15 `hub.invoke.poll` (仅限 HTTP)
@@ -1148,6 +1162,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - Hub **必须**要求 `params.leaseToken` 为非空字符串，并校验其等于该 invocation 当前有效交付租约的 token；缺失或类型非法时**必须**返回 `-32602 invalid_params`。
 - Hub **必须**强制要求实例具有 `invoke.respond==true`；否则返回 `-32002 forbidden` 且 `error.data.reason="respond_not_enabled"`。
 - 成功的 `respond` **必须**更新实例的 `lastSeenUtc`。
+- 当被调用方返回应用程序错误且 `error.data` 存在时，Hub **必须**在 `-32050 invocation_failed` 的 `error.data.calleeError.data` 中保留该值；该值**可以**是对象、数组、字符串、数字、布尔值或 `null`，Hub **不得**为了满足对象模型而包装或丢弃非对象 JSON 值。
 
 **错误**：
 - `-32030 delivery_conflict`：如果租约无效/已过期、`leaseToken` 不是当前有效租约、使用旧交付尝试的 token、错误的实例响应或重复响应。
@@ -1287,6 +1302,7 @@ stateDiagram-v2
 | `leaseSeconds`          | 30 s (默认)     | 30 s (默认)      | 由 Hub 在 `poll` 时分配；可配置，见 `hub.json.runtimeTuning.leaseSeconds` |
 | 在线阈值                | 30 s (默认)     | 30 s (默认)      | `now - lastSeenUtc ≤ 在线阈值`；可配置，见 `hub.json.runtimeTuning.onlineThresholdSeconds` |
 | 去重窗口                | 30 s (默认)     | 30 s (默认)      | 启动去重窗口；可配置，见 `hub.json.runtimeTuning.launchDedupeWindowSeconds` |
+| 启动注册截止时间        | 30 s (默认)     | 30 s (默认)      | 未完成 launch record 的基础注册截止时间；可配置，见 `hub.json.runtimeTuning.launchRegisterTimeoutSeconds` |
 | `maxCount` (轮询默认值) | 10              | 10               | **必须**在 1..100 (超出范围 = invalid_params) |
 
 ---
@@ -1312,14 +1328,14 @@ stateDiagram-v2
 | ------ | -------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | -32001 | `unauthorized`             | 令牌无效/缺失                       | `reason`: `"missing_token"` 或 `"invalid_token"`                                                                      |
 | -32002 | `forbidden`                | 能力受限或操作被禁止                | `reason`: `"rpc_disabled"`, `"poll_not_enabled"`, `"respond_not_enabled"`, `"instance_password_mismatch"`, `"instance_identity_mismatch"`, `"instance_session_token_mismatch"`；若某次已跟踪 launch 的注册尝试绑定到另一作用域，**必须**使用 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
-| -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 / 精确实例查询未命中 | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`; 对于 `hub.apps.getInstance` 精确未命中，**必须**附带 `instanceId`: string；在 auto-launch 未命中请求的精确 Definition 时**可以**附带 `appId?`: string, `scope?`: string |
+| -32010 | `instance_not_found`       | 无路由且 !queueIfOffline / 未知实例 / 精确实例查询未命中 / 缺少离线队列或 auto-launch 所需精确 Definition | `reason`: `"offline_no_queue"`, `"unknown_instance"`, `"target_instance_missing"`, `"definition_not_found"`; 对于 `hub.apps.getInstance` 精确未命中，**必须**附带 `instanceId`: string；缺少离线队列或 auto-launch 所需精确 Definition 时，**必须**附带 `appId`: string 与 `scope`: string |
 | -32011 | `invocation_expired`       | TTL 耗尽 / 调用已过期 / 未知 invocationId | `invocationId?`: string; `elapsedMs?`: number; `reason?`: `"unknown_invocation"`                                      |
 | -32012 | `invocation_timeout`       | `waitTimeoutMs` 耗尽 (仅限请求)     | `invocationId?`: string; `elapsedMs`: number                                                                          |
 | -32014 | `app_definition_not_found` | 精确 Definition 缺失 / 启动所需定义缺失 | `appId?`: string; `scope?`: string                                                                                    |
-| -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string; 若等待中的 launch 因作用域回绑冲突失败，`reason` **必须**为 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string |
+| -32020 | `launch_failed`            | 进程启动失败 / 启动配置不可用       | `reason?`: string; `exitCode?`: number 或 null; `stderr?`: string; 若等待中的 launch 因作用域回绑冲突失败，`reason` **必须**为 `"definition_scope_mismatch"`，且**应该**附带 `appId?`: string, `expectedScope?`: string, `actualScope?`: string；若等待中的 launch 因注册截止时间耗尽失败，`reason` **必须**为 `"launch_register_timeout"` |
 | -32030 | `delivery_conflict`        | 重复响应或违反租约                  | `currentLeaseHolder?`: string; `invocationId?`: string                                                                |
 | -32040 | `rate_limited`             | 超过速率限制或资源上限              | `reason?`: string                                                                                                     |
-| -32050 | `invocation_failed`        | 被调用方返回应用程序错误 (请求)     | `invocationId`: string; `calleeError`: `{ code:int, message:string, data?:object }`                                   |
+| -32050 | `invocation_failed`        | 被调用方返回应用程序错误 (请求)     | `invocationId`: string; `calleeError`: `{ code:int, message:string, data?: JSON value }`                             |
 | -32099 | `not_supported`            | 协议版本不匹配 / 缺失协议头         | `expected`: 1; `received?`: string/number/null; `reason`: `"missing"` 或 `"mismatch"`                                 |
 
 > **注意**：`-32013 instance_offline` 已有意省略；请使用 `-32010 instance_not_found` 配合 `data.reason` 进行诊断。

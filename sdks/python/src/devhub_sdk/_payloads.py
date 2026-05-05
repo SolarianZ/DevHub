@@ -494,5 +494,5 @@ def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:
         "message": message,
     }
     if error.data is not None:
-        payload["data"] = ensure_json_object(error.data, "error.data")
+        payload["data"] = ensure_json_value(error.data, "error.data")
     return payload

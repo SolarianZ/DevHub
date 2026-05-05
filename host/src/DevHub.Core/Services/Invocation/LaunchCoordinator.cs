@@ -17,7 +17,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     public const string LaunchIdEnvironmentVariable = "DEVHUB_LAUNCH_ID";
 
     private readonly object _launchSyncRoot = new();
-    private readonly Dictionary<string, LaunchRecord> _dedupeRecords = new();
+    private readonly Dictionary<LaunchDedupeIdentity, LaunchRecord> _dedupeRecords = new();
     private readonly Dictionary<string, LaunchRecord> _launchRecordsById = new();
     private readonly IDefinitionProvider _definitionProvider;
     private readonly AppRegistry _appRegistry;
@@ -101,8 +101,10 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         {
             return LaunchOperationResult.CreateSuccess(
                 status: "already_running",
-                launchId: BuildLaunchId(),
-                pid: onlineInstances[0].Pid);
+                launchId: null,
+                pid: onlineInstances[0].Pid,
+                dedupeKey: null,
+                instanceId: onlineInstances[0].InstanceId);
         }
 
         if (!TryValidateLaunchConfig(definition, out var launchConfig, out var configError))
@@ -112,12 +114,13 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
         var httpBaseUrl = _runtimeHttpBaseUrlProvider.GetHttpBaseUrl();
         var resolvedDedupeKey = ResolveDedupeKey(definition, appId, scope, dedupeKey, httpBaseUrl);
+        var dedupeIdentity = LaunchDedupeIdentity.Create(appId, scope, resolvedDedupeKey);
 
         var now = _clock.UtcNow;
         LaunchRecord? existingRecord;
         lock (_launchSyncRoot)
         {
-            existingRecord = TryGetActiveDedupeRecord(resolvedDedupeKey, now);
+            existingRecord = TryGetActiveDedupeRecord(dedupeIdentity, now);
         }
 
         if (existingRecord is not null)
@@ -125,31 +128,36 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             return LaunchOperationResult.CreateSuccess(
                 status: "already_running",
                 launchId: existingRecord.LaunchId,
-                pid: existingRecord.Pid);
+                pid: existingRecord.Pid,
+                dedupeKey: existingRecord.DedupeKey,
+                instanceId: null);
         }
 
         var launchId = BuildLaunchId();
         lock (_launchSyncRoot)
         {
             var nextNow = _clock.UtcNow;
-            if (TryGetActiveDedupeRecord(resolvedDedupeKey, nextNow) is { } record)
+            if (TryGetActiveDedupeRecord(dedupeIdentity, nextNow) is { } record)
             {
                 return LaunchOperationResult.CreateSuccess(
                     status: "already_running",
                     launchId: record.LaunchId,
-                    pid: record.Pid);
+                    pid: record.Pid,
+                    dedupeKey: record.DedupeKey,
+                    instanceId: null);
             }
 
             var launchRecord = new LaunchRecord
             {
                 LaunchId = launchId,
+                DedupeIdentity = dedupeIdentity,
                 DedupeKey = resolvedDedupeKey,
                 AppId = appId,
                 Scope = scope,
                 CreatedAtUtc = nextNow,
                 State = LaunchRecordState.Starting
             };
-            _dedupeRecords[resolvedDedupeKey] = launchRecord;
+            _dedupeRecords[dedupeIdentity] = launchRecord;
             _launchRecordsById[launchId] = launchRecord;
         }
 
@@ -198,18 +206,22 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         UpdateLaunchRecordPid(launchId, process.Id);
         if (waitForRegisterMs <= 0)
         {
-            return LaunchOperationResult.CreateSuccess("started", launchId, process.Id);
+            return LaunchOperationResult.CreateSuccess("started", launchId, process.Id, resolvedDedupeKey, instanceId: null);
         }
 
         var waitOutcome = await WaitForRegistrationAsync(launchId, waitForRegisterMs, cancellationToken);
         return waitOutcome switch
         {
-            LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id),
+            LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id, resolvedDedupeKey),
             LaunchWaitOutcome.ScopeMismatch => LaunchOperationResult.CreateError(
                 -32020,
                 "launch_failed",
                 GetLaunchFailureData(launchId)),
-            _ => LaunchOperationResult.CreateSuccess("starting", launchId, process.Id)
+            LaunchWaitOutcome.RegisterTimeout => LaunchOperationResult.CreateError(
+                -32020,
+                "launch_failed",
+                new { reason = "launch_register_timeout", launchId }),
+            _ => LaunchOperationResult.CreateSuccess("starting", launchId, process.Id, resolvedDedupeKey, instanceId: null)
         };
     }
 
@@ -329,11 +341,12 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
                 if (_launchRecordsById.TryGetValue(launchId, out var launchRecord))
                 {
-                    if (launchRecord.State == LaunchRecordState.Failed
-                        && string.Equals(launchRecord.FailureReason, "definition_scope_mismatch", StringComparison.Ordinal))
+                    if (launchRecord.State == LaunchRecordState.Failed)
                     {
                         RemoveLaunchRecordById(launchId);
-                        return LaunchWaitOutcome.ScopeMismatch;
+                        return string.Equals(launchRecord.FailureReason, "launch_register_timeout", StringComparison.Ordinal)
+                            ? LaunchWaitOutcome.RegisterTimeout
+                            : LaunchWaitOutcome.ScopeMismatch;
                     }
 
                     if (launchRecord.State == LaunchRecordState.Registered)
@@ -350,9 +363,9 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         return LaunchWaitOutcome.TimedOut;
     }
 
-    private static LaunchOperationResult BuildStartedAfterWait(string launchId, int processId)
+    private static LaunchOperationResult BuildStartedAfterWait(string launchId, int processId, string dedupeKey)
     {
-        return LaunchOperationResult.CreateSuccess("started", launchId, processId);
+        return LaunchOperationResult.CreateSuccess("started", launchId, processId, dedupeKey, instanceId: null);
     }
 
     private object GetLaunchFailureData(string launchId)
@@ -565,11 +578,11 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
     }
 
-    private LaunchRecord? TryGetActiveDedupeRecord(string dedupeKey, DateTime now)
+    private LaunchRecord? TryGetActiveDedupeRecord(LaunchDedupeIdentity dedupeIdentity, DateTime now)
     {
         CleanupExpiredLaunchRecords(now);
 
-        if (!_dedupeRecords.TryGetValue(dedupeKey, out var record))
+        if (!_dedupeRecords.TryGetValue(dedupeIdentity, out var record))
         {
             return null;
         }
@@ -603,9 +616,9 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
     private void DeactivateDedupeRecord(LaunchRecord record)
     {
-        if (_dedupeRecords.TryGetValue(record.DedupeKey, out var current) && current.LaunchId == record.LaunchId)
+        if (_dedupeRecords.TryGetValue(record.DedupeIdentity, out var current) && current.LaunchId == record.LaunchId)
         {
-            _dedupeRecords.Remove(record.DedupeKey);
+            _dedupeRecords.Remove(record.DedupeIdentity);
         }
     }
 
@@ -640,7 +653,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     {
         if (record.State == LaunchRecordState.Starting)
         {
-            return !IsLaunchStillInProgress(record);
+            if (!IsLaunchStillInProgress(record))
+            {
+                return true;
+            }
+
+            if (now >= record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchRegisterTimeoutSeconds))
+            {
+                record.State = LaunchRecordState.Failed;
+                record.FailureReason = "launch_register_timeout";
+                record.FailureData = new { reason = "launch_register_timeout", launchId = record.LaunchId };
+                DeactivateDedupeRecord(record);
+            }
+
+            return false;
         }
 
         return now > record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds);
@@ -667,6 +693,8 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private sealed class LaunchRecord
     {
         public required string LaunchId { get; init; }
+
+        public required LaunchDedupeIdentity DedupeIdentity { get; init; }
 
         public required string DedupeKey { get; init; }
 
@@ -698,7 +726,19 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     {
         Registered,
         TimedOut,
-        ScopeMismatch
+        ScopeMismatch,
+        RegisterTimeout
+    }
+
+    private readonly record struct LaunchDedupeIdentity(string AppId, string Scope, string DedupeKey)
+    {
+        public static LaunchDedupeIdentity Create(string appId, string scope, string dedupeKey)
+        {
+            ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
+            ScopeContract.EnsureScopedString(scope, nameof(scope));
+            ArgumentException.ThrowIfNullOrWhiteSpace(dedupeKey);
+            return new LaunchDedupeIdentity(appId, scope, dedupeKey);
+        }
     }
 }
 
@@ -728,6 +768,16 @@ public sealed class LaunchOperationResult
     public string? LaunchId { get; init; }
 
     /// <summary>
+    /// 解析后的启动去重键。
+    /// </summary>
+    public string? DedupeKey { get; init; }
+
+    /// <summary>
+    /// 已在线实例身份。
+    /// </summary>
+    public string? InstanceId { get; init; }
+
+    /// <summary>
     /// 错误码。
     /// </summary>
     public int? ErrorCode { get; init; }
@@ -745,14 +795,16 @@ public sealed class LaunchOperationResult
     /// <summary>
     /// 创建成功结果。
     /// </summary>
-    public static LaunchOperationResult CreateSuccess(string status, string launchId, int? pid)
+    public static LaunchOperationResult CreateSuccess(string status, string? launchId, int? pid, string? dedupeKey, string? instanceId)
     {
         return new LaunchOperationResult
         {
             Ok = true,
             Status = status,
             LaunchId = launchId,
-            Pid = pid
+            Pid = pid,
+            DedupeKey = dedupeKey,
+            InstanceId = instanceId
         };
     }
 

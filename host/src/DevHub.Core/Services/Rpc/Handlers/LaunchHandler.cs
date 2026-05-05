@@ -104,16 +104,36 @@ public class LaunchHandler : IRpcHandler
             launchResult.Status,
             launchResult.Pid);
 
+        var result = new Dictionary<string, object?>
+        {
+            ["ok"] = true,
+            ["status"] = launchResult.Status
+        };
+
+        if (launchResult.Pid.HasValue)
+        {
+            result["pid"] = launchResult.Pid.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(launchResult.LaunchId))
+        {
+            result["launchId"] = launchResult.LaunchId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(launchResult.DedupeKey))
+        {
+            result["dedupeKey"] = launchResult.DedupeKey;
+        }
+
+        if (!string.IsNullOrWhiteSpace(launchResult.InstanceId))
+        {
+            result["instanceId"] = launchResult.InstanceId;
+        }
+
         return new JsonRpcResponse
         {
             Id = request.Id,
-            Result = new
-            {
-                ok = true,
-                status = launchResult.Status,
-                pid = launchResult.Pid,
-                launchId = launchResult.LaunchId
-            }
+            Result = result
         };
     }
 
