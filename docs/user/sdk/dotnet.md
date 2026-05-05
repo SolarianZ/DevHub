@@ -250,6 +250,8 @@ await eventsClient.UnsubscribeAsync(subscriptionId);
 - 若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
 - `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在请求发出后若因超时或取消进入结果未知状态，SDK 会主动废弃当前 WebSocket 会话；后续必须重新认证并重新订阅。
 - 本地事件缓冲采用有界 fail-fast 队列；消费者处理速度落后导致缓冲溢出时，当前事件流会终止，并要求重新认证与重新订阅。
+- `DevHubEventsClient.DisposeAsync()` 与底层 WebSocket 断开流程采用 best-effort 清理；关闭握手最多等待 1 秒，超时后直接继续释放本地资源。
+- `DevHubClientOptions.RequestTimeout` 只用于请求-响应等待阶段；关闭或释放客户端时的清理上限由 SDK 内部固定控制，不形成可无限阻塞的关闭契约。
 
 ### 6.5 已放弃请求维护
 

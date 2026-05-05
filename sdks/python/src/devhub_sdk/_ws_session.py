@@ -407,10 +407,8 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._websocket = None
         if websocket is not None:
             try:
-                if reason:
-                    await websocket.close(reason=reason)
-                else:
-                    await websocket.close()
+                close_operation = websocket.close(reason=reason) if reason else websocket.close()
+                await asyncio.wait_for(close_operation, timeout=1.0)
             except Exception:
                 pass
         receiver_task = self._receiver_task

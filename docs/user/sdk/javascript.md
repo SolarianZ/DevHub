@@ -148,6 +148,8 @@ try {
 - 底层 WebSocket 终止或重新认证失败后，当前活动读取器仍可排空终止前已经进入缓冲的事件；后续新的 `readEvents()` 调用会在重新认证成功前直接失败。
 - 上述“直接失败”对外表现为 `DevHubConnectionError`；连接正常终止时 `kind === "session_terminated"`，若事件流或响应包本身不合法，则返回 `kind === "invalid_response"`。
 - 重新执行 `authenticate()` 只会建立新的事件流代次，不会恢复旧订阅；恢复事件交付时需要再次调用 `subscribe()`。
+- `disconnect()` / `dispose()` 采用 best-effort 清理；调用 `socket.close(...)` 后，SDK 只等待 `close` 事件或内部 1 秒上限中的较早者，然后继续完成本地释放。
+- `requestTimeoutMs` 只约束请求-响应等待时间，不用于放大断连或释放阶段的等待上限。
 
 ### 6.2 定义与实例管理
 

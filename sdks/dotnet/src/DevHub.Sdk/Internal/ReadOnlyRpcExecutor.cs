@@ -197,7 +197,7 @@ internal static class ReadOnlyRpcExecutor
         Func<JsonElement, TResult> resultReader,
         CancellationToken cancellationToken)
     {
-        var result = await sendAsync(method, parameters, cancellationToken);
+        var result = await sendAsync(method, parameters, cancellationToken).ConfigureAwait(false);
         return resultReader(result);
     }
 }

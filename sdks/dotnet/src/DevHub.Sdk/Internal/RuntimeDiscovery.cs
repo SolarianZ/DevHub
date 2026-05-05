@@ -24,7 +24,7 @@ internal static class RuntimeDiscovery
         cancellationToken.ThrowIfCancellationRequested();
 
         await using var hubJsonStream = File.OpenRead(hubJsonPath);
-        using var hubJsonDocument = await JsonDocument.ParseAsync(hubJsonStream, cancellationToken: cancellationToken);
+        using var hubJsonDocument = await JsonDocument.ParseAsync(hubJsonStream, cancellationToken: cancellationToken).ConfigureAwait(false);
         ValidateHubVersion(hubJsonDocument.RootElement, hubJsonPath);
 
         var runtime = hubJsonDocument.RootElement.Deserialize<HubRuntime>(DevHubJson.SerializerOptions)
@@ -37,7 +37,7 @@ internal static class RuntimeDiscovery
             throw new InvalidOperationException($"未找到 token 文件：{runtime.TokenFile}");
         }
 
-        var token = (await File.ReadAllTextAsync(runtime.TokenFile, cancellationToken)).Trim();
+        var token = (await File.ReadAllTextAsync(runtime.TokenFile, cancellationToken).ConfigureAwait(false)).Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
             throw new InvalidOperationException($"token 文件为空：{runtime.TokenFile}");

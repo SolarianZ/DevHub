@@ -80,8 +80,8 @@ internal sealed class JsonRpcHttpTransport : IAsyncDisposable
         try
         {
             using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-            using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
-            var body = await responseMessage.Content.ReadAsStringAsync(linkedCts.Token);
+            using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+            var body = await responseMessage.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
             if (!responseMessage.IsSuccessStatusCode)
             {

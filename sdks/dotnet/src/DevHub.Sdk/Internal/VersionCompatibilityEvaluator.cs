@@ -12,7 +12,7 @@ internal static class VersionCompatibilityEvaluator
         string? hostVersion;
         try
         {
-            hostVersion = await ReadOnlyRpcExecutor.GetHostVersionAsync(sendAsync, cancellationToken);
+            hostVersion = await ReadOnlyRpcExecutor.GetHostVersionAsync(sendAsync, cancellationToken).ConfigureAwait(false);
         }
         catch (DevHubRpcException exception) when (exception.Is(DevHubRpcErrorCode.MethodNotFound))
         {

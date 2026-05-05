@@ -42,7 +42,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
-        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public sealed class DevHubClient : IAsyncDisposable
         DevHubRuntimeConnectionInfo connectionInfo;
         try
         {
-            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
             RuntimeDiscovery.ValidateConnectionInfo(connectionInfo, "runtimeResolver");
         }
         catch (Exception exception)
@@ -107,7 +107,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
         clonedOptions.Validate();
 
-        var connectionInfo = await new FileSystemDevHubRuntimeResolver().ResolveAsync(clonedOptions, cancellationToken);
+        var connectionInfo = await new FileSystemDevHubRuntimeResolver().ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
         var httpClient = JsonRpcHttpTransport.CreateHttpClient(handler);
         var transport = new JsonRpcHttpTransport(
             httpClient,
@@ -128,7 +128,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.PingAsync(_transport.SendAsync, echo, cancellationToken);
+        return await ReadOnlyRpcExecutor.PingAsync(_transport.SendAsync, echo, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -140,7 +140,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_transport.SendAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_transport.SendAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -153,7 +153,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await VersionCompatibilityEvaluator.CheckAsync(_transport.SendAsync, Runtime.HubVersion, cancellationToken);
+        return await VersionCompatibilityEvaluator.CheckAsync(_transport.SendAsync, Runtime.HubVersion, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(ListDefinitionsRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -178,7 +178,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppDefinition> GetDefinitionAsync(string appId, string scope, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -195,7 +195,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.validateDefinition",
             RequestPayloadFactory.BuildValidateDefinitionParams(definition),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         var errorsElement = ResponsePayloadReader.EnsurePropertyExists(
             result,
@@ -240,7 +240,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.upsertDefinition",
             RequestPayloadFactory.BuildUpsertDefinitionParams(definition),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.ValidateAppDefinitionElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.upsertDefinition.result", "definition", JsonValueKind.Object),
             "hub.apps.upsertDefinition.result.definition");
@@ -265,7 +265,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.deleteDefinition",
             RequestPayloadFactory.BuildDeleteDefinitionParams(appId, scope),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.deleteDefinition.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.deleteDefinition.result");
     }
@@ -282,7 +282,7 @@ public sealed class DevHubClient : IAsyncDisposable
         string password,
         CancellationToken cancellationToken = default)
     {
-        return await RegisterInstanceAsync(instance, password, launchId: null, cancellationToken);
+        return await RegisterInstanceAsync(instance, password, launchId: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -306,7 +306,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.registerInstance",
             RequestPayloadFactory.BuildRegisterInstanceParams(instance, password, launchId),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),
             "hub.apps.registerInstance.result.instance");
@@ -350,7 +350,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.heartbeat",
             RequestPayloadFactory.BuildHeartbeatParams(instanceId, instanceSessionToken),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
@@ -374,7 +374,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.unregisterInstance",
             RequestPayloadFactory.BuildUnregisterParams(instanceId, instanceSessionToken),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
         ForgetRegisteredInstance(instanceId);
@@ -389,7 +389,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppInstance>> ListInstancesAsync(ListInstancesRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.ListInstancesAsync(_transport.SendAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListInstancesAsync(_transport.SendAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -401,7 +401,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -413,7 +413,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<LaunchResult> LaunchAsync(LaunchRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
@@ -452,7 +452,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<NotifyResult> NotifyAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.notify.result");
         ResponsePayloadReader.EnsureNotEmpty(payload.InvocationId, "hub.invoke.notify.result", "invocationId");
@@ -468,7 +468,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.request.result", "value");
         var payload = ResponsePayloadReader.DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.request.result");
@@ -488,7 +488,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
-        var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken).ConfigureAwait(false);
         var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JsonValueKind.Array);
 
         var index = 0;
@@ -518,7 +518,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.InvocationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.LeaseToken);
-        var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");
     }
@@ -532,7 +532,7 @@ public sealed class DevHubClient : IAsyncDisposable
         }
 
         _disposed = true;
-        await _transport.DisposeAsync();
+        await _transport.DisposeAsync().ConfigureAwait(false);
     }
 
     private void ThrowIfDisposed()

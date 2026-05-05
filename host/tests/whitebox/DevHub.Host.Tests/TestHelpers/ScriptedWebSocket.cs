@@ -11,6 +11,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     private readonly Queue<SocketFrame> _frames = new();
     private readonly SemaphoreSlim _frameSignal = new(0);
     private readonly TimeSpan _closeFrameDelay;
+    private readonly bool _blockCloseAsyncUntilCanceled;
     private readonly object _framesLock = new();
     private readonly object _sentTextsLock = new();
     private SocketFrame? _activeFrame;
@@ -18,6 +19,8 @@ internal sealed class ScriptedWebSocket : WebSocket
     private WebSocketCloseStatus? _closeStatus;
     private string? _closeStatusDescription;
     private bool _closeFrameQueued;
+    private int _closeAsyncCallCount;
+    private int _closeAsyncCancellationCount;
 
     /// <summary>
     /// 初始化脚本化 WebSocket。
@@ -25,12 +28,15 @@ internal sealed class ScriptedWebSocket : WebSocket
     /// <param name="textMessages">按顺序返回的文本帧列表。</param>
     /// <param name="closeFrameDelay">文本帧耗尽后返回 close 帧前的延迟。</param>
     /// <param name="autoCloseWhenQueueDrained">是否在初始帧消费完后自动返回 close 帧。</param>
+    /// <param name="blockCloseAsyncUntilCanceled">是否让 <see cref="CloseAsync" /> 挂起直至取消令牌被触发。</param>
     public ScriptedWebSocket(
         IEnumerable<string> textMessages,
         TimeSpan? closeFrameDelay = null,
-        bool autoCloseWhenQueueDrained = true)
+        bool autoCloseWhenQueueDrained = true,
+        bool blockCloseAsyncUntilCanceled = false)
     {
         _closeFrameDelay = closeFrameDelay ?? TimeSpan.Zero;
+        _blockCloseAsyncUntilCanceled = blockCloseAsyncUntilCanceled;
         _state = WebSocketState.Open;
 
         foreach (var text in textMessages)
@@ -48,6 +54,16 @@ internal sealed class ScriptedWebSocket : WebSocket
     /// 获取服务端发送到该套接字的文本消息。
     /// </summary>
     public List<string> SentTexts { get; } = [];
+
+    /// <summary>
+    /// 获取服务端调用 <see cref="CloseAsync" /> 的次数。
+    /// </summary>
+    public int CloseAsyncCallCount => Volatile.Read(ref _closeAsyncCallCount);
+
+    /// <summary>
+    /// 获取服务端调用 <see cref="CloseAsync" /> 时因取消退出的次数。
+    /// </summary>
+    public int CloseAsyncCancellationCount => Volatile.Read(ref _closeAsyncCancellationCount);
 
     /// <summary>
     /// 向输入脚本追加文本消息。
@@ -98,12 +114,28 @@ internal sealed class ScriptedWebSocket : WebSocket
     }
 
     /// <inheritdoc />
-    public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+    public override async Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _closeAsyncCallCount);
         _closeStatus = closeStatus;
         _closeStatusDescription = statusDescription;
+        if (_blockCloseAsyncUntilCanceled)
+        {
+            _state = WebSocketState.CloseSent;
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Increment(ref _closeAsyncCancellationCount);
+                throw;
+            }
+
+            return;
+        }
+
         _state = WebSocketState.Closed;
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

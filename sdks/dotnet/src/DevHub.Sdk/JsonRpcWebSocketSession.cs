@@ -200,7 +200,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
     {
         ThrowIfDisposed();
         using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-        await _connectionLock.WaitAsync(linkedCts.Token);
+        await _connectionLock.WaitAsync(linkedCts.Token).ConfigureAwait(false);
         try
         {
             ThrowIfDisposed();
@@ -215,7 +215,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             IWebSocketConnection connection;
             try
             {
-                connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token);
+                connection = await _connectionFactory.ConnectAsync(_options.WebSocketEndpoint, linkedCts.Token).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -249,7 +249,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
         CleanupExpiredAbandonedRequests();
 
-        await EnsureConnectedAsync(cancellationToken);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var connection = _connection ?? throw new InvalidOperationException("当前 WebSocket 尚未建立连接。");
         var requestId = _requestIdFactory();
         var waiter = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -269,10 +269,10 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
                 },
                 DevHubJson.SerializerOptions);
 
-            await _sendLock.WaitAsync(cancellationToken);
+            await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await connection.SendTextAsync(payload, cancellationToken);
+                await connection.SendTextAsync(payload, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -280,7 +280,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             }
 
             using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-            return await waiter.Task.WaitAsync(linkedCts.Token);
+            return await waiter.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -305,7 +305,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             "Disconnecting DevHub WebSocket session. WebSocketEndpoint: {WebSocketEndpoint}. Reason: {Reason}.",
             _options.WebSocketEndpoint,
             reason);
-        await _connectionLock.WaitAsync(cancellationToken);
+        await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ThrowIfDisposed();
@@ -327,13 +327,13 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             _receiverLoopTask = null;
 
             _connectionReceiveLoopCts?.Cancel();
-            await DisposeConnectionAsync(connection, reason, cancellationToken);
+            await DisposeConnectionAsync(connection, reason, cancellationToken).ConfigureAwait(false);
 
             if (receiverLoopTask is not null)
             {
                 try
                 {
-                    await receiverLoopTask;
+                    await receiverLoopTask.ConfigureAwait(false);
                 }
                 catch
                 {
@@ -354,7 +354,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             return;
         }
 
-        await _connectionLock.WaitAsync(CancellationToken.None);
+        await _connectionLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             if (_disposed)
@@ -372,13 +372,13 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             _receiverLoopTask = null;
 
             _connectionReceiveLoopCts?.Cancel();
-            await DisposeConnectionAsync(connection, "client_dispose", CancellationToken.None);
+            await DisposeConnectionAsync(connection, "client_dispose", CancellationToken.None).ConfigureAwait(false);
 
             if (receiverLoopTask is not null)
             {
                 try
                 {
-                    await receiverLoopTask;
+                    await receiverLoopTask.ConfigureAwait(false);
                 }
                 catch
                 {
@@ -409,7 +409,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var message = await connection.ReceiveAsync(cancellationToken);
+                var message = await connection.ReceiveAsync(cancellationToken).ConfigureAwait(false);
                 if (message.MessageType == WebSocketMessageType.Close)
                 {
                     break;
@@ -461,7 +461,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
 
             FailPendingRequests(terminalException ?? new InvalidOperationException("WebSocket 连接已关闭。"));
             _abandonedRequests.Clear();
-            await DisposeConnectionAsync(connection, "connection_closed", CancellationToken.None);
+            await DisposeConnectionAsync(connection, "connection_closed", CancellationToken.None).ConfigureAwait(false);
 
             if (terminalException is null)
             {
@@ -752,13 +752,13 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(1));
-            await connection.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, timeoutCts.Token);
+            await connection.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, timeoutCts.Token).ConfigureAwait(false);
         }
         catch
         {
         }
 
-        await connection.DisposeAsync();
+        await connection.DisposeAsync().ConfigureAwait(false);
     }
 
     private CancellationTokenSource CreateLinkedTokenSource(CancellationToken cancellationToken)

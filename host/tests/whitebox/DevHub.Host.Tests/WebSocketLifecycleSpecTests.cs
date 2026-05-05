@@ -1251,6 +1251,40 @@ public class WebSocketLifecycleSpecTests : IDisposable
                  && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
     }
 
+    [Fact]
+    [Trait("Category", "Impl")]
+    public async Task Impl_WebSocketSessionHandler_WhenCloseHandshakeStalls_ShouldCompleteCleanupWithinBoundedTimeout()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-stalled-close",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-stalled-close-client",
+                clientSessionId = "66666666-6666-6666-6666-666666666666"
+            }
+        });
+
+        var socket = new ScriptedWebSocket(
+            [auth],
+            autoCloseWhenQueueDrained: true,
+            blockCloseAsyncUntilCanceled: true);
+
+        var handlerTask = context.InvokeWebSocketConnectionAsync(socket);
+        var completedTask = await Task.WhenAny(handlerTask, Task.Delay(TimeSpan.FromSeconds(3)));
+
+        Assert.Same(handlerTask, completedTask);
+        await handlerTask;
+        Assert.True(socket.CloseAsyncCallCount >= 1);
+        Assert.True(socket.CloseAsyncCancellationCount >= 1);
+    }
+
     /// <summary>
     /// 释放测试资源。
     /// </summary>

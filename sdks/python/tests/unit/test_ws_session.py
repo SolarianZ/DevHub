@@ -20,12 +20,24 @@ class FakeWebSocket:
     incoming: asyncio.Queue[object] = field(default_factory=asyncio.Queue)
     sent_messages: list[str] = field(default_factory=list)
     close_reasons: list[str | None] = field(default_factory=list)
+    close_calls: int = 0
+    block_close_until_cancelled: bool = False
+    close_attempted: asyncio.Event = field(default_factory=asyncio.Event)
+    close_cancelled: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def send(self, message: str) -> None:
         self.sent_messages.append(message)
 
     async def close(self, reason: str | None = None) -> None:
+        self.close_calls += 1
         self.close_reasons.append(reason)
+        self.close_attempted.set()
+        if self.block_close_until_cancelled:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                self.close_cancelled.set()
+                raise
         await self.incoming.put(_STREAM_EOF)
 
     def __aiter__(self) -> "FakeWebSocket":
@@ -376,6 +388,60 @@ async def test_ws_session_should_enforce_single_active_reader_until_reader_is_cl
 
     await third_reader.aclose()
     await session.close()
+
+
+@pytest.mark.asyncio
+async def test_ws_session_close_should_bound_cleanup_when_websocket_close_hangs() -> None:
+    websocket = FakeWebSocket(block_close_until_cancelled=True)
+
+    async def connect(*_args, **_kwargs) -> FakeWebSocket:
+        return websocket
+
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
+        connect=connect,
+    )
+
+    request_task = asyncio.create_task(session.send_request("hub.ping", None))
+    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+
+    await asyncio.wait_for(session.close(), timeout=1.2)
+
+    await websocket.close_attempted.wait()
+    await websocket.close_cancelled.wait()
+    assert websocket.close_calls == 1
+    assert websocket.close_reasons == ["session_closed"]
+    assert session.is_terminated() is True
+    with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
+        await request_task
+
+
+@pytest.mark.asyncio
+async def test_ws_session_disconnect_should_bound_cleanup_when_websocket_close_hangs() -> None:
+    websocket = FakeWebSocket(block_close_until_cancelled=True)
+
+    async def connect(*_args, **_kwargs) -> FakeWebSocket:
+        return websocket
+
+    session = WebSocketJsonRpcSession(
+        _create_connection_info(),
+        DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
+        connect=connect,
+    )
+
+    request_task = asyncio.create_task(session.send_request("hub.ping", None))
+    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+
+    await asyncio.wait_for(session.disconnect("manual_disconnect"), timeout=1.2)
+
+    await websocket.close_attempted.wait()
+    await websocket.close_cancelled.wait()
+    assert websocket.close_calls == 1
+    assert websocket.close_reasons == ["manual_disconnect"]
+    assert session.is_terminated() is True
+    with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
+        await request_task
 
 
 def _create_connection_info() -> RuntimeConnectionInfo:

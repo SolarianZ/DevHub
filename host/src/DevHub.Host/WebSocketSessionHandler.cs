@@ -17,6 +17,7 @@ namespace DevHub.Host;
 public class WebSocketSessionHandler
 {
     private const int MaxInboundTextMessageBytes = 1024 * 1024;
+    private static readonly TimeSpan WebSocketCloseTimeout = TimeSpan.FromSeconds(1);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -469,7 +470,9 @@ public class WebSocketSessionHandler
 
         try
         {
-            await webSocket.CloseAsync(closeStatus, description, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(WebSocketCloseTimeout);
+            await webSocket.CloseAsync(closeStatus, description, timeoutCts.Token);
         }
         catch (Exception ex)
         {

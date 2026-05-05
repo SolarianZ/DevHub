@@ -146,6 +146,10 @@ await events_client.unsubscribe(subscription_id)
 
 底层 WebSocket 终止时，当前活动读取器只排空终止前已经进入本地缓冲的事件，然后结束。后续新的读取前需要重新执行 `authenticate()`，并重新执行 `subscribe()` 恢复订阅；旧订阅不会自动恢复。
 
+`close()` / `disconnect()` 对底层 WebSocket 采用 best-effort 清理。关闭握手等待上限固定为 1 秒；达到上限后继续完成本地释放。
+
+`request_timeout` 只用于请求-响应等待阶段，不代表 `close()`、`disconnect()` 或对象释放路径可以无限等待远端响应。
+
 ## 8. 已放弃请求维护
 
 ```python

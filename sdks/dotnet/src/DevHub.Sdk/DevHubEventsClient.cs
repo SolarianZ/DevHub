@@ -59,7 +59,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubEventsClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
-        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -88,7 +88,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         DevHubRuntimeConnectionInfo connectionInfo;
         try
         {
-            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+            connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
             RuntimeDiscovery.ValidateConnectionInfo(connectionInfo, "runtimeResolver");
         }
         catch (Exception exception)
@@ -130,7 +130,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             new DevHubEventsClientDependencies(),
             connectionFactory,
             requestIdFactory,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     internal static async Task<DevHubEventsClient> FromRuntimeAsync(
@@ -144,7 +144,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         clonedOptions.Validate();
 
         dependencies ??= new DevHubEventsClientDependencies();
-        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
         var loggerFactory = dependencies.LoggerFactory;
         var logger = loggerFactory.CreateLogger<DevHubEventsClient>();
 
@@ -172,7 +172,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task AuthenticateAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        await _lifecycleLock.WaitAsync(cancellationToken);
+        await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ThrowIfDisposed();
@@ -197,7 +197,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                         ["clientId"] = _options.ClientId,
                         ["clientSessionId"] = _options.ClientSessionId.ToString("D")
                     },
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 var payload = JsonSerializer.Deserialize<AuthenticateResultContract>(result.GetRawText(), DevHubJson.SerializerOptions)
                     ?? throw new InvalidOperationException("无法解析 hub.ws.authenticate 结果。");
@@ -221,7 +221,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                     exception,
                     "DevHub WebSocket authentication failed for client {ClientId}. The current session will be discarded.",
                     _options.ClientId);
-                await DisconnectSessionAsync("authenticate_failed");
+                await DisconnectSessionAsync("authenticate_failed").ConfigureAwait(false);
                 throw;
             }
         }
@@ -240,7 +240,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.PingAsync(_session.SendRequestAsync, echo, cancellationToken);
+        return await ReadOnlyRpcExecutor.PingAsync(_session.SendRequestAsync, echo, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -252,7 +252,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -265,7 +265,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken);
+        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(ListDefinitionsRequest request, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -290,7 +290,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<AppDefinition> GetDefinitionAsync(string appId, string scope, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -304,7 +304,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.ListInstancesAsync(_session.SendRequestAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListInstancesAsync(_session.SendRequestAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -316,7 +316,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -385,7 +385,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
                 return payload.SubscriptionId;
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -415,7 +415,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
                 return true;
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -431,7 +431,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
         try
         {
-            while (await eventChannel.Reader.WaitToReadAsync(cancellationToken))
+            while (await eventChannel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 while (eventChannel.Reader.TryRead(out var evt))
                 {
@@ -455,7 +455,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
         _disposed = true;
         ResetSessionState();
-        await _session.DisposeAsync();
+        await _session.DisposeAsync().ConfigureAwait(false);
         _lifecycleLock.Dispose();
     }
 
@@ -574,7 +574,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
-        await _lifecycleLock.WaitAsync(cancellationToken);
+        await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             EnsureAuthenticated();
@@ -585,7 +585,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
             try
             {
-                var result = await _session.SendRequestAsync(method, parameters, cancellationToken);
+                var result = await _session.SendRequestAsync(method, parameters, cancellationToken).ConfigureAwait(false);
                 var parsed = parseResult(result);
                 _logger.LogInformation(
                     "Completed DevHub WebSocket subscription lifecycle request. Method: {Method}. ClientId: {ClientId}.",
@@ -595,7 +595,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             }
             catch (OperationCanceledException exception)
             {
-                await HandleAmbiguousSubscriptionStateAsync(method, exception);
+                await HandleAmbiguousSubscriptionStateAsync(method, exception).ConfigureAwait(false);
                 throw;
             }
         }
@@ -615,14 +615,14 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         ResetSessionState(new InvalidOperationException(
             $"{method} 在结果返回前已超时或被取消；当前 WebSocket 会话已失效，必须重新认证并重新订阅。",
             exception));
-        await DisconnectSessionAsync("subscription_state_ambiguous");
+        await DisconnectSessionAsync("subscription_state_ambiguous").ConfigureAwait(false);
     }
 
     private async Task DisconnectSessionAsync(string reason)
     {
         try
         {
-            await _session.DisconnectAsync(reason, CancellationToken.None);
+            await _session.DisconnectAsync(reason, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
