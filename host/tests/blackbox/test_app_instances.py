@@ -241,8 +241,8 @@ class TestAppInstances(unittest.TestCase):
         return result
 
     def test_register_upsert_refresh_last_seen(self):
-        """测试同一 instanceId 二次注册触发 upsert 并更新 lastSeen"""
-        result = TestResult("测试同一 instanceId 二次注册触发 upsert 并更新 lastSeen")
+        """测试同一 instanceId 同身份二次注册刷新 lastSeen"""
+        result = TestResult("测试同一 instanceId 同身份二次注册刷新 lastSeen")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -269,7 +269,7 @@ class TestAppInstances(unittest.TestCase):
                 "instance": {
                     "instanceId": instance_id,
                     "appId": "test-app-upsert",
-                    "scope": "scope-upsert",
+                    "scope": "",
                     "pid": 12348,
                     "invoke": {"poll": True, "respond": True}
                 }
@@ -285,8 +285,8 @@ class TestAppInstances(unittest.TestCase):
                 result.mark_failure("❌ 二次注册未更新 lastSeenUtc")
                 return result
 
-            if instance2.get("scope") != "scope-upsert":
-                result.mark_failure("❌ upsert 后 scope 未更新")
+            if instance2.get("scope") != "":
+                result.mark_failure("❌ 二次注册后 scope 不应变化")
                 return result
 
             if token_2 == token_1:
