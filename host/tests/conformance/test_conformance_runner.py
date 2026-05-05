@@ -328,7 +328,9 @@ class TestConformanceRunner(unittest.TestCase):
             self.assertIn("PASS  CONF-001 discovery.valid_runtime_layout_reads_token", completed.stdout)
             self.assertIn("PASS  CONF-001 discovery.env_override_reads_runtime", completed.stdout)
             self.assertIn("PASS  CONF-001 discovery.runtime_dir_as_data_dir_rejected", completed.stdout)
-            self.assertIn("SUMMARY  total=3 passed=3 failed=0", completed.stdout)
+            self.assertIn("PASS  CONF-001 discovery.invalid_wsurl_custom_path_rejected", completed.stdout)
+            self.assertIn("PASS  CONF-001 discovery.invalid_wsurl_query_rejected", completed.stdout)
+            self.assertIn("SUMMARY  total=5 passed=5 failed=0", completed.stdout)
 
     def test_CONF_006_emit_failures_should_include_case_id_and_diff_fields(self) -> None:
         buffer = io.StringIO()

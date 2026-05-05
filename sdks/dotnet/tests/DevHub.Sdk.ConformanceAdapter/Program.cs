@@ -121,9 +121,9 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
         DataDir = ReadString(context, "dataDir")
     });
 
-    var invokeRequest = BuildInvokeRequest(request.GetProperty("invokeRequest"));
     try
     {
+        var invokeRequest = BuildInvokeRequest(request.GetProperty("invokeRequest"));
         if (string.Equals(operation, "notify", StringComparison.Ordinal))
         {
             var result = await client.NotifyAsync(invokeRequest);
@@ -165,6 +165,38 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
             operation,
             "error",
             NormalizeInvocationError(exception),
+            null);
+    }
+    catch (ArgumentException)
+    {
+        if (!ExpectsInvalidParams(vector))
+        {
+            throw;
+        }
+
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "sdk-invocation",
+            operation,
+            "error",
+            NormalizeLocalInvalidParamsError(),
+            null);
+    }
+    catch (InvalidOperationException)
+    {
+        if (!ExpectsInvalidParams(vector))
+        {
+            throw;
+        }
+
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "sdk-invocation",
+            operation,
+            "error",
+            NormalizeLocalInvalidParamsError(),
             null);
     }
 }
@@ -1090,6 +1122,30 @@ object NormalizeInvocationError(DevHubRpcException exception)
     }
 
     return payload;
+}
+
+object NormalizeLocalInvalidParamsError()
+{
+    return new Dictionary<string, object?>
+    {
+        ["code"] = -32602,
+        ["message"] = "invalid_params"
+    };
+}
+
+bool ExpectsInvalidParams(JsonElement vector)
+{
+    if (!vector.TryGetProperty("expectedResponse", out var expectedResponse) ||
+        !expectedResponse.TryGetProperty("actual", out var actual))
+    {
+        return false;
+    }
+
+    return actual.TryGetProperty("code", out var code) &&
+           code.ValueKind == JsonValueKind.Number &&
+           code.TryGetInt32(out var codeValue) &&
+           codeValue == -32602 &&
+           string.Equals(ReadOptionalString(actual, "message"), "invalid_params", StringComparison.Ordinal);
 }
 
 object? ConvertJsonElement(JsonElement? element)

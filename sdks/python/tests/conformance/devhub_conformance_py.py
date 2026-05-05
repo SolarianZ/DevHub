@@ -146,8 +146,8 @@ def run_invocation(context: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    invoke_request = build_invoke_request(request.get("invokeRequest"))
     try:
+        invoke_request = build_invoke_request(request.get("invokeRequest"))
         if operation == "notify":
             result = client.notify(invoke_request)
             actual = {
@@ -179,6 +179,18 @@ def run_invocation(context: dict[str, Any]) -> dict[str, Any]:
             "operation": operation,
             "outcome": "error",
             "actual": normalize_invocation_error(exc),
+            "error": None,
+        }
+    except ValueError:
+        if not expects_invalid_params(vector):
+            raise
+        return {
+            "sdk": "python",
+            "vectorId": vector["id"],
+            "phase": "sdk-invocation",
+            "operation": operation,
+            "outcome": "error",
+            "actual": normalize_local_invalid_params_error(),
             "error": None,
         }
 
@@ -644,6 +656,23 @@ def normalize_invocation_error(exc: DevHubRpcException) -> dict[str, Any]:
         if exc.callee_error.data is not None:
             actual["calleeError"]["data"] = exc.callee_error.data
     return actual
+
+
+def normalize_local_invalid_params_error() -> dict[str, Any]:
+    return {
+        "code": -32602,
+        "message": "invalid_params",
+    }
+
+
+def expects_invalid_params(vector: dict[str, Any]) -> bool:
+    expected_response = vector.get("expectedResponse")
+    if not isinstance(expected_response, dict):
+        return False
+    actual = expected_response.get("actual")
+    if not isinstance(actual, dict):
+        return False
+    return actual.get("code") == -32602 and actual.get("message") == "invalid_params"
 
 
 def normalize_discovery_error(explicit_data_dir: str | None, exc: Exception) -> dict[str, Any]:

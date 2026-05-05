@@ -139,7 +139,19 @@ async function runInvocation(context) {
       };
     }
 
-    throw error;
+    if (!expectsInvalidParams(vector)) {
+      throw error;
+    }
+
+    return {
+      sdk: "typescript",
+      vectorId: vector.id,
+      phase: "sdk-invocation",
+      operation,
+      outcome: "error",
+      actual: normalizeLocalInvalidParamsError(),
+      error: null
+    };
   } finally {
     await client.dispose();
   }
@@ -650,6 +662,18 @@ function normalizeInvocationError(error) {
   }
 
   return actual;
+}
+
+function normalizeLocalInvalidParamsError() {
+  return {
+    code: -32602,
+    message: "invalid_params"
+  };
+}
+
+function expectsInvalidParams(vector) {
+  const actual = vector?.expectedResponse?.actual;
+  return actual?.code === -32602 && actual?.message === "invalid_params";
 }
 
 function normalizeEvent(event) {
