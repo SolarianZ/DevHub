@@ -247,7 +247,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-003-launch-empty",
             )
-            if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "instanceId"]):
+                return result
+            if launch_empty_scope["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ scope='' launch 未命中在线 Global 实例: {launch_empty_scope}")
+                return result
+            if launch_empty_scope["result"].get("instanceId") != empty_instance:
+                result.mark_failure(f"❌ scope='' launch 命中实例不匹配: {launch_empty_scope}")
                 return result
 
             launch_null_scope = client.launch_app(
@@ -346,7 +352,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-004-launch",
             )
-            if not RpcAssertions.expect_success(result, launch_response, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_response, ["status", "instanceId"]):
+                return result
+            if launch_response["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ scope='global' launch 未命中显式作用域在线实例: {launch_response}")
+                return result
+            if launch_response["result"].get("instanceId") != scoped_global_instance:
+                result.mark_failure(f"❌ scope='global' launch 命中实例不匹配: {launch_response}")
                 return result
 
             launch_global_default = client.launch_app(
@@ -355,7 +367,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-004-launch-default",
             )
-            if not RpcAssertions.expect_success(result, launch_global_default, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_global_default, ["status", "instanceId"]):
+                return result
+            if launch_global_default["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ 默认 Global launch 未命中在线实例: {launch_global_default}")
+                return result
+            if launch_global_default["result"].get("instanceId") != global_instance:
+                result.mark_failure(f"❌ 默认 Global launch 命中实例不匹配: {launch_global_default}")
                 return result
 
             result.mark_success()
