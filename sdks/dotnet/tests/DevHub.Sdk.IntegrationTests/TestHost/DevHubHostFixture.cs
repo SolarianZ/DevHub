@@ -2,8 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using DevHub.Sdk.Models;
 
@@ -130,11 +128,8 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         _ = definition.AppId;
         _ = definition.Scope;
 
-        Directory.CreateDirectory(AppsDirectory);
-
-        var definitionsByIdentity = await ReadDefinitionsAsync();
-        definitionsByIdentity[GetDefinitionIdentity(definition)] = CloneDefinition(definition);
-        await WriteDefinitionsAsync(definitionsByIdentity.Values);
+        await using var client = await CreateClientAsync($"fixture-definition-writer-{Guid.NewGuid():N}");
+        await client.UpsertDefinitionAsync(definition);
     }
 
     public Task<DevHubClient> CreateClientAsync(string clientId)
@@ -463,114 +458,6 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         }
     }
 
-    private async Task<Dictionary<string, AppDefinition>> ReadDefinitionsAsync()
-    {
-        if (!File.Exists(DefinitionsCatalogPath))
-        {
-            return new Dictionary<string, AppDefinition>(StringComparer.Ordinal);
-        }
-
-        await using var stream = File.OpenRead(DefinitionsCatalogPath);
-        var catalog = await JsonSerializer.DeserializeAsync<AppDefinitionsCatalogDocument>(stream, CreateJsonOptions())
-            ?? new AppDefinitionsCatalogDocument();
-
-        var definitions = new Dictionary<string, AppDefinition>(StringComparer.Ordinal);
-        foreach (var appEntry in catalog.Definitions)
-        {
-            if (string.IsNullOrWhiteSpace(appEntry.AppId))
-            {
-                continue;
-            }
-
-            foreach (var scopeEntry in appEntry.Scopes)
-            {
-                var definition = new AppDefinition
-                {
-                    AppId = appEntry.AppId,
-                    Scope = scopeEntry.Scope ?? string.Empty,
-                    DisplayName = scopeEntry.DisplayName ?? string.Empty,
-                    Description = scopeEntry.Description,
-                    Launch = scopeEntry.Launch,
-                    Capabilities = scopeEntry.Capabilities
-                };
-                definitions[GetDefinitionIdentity(definition)] = definition;
-            }
-        }
-
-        return definitions;
-    }
-
-    private async Task WriteDefinitionsAsync(IEnumerable<AppDefinition> definitions)
-    {
-        ArgumentNullException.ThrowIfNull(definitions);
-
-        var orderedDefinitions = definitions
-            .Select(CloneDefinition)
-            .OrderBy(static definition => definition.AppId, StringComparer.Ordinal)
-            .ThenBy(static definition => definition.Scope.Length == 0 ? 0 : 1)
-            .ThenBy(static definition => definition.Scope, StringComparer.Ordinal)
-            .ToArray();
-
-        var catalog = new AppDefinitionsCatalogDocument
-        {
-            Definitions = orderedDefinitions
-                .GroupBy(static definition => definition.AppId, StringComparer.Ordinal)
-                .Select(static group => new AppDefinitionsCatalogAppEntryDocument
-                {
-                    AppId = group.Key,
-                    Scopes = group
-                        .Select(static definition => new AppDefinitionsCatalogScopeEntryDocument
-                        {
-                            Scope = definition.Scope,
-                            DisplayName = definition.DisplayName,
-                            Description = definition.Description,
-                            Launch = definition.Launch,
-                            Capabilities = definition.Capabilities
-                        })
-                        .ToList()
-                })
-                .ToList()
-        };
-
-        var tempPath = Path.Combine(AppsDirectory, $".definitions.{Guid.NewGuid():N}.json.tmp");
-        await using (var stream = File.Create(tempPath))
-        {
-            await JsonSerializer.SerializeAsync(stream, catalog, CreateJsonOptions());
-        }
-
-        File.Move(tempPath, DefinitionsCatalogPath, overwrite: true);
-    }
-
-    private static AppDefinition CloneDefinition(AppDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        return new AppDefinition
-        {
-            AppId = definition.AppId,
-            Scope = definition.Scope,
-            DisplayName = definition.DisplayName,
-            Description = definition.Description,
-            Launch = definition.Launch,
-            Capabilities = definition.Capabilities
-        };
-    }
-
-    private static string GetDefinitionIdentity(AppDefinition definition)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        return $"{definition.AppId}\n{definition.Scope}";
-    }
-
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        return new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = true
-        };
-    }
-
     private static string? ReadEnvironmentVariable(
         string environmentVariableName,
         IReadOnlyDictionary<string, string?>? environmentVariables)
@@ -647,39 +534,4 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
             .Configuration;
     }
 
-    private sealed class AppDefinitionsCatalogDocument
-    {
-        [JsonPropertyName("version")]
-        public int Version { get; set; } = 1;
-
-        [JsonPropertyName("definitions")]
-        public List<AppDefinitionsCatalogAppEntryDocument> Definitions { get; set; } = [];
-    }
-
-    private sealed class AppDefinitionsCatalogAppEntryDocument
-    {
-        [JsonPropertyName("appId")]
-        public string AppId { get; set; } = string.Empty;
-
-        [JsonPropertyName("scopes")]
-        public List<AppDefinitionsCatalogScopeEntryDocument> Scopes { get; set; } = [];
-    }
-
-    private sealed class AppDefinitionsCatalogScopeEntryDocument
-    {
-        [JsonPropertyName("scope")]
-        public string? Scope { get; set; }
-
-        [JsonPropertyName("displayName")]
-        public string? DisplayName { get; set; }
-
-        [JsonPropertyName("description")]
-        public string? Description { get; set; }
-
-        [JsonPropertyName("launch")]
-        public LaunchConfiguration? Launch { get; set; }
-
-        [JsonPropertyName("capabilities")]
-        public AppCapabilities? Capabilities { get; set; }
-    }
 }

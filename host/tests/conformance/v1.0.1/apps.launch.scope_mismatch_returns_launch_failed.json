@@ -68,7 +68,11 @@
       "message": "launch_failed",
       "data": {
         "reason": "definition_scope_mismatch",
-        "launchId": "${ANY_NON_EMPTY_STRING}"
+        "launchId": "${ANY_NON_EMPTY_STRING}",
+        "appId": "apps.launch.bound-scope.app",
+        "scope": "scope-b",
+        "expectedAppId": "apps.launch.bound-scope.app",
+        "expectedScope": "scope-a"
       }
     }
   },

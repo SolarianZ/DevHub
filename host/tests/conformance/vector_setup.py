@@ -71,6 +71,9 @@ class CleanupLedger:
 
     vector_temp_dir: Path
     upserted_definitions: list[tuple[str, str]] = field(default_factory=list)
+    definitions_catalog_overridden: bool = False
+    previous_definitions_catalog: str | None = None
+    had_previous_definitions_catalog: bool = False
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
     instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
@@ -96,7 +99,32 @@ class CleanupLedger:
             except Exception:
                 pass
 
+        if self.definitions_catalog_overridden and self.previous_definitions_catalog is not None:
+            host_context.apps_dir.mkdir(parents=True, exist_ok=True)
+            host_context.definitions_catalog_path.write_text(self.previous_definitions_catalog, encoding="utf-8")
+            self._refresh_definition_snapshot(host_context)
+        elif self.definitions_catalog_overridden and not self.had_previous_definitions_catalog:
+            try:
+                host_context.definitions_catalog_path.unlink()
+            except FileNotFoundError:
+                pass
+            self._refresh_definition_snapshot(host_context)
+
         shutil.rmtree(self.vector_temp_dir, ignore_errors=True)
+
+    @staticmethod
+    def _refresh_definition_snapshot(host_context: HostRuntimeContext) -> None:
+        # launch 是当前公开协议中保留显式刷新 Definition 快照语义的入口。
+        client = host_context.create_rpc_client()
+        client.call(
+            "hub.apps.launch",
+            {
+                "appId": "devhub.cleanup.refresh-sentinel",
+                "scope": "",
+                "waitForRegisterMs": 0,
+            },
+            request_id="cleanup-refresh-definition-snapshot",
+        )
 
 
 @dataclass
@@ -469,6 +497,10 @@ def apply_definitions_setup(
     if not definitions:
         return
 
+    if any(is_raw_definition_setup(require_mapping(item, f"setup.definitions[{index}]")) for index, item in enumerate(definitions)):
+        apply_raw_definitions_setup(host_context, definitions, ledger)
+        return
+
     client = host_context.create_rpc_client()
     for index, item in enumerate(definitions):
         definition_setup = require_mapping(item, f"setup.definitions[{index}]")
@@ -491,6 +523,91 @@ def apply_definitions_setup(
             )
 
         ledger.upserted_definitions.append((materialized["appId"], materialized["scope"]))
+
+
+def is_raw_definition_setup(definition_setup: dict[str, Any]) -> bool:
+    """判断 setup.definitions 条目是否需要按原始 catalog 片段写入。"""
+
+    return "rawScopeEntry" in definition_setup or "rawAppEntry" in definition_setup
+
+
+def apply_raw_definitions_setup(
+    host_context: HostRuntimeContext,
+    definitions: list[Any],
+    ledger: CleanupLedger,
+) -> None:
+    """将包含非法条目的 setup.definitions 原样物化到 definitions.json。"""
+
+    if ledger.previous_definitions_catalog is None:
+        ledger.definitions_catalog_overridden = True
+        ledger.had_previous_definitions_catalog = host_context.definitions_catalog_path.exists()
+        if ledger.had_previous_definitions_catalog:
+            ledger.previous_definitions_catalog = host_context.definitions_catalog_path.read_text(encoding="utf-8")
+
+    catalog: dict[str, Any] = {"version": 1, "definitions": []}
+    for index, item in enumerate(definitions):
+        definition_setup = require_mapping(item, f"setup.definitions[{index}]")
+        append_catalog_definition_setup(catalog, definition_setup, index)
+
+    host_context.apps_dir.mkdir(parents=True, exist_ok=True)
+    host_context.definitions_catalog_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    refresh_response = host_context.create_rpc_client().call(
+        "hub.apps.launch",
+        {
+            "appId": "devhub.setup.refresh-sentinel",
+            "scope": "",
+            "waitForRegisterMs": 0,
+        },
+        request_id="setup-refresh-definition-snapshot",
+    )
+    if refresh_response.get("error", {}).get("message") != "app_definition_not_found":
+        raise RuntimeError(
+            "刷新预置 Definition 快照失败："
+            f"{json.dumps(refresh_response, ensure_ascii=False, sort_keys=True)}"
+        )
+
+
+def append_catalog_definition_setup(catalog: dict[str, Any], definition_setup: dict[str, Any], index: int) -> None:
+    """将单个 setup.definitions 条目追加到 catalog 模型。"""
+
+    if "appId" in definition_setup:
+        app_id = require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+        scope_entry_field = "scopeEntry" if "scopeEntry" in definition_setup else "rawScopeEntry"
+        scope_entry = read_catalog_setup_value(
+            definition_setup.get(scope_entry_field),
+            f"setup.definitions[{index}].{scope_entry_field}",
+            require_object=scope_entry_field == "scopeEntry",
+        )
+        app_entry = find_or_add_catalog_app_entry(catalog, app_id)
+        app_entry["scopes"].append(scope_entry)
+        return
+
+    app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
+    app_entry = read_catalog_setup_value(
+        definition_setup.get(app_entry_field),
+        f"setup.definitions[{index}].{app_entry_field}",
+        require_object=app_entry_field == "appEntry",
+    )
+    catalog["definitions"].append(app_entry)
+
+
+def find_or_add_catalog_app_entry(catalog: dict[str, Any], app_id: str) -> dict[str, Any]:
+    """按 appId 查找或创建 catalog app 分组。"""
+
+    definitions = catalog["definitions"]
+    for item in definitions:
+        if isinstance(item, dict) and item.get("appId") == app_id:
+            scopes = item.setdefault("scopes", [])
+            if not isinstance(scopes, list):
+                raise ValueError(f"setup.definitions 中 {app_id} 的 scopes 必须是数组。")
+            return item
+
+    app_entry = {"appId": app_id, "scopes": []}
+    definitions.append(app_entry)
+    return app_entry
 
 
 def try_materialize_definition_setup(definition_setup: dict[str, Any]) -> dict[str, Any] | None:

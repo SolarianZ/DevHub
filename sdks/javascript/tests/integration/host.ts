@@ -8,6 +8,8 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { DevHubClient } from "../../src/client.js";
+import type { AppDefinition } from "../../src/models.js";
+import type { RuntimeConnectionInfo, RuntimeResolver } from "../../src/runtime.js";
 
 const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
@@ -156,23 +158,22 @@ export class DevHubHostFixture {
     const payload = { ...definition };
     const appId = ensureCanonicalIdentifier(payload.appId, "definition.appId");
     const scope = normalizeDefinitionScope(payload.scope);
-    const catalog = await readDefinitionsCatalog(this.definitionsCatalogPath);
 
-    const scopeEntry = toCatalogScopeEntry(payload, scope);
-    const existingAppEntry = catalog.definitions.find((entry) => entry.appId === appId);
-    if (existingAppEntry) {
-      existingAppEntry.scopes = existingAppEntry.scopes.filter((entry) => entry.scope !== scope);
-      existingAppEntry.scopes.push(scopeEntry);
-    } else {
-      catalog.definitions.push({
+    const client = await DevHubClient.fromRuntime({
+      clientId: `host-fixture-definition-writer-${randomUUID()}`,
+      dataDir: this.dataDirectory
+    }, {
+      runtimeResolver: await this.createStaticRuntimeResolver()
+    });
+    try {
+      await client.upsertDefinition({
+        ...payload,
         appId,
-        scopes: [scopeEntry]
-      });
+        scope
+      } as AppDefinition);
+    } finally {
+      await client.dispose();
     }
-
-    sortDefinitionsCatalog(catalog);
-    await writeDefinitionsCatalog(this.definitionsCatalogPath, catalog);
-    await this.refreshDefinitionsSnapshot();
   }
 
   async close(): Promise<void> {
@@ -245,40 +246,13 @@ export class DevHubHostFixture {
     throw new Error("等待 hub.json 超时。");
   }
 
-  private async refreshDefinitionsSnapshot(): Promise<void> {
-    const runtime = await readRuntimeConnection(this.runtimeDirectory);
-    const response = await fetch(`${runtime.httpBaseUrl}/rpc`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${runtime.token}`,
-        "Content-Type": "application/json",
-        "X-DevHub-Protocol": "1",
-        "X-DevHub-ClientId": `host-fixture-refresh-${randomUUID()}`,
-        "X-DevHub-ClientSessionId": randomUUID()
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: `host-fixture-refresh-${randomUUID()}`,
-        method: "hub.apps.listDefinitions",
-        params: {
-          scope: null
-        }
-      })
-    });
-
-    const payload = await response.json() as {
-      error?: {
-        code?: number;
-        message?: string;
-      };
-      result?: {
-        ok?: boolean;
-      };
+  private async createStaticRuntimeResolver(): Promise<RuntimeResolver> {
+    const connection = await readRuntimeConnection(this.runtimeDirectory);
+    return {
+      async resolve() {
+        return connection;
+      }
     };
-
-    if (!response.ok || payload.error || payload.result?.ok !== true) {
-      throw new Error(`刷新 Host Definition 快照失败: ${JSON.stringify(payload)}`);
-    }
   }
 }
 
@@ -417,30 +391,59 @@ async function fileExists(target: string): Promise<boolean> {
   }
 }
 
-async function readRuntimeConnection(runtimeDirectory: string): Promise<{ httpBaseUrl: string; token: string; }> {
+function ensureTrailingSeparator(value: string): string {
+  return value.endsWith(path.sep)
+    ? value
+    : `${value}${path.sep}`;
+}
+
+async function readRuntimeConnection(runtimeDirectory: string): Promise<RuntimeConnectionInfo> {
   const hubJsonPath = path.join(runtimeDirectory, "hub.json");
   const runtime = JSON.parse(await fsPromises.readFile(hubJsonPath, "utf-8")) as {
+    protocolVersion?: number;
+    pid?: number;
     httpBaseUrl?: string;
+    wsUrl?: string;
     tokenFile?: string;
+    startedAtUtc?: string;
+    runtimeTuning?: {
+      leaseSeconds?: number;
+      onlineThresholdSeconds?: number;
+      launchDedupeWindowSeconds?: number;
+    };
+    hubVersion?: string;
   };
 
   if (typeof runtime.httpBaseUrl !== "string" || runtime.httpBaseUrl.length === 0) {
     throw new Error(`Host runtime 缺少有效 httpBaseUrl: ${hubJsonPath}`);
+  }
+  if (typeof runtime.wsUrl !== "string" || runtime.wsUrl.length === 0) {
+    throw new Error(`Host runtime 缺少有效 wsUrl: ${hubJsonPath}`);
   }
   if (typeof runtime.tokenFile !== "string" || runtime.tokenFile.length === 0) {
     throw new Error(`Host runtime 缺少有效 tokenFile: ${hubJsonPath}`);
   }
 
   return {
-    httpBaseUrl: runtime.httpBaseUrl,
-    token: (await fsPromises.readFile(runtime.tokenFile, "utf-8")).trim()
+    runtimeDirectory,
+    token: (await fsPromises.readFile(runtime.tokenFile, "utf-8")).trim(),
+    rpcEndpoint: `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: runtime.wsUrl,
+    runtime: {
+      protocolVersion: runtime.protocolVersion ?? 1,
+      pid: runtime.pid ?? 1,
+      httpBaseUrl: runtime.httpBaseUrl,
+      wsUrl: runtime.wsUrl,
+      tokenFile: runtime.tokenFile,
+      startedAtUtc: new Date(runtime.startedAtUtc ?? new Date().toISOString()),
+      runtimeTuning: {
+        leaseSeconds: runtime.runtimeTuning?.leaseSeconds ?? 30,
+        onlineThresholdSeconds: runtime.runtimeTuning?.onlineThresholdSeconds ?? 10,
+        launchDedupeWindowSeconds: runtime.runtimeTuning?.launchDedupeWindowSeconds ?? 30
+      },
+      hubVersion: runtime.hubVersion
+    }
   };
-}
-
-function ensureTrailingSeparator(value: string): string {
-  return value.endsWith(path.sep)
-    ? value
-    : `${value}${path.sep}`;
 }
 
 function normalizeDefinitionScope(value: unknown): string {
@@ -540,110 +543,4 @@ function isMissingProcessError(error: unknown): boolean {
     && error !== null
     && "code" in error
     && (error as NodeJS.ErrnoException).code === "ESRCH";
-}
-
-type DefinitionCatalog = {
-  version: number;
-  definitions: DefinitionCatalogAppEntry[];
-};
-
-type DefinitionCatalogAppEntry = {
-  appId: string;
-  scopes: DefinitionCatalogScopeEntry[];
-};
-
-type DefinitionCatalogScopeEntry = Record<string, unknown> & {
-  scope: string;
-};
-
-async function readDefinitionsCatalog(catalogPath: string): Promise<DefinitionCatalog> {
-  if (!(await fileExists(catalogPath))) {
-    return createEmptyDefinitionsCatalog();
-  }
-
-  const rawCatalog = JSON.parse(await fsPromises.readFile(catalogPath, "utf-8")) as unknown;
-  if (!isDefinitionCatalog(rawCatalog)) {
-    throw new Error(`definitions catalog 结构无效：${catalogPath}`);
-  }
-
-  return {
-    version: rawCatalog.version,
-    definitions: rawCatalog.definitions.map((entry) => ({
-      appId: entry.appId,
-      scopes: entry.scopes.map((scopeEntry) => ({ ...scopeEntry }))
-    }))
-  };
-}
-
-async function writeDefinitionsCatalog(catalogPath: string, catalog: DefinitionCatalog): Promise<void> {
-  const tempPath = path.join(
-    path.dirname(catalogPath),
-    `.definitions.${randomUUID().replaceAll("-", "")}.tmp`
-  );
-
-  try {
-    await fsPromises.writeFile(tempPath, JSON.stringify(catalog, null, 2), "utf-8");
-    await fsPromises.rename(tempPath, catalogPath);
-  } finally {
-    await fsPromises.rm(tempPath, { force: true });
-  }
-}
-
-function createEmptyDefinitionsCatalog(): DefinitionCatalog {
-  return {
-    version: 1,
-    definitions: []
-  };
-}
-
-function toCatalogScopeEntry(definition: Record<string, unknown>, scope: string): DefinitionCatalogScopeEntry {
-  const scopeEntry: DefinitionCatalogScopeEntry = { scope };
-
-  for (const [key, value] of Object.entries(definition)) {
-    if (key === "appId" || key === "scope" || value === undefined) {
-      continue;
-    }
-
-    scopeEntry[key] = value;
-  }
-
-  return scopeEntry;
-}
-
-function sortDefinitionsCatalog(catalog: DefinitionCatalog): void {
-  catalog.definitions.sort((left, right) => compareOrdinal(left.appId, right.appId));
-  for (const appEntry of catalog.definitions) {
-    appEntry.scopes.sort((left, right) => {
-      const globalOrder = Number(right.scope === "") - Number(left.scope === "");
-      return globalOrder !== 0
-        ? globalOrder
-        : compareOrdinal(left.scope, right.scope);
-    });
-  }
-}
-
-function compareOrdinal(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function isDefinitionCatalog(value: unknown): value is DefinitionCatalog {
-  return isRecord(value)
-    && value.version === 1
-    && Array.isArray(value.definitions)
-    && value.definitions.every(isDefinitionCatalogAppEntry);
-}
-
-function isDefinitionCatalogAppEntry(value: unknown): value is DefinitionCatalogAppEntry {
-  return isRecord(value)
-    && typeof value.appId === "string"
-    && Array.isArray(value.scopes)
-    && value.scopes.every(isDefinitionCatalogScopeEntry);
-}
-
-function isDefinitionCatalogScopeEntry(value: unknown): value is DefinitionCatalogScopeEntry {
-  return isRecord(value) && typeof value.scope === "string";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
