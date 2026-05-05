@@ -359,7 +359,8 @@ sequenceDiagram
 - 如果提供 `launch.args`，其值**必须**是字符串数组。数组中的每个元素表示一个独立 argv 参数，并按 §6.3.12 的模板规则独立展开。
 - 如果同时提供 `launch.args` 与 `launch.argsTemplate`，启动阶段**必须**使用 `launch.args`，并忽略 `launch.argsTemplate`。
 - 如果省略 `capabilities` 或 `capabilities.rpc`，默认值为 `true`。
-  - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
+  - 如果精确匹配请求 `appId + scope` 的 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**拒绝该 `appId + scope` 的 `hub.invoke.notify` 和 `hub.invoke.request` 调用，返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
+  - Hub **不得**因同一 `appId` 下其他 `scope` 的 `AppDefinition.capabilities.rpc=false` 拒绝当前 `appId + scope` 的调用。
 - `capabilities.events` 保留供未来使用；在 v1 中，Hub **必须**忽略它。
 
 #### 5.1.2 ValidationIssue（规范性）
@@ -1038,7 +1039,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `options.autoLaunch` 为 true，则 `options.queueIfOffline` **必须**为 true（否则返回 `-32602 invalid_params`）。
 - 如果 `target.scope = ""`，Hub **必须**仅在 Global 作用域中路由该调用。
 - 如果 `target.scope` 为其他合法字符串，Hub **必须**仅在该精确作用域中路由该调用。
-- 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
+- 如果精确匹配请求 `appId + target.scope` 的 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
 - 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
 - 当 auto-launch 或离线队列因缺少精确 `AppDefinition(appId, scope)` 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data.reason` **必须**为 `"definition_not_found"`，`error.data.appId` 与 `error.data.scope` **必须**分别等于请求中的 `appId` 与 canonical `scope`。
@@ -1076,7 +1077,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `target.scope = ""`，Hub **必须**仅在 Global 作用域中路由该调用。
 - 如果 `target.scope` 为其他合法字符串，Hub **必须**仅在该精确作用域中路由该调用。
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
-- 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
+- 如果精确匹配请求 `appId + target.scope` 的 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
 - 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
 - 当 auto-launch 或离线队列因缺少精确 `AppDefinition(appId, scope)` 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data.reason` **必须**为 `"definition_not_found"`，`error.data.appId` 与 `error.data.scope` **必须**分别等于请求中的 `appId` 与 canonical `scope`。
