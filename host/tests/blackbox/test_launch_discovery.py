@@ -161,6 +161,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                 "leaseSeconds",
                 "onlineThresholdSeconds",
                 "launchDedupeWindowSeconds",
+                "launchRegisterTimeoutSeconds",
             ]
             for field in runtime_tuning_fields:
                 value = runtime_tuning.get(field)

@@ -238,7 +238,8 @@ public sealed class HostRuntimeArtifactManager : IDisposable
                 {
                     LeaseSeconds = _runtimeTuningOptions.LeaseSeconds,
                     OnlineThresholdSeconds = _runtimeTuningOptions.OnlineThresholdSeconds,
-                    LaunchDedupeWindowSeconds = _runtimeTuningOptions.LaunchDedupeWindowSeconds
+                    LaunchDedupeWindowSeconds = _runtimeTuningOptions.LaunchDedupeWindowSeconds,
+                    LaunchRegisterTimeoutSeconds = _runtimeTuningOptions.LaunchRegisterTimeoutSeconds
                 }
             };
 

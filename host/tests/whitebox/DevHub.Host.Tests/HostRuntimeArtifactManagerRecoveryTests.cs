@@ -201,6 +201,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         Assert.True(runtimeTuning.TryGetProperty("leaseSeconds", out _));
         Assert.True(runtimeTuning.TryGetProperty("onlineThresholdSeconds", out _));
         Assert.True(runtimeTuning.TryGetProperty("launchDedupeWindowSeconds", out _));
+        Assert.True(runtimeTuning.TryGetProperty("launchRegisterTimeoutSeconds", out _));
     }
 
     [Fact]

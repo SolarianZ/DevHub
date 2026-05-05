@@ -224,6 +224,7 @@ public sealed class HostRuntimeArtifactManagerTests
             Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
             Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
             Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
+            Assert.Equal(RuntimeTuningOptions.DefaultLaunchRegisterTimeoutSeconds, runtimeTuning.GetProperty("launchRegisterTimeoutSeconds").GetInt32());
 
             AssertCurrentUserOnlyAccess(hubJsonPath);
             AssertCurrentUserOnlyAccess(tokenFile!);
@@ -314,6 +315,7 @@ public sealed class HostRuntimeArtifactManagerTests
             using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
             using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
             using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
+            using var registerScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchRegisterTimeoutSecondsEnvironmentVariable, "65");
 
             var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
             var manager = new HostRuntimeArtifactManager(
@@ -330,6 +332,7 @@ public sealed class HostRuntimeArtifactManagerTests
             Assert.Equal(45, runtimeTuning.GetProperty("leaseSeconds").GetInt32());
             Assert.Equal(20, runtimeTuning.GetProperty("onlineThresholdSeconds").GetInt32());
             Assert.Equal(55, runtimeTuning.GetProperty("launchDedupeWindowSeconds").GetInt32());
+            Assert.Equal(65, runtimeTuning.GetProperty("launchRegisterTimeoutSeconds").GetInt32());
         }
         finally
         {

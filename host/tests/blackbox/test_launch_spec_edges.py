@@ -13,12 +13,17 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    TEST_HUB_ENV_JSON_ENV_VAR,
+    PENDING_WAIT_STATUS,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_shared_test_asset_path,
     get_test_python_executable,
     safe_remove,
+    start_isolated_hub_process,
+    temporary_env_var,
+    poll_until_deadline_with_long_wait_status,
     write_app_definition,
 )
 
@@ -208,6 +213,108 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_003b_wait_budget_should_not_fail_before_requested_window(self):
+        """LAUNCH-EDGE-003B: waitForRegisterMs 更长时不得被基础注册超时提前失败。"""
+        result = TestResult("LAUNCH-EDGE-003B waitForRegisterMs 不应被基础超时提前失败")
+        definition_path = None
+        temp_root = None
+        process = None
+        log_file = None
+
+        try:
+            temp_root = tempfile.mkdtemp(prefix="devhub-launch-wait-budget-")
+            data_dir = os.path.join(temp_root, "data")
+            log_path = os.path.join(temp_root, "host.log")
+
+            overrides = json.dumps({
+                "DEVHUB_LAUNCH_REGISTER_TIMEOUT_SECONDS": "1"
+            }, ensure_ascii=False)
+
+            with temporary_env_var(TEST_HUB_ENV_JSON_ENV_VAR, overrides):
+                with open(log_path, "w+", encoding="utf-8") as log_file:
+                    process = start_isolated_hub_process(data_dir, log_file)
+
+                    def wait_for_ping():
+                        if process.poll() is not None:
+                            return False
+
+                        try:
+                            with temporary_env_var("DEVHUB_DATA_DIR", data_dir):
+                                base_url, token = DiscoveryService.get_hub_info()
+                                response = RpcClient(base_url, token).call("hub.ping")
+                                if response.get("result", {}).get("ok") is True:
+                                    return True
+                        except Exception:
+                            return PENDING_WAIT_STATUS
+
+                        return PENDING_WAIT_STATUS
+
+                    poll_until_deadline_with_long_wait_status(
+                        label="等待隔离 Host 就绪",
+                        timeout_seconds=20,
+                        poll_interval_seconds=0.2,
+                        poll_once=wait_for_ping,
+                        on_timeout=lambda: False,
+                    )
+
+                    with temporary_env_var("DEVHUB_DATA_DIR", data_dir):
+                        app_id = self._new_app_id("wait-budget")
+                        definition_path = self._create_definition(
+                            app_id,
+                            self._build_launch_config(),
+                        )
+
+                        base_url, token = DiscoveryService.get_hub_info()
+                        client = RpcClient(base_url, token)
+
+                        start_ts = time.monotonic()
+                        response = client.launch_app(
+                            app_id=app_id,
+                            scope="",
+                            wait_for_register_ms=5000,
+                            request_id="launch-edge-003b",
+                        )
+                        elapsed_ms = int((time.monotonic() - start_ts) * 1000)
+
+                    if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                        return result
+
+                    if response["result"].get("status") != "starting":
+                        result.mark_failure(f"❌ 长等待窗口场景未返回 starting: {response}")
+                        return result
+
+                    if elapsed_ms < 3500:
+                        result.mark_failure(f"❌ launch 提前结束，疑似被基础超时截断: elapsed={elapsed_ms}ms, response={response}")
+                        return result
+
+                    result.add_detail(f"✅ 长等待窗口耗时 {elapsed_ms}ms，未被基础超时提前失败")
+                    result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except Exception:
+                    process.kill()
+                    process.wait(timeout=5)
+            if log_file is not None:
+                log_file.close()
+            if temp_root and os.path.isdir(temp_root):
+                try:
+                    for root, dirs, files in os.walk(temp_root, topdown=False):
+                        for file_name in files:
+                            os.remove(os.path.join(root, file_name))
+                        for dir_name in dirs:
+                            os.rmdir(os.path.join(root, dir_name))
+                    os.rmdir(temp_root)
+                except Exception:
+                    pass
+
+        return result
+
     def test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(self):
         """SCOPE-LAUNCH-EDGE-004: dedupeKeyTemplate 作用域占位符应隔离。"""
         result = TestResult("SCOPE-LAUNCH-EDGE-004 dedupe 模板 scope 隔离")
@@ -391,6 +498,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
             self.test_launch_edge_002_explicit_dedupe_key_should_take_effect(),
             self.test_launch_edge_003_wait_for_register_positive_should_return_started_or_starting(),
+            self.test_launch_edge_003b_wait_budget_should_not_fail_before_requested_window(),
             self.test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(),
             self.test_launch_edge_005_undocumented_placeholder_should_remain_literal(),
             self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),

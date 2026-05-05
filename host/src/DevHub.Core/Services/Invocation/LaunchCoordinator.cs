@@ -14,6 +14,7 @@ namespace DevHub.Core.Services.Invocation;
 public class LaunchCoordinator : ILaunchRegistrationTracker
 {
     private const string DefaultDedupeKeyTemplate = "{appId}:{scopeOrGlobal}";
+    private const string ProcessExitedBeforeRegisterReason = "process_exited_before_register";
     public const string LaunchIdEnvironmentVariable = "DEVHUB_LAUNCH_ID";
 
     private readonly object _launchSyncRoot = new();
@@ -155,6 +156,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                 AppId = appId,
                 Scope = scope,
                 CreatedAtUtc = nextNow,
+                RegisterDeadlineUtc = ComputeRegisterDeadlineUtc(nextNow, waitForRegisterMs),
                 State = LaunchRecordState.Starting
             };
             _dedupeRecords[dedupeIdentity] = launchRecord;
@@ -213,10 +215,8 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         return waitOutcome switch
         {
             LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id, resolvedDedupeKey),
-            LaunchWaitOutcome.ScopeMismatch => LaunchOperationResult.CreateError(
-                -32020,
-                "launch_failed",
-                GetLaunchFailureData(launchId)),
+            LaunchWaitOutcome.ScopeMismatch or
+            LaunchWaitOutcome.ProcessExitedBeforeRegister => BuildLaunchFailureAfterWait(launchId),
             LaunchWaitOutcome.RegisterTimeout => LaunchOperationResult.CreateError(
                 -32020,
                 "launch_failed",
@@ -287,11 +287,31 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                 launchRecord.State = LaunchRecordState.Registered;
                 launchRecord.RegisteredInstanceId = instance.InstanceId;
                 DeactivateDedupeRecord(launchRecord);
+                _logger.LogInformation(
+                    "启动记录已完成注册绑定，LaunchId: {LaunchId}, AppId: {AppId}, Scope: {Scope}, InstanceId: {InstanceId}",
+                    launchRecord.LaunchId,
+                    launchRecord.AppId,
+                    launchRecord.Scope,
+                    instance.InstanceId);
             }
         }
     }
 
     private static string BuildLaunchId() => $"launch-{Guid.NewGuid():N}";
+
+    private DateTime ComputeRegisterDeadlineUtc(DateTime createdAtUtc, int waitForRegisterMs)
+    {
+        var baselineDeadlineUtc = createdAtUtc.AddSeconds(_runtimeTuningOptions.LaunchRegisterTimeoutSeconds);
+        if (waitForRegisterMs <= 0)
+        {
+            return baselineDeadlineUtc;
+        }
+
+        var requestedDeadlineUtc = createdAtUtc.AddMilliseconds(waitForRegisterMs);
+        return requestedDeadlineUtc > baselineDeadlineUtc
+            ? requestedDeadlineUtc
+            : baselineDeadlineUtc;
+    }
 
     private static bool TryValidateLaunchConfig(
         AppDefinition definition,
@@ -333,20 +353,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         CancellationToken cancellationToken)
     {
         var deadline = _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
-        while (_clock.UtcNow <= deadline)
+        while (true)
         {
+            var now = _clock.UtcNow;
             lock (_launchSyncRoot)
             {
-                CleanupExpiredLaunchRecords(_clock.UtcNow);
-
                 if (_launchRecordsById.TryGetValue(launchId, out var launchRecord))
                 {
                     if (launchRecord.State == LaunchRecordState.Failed)
                     {
-                        RemoveLaunchRecordById(launchId);
                         return string.Equals(launchRecord.FailureReason, "launch_register_timeout", StringComparison.Ordinal)
                             ? LaunchWaitOutcome.RegisterTimeout
-                            : LaunchWaitOutcome.ScopeMismatch;
+                            : string.Equals(launchRecord.FailureReason, ProcessExitedBeforeRegisterReason, StringComparison.Ordinal)
+                                ? LaunchWaitOutcome.ProcessExitedBeforeRegister
+                                : LaunchWaitOutcome.ScopeMismatch;
                     }
 
                     if (launchRecord.State == LaunchRecordState.Registered)
@@ -354,7 +374,31 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                         RemoveLaunchRecordById(launchId);
                         return LaunchWaitOutcome.Registered;
                     }
+
+                    if (!IsLaunchStillInProgress(launchRecord))
+                    {
+                        MarkLaunchFailed(
+                            launchRecord,
+                            ProcessExitedBeforeRegisterReason,
+                            BuildProcessExitedBeforeRegisterErrorData(launchRecord));
+                        return LaunchWaitOutcome.ProcessExitedBeforeRegister;
+                    }
+
+                    if (launchRecord.RegisterDeadlineUtc < deadline
+                        && now >= launchRecord.RegisterDeadlineUtc)
+                    {
+                        MarkLaunchFailed(
+                            launchRecord,
+                            "launch_register_timeout",
+                            new { reason = "launch_register_timeout", launchId = launchRecord.LaunchId });
+                        return LaunchWaitOutcome.RegisterTimeout;
+                    }
                 }
+            }
+
+            if (now >= deadline)
+            {
+                break;
             }
 
             await Task.Delay(20, cancellationToken);
@@ -366,6 +410,16 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private static LaunchOperationResult BuildStartedAfterWait(string launchId, int processId, string dedupeKey)
     {
         return LaunchOperationResult.CreateSuccess("started", launchId, processId, dedupeKey, instanceId: null);
+    }
+
+    private LaunchOperationResult BuildLaunchFailureAfterWait(string launchId)
+    {
+        var errorData = GetLaunchFailureData(launchId);
+        RemoveLaunchRecordById(launchId);
+        return LaunchOperationResult.CreateError(
+            -32020,
+            "launch_failed",
+            errorData);
     }
 
     private object GetLaunchFailureData(string launchId)
@@ -568,7 +622,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private void CleanupExpiredLaunchRecords(DateTime now)
     {
         var expiredLaunchIds = _launchRecordsById.Values
-            .Where(record => ShouldRemoveLaunchRecord(record, now))
+            .Where(record => EvaluateLaunchRecordLifecycle(record, now))
             .Select(record => record.LaunchId)
             .ToList();
 
@@ -590,12 +644,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         if (record.State != LaunchRecordState.Starting)
         {
             DeactivateDedupeRecord(record);
-            return null;
-        }
-
-        if (!IsLaunchStillInProgress(record))
-        {
-            RemoveLaunchRecordById(record.LaunchId);
             return null;
         }
 
@@ -649,27 +697,52 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         };
     }
 
-    private bool ShouldRemoveLaunchRecord(LaunchRecord record, DateTime now)
+    private bool EvaluateLaunchRecordLifecycle(LaunchRecord record, DateTime now)
     {
         if (record.State == LaunchRecordState.Starting)
         {
             if (!IsLaunchStillInProgress(record))
             {
-                return true;
+                MarkLaunchFailed(
+                    record,
+                    ProcessExitedBeforeRegisterReason,
+                    BuildProcessExitedBeforeRegisterErrorData(record));
+                return false;
             }
 
-            if (now >= record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchRegisterTimeoutSeconds))
+            if (now >= record.RegisterDeadlineUtc)
             {
-                record.State = LaunchRecordState.Failed;
-                record.FailureReason = "launch_register_timeout";
-                record.FailureData = new { reason = "launch_register_timeout", launchId = record.LaunchId };
-                DeactivateDedupeRecord(record);
+                MarkLaunchFailed(
+                    record,
+                    "launch_register_timeout",
+                    new { reason = "launch_register_timeout", launchId = record.LaunchId });
             }
 
             return false;
         }
 
         return now > record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds);
+    }
+
+    private void MarkLaunchFailed(LaunchRecord record, string reason, object failureData)
+    {
+        if (record.State == LaunchRecordState.Failed
+            && string.Equals(record.FailureReason, reason, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        record.State = LaunchRecordState.Failed;
+        record.FailureReason = reason;
+        record.FailureData = failureData;
+        DeactivateDedupeRecord(record);
+        _logger.LogWarning(
+            "启动记录进入失败终态，LaunchId: {LaunchId}, AppId: {AppId}, Scope: {Scope}, Pid: {Pid}, Reason: {Reason}",
+            record.LaunchId,
+            record.AppId,
+            record.Scope,
+            record.Pid,
+            reason);
     }
 
     private static object BuildDefinitionScopeMismatchErrorData(
@@ -690,6 +763,16 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         };
     }
 
+    private static object BuildProcessExitedBeforeRegisterErrorData(LaunchRecord record)
+    {
+        return new
+        {
+            reason = ProcessExitedBeforeRegisterReason,
+            launchId = record.LaunchId,
+            pid = record.Pid
+        };
+    }
+
     private sealed class LaunchRecord
     {
         public required string LaunchId { get; init; }
@@ -703,6 +786,8 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         public required string Scope { get; init; }
 
         public required DateTime CreatedAtUtc { get; init; }
+
+        public required DateTime RegisterDeadlineUtc { get; init; }
 
         public required LaunchRecordState State { get; set; }
 
@@ -727,7 +812,8 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         Registered,
         TimedOut,
         ScopeMismatch,
-        RegisterTimeout
+        RegisterTimeout,
+        ProcessExitedBeforeRegister
     }
 
     private readonly record struct LaunchDedupeIdentity(string AppId, string Scope, string DedupeKey)

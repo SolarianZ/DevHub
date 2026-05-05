@@ -680,7 +680,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchAsync_WhenRegisterDeadlineElapsed_ShouldReturnLaunchRegisterTimeoutAndReleaseDedupe()
+    public async Task Impl_LaunchAsync_WhenBackgroundRegisterDeadlineElapsed_ShouldReleaseDedupeForRetry()
     {
         WriteDefinition("launch-register-timeout.app", includeLaunch: true);
 
@@ -700,18 +700,14 @@ public class LaunchCoordinatorTests : IDisposable
             appId: "launch-register-timeout.app",
             scope: ScopeContract.Global,
             dedupeKey: "register-timeout",
-            waitForRegisterMs: 5000,
+            waitForRegisterMs: 0,
             CancellationToken.None);
 
-        await Task.Delay(60);
-        clock.Advance(TimeSpan.FromSeconds(2));
-
         var result = await launchTask;
-        Assert.False(result.Ok);
-        Assert.Equal(-32020, result.ErrorCode);
-        Assert.Equal("launch_failed", result.ErrorMessage);
-        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
-        Assert.Equal("launch_register_timeout", errorData.GetProperty("reason").GetString());
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
 
         var retry = await coordinator.LaunchAsync(
             appId: "launch-register-timeout.app",
@@ -723,6 +719,81 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(retry.Ok);
         Assert.Equal("started", retry.Status);
         Assert.NotEqual(result.LaunchId, retry.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenWaitForRegisterExceedsBaseTimeout_ShouldHonorWaitBudgetAndReturnStarting()
+    {
+        WriteDefinition("launch-wait-budget.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var tuningOptions = RuntimeTuningOptions.Create(
+            leaseSeconds: 30,
+            onlineThresholdSeconds: 30,
+            launchDedupeWindowSeconds: 30,
+            launchRegisterTimeoutSeconds: 1);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object, runtimeTuningOptions: tuningOptions);
+
+        var launchTask = coordinator.LaunchAsync(
+            appId: "launch-wait-budget.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "wait-budget",
+            waitForRegisterMs: 5000,
+            CancellationToken.None);
+
+        await Task.Delay(60);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        Assert.False(launchTask.IsCompleted);
+
+        clock.Advance(TimeSpan.FromSeconds(3));
+        var result = await launchTask;
+
+        Assert.True(result.Ok);
+        Assert.Equal("starting", result.Status);
+        Assert.Equal("wait-budget", result.DedupeKey);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenProcessExitsBeforeRegister_ShouldReturnLaunchFailedAndReleaseDedupe()
+    {
+        WriteDefinition("launch-exit-before-register.app", includeLaunch: true);
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .SetupSequence(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(CreateShortLivedSleepProcess())
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-exit-before-register.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "exit-before-register",
+            waitForRegisterMs: 1200,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("process_exited_before_register", errorData.GetProperty("reason").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(errorData.GetProperty("launchId").GetString()));
+
+        var retry = await coordinator.LaunchAsync(
+            appId: "launch-exit-before-register.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "exit-before-register",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(retry.Ok);
+        Assert.Equal("started", retry.Status);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
     }
 
@@ -805,7 +876,8 @@ public class LaunchCoordinatorTests : IDisposable
             {
                 leaseSeconds = 30,
                 onlineThresholdSeconds = 30,
-                launchDedupeWindowSeconds = 30
+                launchDedupeWindowSeconds = 30,
+                launchRegisterTimeoutSeconds = 30
             }
         };
 
@@ -897,5 +969,17 @@ public class LaunchCoordinatorTests : IDisposable
         {
             UtcNow = UtcNow.Add(duration);
         }
+    }
+
+    private static System.Diagnostics.Process CreateShortLivedSleepProcess()
+    {
+        var processStartInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "python3",
+            UseShellExecute = false
+        };
+        processStartInfo.ArgumentList.Add("-c");
+        processStartInfo.ArgumentList.Add("import time; time.sleep(0.05)");
+        return System.Diagnostics.Process.Start(processStartInfo)!;
     }
 }
