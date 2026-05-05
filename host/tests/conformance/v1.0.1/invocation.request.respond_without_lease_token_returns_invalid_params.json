@@ -82,7 +82,8 @@
     "outcome": "error",
     "actual": {
       "code": -32012,
-      "message": "invocation_timeout"
+      "message": "invocation_timeout",
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
     }
   },
   "tags": [

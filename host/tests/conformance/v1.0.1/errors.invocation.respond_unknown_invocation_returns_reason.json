@@ -38,6 +38,7 @@
       "instanceId": "errors-respond-unknown-inst-1",
       "instanceSessionToken": "${REGISTERED_INSTANCE_SESSION_TOKEN}",
       "invocationId": "invk-unknown",
+      "leaseToken": "lease-unknown-invocation",
       "value": {
         "ok": true
       }
