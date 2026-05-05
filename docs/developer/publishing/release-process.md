@@ -32,7 +32,8 @@
 
 - `pull_request` 与非 `preview` / `main` / `v*` 的普通分支 push 进入验证专用路径。
 - 路由层先计算改动范围，再决定是否运行 Host 主验证、`.NET` / `JS/TS` / `Python` SDK、Monitor 与 conformance 等 job。
-- `integration-full-gate`、`cross-platform-smoke`、release 资产准备与发布链路只在发布意图 ref 上执行。
+- `dev` 分支 push 保持验证专用路径；涉及 Host、SDK、发布脚本、workflow 或协议规范的改动会额外运行跨平台 smoke，涉及 Host、JS/TS SDK、Monitor、发布脚本、workflow 或协议规范的改动会额外运行 Monitor 验证。
+- `integration-full-gate`、release 资产准备与发布链路只在发布意图 ref 上执行。
 
 ## 2. 发布关键验证
 

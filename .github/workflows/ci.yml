@@ -86,6 +86,11 @@ jobs:
             is_release_intent="true"
           fi
 
+          is_dev_push="false"
+          if [[ "${EVENT_NAME}" == "push" && "${REF}" == "refs/heads/dev" ]]; then
+            is_dev_push="true"
+          fi
+
           base_sha=""
           head_sha="${SHA}"
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
@@ -234,6 +239,12 @@ jobs:
               run_sdk_conformance="true"
             fi
             if [[ "${changed_monitor}" == "true" || "${changed_sdk_js}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" ]]; then
+              run_monitor_validation="true"
+            fi
+            if [[ "${is_dev_push}" == "true" && ( "${changed_host}" == "true" || "${changed_sdk_dotnet}" == "true" || "${changed_sdk_js}" == "true" || "${changed_sdk_python}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ) ]]; then
+              run_cross_platform_smoke="true"
+            fi
+            if [[ "${is_dev_push}" == "true" && ( "${changed_host}" == "true" || "${changed_sdk_js}" == "true" || "${changed_monitor}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ) ]]; then
               run_monitor_validation="true"
             fi
           fi
