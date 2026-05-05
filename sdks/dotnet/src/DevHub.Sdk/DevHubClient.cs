@@ -11,6 +11,8 @@ namespace DevHub.Sdk;
 public sealed class DevHubClient : IAsyncDisposable
 {
     private readonly JsonRpcHttpTransport _transport;
+    private readonly object _registrationIdentityLock = new();
+    private readonly Dictionary<string, RegistrationIdentity> _registrationIdentities = new(StringComparer.Ordinal);
     private bool _disposed;
 
     private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, JsonRpcHttpTransport transport)
@@ -70,6 +72,7 @@ public sealed class DevHubClient : IAsyncDisposable
         try
         {
             connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+            RuntimeDiscovery.ValidateConnectionInfo(connectionInfo, "runtimeResolver");
         }
         catch (Exception exception)
         {
@@ -273,7 +276,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="instance">实例注册载荷。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>注册结果。调用方应通过返回值中的 <see cref="RegisterInstanceResult.Instance" /> 读取实例快照，并使用 <see cref="RegisterInstanceResult.InstanceSessionToken" /> 进行后续实例生命周期调用。</returns>
+    /// <returns>注册结果。返回值中的 <see cref="RegisterInstanceResult.Instance" /> 提供实例快照，<see cref="RegisterInstanceResult.InstanceSessionToken" /> 用于后续实例生命周期调用。</returns>
     public async Task<RegisterInstanceResult> RegisterInstanceAsync(
         AppInstanceRegistration instance,
         string password,
@@ -289,7 +292,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="password">实例密码。</param>
     /// <param name="launchId">Host 通过 <c>DEVHUB_LAUNCH_ID</c> 传入的启动请求标识；自主注册时为 <see langword="null"/>。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>注册结果。调用方应通过返回值中的 <see cref="RegisterInstanceResult.Instance" /> 读取实例快照，并使用 <see cref="RegisterInstanceResult.InstanceSessionToken" /> 进行后续实例生命周期调用。</returns>
+    /// <returns>注册结果。返回值中的 <see cref="RegisterInstanceResult.Instance" /> 提供实例快照，<see cref="RegisterInstanceResult.InstanceSessionToken" /> 用于后续实例生命周期调用。</returns>
     public async Task<RegisterInstanceResult> RegisterInstanceAsync(
         AppInstanceRegistration instance,
         string password,
@@ -299,6 +302,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        EnsureRegisterIdentityDoesNotDrift(instance);
         var result = await _transport.SendAsync(
             "hub.apps.registerInstance",
             RequestPayloadFactory.BuildRegisterInstanceParams(instance, password, launchId),
@@ -320,6 +324,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.EnsureAppIdValue(payload.Instance.AppId, "hub.apps.registerInstance.result", "instance.appId");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.RegisteredAtUtc, "hub.apps.registerInstance.result", "instance.registeredAtUtc");
         ResponsePayloadReader.EnsureTimestamp(payload.Instance.LastSeenUtc, "hub.apps.registerInstance.result", "instance.lastSeenUtc");
+        RememberRegisteredInstance(payload.Instance);
         return new RegisterInstanceResult
         {
             Instance = payload.Instance,
@@ -372,6 +377,7 @@ public sealed class DevHubClient : IAsyncDisposable
             cancellationToken);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
+        ForgetRegisteredInstance(instanceId);
     }
 
     /// <summary>
@@ -517,5 +523,59 @@ public sealed class DevHubClient : IAsyncDisposable
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    private void EnsureRegisterIdentityDoesNotDrift(AppInstanceRegistration instance)
+    {
+        var identity = RegistrationIdentity.From(instance);
+
+        lock (_registrationIdentityLock)
+        {
+            if (_registrationIdentities.TryGetValue(identity.InstanceId, out var existing) &&
+                (!string.Equals(existing.AppId, identity.AppId, StringComparison.Ordinal) ||
+                 !string.Equals(existing.Scope, identity.Scope, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException("当前客户端已将该 instanceId 关联到不同 appId 或 scope。", nameof(instance));
+            }
+        }
+    }
+
+    private void RememberRegisteredInstance(AppInstance instance)
+    {
+        var identity = RegistrationIdentity.From(instance);
+
+        lock (_registrationIdentityLock)
+        {
+            _registrationIdentities[identity.InstanceId] = identity;
+        }
+    }
+
+    private void ForgetRegisteredInstance(string instanceId)
+    {
+        var validatedInstanceId = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
+
+        lock (_registrationIdentityLock)
+        {
+            _registrationIdentities.Remove(validatedInstanceId);
+        }
+    }
+
+    private sealed record RegistrationIdentity(string InstanceId, string AppId, string Scope)
+    {
+        internal static RegistrationIdentity From(AppInstanceRegistration instance)
+        {
+            return new RegistrationIdentity(
+                ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(AppInstanceRegistration.InstanceId)),
+                ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(AppInstanceRegistration.AppId)),
+                ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope)));
+        }
+
+        internal static RegistrationIdentity From(AppInstance instance)
+        {
+            return new RegistrationIdentity(
+                ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(AppInstance.InstanceId)),
+                ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(AppInstance.AppId)),
+                ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope)));
+        }
     }
 }

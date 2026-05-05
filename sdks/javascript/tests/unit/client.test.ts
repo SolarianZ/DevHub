@@ -169,6 +169,30 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   expect(transport.send).toHaveBeenCalledTimes(1);
 });
 
+it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", async () => {
+  const connection = createConnectionInfo({
+    runtime: {
+      wsUrl: "ws://127.0.0.1:57231/ws?"
+    },
+    websocketEndpoint: "ws://127.0.0.1:57231/ws?"
+  });
+
+  await expect(DevHubClient.fromRuntime(
+    {
+      clientId: "unit-invalid-resolver-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => {
+        throw new Error("transportFactory should not be called.");
+      }
+    }
+  )).rejects.toThrow(/wsUrl/);
+});
+
 it("runtime 应返回脱敏快照", async () => {
   const connection = createConnectionInfo();
 
@@ -1352,6 +1376,44 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["notify", (client: DevHubClient) => client.notify({
+    appId: "test.app",
+    method: "test.notify",
+    target: {
+      scope: "",
+      instanceId: "a".repeat(257)
+    },
+    options: {
+      autoLaunch: false
+    }
+  })],
+  ["request", (client: DevHubClient) => client.request({
+    appId: "test.app",
+    method: "test.request",
+    target: {
+      scope: "",
+      instanceId: "a".repeat(257)
+    },
+    options: {
+      autoLaunch: false
+    }
+  })]
+])("%s 应在发送前拒绝超长 target.instanceId", async (_name, act) => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-target-instanceid-length-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(act(client)).rejects.toThrow(/target\.instanceId/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("launch should reject null waitForRegisterMs before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
@@ -2432,7 +2494,28 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   })).rejects.toThrow("hub.invoke.poll.result.items[0].args.callback 包含不支持的 JSON 类型。");
 });
 
-function createConnectionInfo() {
+type TestRuntimeConnectionInfo = ReturnType<typeof createBaseConnectionInfo>;
+
+function createConnectionInfo(overrides: {
+  runtime?: Partial<TestRuntimeConnectionInfo["runtime"]>;
+  rpcEndpoint?: string;
+  websocketEndpoint?: string;
+} = {}): TestRuntimeConnectionInfo {
+  const base = createBaseConnectionInfo();
+  const runtime = {
+    ...base.runtime,
+    ...overrides.runtime
+  };
+
+  return {
+    ...base,
+    runtime,
+    rpcEndpoint: overrides.rpcEndpoint ?? `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: overrides.websocketEndpoint ?? runtime.wsUrl
+  };
+}
+
+function createBaseConnectionInfo() {
   return {
     runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
     token: "token-fake",

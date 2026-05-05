@@ -428,6 +428,14 @@ def test_parse_app_instance_when_scope_violates_canonical_grammar_should_raise()
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
+def test_parse_app_instance_when_instance_id_exceeds_limit_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["instanceId"] = "a" * 257
+
+    with pytest.raises(RuntimeError, match=r"instanceId"):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -709,6 +717,7 @@ def test_parse_event_when_instance_payload_contains_instance_session_token_shoul
     [
         (lambda payload: payload.__setitem__("invocationId", "request-1"),),
         (lambda payload: payload["target"].__setitem__("instanceId", "inst-1."),),
+        (lambda payload: payload["target"].__setitem__("instanceId", "a" * 257),),
         (lambda payload: payload["target"].__setitem__("scope", ".workspace"),),
         (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
     ],
@@ -735,7 +744,7 @@ def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) ->
             "app.instance.registered",
             {
                 "appId": "Sample.App",
-                "instanceId": ".node-01",
+                "instanceId": "a" * 257,
                 "scope": "",
             },
         ),

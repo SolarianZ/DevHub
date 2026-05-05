@@ -78,6 +78,30 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   expect(session?.disposedReason).toBe("client_dispose");
 });
 
+it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", async () => {
+  const connection = createConnectionInfo({
+    runtime: {
+      wsUrl: " ws://127.0.0.1:57231/ws"
+    },
+    websocketEndpoint: " ws://127.0.0.1:57231/ws"
+  });
+
+  await expect(DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-resolver-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => {
+        throw new Error("sessionFactory should not be called.");
+      }
+    }
+  )).rejects.toThrow(/wsUrl/);
+});
+
 it("本地已放弃请求维护接口应直接委托 session 且不要求认证", async () => {
   const connection = createConnectionInfo();
   const ensureConnected = vi.fn(async () => {});
@@ -1428,7 +1452,28 @@ async function createRuntime(overrides?: {
   return dataDir;
 }
 
-function createConnectionInfo() {
+type TestRuntimeConnectionInfo = ReturnType<typeof createBaseConnectionInfo>;
+
+function createConnectionInfo(overrides: {
+  runtime?: Partial<TestRuntimeConnectionInfo["runtime"]>;
+  rpcEndpoint?: string;
+  websocketEndpoint?: string;
+} = {}): TestRuntimeConnectionInfo {
+  const base = createBaseConnectionInfo();
+  const runtime = {
+    ...base.runtime,
+    ...overrides.runtime
+  };
+
+  return {
+    ...base,
+    runtime,
+    rpcEndpoint: overrides.rpcEndpoint ?? `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: overrides.websocketEndpoint ?? runtime.wsUrl
+  };
+}
+
+function createBaseConnectionInfo() {
   return {
     runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
     token: "token-fake",

@@ -5,6 +5,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::{Client, Url};
 use serde_json::{json, Value};
 use std::fs;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -109,10 +110,16 @@ fn validate_runtime(runtime: &MonitorHubRuntime, source: &Path) -> Result<()> {
         &runtime.http_base_url,
         &["http", "https"],
         "hub.json.httpBaseUrl",
-        true,
+        RuntimeUrlShape::Origin,
         source,
     )?;
-    validate_runtime_url(&runtime.ws_url, &["ws", "wss"], "hub.json.wsUrl", false, source)?;
+    validate_runtime_url(
+        &runtime.ws_url,
+        &["ws", "wss"],
+        "hub.json.wsUrl",
+        RuntimeUrlShape::WebSocketEndpoint,
+        source,
+    )?;
 
     if runtime.token_file.trim().is_empty() {
         anyhow::bail!("hub.json.tokenFile 非法：{}", source.display());
@@ -145,10 +152,15 @@ fn validate_runtime_url(
     value: &str,
     schemes: &[&str],
     field_name: &str,
-    require_origin_only: bool,
+    shape: RuntimeUrlShape,
     source: &Path,
 ) -> Result<()> {
-    if value.trim().is_empty() || value.ends_with('/') {
+    if value.trim().is_empty()
+        || value.trim() != value
+        || value.ends_with('/')
+        || value.contains('?')
+        || value.contains('#')
+    {
         anyhow::bail!("{field_name} 非法：{}", source.display());
     }
 
@@ -162,21 +174,48 @@ fn validate_runtime_url(
         .host_str()
         .map(str::to_lowercase)
         .context(format!("{field_name} 缺少 host：{}", source.display()))?;
-    if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+    if !is_loopback_host(&host) {
         anyhow::bail!("{field_name} 必须使用回环地址：{}", source.display());
     }
 
-    if require_origin_only
-        && (!url.username().is_empty()
-            || url.password().is_some()
-            || url.path() != "/"
-            || url.query().is_some()
-            || url.fragment().is_some())
-    {
-        anyhow::bail!("{field_name} 必须是 origin：{}", source.display());
+    match shape {
+        RuntimeUrlShape::Origin => {
+            if !url.username().is_empty()
+                || url.password().is_some()
+                || url.path() != "/"
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                anyhow::bail!("{field_name} 必须是 origin：{}", source.display());
+            }
+        }
+        RuntimeUrlShape::WebSocketEndpoint => {
+            if !url.username().is_empty()
+                || url.password().is_some()
+                || url.path() != "/ws"
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                anyhow::bail!("{field_name} 必须是固定 /ws 端点：{}", source.display());
+            }
+        }
     }
 
     Ok(())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host == "localhost"
+        || host
+            .parse::<IpAddr>()
+            .map(|address| address.is_loopback())
+            .unwrap_or(false)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeUrlShape {
+    Origin,
+    WebSocketEndpoint,
 }
 
 fn build_discovery_client() -> Result<Client> {
@@ -401,6 +440,8 @@ mod tests {
     fn discover_runtime_rejects_http_base_url_that_is_not_origin() {
         let invalid_urls = [
             "http://127.0.0.1:4123/path",
+            " http://127.0.0.1:4123",
+            "http://127.0.0.1:4123 ",
             "http://127.0.0.1:4123?debug=true",
             "http://127.0.0.1:4123#fragment",
             "http://user@127.0.0.1:4123",
@@ -438,6 +479,86 @@ mod tests {
 
             fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
         }
+    }
+
+    #[test]
+    fn discover_runtime_rejects_ws_url_that_is_not_fixed_loopback_ws_endpoint() {
+        let invalid_urls = [
+            "ws://127.0.0.1:4123/events",
+            " ws://127.0.0.1:4123/ws",
+            "ws://127.0.0.1:4123/ws ",
+            "ws://127.0.0.1:4123/ws/",
+            "ws://127.0.0.1:4123/ws?",
+            "ws://127.0.0.1:4123/ws?debug=true",
+            "ws://127.0.0.1:4123/ws#",
+            "ws://127.0.0.1:4123/ws#fragment",
+            "ws://user@127.0.0.1:4123/ws",
+            "ws://192.168.1.2:4123/ws",
+            "http://127.0.0.1:4123/ws",
+        ];
+
+        for ws_url in invalid_urls {
+            let data_directory = create_temp_directory("runtime-invalid-ws-url");
+            let runtime_directory = data_directory.join("runtime");
+            fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+            let token_path = runtime_directory.join("token.txt");
+            fs::write(&token_path, "secret-token\n").expect("failed to write token");
+            let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+                "protocolVersion": 1,
+                "pid": 4321,
+                "httpBaseUrl": "http://127.0.0.1:4123",
+                "wsUrl": ws_url,
+                "tokenFile": token_path.display().to_string(),
+                "startedAtUtc": "2026-04-12T00:00:00Z",
+                "runtimeTuning": {
+                    "leaseSeconds": 30,
+                    "onlineThresholdSeconds": 15,
+                    "launchDedupeWindowSeconds": 5
+                }
+            }))
+            .expect("failed to serialize hub.json");
+            fs::write(runtime_directory.join("hub.json"), hub_json)
+                .expect("failed to write hub.json");
+
+            let error = discover_runtime(&data_directory).expect_err("expected invalid runtime");
+            assert!(
+                error.to_string().contains("hub.json.wsUrl"),
+                "unexpected error for {ws_url}: {error}"
+            );
+
+            fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+        }
+    }
+
+    #[test]
+    fn discover_runtime_accepts_ipv4_loopback_aliases() {
+        let data_directory = create_temp_directory("runtime-ipv4-loopback");
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        let token_path = runtime_directory.join("token.txt");
+        fs::write(&token_path, "secret-token\n").expect("failed to write token");
+        let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+            "protocolVersion": 1,
+            "pid": 4321,
+            "httpBaseUrl": "http://127.0.0.23:4123",
+            "wsUrl": "ws://127.0.0.23:4123/ws",
+            "tokenFile": token_path.display().to_string(),
+            "startedAtUtc": "2026-04-12T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 15,
+                "launchDedupeWindowSeconds": 5
+            }
+        }))
+        .expect("failed to serialize hub.json");
+        fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
+
+        let connection = discover_runtime(&data_directory).expect("expected runtime discovery");
+
+        assert_eq!(connection.runtime.http_base_url, "http://127.0.0.23:4123");
+        assert_eq!(connection.runtime.ws_url, "ws://127.0.0.23:4123/ws");
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
     }
 
     #[test]

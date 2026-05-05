@@ -25,11 +25,13 @@ from devhub_sdk import (
     VersionCompatibilityStatus,
     WebSocketJsonRpcSession,
     __version__,
+    create_instance_id,
     ensure_supported_event_type,
     resolve_data_directory,
 )
 from devhub_sdk.client import DevHubClientDependencies as InternalDevHubClientDependencies
 from devhub_sdk.events import DevHubEventsClientDependencies as InternalDevHubEventsClientDependencies
+from devhub_sdk.identity import create_instance_id as InternalCreateInstanceId
 from devhub_sdk._versioning import SDK_VERSION as InternalSdkVersion
 from devhub_sdk.constants import ALL_EVENT_TYPES as InternalAllEventTypes
 from devhub_sdk.constants import APP_DEFINITION_DELETED as InternalAppDefinitionDeleted
@@ -74,6 +76,7 @@ def test_package_root_should_export_runtime_and_transport_abstractions() -> None
     assert VersionCompatibilityStatus is InternalVersionCompatibilityStatus
     assert SDK_VERSION == InternalSdkVersion
     assert __version__ == InternalSdkVersion
+    assert create_instance_id is InternalCreateInstanceId
 
 
 def test_public_client_api_should_preserve_heartbeat_return_type_annotation() -> None:

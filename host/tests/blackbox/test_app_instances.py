@@ -489,6 +489,55 @@ class TestAppInstances(unittest.TestCase):
 
         return result
 
+    def test_register_instance_identity_mismatch_rejected(self):
+        """测试同一 instanceId 使用相同密码漂移到其他 appId/scope 时被拒绝"""
+        result = TestResult("测试同一 instanceId 身份漂移时被拒绝")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = self.generate_unique_instance_id()
+            app_id = "test-app-identity-guard"
+            correct_password = "correct-password"
+
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, app_id, 22355, password=correct_password),
+            )
+            if not self._validate_register_result(result, register_response):
+                return result
+
+            mismatch_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-identity-guard-updated", 22356, scope="scope-updated", password=correct_password),
+            )
+            if not RpcAssertions.expect_error(result, mismatch_response, -32002, "forbidden"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, mismatch_response, {"reason": "instance_identity_mismatch"}):
+                return result
+
+            list_response = client.call("hub.apps.listInstances", {"appId": app_id, "scope": None, "includeOffline": True})
+            if not RpcAssertions.expect_success(result, list_response, ["instances"]):
+                return result
+
+            instances = list_response["result"]["instances"]
+            target = next((inst for inst in instances if inst.get("instanceId") == instance_id), None)
+            if target is None:
+                result.mark_failure("❌ 身份漂移被拒绝后原实例丢失")
+                return result
+            if target.get("appId") != app_id or target.get("pid") != 22355 or target.get("scope") != "":
+                result.mark_failure(f"❌ 身份漂移被拒绝后实例被错误更新: {target}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._cleanup_test_instances([(locals().get("instance_id"), locals().get("correct_password"))], result)
+
+        return result
+
     def test_heartbeat_instance_session_token_mismatch_rejected(self):
         """测试心跳时 instanceSessionToken 不匹配会被拒绝"""
         result = TestResult("测试心跳时 instanceSessionToken 不匹配会被拒绝")
@@ -1162,6 +1211,7 @@ class TestAppInstances(unittest.TestCase):
             self.test_unregister_instance,
             self.test_unregister_nonexistent_instance,
             self.test_register_instance_password_mismatch_rejected,
+            self.test_register_instance_identity_mismatch_rejected,
             self.test_heartbeat_instance_session_token_mismatch_rejected,
             self.test_unregister_instance_session_token_mismatch_rejected,
             self.test_list_instances_with_params,

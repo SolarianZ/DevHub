@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from ._json import load_json_text
-from ._parsing import parse_hub_runtime
+from ._parsing import parse_hub_runtime, validate_runtime_endpoints
 from .models import DevHubClientOptions, RuntimeConnectionInfo
 
 
@@ -57,6 +57,17 @@ def discover_runtime(options: DevHubClientOptions) -> RuntimeConnectionInfo:
     """根据数据根目录发现 Hub 连接信息。"""
 
     return FileSystemRuntimeResolver().resolve(options)
+
+
+def validate_runtime_connection_info(connection_info: RuntimeConnectionInfo, source: str = "runtime_resolver") -> None:
+    """校验注入式运行时连接信息仍满足协议端点约束。"""
+
+    validate_runtime_endpoints(connection_info.runtime.http_base_url, connection_info.runtime.ws_url, source)
+
+    if connection_info.rpc_endpoint != f"{connection_info.runtime.http_base_url}/rpc":
+        raise RuntimeError(f"{source}.rpc_endpoint 非法。")
+    if connection_info.websocket_endpoint != connection_info.runtime.ws_url:
+        raise RuntimeError(f"{source}.websocket_endpoint 非法。")
 
 
 def resolve_data_directory(data_dir_override: str | None = None) -> Path:

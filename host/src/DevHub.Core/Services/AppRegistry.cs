@@ -122,14 +122,14 @@ public class AppRegistry : IDisposable
     /// <param name="instance">待注册的实例。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="registeredInstance">成功时返回最新实例快照。</param>
-    /// <param name="passwordMismatch">密码不匹配时返回 <c>true</c>。</param>
+    /// <param name="validationStatus">注册所有权校验结果。</param>
     /// <returns>成功注册或更新返回 <c>true</c>。</returns>
     public bool TryRegisterInstance(
         AppInstance instance,
         string password,
         out AppInstance registeredInstance,
         out string instanceSessionToken,
-        out bool passwordMismatch)
+        out InstanceRegistrationValidationStatus validationStatus)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -145,14 +145,21 @@ public class AppRegistry : IDisposable
                     if (!MatchesSecret(passwordState, password))
                     {
                         registeredInstance = CloneInstance(existing);
-                        passwordMismatch = true;
+                        validationStatus = InstanceRegistrationValidationStatus.PasswordMismatch;
+                        return false;
+                    }
+
+                    if (!IsSameRegisteredIdentity(existing, instance))
+                    {
+                        registeredInstance = CloneInstance(existing);
+                        validationStatus = InstanceRegistrationValidationStatus.IdentityMismatch;
                         return false;
                     }
 
                     var updatedInstance = RegisterOrUpdateInstance(instance);
                     instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
                     registeredInstance = CloneInstance(updatedInstance);
-                    passwordMismatch = false;
+                    validationStatus = InstanceRegistrationValidationStatus.Accepted;
                     return true;
                 }
 
@@ -173,7 +180,7 @@ public class AppRegistry : IDisposable
             var storedInstance = RegisterOrUpdateInstance(instance);
             instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
             registeredInstance = CloneInstance(storedInstance);
-            passwordMismatch = false;
+            validationStatus = InstanceRegistrationValidationStatus.Accepted;
             return true;
         }
     }
@@ -513,6 +520,12 @@ public class AppRegistry : IDisposable
         return instanceToRegister;
     }
 
+    private static bool IsSameRegisteredIdentity(AppInstance existing, AppInstance candidate)
+    {
+        return string.Equals(existing.AppId, candidate.AppId, StringComparison.Ordinal)
+            && string.Equals(existing.Scope, candidate.Scope, StringComparison.Ordinal);
+    }
+
     private static AppInstance CloneInstance(AppInstance instance)
     {
         return new AppInstance
@@ -642,4 +655,25 @@ public enum InstanceSessionValidationStatus
     /// 凭据不匹配。
     /// </summary>
     TokenMismatch
+}
+
+/// <summary>
+/// 实例注册所有权校验结果。
+/// </summary>
+public enum InstanceRegistrationValidationStatus
+{
+    /// <summary>
+    /// 注册请求被接受。
+    /// </summary>
+    Accepted,
+
+    /// <summary>
+    /// 实例密码不匹配。
+    /// </summary>
+    PasswordMismatch,
+
+    /// <summary>
+    /// 同一实例身份绑定的 appId 或 scope 不匹配。
+    /// </summary>
+    IdentityMismatch
 }

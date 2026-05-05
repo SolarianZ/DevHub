@@ -6,6 +6,7 @@ import type {
   RuntimeConnectionInfo,
   RuntimeResolver
 } from "./runtime.js";
+import { validateRuntimeConnectionInfo } from "./runtime-validation.js";
 import { JsonRpcHttpTransport } from "./http-transport.js";
 import {
   normalizeClientOptions,
@@ -117,6 +118,7 @@ export class DevHubClient {
     validateClientOptions(normalized);
     const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
+    validateRuntimeConnectionInfo(connection);
     const transport = dependencies.transportFactory?.(normalized, connection)
       ?? new JsonRpcHttpTransport(normalized, connection);
     return new DevHubClient(normalized, connection, transport);

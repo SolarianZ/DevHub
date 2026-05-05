@@ -37,6 +37,7 @@
             "string",
             "null"
           ],
+          "maxLength": 256,
           "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
         }
       }

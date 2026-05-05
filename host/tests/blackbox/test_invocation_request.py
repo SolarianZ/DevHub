@@ -616,6 +616,42 @@ class TestInvocationRequest(unittest.TestCase):
 
         return result
 
+    def test_request_overlong_target_instance_id_should_return_invalid_params(self):
+        """request 超长 target.instanceId 在路由前返回 invalid_params"""
+        result = TestResult("request 超长 target.instanceId 返回 invalid_params")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("request-overlong-target-id")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                target_instance_id="a" * 257,
+                options={
+                    "ttlMs": 300000,
+                    "waitTimeoutMs": 120000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="request-overlong-target-id",
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_target_instance"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+
+        return result
+
     def test_request_callee_error_should_return_invocation_failed(self):
         """REQ-005: callee respond_error 时 caller 返回 invocation_failed。"""
         result = TestResult("REQ-005 request callee error 返回 invocation_failed")
@@ -913,6 +949,7 @@ class TestInvocationRequest(unittest.TestCase):
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),
             self.test_request_target_instance_missing_should_return_specific_reason(),
+            self.test_request_overlong_target_instance_id_should_return_invalid_params(),
         ]
 
 

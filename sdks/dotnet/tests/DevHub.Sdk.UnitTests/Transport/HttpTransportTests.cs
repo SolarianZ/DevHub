@@ -656,6 +656,54 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenRegisteredInstanceIdDriftsWithinClient_ShouldThrowBeforeSending()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new CaptureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{" +
+                "\"jsonrpc\":\"2.0\"," +
+                "\"id\":\"req-register\"," +
+                "\"result\":{\"ok\":true,\"instance\":{\"instanceId\":\"inst-1\",\"appId\":\"sample.app\",\"scope\":\"scope-a\",\"pid\":12345,\"registeredAtUtc\":\"2026-03-09T00:00:00Z\",\"lastSeenUtc\":\"2026-03-09T00:00:01Z\",\"invoke\":{\"poll\":true,\"respond\":true}},\"instanceSessionToken\":\"session-1\"}}", Encoding.UTF8, "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-register");
+
+        _ = await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "sample.app",
+            Scope = "scope-a",
+            Pid = 12345,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "secret-1", CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "inst-1",
+            AppId = "other.app",
+            Scope = "scope-a",
+            Pid = 12345,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, "secret-1", CancellationToken.None));
+
+        Assert.Contains("instanceId", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task HttpTransport_WhenRegisterInstanceResultMissingLastSeenUtc_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -1120,8 +1168,11 @@ public sealed class HttpTransportTests : IDisposable
 
         public CapturedRequest? LastRequest { get; private set; }
 
+        public int RequestCount { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestCount++;
             LastRequest = new CapturedRequest(
                 request.RequestUri?.ToString() ?? string.Empty,
                 request.Headers.Authorization?.ToString() ?? string.Empty,

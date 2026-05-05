@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  buildInvokeParams,
   buildListInstancesParams,
   buildRegisterInstanceParams,
   buildValidateDefinitionParams
@@ -42,9 +43,48 @@ it("buildRegisterInstanceParams 应把 launchId 放入顶层 params", () => {
   });
 });
 
+it("buildRegisterInstanceParams 应接受适合 Hub 全局注册的生成式 instanceId", () => {
+  const generatedInstanceId = "sample.app.global.550e8400e29b41d4a716446655440000";
+
+  expect(buildRegisterInstanceParams({
+    ...createRegistration(),
+    instanceId: generatedInstanceId
+  }, "secret-1")).toMatchObject({
+    instance: {
+      instanceId: generatedInstanceId,
+      appId: "sample.app",
+      scope: ""
+    }
+  });
+});
+
+it("buildRegisterInstanceParams 应拒绝超过 256 字符的 instanceId", () => {
+  expect(() => buildRegisterInstanceParams({
+    ...createRegistration(),
+    instanceId: "a".repeat(257)
+  }, "secret-1")).toThrow(/instanceId/);
+});
+
 it("buildRegisterInstanceParams 应拒绝空 launchId", () => {
   expect(() => buildRegisterInstanceParams(createRegistration(), "secret-1", { launchId: "" }))
     .toThrow("launchId 不能为空。");
+});
+
+it.each([
+  ["notify", false],
+  ["request", true]
+])("buildInvokeParams 应拒绝 %s 的超长 target.instanceId", (_name, isRequest) => {
+  expect(() => buildInvokeParams({
+    appId: "sample.app",
+    method: "sample.method",
+    target: {
+      scope: "",
+      instanceId: "a".repeat(257)
+    },
+    options: {
+      autoLaunch: false
+    }
+  }, isRequest)).toThrow(/target\.instanceId/);
 });
 
 it("buildRegisterInstanceParams 应拒绝非对象 options", () => {

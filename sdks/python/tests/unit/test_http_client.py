@@ -127,6 +127,23 @@ def test_http_client_with_injected_resolver_and_transport_should_use_abstraction
     assert transport_factory.calls[0]["options"].client_id == "http-client"
 
 
+def test_http_client_with_injected_resolver_should_reject_invalid_websocket_endpoint() -> None:
+    connection_info = _create_connection_info(ws_url="ws://127.0.0.1:57231/ws?")
+    resolver = FakeRuntimeResolver(connection_info)
+    transport_factory = FakeHttpTransportFactory(FakeHttpTransport({"ok": True}))
+
+    with pytest.raises(RuntimeError, match="wsUrl"):
+        DevHubClient.from_runtime(
+            DevHubClientOptions(client_id="http-client"),
+            DevHubClientDependencies(
+                runtime_resolver=resolver,
+                transport_factory=transport_factory,
+            ),
+        )
+
+    assert len(transport_factory.calls) == 0
+
+
 def test_http_client_close_should_forward_to_transport_once() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
@@ -498,6 +515,25 @@ def test_http_client_get_instance_should_reuse_shared_payload_builder_validation
     assert transport.calls == []
 
 
+@pytest.mark.parametrize("method_name", ["notify", "request"])
+def test_http_client_invoke_should_validate_mutated_target_instance_id_before_sending(method_name: str) -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True, "invocationId": "invk-1", "value": None})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+    target = InvocationTarget(scope="", instance_id="inst-1")
+    target.instance_id = "a" * 257
+
+    with pytest.raises(ValueError, match="target.instance_id"):
+        getattr(client, method_name)(InvokeRequest(app_id="test.app", method="test.invoke", target=target))
+
+    assert transport.calls == []
+
+
 def test_http_client_delete_definition_should_send_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
@@ -814,7 +850,7 @@ def _launch_invalid_status_response(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _create_connection_info() -> RuntimeConnectionInfo:
+def _create_connection_info(ws_url: str = "ws://127.0.0.1:57231/ws") -> RuntimeConnectionInfo:
     return RuntimeConnectionInfo(
         runtime_directory="D:/runtime",
         token="token-fake",
@@ -822,7 +858,7 @@ def _create_connection_info() -> RuntimeConnectionInfo:
             protocol_version=1,
             pid=12345,
             http_base_url="http://127.0.0.1:57231",
-            ws_url="ws://127.0.0.1:57231/ws",
+            ws_url=ws_url,
             token_file="D:/runtime/token.txt",
             started_at_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
             runtime_tuning=HubRuntimeTuning(

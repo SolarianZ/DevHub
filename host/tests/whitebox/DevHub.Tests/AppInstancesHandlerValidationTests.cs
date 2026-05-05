@@ -809,6 +809,52 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenIdentityMismatchWithMatchingPassword_ShouldReturnForbiddenAndKeepStoredInstance()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var firstRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-identity-initial",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-identity-guard",
+                appId = "app.original",
+                scope = ScopeContract.Global,
+                pid = 211,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+        Assert.Null(firstRegister.Error);
+
+        var secondRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-identity-mismatch",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-identity-guard",
+                appId = "app.updated",
+                scope = "workspace-updated",
+                pid = 212,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+
+        AssertError(secondRegister, -32002, "forbidden");
+        var errorData = JsonSerializer.SerializeToElement(secondRegister.Error!.Data);
+        Assert.Equal("instance_identity_mismatch", errorData.GetProperty("reason").GetString());
+
+        var stored = appRegistry.GetInstance("inst-identity-guard");
+        Assert.NotNull(stored);
+        Assert.Equal("app.original", stored!.AppId);
+        Assert.Equal(ScopeContract.Global, stored.Scope);
+        Assert.Equal(211, stored.Pid);
+    }
+
+    [Fact]
     public async Task Impl_Unregister_WhenPasswordMismatch_ShouldReturnForbiddenAndKeepStoredInstance()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());

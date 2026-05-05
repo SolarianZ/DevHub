@@ -6,7 +6,7 @@
 
 - DevHub 是本机单用户守护进程，默认按“同一 OS 用户 + 同一数据根目录一个实例”运行；不同数据根目录可并行启动。
 - Hub 仅应监听回环地址（`127.0.0.1`、`localhost`，实现也可额外使用 `::1`）。
-- 客户端必须从 `hub.json` 动态发现 `httpBaseUrl` 与 `wsUrl`，禁止假设固定端口或固定 WebSocket 路径。
+- 客户端必须从 `hub.json` 动态发现 `httpBaseUrl` 与 `wsUrl`，禁止假设固定端口或固定地址；`wsUrl` 的端点形状固定为回环地址上的 `/ws`。
 - Hub 启动后会生成新的会话 token；重启或重新部署后，客户端需要重新读取 `token.txt`。
 
 ## 2. 数据根目录与配置
@@ -141,7 +141,7 @@ npm --prefix apps/monitor run tauri:dev
 启动后先检查 `hub.json`：
 
 - `httpBaseUrl` 不应包含末尾斜杠。
-- `wsUrl` 应为绝对 WebSocket URL，且不应包含末尾斜杠。
+- `wsUrl` 应为回环地址上的绝对 WebSocket URL，路径固定为 `/ws`，且不包含 query、fragment、userinfo、自定义路径或末尾斜杠。
 - `httpBaseUrl` 与 `wsUrl` 应指向回环地址。
 - `tokenFile` 应为绝对路径，且文件存在。
 

@@ -137,14 +137,29 @@ public class AppInstancesHandler : IRpcHandler
                     password,
                     out var registeredInstance,
                     out var instanceSessionToken,
-                    out var passwordMismatch))
+                    out var registrationValidationStatus))
             {
-                if (passwordMismatch)
+                if (registrationValidationStatus == InstanceRegistrationValidationStatus.PasswordMismatch)
                 {
                     _logger.LogWarning("注册应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instance.InstanceId, request.Id);
                     return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
                     {
                         reason = "instance_password_mismatch",
+                        instanceId = instance.InstanceId
+                    }));
+                }
+
+                if (registrationValidationStatus == InstanceRegistrationValidationStatus.IdentityMismatch)
+                {
+                    _logger.LogWarning(
+                        "注册应用程序实例失败: 实例身份不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
+                        instance.InstanceId,
+                        instance.AppId,
+                        instance.Scope,
+                        request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_identity_mismatch",
                         instanceId = instance.InstanceId
                     }));
                 }

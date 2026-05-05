@@ -173,7 +173,7 @@ python3 -m build --sdist --wheel --outdir temp/sdk-pack sdks/python
 1. 先阅读 [`Specification.md`](../../specification/protocol/Specification.md) 中对应章节，确认改动是否影响公开契约。
 2. 执行 `dotnet build host/DevHub.slnx -c Release`，确保当前工作区基础可构建。
 3. 使用 `dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release` 启动本地 Hub。
-4. 从数据根目录下的 `<dataDir>/runtime/hub.json` 动态读取 `httpBaseUrl`、`wsUrl` 与 `tokenFile`，禁止硬编码端口或地址。
+4. 从数据根目录下的 `<dataDir>/runtime/hub.json` 动态读取 `httpBaseUrl`、固定 `/ws` 端点形状的 `wsUrl` 与 `tokenFile`，禁止硬编码端口或地址。
 5. 完成改动后，至少执行单元测试与 smoke 集成测试；若涉及官方 SDK 集成测试夹具、SDK 维护脚本或多语言一致性，再执行 `python3 scripts/sdk/run_integration_full.py` 或最小相关 SDK 测试。
 6. 涉及 `.github/workflows/`、`scripts/release/` 或发布链路文档时，按 workflow 同级别执行本地验证，并同步核对 `preview` / `main` / `v*` 与普通分支 / PR 的路由条件、artifact 复用路径和手动发布入口说明。
 
@@ -200,7 +200,7 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 客户端必须以 `hub.json` 为权威来源读取下列字段：
 
 - `httpBaseUrl`
-- `wsUrl`
+- `wsUrl`，固定为回环地址上的 `/ws` 端点
 - `tokenFile`
 
 如需查看当前数据根目录、发现文件和 token 的最小诊断脚本，请参考 [`troubleshooting.md`](../operations/troubleshooting.md) 中“3.1 读取 `hub.json` 与 token”一节。

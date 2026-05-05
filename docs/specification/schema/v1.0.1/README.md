@@ -51,11 +51,11 @@
 
 本目录可作为 DevHub v1.0.1 的版本化协议资产；各文件与 [`Specification.md`](../../protocol/Specification.md) 保持同一套公开契约约束：
 
-- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验；该 schema 要求 `httpBaseUrl` 与 `wsUrl` 使用 loopback 地址、禁止末尾斜杠，并要求 `tokenFile` 为绝对路径。
+- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验；该 schema 要求 `httpBaseUrl` 使用 loopback origin，`wsUrl` 使用 loopback WebSocket 绝对 URL 且路径固定为 `/ws`，并要求 `tokenFile` 为绝对路径。
 - 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用 canonical identifier grammar 的非空字符串。`launch` 与 `launch.exePath` 均为可选结构；`launch.args` 为可选字符串数组，每个元素对应一个 argv 参数。
 - 读取实例镜像或注册返回值时，用 `app-instance.json` 校验；该 schema 明确禁止 `password` 与 `instanceSessionToken` 出现在公共实例结构中。
 - 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。该 schema 同样禁止 `password` 与 `instanceSessionToken` 混入 `params.instance`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
-- 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，`caller.clientSessionId` **必须**是 canonical UUID string。`delivery` 存在时必须包含 `leaseSeconds`、`attempt` 与 Hub 签发的 `leaseToken`。
+- 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，非 null `target.instanceId` 长度不超过 256 字符，`caller.clientSessionId` **必须**是 canonical UUID string。`delivery` 存在时必须包含 `leaseSeconds`、`attempt` 与 Hub 签发的 `leaseToken`。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
 - 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；其中 numeric `id` 只接受有符号 64 位整数范围内的整数值。该 schema 接受 `params: null`，但具体方法仍受 [`Specification.md`](../../protocol/Specification.md) 的方法级约束。
 - 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验。

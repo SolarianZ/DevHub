@@ -234,6 +234,63 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
+it("discoverRuntime 应原样接受固定 /ws 的 IPv4 loopback WebSocket 端点", async () => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-ipv4", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.2:47231",
+    wsUrl: "wss://127.0.0.2:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  const result = await discoverRuntime(dataDir);
+
+  expect(result.rpcEndpoint).toBe("http://127.0.0.2:47231/rpc");
+  expect(result.websocketEndpoint).toBe("wss://127.0.0.2:47231/ws");
+});
+
+it.each([
+  "ws://127.0.0.1:47231/ws?debug=true",
+  "ws://127.0.0.1:47231/ws?",
+  "ws://127.0.0.1:47231/ws#events",
+  "ws://127.0.0.1:47231/ws#",
+  " ws://127.0.0.1:47231/ws",
+  "ws://127.0.0.1:47231/ws ",
+  "ws://user:pass@127.0.0.1:47231/ws",
+  "ws://127.0.0.1:47231/events",
+  "ws://127.0.0.1:47231/ws/",
+  "http://127.0.0.1:47231/ws",
+  "ws://192.168.1.10:47231/ws"
+])("discoverRuntime 应拒绝非法 wsUrl 且不重写端点: %s", async (wsUrl) => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-ws", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl,
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/hub\.json\.wsUrl/);
+});
+
 it.each([
   "http://127.0.0.1:47231/",
   "http://127.0.0.1:47231/rpc",

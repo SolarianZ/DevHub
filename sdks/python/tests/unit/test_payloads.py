@@ -365,6 +365,11 @@ def test_get_instance_builder_should_validate_instance_id() -> None:
         build_get_instance_params(None)  # type: ignore[arg-type]
 
 
+def test_get_instance_builder_when_instance_id_exceeds_limit_should_raise() -> None:
+    with pytest.raises(ValueError, match="instance_id"):
+        build_get_instance_params("a" * 257)
+
+
 def test_list_definitions_builder_should_include_explicit_scope_filter() -> None:
     assert build_list_definitions_params(ListDefinitionsRequest(scope=None)) == {"scope": None}
     assert build_list_definitions_params(ListDefinitionsRequest(scope="", app_id="test.app")) == {
@@ -535,6 +540,20 @@ def test_register_instance_builder_when_instance_id_violates_spec_should_raise()
         )
 
 
+def test_register_instance_builder_when_instance_id_exceeds_limit_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="a" * 257,
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            "secret-1",
+        )
+
+
 def test_heartbeat_builder_should_include_instance_session_token() -> None:
     assert build_heartbeat_params("inst-1", "token-1") == {
         "instanceId": "inst-1",
@@ -574,6 +593,18 @@ def test_notify_builder_when_target_instance_id_is_not_string_should_raise() -> 
                 app_id="test.app",
                 method="test.notify",
                 target=InvocationTarget(scope="", instance_id=123),  # type: ignore[arg-type]
+            )
+        )
+
+
+@pytest.mark.parametrize("builder", [build_notify_params, build_request_params])
+def test_invoke_builder_when_target_instance_id_exceeds_limit_should_raise(builder) -> None:
+    with pytest.raises(ValueError, match="instance_id"):
+        builder(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.invoke",
+                target=InvocationTarget(scope="", instance_id="a" * 257),
             )
         )
 

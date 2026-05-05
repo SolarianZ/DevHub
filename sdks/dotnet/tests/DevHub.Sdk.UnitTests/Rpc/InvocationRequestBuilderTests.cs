@@ -248,6 +248,36 @@ public sealed class InvocationRequestBuilderTests
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(instanceId));
     }
 
+    [Fact]
+    public void GetInstanceBuilder_WhenInstanceIdTooLong_ShouldThrowArgumentException()
+    {
+        var instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1);
+
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildGetInstanceParams(instanceId));
+    }
+
+    [Fact]
+    public void InvocationTarget_WhenInstanceIdTooLong_ShouldThrowArgumentException()
+    {
+        var instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1);
+
+        Assert.Throws<ArgumentException>(() => new InvocationTarget
+        {
+            Scope = string.Empty,
+            InstanceId = instanceId
+        });
+    }
+
+    [Fact]
+    public void InvokeBuilders_WhenTargetInstanceIdMalformed_ShouldThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => new InvocationTarget
+        {
+            Scope = string.Empty,
+            InstanceId = "node:01"
+        });
+    }
+
     [Theory]
     [InlineData(" ")]
     [InlineData("\t")]
@@ -348,6 +378,7 @@ public sealed class InvocationRequestBuilderTests
         Assert.Throws<ArgumentException>(() => new InvokeRequest { AppId = "bad:app" });
         Assert.Throws<ArgumentException>(() => new InvocationTarget { Scope = null! });
         Assert.Throws<ArgumentException>(() => new InvocationTarget { InstanceId = "-inst" });
+        Assert.Throws<ArgumentException>(() => new InvocationTarget { InstanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) });
         Assert.Throws<ArgumentException>(() => new PollRequest { InstanceId = "inst-" });
         Assert.Throws<ArgumentException>(() => new RespondRequest { InstanceId = ".inst" });
 

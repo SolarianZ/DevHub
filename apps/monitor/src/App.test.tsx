@@ -550,6 +550,49 @@ describe("Monitor App", () => {
     }
   });
 
+  it("rejects malformed invocation target instance IDs in the RPC test workspace before sending", async () => {
+    const hostClient = createHostClient({
+      listDefinitions: vi.fn().mockResolvedValue([createDefinition()]),
+      listInstances: vi.fn().mockResolvedValue([createInstance()]),
+    });
+    const eventsClient = createEventsClient();
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+    const restoreFetch = replaceGlobalFetch(fetchMock);
+
+    hostClientFromRuntimeMock.mockResolvedValue(hostClient);
+    eventsClientFromRuntimeMock.mockResolvedValue(eventsClient);
+
+    try {
+      render(<App />);
+
+      await screen.findByRole("heading", { name: "主页" });
+      const user = userEvent.setup();
+      await openTestWorkspace(user);
+
+      const input = await findRpcTestRequestInput();
+      await replaceRpcTestRequest(user, input, JSON.stringify({
+        jsonrpc: "2.0",
+        id: "invalid-target",
+        method: "hub.invoke.notify",
+        params: {
+          appId: "demo.app",
+          target: {
+            scope: "",
+            instanceId: "node:01",
+          },
+          method: "demo.notify",
+        },
+      }, null, 2));
+
+      await user.click(screen.getByRole("button", { name: "发送请求" }));
+
+      await screen.findByText("target.instanceId 必须匹配 ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$，且长度不能超过 256。");
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      restoreFetch();
+    }
+  });
+
   it("keeps the caret position when editing the RPC draft in the middle of the text", async () => {
     const hostClient = createHostClient();
     const eventsClient = createEventsClient();
@@ -792,7 +835,9 @@ describe("Monitor App", () => {
       appId: "demo.app",
       scope: "global",
     });
-    expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("global");
+    await waitFor(() => {
+      expect((screen.getByLabelText("scope") as HTMLInputElement).value).toBe("global");
+    });
   });
 
   it("renders backend-reported incompatible hosts in discovery mode", async () => {

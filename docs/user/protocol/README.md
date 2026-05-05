@@ -129,7 +129,7 @@ JSON-RPC 信封约束：
 - `hub.apps.listDefinitions` 支持可选 `appId` 过滤，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global Definition，其他合法字符串按精确作用域过滤。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，并显式提供合法字符串 `scope`；仅按 `appId` 或使用 `scope: null` 都不是合法的 Definition 定位方式。
-- `hub.apps.registerInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；注册成功后，结果顶层会返回 `instanceSessionToken`，供 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 作为实例所有权凭据复用；该 token 不会出现在 `AppInstance`、`hub.apps.listInstances` 或事件载荷中。
+- `hub.apps.registerInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；`instanceId` 是 Hub 注册表全局实例身份，同一 `instanceId` 的再次注册必须保持相同 `appId + scope` 且 password 匹配；注册成功后，结果顶层会返回 `instanceSessionToken`，供 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 作为实例所有权凭据复用；该 token 不会出现在 `AppInstance`、`hub.apps.listInstances` 或事件载荷中。
 - `hub.apps.listInstances` 支持可选 `appId` 与 `includeOffline`，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global 实例，其他合法字符串按精确作用域过滤。
 - 只有 `hub.apps.listDefinitions.scope` 与 `hub.apps.listInstances.scope` 接受 `scope: null` 表示“不限制作用域”，且这两个接口也必须显式携带 `scope` 字段。
 - `hub.apps.launch.scope` 与 `hub.invoke.*.target.scope` 都必须显式给出合法字符串；`scope: ""` 表示仅限 Global，缺失 `scope` 或使用 `scope: null` 都属于非法请求。
@@ -139,7 +139,7 @@ JSON-RPC 信封约束：
 
 ## 4. WebSocket 鉴权与事件订阅
 
-WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。
+WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。该地址是回环地址上的固定 `/ws` 端点，不包含 query、fragment、userinfo、自定义路径或末尾斜杠。
 
 连接建立后：
 
@@ -202,7 +202,9 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - `hub.apps.validateDefinition` 中，`definition.scope` 缺失、为 `null` 或为非法字符串时，会进入定义校验失败结果，而不是 JSON-RPC `error`。
 - `hub.apps.upsertDefinition` 的业务校验失败走 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下携带 `errors: ValidationIssue[]`。
 - 除 `hub.apps.listDefinitions`、`hub.apps.listInstances`、`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` 的 Definition 校验分支外，其余带 `scope` / `target.scope` 的请求在缺失该字段或传入 `null` 时都返回 `-32602 invalid_params`。
+- `hub.invoke.notify` 与 `hub.invoke.request` 的非 null `target.instanceId` 必须满足 canonical `instanceId` grammar 与 256 字符长度上限；非法值返回 `-32602 invalid_params`。
 - 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
+- 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在 password 匹配但 `appId` 或 `scope` 与既有绑定不一致时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_identity_mismatch"`。
 - `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 在 `instanceSessionToken` 不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_session_token_mismatch"`。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 查找未知 Definition 时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 与 `error.data.scope` 中回传请求目标。
 - `hub.apps.launch` 在 `launch.exePath` 缺失或为空白字符串时返回 `-32020 launch_failed`，并携带 `error.data.reason="launch_config_missing"`；Definition 校验与写入接口允许保存这种启动配置。

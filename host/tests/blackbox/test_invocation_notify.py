@@ -315,6 +315,38 @@ class TestInvocationNotify(unittest.TestCase):
 
         return result
 
+    def test_notify_invalid_target_instance_id_should_return_invalid_params(self):
+        """notify 非法 target.instanceId 在路由前返回 invalid_params"""
+        result = TestResult("notify 非法 target.instanceId 返回 invalid_params")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("notify-invalid-target-id")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_notify(
+                app_id=app_id,
+                method="asset.rebuild",
+                target_instance_id="node:01",
+                queue_if_offline=False,
+                auto_launch=False,
+                request_id="notify-invalid-target-id",
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_target_instance"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            safe_remove(definition_path)
+
+        return result
+
     def test_notify_rpc_disabled_should_forbidden(self):
         """NOTIFY-003: capabilities.rpc=false 时 notify 返回 forbidden/rpc_disabled。"""
         result = TestResult("NOTIFY-003 notify rpc_disabled 门禁")
@@ -462,6 +494,7 @@ class TestInvocationNotify(unittest.TestCase):
             self.test_notify_with_autolaunch_true_and_queue_false_should_fail(),
             self.test_notify_with_ttl_less_than_1000_should_fail(),
             self.test_notify_target_instance_missing_should_return_specific_reason(),
+            self.test_notify_invalid_target_instance_id_should_return_invalid_params(),
             self.test_notify_rpc_disabled_should_forbidden(),
             self.test_notify_defaults_should_follow_spec_when_options_omitted(),
         ]

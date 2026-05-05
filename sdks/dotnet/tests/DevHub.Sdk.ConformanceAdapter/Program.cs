@@ -88,7 +88,9 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
         var reason = !string.IsNullOrWhiteSpace(explicitDataDir)
                      && string.Equals(Path.GetFileName(explicitDataDir), "runtime", StringComparison.OrdinalIgnoreCase)
             ? "runtime_subdirectory_rejected"
-            : "discovery_failed";
+            : exception.Message.Contains("hub.json", StringComparison.Ordinal)
+                ? "invalid_runtime"
+                : "discovery_failed";
         return new AdapterResult(
             "dotnet",
             ReadString(vector, "id"),

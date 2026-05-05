@@ -183,7 +183,7 @@ public sealed class AppInstance
     private string _scope = string.Empty;
 
     /// <summary>
-    /// 实例标识。
+    /// Hub 注册表内全局唯一的实例标识，长度不超过 256。
     /// </summary>
     [JsonPropertyName("instanceId")]
     public string InstanceId
@@ -287,7 +287,7 @@ public sealed class AppInstanceRegistration
     private string? _scope;
 
     /// <summary>
-    /// 实例标识。
+    /// Hub 注册表内全局唯一的实例标识，长度不超过 256。同一 instanceId 重注册时必须保持相同 appId 与 scope。
     /// </summary>
     [JsonPropertyName("instanceId")]
     public string InstanceId

@@ -18,7 +18,8 @@ it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () =>
     }
 
     return {
-      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver
+      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver,
+      validateRuntimeConnectionInfo: () => {}
     };
   });
 
@@ -82,7 +83,8 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
     }
 
     return {
-      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver
+      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver,
+      validateRuntimeConnectionInfo: () => {}
     };
   });
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import ip_address
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -74,7 +75,7 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     )
 
     ws_url = require_non_empty_string(root, "wsUrl", source)
-    _validate_loopback_url(ws_url, {"ws", "wss"}, source, "wsUrl")
+    _validate_websocket_url(ws_url, source)
 
     token_file = require_non_empty_string(root, "tokenFile", source)
     if not Path(token_file).is_absolute():
@@ -724,11 +725,11 @@ def _validate_loopback_url(
     origin_only: bool = False,
 ) -> None:
     parsed = urlparse(url)
-    if not url or url.endswith("/"):
+    if not url or url.strip() != url or url.endswith("/") or "?" in url or "#" in url:
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
     if parsed.scheme not in schemes or not parsed.hostname:
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
-    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+    if not _is_loopback_host(parsed.hostname):
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
     if origin_only and (
         parsed.username
@@ -739,3 +740,47 @@ def _validate_loopback_url(
         or parsed.params
     ):
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
+
+
+def _validate_websocket_url(url: str, source: str) -> None:
+    parsed = urlparse(url)
+    if (
+        not url
+        or url.strip() != url
+        or url.endswith("/")
+        or parsed.scheme not in {"ws", "wss"}
+        or not parsed.hostname
+        or not _is_loopback_host(parsed.hostname)
+        or "@" in parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.path != "/ws"
+        or "?" in url
+        or "#" in url
+        or parsed.query
+        or parsed.fragment
+        or parsed.params
+    ):
+        raise RuntimeError(f"hub.json.wsUrl 非法：{source}")
+
+
+def validate_runtime_endpoints(http_base_url: str, ws_url: str, source: str) -> None:
+    """校验运行时 HTTP 与 WebSocket 端点形状。"""
+
+    _validate_loopback_url(
+        http_base_url,
+        {"http", "https"},
+        source,
+        "httpBaseUrl",
+        origin_only=True,
+    )
+    _validate_websocket_url(ws_url, source)
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False

@@ -154,6 +154,70 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Notify_WhenTargetInstanceIdMalformed_ShouldReturnInvalidParamsBeforeRouting()
+    {
+        WriteDefinition("invocation-notify-invalid-target-instance", rpcEnabled: true);
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-invalid-target-instance",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "invocation-notify-invalid-target-instance",
+                target = new { scope = ScopeContract.Global, instanceId = "node:01" },
+                method = "task.run",
+                options = new
+                {
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_target_instance", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenTargetInstanceIdOverlong_ShouldReturnInvalidParamsBeforeRouting()
+    {
+        WriteDefinition("invocation-request-overlong-target-instance", rpcEnabled: true);
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-overlong-target-instance",
+            Method = HubRpcMethods.HubInvokeRequest,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "invocation-request-overlong-target-instance",
+                target = new
+                {
+                    scope = ScopeContract.Global,
+                    instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1)
+                },
+                method = "task.run",
+                options = new
+                {
+                    ttlMs = 300000,
+                    waitTimeoutMs = 120000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_target_instance", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task Impl_Poll_WhenParamsInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());

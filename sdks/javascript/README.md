@@ -51,3 +51,9 @@ console.log({
 - `unknown`：`hub.getVersion` 不可用且 `runtime.hubVersion` 缺失或无法解析，或 SDK / Host 版本字符串无法完成比较。
 
 `DevHubEventsClient` 的两个版本接口复用已鉴权 WebSocket 只读 RPC 通道，调用前需要先执行 `authenticate()`。
+
+## 实例注册标识
+
+`registerInstance()` 使用的 `instanceId` 是当前 Hub 注册表内的全局实例身份。该值必须满足公开 `instanceId` 语法，长度不超过 256 个字符。
+
+生成实例 ID 时建议包含 `appId`、`scope` 与随机或进程级后缀，例如 `sample.app.global.550e8400e29b41d4a716446655440000`。同一个 `instanceId` 只适合同一 `appId + scope` 的重注册使用，避免复用到其他 App 或 Scope。

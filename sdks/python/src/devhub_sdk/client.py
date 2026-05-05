@@ -64,7 +64,7 @@ from .models import (
     RuntimeConnectionInfo,
     VersionCompatibilityResult,
 )
-from .runtime import FileSystemRuntimeResolver, RuntimeResolver
+from .runtime import FileSystemRuntimeResolver, RuntimeResolver, validate_runtime_connection_info
 
 
 _ECHO_UNSET = object()
@@ -122,6 +122,7 @@ class DevHubClient:
         cloned_options.validate()
         resolved_dependencies = dependencies or DevHubClientDependencies()
         connection_info = resolved_dependencies.runtime_resolver.resolve(cloned_options)
+        validate_runtime_connection_info(connection_info)
         transport = resolved_dependencies.transport_factory(cloned_options, connection_info)
         return cls(cloned_options, connection_info, transport)
 

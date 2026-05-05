@@ -89,6 +89,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         try
         {
             connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+            RuntimeDiscovery.ValidateConnectionInfo(connectionInfo, "runtimeResolver");
         }
         catch (Exception exception)
         {

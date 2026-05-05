@@ -45,6 +45,14 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
+    public void DevHubRuntimeConnectionInfo_WhenRuntimeWsUrlHasQueryDelimiter_ShouldReject()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CreateConnectionInfo(wsUrl: "ws://127.0.0.1:57231/ws?"));
+
+        Assert.Contains("wsUrl", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DevHubClient_FromRuntime_WithInjectedLoggerFactory_ShouldEmitDiscoveryAndHttpDiagnosticsWithoutLeakingToken()
     {
         var connectionInfo = CreateConnectionInfo();
@@ -147,6 +155,14 @@ public sealed class PublicExtensionPointTests
     }
 
     [Fact]
+    public void DevHubRuntimeConnectionInfo_WhenRuntimeWsUrlHasLeadingWhitespace_ShouldReject()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() => CreateConnectionInfo(wsUrl: " ws://127.0.0.1:57231/ws"));
+
+        Assert.Contains("wsUrl", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DevHubEventsClient_FromRuntime_WithInjectedLoggerFactory_ShouldEmitRuntimeDiscoveryDiagnosticsWithoutLeakingToken()
     {
         var connectionInfo = CreateConnectionInfo();
@@ -199,7 +215,7 @@ public sealed class PublicExtensionPointTests
         Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, DevHubEventType.Parse("app.definition.deleted"));
     }
 
-    private static DevHubRuntimeConnectionInfo CreateConnectionInfo()
+    private static DevHubRuntimeConnectionInfo CreateConnectionInfo(string wsUrl = "ws://127.0.0.1:57231/ws")
     {
         var runtime = new HubRuntime
         {
@@ -207,7 +223,7 @@ public sealed class PublicExtensionPointTests
             HubVersion = ExpectedHubVersion,
             Pid = 12345,
             HttpBaseUrl = "http://127.0.0.1:57231",
-            WsUrl = "ws://127.0.0.1:57231/ws",
+            WsUrl = wsUrl,
             TokenFile = Path.Combine(Path.GetTempPath(), "devhub-sdk-public-seams-token.txt"),
             StartedAtUtc = DateTimeOffset.Parse("2026-03-09T00:00:00Z"),
             RuntimeTuning = new HubRuntimeTuning

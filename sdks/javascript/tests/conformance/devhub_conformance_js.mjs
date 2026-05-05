@@ -21,6 +21,8 @@ function normalizeDiscoveryError(explicitDataDir, error) {
   let reason = "discovery_failed";
   if (typeof explicitDataDir === "string" && path.basename(explicitDataDir).toLowerCase() === "runtime") {
     reason = "runtime_subdirectory_rejected";
+  } else if (String(error instanceof Error ? error.message : error).includes("hub.json")) {
+    reason = "invalid_runtime";
   }
 
   return {

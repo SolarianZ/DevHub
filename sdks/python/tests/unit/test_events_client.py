@@ -145,6 +145,25 @@ async def test_events_client_with_injected_resolver_and_session_should_use_abstr
 
 
 @pytest.mark.asyncio
+async def test_events_client_with_injected_resolver_should_reject_invalid_websocket_endpoint() -> None:
+    connection_info = _create_connection_info(ws_url=" ws://127.0.0.1:57231/ws")
+    resolver = FakeRuntimeResolver(connection_info)
+    session = FakeWsSession(responses={}, events=[])
+    session_factory = FakeWsSessionFactory(session)
+
+    with pytest.raises(RuntimeError, match="wsUrl"):
+        await DevHubEventsClient.from_runtime(
+            DevHubClientOptions(client_id="ws-client"),
+            DevHubEventsClientDependencies(
+                runtime_resolver=resolver,
+                session_factory=session_factory,
+            ),
+        )
+
+    assert len(session_factory.calls) == 0
+
+
+@pytest.mark.asyncio
 async def test_events_client_with_injected_session_should_support_ws_readable_methods() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
@@ -1096,7 +1115,7 @@ def _write_data_directory(tmp_path: Path, port: int) -> Path:
     return data_dir
 
 
-def _create_connection_info() -> RuntimeConnectionInfo:
+def _create_connection_info(ws_url: str = "ws://127.0.0.1:57231/ws") -> RuntimeConnectionInfo:
     return RuntimeConnectionInfo(
         runtime_directory="D:/runtime",
         token="token-fake",
@@ -1104,7 +1123,7 @@ def _create_connection_info() -> RuntimeConnectionInfo:
             protocol_version=1,
             pid=12345,
             http_base_url="http://127.0.0.1:57231",
-            ws_url="ws://127.0.0.1:57231/ws",
+            ws_url=ws_url,
             token_file="D:/runtime/token.txt",
             started_at_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
             runtime_tuning=HubRuntimeTuning(

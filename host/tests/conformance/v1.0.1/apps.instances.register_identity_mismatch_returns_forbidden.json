@@ -1,0 +1,98 @@
+{
+  "id": "apps.instances.register_identity_mismatch_returns_forbidden",
+  "caseId": "CONF-003",
+  "description": "已注册 instanceId 再次以相同 password 但不同 appId/scope 调用 hub.apps.registerInstance 时，必须返回 instance_identity_mismatch，且保留原状态。",
+  "transport": "http",
+  "setup": {
+    "instances": [
+      {
+        "state": "registered",
+        "password": "correct-password",
+        "instance": {
+          "instanceId": "apps-instance-identity-guard",
+          "appId": "apps.instance.identity.guard.app",
+          "scope": "workspace-identity-guard",
+          "pid": 32022,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.listInstances",
+        "requestId": "apps-instances-register-identity-mismatch-list",
+        "params": {
+          "appId": "apps.instance.identity.guard.app",
+          "includeOffline": true,
+          "scope": null
+        },
+        "expectedResult": {
+          "ok": true,
+          "instances": [
+            {
+              "instanceId": "apps-instance-identity-guard",
+              "appId": "apps.instance.identity.guard.app",
+              "scope": "workspace-identity-guard",
+              "pid": 32022,
+              "invoke": {
+                "poll": true,
+                "respond": true
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000040"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-identity-mismatch",
+    "method": "hub.apps.registerInstance",
+    "params": {
+      "password": "correct-password",
+      "instance": {
+        "instanceId": "apps-instance-identity-guard",
+        "appId": "apps.instance.identity.guard.updated",
+        "scope": "workspace-identity-updated",
+        "pid": 32023,
+        "invoke": {
+          "poll": true,
+          "respond": true
+        }
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-register-identity-mismatch",
+    "error": {
+      "code": -32002,
+      "message": "forbidden",
+      "data": {
+        "reason": "instance_identity_mismatch",
+        "instanceId": "apps-instance-identity-guard"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "error"
+  ]
+}

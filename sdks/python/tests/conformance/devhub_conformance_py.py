@@ -650,6 +650,8 @@ def normalize_discovery_error(explicit_data_dir: str | None, exc: Exception) -> 
     reason = "discovery_failed"
     if explicit_data_dir and Path(explicit_data_dir).name.lower() == "runtime":
         reason = "runtime_subdirectory_rejected"
+    elif "hub.json" in str(exc):
+        reason = "invalid_runtime"
 
     return {
         "reason": reason,

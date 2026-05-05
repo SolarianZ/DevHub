@@ -20,6 +20,9 @@ sdks/python/
 
 SDK 对外公开包版本常量 `SDK_VERSION` 与 `__version__`，可用于记录调用侧使用的 Python SDK 版本。
 
+SDK 提供 `create_instance_id(app_id, scope="")`，用于生成满足 canonical `instanceId` 语法且长度不超过 256 的实例标识。生成值包含 `appId`、`scope` 语义和随机后缀，适合在当前 Hub 注册表中作为全局实例身份使用。
+`register_instance(...)` 不会为不同 `appId + scope` 静默复用同一 `instanceId`；同一 Hub 注册表中的 `instanceId` 表示全局实例身份。
+
 同步 `DevHubClient` 与异步 `DevHubEventsClient` 都提供以下版本相关 API：
 
 - `get_host_version()`：调用 `hub.getVersion` 并返回当前 Host 版本字符串。

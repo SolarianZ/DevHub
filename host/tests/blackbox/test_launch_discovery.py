@@ -5,6 +5,7 @@ DevHub 启动与发现测试
 
 import os
 import json
+import ipaddress
 from urllib.parse import urlparse
 import time
 import tempfile
@@ -30,6 +31,15 @@ from tests.blackbox.test_base import (
 
 class TestLaunchDiscovery(unittest.TestCase):
     """启动与发现测试类"""
+
+    @staticmethod
+    def _is_loopback_host(host):
+        if host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
 
     @staticmethod
     def _read_open_log_tail(log_file, max_chars=4000):
@@ -190,17 +200,22 @@ class TestLaunchDiscovery(unittest.TestCase):
             # 验证 wsUrl 规范
             ws_url = hub_info["wsUrl"]
             result.add_detail(f"WebSocket 地址: {ws_url}")
-            # 检查是否为有效的 WebSocket URL
-            if not ws_url.startswith("ws://") and not ws_url.startswith("wss://"):
+            parsed_ws_url = urlparse(ws_url)
+            if parsed_ws_url.scheme not in ("ws", "wss") or not parsed_ws_url.hostname:
                 result.mark_failure(f"❌ wsUrl 必须是 ws:// 或 wss:// 开头的绝对 URL: {ws_url}")
                 return result
-            # 检查是否指向 loopback 地址
-            if not any(addr in ws_url for addr in ["127.0.0.1", "localhost", "::1"]):
+            if not self._is_loopback_host(parsed_ws_url.hostname):
                 result.mark_failure(f"❌ wsUrl 必须指向 loopback 地址: {ws_url}")
                 return result
-            # 检查是否有尾随斜杠
-            if ws_url.endswith("/"):
-                result.mark_failure(f"❌ wsUrl 不得有尾随斜杠: {ws_url}")
+            if (
+                parsed_ws_url.username
+                or parsed_ws_url.password
+                or parsed_ws_url.path != "/ws"
+                or parsed_ws_url.query
+                or parsed_ws_url.fragment
+                or ws_url.endswith("/")
+            ):
+                result.mark_failure(f"❌ wsUrl 必须是固定 /ws 端点，不能包含 query/fragment/userinfo 或尾随斜杠: {ws_url}")
                 return result
 
             # 验证 tokenFile 规范

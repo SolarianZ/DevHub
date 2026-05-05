@@ -118,10 +118,10 @@ public sealed class AppRegistryLifecycleTests
             "new-password",
             out var claimed,
             out var newSessionToken,
-            out var passwordMismatch);
+            out var validationStatus);
 
         Assert.True(registered);
-        Assert.False(passwordMismatch);
+        Assert.Equal(InstanceRegistrationValidationStatus.Accepted, validationStatus);
         Assert.NotEqual(legacy.RegisteredAtUtc, claimed.RegisteredAtUtc);
         Assert.Equal(clock.UtcNow, claimed.RegisteredAtUtc);
         Assert.Equal("app.claimed", claimed.AppId);
@@ -142,23 +142,51 @@ public sealed class AppRegistryLifecycleTests
             "correct-password",
             out var original,
             out _,
-            out var initialPasswordMismatch);
+            out var initialValidationStatus);
         Assert.True(initial);
-        Assert.False(initialPasswordMismatch);
+        Assert.Equal(InstanceRegistrationValidationStatus.Accepted, initialValidationStatus);
 
         var updated = registry.TryRegisterInstance(
             CreateInstance("inst-password", "app.claimed", "workspace-claimed", 402),
             "wrong-password",
             out var stored,
             out _,
-            out var passwordMismatch);
+            out var validationStatus);
 
         Assert.False(updated);
-        Assert.True(passwordMismatch);
+        Assert.Equal(InstanceRegistrationValidationStatus.PasswordMismatch, validationStatus);
         Assert.Equal(original.AppId, stored.AppId);
         Assert.Equal(original.Scope, stored.Scope);
         Assert.Equal(original.Pid, stored.Pid);
         Assert.Equal("app.original", registry.GetInstance("inst-password")!.AppId);
+    }
+
+    [Fact]
+    public void Impl_TryRegisterInstance_WhenIdentityMismatchWithMatchingPassword_ShouldKeepStoredInstance()
+    {
+        using var registry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var initial = registry.TryRegisterInstance(
+            CreateInstance("inst-identity", "app.original", null, 501),
+            "correct-password",
+            out var original,
+            out _,
+            out var initialValidationStatus);
+        Assert.True(initial);
+        Assert.Equal(InstanceRegistrationValidationStatus.Accepted, initialValidationStatus);
+
+        var updated = registry.TryRegisterInstance(
+            CreateInstance("inst-identity", "app.claimed", "workspace-claimed", 502),
+            "correct-password",
+            out var stored,
+            out _,
+            out var validationStatus);
+
+        Assert.False(updated);
+        Assert.Equal(InstanceRegistrationValidationStatus.IdentityMismatch, validationStatus);
+        Assert.Equal(original.AppId, stored.AppId);
+        Assert.Equal(original.Scope, stored.Scope);
+        Assert.Equal(original.Pid, stored.Pid);
+        Assert.Equal("app.original", registry.GetInstance("inst-identity")!.AppId);
     }
 
     [Fact]

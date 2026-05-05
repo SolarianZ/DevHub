@@ -473,7 +473,7 @@ public sealed class InvocationTarget
     }
 
     /// <summary>
-    /// 目标实例标识。
+    /// 目标实例标识。非空值必须满足实例标识规范，长度不超过 256。
     /// </summary>
     [JsonPropertyName("instanceId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

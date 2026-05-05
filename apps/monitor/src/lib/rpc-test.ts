@@ -19,6 +19,13 @@ export type RpcTestValidationResult =
   };
 
 const VALIDATION_SUCCESS_MESSAGE = "当前请求文本已通过校验。";
+const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
+const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
+const INSTANCE_ID_MAX_LENGTH = 256;
+const INVOCATION_METHODS_WITH_TARGET_INSTANCE_ID = new Set([
+  "hub.invoke.notify",
+  "hub.invoke.request",
+]);
 
 export function getRpcTestDraftPlaceholder(): string {
   return [
@@ -103,11 +110,50 @@ export function validateRpcTestEnvelope(payload: unknown): RpcTestValidationResu
     };
   }
 
+  if (INVOCATION_METHODS_WITH_TARGET_INSTANCE_ID.has(payload.method)) {
+    const invocationTargetValidation = validateInvocationTargetInstanceId(params);
+    if (!invocationTargetValidation.ok) {
+      return invocationTargetValidation;
+    }
+  }
+
   return {
     ok: true,
     envelope: payload as ValidatedRpcTestEnvelope,
     message: VALIDATION_SUCCESS_MESSAGE,
   };
+}
+
+function validateInvocationTargetInstanceId(params: unknown): { ok: true } | { ok: false; error: string } {
+  if (!isRecord(params)) {
+    return { ok: true };
+  }
+
+  const target = params.target;
+  if (!isRecord(target) || !Object.prototype.hasOwnProperty.call(target, "instanceId")) {
+    return { ok: true };
+  }
+
+  const instanceId = target.instanceId;
+  if (instanceId === null || instanceId === undefined) {
+    return { ok: true };
+  }
+
+  if (typeof instanceId !== "string" || !instanceId.trim()) {
+    return {
+      ok: false,
+      error: "target.instanceId 存在时必须是非空字符串或 null。",
+    };
+  }
+
+  if (instanceId.length > INSTANCE_ID_MAX_LENGTH || !CANONICAL_IDENTIFIER_REGEX.test(instanceId)) {
+    return {
+      ok: false,
+      error: `target.instanceId 必须匹配 ${CANONICAL_IDENTIFIER_PATTERN}，且长度不能超过 ${INSTANCE_ID_MAX_LENGTH}。`,
+    };
+  }
+
+  return { ok: true };
 }
 
 function isRequestId(value: unknown): value is RpcTestRequestId {

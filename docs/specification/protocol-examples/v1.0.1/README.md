@@ -39,7 +39,7 @@ JSON-RPC request `id` 的示例默认优先使用字符串，避免跨语言 num
 以下地址、凭据与运行时返回值由运行中的 Hub 决定；示例中的固定字面值仅用于说明报文形状：
 
 - HTTP 地址：`hub.json.httpBaseUrl`
-- WebSocket 地址：`hub.json.wsUrl`
+- WebSocket 地址：`hub.json.wsUrl`，该值为回环地址上的固定 `/ws` 端点
 - token：`hub.json.tokenFile`
 - Host 版本：`hub.getVersion.result.version`
 - `subscriptionId`：`hub.events.subscribe.result.subscriptionId`
@@ -133,5 +133,7 @@ WebSocket：
 - `listDefinitions` 与 `listInstances` 都演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅匹配 Global 的语义。除这两个列表查询外，本目录不会用 `scope: null` 表示 Global，也不会省略必须显式存在的 `scope` 字段。
 - `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。`invoke-poll.success.json` 展示 Hub 在 `delivery.leaseToken` 中签发的当前租约 token；`invoke-respond.request.json` 使用同一 token 完成本次交付。
 - `invoke-notify.notification.request.json` 演示的是省略 `id` 的 JSON-RPC notification。该用法在 HTTP 下对应空的 `200 OK` 响应体；如需获得 JSON-RPC `error` 或成功结果，必须改为发送带 `id` 的普通 request。
+- `invoke-notify.notification.request.json` 与 `invoke-request.request.json` 中的非 null `target.instanceId` 必须满足 canonical `instanceId` grammar 与 256 字符长度上限；非法值属于参数错误，不进入实例路由查找。
+- `register-instance.request.json` 中的 `instanceId` 是 Hub 注册表全局实例身份；同一 `instanceId` 的 re-register 必须保持相同 `appId + scope` 且 password 匹配。
 - 如需做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
 - 如需验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。

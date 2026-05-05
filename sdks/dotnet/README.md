@@ -27,6 +27,8 @@
 
 `AppInstance`、`ListInstancesAsync(...)`、`GetInstanceAsync(...)` 与事件载荷都不包含 `instanceSessionToken`。实例快照可直接序列化或缓存，不会混入所有权凭据。
 
+`instanceId` 是同一 Hub 注册表内的全局实例身份，值必须满足公开标识符规范且长度不超过 256。复用同一 `instanceId` 执行注册时，`appId` 与 `scope` 必须保持一致；同一 `DevHubClient` 实例能够识别的身份漂移会在本地请求发送前失败。
+
 ## 事件客户端恢复语义
 
 - 同一 `DevHubEventsClient` 实例会串行执行 `AuthenticateAsync(...)`，避免并发发送多条 `hub.ws.authenticate`。

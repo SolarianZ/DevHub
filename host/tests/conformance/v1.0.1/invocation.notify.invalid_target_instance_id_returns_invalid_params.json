@@ -1,0 +1,47 @@
+{
+  "id": "invocation.notify.invalid_target_instance_id_returns_invalid_params",
+  "caseId": "CONF-004",
+  "description": "SDK notify 指定 malformed target.instanceId 时，必须在路由前返回 invalid_params。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.notify.invalid-target-id",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.notify.invalid-target-id"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyInvalidTargetId",
+    "invokeRequest": {
+      "appId": "invoke.notify.invalid-target-id",
+      "method": "demo.notify.invalid-target-id",
+      "target": {
+        "instanceId": "node:01",
+        "scope": ""
+      },
+      "options": {
+        "queueIfOffline": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "error",
+    "actual": {
+      "code": -32602,
+      "message": "invalid_params"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "validation",
+    "sdk"
+  ]
+}

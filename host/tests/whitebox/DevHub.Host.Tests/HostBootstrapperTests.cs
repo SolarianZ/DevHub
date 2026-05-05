@@ -103,6 +103,19 @@ public sealed class HostBootstrapperTests : IDisposable
     }
 
     [Fact]
+    public void Impl_HostRuntimeContext_WhenWsUrlShapeInvalid_ShouldReject()
+    {
+        var context = new HostRuntimeContext();
+
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/events"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws?debug=true"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws?"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", " ws://127.0.0.1:7100/ws"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://user@127.0.0.1:7100/ws"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws/"));
+    }
+
+    [Fact]
     public void Impl_Cleanup_WhenHubRuntimeExists_ShouldRotateHubJsonToPrevHubJson()
     {
         using var context = CreateContext();

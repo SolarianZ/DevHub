@@ -181,7 +181,7 @@ JSON-RPC 信封约束：
 
 | 参数                      | 用途                                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `password`                | 当前 `instanceId` 的注册口令；首次注册时会与实例绑定，后续同一实例的再次注册仍需使用。               |
+| `password`                | 当前 `instanceId` 的注册口令；首次注册时会与实例绑定，后续同一 `appId + scope` 实例再次注册仍需使用。 |
 | `instance`                | 待注册实例的公开信息。                                                                               |
 | `instance.instanceId`     | 当前实例的稳定唯一标识，用于心跳、调用投递、注销和回包。                                             |
 | `instance.appId`          | 指明该实例属于哪个应用。                                                                             |
@@ -206,6 +206,7 @@ JSON-RPC 信封约束：
 
 - 成功结果顶层会返回新的 `instanceSessionToken`。
 - 每次成功的 re-register 都会轮换 `instanceSessionToken`；旧 token 随即失效。
+- 同一 `instanceId` 的 re-register 只允许保持相同 `appId + scope`；相同 password 但不同 `appId` 或 `scope` 会返回 `instance_identity_mismatch`。
 - `instanceSessionToken` 不会出现在 `AppInstance`、`hub.apps.getInstance`、`hub.apps.listInstances` 或 `app.instance.*` 事件载荷中。
 
 ### 3.11 `hub.apps.unregisterInstance`
@@ -285,7 +286,7 @@ JSON-RPC 信封约束：
 
 - `target` 必须是对象。
 - `target.scope` 必须是显式字符串。
-- `target.instanceId` 如果出现，必须是非空字符串或 `null`。
+- `target.instanceId` 如果出现，必须是 `null` 或满足 canonical `instanceId` grammar 且长度不超过 256 字符的非空字符串。
 - `options.ttlMs` 如果出现，必须是大于等于 `1000` 的整数。
 - 指定 `target.instanceId` 时，当前 Host 不允许显式传 `options.autoLaunch = true`。
 - 当前 Host 要求 `options.autoLaunch = true` 时同时满足 `options.queueIfOffline = true`。

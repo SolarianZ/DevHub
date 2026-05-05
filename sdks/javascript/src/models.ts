@@ -118,6 +118,13 @@ export interface RegisteredAppInstance extends AppInstance {
 }
 
 export interface AppInstanceRegistration {
+  /**
+   * Hub 注册表内的全局实例身份。
+   *
+   * 该值必须满足公开 instanceId 语法，长度不超过 256 个字符。
+   * 生成实例 ID 时应包含 appId、scope 与随机或进程级后缀等全局唯一成分，
+   * 避免在同一 Hub 中与其他 appId 或 scope 的实例发生身份碰撞。
+   */
   instanceId: string;
   appId: string;
   scope: string;

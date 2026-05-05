@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { NormalizedDevHubClientOptions } from "./models.js";
 import { parseDateTimeString } from "./validation.js";
+import { validateHttpBaseUrl, validateWebSocketUrl } from "./runtime-validation.js";
 
 export const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
 
@@ -196,49 +197,6 @@ function parseRuntimeTuning(payload: unknown, source: string): HubRuntimeTuning 
     onlineThresholdSeconds,
     launchDedupeWindowSeconds
   };
-}
-
-function validateHttpBaseUrl(value: string, source: string): void {
-  if (!value || value.endsWith("/")) {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || !isLoopbackHost(url.hostname)) {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-
-  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-}
-
-function validateWebSocketUrl(value: string, source: string): void {
-  if (!value || value.endsWith("/")) {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-
-  if ((url.protocol !== "ws:" && url.protocol !== "wss:") || !isLoopbackHost(url.hostname)) {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-}
-
-function isLoopbackHost(host: string): boolean {
-  const normalized = host.replace(/^\[(.*)\]$/, "$1").toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 async function fileExists(target: string): Promise<boolean> {
