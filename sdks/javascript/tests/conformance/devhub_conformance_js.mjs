@@ -231,7 +231,12 @@ async function runEvents(context) {
         const client = requireMapValue(httpClients, ensureString(step.client, `request.steps[${index}].client`), index, "http client");
         const instance = buildAppInstanceRegistration(ensureRecord(step.instance, `request.steps[${index}].instance`));
         const password = ensureString(step.password, `request.steps[${index}].password`);
-        const registered = await client.registerInstance(instance, password);
+        const launchId = tryResolveOptionalString(step, captures, index, "launchId");
+        const registered = await client.registerInstance(
+          instance,
+          password,
+          launchId === undefined ? undefined : { launchId }
+        );
         registeredInstances.push({
           clientName: ensureString(step.client, `request.steps[${index}].client`),
           instanceId: instance.instanceId,
@@ -761,6 +766,15 @@ function resolveCaptureValue(step, captures, index, fieldName) {
   }
 
   return step[fieldName];
+}
+
+function tryResolveOptionalString(step, captures, index, fieldName) {
+  const referenceField = `${fieldName}Ref`;
+  if (!(fieldName in step) && !(referenceField in step)) {
+    return undefined;
+  }
+
+  return ensureString(resolveCaptureValue(step, captures, index, fieldName), `request.steps[${index}].${fieldName}`);
 }
 
 function parseWsPayload(payload) {

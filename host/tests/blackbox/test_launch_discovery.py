@@ -5,6 +5,7 @@ DevHub 启动与发现测试
 
 import os
 import json
+from urllib.parse import urlparse
 import time
 import tempfile
 import subprocess
@@ -167,13 +168,23 @@ class TestLaunchDiscovery(unittest.TestCase):
             # 验证 httpBaseUrl 规范
             http_base_url = hub_info["httpBaseUrl"]
             result.add_detail(f"HTTP 地址: {http_base_url}")
-            # 检查是否指向 loopback 地址
-            if not any(addr in http_base_url for addr in ["127.0.0.1", "localhost", "::1"]):
+            parsed_http_base_url = urlparse(http_base_url)
+            # 检查是否为 HTTP(S) origin 且指向 loopback 地址
+            if parsed_http_base_url.scheme not in ("http", "https"):
+                result.mark_failure(f"❌ httpBaseUrl 必须是 http:// 或 https:// origin: {http_base_url}")
+                return result
+            if parsed_http_base_url.hostname not in ("127.0.0.1", "localhost", "::1"):
                 result.mark_failure(f"❌ httpBaseUrl 必须指向 loopback 地址: {http_base_url}")
                 return result
-            # 检查是否有尾随斜杠
-            if http_base_url.endswith("/"):
-                result.mark_failure(f"❌ httpBaseUrl 不得有尾随斜杠: {http_base_url}")
+            if (
+                parsed_http_base_url.username
+                or parsed_http_base_url.password
+                or parsed_http_base_url.path
+                or parsed_http_base_url.query
+                or parsed_http_base_url.fragment
+                or http_base_url.endswith("/")
+            ):
+                result.mark_failure(f"❌ httpBaseUrl 必须是 origin，不能包含 path/query/fragment/userinfo 或尾随斜杠: {http_base_url}")
                 return result
 
             # 验证 wsUrl 规范

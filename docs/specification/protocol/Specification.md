@@ -222,7 +222,7 @@ Hub **必须**在 `${dataDir}/runtime/hub.json` 写入发现文件。该文件**
 - 本规范的 `protocolVersion` **必须**为 `1`。
 - 在当前基线下，Host 与客户端 **必须**使用 §5.4 定义的 `hub.json` 架构。若 `hub.json` 字段集合为纠正核心目标偏差而确需变更，**必须**同步更新 §5.4、Schema、协议示例、SDK、测试与接入文档；兼容性处理规则见 §9.2。
 - `hubVersion` 若存在，**必须**为字符串；该字段用于发现阶段诊断，已连接状态下的权威运行版本查询以 §6.3.1A `hub.getVersion` 为准。
-- `httpBaseUrl` **禁止**包含末尾斜杠。
+- `httpBaseUrl` **必须**是 HTTP(S) origin，只能包含 scheme、回环 host 与可选端口；**禁止**包含 path、query、fragment、userinfo 或末尾斜杠。客户端派生 RPC 端点时固定追加 `/rpc`。
 - `wsUrl` **必须**是 WebSocket 绝对 URL （`ws://` 或 `wss://`）且**禁止**包含末尾斜杠。
 - `httpBaseUrl` 和 `wsUrl` **必须**指向回环地址（`127.0.0.1` 和/或 `localhost`；实现也**可以**额外使用 `::1`）。
 - `tokenFile` **必须**是绝对路径。
@@ -559,7 +559,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
     "httpBaseUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
+      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?$"
     },
     "wsUrl": {
       "type": "string",
@@ -810,6 +810,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ```json
 {
   "password": "sample-password-1",
+  "launchId": "launch-optional-from-DEVHUB_LAUNCH_ID",
   "instance": {
     "appId": "test.app",
     "instanceId": "inst-123",
@@ -823,6 +824,8 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 
 规范性要求：
 - `params.password` **必须**是非空字符串。
+- `params.password` **必须**是实例级高熵重注册秘密；调用方**必须**像保护 bearer token 一样保护该值，且**不得**写入日志、事件、公开实例快照或 Monitor 展示。
+- `params.launchId` 为可选顶层字段；若存在，**必须**是非空字符串，且表示被启动进程从 `DEVHUB_LAUNCH_ID` 环境变量读取并回传给 Hub 的启动绑定身份。
 - `params.instance` **必须**符合 `AppInstanceRegistration` (§5.2.1)。
 - `params.instance.appId` 与 `params.instance.instanceId` **必须**满足 canonical protocol identifier grammar。
 - `params.instance.password` 与 `params.instance.instanceSessionToken` **不得**出现；若任一字段存在，Hub **必须**返回 `-32602 invalid_params`，且**不得**创建或更新该实例注册状态。
@@ -830,14 +833,15 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - Hub **必须**在每次成功的 `registerInstance` 时更新 `lastSeenUtc`。
 - Hub **必须**在每次成功的 `registerInstance` / re-register 时生成新的、不透明的 `instanceSessionToken`，并立即使该 `instanceId` 先前持有的旧 token 失效。
 - Hub **必须**根据 §5.5 验证并解释 `scope`；若 `scope` 缺失、为 `null`、类型非法或未通过字符串验证，**必须**返回 `-32602 invalid_params`。
-- 未关联到活动 `launchId` 的 `hub.apps.registerInstance` **必须**视为实例自主注册路径；Hub **必须**仅依据请求参数合法性、实例密码/所有权规则和既有实例更新规则决定是否接受该注册。
+- `params.instance.meta.launchId` **不得**作为规范控制面字段；符合本规范的客户端、SDK、Monitor 与测试资产**必须**使用顶层 `params.launchId`。
+- 未携带顶层 `launchId` 或未关联到活动 `launchId` 的 `hub.apps.registerInstance` **必须**视为实例自主注册路径；Hub **必须**仅依据请求参数合法性、实例密码/所有权规则和既有实例更新规则决定是否接受该注册。
 - 对于上述自主注册路径，若同一 `appId` 已存在其他 scope 的 Definition，Hub **不得**再要求当前 `scope` 也存在精确匹配的 Definition，也**不得**因缺少同 scope Definition 返回 `-32014 app_definition_not_found`。
 - 当某个 `instanceId` 首次成功注册时，Hub **必须**把该次请求中的 `password` 与该 `instanceId` 绑定。
 - 当某个 `instanceId` 已存在时，Hub **必须**只在 `password` 匹配时允许更新该实例；若不匹配，**必须**返回 `-32002 forbidden` 且 `error.data.reason="instance_password_mismatch"`。
-- `instanceSessionToken` **必须**作为该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权凭据使用。
+- `instanceSessionToken` **必须**作为单次注册会话凭据，用于该实例后续 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll`、`hub.invoke.respond` 的所有权校验；进程重启后的同 `instanceId` 重注册授权**不得**要求提供旧 `instanceSessionToken`。
 - 自主注册成功的实例，即使其 `scope` 未被任何 Definition 覆盖，后续 `hub.apps.listInstances` 与 `hub.apps.getInstance` 仍**必须**返回该实例快照；Hub **不得**因此自动创建、复制或推导新的 Definition。
-- Definition inventory **必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist。
-- 当某次注册可被 Hub 关联到一条尚未完成的启动记录时，该注册**必须**通过被跟踪的 `launchId` 绑定回对应启动记录；仅凭“已有同 `appId + scope` 实例在线”**不得**视为该次启动已完成。
+- Definition inventory **必须**仅继续约束 `hub.apps.launch` 与 `hub.invoke.notify/request` 的 auto-launch 精确 `appId + scope` 解析，不得扩展为普通 `registerInstance` 的 scope allowlist；没有精确 `AppDefinition(appId, scope)` 时，自主注册只建立在线路由能力，不建立离线队列或 auto-launch 能力。
+- 当某次注册可被 Hub 关联到一条尚未完成的启动记录时，该注册**必须**通过顶层 `params.launchId` 绑定回对应启动记录；仅凭“已有同 `appId + scope` 实例在线”**不得**视为该次启动已完成。
 - 若该启动绑定注册的 `appId + scope` 与发起启动的 Definition 不一致，Hub **必须**拒绝本次注册，并返回 `-32002 forbidden` 且 `error.data.reason="definition_scope_mismatch"`；Hub **不得**让同 `appId` 的其他作用域 Definition 吸收该进程。
 - 发生上述启动绑定冲突时，任何等待该启动完成的 `hub.apps.launch` **必须**以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；相关 `error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope` 以便诊断。
 - Hub **不得**在成功结果或任何 `app.instance.*` 事件载荷中回传 `password`。
@@ -964,6 +968,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空白字符串，Hub **必须**在 `hub.apps.launch` 阶段返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` **不得**仅因 `launch.exePath` 是空白字符串而拒绝候选 Definition。
 - Hub **必须**读取精确命中的 `AppDefinition.launch.exePath`。若该 `appId + scope` 对应的 Definition 缺失：返回 `-32014 app_definition_not_found`，且 `error.data` **必须**至少包含 `appId` 与原始 canonical `scope`。若进程创建失败：返回 `-32020`。
 - 如果 `waitForRegisterMs > 0`，Hub **必须**只允许被跟踪 `launchId` 对应的注册满足等待中的启动；无关实例或缺少该 `launchId` 的同 scope 注册**不得**完成这次等待。
+- Hub **必须**通过被启动进程环境变量 `DEVHUB_LAUNCH_ID` 传递该启动记录的 `launchId`；被启动 App **必须**在 `hub.apps.registerInstance.params.launchId` 顶层字段回传该值。
 - 如果 `waitForRegisterMs > 0` 且被启动的进程在等待窗口内尝试注册到不同于启动 Definition 的 `scope`，Hub **必须**让该次启动以 `-32020 launch_failed` 失败，且 `error.data.reason="definition_scope_mismatch"`；`error.data` **应该**至少包含 `appId`、`expectedScope` 与 `actualScope`。
 
 #### 6.3.13 `hub.invoke.notify` (仅限 HTTP)
@@ -997,7 +1002,8 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `target.scope` 为其他合法字符串，Hub **必须**仅在该精确作用域中路由该调用。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
-- 当 auto-launch 因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
+- 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
+- 当 auto-launch 或离线队列因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
 
 #### 6.3.14 `hub.invoke.request` (仅限 HTTP)
 **参数**：结构与 `hub.invoke.notify` 相同，外加：
@@ -1033,7 +1039,8 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - `waitTimeoutMs` **必须** ≤ `ttlMs`。
 - 如果 `AppDefinition` 存在且 `capabilities.rpc` 为 `false`，Hub **必须**返回 `-32002 forbidden` 且 `error.data.reason="rpc_disabled"`。
 - 当 `options.autoLaunch = true` 且不存在在线匹配实例时，Hub **必须**只查找精确 `appId + scope` 的可启动 Definition。
-- 当 auto-launch 因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
+- 当 `options.queueIfOffline = true` 且不存在在线匹配实例时，Hub **必须**先要求存在精确 `AppDefinition(appId, scope)` 才能建立离线挂起路由。自主注册历史不得替代该 Definition 边界。
+- 当 auto-launch 或离线队列因缺少精确 `appId + scope` Definition 而无法建立挂起路由时，Hub **必须**返回 `-32010 instance_not_found`，且 `error.data` **应该**至少包含缺失的 `appId` 与请求中的 `scope` 以便诊断。
 - 当 HTTP caller 在 `hub.invoke.request` 完成前主动断连或取消请求时，Hub **必须**终止当前 HTTP 等待流程，但**不得**仅因 caller 断连而把该 invocation 推进到 `invocation_timeout` 或 `invocation_expired`；原有 `ttlMs` / `waitTimeoutMs` 预算 **必须**继续独立生效，因此后续 `poll/respond` 在预算仍有效时**可以**成功，在预算真正耗尽后仍**必须**按既有超时/过期语义拒绝迟到响应。
 
 #### 6.3.15 `hub.invoke.poll` (仅限 HTTP)

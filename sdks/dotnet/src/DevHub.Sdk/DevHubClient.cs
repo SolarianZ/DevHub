@@ -279,12 +279,29 @@ public sealed class DevHubClient : IAsyncDisposable
         string password,
         CancellationToken cancellationToken = default)
     {
+        return await RegisterInstanceAsync(instance, password, launchId: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.registerInstance</c>。
+    /// </summary>
+    /// <param name="instance">实例注册载荷。</param>
+    /// <param name="password">实例密码。</param>
+    /// <param name="launchId">Host 通过 <c>DEVHUB_LAUNCH_ID</c> 传入的启动请求标识；自主注册时为 <see langword="null"/>。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>注册结果。调用方应通过返回值中的 <see cref="RegisterInstanceResult.Instance" /> 读取实例快照，并使用 <see cref="RegisterInstanceResult.InstanceSessionToken" /> 进行后续实例生命周期调用。</returns>
+    public async Task<RegisterInstanceResult> RegisterInstanceAsync(
+        AppInstanceRegistration instance,
+        string password,
+        string? launchId,
+        CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
         var result = await _transport.SendAsync(
             "hub.apps.registerInstance",
-            RequestPayloadFactory.BuildRegisterInstanceParams(instance, password),
+            RequestPayloadFactory.BuildRegisterInstanceParams(instance, password, launchId),
             cancellationToken);
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JsonValueKind.Object),

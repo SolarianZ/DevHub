@@ -249,7 +249,8 @@ async Task<AdapterResult> RunEventsAsync(JsonElement context, JsonElement vector
                     var instance = BuildAppInstanceRegistration(step.GetProperty("instance"));
                     var password = Convert.ToString(ResolveCaptureValue(step, captures, index, "password"))
                         ?? throw new InvalidOperationException($"request.steps[{index}].password 不能为空。");
-                    var registered = await client.RegisterInstanceAsync(instance, password);
+                    var launchId = TryResolveCapturedString(step, captures, index, "launchId");
+                    var registered = await client.RegisterInstanceAsync(instance, password, launchId);
                     var instanceSessionToken = registered.InstanceSessionToken;
                     registeredInstances.Add((clientName, registered.Instance.InstanceId, instanceSessionToken));
                     if (step.TryGetProperty("captureAs", out var captureElement))

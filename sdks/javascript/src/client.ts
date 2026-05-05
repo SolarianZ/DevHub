@@ -28,6 +28,7 @@ import type {
   PingResult,
   PollRequest,
   PollResult,
+  RegisterInstanceOptions,
   RegisteredAppInstance,
   RequestResult,
   RespondRequest,
@@ -196,11 +197,15 @@ export class DevHubClient {
     );
   }
 
-  async registerInstance(instance: AppInstanceRegistration, password: string): Promise<RegisteredAppInstance> {
+  async registerInstance(
+    instance: AppInstanceRegistration,
+    password: string,
+    options?: RegisterInstanceOptions
+  ): Promise<RegisteredAppInstance> {
     this.throwIfDisposed();
     return await this.sendAndParse(
       "hub.apps.registerInstance.result",
-      buildRegisterInstanceParams(instance, password),
+      buildRegisterInstanceParams(instance, password, options),
       "hub.apps.registerInstance",
       parseRegisterInstanceResult
     );

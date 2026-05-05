@@ -7,6 +7,7 @@ import type {
   LaunchRequest,
   ListInstancesRequest,
   PollRequest,
+  RegisterInstanceOptions,
   RespondRequest
 } from "./models.js";
 import {
@@ -55,7 +56,8 @@ export function buildDeleteDefinitionParams(identity: AppDefinitionIdentity): Re
 
 export function buildRegisterInstanceParams(
   instance: AppInstanceRegistration,
-  password: string
+  password: string,
+  options?: RegisterInstanceOptions
 ): Record<string, unknown> {
   if (!instance) {
     throw new Error("instance cannot be empty.");
@@ -77,6 +79,8 @@ export function buildRegisterInstanceParams(
   const appId = ensureAppId(instance.appId, "appId");
   const scope = ensureScopedString(instance.scope, "scope");
   const normalizedPassword = ensureRequiredInputString(password, "password");
+  const normalizedOptions = ensureOptionalInputRecord(options, "options");
+  const normalizedLaunchId = ensureOptionalInputString(normalizedOptions?.launchId, "launchId", false);
 
   if (!instance.invoke) {
     throw new Error("invoke cannot be empty.");
@@ -105,6 +109,10 @@ export function buildRegisterInstanceParams(
 
   if (instance.meta !== undefined) {
     (payload.instance as Record<string, unknown>).meta = ensureJsonObject(instance.meta, "meta");
+  }
+
+  if (normalizedLaunchId !== undefined) {
+    payload.launchId = normalizedLaunchId;
   }
 
   return payload;

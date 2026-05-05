@@ -343,8 +343,11 @@ public class LaunchSpecTests : IDisposable
 
         var success = Assert.Single(logger.Entries, entry => entry.Message.Contains("映射 launch 成功", StringComparison.Ordinal));
         Assert.Equal("started", success.GetValue<string>("Status"));
-        Assert.False(string.IsNullOrWhiteSpace(success.GetValue<string>("LaunchId")));
+        Assert.False(success.HasValue("LaunchId"));
         Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().Id, success.GetValue<int>("Pid"));
+
+        var result = JsonSerializer.SerializeToElement(response.Result);
+        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("launchId").GetString()));
 
         var logText = string.Join(Environment.NewLine, logger.Entries.Select(entry => entry.Message));
         Assert.DoesNotContain(dedupeKey, logText, StringComparison.Ordinal);
@@ -646,6 +649,11 @@ public class LaunchSpecTests : IDisposable
             var match = Values.FirstOrDefault(value => string.Equals(value.Key, key, StringComparison.Ordinal));
             Assert.NotNull(match.Key);
             return match.Value is null ? default : (TValue)match.Value;
+        }
+
+        public bool HasValue(string key)
+        {
+            return Values.Any(value => string.Equals(value.Key, key, StringComparison.Ordinal));
         }
     }
 

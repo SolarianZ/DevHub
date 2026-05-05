@@ -258,7 +258,7 @@ describe("Monitor App real-host integration", () => {
       );
       expect(within(missingInstanceRow).getAllByText(MISSING_APP_ID)).toHaveLength(2);
       within(missingInstanceRow).getByText("scope：Global");
-      within(missingInstanceRow).getByText("未提供 App 描述");
+      within(missingInstanceRow).getByText("未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力");
 
       const existingDefinitionRow = getInventoryRowByActionLabel(
         definitionsSection,
@@ -352,7 +352,7 @@ describe("Monitor App real-host integration", () => {
       );
       expect(within(missingInstanceRowAfterUpdate).getAllByText(MISSING_APP_ID)).toHaveLength(2);
       within(missingInstanceRowAfterUpdate).getByText("scope：Global");
-      within(missingInstanceRowAfterUpdate).getByText("未提供 App 描述");
+      within(missingInstanceRowAfterUpdate).getByText("未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力");
 
       await user.click(within(missingInstanceRowAfterUpdate).getByRole("button", {
         name: getInstanceActionLabel(MISSING_INSTANCE_ID, MISSING_APP_ID, null),

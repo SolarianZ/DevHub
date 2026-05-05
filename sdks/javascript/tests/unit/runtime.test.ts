@@ -234,6 +234,33 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
+it.each([
+  "http://127.0.0.1:47231/",
+  "http://127.0.0.1:47231/rpc",
+  "http://127.0.0.1:47231?debug=true",
+  "http://127.0.0.1:47231#runtime",
+  "http://user:pass@127.0.0.1:47231"
+])("discoverRuntime 应拒绝非 origin 形式的 httpBaseUrl: %s", async (httpBaseUrl) => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl,
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30
+    }
+  });
+
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/httpBaseUrl/);
+});
+
 it("discoverRuntime should reject a non-string hubVersion when present", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");

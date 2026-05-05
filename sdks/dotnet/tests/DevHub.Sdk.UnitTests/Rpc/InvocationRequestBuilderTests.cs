@@ -400,7 +400,8 @@ public sealed class InvocationRequestBuilderTests
                     Respond = true
                 }
             },
-            "secret-1");
+            "secret-1",
+            "launch-1");
         var heartbeatPayload = RequestPayloadFactory.BuildHeartbeatParams("inst-1", "session-1");
         var unregisterPayload = RequestPayloadFactory.BuildUnregisterParams("inst-1", "session-1");
 
@@ -409,11 +410,59 @@ public sealed class InvocationRequestBuilderTests
         using var unregisterDocument = Serialize(unregisterPayload);
 
         Assert.Equal("secret-1", registerDocument.RootElement.GetProperty("password").GetString());
+        Assert.Equal("launch-1", registerDocument.RootElement.GetProperty("launchId").GetString());
         Assert.Equal(string.Empty, registerDocument.RootElement.GetProperty("instance").GetProperty("scope").GetString());
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("password", out _));
         Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("instanceSessionToken", out _));
+        Assert.False(registerDocument.RootElement.GetProperty("instance").TryGetProperty("launchId", out _));
         Assert.Equal("session-1", heartbeatDocument.RootElement.GetProperty("instanceSessionToken").GetString());
         Assert.Equal("session-1", unregisterDocument.RootElement.GetProperty("instanceSessionToken").GetString());
+    }
+
+    [Fact]
+    public void RegisterInstanceBuilder_WhenLaunchIdMissing_ShouldOmitLaunchId()
+    {
+        var registerPayload = RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
+            {
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Scope = string.Empty,
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            "secret-1");
+
+        using var document = Serialize(registerPayload);
+        Assert.False(document.RootElement.TryGetProperty("launchId", out _));
+        Assert.False(document.RootElement.GetProperty("instance").TryGetProperty("launchId", out _));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public void RegisterInstanceBuilder_WhenLaunchIdBlank_ShouldThrowArgumentException(string launchId)
+    {
+        Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRegisterInstanceParams(
+            new AppInstanceRegistration
+            {
+                InstanceId = "inst-1",
+                AppId = "test.app",
+                Scope = string.Empty,
+                Pid = Environment.ProcessId,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            "secret-1",
+            launchId));
     }
 
     [Fact]

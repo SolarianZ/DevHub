@@ -914,6 +914,66 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
   expect(fetchSpy).toHaveBeenCalledTimes(5);
 });
 
+it("registerInstance 应把 launchId 作为顶层 params 发送", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.registerInstance");
+    expect(body.params).toEqual({
+      password: "secret-1",
+      launchId: "launch-1",
+      instance: {
+        instanceId: "inst-1",
+        appId: "test.app",
+        scope: "",
+        pid: 12345,
+        invoke: {
+          poll: true,
+          respond: true
+        }
+      }
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      instance: {
+        instanceId: "inst-1",
+        appId: "test.app",
+        scope: "",
+        pid: 12345,
+        registeredAtUtc: "2026-03-09T00:00:00Z",
+        lastSeenUtc: "2026-03-09T00:00:00Z",
+        invoke: {
+          poll: true,
+          respond: true
+        }
+      },
+      instanceSessionToken: "session-1"
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-register-launch-id-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    scope: "",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "secret-1", { launchId: "launch-1" })).resolves.toMatchObject({
+    instanceId: "inst-1",
+    instanceSessionToken: "session-1"
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("registerInstance 应拒绝返回包含 password 的实例结果", async () => {
   const connection = createConnectionInfo();
 

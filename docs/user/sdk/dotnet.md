@@ -212,6 +212,7 @@ var token = registered.InstanceSessionToken;
 ```
 
 - `RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，其中 `Instance` 为 `AppInstance` 快照，`InstanceSessionToken` 为实例所有权凭据。
+- Host 启动的 App 从环境变量 `DEVHUB_LAUNCH_ID` 读取启动请求标识，并调用 `RegisterInstanceAsync(instance, password, launchId)` 将该值作为顶层 `launchId` 传回 Host；自主注册可省略该参数。
 - `password` 只作为 `RegisterInstanceAsync(..., password)` 的独立参数出现；`AppInstanceRegistration`、`AppInstance` 与 `app.instance.*` 事件载荷都不包含 `password` 或 `instanceSessionToken`。
 - `AppInstance`、`GetInstanceAsync(...)`、`ListInstancesAsync(...)` 与 `app.instance.*` 事件载荷都不包含 `instanceSessionToken`。
 - `HeartbeatAsync(...)`、`UnregisterInstanceAsync(...)`、`PollAsync(...)` 与 `RespondAsync(...)` 需要显式使用 `RegisterInstanceResult.InstanceSessionToken`。

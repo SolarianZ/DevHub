@@ -362,6 +362,40 @@ def test_register_instance_builder_should_place_password_at_top_level() -> None:
     assert "instanceSessionToken" not in payload["instance"]
 
 
+def test_register_instance_builder_should_place_launch_id_at_top_level() -> None:
+    payload = build_register_instance_params(
+        AppInstanceRegistration(
+            instance_id="inst-1",
+            app_id="test.app",
+            pid=1234,
+            invoke=InvokeCapability(poll=True, respond=True),
+            scope="",
+            meta={"launchId": "business-meta-value"},
+        ),
+        "secret-1",
+        launch_id="launch-1",
+    )
+
+    assert payload["launchId"] == "launch-1"
+    assert payload["instance"]["meta"] == {"launchId": "business-meta-value"}
+
+
+@pytest.mark.parametrize("launch_id", ["", "   ", 123])
+def test_register_instance_builder_when_launch_id_invalid_should_raise(launch_id: object) -> None:
+    with pytest.raises(ValueError, match=r"launch_id"):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            "secret-1",
+            launch_id=launch_id,  # type: ignore[arg-type]
+        )
+
+
 def test_register_instance_builder_when_instance_payload_carries_password_should_raise() -> None:
     with pytest.raises(ValueError, match=r"instance\.password"):
         build_register_instance_params(

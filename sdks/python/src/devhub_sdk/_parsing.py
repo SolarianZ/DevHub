@@ -65,7 +65,13 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
         raise RuntimeError(f"hub.json.pid 非法：{source}")
 
     http_base_url = require_non_empty_string(root, "httpBaseUrl", source)
-    _validate_loopback_url(http_base_url, {"http", "https"}, source, "httpBaseUrl")
+    _validate_loopback_url(
+        http_base_url,
+        {"http", "https"},
+        source,
+        "httpBaseUrl",
+        origin_only=True,
+    )
 
     ws_url = require_non_empty_string(root, "wsUrl", source)
     _validate_loopback_url(ws_url, {"ws", "wss"}, source, "wsUrl")
@@ -690,11 +696,27 @@ def parse_datetime(value: str, path: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _validate_loopback_url(url: str, schemes: set[str], source: str, field_name: str) -> None:
+def _validate_loopback_url(
+    url: str,
+    schemes: set[str],
+    source: str,
+    field_name: str,
+    *,
+    origin_only: bool = False,
+) -> None:
     parsed = urlparse(url)
     if not url or url.endswith("/"):
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
     if parsed.scheme not in schemes or not parsed.hostname:
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
     if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
+    if origin_only and (
+        parsed.username
+        or parsed.password
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.params
+    ):
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")

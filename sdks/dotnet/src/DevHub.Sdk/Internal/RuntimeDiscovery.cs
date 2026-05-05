@@ -162,7 +162,11 @@ internal static class RuntimeDiscovery
 
         if (!Uri.TryCreate(httpBaseUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-            !IsLoopbackHost(uri.Host))
+            !IsLoopbackHost(uri.Host) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            uri.AbsolutePath != "/" ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
         {
             throw new InvalidOperationException($"hub.json.httpBaseUrl 非法：{hubJsonPath}");
         }

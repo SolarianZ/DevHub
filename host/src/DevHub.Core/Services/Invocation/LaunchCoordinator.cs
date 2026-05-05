@@ -15,7 +15,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 {
     private const string DefaultDedupeKeyTemplate = "{appId}:{scopeOrGlobal}";
     public const string LaunchIdEnvironmentVariable = "DEVHUB_LAUNCH_ID";
-    public const string LaunchIdMetaKey = "launchId";
 
     private readonly object _launchSyncRoot = new();
     private readonly Dictionary<string, LaunchRecord> _dedupeRecords = new();

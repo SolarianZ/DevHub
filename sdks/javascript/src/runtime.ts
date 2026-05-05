@@ -213,6 +213,10 @@ function validateHttpBaseUrl(value: string, source: string): void {
   if ((url.protocol !== "http:" && url.protocol !== "https:") || !isLoopbackHost(url.hostname)) {
     throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
   }
+
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
+  }
 }
 
 function validateWebSocketUrl(value: string, source: string): void {

@@ -627,8 +627,9 @@ describe("Monitor App", () => {
     );
     expect(within(orphanInstanceRow).getAllByText(orphanAppId)).toHaveLength(2);
     within(orphanInstanceRow).getByText("scope：Global");
-    expect(within(orphanInstanceRow).getByText("未提供 App 描述").getAttribute("title"))
-      .toBe("未提供 App 描述");
+    const missingDefinitionText = "未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力";
+    expect(within(orphanInstanceRow).getByText(missingDefinitionText).getAttribute("title"))
+      .toBe(missingDefinitionText);
 
     const definitionsSection = getInventorySection("App 定义");
     const definitionRow = getInventoryRowByActionLabel(
@@ -1542,7 +1543,7 @@ describe("Monitor App", () => {
     );
     expect(within(missingInstanceRow).getAllByText("demo.app")).toHaveLength(2);
     within(missingInstanceRow).getByText("scope：Global");
-    within(missingInstanceRow).getByText("未提供 App 描述");
+    within(missingInstanceRow).getByText("未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力");
 
     const user = userEvent.setup();
     await user.click(within(missingInstanceRow).getByRole("button", {
@@ -1550,6 +1551,7 @@ describe("Monitor App", () => {
     }));
 
     await screen.findByRole("heading", { name: "定义不存在" });
+    screen.getByText(/该实例可在线路由；离线队列和自动启动需要精确 App Definition。/);
     screen.getByText("只读模式不允许保存或删除。");
   });
 });

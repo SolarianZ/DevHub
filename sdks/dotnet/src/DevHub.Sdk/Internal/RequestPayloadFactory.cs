@@ -53,7 +53,7 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password)
+    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password, string? launchId = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -89,11 +89,23 @@ internal static class RequestPayloadFactory
             instancePayload["meta"] = instance.Meta;
         }
 
-        return new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>
         {
             ["password"] = password,
             ["instance"] = instancePayload
         };
+
+        if (launchId is not null)
+        {
+            if (string.IsNullOrWhiteSpace(launchId))
+            {
+                throw new ArgumentException("LaunchId 不能为空白字符串。", nameof(launchId));
+            }
+
+            payload["launchId"] = launchId;
+        }
+
+        return payload;
     }
 
     internal static object BuildHeartbeatParams(string instanceId, string instanceSessionToken)

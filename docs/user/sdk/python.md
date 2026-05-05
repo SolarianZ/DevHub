@@ -69,7 +69,7 @@ print(ping.ok, ping.server_time_utc)
 
 ## 6. 常见交互场景
 
-定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。由 Host 启动的 App 可读取 `DEVHUB_LAUNCH_ID` 环境变量，并通过 `register_instance(..., launch_id=...)` 顶层参数回传启动绑定标识。
 
 ```python
 from devhub_sdk import (

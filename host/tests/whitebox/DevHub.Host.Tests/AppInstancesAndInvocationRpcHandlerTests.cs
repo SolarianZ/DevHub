@@ -113,6 +113,43 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.8")]
+    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenTopLevelLaunchIdIsInvalid_ShouldReturnInvalidParams()
+    {
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateAppInstancesHandler(appRegistry);
+
+        var response = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "register-invalid-launch-id",
+                new
+                {
+                    password = "sample-password",
+                    launchId = " ",
+                    instance = new
+                    {
+                        instanceId = "instance.invalid.launch",
+                        appId = "instance.invalid.launch.app",
+                        scope = ScopeContract.Global,
+                        pid = 7203,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params", "register-invalid-launch-id");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_launch_id", errorData.GetProperty("reason").GetString());
+        Assert.Null(appRegistry.GetInstance("instance.invalid.launch"));
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.8")]
     public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
     {
         const string appId = "managed.scope.app";
@@ -281,6 +318,194 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.8")]
+    public async Task Spec_6_3_8_AppInstancesAndLaunch_WhenTopLevelLaunchIdMatches_ShouldCompleteWaitingLaunch()
+    {
+        const string appId = "managed.bound.launch.success";
+        const string launchScope = "workspace-A";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        string? capturedLaunchId = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
+            {
+                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+            })
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "bound-launch-success",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 600
+                }),
+            CancellationToken.None);
+
+        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
+        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "bound-register-success",
+                new
+                {
+                    password = "bound-success-password",
+                    launchId = capturedLaunchId,
+                    instance = new
+                    {
+                        instanceId = "bound.success.instance",
+                        appId,
+                        scope = launchScope,
+                        pid = 7312,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+
+        var launchResponse = await launchTask;
+        Assert.Null(launchResponse.Error);
+        var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
+        Assert.Equal("started", launchResult.GetProperty("status").GetString());
+        Assert.Equal(capturedLaunchId, launchResult.GetProperty("launchId").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.8")]
+    public async Task Spec_6_3_8_AppInstancesAndLaunch_WhenMetaLaunchIdIsPresent_ShouldRemainUntracked()
+    {
+        const string appId = "managed.meta-launch-ignored";
+        const string launchScope = "workspace-A";
+        const string selfRegisteredScope = "workspace-B";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        string? capturedLaunchId = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
+            {
+                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+            })
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "meta-ignored-launch",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 250
+                }),
+            CancellationToken.None);
+
+        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
+        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "meta-ignored-register",
+                new
+                {
+                    password = "meta-ignored-password",
+                    instance = new
+                    {
+                        instanceId = "meta.ignored.instance",
+                        appId,
+                        scope = selfRegisteredScope,
+                        pid = 7313,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        },
+                        meta = new
+                        {
+                            launchId = capturedLaunchId
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+        Assert.Equal(selfRegisteredScope, registerResult.GetProperty("instance").GetProperty("scope").GetString());
+
+        var launchResponse = await launchTask;
+        Assert.Null(launchResponse.Error);
+        var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
+        Assert.Equal("starting", launchResult.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Spec")]
+    [Trait("SpecRef", "6.3.8")]
     public async Task Spec_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
     {
         const string appId = "managed.bound.launch";
@@ -345,6 +570,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     password = "bound-password",
+                    launchId = capturedLaunchId,
                     instance = new
                     {
                         instanceId = "bound.instance",
@@ -355,10 +581,6 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                         {
                             poll = true,
                             respond = true
-                        },
-                        meta = new
-                        {
-                            launchId = capturedLaunchId
                         }
                     }
                 }),

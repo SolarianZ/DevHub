@@ -633,6 +633,7 @@ def test_http_client_instance_lifecycle_methods_should_forward_instance_session_
             scope="",
         ),
         "secret-1",
+        launch_id="launch-1",
     )
     transport.response = {
         "ok": True,
@@ -644,6 +645,7 @@ def test_http_client_instance_lifecycle_methods_should_forward_instance_session_
 
     assert registered.instance_session_token == "token-1"
     assert transport.calls[0]["params"]["password"] == "secret-1"
+    assert transport.calls[0]["params"]["launchId"] == "launch-1"
     assert "password" not in transport.calls[0]["params"]["instance"]
     assert transport.calls[1] == {
         "method": "hub.apps.heartbeat",

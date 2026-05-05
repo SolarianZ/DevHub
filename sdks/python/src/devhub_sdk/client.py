@@ -203,10 +203,15 @@ class DevHubClient:
         if not require_bool(root, "ok", "hub.apps.deleteDefinition.result"):
             raise RuntimeError("hub.apps.deleteDefinition.result 返回结果非法。")
 
-    def register_instance(self, instance: AppInstanceRegistration, password: str) -> AppInstance:
+    def register_instance(
+        self,
+        instance: AppInstanceRegistration,
+        password: str,
+        launch_id: str | None = None,
+    ) -> AppInstance:
         """调用 `hub.apps.registerInstance`。"""
 
-        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password))
+        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password, launch_id))
         return parse_register_instance_result(result, path="hub.apps.registerInstance.result")
 
     def heartbeat(self, instance_id: str, instance_session_token: str) -> datetime:

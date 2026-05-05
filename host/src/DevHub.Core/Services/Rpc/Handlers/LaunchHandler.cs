@@ -95,14 +95,13 @@ public class LaunchHandler : IRpcHandler
         }
 
         _logger.LogInformation(
-            "映射 launch 成功，RequestId: {RequestId}, AppId: {AppId}, Scope: {Scope}, DedupeKeyPresent: {DedupeKeyPresent}, WaitForRegisterMs: {WaitForRegisterMs}, Status: {Status}, LaunchId: {LaunchId}, Pid: {Pid}",
+            "映射 launch 成功，RequestId: {RequestId}, AppId: {AppId}, Scope: {Scope}, DedupeKeyPresent: {DedupeKeyPresent}, WaitForRegisterMs: {WaitForRegisterMs}, Status: {Status}, Pid: {Pid}",
             request.Id,
             appId,
             scope,
             dedupeKeyPresent,
             waitForRegisterMs,
             launchResult.Status,
-            launchResult.LaunchId,
             launchResult.Pid);
 
         return new JsonRpcResponse

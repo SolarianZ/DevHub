@@ -127,6 +127,10 @@ export interface AppInstanceRegistration {
   instanceSessionToken?: never;
 }
 
+export interface RegisterInstanceOptions {
+  launchId?: string;
+}
+
 export interface LaunchRequest {
   appId: string;
   scope: string;

@@ -225,6 +225,11 @@ def test_runtime_discovery_when_optional_hub_version_is_null_should_raise(tmp_pa
     ("property_name", "value"),
     [
         ("httpBaseUrl", "http://127.0.0.1:47231/"),
+        ("httpBaseUrl", "http://user@127.0.0.1:47231"),
+        ("httpBaseUrl", "http://user:password@127.0.0.1:47231"),
+        ("httpBaseUrl", "http://127.0.0.1:47231/rpc"),
+        ("httpBaseUrl", "http://127.0.0.1:47231?rpc=1"),
+        ("httpBaseUrl", "http://127.0.0.1:47231#rpc"),
         ("httpBaseUrl", "http://192.168.1.10:47231"),
         ("wsUrl", "ws://127.0.0.1:47231/ws/"),
         ("wsUrl", "ws://example.com:47231/ws"),

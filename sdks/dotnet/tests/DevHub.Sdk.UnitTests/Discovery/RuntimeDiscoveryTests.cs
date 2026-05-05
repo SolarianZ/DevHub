@@ -243,6 +243,10 @@ public sealed class RuntimeDiscoveryTests : IDisposable
 
     [Theory]
     [InlineData("http://127.0.0.1:47231/", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://127.0.0.1:47231/base", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://127.0.0.1:47231?rpc=1", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://127.0.0.1:47231#rpc", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
+    [InlineData("http://user@127.0.0.1:47231", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
     [InlineData("http://devhub.example.com:47231", "ws://127.0.0.1:47231/ws", "httpBaseUrl")]
     [InlineData("http://127.0.0.1:47231", "ws://127.0.0.1:47231/ws/", "wsUrl")]
     [InlineData("http://127.0.0.1:47231", "wss://devhub.example.com/ws", "wsUrl")]

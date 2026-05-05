@@ -115,16 +115,19 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
-            var launchId = TryGetLaunchId(instance.Meta);
+            if (!TryGetOptionalLaunchId(paramsElement, request.Id, out var launchId, out var launchIdErrorData))
+            {
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", launchIdErrorData));
+            }
+
             var launchBindingValidation = _launchRegistrationTracker.ValidateRegistration(launchId, instance.AppId, instance.Scope);
             if (launchBindingValidation.Status == LaunchRegistrationValidationStatus.Mismatched)
             {
                 _logger.LogWarning(
-                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, LaunchId: {LaunchId}, RequestId: {RequestId}",
+                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
                     instance.InstanceId,
                     instance.AppId,
                     instance.Scope,
-                    launchId,
                     request.Id);
                 return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, launchBindingValidation.ErrorData));
             }
@@ -584,19 +587,33 @@ public class AppInstancesHandler : IRpcHandler
         });
     }
 
-    private static string? TryGetLaunchId(Dictionary<string, object?>? meta)
+    private bool TryGetOptionalLaunchId(JsonElement paramsElement, object? requestId, out string? launchId, out object? errorData)
     {
-        if (meta is null || !meta.TryGetValue(LaunchCoordinator.LaunchIdMetaKey, out var value) || value is null)
+        launchId = null;
+        errorData = null;
+
+        if (!paramsElement.TryGetProperty("launchId", out var launchIdElement))
         {
-            return null;
+            return true;
         }
 
-        return value switch
+        if (launchIdElement.ValueKind != JsonValueKind.String)
         {
-            string launchId when !string.IsNullOrWhiteSpace(launchId) => launchId,
-            JsonElement { ValueKind: JsonValueKind.String } element when !string.IsNullOrWhiteSpace(element.GetString()) => element.GetString(),
-            _ => null
-        };
+            _logger.LogWarning("hub.apps.registerInstance参数无效: launchId 必须为非空字符串, RequestId: {RequestId}", requestId);
+            errorData = new { reason = "invalid_launch_id" };
+            return false;
+        }
+
+        var value = launchIdElement.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: launchId 必须为非空字符串, RequestId: {RequestId}", requestId);
+            errorData = new { reason = "invalid_launch_id" };
+            return false;
+        }
+
+        launchId = value;
+        return true;
     }
 
     private static JsonRpcResponse InstanceNotFound(object? id, string instanceId)

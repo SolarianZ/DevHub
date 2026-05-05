@@ -88,7 +88,11 @@ def build_delete_definition_params(app_id: str, scope: str) -> dict[str, Any]:
     }
 
 
-def build_register_instance_params(instance: AppInstanceRegistration, password: str) -> dict[str, Any]:
+def build_register_instance_params(
+    instance: AppInstanceRegistration,
+    password: str,
+    launch_id: str | None = None,
+) -> dict[str, Any]:
     """构造 `hub.apps.registerInstance` 参数。"""
 
     if instance is None:
@@ -122,10 +126,18 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     if instance.meta is not None:
         meta = _ensure_json_object(instance.meta, "meta")
         payload["meta"] = meta
-    return {
+    params = {
         "password": normalized_password,
         "instance": payload,
     }
+    normalized_launch_id = require_optional_string(
+        launch_id,
+        "launch_id",
+        allow_empty=False,
+    )
+    if normalized_launch_id is not None:
+        params["launchId"] = normalized_launch_id
+    return params
 
 
 def build_heartbeat_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:

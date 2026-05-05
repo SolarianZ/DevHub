@@ -282,7 +282,12 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                     index,
                     default=_default_instance_password(instance.instance_id),
                 )
-                registered = require_http_client(http_clients, client_name, index).register_instance(instance, password)
+                launch_id = resolve_launch_id(step, captures, index)
+                registered = require_http_client(http_clients, client_name, index).register_instance(
+                    instance,
+                    password,
+                    launch_id=launch_id,
+                )
                 instance_session_token = require_string(
                     registered.instance_session_token,
                     f"request.steps[{index}].registerInstance.instanceSessionToken",
@@ -811,6 +816,13 @@ def resolve_password(
     if value is None:
         return default
     return require_string(value, f"request.steps[{index}].password")
+
+
+def resolve_launch_id(step: dict[str, Any], captures: dict[str, Any], index: int) -> str | None:
+    value = resolve_capture_value(step, captures, index, "launchId")
+    if value is None:
+        return None
+    return require_string(value, f"request.steps[{index}].launchId")
 
 
 def resolve_instance_session_token(

@@ -652,6 +652,86 @@ public class InvocationScopeRoutingTests : IDisposable
         Assert.Equal(sameScopeReceiver.InstanceId, redelivered.LeaseHolderInstanceId);
     }
 
+    [Fact]
+    public async Task Impl_OfflineQueue_WhenOnlyAutonomousRegistrationHistoryExists_ShouldRejectAfterInstanceOffline()
+    {
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object, RuntimeTuningOptions.Default);
+
+        const string appId = "autonomous-online-only.app";
+        const string scope = "workspace-A";
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "autonomous-online-only-instance",
+            AppId = appId,
+            Scope = scope,
+            Pid = 4101,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), clock, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, clock, _invocationHandlerLogger.Object);
+
+        var onlineResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "autonomous-online-request",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope, instanceId = (string?)null },
+                method = "asset.online",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(onlineResponse.Error);
+        var onlineInvocationId = JsonSerializer.SerializeToElement(onlineResponse.Result).GetProperty("invocationId").GetString();
+        var onlinePoll = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        Assert.Single(onlinePoll);
+        Assert.Equal(onlineInvocationId, onlinePoll[0].InvocationId);
+
+        clock.Advance(TimeSpan.FromSeconds(31));
+
+        var offlineResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "autonomous-offline-request",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope, instanceId = (string?)null },
+                method = "asset.offline",
+                args = new { },
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        Assert.NotNull(offlineResponse.Error);
+        Assert.Equal(-32010, offlineResponse.Error.Code);
+        Assert.Equal("instance_not_found", offlineResponse.Error.Message);
+        var errorData = JsonSerializer.SerializeToElement(offlineResponse.Error.Data);
+        Assert.Equal("offline_no_queue", errorData.GetProperty("reason").GetString());
+    }
+
     private sealed class MutableClock : IClock
     {
         public MutableClock(DateTime utcNow)

@@ -552,6 +552,70 @@ public class InvocationRequestFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Request_WhenCallerCanceledAndTimeoutLaterElapsed_ShouldNotDeliverOnLaterPoll()
+    {
+        const string appId = "request-canceled-timeout-poll.app";
+        const string instanceId = "request-canceled-timeout-poll-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6106);
+
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+        var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), clock, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, clock, _invocationHandlerLogger.Object);
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-canceled-timeout-poll",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.cancel.timeout.poll",
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 300,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
+
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-after-canceled-timeout",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = instanceToken,
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var items = JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray();
+        Assert.Empty(items);
+    }
+
+    [Fact]
     public async Task Impl_Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
     {
         WriteDefinition("request-invalid.app", rpcEnabled: true);
