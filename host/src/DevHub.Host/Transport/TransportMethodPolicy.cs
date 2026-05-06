@@ -12,16 +12,7 @@ internal static class TransportMethodPolicy
     /// </summary>
     internal static bool SupportsNotification(string method)
     {
-        return method is
-            HubRpcMethods.HubPing or
-            HubRpcMethods.HubGetVersion or
-            HubRpcMethods.HubAppsListDefinitions or
-            HubRpcMethods.HubAppsGetDefinition or
-            HubRpcMethods.HubAppsHeartbeat or
-            HubRpcMethods.HubAppsUnregisterInstance or
-            HubRpcMethods.HubAppsListInstances or
-            HubRpcMethods.HubAppsGetInstance or
-            HubRpcMethods.HubEventsUnsubscribe;
+        return HubRpcMethodRegistry.SupportsNotification(method);
     }
 
     /// <summary>
@@ -29,7 +20,7 @@ internal static class TransportMethodPolicy
     /// </summary>
     internal static bool RequiresRequestId(string method)
     {
-        return IsKnownHubMethod(method) && !SupportsNotification(method);
+        return HubRpcMethodRegistry.IsKnownClientMethod(method) && !SupportsNotification(method);
     }
 
     /// <summary>
@@ -37,18 +28,7 @@ internal static class TransportMethodPolicy
     /// </summary>
     internal static bool IsHttpOnlyMethod(string method)
     {
-        return method is
-            HubRpcMethods.HubAppsValidateDefinition or
-            HubRpcMethods.HubAppsUpsertDefinition or
-            HubRpcMethods.HubAppsDeleteDefinition or
-            HubRpcMethods.HubAppsRegisterInstance or
-            HubRpcMethods.HubAppsHeartbeat or
-            HubRpcMethods.HubAppsUnregisterInstance or
-            HubRpcMethods.HubAppsLaunch or
-            HubRpcMethods.HubInvokeNotify or
-            HubRpcMethods.HubInvokeRequest or
-            HubRpcMethods.HubInvokePoll or
-            HubRpcMethods.HubInvokeRespond;
+        return HubRpcMethodRegistry.HttpOnlyMethods.Contains(method);
     }
 
     /// <summary>
@@ -56,34 +36,6 @@ internal static class TransportMethodPolicy
     /// </summary>
     internal static bool IsWebSocketOnlyMethod(string method)
     {
-        return method is
-            HubRpcMethods.HubWsAuthenticate or
-            HubRpcMethods.HubEventsSubscribe or
-            HubRpcMethods.HubEventsUnsubscribe;
-    }
-
-    private static bool IsKnownHubMethod(string method)
-    {
-        return method is
-            HubRpcMethods.HubPing or
-            HubRpcMethods.HubGetVersion or
-            HubRpcMethods.HubWsAuthenticate or
-            HubRpcMethods.HubEventsSubscribe or
-            HubRpcMethods.HubEventsUnsubscribe or
-            HubRpcMethods.HubAppsListDefinitions or
-            HubRpcMethods.HubAppsGetDefinition or
-            HubRpcMethods.HubAppsValidateDefinition or
-            HubRpcMethods.HubAppsUpsertDefinition or
-            HubRpcMethods.HubAppsDeleteDefinition or
-            HubRpcMethods.HubAppsRegisterInstance or
-            HubRpcMethods.HubAppsHeartbeat or
-            HubRpcMethods.HubAppsUnregisterInstance or
-            HubRpcMethods.HubAppsListInstances or
-            HubRpcMethods.HubAppsGetInstance or
-            HubRpcMethods.HubAppsLaunch or
-            HubRpcMethods.HubInvokeNotify or
-            HubRpcMethods.HubInvokeRequest or
-            HubRpcMethods.HubInvokePoll or
-            HubRpcMethods.HubInvokeRespond;
+        return HubRpcMethodRegistry.WebSocketOnlyMethods.Contains(method);
     }
 }

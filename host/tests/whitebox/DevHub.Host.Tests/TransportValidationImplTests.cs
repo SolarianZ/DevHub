@@ -1,6 +1,7 @@
 namespace DevHub.Host.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Services;
 using DevHub.Core.Models.Rpc;
 using DevHub.Host.Transport;
 
@@ -199,6 +200,23 @@ public class TransportValidationImplTests
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.getVersion"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ping"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.invoke.request"));
+    }
+
+    [Fact]
+    public void Impl_6_2_HubRpcMethodRegistry_ShouldExposeTransportAndNotificationSets()
+    {
+        Assert.Contains(HubRpcMethods.HubEvent, HubRpcMethodRegistry.AllMethods);
+        Assert.DoesNotContain(HubRpcMethods.HubEvent, HubRpcMethodRegistry.ClientMethods);
+
+        Assert.Contains(HubRpcMethods.HubAppsUnregisterInstance, HubRpcMethodRegistry.NotificationMethods);
+        Assert.Contains(HubRpcMethods.HubEventsUnsubscribe, HubRpcMethodRegistry.WebSocketOnlyMethods);
+        Assert.Contains(HubRpcMethods.HubInvokeRequest, HubRpcMethodRegistry.HttpOnlyMethods);
+
+        Assert.True(HubRpcMethodRegistry.TryGetDescriptor(HubRpcMethods.HubInvokeRequest, out var descriptor));
+        Assert.Equal(HubRpcMethodCategory.Invocation, descriptor.Category);
+        Assert.Equal(HubRpcMethodTransport.Http, descriptor.Transports);
+        Assert.False(descriptor.SupportsNotification);
+        Assert.True(descriptor.ClientCallable);
     }
 
     [Fact]
