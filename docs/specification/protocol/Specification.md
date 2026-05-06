@@ -828,7 +828,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 **参数**：
 ```json
 {
-  "password": "sample-password-1",
+  "password": "regsec_7fK2m9Qx4Nc8Vt1Lp6Ys3Hd0Br5ZwJ2Ua8Ce1Mg4",
   "launchId": "launch-optional-from-DEVHUB_LAUNCH_ID",
   "instance": {
     "appId": "test.app",

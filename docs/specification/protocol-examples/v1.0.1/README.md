@@ -18,6 +18,7 @@
 - `subscriptionId`：`sub-sample-001`
 - `invocationId`：`invk-sample-request-001`
 - `launchId`：`launch-sample-app-global-001`
+- register password：`regsec_7fK2m9Qx4Nc8Vt1Lp6Ys3Hd0Br5ZwJ2Ua8Ce1Mg4`
 - `instanceSessionToken`：`inst-session-node-01-alpha-001`
 - `leaseToken`：`lease-sample-request-001-attempt-1`
 - `serverTimeUtc`：`2026-03-28T12:34:56Z`

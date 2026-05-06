@@ -3,7 +3,7 @@
   "id": "apps-instances-register",
   "method": "hub.apps.registerInstance",
   "params": {
-    "password": "sample-password-1",
+    "password": "regsec_7fK2m9Qx4Nc8Vt1Lp6Ys3Hd0Br5ZwJ2Ua8Ce1Mg4",
     "instance": {
       "instanceId": "NODE_01.alpha",
       "appId": "Sample.App",
