@@ -656,8 +656,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.1")]
-    public async Task Spec_6_1_AfterAuthenticate_HubMethodParamsNullOverWs_ShouldReturnInvalidRequest()
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_AfterAuthenticate_HubPing_WhenParamsNullOverWs_ShouldReturnOk()
     {
         var context = CreateHostContext();
 
@@ -688,11 +688,10 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(authResponse.TryGetProperty("result", out var authResult));
         Assert.True(authResult.GetProperty("ok").GetBoolean());
 
-        var invalidRequestResponse = FindResponseById(responses, "ws-null-params");
-        Assert.NotEqual(JsonValueKind.Undefined, invalidRequestResponse.ValueKind);
-        Assert.True(invalidRequestResponse.TryGetProperty("error", out var error));
-        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
-        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+        var pingResponse = FindResponseById(responses, "ws-null-params");
+        Assert.NotEqual(JsonValueKind.Undefined, pingResponse.ValueKind);
+        Assert.True(pingResponse.TryGetProperty("result", out var result));
+        Assert.True(result.GetProperty("ok").GetBoolean());
     }
 
     [Fact]
@@ -769,6 +768,80 @@ public class WebSocketLifecycleSpecTests : IDisposable
         Assert.True(getVersionResponse.TryGetProperty("error", out var error));
         Assert.Equal(-32602, error.GetProperty("code").GetInt32());
         Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.2")]
+    [Trait("SpecRef", "6.3.17")]
+    public async Task Spec_6_2_And_6_3_17_SubscribeNotification_ShouldReturnInvalidRequestAndNotCreateSubscription()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-sub-notification",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-sub-notification-client",
+                clientSessionId = "12121212-1212-1212-1212-121212121212"
+            }
+        });
+
+        var subscribeNotification = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            method = "hub.events.subscribe",
+            @params = new { types = new[] { "invocation.completed" } }
+        });
+
+        var socket = new ScriptedWebSocket([auth, subscribeNotification], autoCloseWhenQueueDrained: false);
+        var runTask = context.InvokeWebSocketConnectionAsync(socket);
+
+        var authResponse = await WaitForResponseByIdAsync(socket, "auth-sub-notification", TimeSpan.FromSeconds(2));
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var invalidRequest = await WaitForErrorByCodeAsync(socket, -32600, TimeSpan.FromSeconds(2));
+        Assert.Equal(JsonValueKind.Null, invalidRequest.GetProperty("id").ValueKind);
+        var error = invalidRequest.GetProperty("error");
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+        Assert.Equal("request_id_required", error.GetProperty("data").GetProperty("reason").GetString());
+
+        context.EventBus.Publish(new HubEventMessage
+        {
+            Type = "invocation.completed",
+            TimeUtc = DateTime.UtcNow,
+            Payload = new
+            {
+                invocationId = "invk-sub-notification-rejected",
+                appId = "ws-sub-notification.app",
+                instanceId = "inst-ws-sub-notification"
+            }
+        });
+
+        socket.EnqueueText(CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-after-rejected-sub-notification",
+            method = "hub.ping",
+            @params = new { }
+        }));
+
+        var pingResponse = await WaitForResponseByIdAsync(socket, "ping-after-rejected-sub-notification", TimeSpan.FromSeconds(2));
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        socket.EnqueueClose();
+        await runTask;
+
+        Assert.DoesNotContain(
+            ParseSentMessages(socket),
+            message => message.TryGetProperty("method", out var method)
+                       && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1136,6 +1209,61 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.2")]
+    [Trait("SpecRef", "6.3.18")]
+    public async Task Spec_6_2_And_6_3_18_UnsubscribeNotification_ShouldBeAcceptedWithoutResponse()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-unsub-notification",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-unsub-notification-client",
+                clientSessionId = "13131313-1313-1313-1313-131313131313"
+            }
+        });
+
+        var unsubscribeNotification = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            method = "hub.events.unsubscribe",
+            @params = new { subscriptionId = "sub-not-exists" }
+        });
+
+        var ping = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "ping-after-unsub-notification",
+            method = "hub.ping",
+            @params = new { }
+        });
+
+        var socket = new ScriptedWebSocket([auth, unsubscribeNotification, ping]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var authResponse = FindResponseById(responses, "auth-unsub-notification");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var pingResponse = FindResponseById(responses, "ping-after-unsub-notification");
+        Assert.True(pingResponse.TryGetProperty("result", out var pingResult));
+        Assert.True(pingResult.GetProperty("ok").GetBoolean());
+
+        Assert.Equal(2, responses.Count);
+        Assert.DoesNotContain(
+            responses,
+            message => message.TryGetProperty("error", out var error)
+                       && error.GetProperty("code").GetInt32() == -32600);
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.16")]
     public async Task Spec_6_3_16_AfterSubscribe_ShouldReceiveHubEventNotification()
     {
@@ -1310,6 +1438,26 @@ public class WebSocketLifecycleSpecTests : IDisposable
         }
 
         throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
+    }
+
+    private static async Task<JsonElement> WaitForErrorByCodeAsync(ScriptedWebSocket socket, int code, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var response = ParseSentMessages(socket).FirstOrDefault(message =>
+                message.TryGetProperty("error", out var error)
+                && error.GetProperty("code").GetInt32() == code);
+
+            if (response.ValueKind != JsonValueKind.Undefined)
+            {
+                return response;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 code={code} 的错误响应。");
     }
 
     private static async Task<JsonElement> WaitForHubEventAsync(ScriptedWebSocket socket, string eventType, TimeSpan timeout)

@@ -528,7 +528,7 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.1")]
-    public void Spec_6_1_TryBuildRpcRequest_InvalidParamsType_ShouldReturnInvalidRequest()
+    public void Spec_6_1_TryBuildRpcRequest_HubPingScalarParams_ShouldBePassedToMethodValidation()
     {
         var root = ParseJsonElement("""
         {
@@ -539,15 +539,17 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
-        Assert.False(ok);
-        AssertError(errorResponse, -32600, "invalid_request", "req-params");
+        Assert.True(ok);
+        Assert.Equal("hub.ping", request.Method);
+        Assert.IsType<JsonElement>(request.Params);
+        Assert.Null(errorResponse);
     }
 
     [Fact]
-    [Trait("SpecRef", "6.1")]
-    public void Spec_6_1_TryBuildRpcRequest_ParamsJsonNull_ShouldReturnInvalidRequest()
+    [Trait("SpecRef", "6.3.1")]
+    public void Spec_6_3_1_TryBuildRpcRequest_HubPingParamsJsonNull_ShouldBeAccepted()
     {
         var root = ParseJsonElement("""
         {
@@ -558,10 +560,11 @@ public class TransportValidationTests
         }
         """);
 
-        var ok = JsonRpcEnvelopeParser.TryParse(root, out _, out var errorResponse);
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
-        Assert.False(ok);
-        AssertError(errorResponse, -32600, "invalid_request", "req-params-null");
+        Assert.True(ok);
+        Assert.NotNull(request);
+        Assert.Null(errorResponse);
     }
 
     [Fact]

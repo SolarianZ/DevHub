@@ -256,6 +256,23 @@ public class WebSocketSessionHandler
                         continue;
                     }
 
+                    if (rpcRequest.Id is null && TransportMethodPolicy.RequiresRequestId(rpcRequest.Method))
+                    {
+                        _logger.LogWarning(
+                            "WS notification 调用了 request-only 方法，返回 invalid_request，ConnectionId: {ConnectionId}, Method: {Method}",
+                            connectionId,
+                            rpcRequest.Method);
+                        await SendWebSocketJsonAsync(
+                            webSocket,
+                            TransportResponseFactory.CreateErrorResponse(
+                                -32600,
+                                "invalid_request",
+                                null,
+                                new { reason = "request_id_required" }),
+                            cancellationToken);
+                        continue;
+                    }
+
                     JsonRpcResponse? response = null;
                     var closeAfterResponse = false;
                     (response, closeAfterResponse) = await DispatchWebSocketRpcAsync(

@@ -257,8 +257,8 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.1")]
-    public async Task Spec_6_1_HttpHubMethod_WhenParamsIsNull_ShouldReturnInvalidRequest()
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_HttpHubPing_WhenParamsIsNull_ShouldReturnOk()
     {
         using var harness = CreateHarness();
 
@@ -269,9 +269,8 @@ public class HttpNotificationSpecTests : IDisposable
         var root = responseDocument.RootElement;
 
         Assert.Equal("http-null-params", root.GetProperty("id").GetString());
-        var error = root.GetProperty("error");
-        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
-        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+        var result = root.GetProperty("result");
+        Assert.True(result.GetProperty("ok").GetBoolean());
     }
 
     [Fact]
@@ -545,8 +544,8 @@ public class HttpNotificationSpecTests : IDisposable
 
     [Fact]
     [Trait("SpecRef", "3.1")]
-    [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_3_1_And_6_3_10_HttpInvokeNotifyNotification_ShouldAcceptCanonicalIdentifiersAndQueueInvocation()
+    [Trait("SpecRef", "6.2")]
+    public async Task Spec_3_1_And_6_2_HttpRequestOnlyNotification_ShouldReturnInvalidRequestAndNotQueueInvocation()
     {
         const string appId = "Sample.App_01";
         const string scope = "Workspace-A.v2";
@@ -616,7 +615,15 @@ public class HttpNotificationSpecTests : IDisposable
             "http-canonical-notify-client");
 
         Assert.Equal(StatusCodes.Status200OK, notifyResponse.StatusCode);
-        Assert.True(string.IsNullOrEmpty(notifyResponse.BodyText));
+        using (var notifyDocument = JsonDocument.Parse(notifyResponse.BodyText))
+        {
+            var root = notifyDocument.RootElement;
+            Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+            var error = root.GetProperty("error");
+            Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+            Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+            Assert.Equal("request_id_required", error.GetProperty("data").GetProperty("reason").GetString());
+        }
 
         using var pollResponse = await ExecuteJsonRequestAsync(
             harness,
@@ -635,14 +642,84 @@ public class HttpNotificationSpecTests : IDisposable
             """,
             "http-canonical-poll-client");
 
-        var item = Assert.Single(pollResponse.RootElement
+        Assert.Empty(pollResponse.RootElement
             .GetProperty("result")
             .GetProperty("items")
             .EnumerateArray()
             .ToArray());
-        Assert.Equal(appId, item.GetProperty("appId").GetString());
-        Assert.Equal(scope, item.GetProperty("target").GetProperty("scope").GetString());
-        Assert.Equal("sample.refresh", item.GetProperty("method").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.2")]
+    [Trait("SpecRef", "6.3.10")]
+    public async Task Spec_6_2_And_6_3_10_HttpUnregisterInstanceNotification_ShouldUnregisterWithEmptyResponse()
+    {
+        using var harness = CreateHarness();
+
+        using var registerResponse = await ExecuteJsonRequestAsync(
+            harness,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "http-register-for-unregister-notification",
+              "method": "hub.apps.registerInstance",
+              "params": {
+                "password": "http-unregister-notification-password",
+                "instance": {
+                  "instanceId": "http-unregister-notification-inst",
+                  "appId": "http-unregister-notification.app",
+                  "scope": "",
+                  "pid": 7003,
+                  "invoke": {
+                    "poll": true,
+                    "respond": true
+                  }
+                }
+              }
+            }
+            """,
+            "http-unregister-notification-register-client");
+
+        var instanceSessionToken = registerResponse.RootElement
+            .GetProperty("result")
+            .GetProperty("instanceSessionToken")
+            .GetString();
+        Assert.False(string.IsNullOrWhiteSpace(instanceSessionToken));
+
+        var unregisterResponse = await ExecuteHttpRequestAsync(
+            harness,
+            $$"""
+            {
+              "jsonrpc": "2.0",
+              "method": "hub.apps.unregisterInstance",
+              "params": {
+                "instanceId": "http-unregister-notification-inst",
+                "instanceSessionToken": "{{instanceSessionToken}}"
+              }
+            }
+            """,
+            "http-unregister-notification-client");
+
+        Assert.Equal(StatusCodes.Status200OK, unregisterResponse.StatusCode);
+        Assert.True(string.IsNullOrEmpty(unregisterResponse.BodyText));
+
+        using var getInstanceResponse = await ExecuteJsonRequestAsync(
+            harness,
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": "http-get-unregistered-instance",
+              "method": "hub.apps.getInstance",
+              "params": {
+                "instanceId": "http-unregister-notification-inst"
+              }
+            }
+            """,
+            "http-unregister-notification-get-client");
+
+        var error = getInstanceResponse.RootElement.GetProperty("error");
+        Assert.Equal(-32010, error.GetProperty("code").GetInt32());
+        Assert.Equal("instance_not_found", error.GetProperty("message").GetString());
     }
 
     /// <summary>

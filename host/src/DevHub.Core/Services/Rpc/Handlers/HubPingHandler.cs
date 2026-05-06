@@ -33,6 +33,12 @@ public class HubPingHandler : IRpcHandler
     {
         _logger.LogDebug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
 
+        if (!AcceptsParams(request.Params))
+        {
+            _logger.LogWarning("hub.ping 参数非法，RequestId: {RequestId}", request.Id);
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+        }
+
         var result = new Dictionary<string, object?>
         {
             ["ok"] = true,
@@ -53,6 +59,21 @@ public class HubPingHandler : IRpcHandler
         _logger.LogInformation("处理 hub.ping 请求成功，RequestId: {RequestId}", request.Id);
         _logger.LogDebug("hub.ping 响应内容: {Response}", RpcLogJsonSerializer.Serialize(response));
         return Task.FromResult(response);
+    }
+
+    private static bool AcceptsParams(object? parameters)
+    {
+        if (parameters is null)
+        {
+            return true;
+        }
+
+        if (parameters is JsonElement paramsElement)
+        {
+            return paramsElement.ValueKind is JsonValueKind.Null or JsonValueKind.Object;
+        }
+
+        return parameters is IDictionary<string, object?>;
     }
 
     private static bool TryReadEcho(object? parameters, out object? echo)

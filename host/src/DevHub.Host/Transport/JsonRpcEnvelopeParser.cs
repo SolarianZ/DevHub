@@ -93,7 +93,8 @@ internal static class JsonRpcEnvelopeParser
 
     private static bool IsAcceptedParamsValue(string method, JsonElement paramsElement)
     {
-        if (string.Equals(method, HubRpcMethods.HubGetVersion, StringComparison.Ordinal))
+        if (string.Equals(method, HubRpcMethods.HubPing, StringComparison.Ordinal)
+            || string.Equals(method, HubRpcMethods.HubGetVersion, StringComparison.Ordinal))
         {
             return paramsElement.ValueKind != JsonValueKind.Undefined;
         }

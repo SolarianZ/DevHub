@@ -80,6 +80,63 @@ public class CoreRpcSpecTests : IDisposable
         Assert.True(JsonElement.DeepEquals(expectedEcho, actualEcho));
     }
 
+    [Theory]
+    [Trait("SpecRef", "6.1")]
+    [InlineData("[1,2,3]")]
+    [InlineData("\"text\"")]
+    [InlineData("1")]
+    [InlineData("true")]
+    public async Task Spec_6_1_HubPing_WhenParamsIsNotObjectOrNull_ShouldReturnInvalidParams(string paramsJson)
+    {
+        var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
+        using var document = JsonDocument.Parse(paramsJson);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "spec-6.1-ping-invalid-params",
+            Method = "hub.ping",
+            Params = document.RootElement.Clone()
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32602, response.Error.Code);
+        Assert.Equal("invalid_params", response.Error.Message);
+    }
+
+    [Theory]
+    [Trait("SpecRef", "6.3.1")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Spec_6_3_1_HubPing_WhenParamsOmittedOrNull_ShouldReturnOk(bool useNullParams)
+    {
+        var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
+        var request = new JsonRpcRequest
+        {
+            Id = "spec-6.3.1-ping-nullish",
+            Method = "hub.ping"
+        };
+
+        JsonDocument? document = null;
+        try
+        {
+            if (useNullParams)
+            {
+                document = JsonDocument.Parse("null");
+                request.Params = document.RootElement.Clone();
+            }
+
+            var response = await handler.HandleAsync(request, CancellationToken.None);
+
+            Assert.Null(response.Error);
+            var result = JsonSerializer.SerializeToElement(response.Result);
+            Assert.True(result.GetProperty("ok").GetBoolean());
+        }
+        finally
+        {
+            document?.Dispose();
+        }
+    }
+
     [Fact]
     [Trait("SpecRef", "6.3.1.1")]
     public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()

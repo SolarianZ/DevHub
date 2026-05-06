@@ -171,6 +171,22 @@ public class RpcHttpEndpointHandler
                         JsonOptions));
                 }
 
+                if (rpcRequest.Id is null && TransportMethodPolicy.RequiresRequestId(rpcRequest.Method))
+                {
+                    _logger.LogWarning(
+                        "HTTP notification 调用了 request-only 方法，返回 invalid_request，Method: {Method}, ClientId: {ClientId}",
+                        rpcRequest.Method,
+                        clientId);
+
+                    return FinalizeResponse(Results.Json(
+                        TransportResponseFactory.CreateErrorResponse(
+                            -32600,
+                            "invalid_request",
+                            null,
+                            new { reason = "request_id_required" }),
+                        JsonOptions));
+                }
+
                 var response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
                 if (suppressJsonRpcResponse)
                 {
