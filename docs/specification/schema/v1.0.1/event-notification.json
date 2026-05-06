@@ -71,7 +71,52 @@
     },
     "instanceId": {
       "type": "string",
+      "maxLength": 256,
       "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
+    },
+    "nullableInstanceId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
+    },
+    "invocationId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^invk-[a-zA-Z0-9._:-]+$"
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/scope"
+        },
+        "instanceId": {
+          "$ref": "#/definitions/nullableInstanceId"
+        }
+      }
+    },
+    "deliveryAttempt": {
+      "type": "object",
+      "required": [
+        "attempt"
+      ],
+      "not": {
+        "required": [
+          "leaseToken"
+        ]
+      },
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
     },
     "appDefinition": {
       "type": "object",
@@ -198,6 +243,114 @@
           }
         }
       ]
+    },
+    "invocationQueuedPayload": {
+      "type": "object",
+      "required": [
+        "invocationId",
+        "appId",
+        "target",
+        "method",
+        "kind"
+      ],
+      "properties": {
+        "invocationId": {
+          "$ref": "#/definitions/invocationId"
+        },
+        "appId": {
+          "$ref": "#/definitions/appId"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "method": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "request",
+            "notify"
+          ]
+        }
+      }
+    },
+    "invocationDeliveredPayload": {
+      "type": "object",
+      "required": [
+        "invocationId",
+        "appId",
+        "target",
+        "instanceId",
+        "delivery"
+      ],
+      "properties": {
+        "invocationId": {
+          "$ref": "#/definitions/invocationId"
+        },
+        "appId": {
+          "$ref": "#/definitions/appId"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "instanceId": {
+          "$ref": "#/definitions/instanceId"
+        },
+        "delivery": {
+          "$ref": "#/definitions/deliveryAttempt"
+        }
+      }
+    },
+    "invocationCompletedPayload": {
+      "type": "object",
+      "required": [
+        "invocationId",
+        "appId",
+        "target",
+        "instanceId"
+      ],
+      "properties": {
+        "invocationId": {
+          "$ref": "#/definitions/invocationId"
+        },
+        "appId": {
+          "$ref": "#/definitions/appId"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "instanceId": {
+          "$ref": "#/definitions/instanceId"
+        }
+      }
+    },
+    "invocationFailedPayload": {
+      "type": "object",
+      "required": [
+        "invocationId",
+        "appId",
+        "target",
+        "instanceId",
+        "reason"
+      ],
+      "properties": {
+        "invocationId": {
+          "$ref": "#/definitions/invocationId"
+        },
+        "appId": {
+          "$ref": "#/definitions/appId"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "instanceId": {
+          "$ref": "#/definitions/instanceId"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
     }
   },
   "allOf": [
@@ -270,6 +423,102 @@
             "properties": {
               "payload": {
                 "$ref": "#/definitions/appInstanceLifecyclePayload"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "params": {
+            "properties": {
+              "type": {
+                "const": "invocation.queued"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "payload": {
+                "$ref": "#/definitions/invocationQueuedPayload"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "params": {
+            "properties": {
+              "type": {
+                "const": "invocation.delivered"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "payload": {
+                "$ref": "#/definitions/invocationDeliveredPayload"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "params": {
+            "properties": {
+              "type": {
+                "const": "invocation.completed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "payload": {
+                "$ref": "#/definitions/invocationCompletedPayload"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "params": {
+            "properties": {
+              "type": {
+                "const": "invocation.failed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "properties": {
+              "payload": {
+                "$ref": "#/definitions/invocationFailedPayload"
               }
             }
           }

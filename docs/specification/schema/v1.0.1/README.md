@@ -60,7 +60,7 @@
 - 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；其中 numeric `id` 只接受有符号 64 位整数范围内的整数值。该 schema 接受 `params: null`，但具体方法仍受 [`Specification.md`](../../protocol/Specification.md) 的方法级约束。
 - 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验。
 - 接收成功响应时，用 `rpc-response.json` 校验；接收错误响应时，用 `error-response.json` 校验。两个响应 schema 中的 numeric `id` 同样只接受有符号 64 位整数范围内的整数值。这两个 schema 分别约束成功/错误信封，不能同时接受同一个同时带 `result` 与 `error` 的响应对象。
-- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition / Instance 生命周期事件施加最小 payload 约束。
+- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition 生命周期事件、Instance 生命周期事件与 invocation 事件施加最小 payload 约束。`app.definition.upserted.payload.definition.scope` 与 `payload.scope` 的相等性属于 [`Specification.md`](../../protocol/Specification.md) §6.3.19 的规范要求；标准 Draft-07 schema 不表达跨字段动态相等校验，该一致性由协议实现或 conformance 测试校验。
 
 实例所有权相关的 `instanceSessionToken` 还适用于 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 的顶层 `params`。`hub.invoke.respond` 还必须携带当前 delivery 的 `leaseToken`。这些字段属于方法级参数而不是通用数据模型，因此未单独收敛到 `app-instance*.json` 中。
 

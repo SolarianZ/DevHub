@@ -5,6 +5,7 @@
     "ok": true,
     "status": "started",
     "pid": 32001,
-    "launchId": "launch-sample-app-global-001"
+    "launchId": "launch-sample-app-global-001",
+    "dedupeKey": "Sample.App:global"
   }
 }

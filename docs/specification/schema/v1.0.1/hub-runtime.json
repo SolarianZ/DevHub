@@ -58,7 +58,8 @@
       "required": [
         "leaseSeconds",
         "onlineThresholdSeconds",
-        "launchDedupeWindowSeconds"
+        "launchDedupeWindowSeconds",
+        "launchRegisterTimeoutSeconds"
       ],
       "properties": {
         "leaseSeconds": {
@@ -70,6 +71,10 @@
           "minimum": 1
         },
         "launchDedupeWindowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "launchRegisterTimeoutSeconds": {
           "type": "integer",
           "minimum": 1
         }
