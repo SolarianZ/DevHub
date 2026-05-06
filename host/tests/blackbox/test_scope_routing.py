@@ -33,7 +33,7 @@ class TestScopeRouting(unittest.TestCase):
         if include_launch:
             launch_config = {
                 "exePath": get_test_python_executable(),
-                "argsTemplate": get_shared_test_asset_path("launch_noop.py"),
+                "args": [get_shared_test_asset_path("launch_noop.py")],
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template

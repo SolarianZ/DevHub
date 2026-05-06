@@ -35,30 +35,16 @@ public class SpecConformanceTests : IDisposable
               "definitions": [
                 {
                   "appId": "valid-app",
-                  "scopes": [
-                    {
-                      "scope": "",
-                      "displayName": "Valid App"
-                    },
-                    {
-                      "displayName": "Missing Scope"
-                    }
-                  ]
+                  "scope": "",
+                  "displayName": "Valid App"
+                },
+                {
+                  "appId": "missing-scope"
                 },
                 {
                   "appId": "invalid app id",
-                  "scopes": [
-                    {
-                      "scope": "",
-                      "displayName": "Invalid AppId"
-                    }
-                  ]
-                },
-                {
-                  "appId": "bad-entry",
-                  "scopes": [
-                    "not-an-object"
-                  ]
+                  "scope": "",
+                  "displayName": "Invalid AppId"
                 }
               ]
             }

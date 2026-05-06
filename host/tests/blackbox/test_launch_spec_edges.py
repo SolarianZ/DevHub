@@ -41,7 +41,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
     def _build_launch_config(self, dedupe_key_template=None):
         launch_config = {
             "exePath": get_test_python_executable(),
-            "argsTemplate": self._launch_script_path(),
+            "args": [self._launch_script_path()],
         }
         if dedupe_key_template is not None:
             launch_config["dedupeKeyTemplate"] = dedupe_key_template
@@ -213,9 +213,9 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
-    def test_launch_edge_003b_wait_budget_should_not_fail_before_requested_window(self):
-        """LAUNCH-EDGE-003B: waitForRegisterMs 更长时不得被基础注册超时提前失败。"""
-        result = TestResult("LAUNCH-EDGE-003B waitForRegisterMs 不应被基础超时提前失败")
+    def test_launch_edge_003b_wait_budget_should_return_register_timeout_at_effective_deadline(self):
+        """LAUNCH-EDGE-003B: 到达有效注册截止时间时返回 launch_register_timeout。"""
+        result = TestResult("LAUNCH-EDGE-003B waitForRegisterMs 到达有效注册截止返回 launch_register_timeout")
         definition_path = None
         temp_root = None
         process = None
@@ -279,18 +279,17 @@ class TestLaunchSpecEdges(unittest.TestCase):
                         )
                         elapsed_ms = int((time.monotonic() - start_ts) * 1000)
 
-                    if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                    if not RpcAssertions.expect_error(result, response, -32020, "launch_failed"):
                         return result
 
-                    if response["result"].get("status") != "starting":
-                        result.mark_failure(f"❌ 长等待窗口场景未返回 starting: {response}")
+                    if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "launch_register_timeout"}):
                         return result
 
-                    if elapsed_ms < 3500:
-                        result.mark_failure(f"❌ launch 提前结束，疑似被基础超时截断: elapsed={elapsed_ms}ms, response={response}")
+                    if elapsed_ms < 900:
+                        result.mark_failure(f"❌ launch 过早结束，未等待有效注册截止: elapsed={elapsed_ms}ms, response={response}")
                         return result
 
-                    result.add_detail(f"✅ 长等待窗口耗时 {elapsed_ms}ms，未被基础超时提前失败")
+                    result.add_detail(f"✅ 有效注册截止耗时 {elapsed_ms}ms，返回 launch_register_timeout")
                     result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
@@ -414,7 +413,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
                 app_id,
                 {
                     "exePath": get_test_python_executable(),
-                    "argsTemplate": f'"{script_path}" "{capture_file}" "{{dedupeKey}}" "{{appId}}"',
+                    "args": [script_path, capture_file, "{dedupeKey}", "{appId}"],
                 },
             )
 
@@ -501,7 +500,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
             self.test_launch_edge_002_explicit_dedupe_key_should_take_effect(),
             self.test_launch_edge_003_wait_for_register_positive_should_return_started_or_starting(),
-            self.test_launch_edge_003b_wait_budget_should_not_fail_before_requested_window(),
+            self.test_launch_edge_003b_wait_budget_should_return_register_timeout_at_effective_deadline(),
             self.test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(),
             self.test_launch_edge_005_undocumented_placeholder_should_remain_literal(),
             self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),

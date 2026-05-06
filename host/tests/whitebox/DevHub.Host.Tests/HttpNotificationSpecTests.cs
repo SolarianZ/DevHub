@@ -202,6 +202,61 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.1")]
+    public async Task Spec_3_1_HttpNotification_WhenHubParamsArray_ShouldReturnInvalidParams()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","method":"hub.ping","params":[1,2,3]}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-notify-array-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.1")]
+    public async Task Spec_3_1_HttpNotification_WhenWsOnlyMethod_ShouldReturnNotSupported()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","method":"hub.events.subscribe","params":{}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-notify-ws-only-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32099, error.GetProperty("code").GetInt32());
+        Assert.Equal("not_supported", error.GetProperty("message").GetString());
+        Assert.Equal("transport_mismatch", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.1")]
+    public async Task Spec_3_1_HttpNotification_WhenMethodReturnsError_ShouldReturnJsonRpcError()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","method":"hub.getVersion","params":{"verbose":true}}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-notify-method-error-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.1")]
     public async Task Spec_6_1_HttpHubMethod_WhenParamsIsNull_ShouldReturnInvalidRequest()
     {
@@ -296,6 +351,30 @@ public class HttpNotificationSpecTests : IDisposable
         Assert.Equal(-32600, error.GetProperty("code").GetInt32());
         Assert.Equal("invalid_request", error.GetProperty("message").GetString());
         Assert.Equal("invalid_content_type", error.GetProperty("data").GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "3.2")]
+    public async Task Spec_3_2_HttpInvalidUtf8_ShouldReturnParseErrorWithNullId()
+    {
+        using var harness = CreateHarness();
+
+        var bytes = new byte[]
+        {
+            0x7B, 0x22, 0x6A, 0x73, 0x6F, 0x6E, 0x72, 0x70, 0x63, 0x22, 0x3A, 0x22, 0x32, 0x2E, 0x30, 0x22,
+            0x2C, 0x22, 0x69, 0x64, 0x22, 0x3A, 0x22, 0x62, 0x61, 0x64, 0x2D, 0x75, 0x74, 0x66, 0x38, 0x22,
+            0x2C, 0x22, 0x6D, 0x65, 0x74, 0x68, 0x6F, 0x64, 0x22, 0x3A, 0x22, 0x68, 0x75, 0x62, 0x2E, 0x70,
+            0x69, 0x6E, 0x67, 0x22, 0x2C, 0x22, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73, 0x22, 0x3A, 0x7B,
+            0x22, 0x65, 0x63, 0x68, 0x6F, 0x22, 0x3A, 0x22, 0xC3, 0x28, 0x22, 0x7D, 0x7D
+        };
+        var response = await ExecuteHttpRequestBytesAsync(harness, bytes, "http-invalid-utf8-client");
+
+        using var responseDocument = JsonDocument.Parse(response.BodyText);
+        var root = responseDocument.RootElement;
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("id").ValueKind);
+        var error = root.GetProperty("error");
+        Assert.Equal(-32700, error.GetProperty("code").GetInt32());
+        Assert.Equal("parse_error", error.GetProperty("message").GetString());
     }
 
     [Theory]
@@ -587,6 +666,23 @@ public class HttpNotificationSpecTests : IDisposable
         int localPort = 0,
         Action<DefaultHttpContext>? configureRequest = null)
     {
+        return await ExecuteHttpRequestBytesAsync(
+            harness,
+            Encoding.UTF8.GetBytes(requestJson),
+            clientId,
+            contentType,
+            localPort,
+            configureRequest);
+    }
+
+    private static async Task<(int StatusCode, string BodyText)> ExecuteHttpRequestBytesAsync(
+        HostTransportTestHarness harness,
+        byte[] requestBody,
+        string clientId,
+        string? contentType = "application/json",
+        int localPort = 0,
+        Action<DefaultHttpContext>? configureRequest = null)
+    {
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.LocalPort = localPort;
         httpContext.Request.Method = HttpMethods.Post;
@@ -599,7 +695,7 @@ public class HttpNotificationSpecTests : IDisposable
             .AddLogging()
             .AddOptions()
             .BuildServiceProvider();
-        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(requestJson));
+        httpContext.Request.Body = new MemoryStream(requestBody);
         httpContext.Response.Body = new MemoryStream();
         configureRequest?.Invoke(httpContext);
 

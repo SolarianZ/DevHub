@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace DevHub.Core.Services;
 
 /// <summary>
-/// 应用程序定义加载器
+/// 应用程序定义加载器。
 /// </summary>
 public class DefinitionLoader
 {
@@ -21,6 +21,7 @@ public class DefinitionLoader
     /// </summary>
     /// <param name="definitionsCatalogPath">应用定义目录索引文件路径。</param>
     /// <param name="logger">日志记录器。</param>
+    /// <param name="validator">定义校验器。</param>
     public DefinitionLoader(string definitionsCatalogPath, ILogger<DefinitionLoader> logger, AppDefinitionValidator? validator = null)
     {
         _definitionsCatalogPath = definitionsCatalogPath;
@@ -29,7 +30,7 @@ public class DefinitionLoader
     }
 
     /// <summary>
-    /// 加载应用程序定义
+    /// 加载应用程序定义。
     /// </summary>
     public void Load()
     {
@@ -39,99 +40,67 @@ public class DefinitionLoader
 
             if (!File.Exists(_definitionsCatalogPath))
             {
+                UseEmptySnapshot();
                 _logger.LogDebug("应用程序定义目录索引不存在，按空集合处理: {Path}", _definitionsCatalogPath);
-                _definitions = new List<AppDefinition>();
-                _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
                 return;
             }
 
             var definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
             var content = File.ReadAllText(_definitionsCatalogPath);
             using var document = JsonDocument.Parse(content);
-            if (!AppDefinitionsCatalogMapper.TryGetDefinitionsArray(document.RootElement, out var appEntries, out var errorMessage))
+            if (!AppDefinitionsCatalogMapper.TryGetDefinitionsArray(document.RootElement, out var definitionEntries, out var errorMessage))
             {
-                _definitions = new List<AppDefinition>();
-                _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
+                UseEmptySnapshot();
                 _logger.LogError("应用程序定义目录索引结构无效，已按空集合处理: {Path}, 原因: {Reason}", _definitionsCatalogPath, errorMessage);
                 return;
             }
 
-            foreach (var appEntry in appEntries.EnumerateArray())
+            foreach (var definitionEntry in definitionEntries.EnumerateArray())
             {
-                if (appEntry.ValueKind != JsonValueKind.Object)
+                if (definitionEntry.ValueKind != JsonValueKind.Object)
                 {
-                    _logger.LogWarning("应用程序定义分组无效，已忽略: {Path}, 原因: app entry must be an object", _definitionsCatalogPath);
+                    _logger.LogWarning("应用程序定义记录无效，已忽略: {Path}, 原因: definition record must be an object", _definitionsCatalogPath);
                     continue;
                 }
 
-                if (!appEntry.TryGetProperty("appId", out var appIdElement) || appIdElement.ValueKind != JsonValueKind.String)
+                if (!AppDefinitionsCatalogMapper.TryParseDefinition(definitionEntry, _validator, out var definition, out var validationResult))
                 {
-                    _logger.LogWarning("应用程序定义分组无效，已忽略: {Path}, 原因: appId is required", _definitionsCatalogPath);
+                    var invalidReason = validationResult.Errors.Count == 0
+                        ? "定义校验失败"
+                        : string.Join("; ", validationResult.Errors.Select(issue => $"{issue.Path}: {issue.Message}"));
+                    _logger.LogWarning("应用程序定义记录无效，已忽略: {Path}, 原因: {Reason}", _definitionsCatalogPath, invalidReason);
                     continue;
                 }
 
-                var appId = appIdElement.GetString();
-                if (!ProtocolIdentifier.IsValidAppId(appId))
+                var identity = AppDefinitionIdentity.FromDefinition(definition!);
+                if (definitionsByIdentity.ContainsKey(identity))
                 {
-                    _logger.LogWarning("应用程序定义分组无效，已忽略: {Path}, AppId: {AppId}, 原因: appId must match {Pattern}", _definitionsCatalogPath, appId, ProtocolIdentifier.CanonicalPattern);
+                    _logger.LogWarning("应用程序定义记录重复，已忽略后续记录: {Path}, AppId: {AppId}, Scope: {Scope}", _definitionsCatalogPath, identity.AppId, identity.Scope);
                     continue;
                 }
 
-                if (!appEntry.TryGetProperty("scopes", out var scopesElement) || scopesElement.ValueKind != JsonValueKind.Array)
-                {
-                    _logger.LogWarning("应用程序定义分组无效，已忽略: {Path}, AppId: {AppId}, 原因: scopes must be an array", _definitionsCatalogPath, appId);
-                    continue;
-                }
-
-                foreach (var scopeEntry in scopesElement.EnumerateArray())
-                {
-                    if (scopeEntry.ValueKind != JsonValueKind.Object)
-                    {
-                        _logger.LogWarning("应用程序定义条目无效，已忽略: {Path}, AppId: {AppId}, 原因: scope entry must be an object", _definitionsCatalogPath, appId);
-                        continue;
-                    }
-
-                    if (!AppDefinitionsCatalogMapper.TryParseDefinition(appId!, scopeEntry, _validator, out var definition, out var validationResult))
-                    {
-                        var invalidReason = validationResult.Errors.Count == 0
-                            ? "定义校验失败"
-                            : string.Join("; ", validationResult.Errors.Select(issue => $"{issue.Path}: {issue.Message}"));
-                        _logger.LogWarning("应用程序定义条目无效，已忽略: {Path}, AppId: {AppId}, 原因: {Reason}", _definitionsCatalogPath, appId, invalidReason);
-                        continue;
-                    }
-
-                    var identity = AppDefinitionIdentity.FromDefinition(definition!);
-                    if (definitionsByIdentity.ContainsKey(identity))
-                    {
-                        _logger.LogWarning("应用程序定义条目重复，已忽略后续记录: {Path}, AppId: {AppId}, Scope: {Scope}", _definitionsCatalogPath, identity.AppId, identity.Scope);
-                        continue;
-                    }
-
-                    definitionsByIdentity.Add(identity, definition!);
-                    _logger.LogDebug("成功加载应用程序定义: {AppId}, Scope: {Scope}, 路径: {Path}", definition!.AppId, definition.Scope, _definitionsCatalogPath);
-                }
+                definitionsByIdentity.Add(identity, definition!);
+                _logger.LogDebug("成功加载应用程序定义: {AppId}, Scope: {Scope}, 路径: {Path}", definition!.AppId, definition.Scope, _definitionsCatalogPath);
             }
 
             _definitions = AppDefinitionsCatalogMapper.OrderDefinitions(definitionsByIdentity.Values).ToList();
             _definitionsByIdentity = definitionsByIdentity;
-            _logger.LogInformation("成功加载 {Count} 个应用程序定义", _definitions.Count);
+            _logger.LogInformation("成功加载 {Count} 个应用程序定义。", _definitions.Count);
         }
         catch (JsonException ex)
         {
-            _definitions = new List<AppDefinition>();
-            _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
+            UseEmptySnapshot();
             _logger.LogError(ex, "应用程序定义目录索引 JSON 无效，已按空集合处理: {Path}", _definitionsCatalogPath);
         }
         catch (Exception ex)
         {
-            _definitions = new List<AppDefinition>();
-            _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
+            UseEmptySnapshot();
             _logger.LogError(ex, "加载应用程序定义失败，路径: {Path}", _definitionsCatalogPath);
         }
     }
 
     /// <summary>
-    /// 获取所有应用程序定义
+    /// 获取所有应用程序定义。
     /// </summary>
     public IReadOnlyList<AppDefinition> GetAllDefinitions()
     {
@@ -169,5 +138,11 @@ public class DefinitionLoader
     {
         ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
         return _definitions.Any(definition => definition.AppId == appId);
+    }
+
+    private void UseEmptySnapshot()
+    {
+        _definitions = new List<AppDefinition>();
+        _definitionsByIdentity = new Dictionary<AppDefinitionIdentity, AppDefinition>();
     }
 }

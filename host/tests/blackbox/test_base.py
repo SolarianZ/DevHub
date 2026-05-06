@@ -716,11 +716,11 @@ def _write_definition_catalog(catalog: Dict[str, Any]) -> None:
         json.dump(catalog, f, ensure_ascii=False, indent=2)
 
 
-def _find_definition_entry(catalog: Dict[str, Any], app_id: str) -> Optional[Dict[str, Any]]:
+def _find_definition_entry(catalog: Dict[str, Any], app_id: str, scope: str) -> Optional[Dict[str, Any]]:
     """按 appId 查找目录索引中的应用分组。"""
-    for app_entry in catalog.get("definitions", []):
-        if app_entry.get("appId") == app_id:
-            return app_entry
+    for definition in catalog.get("definitions", []):
+        if definition.get("appId") == app_id and definition.get("scope") == scope:
+            return definition
 
     return None
 
@@ -729,26 +729,22 @@ def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
     """写入测试 AppDefinition 并返回目录索引路径。"""
     normalized_scope = normalize_definition_scope(payload.get("scope"))
     payload = dict(payload)
+    payload["appId"] = app_id
     payload["scope"] = normalized_scope
     catalog = _read_definition_catalog()
-    app_entry = _find_definition_entry(catalog, app_id)
-    if app_entry is None:
-        app_entry = {"appId": app_id, "scopes": []}
-        catalog["definitions"].append(app_entry)
+    definitions = catalog.setdefault("definitions", [])
+    existing = _find_definition_entry(catalog, app_id, normalized_scope)
+    if existing is not None:
+        definitions.remove(existing)
+    definitions.append(payload)
 
-    scope_entries = app_entry.setdefault("scopes", [])
-    scope_entries[:] = [entry for entry in scope_entries if entry.get("scope") != normalized_scope]
-
-    scope_entry = dict(payload)
-    scope_entry.pop("appId", None)
-    scope_entries.append(scope_entry)
-
-    catalog["definitions"].sort(key=lambda item: item.get("appId", ""))
-    for entry in catalog["definitions"]:
-        entry["scopes"] = sorted(
-            entry.get("scopes", []),
-            key=lambda item: (0 if item.get("scope", "") == "" else 1, item.get("scope", "")),
+    catalog["definitions"].sort(
+        key=lambda item: (
+            item.get("appId", ""),
+            0 if item.get("scope", "") == "" else 1,
+            item.get("scope", ""),
         )
+    )
 
     _write_definition_catalog(catalog)
     return get_definitions_catalog_path()

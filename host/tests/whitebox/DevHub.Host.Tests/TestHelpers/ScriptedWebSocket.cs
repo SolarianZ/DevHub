@@ -51,6 +51,31 @@ internal sealed class ScriptedWebSocket : WebSocket
     }
 
     /// <summary>
+    /// 初始化包含原始文本帧字节的脚本化 WebSocket。
+    /// </summary>
+    /// <param name="textMessageBytes">按顺序返回的文本帧原始负载。</param>
+    /// <param name="closeFrameDelay">文本帧耗尽后返回 close 帧前的延迟。</param>
+    /// <param name="autoCloseWhenQueueDrained">初始帧消费完成后是否自动返回 close 帧。</param>
+    public ScriptedWebSocket(
+        IEnumerable<byte[]> textMessageBytes,
+        TimeSpan? closeFrameDelay = null,
+        bool autoCloseWhenQueueDrained = true)
+    {
+        _closeFrameDelay = closeFrameDelay ?? TimeSpan.Zero;
+        _state = WebSocketState.Open;
+
+        foreach (var payload in textMessageBytes)
+        {
+            EnqueueFrame(SocketFrame.TextBytes(payload));
+        }
+
+        if (autoCloseWhenQueueDrained)
+        {
+            EnqueueClose();
+        }
+    }
+
+    /// <summary>
     /// 获取服务端发送到该套接字的文本消息。
     /// </summary>
     public List<string> SentTexts { get; } = [];
@@ -72,6 +97,15 @@ internal sealed class ScriptedWebSocket : WebSocket
     public void EnqueueText(string text)
     {
         EnqueueFrame(SocketFrame.Text(text));
+    }
+
+    /// <summary>
+    /// 向输入脚本追加原始文本帧字节。
+    /// </summary>
+    /// <param name="payload">文本帧原始负载。</param>
+    public void EnqueueTextBytes(byte[] payload)
+    {
+        EnqueueFrame(SocketFrame.TextBytes(payload));
     }
 
     /// <summary>
@@ -284,6 +318,11 @@ internal sealed class ScriptedWebSocket : WebSocket
         public static SocketFrame Text(string text)
         {
             return new SocketFrame(WebSocketMessageType.Text, Encoding.UTF8.GetBytes(text));
+        }
+
+        public static SocketFrame TextBytes(byte[] payload)
+        {
+            return new SocketFrame(WebSocketMessageType.Text, payload);
         }
 
         public static SocketFrame Close()

@@ -228,14 +228,20 @@ public sealed class DevHubHostFixtureTests
         using var catalog = JsonDocument.Parse(await File.ReadAllTextAsync(host.DefinitionsCatalogPath));
         Assert.Equal(1, catalog.RootElement.GetProperty("version").GetInt32());
 
-        var appEntry = Assert.Single(catalog.RootElement.GetProperty("definitions").EnumerateArray());
-        Assert.Equal("fixture.scope.app", appEntry.GetProperty("appId").GetString());
-
-        var scopes = appEntry.GetProperty("scopes").EnumerateArray().ToArray();
-        Assert.Equal(3, scopes.Length);
-        Assert.Contains(scopes, item => item.GetProperty("scope").GetString() == string.Empty);
-        Assert.Contains(scopes, item => item.GetProperty("scope").GetString() == "global");
-        Assert.Contains(scopes, item => item.GetProperty("scope").GetString() == "workspace.a");
+        var persistedDefinitions = catalog.RootElement.GetProperty("definitions").EnumerateArray().ToArray();
+        Assert.Equal(3, persistedDefinitions.Length);
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == string.Empty &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.global");
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == "global" &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.literal-global");
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == "workspace.a" &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.workspace-a");
 
         await using var client = await host.CreateClientAsync("fixture-scope-client");
         var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest

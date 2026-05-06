@@ -35,7 +35,7 @@ class TestLaunchInvocation(unittest.TestCase):
         if include_launch:
             launch_config = {
                 "exePath": get_test_python_executable(),
-                "argsTemplate": self._launch_script_path(),
+                "args": [self._launch_script_path()],
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template

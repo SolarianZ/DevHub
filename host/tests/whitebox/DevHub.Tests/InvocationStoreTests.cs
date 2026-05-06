@@ -358,6 +358,42 @@ public class InvocationStoreTests
     }
 
     [Fact]
+    public async Task Impl_Respond_WhenRequestWaitTimeoutElapsedBeforeTtlAndLeaseValid_ShouldMarkTimeoutAndRejectAsExpired()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-respond-timeout",
+            AppId = "respond-timeout.app",
+            Scope = ScopeContract.Global,
+            Pid = 4015,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+
+        var request = CreateRequest("respond-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
+        request.CreatedAtUtc = start;
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        var leaseToken = Assert.Single(polled).Delivery.LeaseToken;
+
+        clock.Advance(TimeSpan.FromMilliseconds(1000));
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
+
+        Assert.Equal(InvocationRespondStatus.Expired, status);
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Timeout, current!.State);
+        Assert.Null(current.LeaseHolderInstanceId);
+        Assert.Null(current.LeaseExpireAtUtc);
+        Assert.Equal(string.Empty, current.Delivery.LeaseToken);
+    }
+
+    [Fact]
     public async Task Impl_Sweep_ShouldRequeueDeliveredInvocation_WhenLeaseExpired()
     {
         var clock = new MutableClock(DateTime.UtcNow);
@@ -521,4 +557,3 @@ public class InvocationStoreTests
         }
     }
 }
-

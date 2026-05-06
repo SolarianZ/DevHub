@@ -44,7 +44,7 @@
 └── logs/
 ```
 
-其中 `apps/definitions.json` 是唯一公开的 Definition 持久化入口。该文件保存版本化目录索引：顶层包含固定 `version: 1` 与 `definitions` 数组；数组按 `appId` 分组，每个分组通过 `scopes` 数组持有多个显式 `scope` Definition 条目。Global Definition 使用 `scope: ""`；显式作用域 Definition 直接按原值保留 `scope`，例如 `scope: "global"` 与 Global Definition 可并存且按精确 `appId + scope` 定位。
+其中 `apps/definitions.json` 是唯一公开的 Definition 持久化入口。该文件保存版本化目录索引：顶层包含固定 `version: 1` 与 `definitions` 数组；数组中的每一项都是完整 AppDefinition 记录，并显式包含 `appId` 与 `scope` 字段。Global Definition 使用 `scope: ""`；显式作用域 Definition 直接按原值保留 `scope`，例如 `scope: "global"` 与 Global Definition 可并存且按精确 `appId + scope` 定位。
 
 `hub.json` 至少需要读取这些字段：
 

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DevHub.Core.Models;
@@ -17,64 +16,10 @@ internal sealed class AppDefinitionsCatalog
     public int Version { get; set; } = AppDefinitionsCatalogMapper.CurrentVersion;
 
     /// <summary>
-    /// 按 appId 分组的定义条目。
+    /// 完整 AppDefinition 记录集合。
     /// </summary>
     [JsonPropertyName("definitions")]
-    public List<AppDefinitionsCatalogAppEntry> Definitions { get; set; } = [];
-}
-
-/// <summary>
-/// 目录索引中的单个 app 分组。
-/// </summary>
-internal sealed class AppDefinitionsCatalogAppEntry
-{
-    /// <summary>
-    /// 应用标识。
-    /// </summary>
-    [JsonPropertyName("appId")]
-    public string AppId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 按 scope 分组的定义条目。
-    /// </summary>
-    [JsonPropertyName("scopes")]
-    public List<AppDefinitionsCatalogScopeEntry> Scopes { get; set; } = [];
-}
-
-/// <summary>
-/// 目录索引中的单个 scope 定义条目。
-/// </summary>
-internal sealed class AppDefinitionsCatalogScopeEntry
-{
-    /// <summary>
-    /// Definition 作用域。
-    /// </summary>
-    [JsonPropertyName("scope")]
-    public string Scope { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 显示名称。
-    /// </summary>
-    [JsonPropertyName("displayName")]
-    public string? DisplayName { get; set; }
-
-    /// <summary>
-    /// 描述。
-    /// </summary>
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    /// <summary>
-    /// 启动配置。
-    /// </summary>
-    [JsonPropertyName("launch")]
-    public LaunchConfiguration? Launch { get; set; }
-
-    /// <summary>
-    /// 能力配置。
-    /// </summary>
-    [JsonPropertyName("capabilities")]
-    public AppCapabilities? Capabilities { get; set; }
+    public List<AppDefinition> Definitions { get; set; } = [];
 }
 
 /// <summary>
@@ -108,45 +53,23 @@ internal static class AppDefinitionsCatalogMapper
     {
         ArgumentNullException.ThrowIfNull(definitions);
 
-        var orderedDefinitions = OrderDefinitions(definitions);
         var catalog = new AppDefinitionsCatalog();
-
-        foreach (var group in orderedDefinitions.GroupBy(static definition => definition.AppId, StringComparer.Ordinal))
-        {
-            catalog.Definitions.Add(new AppDefinitionsCatalogAppEntry
-            {
-                AppId = group.Key,
-                Scopes = group
-                    .Select(static definition => new AppDefinitionsCatalogScopeEntry
-                    {
-                        Scope = definition.Scope,
-                        DisplayName = definition.DisplayName,
-                        Description = definition.Description,
-                        Launch = definition.Launch,
-                        Capabilities = definition.Capabilities
-                    })
-                    .ToList()
-            });
-        }
-
+        catalog.Definitions.AddRange(OrderDefinitions(definitions));
         return catalog;
     }
 
     /// <summary>
-    /// 校验并解析目录索引中的单个 scope 条目。
+    /// 验证并解析目录索引中的单条 Definition 记录。
     /// </summary>
     public static bool TryParseDefinition(
-        string appId,
-        JsonElement scopeElement,
+        JsonElement definitionElement,
         AppDefinitionValidator validator,
         out AppDefinition? definition,
         out AppDefinitionValidationResult validationResult)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appId);
         ArgumentNullException.ThrowIfNull(validator);
 
-        using var definitionDocument = CreateDefinitionDocument(appId, scopeElement);
-        return validator.TryParseAndValidate(definitionDocument.RootElement, out definition, out validationResult);
+        return validator.TryParseAndValidate(definitionElement, out definition, out validationResult);
     }
 
     /// <summary>
@@ -179,29 +102,5 @@ internal static class AppDefinitionsCatalogMapper
         }
 
         return true;
-    }
-
-    private static JsonDocument CreateDefinitionDocument(string appId, JsonElement scopeElement)
-    {
-        var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            writer.WriteString("appId", appId);
-
-            foreach (var property in scopeElement.EnumerateObject())
-            {
-                if (property.NameEquals("appId"))
-                {
-                    continue;
-                }
-
-                property.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return JsonDocument.Parse(buffer.WrittenMemory);
     }
 }

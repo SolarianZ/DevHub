@@ -92,7 +92,8 @@ it("writeDefinition 应写入单文件 catalog 并保留显式 scope 身份", as
       version: number;
       definitions: Array<{
         appId: string;
-        scopes: Array<{ scope: string; displayName: string }>;
+        scope: string;
+        displayName: string;
       }>;
     };
 
@@ -101,16 +102,13 @@ it("writeDefinition 应写入单文件 catalog 并保留显式 scope 身份", as
       definitions: [
         {
           appId: "fixture.scope.app",
-          scopes: [
-            {
-              scope: "",
-              displayName: "fixture.scope.app.global"
-            },
-            {
-              scope: "workspace-A",
-              displayName: "fixture.scope.app.workspace-A"
-            }
-          ]
+          scope: "",
+          displayName: "fixture.scope.app.global"
+        },
+        {
+          appId: "fixture.scope.app",
+          scope: "workspace-A",
+          displayName: "fixture.scope.app.workspace-A"
         }
       ]
     });

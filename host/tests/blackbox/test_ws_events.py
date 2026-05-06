@@ -112,6 +112,9 @@ class SimpleWebSocketClient:
     def send_text(self, text):
         self._send_frame(0x1, text.encode("utf-8"))
 
+    def send_text_bytes(self, payload):
+        self._send_frame(0x1, payload)
+
     def recv_json(self, timeout=None):
         while True:
             opcode, payload = self._recv_frame(timeout=timeout)
@@ -1366,6 +1369,35 @@ class TestWsEvents:
 
         return result
 
+    def test_ws_013b_pre_auth_invalid_utf8_should_parse_error(self):
+        """WS-013B: 鉴权前非法 UTF-8 应返回 parse_error 并断连。"""
+        result = TestResult("WS-013B 鉴权前非法UTF-8返回 parse_error")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_text_bytes(b'{"jsonrpc":"2.0","id":"bad-utf8-13b","method":"hub.ping","params":{"echo":"\xc3("}}')
+
+                try:
+                    response = ws.recv_json(timeout=3)
+                except WebSocketClosed:
+                    result.add_detail("Runtime closed the malformed WebSocket text frame before application dispatch.")
+                    result.mark_success()
+                    return result
+
+                if not RpcAssertions.expect_error(result, response, -32700, "parse_error", expected_id=None):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("鉴权前非法 UTF-8 返回 parse_error 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_014_pre_auth_invalid_envelope_should_invalid_request(self):
         """WS-014: 鉴权前非法信封应返回 invalid_request 并断连。"""
         result = TestResult("WS-014 鉴权前非法信封返回 invalid_request")
@@ -1623,6 +1655,7 @@ class TestWsEvents:
             self.test_ws_012d_should_push_definition_upserted_event(),
             self.test_ws_012e_should_push_definition_deleted_event(),
             self.test_ws_013_pre_auth_invalid_json_should_parse_error(),
+            self.test_ws_013b_pre_auth_invalid_utf8_should_parse_error(),
             self.test_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
             self.test_ws_015_first_authenticate_without_id_should_invalid_request(),
             self.test_ws_016_pre_auth_batch_root_array_should_invalid_request(),

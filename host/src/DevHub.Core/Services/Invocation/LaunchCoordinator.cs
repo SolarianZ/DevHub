@@ -391,8 +391,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                         return LaunchWaitOutcome.ProcessExitedBeforeRegister;
                     }
 
-                    if (launchRecord.RegisterDeadlineUtc < deadline
-                        && now >= launchRecord.RegisterDeadlineUtc)
+                    if (now >= launchRecord.RegisterDeadlineUtc)
                     {
                         MarkLaunchFailed(
                             launchRecord,

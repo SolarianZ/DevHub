@@ -222,7 +222,10 @@ public class InvocationEventFlowTests : IDisposable
         Assert.Equal(invocationId, failedPayload.GetProperty("invocationId").GetString());
         Assert.Equal("event.invoke.fail.app", failedPayload.GetProperty("appId").GetString());
         Assert.Equal("inst-event-failed", failedPayload.GetProperty("instanceId").GetString());
-        Assert.True(failedPayload.TryGetProperty("error", out _));
+        Assert.Equal("mock", failedPayload.GetProperty("reason").GetString());
+        Assert.True(failedPayload.TryGetProperty("error", out var error));
+        Assert.Equal("app_error", error.GetProperty("message").GetString());
+        Assert.False(failedPayload.GetProperty("delivery").TryGetProperty("leaseToken", out _));
     }
 
     /// <summary>
@@ -264,7 +267,6 @@ public class InvocationEventFlowTests : IDisposable
                ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 }
-
 
 
 

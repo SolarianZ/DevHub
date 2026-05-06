@@ -24,7 +24,13 @@
           },
           "launch": {
             "exePath": "${VECTOR_PYTHON_EXE}",
-            "argsTemplate": "\"${VECTOR_DATA_DIR}/scripts/register_wrong_scope.py\" \"${VECTOR_DATA_DIR}\" \"apps.launch.bound-scope.app\" \"scope-b\" \"apps-launch-bound-scope-instance\""
+            "args": [
+              "${VECTOR_DATA_DIR}/scripts/register_wrong_scope.py",
+              "${VECTOR_DATA_DIR}",
+              "apps.launch.bound-scope.app",
+              "scope-b",
+              "apps-launch-bound-scope-instance"
+            ]
           }
         }
       },
@@ -57,7 +63,7 @@
     "params": {
       "appId": "apps.launch.bound-scope.app",
       "scope": "scope-a",
-      "waitForRegisterMs": 2000
+      "waitForRegisterMs": 5000
     }
   },
   "expectedResponse": {

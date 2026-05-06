@@ -84,6 +84,36 @@ class TestInternalErrors(unittest.TestCase):
 
         return result
 
+    def test_parse_error_invalid_utf8(self):
+        """测试非法 UTF-8 字节返回 -32700 parse_error 且 id=null。"""
+        result = TestResult("测试非法 UTF-8 字节返回 parse_error 且 id=null")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._headers(token)
+            invalid_utf8 = b'{"jsonrpc":"2.0","id":"bad-utf8","method":"hub.ping","params":{"echo":"\xc3("}}'
+            response = requests.post(f"{base_url}/rpc", data=invalid_utf8, headers=headers, timeout=30)
+
+            if response.status_code != 200:
+                result.mark_failure(f"HTTP 状态码不正确: {response.status_code}")
+                return result
+
+            payload = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                payload,
+                expected_code=-32700,
+                expected_message="parse_error",
+                expected_id=None,
+            ):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_invalid_request_envelope(self):
         """测试非法 JSON-RPC 信封返回 -32600 invalid_request"""
         result = TestResult("测试非法 JSON-RPC 信封返回 invalid_request")
@@ -437,6 +467,7 @@ class TestInternalErrors(unittest.TestCase):
         """运行所有错误处理测试"""
         tests = [
             self.test_parse_error_invalid_json,
+            self.test_parse_error_invalid_utf8,
             self.test_invalid_request_envelope,
             self.test_invalid_request_numeric_id_must_be_supported_integer,
             self.test_internal_error_handling,

@@ -165,6 +165,14 @@ public class InvocationStore
                 return InvocationRespondStatus.Expired;
             }
 
+            if (invocation.Kind == InvocationKind.Request &&
+                invocation.Options.WaitTimeoutMs.HasValue &&
+                now >= invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
+            {
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Timeout, now);
+                return InvocationRespondStatus.Expired;
+            }
+
             if (invocation.State is InvocationState.Completed or InvocationState.Failed)
             {
                 return InvocationRespondStatus.DeliveryConflict;

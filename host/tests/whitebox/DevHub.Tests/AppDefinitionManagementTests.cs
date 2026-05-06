@@ -211,14 +211,12 @@ public sealed class AppDefinitionManagementTests : IDisposable
         Assert.Equal(scope, definition.GetProperty("scope").GetString());
 
         using var catalog = JsonDocument.Parse(File.ReadAllText(context.RuntimePathOptions.DefinitionsCatalogPath));
-        var appEntry = Assert.Single(catalog.RootElement.GetProperty("definitions").EnumerateArray());
-        Assert.Equal(appId, appEntry.GetProperty("appId").GetString());
-
-        var scopes = appEntry.GetProperty("scopes")
+        var scopes = catalog.RootElement.GetProperty("definitions")
             .EnumerateArray()
             .Select(entry => entry.GetProperty("scope").GetString())
             .ToArray();
         Assert.Equal(new[] { ScopeContract.Global, scope }, scopes);
+        Assert.All(catalog.RootElement.GetProperty("definitions").EnumerateArray(), entry => Assert.Equal(appId, entry.GetProperty("appId").GetString()));
 
         var getResponse = await context.Handler.HandleAsync(new JsonRpcRequest
         {
@@ -270,13 +268,12 @@ public sealed class AppDefinitionManagementTests : IDisposable
         Assert.True(File.Exists(path));
 
         using var persisted = JsonDocument.Parse(File.ReadAllText(path));
-        var appEntry = Assert.Single(persisted.RootElement.GetProperty("definitions").EnumerateArray());
-        Assert.Equal("managed.nullable.app", appEntry.GetProperty("appId").GetString());
-        var scopeEntry = Assert.Single(appEntry.GetProperty("scopes").EnumerateArray());
-        Assert.Equal(ScopeContract.Global, scopeEntry.GetProperty("scope").GetString());
-        Assert.False(scopeEntry.TryGetProperty("description", out _));
-        Assert.False(scopeEntry.TryGetProperty("launch", out _));
-        Assert.False(scopeEntry.TryGetProperty("capabilities", out _));
+        var definitionEntry = Assert.Single(persisted.RootElement.GetProperty("definitions").EnumerateArray());
+        Assert.Equal("managed.nullable.app", definitionEntry.GetProperty("appId").GetString());
+        Assert.Equal(ScopeContract.Global, definitionEntry.GetProperty("scope").GetString());
+        Assert.False(definitionEntry.TryGetProperty("description", out _));
+        Assert.False(definitionEntry.TryGetProperty("launch", out _));
+        Assert.False(definitionEntry.TryGetProperty("capabilities", out _));
     }
 
     [Fact]

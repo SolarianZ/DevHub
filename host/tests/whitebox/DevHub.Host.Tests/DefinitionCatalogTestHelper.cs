@@ -83,17 +83,7 @@ internal static class DefinitionCatalogTestHelper
 
         var content = File.ReadAllText(catalogPath);
         var catalog = JsonSerializer.Deserialize<AppDefinitionsCatalog>(content, JsonOptions) ?? new AppDefinitionsCatalog();
-        return catalog.Definitions
-            .SelectMany(static appEntry => appEntry.Scopes.Select(scopeEntry => new AppDefinition
-            {
-                AppId = appEntry.AppId,
-                Scope = scopeEntry.Scope,
-                DisplayName = scopeEntry.DisplayName,
-                Description = scopeEntry.Description,
-                Launch = scopeEntry.Launch,
-                Capabilities = scopeEntry.Capabilities
-            }))
-            .ToArray();
+        return catalog.Definitions.ToArray();
     }
 
     /// <summary>

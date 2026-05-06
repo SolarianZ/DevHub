@@ -99,21 +99,19 @@ def test_write_definition_should_persist_catalog_by_explicit_app_id_and_scope() 
     assert catalog["definitions"] == [
         {
             "appId": "fixture.scope.app",
-            "scopes": [
-                {
-                    "scope": "",
-                    "displayName": "fixture.scope.app.global",
-                },
-                {
-                    "scope": "global",
-                    "displayName": "fixture.scope.app.literal-global",
-                },
-                {
-                    "scope": "workspace.a",
-                    "displayName": "fixture.scope.app.workspace-a",
-                },
-            ],
-        }
+            "scope": "",
+            "displayName": "fixture.scope.app.global",
+        },
+        {
+            "appId": "fixture.scope.app",
+            "scope": "global",
+            "displayName": "fixture.scope.app.literal-global",
+        },
+        {
+            "appId": "fixture.scope.app",
+            "scope": "workspace.a",
+            "displayName": "fixture.scope.app.workspace-a",
+        },
     ]
 
 

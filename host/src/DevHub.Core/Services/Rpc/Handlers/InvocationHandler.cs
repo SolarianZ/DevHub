@@ -695,9 +695,64 @@ public class InvocationHandler : IRpcHandler
                 {
                     attempt = invocation.Delivery.Attempt
                 },
+                reason = eventType == HubEventTypes.InvocationFailed
+                    ? ResolveInvocationFailureReason(error)
+                    : null,
                 error
             }
         });
+    }
+
+    private static string? ResolveInvocationFailureReason(object? error)
+    {
+        if (error is null)
+        {
+            return null;
+        }
+
+        var errorElement = JsonSerializer.SerializeToElement(error);
+        if (errorElement.ValueKind != JsonValueKind.Object)
+        {
+            return "callee_error";
+        }
+
+        if (TryGetNonEmptyString(errorElement, "reason", out var reason))
+        {
+            return reason;
+        }
+
+        if (errorElement.TryGetProperty("data", out var dataElement)
+            && dataElement.ValueKind == JsonValueKind.Object
+            && TryGetNonEmptyString(dataElement, "reason", out var dataReason))
+        {
+            return dataReason;
+        }
+
+        if (TryGetNonEmptyString(errorElement, "message", out var message))
+        {
+            return message;
+        }
+
+        return "callee_error";
+    }
+
+    private static bool TryGetNonEmptyString(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var text = property.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        value = text;
+        return true;
     }
 
     private static bool TryParseInvocationOptions(

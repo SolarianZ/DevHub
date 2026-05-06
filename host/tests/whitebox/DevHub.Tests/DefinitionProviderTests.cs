@@ -74,12 +74,7 @@ public class DefinitionProviderTests : IDisposable
             {
               "version": 1,
               "definitions": [
-                {
-                  "appId": "broken.launch.app",
-                  "scopes": [
-                    {{payload}}
-                  ]
-                }
+                {{payload}}
               ]
             }
             """);
@@ -155,29 +150,23 @@ public class DefinitionProviderTests : IDisposable
               "definitions": [
                 {
                   "appId": "provider.duplicate",
-                  "scopes": [
-                    {
-                      "scope": "workspace-a",
-                      "displayName": "First Definition"
-                    },
-                    {
-                      "scope": "workspace-a",
-                      "displayName": "Second Definition"
-                    },
-                    {
-                      "scope": 1,
-                      "displayName": "Invalid Definition"
-                    }
-                  ]
+                  "scope": "workspace-a",
+                  "displayName": "First Definition"
+                },
+                {
+                  "appId": "provider.duplicate",
+                  "scope": "workspace-a",
+                  "displayName": "Second Definition"
+                },
+                {
+                  "appId": "provider.invalid",
+                  "scope": 1,
+                  "displayName": "Invalid Definition"
                 },
                 {
                   "appId": "provider.valid",
-                  "scopes": [
-                    {
-                      "scope": "",
-                      "displayName": "Valid Definition"
-                    }
-                  ]
+                  "scope": "",
+                  "displayName": "Valid Definition"
                 }
               ]
             }

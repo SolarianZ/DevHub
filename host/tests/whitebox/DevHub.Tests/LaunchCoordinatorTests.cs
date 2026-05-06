@@ -723,7 +723,7 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchAsync_WhenWaitForRegisterExceedsBaseTimeout_ShouldHonorWaitBudgetAndReturnStarting()
+    public async Task Impl_LaunchAsync_WhenEffectiveRegisterDeadlineEqualsWaitDeadline_ShouldReturnLaunchRegisterTimeout()
     {
         WriteDefinition("launch-wait-budget.app", includeLaunch: true);
 
@@ -753,9 +753,11 @@ public class LaunchCoordinatorTests : IDisposable
         clock.Advance(TimeSpan.FromSeconds(3));
         var result = await launchTask;
 
-        Assert.True(result.Ok);
-        Assert.Equal("starting", result.Status);
-        Assert.Equal("wait-budget", result.DedupeKey);
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("launch_register_timeout", errorData.GetProperty("reason").GetString());
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 

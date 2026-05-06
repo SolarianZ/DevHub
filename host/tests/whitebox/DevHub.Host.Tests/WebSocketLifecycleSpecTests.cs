@@ -456,6 +456,34 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "3.3")]
+    public async Task Spec_3_3_UnauthenticatedInvalidUtf8_ShouldReturnParseErrorWithNullIdAndClose()
+    {
+        var context = CreateHostContext();
+        var invalidUtf8 = new byte[]
+        {
+            0x7B, 0x22, 0x6A, 0x73, 0x6F, 0x6E, 0x72, 0x70, 0x63, 0x22, 0x3A, 0x22, 0x32, 0x2E, 0x30, 0x22,
+            0x2C, 0x22, 0x69, 0x64, 0x22, 0x3A, 0x22, 0x62, 0x61, 0x64, 0x2D, 0x75, 0x74, 0x66, 0x38, 0x22,
+            0x2C, 0x22, 0x6D, 0x65, 0x74, 0x68, 0x6F, 0x64, 0x22, 0x3A, 0x22, 0x68, 0x75, 0x62, 0x2E, 0x70,
+            0x69, 0x6E, 0x67, 0x22, 0x2C, 0x22, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73, 0x22, 0x3A, 0x7B,
+            0x22, 0x65, 0x63, 0x68, 0x6F, 0x22, 0x3A, 0x22, 0xC3, 0x28, 0x22, 0x7D, 0x7D
+        };
+
+        var socket = new ScriptedWebSocket(new[] { invalidUtf8 });
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        Assert.Single(responses);
+
+        var response = responses[0];
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("id").ValueKind);
+        Assert.True(response.TryGetProperty("error", out var error));
+        Assert.Equal(-32700, error.GetProperty("code").GetInt32());
+        Assert.Equal("parse_error", error.GetProperty("message").GetString());
+        Assert.Equal(WebSocketCloseStatus.PolicyViolation, socket.CloseStatus);
+    }
+
+    [Fact]
     [Trait("SpecRef", "3.1")]
     public async Task Spec_3_1_BatchRequestOverWs_ShouldReturnInvalidRequestWithNullIdAndClose()
     {

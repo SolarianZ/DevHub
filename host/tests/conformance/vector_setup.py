@@ -581,17 +581,19 @@ def append_catalog_definition_setup(catalog: dict[str, Any], definition_setup: d
             f"setup.definitions[{index}].{scope_entry_field}",
             require_object=scope_entry_field == "scopeEntry",
         )
-        app_entry = find_or_add_catalog_app_entry(catalog, app_id)
-        app_entry["scopes"].append(scope_entry)
+        definition_record = copy.deepcopy(scope_entry)
+        if isinstance(definition_record, dict):
+            definition_record["appId"] = app_id
+        catalog["definitions"].append(definition_record)
         return
 
     app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
-    app_entry = read_catalog_setup_value(
+    definition_record = read_catalog_setup_value(
         definition_setup.get(app_entry_field),
         f"setup.definitions[{index}].{app_entry_field}",
         require_object=app_entry_field == "appEntry",
     )
-    catalog["definitions"].append(app_entry)
+    catalog["definitions"].append(definition_record)
 
 
 def find_or_add_catalog_app_entry(catalog: dict[str, Any], app_id: str) -> dict[str, Any]:
@@ -630,21 +632,12 @@ def try_materialize_definition_setup(definition_setup: dict[str, Any]) -> dict[s
             return definition if isinstance(definition.get("scope"), str) else None
 
         app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
-        app_entry = read_catalog_setup_value(
+        definition = read_catalog_setup_value(
             definition_setup.get(app_entry_field),
             f"setup.definitions[].{app_entry_field}",
             require_object=app_entry_field == "appEntry",
         )
-        if not isinstance(app_entry, dict) or not isinstance(app_entry.get("appId"), str):
-            return None
-
-        scopes = app_entry.get("scopes")
-        if not isinstance(scopes, list) or len(scopes) != 1 or not isinstance(scopes[0], dict):
-            return None
-
-        definition = copy.deepcopy(scopes[0])
-        definition["appId"] = app_entry["appId"]
-        return definition if isinstance(definition.get("scope"), str) else None
+        return definition if isinstance(definition, dict) and isinstance(definition.get("appId"), str) and isinstance(definition.get("scope"), str) else None
     except ValueError:
         return None
 

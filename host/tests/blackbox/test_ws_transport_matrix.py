@@ -7,6 +7,7 @@ import os
 import time
 import uuid
 import unittest
+import requests
 
 
 from tests.blackbox.test_base import (
@@ -533,6 +534,31 @@ class TestWsTransportMatrix(unittest.TestCase):
                 request_id="matrix-http-ws-unsubscribe",
             )
             if not self._expect_transport_rejected(result, unsubscribe_response, "matrix-http-ws-unsubscribe"):
+                return result
+
+            notification_payload = {
+                "jsonrpc": "2.0",
+                "method": "hub.events.subscribe",
+                "params": {"types": ["app.instance.registered"]},
+            }
+            response = requests.post(
+                f"{http_base_url}/rpc",
+                json=notification_payload,
+                headers=client.headers,
+                timeout=30,
+            )
+            if response.status_code != 200:
+                result.mark_failure(f"HTTP notification 状态码不正确: {response.status_code}")
+                return result
+
+            notification_response = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                notification_response,
+                -32099,
+                "not_supported",
+                expected_id=None,
+            ):
                 return result
 
             result.mark_success()

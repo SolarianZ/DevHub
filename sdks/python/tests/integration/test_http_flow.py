@@ -191,7 +191,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
                 "displayName": "HTTP Launch App",
                 "launch": {
                     "exePath": sys.executable,
-                    "argsTemplate": str(_launch_script_path()),
+                    "args": [str(_launch_script_path())],
                 },
             }
         )
@@ -236,7 +236,7 @@ def test_host_fixture_close_should_cleanup_launch_process_tree_and_temp_dir() ->
                 "displayName": "HTTP Launch Cleanup App",
                 "launch": {
                     "exePath": sys.executable,
-                    "argsTemplate": f'"{_launch_probe_script_path()}" "{ready_file}"',
+                    "args": [str(_launch_probe_script_path()), str(ready_file)],
                 },
             }
         )

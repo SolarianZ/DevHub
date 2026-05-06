@@ -202,13 +202,9 @@ class TestAppDefinitions(unittest.TestCase):
                         "definitions": [
                             {
                                 "appId": invalid_app_id,
-                                "scopes": [
-                                    {
-                                        "scope": "",
-                                        "displayName": invalid_app["displayName"],
-                                        "capabilities": invalid_app["capabilities"],
-                                    }
-                                ],
+                                "scope": "",
+                                "displayName": invalid_app["displayName"],
+                                "capabilities": invalid_app["capabilities"],
                             }
                         ],
                     },
@@ -254,12 +250,8 @@ class TestAppDefinitions(unittest.TestCase):
                         "definitions": [
                             {
                                 "appId": real_app_id,
-                                "scopes": [
-                                    {
-                                        "scope": "",
-                                        "displayName": "Mismatch Name Application",
-                                    }
-                                ],
+                                "scope": "",
+                                "displayName": "Mismatch Name Application",
                             }
                         ],
                     },
@@ -597,17 +589,14 @@ class TestAppDefinitions(unittest.TestCase):
             with open(get_definitions_catalog_path(), "r", encoding="utf-8") as f:
                 catalog = json.load(f)
 
-            matching_app = next(
-                (entry for entry in catalog.get("definitions", []) if entry.get("appId") == app_id),
-                None,
-            )
-            if matching_app is None:
+            matching_definitions = [entry for entry in catalog.get("definitions", []) if entry.get("appId") == app_id]
+            if not matching_definitions:
                 result.mark_failure(f"❌ catalog 中未找到目标 appId: {catalog}")
                 return result
 
-            scopes = [entry.get("scope") for entry in matching_app.get("scopes", [])]
+            scopes = [entry.get("scope") for entry in matching_definitions]
             if scopes != ["", "global"]:
-                result.mark_failure(f"❌ catalog 中的 scope 集合不正确: {matching_app}")
+                result.mark_failure(f"❌ catalog 中的 scope 集合不正确: {matching_definitions}")
                 return result
 
             get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "global"))
