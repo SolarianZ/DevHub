@@ -286,7 +286,6 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             {
                 launchRecord.State = LaunchRecordState.Registered;
                 launchRecord.RegisteredInstanceId = instance.InstanceId;
-                DeactivateDedupeRecord(launchRecord);
                 _logger.LogInformation(
                     "启动记录已完成注册绑定，LaunchId: {LaunchId}, AppId: {AppId}, Scope: {Scope}, InstanceId: {InstanceId}",
                     launchRecord.LaunchId,
@@ -438,7 +437,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             }
         }
 
-        return new { reason = "definition_scope_mismatch", launchId };
+        return new { reason = "launch_failed", launchId };
     }
 
     private static string? RenderTemplate(
@@ -647,7 +646,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             return null;
         }
 
-        if (record.State != LaunchRecordState.Starting)
+        if (record.State == LaunchRecordState.Failed)
         {
             DeactivateDedupeRecord(record);
             return null;

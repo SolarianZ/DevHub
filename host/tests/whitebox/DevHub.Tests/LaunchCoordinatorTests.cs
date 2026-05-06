@@ -315,6 +315,55 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_WhenLaunchRegisteredWithinDedupeWindow_ShouldReturnAlreadyRunning()
+    {
+        WriteDefinition("launch-registered-dedupe.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-registered-dedupe.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "registered-window",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.False(string.IsNullOrWhiteSpace(first.LaunchId));
+
+        var instance = new AppInstance
+        {
+            InstanceId = "launch-registered-dedupe-instance",
+            AppId = "launch-registered-dedupe.app",
+            Scope = ScopeContract.Global,
+            Pid = 6502,
+            RegisteredAtUtc = clock.UtcNow,
+            LastSeenUtc = clock.UtcNow,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        };
+        coordinator.RecordSuccessfulRegistration(first.LaunchId, instance);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-registered-dedupe.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "registered-window",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+        Assert.Equal(first.DedupeKey, second.DedupeKey);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WithExplicitDedupeKey_ShouldOverrideTemplate()
     {
         WriteDefinition(

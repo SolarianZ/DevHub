@@ -76,6 +76,29 @@ public class InvocationStoreTests
     }
 
     [Fact]
+    public void Impl_TryGet_ShouldReturnSnapshot()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var created = store.CreateInvocation(CreateNotify("snapshot.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+
+        Assert.True(store.TryGet(created.InvocationId, out var snapshot));
+        snapshot!.State = InvocationState.Completed;
+        snapshot.Target.Scope = "mutated";
+        snapshot.Options.TtlMs = 1;
+        snapshot.Delivery.LeaseToken = "mutated-token";
+        snapshot.Caller.ClientId = "mutated-client";
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Queued, current!.State);
+        Assert.Equal(ScopeContract.Global, current.Target.Scope);
+        Assert.Equal(60000, current.Options.TtlMs);
+        Assert.Equal(string.Empty, current.Delivery.LeaseToken);
+        Assert.Equal("test-client", current.Caller.ClientId);
+    }
+
+    [Fact]
     public async Task Impl_TryCreateInvocation_WhenPendingLimitReachedConcurrently_ShouldOnlyStoreSingleInvocation()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);

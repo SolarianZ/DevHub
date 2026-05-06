@@ -83,7 +83,7 @@ public class InvocationStore
     public bool TryGet(string invocationId, out InvocationModel? invocation)
     {
         var exists = _all.TryGetValue(invocationId, out var found);
-        invocation = found;
+        invocation = found is null ? null : CloneInvocation(found);
         return exists;
     }
 
@@ -505,6 +505,48 @@ public class InvocationStore
     private int CountActiveInvocationsUnsafe()
     {
         return _all.Values.Count(static invocation => invocation.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered);
+    }
+
+    private static InvocationModel CloneInvocation(InvocationModel invocation)
+    {
+        return new InvocationModel
+        {
+            InvocationId = invocation.InvocationId,
+            AppId = invocation.AppId,
+            Target = new InvocationTarget
+            {
+                Scope = invocation.Target.Scope,
+                InstanceId = invocation.Target.InstanceId
+            },
+            Method = invocation.Method,
+            Args = invocation.Args,
+            Kind = invocation.Kind,
+            CreatedAtUtc = invocation.CreatedAtUtc,
+            Options = new InvocationOptions
+            {
+                TtlMs = invocation.Options.TtlMs,
+                WaitTimeoutMs = invocation.Options.WaitTimeoutMs,
+                QueueIfOffline = invocation.Options.QueueIfOffline,
+                AutoLaunch = invocation.Options.AutoLaunch
+            },
+            Delivery = new InvocationDelivery
+            {
+                LeaseSeconds = invocation.Delivery.LeaseSeconds,
+                Attempt = invocation.Delivery.Attempt,
+                LeaseToken = invocation.Delivery.LeaseToken
+            },
+            Caller = new InvocationCaller
+            {
+                ClientId = invocation.Caller.ClientId,
+                ClientSessionId = invocation.Caller.ClientSessionId
+            },
+            State = invocation.State,
+            LeaseHolderInstanceId = invocation.LeaseHolderInstanceId,
+            LeaseExpireAtUtc = invocation.LeaseExpireAtUtc,
+            CompletedAtUtc = invocation.CompletedAtUtc,
+            ResponseValue = invocation.ResponseValue,
+            ResponseError = invocation.ResponseError
+        };
     }
 }
 
