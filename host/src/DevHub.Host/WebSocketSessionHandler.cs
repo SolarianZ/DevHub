@@ -240,6 +240,22 @@ public class WebSocketSessionHandler
                         break;
                     }
 
+                    if (JsonRpcEnvelopeParser.IsHubPingScalarParams(rpcRequest))
+                    {
+                        if (rpcRequest.Id is not null)
+                        {
+                            await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id), cancellationToken);
+                        }
+
+                        if (!isAuthenticated)
+                        {
+                            await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", cancellationToken);
+                            break;
+                        }
+
+                        continue;
+                    }
+
                     if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                     {
                         if (rpcRequest.Id is not null)

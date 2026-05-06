@@ -274,6 +274,24 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_HttpHubPing_WhenParamsIsScalar_ShouldReturnInvalidRequest()
+    {
+        using var harness = CreateHarness();
+
+        const string requestJson = """
+            {"jsonrpc":"2.0","id":"http-ping-scalar","method":"hub.ping","params":1}
+            """;
+        using var responseDocument = await ExecuteJsonRequestAsync(harness, requestJson, "http-ping-scalar-client");
+        var root = responseDocument.RootElement;
+
+        Assert.Equal("http-ping-scalar", root.GetProperty("id").GetString());
+        var error = root.GetProperty("error");
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.1.1")]
     public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsNull_ShouldReturnVersion()
     {

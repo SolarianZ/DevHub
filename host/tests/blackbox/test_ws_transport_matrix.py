@@ -363,6 +363,40 @@ class TestWsTransportMatrix(unittest.TestCase):
 
         return result
 
+    def test_ws_matrix_005a_scalar_params_should_be_invalid_request_for_hub_ping(self):
+        """WS-MATRIX-005A: 鉴权后 hub.ping 顶层标量 params 必须返回 invalid_request。"""
+        result = TestResult("WS-MATRIX-005A 鉴权后 WS hub.ping 标量 params")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-005a")
+                if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
+                    return result
+
+                cases = [
+                    ("matrix-invalid-ping-string", "invalid"),
+                    ("matrix-invalid-ping-number", 1),
+                    ("matrix-invalid-ping-bool", True),
+                ]
+
+                for request_id, params in cases:
+                    response = self._ws_call(ws, request_id, "hub.ping", params)
+                    if not RpcAssertions.expect_error(
+                        result,
+                        response,
+                        -32600,
+                        "invalid_request",
+                        expected_id=request_id,
+                    ):
+                        return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(self):
         """WS-MATRIX-006: HTTP-only 方法在 WS 下必须被拒绝。"""
         result = TestResult("WS-MATRIX-006 WS 调用 HTTP-only 方法应拒绝")

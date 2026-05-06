@@ -84,6 +84,40 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_scalar_params_should_be_invalid_request_for_hub_ping(self):
+        """测试 hub.ping 顶层标量 params 返回 invalid_request"""
+        result = TestResult("测试 hub.ping 标量 params 返回 invalid_request")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                ("ping-scalar-string", "invalid"),
+                ("ping-scalar-number", 1),
+                ("ping-scalar-bool", True),
+            ]
+
+            for request_id, params in cases:
+                response = client.call("hub.ping", params, request_id=request_id)
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    expected_code=-32600,
+                    expected_message="invalid_request",
+                    expected_id=request_id,
+                ):
+                    return result
+
+                result.add_detail(f"✅ {request_id} 正确返回 invalid_request")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_hub_apps_get_definition_missing_appid(self):
         """测试 hub.apps.getDefinition 缺少 appId 参数"""
         result = TestResult("测试 hub.apps.getDefinition 缺少 appId 参数")

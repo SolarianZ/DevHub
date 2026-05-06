@@ -149,6 +149,14 @@ public class RpcHttpEndpointHandler
                 rpcRequest.ClientId = validatedClientId;
                 rpcRequest.ClientSessionId = validatedClientSessionId;
 
+                if (JsonRpcEnvelopeParser.IsHubPingScalarParams(rpcRequest))
+                {
+                    _logger.LogWarning("hub.ping 顶层标量参数无效，返回 invalid_request，RequestId: {RequestId}",
+                        rpcRequest.Id);
+
+                    return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id), JsonOptions));
+                }
+
                 if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                 {
                     _logger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",

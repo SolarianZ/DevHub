@@ -179,6 +179,29 @@ public class TransportValidationImplTests
     }
 
     [Fact]
+    public void Impl_6_1_HubPingScalarParams_ShouldDetectHubPingOnly()
+    {
+        var scalarParams = ParseJsonElement("\"bad\"");
+
+        var hubPingRequest = new JsonRpcRequest
+        {
+            Id = "req-hub-ping-scalar",
+            Method = "hub.ping",
+            Params = scalarParams
+        };
+
+        var hubGetVersionRequest = new JsonRpcRequest
+        {
+            Id = "req-hub-get-version-scalar",
+            Method = "hub.getVersion",
+            Params = scalarParams
+        };
+
+        Assert.True(JsonRpcEnvelopeParser.IsHubPingScalarParams(hubPingRequest));
+        Assert.False(JsonRpcEnvelopeParser.IsHubPingScalarParams(hubGetVersionRequest));
+    }
+
+    [Fact]
     public void Impl_6_2_IsHttpOnlyMethod_ShouldMatchTransportBoundary()
     {
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.validateDefinition"));

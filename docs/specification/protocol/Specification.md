@@ -674,11 +674,17 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 ### 6.3 方法定义
 
 #### 6.3.1 `hub.ping`
-**参数（可选）**：`{ "echo": any }`
+**参数（可选）**：可以省略 `params`，也可以传 `null` 或对象参数（对象中可包含 `echo` 字段）
 **结果**：
 ```json
 { "ok": true, "serverTimeUtc": "2026-01-30T12:34:56Z", "echo": "..." }
 ```
+
+规范性行为：
+- `params` 省略、`params = null` 或 `params` 为对象时，Hub **必须**接受请求。
+- 若 `params` 为对象且存在 `echo` 字段，Hub **可以**在成功响应中回显该字段值。
+- 当 `params` 为数组时，Hub **必须**按 §6.1 返回 `-32602 invalid_params`。
+- 当 `params` 为 `string`、`number` 或 `boolean` 时，Hub **必须**返回 `-32600 invalid_request`。
 
 #### 6.3.1A `hub.getVersion`
 **参数（可选）**：可以省略 `params`，也可以传 `null` 或空对象 `{}`

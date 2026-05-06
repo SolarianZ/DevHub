@@ -528,7 +528,7 @@ public class TransportValidationTests
 
     [Fact]
     [Trait("SpecRef", "6.1")]
-    public void Spec_6_1_TryBuildRpcRequest_HubPingScalarParams_ShouldBePassedToMethodValidation()
+    public void Spec_6_1_TryBuildRpcRequest_HubPingScalarParams_ShouldBeAcceptedForTransportValidation()
     {
         var root = ParseJsonElement("""
         {

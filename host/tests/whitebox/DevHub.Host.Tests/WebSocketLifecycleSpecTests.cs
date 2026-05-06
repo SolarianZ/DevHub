@@ -695,6 +695,46 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
+    [Trait("SpecRef", "6.3.1")]
+    public async Task Spec_6_3_1_AfterAuthenticate_HubPing_WhenParamsScalarOverWs_ShouldReturnInvalidRequest()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-scalar-params",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-scalar-client",
+                clientSessionId = "97979797-9797-9797-9797-979797979797"
+            }
+        });
+
+        const string scalarParamsRequest = """
+        {"jsonrpc":"2.0","id":"ws-ping-scalar","method":"hub.ping","params":1}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, scalarParamsRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+
+        var authResponse = FindResponseById(responses, "auth-scalar-params");
+        Assert.True(authResponse.TryGetProperty("result", out var authResult));
+        Assert.True(authResult.GetProperty("ok").GetBoolean());
+
+        var invalidRequestResponse = FindResponseById(responses, "ws-ping-scalar");
+        Assert.NotEqual(JsonValueKind.Undefined, invalidRequestResponse.ValueKind);
+        Assert.True(invalidRequestResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32600, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_request", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
     [Trait("SpecRef", "6.3.1.1")]
     public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsNull_ShouldReturnVersion()
     {
@@ -764,6 +804,41 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
         var responses = ParseSentMessages(socket);
         var getVersionResponse = FindResponseById(responses, "ws-get-version-extra");
+        Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
+        Assert.True(getVersionResponse.TryGetProperty("error", out var error));
+        Assert.Equal(-32602, error.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    [Trait("SpecRef", "6.3.1.1")]
+    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsScalar_ShouldReturnInvalidParams()
+    {
+        var context = CreateHostContext();
+
+        var auth = CreateJson(new
+        {
+            jsonrpc = "2.0",
+            id = "auth-get-version-scalar",
+            method = "hub.ws.authenticate",
+            @params = new
+            {
+                token = context.Token,
+                protocolVersion = 1,
+                clientId = "ws-get-version-scalar-client",
+                clientSessionId = "66666666-6666-6666-6666-666666666666"
+            }
+        });
+
+        const string getVersionRequest = """
+        {"jsonrpc":"2.0","id":"ws-get-version-scalar","method":"hub.getVersion","params":1}
+        """;
+
+        var socket = new ScriptedWebSocket([auth, getVersionRequest]);
+        await context.InvokeWebSocketConnectionAsync(socket);
+
+        var responses = ParseSentMessages(socket);
+        var getVersionResponse = FindResponseById(responses, "ws-get-version-scalar");
         Assert.NotEqual(JsonValueKind.Undefined, getVersionResponse.ValueKind);
         Assert.True(getVersionResponse.TryGetProperty("error", out var error));
         Assert.Equal(-32602, error.GetProperty("code").GetInt32());

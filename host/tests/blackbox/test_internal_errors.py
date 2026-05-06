@@ -143,11 +143,6 @@ class TestInternalErrors(unittest.TestCase):
                     "name": "params 非 object/array",
                     "payload": {"jsonrpc": "2.0", "id": "bad-envelope-3", "method": "hub.ping", "params": "invalid"},
                     "expected_id": "bad-envelope-3"
-                },
-                {
-                    "name": "params 为 null",
-                    "payload": {"jsonrpc": "2.0", "id": "bad-envelope-4", "method": "hub.ping", "params": None},
-                    "expected_id": "bad-envelope-4"
                 }
             ]
 
@@ -168,6 +163,26 @@ class TestInternalErrors(unittest.TestCase):
                     return result
 
                 result.add_detail(f"✅ {case['name']} 返回 invalid_request")
+
+            null_params_response = requests.post(
+                f"{base_url}/rpc",
+                json={"jsonrpc": "2.0", "id": "ping-null-params", "method": "hub.ping", "params": None},
+                headers=headers,
+                timeout=30,
+            )
+            if null_params_response.status_code != 200:
+                result.mark_failure(f"❌ params 为 null 返回非200状态码: {null_params_response.status_code}")
+                return result
+
+            null_params_payload = null_params_response.json()
+            if null_params_payload.get("id") != "ping-null-params":
+                result.mark_failure(f"❌ hub.ping params 为 null 响应 id 不正确: {null_params_payload.get('id')}")
+                return result
+
+            if not RpcAssertions.expect_success(result, null_params_payload, ["serverTimeUtc"]):
+                return result
+
+            result.add_detail("✅ hub.ping params 为 null 正确返回成功")
 
             root_type_cases = [
                 {"name": "根节点为字符串", "body": '"not-an-object"'},
