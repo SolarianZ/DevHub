@@ -57,8 +57,8 @@
 - 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。该 schema 同样禁止 `password` 与 `instanceSessionToken` 混入 `params.instance`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
 - 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，非 null `target.instanceId` 长度不超过 256 字符，`caller.clientSessionId` **必须**是 canonical UUID string。`delivery` 存在时必须包含 `leaseSeconds`、`attempt` 与 Hub 签发的 `leaseToken`。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
-- 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；其中 numeric `id` 只接受有符号 64 位整数范围内的整数值。该 schema 将 `params` 的通用形状收敛为对象，并只为 `hub.getVersion` 保留 `params: null` 的规范例外；更细的方法级字段约束仍以 [`Specification.md`](../../protocol/Specification.md) 为准。
-- 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验；该 schema 将 `params` 的通用形状收敛为对象，对应 DevHub 当前规范中的通知入口。
+- 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；其中 numeric `id` 只接受有符号 64 位整数范围内的整数值。该 schema 作为 DevHub 当前公开方法集合的 envelope schema，将 `params` 的通用形状收敛为对象，并仅为 `hub.ping` / `hub.getVersion` 提供 `params: null` 的方法级例外；更细的方法级字段约束仍以 [`Specification.md`](../../protocol/Specification.md) 为准。
+- 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验；该 schema 同样服务于 DevHub 当前公开方法集合，默认要求 `params` 为对象，并仅为 `hub.ping` / `hub.getVersion` 提供 `params: null` 的方法级例外。
 - 接收成功响应时，用 `rpc-response.json` 校验；接收错误响应时，用 `error-response.json` 校验。两个响应 schema 中的 numeric `id` 同样只接受有符号 64 位整数范围内的整数值。这两个 schema 分别约束成功/错误信封，不能同时接受同一个同时带 `result` 与 `error` 的响应对象。
 - 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition 生命周期事件、Instance 生命周期事件与 invocation 事件施加最小 payload 约束。`app.definition.upserted.payload.definition.scope` 与 `payload.scope` 的相等性属于 [`Specification.md`](../../protocol/Specification.md) §6.3.19 的规范要求；标准 Draft-07 schema 不表达跨字段动态相等校验，该一致性由协议实现或 conformance 测试校验。
 
