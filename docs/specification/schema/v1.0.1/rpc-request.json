@@ -33,17 +33,34 @@
       "oneOf": [
         {
           "type": "object"
-        },
-        {
-          "type": "array"
-        },
-        {
-          "type": "null"
         }
       ]
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "hub.getVersion"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

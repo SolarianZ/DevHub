@@ -25,9 +25,6 @@
       "oneOf": [
         {
           "type": "object"
-        },
-        {
-          "type": "array"
         }
       ]
     }
