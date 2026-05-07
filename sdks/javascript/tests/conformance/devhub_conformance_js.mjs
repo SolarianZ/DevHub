@@ -732,11 +732,15 @@ function normalizeAppDefinition(definition) {
   }
 
   if (definition.capabilities !== undefined) {
-    normalized.capabilities = {
-      rpc: definition.capabilities.rpc
-    };
+    const normalizedCapabilities = {};
+    if (definition.capabilities.rpc !== true) {
+      normalizedCapabilities.rpc = definition.capabilities.rpc;
+    }
     if ("events" in definition.capabilities && definition.capabilities.events !== undefined) {
-      normalized.capabilities.events = definition.capabilities.events;
+      normalizedCapabilities.events = definition.capabilities.events;
+    }
+    if (Object.keys(normalizedCapabilities).length > 0) {
+      normalized.capabilities = normalizedCapabilities;
     }
   }
 
