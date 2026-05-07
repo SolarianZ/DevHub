@@ -30,6 +30,8 @@ HOST_BUILD_CONFIGURATION = "Release"
 HOST_TARGET_FRAMEWORK = "net10.0"
 TEST_LIVE_STATUS_ENV_VAR = "DEVHUB_TEST_LIVE_STATUS"
 LONG_WAIT_STATUS_THRESHOLD_SECONDS = 8
+HOST_STARTUP_TIMEOUT_SECONDS = 30
+HOST_STARTUP_MAX_ATTEMPTS = 2
 
 _shared_host_assembly_path: Path | None = None
 _shared_host_build_root: Path | None = None
@@ -161,18 +163,7 @@ class DevHubHostFixture:
         )
 
     def close(self) -> None:
-        if self._process is not None:
-            try:
-                if self._process.poll() is None:
-                    _terminate_process_tree(self._process)
-                    try:
-                        self._process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        self._process.kill()
-                        self._process.wait(timeout=5)
-            finally:
-                self._process = None
-        self._stop_output_drainers()
+        self._stop_process()
         self._temp_root.cleanup()
 
     def __enter__(self) -> "DevHubHostFixture":
@@ -186,42 +177,60 @@ class DevHubHostFixture:
         if not host_assembly_path.is_file():
             raise RuntimeError(f"未找到 Host 程序：{host_assembly_path}")
 
-        environment = os.environ.copy()
-        environment["DEVHUB_DATA_DIR"] = str(self.data_directory)
-        environment["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = uuid4().hex
+        last_error: RuntimeError | None = None
+        for attempt in range(1, HOST_STARTUP_MAX_ATTEMPTS + 1):
+            self._reset_output_buffers()
 
-        self._process = subprocess.Popen(
-            ["dotnet", str(host_assembly_path)],
-            cwd=self._repo_root,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=environment,
-            **_create_isolated_process_kwargs(),
-        )
-        # 重要：必须持续消费 stdout/stderr，避免管道被写满后阻塞 Host 线程，导致 HTTP 请求卡死。
-        self._start_output_drainers()
+            environment = os.environ.copy()
+            environment["DEVHUB_DATA_DIR"] = str(self.data_directory)
+            environment["DEVHUB_SINGLE_INSTANCE_SLOT_FOR_TESTS"] = uuid4().hex
 
-        hub_json_path = self.runtime_directory / "hub.json"
-        deadline = time.time() + 30
-        status = _LongWaitStatus("等待 Python SDK Host fixture 生成 hub.json", 30)
-        try:
-            while time.time() < deadline:
-                if hub_json_path.is_file():
-                    return
-                if self._process.poll() is not None:
-                    stdout = self._collect_output(self._stdout_buffer)
-                    stderr = self._collect_output(self._stderr_buffer)
-                    raise RuntimeError(f"Host 进程提前退出。stdout={stdout} stderr={stderr}")
-                time.sleep(0.25)
-                status.tick()
-        finally:
-            status.finish()
+            self._process = subprocess.Popen(
+                ["dotnet", str(host_assembly_path)],
+                cwd=self._repo_root,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=environment,
+                **_create_isolated_process_kwargs(),
+            )
+            # 重要：必须持续消费 stdout/stderr，避免管道被写满后阻塞 Host 线程，导致 HTTP 请求卡死。
+            self._start_output_drainers()
 
-        raise RuntimeError("等待 hub.json 超时。")
+            hub_json_path = self.runtime_directory / "hub.json"
+            deadline = time.time() + HOST_STARTUP_TIMEOUT_SECONDS
+            status = _LongWaitStatus(
+                f"等待 Python SDK Host fixture 生成 hub.json（第 {attempt}/{HOST_STARTUP_MAX_ATTEMPTS} 次）",
+                HOST_STARTUP_TIMEOUT_SECONDS,
+            )
+            try:
+                while time.time() < deadline:
+                    if hub_json_path.is_file():
+                        return
+                    if self._process.poll() is not None:
+                        stdout = self._collect_output(self._stdout_buffer)
+                        stderr = self._collect_output(self._stderr_buffer)
+                        raise RuntimeError(f"Host 进程提前退出。stdout={stdout} stderr={stderr}")
+                    time.sleep(0.25)
+                    status.tick()
+            except RuntimeError as exc:
+                last_error = exc
+            finally:
+                status.finish()
+
+            if last_error is None:
+                stdout = self._collect_output(self._stdout_buffer)
+                stderr = self._collect_output(self._stderr_buffer)
+                last_error = RuntimeError(f"等待 hub.json 超时。stdout={stdout} stderr={stderr}")
+
+            self._stop_process()
+            self._reset_runtime_layout()
+
+        assert last_error is not None
+        raise last_error
 
     def _start_output_drainers(self) -> None:
         if self._process is None:
@@ -267,6 +276,33 @@ class DevHubHostFixture:
         if not buffer:
             return ""
         return "".join(buffer)
+
+    def _stop_process(self) -> None:
+        if self._process is not None:
+            try:
+                if self._process.poll() is None:
+                    _terminate_process_tree(self._process)
+                    try:
+                        self._process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        self._process.kill()
+                        self._process.wait(timeout=5)
+            finally:
+                self._process = None
+        self._stop_output_drainers()
+
+    def _reset_output_buffers(self) -> None:
+        self._stdout_buffer.clear()
+        self._stderr_buffer.clear()
+
+    def _reset_runtime_layout(self) -> None:
+        shutil.rmtree(self.runtime_directory, ignore_errors=True)
+        shutil.rmtree(self.definitions_directory, ignore_errors=True)
+        shutil.rmtree(self.logs_directory, ignore_errors=True)
+        self.runtime_directory.mkdir(parents=True, exist_ok=True)
+        self.definitions_directory.mkdir(parents=True, exist_ok=True)
+        self.instances_directory.mkdir(parents=True, exist_ok=True)
+        self.logs_directory.mkdir(parents=True, exist_ok=True)
 
 
 def _resolve_repo_root() -> Path:
@@ -355,6 +391,7 @@ def _build_host_assembly(repo_root: Path, build_root: Path) -> None:
             HOST_BUILD_CONFIGURATION,
             "--nologo",
             f"-p:BaseOutputPath={_ensure_trailing_separator(build_root / 'bin')}",
+            f"-p:BaseIntermediateOutputPath={_ensure_trailing_separator(build_root / 'obj')}",
         ],
         cwd=repo_root,
         stdin=subprocess.DEVNULL,

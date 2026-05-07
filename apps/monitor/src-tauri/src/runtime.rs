@@ -141,6 +141,7 @@ fn validate_runtime_tuning(runtime_tuning: &MonitorRuntimeTuning, source: &Path)
     if runtime_tuning.lease_seconds == 0
         || runtime_tuning.online_threshold_seconds == 0
         || runtime_tuning.launch_dedupe_window_seconds == 0
+        || runtime_tuning.launch_register_timeout_seconds == 0
     {
         anyhow::bail!("hub.json.runtimeTuning 非法：{}", source.display());
     }
@@ -407,7 +408,8 @@ mod tests {
             "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 15,
-                "launchDedupeWindowSeconds": 5
+                "launchDedupeWindowSeconds": 5,
+                "launchRegisterTimeoutSeconds": 45
             },
             "hubVersion": "0.7.0"
         }))
@@ -464,7 +466,8 @@ mod tests {
                 "runtimeTuning": {
                     "leaseSeconds": 30,
                     "onlineThresholdSeconds": 15,
-                    "launchDedupeWindowSeconds": 5
+                    "launchDedupeWindowSeconds": 5,
+                    "launchRegisterTimeoutSeconds": 45
                 }
             }))
             .expect("failed to serialize hub.json");
@@ -513,7 +516,8 @@ mod tests {
                 "runtimeTuning": {
                     "leaseSeconds": 30,
                     "onlineThresholdSeconds": 15,
-                    "launchDedupeWindowSeconds": 5
+                    "launchDedupeWindowSeconds": 5,
+                    "launchRegisterTimeoutSeconds": 45
                 }
             }))
             .expect("failed to serialize hub.json");
@@ -547,7 +551,8 @@ mod tests {
             "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 15,
-                "launchDedupeWindowSeconds": 5
+                "launchDedupeWindowSeconds": 5,
+                "launchRegisterTimeoutSeconds": 45
             }
         }))
         .expect("failed to serialize hub.json");

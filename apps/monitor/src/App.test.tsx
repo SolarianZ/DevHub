@@ -113,6 +113,7 @@ function createConnection(
         leaseSeconds: 30,
         onlineThresholdSeconds: 15,
         launchDedupeWindowSeconds: 5,
+        launchRegisterTimeoutSeconds: 45,
       },
       hubVersion: "0.7.0",
       ...runtimeOverrides,
@@ -1448,8 +1449,10 @@ describe("Monitor App", () => {
 
     expect(pickHostExecutablePathMock).toHaveBeenCalledWith("/tmp/DevHub.Host");
     expect(pickDataDirectoryMock).toHaveBeenCalledWith("/tmp/devhub");
-    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/picked-host");
-    expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/picked-data");
+    await waitFor(() => {
+      expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/picked-host");
+      expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/picked-data");
+    });
   });
 
   it("prompts before leaving settings with unsaved changes and discards the draft after confirmation", async () => {

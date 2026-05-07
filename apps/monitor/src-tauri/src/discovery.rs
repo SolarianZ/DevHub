@@ -490,6 +490,7 @@ mod tests {
                     lease_seconds: 30,
                     online_threshold_seconds: 15,
                     launch_dedupe_window_seconds: 5,
+                    launch_register_timeout_seconds: 45,
                 },
                 hub_version: hub_version.map(str::to_string),
             },

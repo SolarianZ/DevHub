@@ -696,6 +696,7 @@ async function createConnection(activeHost: DevHubHostFixture): Promise<MonitorR
       leaseSeconds: number;
       onlineThresholdSeconds: number;
       launchDedupeWindowSeconds: number;
+      launchRegisterTimeoutSeconds: number;
     };
     hubVersion?: string;
   };
@@ -772,6 +773,7 @@ function createSdkRuntimeResolver(connection: MonitorRuntimeConnectionInfo) {
             leaseSeconds: connection.runtime.runtimeTuning.leaseSeconds,
             onlineThresholdSeconds: connection.runtime.runtimeTuning.onlineThresholdSeconds,
             launchDedupeWindowSeconds: connection.runtime.runtimeTuning.launchDedupeWindowSeconds,
+            launchRegisterTimeoutSeconds: connection.runtime.runtimeTuning.launchRegisterTimeoutSeconds,
           },
           hubVersion: connection.runtime.hubVersion ?? undefined,
         },

@@ -46,9 +46,6 @@
         "appId": "events.definition.blank-launch-exepath",
         "scope": "",
         "displayName": "Events Blank Launch ExePath",
-        "capabilities": {
-          "rpc": true
-        },
         "launch": {
           "exePath": "   "
         }
