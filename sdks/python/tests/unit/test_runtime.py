@@ -192,7 +192,8 @@ def test_runtime_discovery_when_hub_json_contains_non_standard_json_constant_sho
                 '  "runtimeTuning": {',
                 '    "leaseSeconds": 30,',
                 '    "onlineThresholdSeconds": 30,',
-                '    "launchDedupeWindowSeconds": 30',
+                '    "launchDedupeWindowSeconds": 30,',
+                '    "launchRegisterTimeoutSeconds": 30',
                 "  },",
                 '  "extra": NaN',
                 "}",
@@ -235,6 +236,19 @@ def test_runtime_discovery_when_optional_hub_version_is_null_should_raise(tmp_pa
     (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError):
+        discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
+
+
+def test_runtime_discovery_when_launch_register_timeout_seconds_missing_should_raise(tmp_path: Path) -> None:
+    data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    runtime_tuning = payload["runtimeTuning"]
+    assert isinstance(runtime_tuning, dict)
+    runtime_tuning.pop("launchRegisterTimeoutSeconds")
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="runtimeTuning"):
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
@@ -337,5 +351,6 @@ def _hub_payload(token_file: Path) -> dict[str, object]:
             "leaseSeconds": 30,
             "onlineThresholdSeconds": 30,
             "launchDedupeWindowSeconds": 30,
+            "launchRegisterTimeoutSeconds": 30,
         },
     }

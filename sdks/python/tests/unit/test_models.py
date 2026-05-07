@@ -61,6 +61,7 @@ def test_public_models_should_preserve_case_sensitive_canonical_identifiers() ->
     "factory",
     [
         lambda: AppDefinition(app_id=".Sample", display_name="Sample", scope=""),
+        lambda: AppDefinition(app_id="Sample.App", display_name=" ", scope=""),
         lambda: AppInstanceRegistration(
             instance_id="NODE_01.alpha-",
             app_id="Sample.App",

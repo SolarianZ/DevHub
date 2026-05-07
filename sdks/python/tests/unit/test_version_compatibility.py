@@ -320,6 +320,7 @@ def _create_connection_info(hub_version: str | None = "0.7.0") -> RuntimeConnect
                 lease_seconds=15,
                 online_threshold_seconds=30,
                 launch_dedupe_window_seconds=45,
+                launch_register_timeout_seconds=60,
             ),
             hub_version=hub_version,
         ),

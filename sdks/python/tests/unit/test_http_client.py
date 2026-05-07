@@ -757,6 +757,7 @@ def _write_data_directory(tmp_path: Path, port: int) -> Path:
                     "leaseSeconds": 30,
                     "onlineThresholdSeconds": 30,
                     "launchDedupeWindowSeconds": 30,
+                    "launchRegisterTimeoutSeconds": 30,
                 },
             }
         ),
@@ -865,6 +866,7 @@ def _create_connection_info(ws_url: str = "ws://127.0.0.1:57231/ws") -> RuntimeC
                 lease_seconds=30,
                 online_threshold_seconds=30,
                 launch_dedupe_window_seconds=30,
+                launch_register_timeout_seconds=30,
             ),
         ),
     )

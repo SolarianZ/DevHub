@@ -45,7 +45,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -83,7 +84,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -118,7 +120,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -157,7 +160,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
               "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 30,
-                "launchDedupeWindowSeconds": 30
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 30
               }
             }
             """);
@@ -192,7 +196,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
           "runtimeTuning": {
             "leaseSeconds": 30,
             "onlineThresholdSeconds": 30,
-            "launchDedupeWindowSeconds": 30
+            "launchDedupeWindowSeconds": 30,
+            "launchRegisterTimeoutSeconds": 30
           }
         }
         """);
@@ -230,7 +235,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = leaseSeconds,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -239,6 +245,74 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             ClientId = "unit-test-client",
             DataDir = dataDir
         }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RuntimeDiscovery_WhenLaunchRegisterTimeoutMissing_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-1");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(runtimeDir, "hub.json"),
+            $$"""
+            {
+              "protocolVersion": 1,
+              "pid": 12345,
+              "httpBaseUrl": "http://127.0.0.1:47231",
+              "wsUrl": "ws://127.0.0.1:47231/ws",
+              "tokenFile": "{{tokenFile.Replace("\\", "\\\\")}}",
+              "startedAtUtc": "2026-03-09T00:00:00Z",
+              "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 30,
+                "launchDedupeWindowSeconds": 30
+              }
+            }
+            """);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None));
+
+        Assert.Contains("hub.json.runtimeTuning", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RuntimeDiscovery_WhenLaunchRegisterTimeoutNonPositive_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = CreateDataDirectory();
+        var runtimeDir = GetRuntimeDirectory(dataDir);
+        var tokenFile = Path.Combine(runtimeDir, "token.txt");
+        await File.WriteAllTextAsync(tokenFile, "token-1");
+        await WriteHubJsonAsync(dataDir, new HubRuntime
+        {
+            ProtocolVersion = 1,
+            Pid = 12345,
+            HttpBaseUrl = "http://127.0.0.1:47231",
+            WsUrl = "ws://127.0.0.1:47231/ws",
+            TokenFile = tokenFile,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+            RuntimeTuning = new HubRuntimeTuning
+            {
+                LeaseSeconds = 30,
+                OnlineThresholdSeconds = 30,
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 0
+            }
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeDiscovery.DiscoverAsync(new DevHubClientOptions
+        {
+            ClientId = "unit-test-client",
+            DataDir = dataDir
+        }, CancellationToken.None));
+
+        Assert.Contains("hub.json.runtimeTuning", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -281,7 +355,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -310,7 +385,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -342,7 +418,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -374,7 +451,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -407,7 +485,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 
@@ -442,7 +521,8 @@ public sealed class RuntimeDiscoveryTests : IDisposable
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         });
 

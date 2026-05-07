@@ -647,7 +647,7 @@ class TestAppDefinitions(unittest.TestCase):
                 "definition": {
                     "appId": "Invalid App",
                     "scope": "",
-                    "displayName": ""
+                    "displayName": "   "
                 }
             })
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):

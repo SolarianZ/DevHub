@@ -153,7 +153,7 @@ try {
 
 ### 6.2 定义与实例管理
 
-定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。`AppInstanceRegistration` 的 TypeScript 类型与本地运行时校验都会拒绝把 `password` 或 `instanceSessionToken` 混入实例对象。Host 启动 App 时通过 `DEVHUB_LAUNCH_ID` 传入的启动标识，应通过 `registerInstance` 第三个参数中的 `launchId` 返回 Host，SDK 会将其放入 `hub.apps.registerInstance.params.launchId`。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
+定义写接口只在 `DevHubClient` 上提供；`displayName` 必须是至少包含一个非空白字符的字符串。实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。`AppInstanceRegistration` 的 TypeScript 类型与本地运行时校验都会拒绝把 `password` 或 `instanceSessionToken` 混入实例对象。Host 启动 App 时通过 `DEVHUB_LAUNCH_ID` 传入的启动标识，应通过 `registerInstance` 第三个参数中的 `launchId` 返回 Host，SDK 会将其放入 `hub.apps.registerInstance.params.launchId`。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
 
 ```ts
 const definition = {

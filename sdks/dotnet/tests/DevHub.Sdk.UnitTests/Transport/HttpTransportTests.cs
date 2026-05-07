@@ -485,6 +485,28 @@ public sealed class HttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task HttpTransport_WhenGetDefinitionResultDisplayNameWhitespaceOnly_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-get-definition\",\"result\":{\"ok\":true,\"definition\":{\"appId\":\"sample.app\",\"scope\":\"\",\"displayName\":\"   \"}}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-get-definition");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetDefinitionAsync("sample.app", string.Empty, CancellationToken.None));
+        Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HttpTransport_WhenGetDefinitionResultAppIdViolatesCanonicalGrammar_ShouldThrowInvalidOperationException()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -1160,7 +1182,8 @@ public sealed class HttpTransportTests : IDisposable
               "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 30,
-                "launchDedupeWindowSeconds": 30
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 30
               }
             }
             """);

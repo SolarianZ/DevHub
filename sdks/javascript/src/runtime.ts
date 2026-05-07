@@ -11,6 +11,7 @@ export interface HubRuntimeTuning {
   leaseSeconds: number;
   onlineThresholdSeconds: number;
   launchDedupeWindowSeconds: number;
+  launchRegisterTimeoutSeconds: number;
 }
 
 export interface HubRuntime {
@@ -187,15 +188,17 @@ function parseRuntimeTuning(payload: unknown, source: string): HubRuntimeTuning 
   const leaseSeconds = readInteger(payload, "leaseSeconds", source, "hub.json.runtimeTuning 非法");
   const onlineThresholdSeconds = readInteger(payload, "onlineThresholdSeconds", source, "hub.json.runtimeTuning 非法");
   const launchDedupeWindowSeconds = readInteger(payload, "launchDedupeWindowSeconds", source, "hub.json.runtimeTuning 非法");
+  const launchRegisterTimeoutSeconds = readInteger(payload, "launchRegisterTimeoutSeconds", source, "hub.json.runtimeTuning 非法");
 
-  if (leaseSeconds < 1 || onlineThresholdSeconds < 1 || launchDedupeWindowSeconds < 1) {
+  if (leaseSeconds < 1 || onlineThresholdSeconds < 1 || launchDedupeWindowSeconds < 1 || launchRegisterTimeoutSeconds < 1) {
     throw new Error(`hub.json.runtimeTuning 非法：${source}`);
   }
 
   return {
     leaseSeconds,
     onlineThresholdSeconds,
-    launchDedupeWindowSeconds
+    launchDedupeWindowSeconds,
+    launchRegisterTimeoutSeconds
   };
 }
 

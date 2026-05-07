@@ -114,9 +114,10 @@ class AppDefinition:
     scope: str = field(kw_only=True)
 
     def __post_init__(self) -> None:
-        """校验 Definition 复合身份中的 scope。"""
+        """校验 Definition 的关键字段。"""
 
         self.app_id = require_app_id(self.app_id, "app_id")
+        self.display_name = require_non_empty_string(self.display_name, "display_name")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -194,6 +195,7 @@ class HubRuntimeTuning:
     lease_seconds: int
     online_threshold_seconds: int
     launch_dedupe_window_seconds: int
+    launch_register_timeout_seconds: int
 
 
 @dataclass(slots=True, frozen=True)

@@ -124,6 +124,42 @@ it("buildValidateDefinitionParams 应允许缺少 launch 和 launch.exePath 并�
   });
 });
 
+it("buildValidateDefinitionParams 应仅对 displayName 拒绝空白字符串，并保留其他空白字符串字段", () => {
+  expect(() => buildValidateDefinitionParams({
+    appId: "sample.app",
+    scope: "",
+    displayName: "   "
+  })).toThrow("definition.displayName 不能为空白字符串。");
+
+  expect(buildValidateDefinitionParams({
+    appId: "sample.app",
+    scope: "",
+    displayName: "Sample App",
+    description: "   ",
+    launch: {
+      exePath: "   ",
+      args: ["", "   "],
+      argsTemplate: "   ",
+      workingDirectory: "   ",
+      dedupeKeyTemplate: "   "
+    }
+  })).toEqual({
+    definition: {
+      appId: "sample.app",
+      scope: "",
+      displayName: "Sample App",
+      description: "   ",
+      launch: {
+        exePath: "   ",
+        args: ["", "   "],
+        argsTemplate: "   ",
+        workingDirectory: "   ",
+        dedupeKeyTemplate: "   "
+      }
+    }
+  });
+});
+
 it("buildListInstancesParams 应允许省略 appId 但保留显式 scope", () => {
   expect(buildListInstancesParams({
     scope: null

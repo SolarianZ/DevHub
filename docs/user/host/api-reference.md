@@ -139,7 +139,7 @@ JSON-RPC 信封约束：
 约束：
 
 - `definition`、`definition.capabilities`、`definition.launch` 如果出现，都必须是对象，不能是 `null`。
-- `definition.displayName` 在当前 Host 中要求非空字符串。
+- `definition.displayName` 在当前 Host 中要求至少包含一个非空白字符。
 - `definition.launch.exePath` 必须是字符串；空白字符串可被校验和写入接口保存，并在 `hub.apps.launch` 阶段按启动配置缺失处理。
 
 ### 3.8 `hub.apps.upsertDefinition`

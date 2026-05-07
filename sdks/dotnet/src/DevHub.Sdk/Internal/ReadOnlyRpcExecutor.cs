@@ -113,7 +113,6 @@ internal static class ReadOnlyRpcExecutor
                 ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.getDefinition.result");
                 ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.getDefinition.result", "definition");
                 ResponsePayloadReader.EnsureAppIdValue(payload.Definition.AppId, "hub.apps.getDefinition.result", "definition.appId");
-                ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.getDefinition.result", "definition.displayName");
                 return payload.Definition;
             },
             cancellationToken);

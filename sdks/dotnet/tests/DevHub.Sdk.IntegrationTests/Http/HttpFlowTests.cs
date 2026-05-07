@@ -234,17 +234,13 @@ public sealed class HttpFlowTests
         });
         Assert.Equal("AppId", localException.ParamName);
 
-        var invalid = await client.ValidateDefinitionAsync(new AppDefinition
+        var invalidDisplayNameException = Assert.Throws<ArgumentException>(() => new AppDefinition
         {
             AppId = "definition.invalid.display-name",
             Scope = string.Empty,
             DisplayName = string.Empty
         });
-
-        Assert.True(invalid.Ok);
-        Assert.False(invalid.Valid);
-        Assert.NotEmpty(invalid.Errors);
-        Assert.Contains(invalid.Errors, issue => issue.Path == "definition.displayName");
+        Assert.Equal("DisplayName", invalidDisplayNameException.ParamName);
 
         var validDefinition = new AppDefinition
         {
@@ -265,16 +261,13 @@ public sealed class HttpFlowTests
         Assert.Equal(validDefinition.DisplayName, fetched.DisplayName);
         Assert.Equal(validDefinition.Scope, fetched.Scope);
 
-        var invalidException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UpsertDefinitionAsync(new AppDefinition
+        var invalidUpsertDisplayNameException = Assert.Throws<ArgumentException>(() => new AppDefinition
         {
             AppId = "definition.invalid.display-name",
             Scope = string.Empty,
-            DisplayName = string.Empty
-        }));
-        Assert.Equal(-32602, invalidException.Code);
-        Assert.Equal("definition_invalid", invalidException.Reason);
-        Assert.True(invalidException.TryGetDataProperty("errors", out var errorsElement));
-        Assert.Equal(JsonValueKind.Array, errorsElement.ValueKind);
+            DisplayName = " "
+        });
+        Assert.Equal("DisplayName", invalidUpsertDisplayNameException.ParamName);
 
         await client.DeleteDefinitionAsync(validDefinition.AppId, validDefinition.Scope);
 

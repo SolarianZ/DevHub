@@ -137,7 +137,8 @@ internal static class RuntimeDiscovery
         if (runtime.RuntimeTuning is null ||
             runtime.RuntimeTuning.LeaseSeconds < 1 ||
             runtime.RuntimeTuning.OnlineThresholdSeconds < 1 ||
-            runtime.RuntimeTuning.LaunchDedupeWindowSeconds < 1)
+            runtime.RuntimeTuning.LaunchDedupeWindowSeconds < 1 ||
+            runtime.RuntimeTuning.LaunchRegisterTimeoutSeconds < 1)
         {
             throw new InvalidOperationException($"hub.json.runtimeTuning 非法：{hubJsonPath}");
         }

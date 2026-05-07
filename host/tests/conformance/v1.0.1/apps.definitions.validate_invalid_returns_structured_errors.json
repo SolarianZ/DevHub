@@ -20,7 +20,7 @@
       "definition": {
         "appId": ".Invalid.App",
         "scope": null,
-        "displayName": "Broken Definition"
+        "displayName": "   "
       }
     }
   },
@@ -40,6 +40,11 @@
           "path": "definition.scope",
           "code": "invalid_field_type",
           "message": "scope must be a string"
+        },
+        {
+          "path": "definition.displayName",
+          "code": "missing_display_name",
+          "message": "displayName is required"
         }
       ]
     }

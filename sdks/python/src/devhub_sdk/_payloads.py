@@ -334,9 +334,9 @@ def _build_definition_payload(definition: AppDefinition) -> dict[str, Any]:
 
     app_id = require_app_id(definition.app_id, "definition.app_id")
     scope = require_scoped_string(definition.scope, "definition.scope")
-    display_name = require_optional_string(definition.display_name, "definition.display_name")
+    display_name = require_optional_string(definition.display_name, "definition.display_name", allow_empty=False)
     if display_name is None:
-        raise ValueError("definition.display_name 类型非法。")
+        raise ValueError("definition.display_name 不能为空白字符串。")
 
     payload: dict[str, Any] = {
         "appId": app_id,

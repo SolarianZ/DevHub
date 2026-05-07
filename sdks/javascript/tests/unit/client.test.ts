@@ -515,6 +515,38 @@ it("listDefinitions 应显式发送请求对象并保留 Global、精确 scope �
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("listDefinitions should reject blank displayName from transport while preserving blank launch.exePath behavior elsewhere", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.listDefinitions");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definitions: [
+        {
+          appId: "test.invalid-display-name.app",
+          scope: "",
+          displayName: "   ",
+          launch: {
+            exePath: ""
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-list-definitions-invalid-display-name-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.listDefinitions({
+    scope: null
+  })).rejects.toThrow("hub.apps.listDefinitions.result.definitions[0].displayName must be a non-empty string.");
+});
+
 it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -652,31 +684,9 @@ it("getInstance should send the exact instanceId and parse a single AppInstance"
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("validateDefinition 应发送校验请求并返回结构化结果", async () => {
+it("validateDefinition should reject blank displayName before sending the request", async () => {
   const runtimeDir = await createRuntime();
-  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
-    const body = parseRequestBody(init);
-    expect(body.method).toBe("hub.apps.validateDefinition");
-    expect(body.params).toEqual({
-      definition: {
-        appId: "test.validate.app",
-        scope: "",
-        displayName: ""
-      }
-    });
-
-    return createJsonResponse(body.id, {
-      ok: true,
-      valid: false,
-      errors: [
-        {
-          path: "definition.displayName",
-          code: "missing_display_name",
-          message: "displayName is required"
-        }
-      ]
-    });
-  });
+  const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
 
   const client = await DevHubClient.fromRuntime({
@@ -684,24 +694,12 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
     dataDir: runtimeDir
   });
 
-  const result = await client.validateDefinition({
+  await expect(client.validateDefinition({
     appId: "test.validate.app",
     scope: "",
-    displayName: ""
-  });
-
-  expect(result).toEqual({
-    ok: true,
-    valid: false,
-    errors: [
-      {
-        path: "definition.displayName",
-        code: "missing_display_name",
-        message: "displayName is required"
-      }
-    ]
-  });
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+    displayName: "   "
+  })).rejects.toThrow("definition.displayName 不能为空白字符串。");
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 it("upsertDefinition 应发送写请求并解析返回定义", async () => {
@@ -781,6 +779,24 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
     }
   });
   expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("upsertDefinition should reject blank displayName before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-upsert-definition-invalid-display-name-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.upsertDefinition({
+    appId: "test.upsert.app",
+    scope: "",
+    displayName: " "
+  })).rejects.toThrow("definition.displayName 不能为空白字符串。");
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 it("deleteDefinition 应发送删除请求", async () => {
@@ -2081,7 +2097,7 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
   })).rejects.toThrow(/waitTimeoutMs/i);
 });
 
-it("getDefinition should accept spec-valid empty displayName and launch.exePath", async () => {
+it("getDefinition should reject blank displayName even when launch.exePath is blank", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -2096,7 +2112,7 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
       definition: {
         appId: "test.empty-fields.app",
         scope: "",
-        displayName: "",
+        displayName: " ",
         launch: {
           exePath: ""
         }
@@ -2110,28 +2126,45 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
     dataDir: runtimeDir
   });
 
-  const definition = await client.getDefinition({
+  await expect(client.getDefinition({
     appId: "test.empty-fields.app",
+    scope: ""
+  })).rejects.toThrow("hub.apps.getDefinition.result.definition.displayName must be a non-empty string.");
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("getDefinition should continue accepting blank launch.exePath when displayName is valid", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.blank-launch-exepath.app",
+        scope: "",
+        displayName: "Blank Launch ExePath App",
+        launch: {
+          exePath: ""
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-blank-launch-exepath-client",
+    dataDir: runtimeDir
+  });
+
+  const definition = await client.getDefinition({
+    appId: "test.blank-launch-exepath.app",
     scope: ""
   });
 
-  expect(definition).toEqual({
-    appId: "test.empty-fields.app",
-    scope: "",
-    displayName: "",
-    description: undefined,
-    capabilities: {
-      rpc: true
-    },
-    launch: {
-      exePath: "",
-      args: undefined,
-      argsTemplate: undefined,
-      workingDirectory: undefined,
-      dedupeKeyTemplate: undefined
-    }
-  });
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(definition.launch?.exePath).toBe("");
+  expect(definition.displayName).toBe("Blank Launch ExePath App");
 });
 
 it("getDefinition should reject null capabilities flags", async () => {
@@ -2535,7 +2568,8 @@ function createBaseConnectionInfo() {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     },
     rpcEndpoint: "http://127.0.0.1:57231/rpc",
@@ -2566,7 +2600,8 @@ async function createRuntime(): Promise<string> {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     }),
     "utf-8"

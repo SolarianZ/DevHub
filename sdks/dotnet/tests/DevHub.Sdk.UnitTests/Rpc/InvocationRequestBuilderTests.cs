@@ -357,6 +357,7 @@ public sealed class InvocationRequestBuilderTests
     public void ScopeBearingModels_ShouldEnforceUpdatedContract()
     {
         Assert.Throws<ArgumentException>(() => new AppDefinition { AppId = ".bad" });
+        Assert.Throws<ArgumentException>(() => new AppDefinition { DisplayName = " \t " });
         Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = null! });
         Assert.Throws<ArgumentException>(() => new AppDefinition { Scope = " " });
 
@@ -409,6 +410,21 @@ public sealed class InvocationRequestBuilderTests
             DisplayName = "Test App"
         }));
         Assert.Contains("AppDefinition.Scope", definitionException.Message, StringComparison.Ordinal);
+
+        var missingDisplayNameException = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildValidateDefinitionParams(new AppDefinition
+        {
+            AppId = "test.app",
+            Scope = string.Empty
+        }));
+        Assert.Equal("DisplayName", missingDisplayNameException.ParamName);
+
+        var whitespaceDisplayNameException = Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildUpsertDefinitionParams(new AppDefinition
+        {
+            AppId = "test.app",
+            Scope = string.Empty,
+            DisplayName = " \t "
+        }));
+        Assert.Equal("DisplayName", whitespaceDisplayNameException.ParamName);
 
         var invokeException = Assert.Throws<InvalidOperationException>(() => RequestPayloadFactory.BuildNotifyParams(new InvokeRequest
         {

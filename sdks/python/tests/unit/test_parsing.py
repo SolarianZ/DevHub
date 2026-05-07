@@ -131,6 +131,19 @@ def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_def
     assert definition.capabilities.events is False
 
 
+@pytest.mark.parametrize("display_name", ["", " ", "\t"])
+def test_parse_app_definition_when_display_name_is_blank_should_raise(display_name: str) -> None:
+    with pytest.raises(RuntimeError, match=r"displayName"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": "",
+                "displayName": display_name,
+            },
+            path="app.definition",
+        )
+
+
 def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value() -> None:
     definition = parse_app_definition(
         {
@@ -218,6 +231,51 @@ def test_parse_hub_runtime_when_http_base_url_empty_should_raise() -> None:
                     "leaseSeconds": 30,
                     "onlineThresholdSeconds": 30,
                     "launchDedupeWindowSeconds": 30,
+                    "launchRegisterTimeoutSeconds": 30,
+                },
+            },
+            source="hub.json",
+        )
+
+
+def test_parse_hub_runtime_should_read_launch_register_timeout_seconds() -> None:
+    runtime = parse_hub_runtime(
+        {
+            "protocolVersion": 1,
+            "pid": 12345,
+            "httpBaseUrl": "http://127.0.0.1:47231",
+            "wsUrl": "ws://127.0.0.1:47231/ws",
+            "tokenFile": "/tmp/token.txt",
+            "startedAtUtc": "2026-03-09T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 30,
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 45,
+            },
+        },
+        source="hub.json",
+    )
+
+    assert runtime.runtime_tuning.launch_register_timeout_seconds == 45
+
+
+@pytest.mark.parametrize("value", [None, 0, True, "30"])
+def test_parse_hub_runtime_when_launch_register_timeout_seconds_invalid_should_raise(value: object) -> None:
+    with pytest.raises(RuntimeError, match=r"runtimeTuning|launchRegisterTimeoutSeconds"):
+        parse_hub_runtime(
+            {
+                "protocolVersion": 1,
+                "pid": 12345,
+                "httpBaseUrl": "http://127.0.0.1:47231",
+                "wsUrl": "ws://127.0.0.1:47231/ws",
+                "tokenFile": "/tmp/token.txt",
+                "startedAtUtc": "2026-03-09T00:00:00Z",
+                "runtimeTuning": {
+                    "leaseSeconds": 30,
+                    "onlineThresholdSeconds": 30,
+                    "launchDedupeWindowSeconds": 30,
+                    "launchRegisterTimeoutSeconds": value,
                 },
             },
             source="hub.json",

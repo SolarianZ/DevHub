@@ -86,7 +86,13 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     lease_seconds = require_int(runtime_tuning, "leaseSeconds", f"{source}.runtimeTuning")
     online_threshold_seconds = require_int(runtime_tuning, "onlineThresholdSeconds", f"{source}.runtimeTuning")
     launch_dedupe_window_seconds = require_int(runtime_tuning, "launchDedupeWindowSeconds", f"{source}.runtimeTuning")
-    if lease_seconds < 1 or online_threshold_seconds < 1 or launch_dedupe_window_seconds < 1:
+    launch_register_timeout_seconds = require_int(runtime_tuning, "launchRegisterTimeoutSeconds", f"{source}.runtimeTuning")
+    if (
+        lease_seconds < 1
+        or online_threshold_seconds < 1
+        or launch_dedupe_window_seconds < 1
+        or launch_register_timeout_seconds < 1
+    ):
         raise RuntimeError(f"hub.json.runtimeTuning 非法：{source}")
 
     hub_version = optional_property_string(root, "hubVersion", source)
@@ -101,6 +107,7 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
             lease_seconds=lease_seconds,
             online_threshold_seconds=online_threshold_seconds,
             launch_dedupe_window_seconds=launch_dedupe_window_seconds,
+            launch_register_timeout_seconds=launch_register_timeout_seconds,
         ),
         hub_version=hub_version,
     )
@@ -181,6 +188,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
     root = require_mapping(value, path)
+    display_name = require_non_blank_string(root, "displayName", path)
     capabilities = AppCapabilities(rpc=True)
     if "capabilities" in root:
         capabilities_root = require_mapping(root["capabilities"], f"{path}.capabilities")
@@ -203,7 +211,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
 
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        display_name=require_string_allow_empty(root, "displayName", path),
+        display_name=display_name,
         scope=require_scope_string(root, "scope", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
@@ -613,7 +621,16 @@ def require_non_empty_string(root: Mapping[str, Any], name: str, path: str) -> s
     """读取必填字符串属性。"""
 
     value = root.get(name)
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"{path}.{name} 类型非法。")
+    return value
+
+
+def require_non_blank_string(root: Mapping[str, Any], name: str, path: str) -> str:
+    """读取必填非空白字符串属性。"""
+
+    value = root.get(name)
+    if not isinstance(value, str) or not value.strip():
         raise RuntimeError(f"{path}.{name} 类型非法。")
     return value
 

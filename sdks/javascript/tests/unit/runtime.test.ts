@@ -55,7 +55,8 @@ it("discoverRuntime 应支持标准 dataDir 布局", async () => {
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -82,7 +83,8 @@ it("discoverRuntime 应支持通过 DEVHUB_DATA_DIR 定位 dataDir", async () =>
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
   process.env[DATA_DIR_ENV] = dataDir;
@@ -107,7 +109,8 @@ it("discoverRuntime 应拒绝 dataDir 根目录直放 hub.json/token.txt 的旧�
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -140,6 +143,28 @@ it("discoverRuntime 应拒绝非法 runtimeTuning", async () => {
     runtimeTuning: {
       leaseSeconds: 0,
       onlineThresholdSeconds: 30,
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
+    }
+  });
+
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/runtimeTuning/);
+});
+
+it("discoverRuntime 应拒绝缺少 launchRegisterTimeoutSeconds 的 runtimeTuning", async () => {
+  const { dataDir, runtimeDir } = await createDataDirectory();
+  const tokenFile = path.join(runtimeDir, "token.txt");
+  await fsPromises.writeFile(tokenFile, "token-1", "utf-8");
+  await writeHubJson(runtimeDir, {
+    protocolVersion: 1,
+    pid: 12345,
+    httpBaseUrl: "http://127.0.0.1:47231",
+    wsUrl: "ws://127.0.0.1:47231/ws",
+    tokenFile,
+    startedAtUtc: "2026-03-09T00:00:00Z",
+    runtimeTuning: {
+      leaseSeconds: 30,
+      onlineThresholdSeconds: 30,
       launchDedupeWindowSeconds: 30
     }
   });
@@ -161,7 +186,8 @@ it("discoverRuntime 应拒绝非整数 pid", async () => {
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -182,7 +208,8 @@ it("discoverRuntime 应拒绝非整数 runtimeTuning", async () => {
     runtimeTuning: {
       leaseSeconds: 30.5,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -203,7 +230,8 @@ it("discoverRuntime should reject a startedAtUtc value without an explicit timez
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -224,7 +252,8 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -248,7 +277,8 @@ it("discoverRuntime 应原样接受固定 /ws 的 IPv4 loopback WebSocket 端点
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -284,7 +314,8 @@ it.each([
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -311,7 +342,8 @@ it.each([
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -334,7 +366,8 @@ it("discoverRuntime should reject a non-string hubVersion when present", async (
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -356,7 +389,8 @@ it("discoverRuntime should preserve a spec-valid empty hubVersion string", async
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 
@@ -379,7 +413,8 @@ async function createPopulatedDataDirectory(): Promise<{ dataDir: string; runtim
     runtimeTuning: {
       leaseSeconds: 30,
       onlineThresholdSeconds: 30,
-      launchDedupeWindowSeconds: 30
+      launchDedupeWindowSeconds: 30,
+      launchRegisterTimeoutSeconds: 30
     }
   });
 

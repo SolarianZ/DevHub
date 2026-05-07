@@ -55,17 +55,11 @@ it("HTTP 链路应可完成基础流程", async () => {
     rpc: true
   });
 
-  const validation = await client.validateDefinition({
+  await expect(client.validateDefinition({
     appId: "http.managed.app",
     scope: "",
-    displayName: ""
-  });
-  expect(validation.ok).toBe(true);
-  expect(validation.valid).toBe(false);
-  expect(validation.errors[0]).toMatchObject({
-    path: "definition.displayName",
-    code: "missing_display_name"
-  });
+    displayName: " "
+  })).rejects.toThrow(/definition\.displayName/);
 
   const upserted = await client.upsertDefinition({
     appId: "http.managed.app",
@@ -103,6 +97,12 @@ it("HTTP 链路应可完成基础流程", async () => {
   })).rejects.toMatchObject({
     code: DevHubRpcErrorCode.AppDefinitionNotFound
   });
+
+  await expect(client.upsertDefinition({
+    appId: "http.invalid.app",
+    scope: "",
+    displayName: "   "
+  })).rejects.toThrow(/definition\.displayName/);
 
   const registered = await client.registerInstance({
     instanceId: "http-flow-inst-1",

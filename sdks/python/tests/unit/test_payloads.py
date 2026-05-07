@@ -284,6 +284,40 @@ def test_definition_builder_should_allow_missing_launch_and_missing_exe_path() -
     }
 
 
+def test_definition_builder_when_display_name_is_blank_should_raise() -> None:
+    with pytest.raises(ValueError, match="definition.display_name"):
+        build_upsert_definition_params(
+            SimpleNamespace(
+                app_id="test.app",
+                display_name=" ",
+                scope="",
+                description=None,
+                capabilities=None,
+                launch=None,
+            )
+        )
+
+
+def test_definition_builder_should_allow_empty_launch_exe_path() -> None:
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+            launch=LaunchConfiguration(exe_path=""),
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "exePath": "",
+            },
+        }
+    }
+
+
 @pytest.mark.parametrize("args", ["--flag", [1], ["ok", 1]])
 def test_definition_builder_when_launch_args_is_not_string_list_should_raise(args: object) -> None:
     with pytest.raises(ValueError, match="args"):

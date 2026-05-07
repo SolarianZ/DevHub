@@ -40,6 +40,7 @@ import {
   readOptionalObject,
   readOptionalString,
   readPositiveInt,
+  readNonBlankString,
   readStringValue,
   readString,
   readUuidString
@@ -260,7 +261,7 @@ export function parseUnsubscribeResult(payload: unknown): void {
 export function parseAppDefinition(payload: unknown, location: string): AppDefinition {
   const record = ensureRecord(payload, location);
   const appId = readAppId(record, location, "appId");
-  const displayName = readStringValue(record, location, "displayName");
+  const displayName = readNonBlankString(record, location, "displayName");
   const description = readOptionalString(record, location, "description");
 
   let capabilities: AppDefinition["capabilities"] = {

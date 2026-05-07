@@ -27,6 +27,7 @@ internal static class RequestPayloadFactory
         ArgumentNullException.ThrowIfNull(definition);
         _ = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(AppDefinition.AppId));
         _ = definition.Scope;
+        _ = definition.DisplayName;
         return new Dictionary<string, object?>
         {
             ["definition"] = definition
@@ -38,6 +39,7 @@ internal static class RequestPayloadFactory
         ArgumentNullException.ThrowIfNull(definition);
         _ = ProtocolIdentifier.EnsureAppId(definition.AppId, nameof(AppDefinition.AppId));
         _ = definition.Scope;
+        _ = definition.DisplayName;
         return new Dictionary<string, object?>
         {
             ["definition"] = definition

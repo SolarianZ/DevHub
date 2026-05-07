@@ -72,6 +72,15 @@ export function readString(payload: Record<string, unknown>, location: string, k
   return value;
 }
 
+export function readNonBlankString(payload: Record<string, unknown>, location: string, key: string): string {
+  const value = readStringValue(payload, location, key);
+  if (!value.trim()) {
+    throw new Error(`${location}.${key} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
 export function readOptionalObject(
   payload: Record<string, unknown>,
   location: string,
@@ -325,6 +334,15 @@ export function ensureRequiredInputStringValue(value: unknown, propertyName: str
   }
 
   return value;
+}
+
+export function ensureRequiredNonBlankInputString(value: unknown, propertyName: string): string {
+  const parsed = ensureRequiredInputStringValue(value, propertyName);
+  if (!parsed.trim()) {
+    throw new Error(`${propertyName} 不能为空白字符串。`);
+  }
+
+  return parsed;
 }
 
 export function ensureAppId(value: unknown, propertyName: string): string {

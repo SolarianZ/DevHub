@@ -307,7 +307,8 @@ function createConnectionInfo(hubVersion?: string) {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     },
     rpcEndpoint: "http://127.0.0.1:57231/rpc",

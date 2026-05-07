@@ -23,6 +23,7 @@ import {
   ensureOptionalInputIntegerInRange,
   ensureOptionalInputRecord,
   ensureOptionalInputString,
+  ensureRequiredNonBlankInputString,
   ensureRequiredInputString,
   ensureRequiredInputStringValue,
   ensureScopedString
@@ -369,7 +370,7 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
   const payload: Record<string, unknown> = {
     appId: ensureAppId(definition.appId, "definition.appId"),
     scope: ensureScopedString(definition.scope, "definition.scope"),
-    displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
+    displayName: ensureRequiredNonBlankInputString(definition.displayName, "definition.displayName")
   };
 
   if (definition.description !== undefined) {

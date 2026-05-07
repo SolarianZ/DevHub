@@ -48,6 +48,7 @@ SDK 固定从以下位置发现运行时信息：
 - `hub.json.tokenFile` 指向的令牌文件
 
 `discover_runtime(...)` 返回的 `RuntimeConnectionInfo` 以及 `DevHubClient.runtime`、`DevHubEventsClient.runtime` 暴露的 `HubRuntime` 都是不可变 dataclass。公开运行时视图用于读取连接信息；字段赋值会触发 `FrozenInstanceError`，后续 HTTP / WebSocket 连接端点与令牌保持稳定。
+`HubRuntime.runtime_tuning` 固定包含 `lease_seconds`、`online_threshold_seconds`、`launch_dedupe_window_seconds` 与 `launch_register_timeout_seconds`；缺失任一字段都会导致运行时发现失败。
 
 不支持以下输入：
 
@@ -69,7 +70,7 @@ print(ping.ok, ping.server_time_utc)
 
 ## 6. 常见交互场景
 
-定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。由 Host 启动的 App 可读取 `DEVHUB_LAUNCH_ID` 环境变量，并通过 `register_instance(..., launch_id=...)` 顶层参数回传启动绑定标识。
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；`display_name` 必须是至少包含一个非空白字符的字符串。实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。由 Host 启动的 App 可读取 `DEVHUB_LAUNCH_ID` 环境变量，并通过 `register_instance(..., launch_id=...)` 顶层参数回传启动绑定标识。
 
 ```python
 from devhub_sdk import (

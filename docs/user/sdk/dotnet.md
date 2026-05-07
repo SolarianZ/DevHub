@@ -72,6 +72,7 @@ SDK 会按以下优先级解析数据根目录：
 - Linux：`$XDG_DATA_HOME/DevHub/`，若未设置则回退到 `~/.local/share/DevHub/`
 
 SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，再通过 `hub.json.tokenFile` 读取令牌。若误传 `runtime` 子目录，SDK 会直接拒绝该路径并要求传入数据根目录。
+`hub.json.runtimeTuning` 公开视图固定包含 `leaseSeconds`、`onlineThresholdSeconds`、`launchDedupeWindowSeconds` 与 `launchRegisterTimeoutSeconds`；缺失任一字段都会导致运行时发现失败。
 
 ## 5. 快速开始
 

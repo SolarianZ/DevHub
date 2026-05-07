@@ -39,7 +39,7 @@ public sealed class TransportAdapterImplTests
                 """
                 {
                   "appId": "Bad App",
-                  "displayName": "",
+                  "displayName": "   ",
                   "description": null,
                   "launch": {
                     "args": [1],

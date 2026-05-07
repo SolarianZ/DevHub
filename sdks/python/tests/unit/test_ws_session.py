@@ -459,6 +459,7 @@ def _create_connection_info() -> RuntimeConnectionInfo:
                 lease_seconds=30,
                 online_threshold_seconds=30,
                 launch_dedupe_window_seconds=30,
+                launch_register_timeout_seconds=30,
             ),
         ),
     )

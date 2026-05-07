@@ -334,6 +334,125 @@ it("authenticate should support WS ping and apps queries", async () => {
   }
 });
 
+it("authenticated WS listDefinitions should reject blank displayName from transport", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-list-definitions-invalid-display-name-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.listDefinitions") {
+            return {
+              ok: true,
+              definitions: [
+                {
+                  appId: "test.invalid-display-name.app",
+                  scope: "",
+                  displayName: " ",
+                  launch: {
+                    exePath: ""
+                  }
+                }
+              ]
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.listDefinitions({
+      scope: null
+    })).rejects.toThrow("hub.apps.listDefinitions.result.definitions[0].displayName must be a non-empty string.");
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("authenticated WS getDefinition should continue accepting blank launch.exePath when displayName is valid", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-get-definition-blank-launch-exepath-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getDefinition") {
+            return {
+              ok: true,
+              definition: {
+                appId: "test.blank-launch-exepath.app",
+                scope: "",
+                displayName: "Blank Launch ExePath App",
+                launch: {
+                  exePath: ""
+                }
+              }
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const definition = await client.getDefinition({
+      appId: "test.blank-launch-exepath.app",
+      scope: ""
+    });
+    expect(definition.launch?.exePath).toBe("");
+    expect(definition.displayName).toBe("Blank Launch ExePath App");
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("getInstance should reject an invalid instanceId before sending the WS request", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
@@ -673,6 +792,74 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
     await expect(client.subscribe(["app.instance.registered"]))
       .rejects
       .toThrow(/password/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("definition upserted 事件应拒绝空白 displayName，即使 launch.exePath 为空白字符串", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-blank-display-name-event-client",
+      dataDir: "/tmp/devhub-js-sdk-runtime"
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-blank-display-name",
+              type: "app.definition.upserted",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                scope: "",
+                definition: {
+                  appId: "test.app",
+                  scope: "",
+                  displayName: "   ",
+                  launch: {
+                    exePath: ""
+                  }
+                }
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-blank-display-name"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["app.definition.upserted"]))
+      .rejects
+      .toThrow(/displayName must be a non-empty string/i);
   } finally {
     await client.dispose();
   }
@@ -1443,7 +1630,8 @@ async function createRuntime(overrides?: {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     }),
     "utf-8"
@@ -1488,7 +1676,8 @@ function createBaseConnectionInfo() {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     },
     rpcEndpoint: "http://127.0.0.1:57231/rpc",

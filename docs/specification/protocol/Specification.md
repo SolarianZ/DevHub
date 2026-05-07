@@ -322,7 +322,7 @@ sequenceDiagram
       "type": "string",
       "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
-    "displayName": { "type": "string" },
+    "displayName": { "type": "string", "pattern": ".*\\S.*" },
     "description": { "type": "string" },
     "capabilities": {
       "type": "object",
@@ -350,6 +350,7 @@ sequenceDiagram
 
 #### 5.1.1 AppDefinition 语义（规范性）
 - `AppDefinition` 的公开身份**必须**是复合键 `(appId, scope)`；其中 Global Definition **必须**使用 `scope = ""` 表示，显式作用域 Definition **必须**使用满足 canonical `scope` grammar 的非空字符串表示。
+- `displayName` **必须**是至少包含一个非空白字符的字符串；空字符串或仅包含空白字符的字符串都**不得**视为合法值。
 - 持久化 Definition payload **必须**显式包含 `scope` 字段；省略 `scope`、使用 `scope = null` 或使用任何未通过 canonical `scope` grammar 的字符串都**不得**视为合法的持久化 Definition 形状。
 - Definition 持久化与读取**必须**以显式 `scope` 字段作为唯一作用域身份，公开协议中的 `scope` 字段**必须**继续回传原始 canonical `scope`，不得改写为其他存储层派生值。
 - `hub.apps.listDefinitions` **必须**支持参数 `{ appId?: string, scope: string|null }`；其中 `scope` 字段**必须**显式出现。`appId` 省略时，结果**必须**覆盖所有应用；当 `scope = null` 时，结果**必须**不按作用域过滤；当 `scope = ""` 时，结果**必须**只包含 Global Definition；当 `scope` 为其他合法字符串时，结果**必须**只包含该精确作用域的 Definition。

@@ -143,7 +143,8 @@ function createConnectionInfo(): RuntimeConnectionInfo {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 90,
-        launchDedupeWindowSeconds: 15
+        launchDedupeWindowSeconds: 15,
+        launchRegisterTimeoutSeconds: 45
       }
     },
     rpcEndpoint: "http://127.0.0.1:47231/rpc",

@@ -133,7 +133,8 @@
           "$ref": "#/definitions/scope"
         },
         "displayName": {
-          "type": "string"
+          "type": "string",
+          "pattern": ".*\\S.*"
         },
         "description": {
           "type": "string"

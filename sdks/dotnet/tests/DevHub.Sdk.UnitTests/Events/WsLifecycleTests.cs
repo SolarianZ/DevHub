@@ -355,6 +355,45 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task EventsClient_AfterAuthenticate_WhenListDefinitionsContainsWhitespaceDisplayName_ShouldThrowInvalidOperationException()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return [CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")];
+            }
+
+            if (sent.Contains("\"id\":\"ws-listdefs-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-listdefs-1","result":{"ok":true,"definitions":[{"appId":"ws.app","scope":"","displayName":"   ","launch":{"exePath":""}}]}}""")
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-listdefs-1").Create);
+
+        await client.AuthenticateAsync();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ListDefinitionsAsync(new ListDefinitionsRequest()));
+        Assert.Contains("displayName", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EventsClient_ShouldCountAndClearAbandonedRequestsByFilter()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -1179,6 +1218,58 @@ public sealed class WsLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task EventsClient_WhenDefinitionUpsertedEventContainsWhitespaceDisplayName_ShouldFaultEventStream()
+    {
+        var notificationJson =
+            """{"jsonrpc":"2.0","method":"hub.event","params":{"subscriptionId":"sub-1","type":"app.definition.upserted","timeUtc":"2026-03-09T00:00:00Z","payload":{"appId":"ws.app","scope":"","definition":{"appId":"ws.app","scope":"","displayName":" ","launch":{"exePath":""}}}}}""";
+
+        var dataDir = await CreateDataDirectoryAsync();
+        var connection = new FakeWebSocketConnection();
+        connection.OnSend = sent =>
+        {
+            if (sent.Contains("\"id\":\"ws-auth-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}""")
+                ];
+            }
+
+            if (sent.Contains("\"id\":\"ws-sub-1\"", StringComparison.Ordinal))
+            {
+                return
+                [
+                    CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-sub-1","result":{"ok":true,"subscriptionId":"sub-1"}}"""),
+                    CreateTextMessage(notificationJson),
+                    CreateCloseMessage()
+                ];
+            }
+
+            return [];
+        };
+
+        var factory = new FakeWebSocketConnectionFactory(connection);
+        await using var client = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "ws-client",
+                DataDir = dataDir
+            },
+            factory,
+            new SequenceRequestIdFactory("ws-auth-1", "ws-sub-1").Create);
+
+        await client.AuthenticateAsync();
+        await using var enumerator = client.ReadEventsAsync().GetAsyncEnumerator();
+        var moveNextTask = enumerator.MoveNextAsync().AsTask();
+        _ = await client.SubscribeAsync(new[] { DevHubEventTypes.AppDefinitionUpserted });
+
+        var exception = await Record.ExceptionAsync(async () => await moveNextTask);
+
+        Assert.NotNull(exception);
+        Assert.Contains("displayName", CollectExceptionMessages(exception!), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EventsClient_WhenEventNotificationContainsId_ShouldFaultEventStream()
     {
         var dataDir = await CreateDataDirectoryAsync();
@@ -1398,7 +1489,8 @@ public sealed class WsLifecycleTests : IDisposable
               "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 30,
-                "launchDedupeWindowSeconds": 30
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 30
               }
             }
             """);

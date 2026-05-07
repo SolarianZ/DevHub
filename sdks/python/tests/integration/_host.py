@@ -402,7 +402,7 @@ def _build_app_definition(definition: Mapping[str, Any]) -> AppDefinition:
 
     return AppDefinition(
         app_id=_required_string(definition, "appId", "definition"),
-        display_name=_required_string(definition, "displayName", "definition"),
+        display_name=_required_non_blank_string(definition, "displayName", "definition"),
         scope=_optional_string(definition, "scope", "definition") or "",
         description=_optional_string(definition, "description", "definition"),
         capabilities=capabilities,
@@ -420,6 +420,13 @@ def _required_string(root: Mapping[str, Any], key: str, path: str) -> str:
     value = root.get(key)
     if not isinstance(value, str):
         raise ValueError(f"{path}.{key} 必须是字符串。")
+    return value
+
+
+def _required_non_blank_string(root: Mapping[str, Any], key: str, path: str) -> str:
+    value = _required_string(root, key, path)
+    if not value.strip():
+        raise ValueError(f"{path}.{key} 不能为空白字符串。")
     return value
 
 

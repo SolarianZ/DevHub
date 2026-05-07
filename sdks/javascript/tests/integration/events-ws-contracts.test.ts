@@ -312,7 +312,8 @@ async function createRuntimeForServer(server: WebSocketServerInstance): Promise<
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     }),
     "utf-8"

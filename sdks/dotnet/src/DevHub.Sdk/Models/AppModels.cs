@@ -11,6 +11,7 @@ public sealed class AppDefinition
 {
     private string _appId = string.Empty;
     private string? _scope;
+    private string? _displayName;
 
     /// <summary>
     /// 应用标识。
@@ -40,7 +41,11 @@ public sealed class AppDefinition
     /// 显示名称。
     /// </summary>
     [JsonPropertyName("displayName")]
-    public string DisplayName { get; set; } = string.Empty;
+    public string DisplayName
+    {
+        get => EnsureNonWhitespaceString(_displayName, nameof(DisplayName));
+        set => _displayName = EnsureNonWhitespaceString(value, nameof(DisplayName));
+    }
 
     /// <summary>
     /// 应用描述。
@@ -62,6 +67,16 @@ public sealed class AppDefinition
     [JsonPropertyName("launch")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public LaunchConfiguration? Launch { get; set; }
+
+    private static string EnsureNonWhitespaceString(string? value, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"{propertyName} 不能为空白字符串。", propertyName);
+        }
+
+        return value;
+    }
 }
 
 /// <summary>
@@ -433,4 +448,10 @@ public sealed class HubRuntimeTuning
     /// </summary>
     [JsonPropertyName("launchDedupeWindowSeconds")]
     public int LaunchDedupeWindowSeconds { get; set; }
+
+    /// <summary>
+    /// 启动注册截止时间秒数。
+    /// </summary>
+    [JsonPropertyName("launchRegisterTimeoutSeconds")]
+    public int LaunchRegisterTimeoutSeconds { get; set; }
 }

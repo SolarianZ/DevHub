@@ -305,18 +305,23 @@ async function runEvents(context) {
       }
 
       if (action === "get_definition") {
-        const response = await sendRawRpc(
-          rawRpcConnection,
-          `sdk-events-get-definition-${index}`,
-          "hub.apps.getDefinition",
-          buildDefinitionIdentityParams(step, captures, index)
-        );
-        const result = readRawResult(response, `request.steps[${index}]`);
+        const clientName = typeof step.client === "string" ? step.client : undefined;
+        const client = clientName ? (eventClients.get(clientName) ?? httpClients.get(clientName)) : undefined;
+        const result = client
+          ? await client.getDefinition(buildDefinitionIdentityPayload(step, captures, index))
+          : readRawResult(
+            await sendRawRpc(
+              rawRpcConnection,
+              `sdk-events-get-definition-${index}`,
+              "hub.apps.getDefinition",
+              buildDefinitionIdentityParams(step, captures, index)
+            ),
+            `request.steps[${index}]`
+          ).definition;
         if (step.captureAs !== undefined) {
-          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureRecord(
-            result.definition,
-            `request.steps[${index}].captureAs`
-          );
+          captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = client
+            ? normalizeAppDefinition(result)
+            : ensureRecord(result, `request.steps[${index}].captureAs`);
         }
         continue;
       }
@@ -336,19 +341,29 @@ async function runEvents(context) {
       }
 
       if (action === "list_definitions") {
-        const response = await sendRawRpc(
-          rawRpcConnection,
-          `sdk-events-list-definitions-${index}`,
-          "hub.apps.listDefinitions",
-          {
+        const clientName = typeof step.client === "string" ? step.client : undefined;
+        const client = clientName ? (eventClients.get(clientName) ?? httpClients.get(clientName)) : undefined;
+        const definitions = client
+          ? await client.listDefinitions({
             scope: null
-          }
-        );
-        const result = readRawResult(response, `request.steps[${index}]`);
-        captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = ensureArray(
-          result.definitions,
-          `request.steps[${index}].captureAs`
-        );
+          })
+          : ensureArray(
+            readRawResult(
+              await sendRawRpc(
+                rawRpcConnection,
+                `sdk-events-list-definitions-${index}`,
+                "hub.apps.listDefinitions",
+                {
+                  scope: null
+                }
+              ),
+              `request.steps[${index}]`
+            ).definitions,
+            `request.steps[${index}].captureAs`
+          );
+        captures[ensureString(step.captureAs, `request.steps[${index}].captureAs`)] = client
+          ? definitions.map((definition) => normalizeAppDefinition(definition))
+          : definitions;
         continue;
       }
 
@@ -584,7 +599,7 @@ function buildAppDefinition(payload) {
   const definition = {
     appId: ensureCanonicalIdentifier(payload.appId, "definition.appId"),
     scope: ensureScopeString(payload.scope, "definition.scope"),
-    displayName: ensureStringValue(payload.displayName, "definition.displayName")
+    displayName: ensureNonBlankStringValue(payload.displayName, "definition.displayName")
   };
 
   if ("description" in payload && payload.description !== undefined) {
@@ -705,6 +720,48 @@ function normalizeAppInstance(instance) {
   return normalized;
 }
 
+function normalizeAppDefinition(definition) {
+  const normalized = {
+    appId: definition.appId,
+    scope: definition.scope,
+    displayName: definition.displayName
+  };
+
+  if (definition.description !== undefined) {
+    normalized.description = definition.description;
+  }
+
+  if (definition.capabilities !== undefined) {
+    normalized.capabilities = {
+      rpc: definition.capabilities.rpc
+    };
+    if ("events" in definition.capabilities && definition.capabilities.events !== undefined) {
+      normalized.capabilities.events = definition.capabilities.events;
+    }
+  }
+
+  if (definition.launch !== undefined) {
+    normalized.launch = {};
+    if ("exePath" in definition.launch && definition.launch.exePath !== undefined) {
+      normalized.launch.exePath = definition.launch.exePath;
+    }
+    if ("args" in definition.launch && definition.launch.args !== undefined) {
+      normalized.launch.args = definition.launch.args;
+    }
+    if ("argsTemplate" in definition.launch && definition.launch.argsTemplate !== undefined) {
+      normalized.launch.argsTemplate = definition.launch.argsTemplate;
+    }
+    if ("workingDirectory" in definition.launch && definition.launch.workingDirectory !== undefined) {
+      normalized.launch.workingDirectory = definition.launch.workingDirectory;
+    }
+    if ("dedupeKeyTemplate" in definition.launch && definition.launch.dedupeKeyTemplate !== undefined) {
+      normalized.launch.dedupeKeyTemplate = definition.launch.dedupeKeyTemplate;
+    }
+  }
+
+  return normalized;
+}
+
 function findRegisteredInstanceSessionToken(registeredInstances, clientName, instanceId, index) {
   for (let registeredIndex = registeredInstances.length - 1; registeredIndex >= 0; registeredIndex -= 1) {
     const registered = registeredInstances[registeredIndex];
@@ -731,6 +788,13 @@ function normalizeDefinitionValidationResult(result) {
     ok: result.ok,
     valid: result.valid,
     errors: result.errors
+  };
+}
+
+function buildDefinitionIdentityPayload(step, captures, index) {
+  return {
+    appId: String(resolveCaptureValue(step, captures, index, "appId")),
+    scope: String(resolveCaptureValue(step, captures, index, "scope"))
   };
 }
 
@@ -856,6 +920,14 @@ function ensureStringValue(value, pathLabel) {
     throw new Error(`${pathLabel} 必须为字符串。`);
   }
   return value;
+}
+
+function ensureNonBlankStringValue(value, pathLabel) {
+  const parsed = ensureStringValue(value, pathLabel);
+  if (!parsed.trim()) {
+    throw new Error(`${pathLabel} 必须为非空白字符串。`);
+  }
+  return parsed;
 }
 
 function ensureScopeString(value, pathLabel) {

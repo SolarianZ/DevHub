@@ -249,7 +249,6 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.upsertDefinition.result");
         ResponsePayloadReader.EnsureNotNull(payload.Definition, "hub.apps.upsertDefinition.result", "definition");
         ResponsePayloadReader.EnsureAppIdValue(payload.Definition.AppId, "hub.apps.upsertDefinition.result", "definition.appId");
-        ResponsePayloadReader.EnsureNotEmpty(payload.Definition.DisplayName, "hub.apps.upsertDefinition.result", "definition.displayName");
         return payload.Definition;
     }
 

@@ -1,0 +1,64 @@
+{
+  "id": "events.get_definition_blank_launch_exepath_returns_definition",
+  "caseId": "CONF-008",
+  "description": "通过 SDK EventsClient 调用 getDefinition 时，合法 displayName 配合空白 launch.exePath 仍必须返回 Definition。",
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "events.definition.blank-launch-exepath",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Events Blank Launch ExePath",
+          "launch": {
+            "exePath": "   "
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.events",
+    "clientId": "ConformanceEventsGetDefinitionBlankLaunchExePath",
+    "steps": [
+      {
+        "action": "create_events_client",
+        "client": "events"
+      },
+      {
+        "action": "authenticate",
+        "client": "events"
+      },
+      {
+        "action": "get_definition",
+        "client": "events",
+        "appId": "events.definition.blank-launch-exepath",
+        "scope": "",
+        "captureAs": "definition"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "phase": "sdk-events",
+    "outcome": "success",
+    "actual": {
+      "definition": {
+        "appId": "events.definition.blank-launch-exepath",
+        "scope": "",
+        "displayName": "Events Blank Launch ExePath",
+        "capabilities": {
+          "rpc": true
+        },
+        "launch": {
+          "exePath": "   "
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "sdk",
+    "definitions"
+  ]
+}

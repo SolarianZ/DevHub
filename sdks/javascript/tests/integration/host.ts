@@ -410,6 +410,7 @@ async function readRuntimeConnection(runtimeDirectory: string): Promise<RuntimeC
       leaseSeconds?: number;
       onlineThresholdSeconds?: number;
       launchDedupeWindowSeconds?: number;
+      launchRegisterTimeoutSeconds?: number;
     };
     hubVersion?: string;
   };
@@ -422,6 +423,12 @@ async function readRuntimeConnection(runtimeDirectory: string): Promise<RuntimeC
   }
   if (typeof runtime.tokenFile !== "string" || runtime.tokenFile.length === 0) {
     throw new Error(`Host runtime 缺少有效 tokenFile: ${hubJsonPath}`);
+  }
+  if (typeof runtime.runtimeTuning?.leaseSeconds !== "number"
+    || typeof runtime.runtimeTuning?.onlineThresholdSeconds !== "number"
+    || typeof runtime.runtimeTuning?.launchDedupeWindowSeconds !== "number"
+    || typeof runtime.runtimeTuning?.launchRegisterTimeoutSeconds !== "number") {
+    throw new Error(`Host runtime 缺少有效 runtimeTuning: ${hubJsonPath}`);
   }
 
   return {
@@ -437,9 +444,10 @@ async function readRuntimeConnection(runtimeDirectory: string): Promise<RuntimeC
       tokenFile: runtime.tokenFile,
       startedAtUtc: new Date(runtime.startedAtUtc ?? new Date().toISOString()),
       runtimeTuning: {
-        leaseSeconds: runtime.runtimeTuning?.leaseSeconds ?? 30,
-        onlineThresholdSeconds: runtime.runtimeTuning?.onlineThresholdSeconds ?? 10,
-        launchDedupeWindowSeconds: runtime.runtimeTuning?.launchDedupeWindowSeconds ?? 30
+        leaseSeconds: runtime.runtimeTuning.leaseSeconds,
+        onlineThresholdSeconds: runtime.runtimeTuning.onlineThresholdSeconds,
+        launchDedupeWindowSeconds: runtime.runtimeTuning.launchDedupeWindowSeconds,
+        launchRegisterTimeoutSeconds: runtime.runtimeTuning.launchRegisterTimeoutSeconds
       },
       hubVersion: runtime.hubVersion
     }

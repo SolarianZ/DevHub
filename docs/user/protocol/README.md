@@ -54,6 +54,13 @@
 - `tokenFile`
 - `runtimeTuning`
 
+其中 `runtimeTuning` 根对象固定包含：
+
+- `leaseSeconds`
+- `onlineThresholdSeconds`
+- `launchDedupeWindowSeconds`
+- `launchRegisterTimeoutSeconds`
+
 接入侧必须把 `hub.json` 当作地址与端口的唯一权威来源，禁止硬编码 `http://127.0.0.1:<port>` 或 WebSocket URL。
 
 ## 3. HTTP 鉴权与最小调用

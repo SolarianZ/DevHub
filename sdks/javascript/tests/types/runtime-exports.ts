@@ -24,7 +24,8 @@ const runtime: HubRuntime = {
   runtimeTuning: {
     leaseSeconds: 30,
     onlineThresholdSeconds: 90,
-    launchDedupeWindowSeconds: 15
+    launchDedupeWindowSeconds: 15,
+    launchRegisterTimeoutSeconds: 45
   }
 };
 
