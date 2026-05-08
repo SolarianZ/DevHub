@@ -1500,61 +1500,68 @@ public class WebSocketLifecycleSpecTests : IDisposable
 
     private static async Task<JsonElement> WaitForResponseByIdAsync(ScriptedWebSocket socket, string id, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            var response = FindResponseById(ParseSentMessages(socket), id);
-            if (response.ValueKind != JsonValueKind.Undefined)
-            {
-                return response;
-            }
-
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
+        return await WaitForMessageAsync(
+            socket,
+            timeout,
+            static (messages, state) => FindResponseById(messages, (string)state!),
+            id,
+            $"在 {timeout.TotalMilliseconds}ms 内未收到 id={id} 的响应。");
     }
 
     private static async Task<JsonElement> WaitForErrorByCodeAsync(ScriptedWebSocket socket, int code, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            var response = ParseSentMessages(socket).FirstOrDefault(message =>
+        return await WaitForMessageAsync(
+            socket,
+            timeout,
+            static (messages, state) => messages.FirstOrDefault(message =>
                 message.TryGetProperty("error", out var error)
-                && error.GetProperty("code").GetInt32() == code);
-
-            if (response.ValueKind != JsonValueKind.Undefined)
-            {
-                return response;
-            }
-
-            await Task.Delay(20);
-        }
-
-        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 code={code} 的错误响应。");
+                && error.GetProperty("code").GetInt32() == (int)state!),
+            code,
+            $"在 {timeout.TotalMilliseconds}ms 内未收到 code={code} 的错误响应。");
     }
 
     private static async Task<JsonElement> WaitForHubEventAsync(ScriptedWebSocket socket, string eventType, TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            var hubEvent = ParseSentMessages(socket).FirstOrDefault(message =>
+        return await WaitForMessageAsync(
+            socket,
+            timeout,
+            static (messages, state) => messages.FirstOrDefault(message =>
                 message.TryGetProperty("method", out var method)
                 && string.Equals(method.GetString(), "hub.event", StringComparison.Ordinal)
                 && message.TryGetProperty("params", out var parameters)
-                && string.Equals(parameters.GetProperty("type").GetString(), eventType, StringComparison.Ordinal));
+                && string.Equals(parameters.GetProperty("type").GetString(), (string)state!, StringComparison.Ordinal)),
+            eventType,
+            $"在 {timeout.TotalMilliseconds}ms 内未收到 type={eventType} 的 hub.event 通知。");
+    }
 
-            if (hubEvent.ValueKind != JsonValueKind.Undefined)
+    private static async Task<JsonElement> WaitForMessageAsync(
+        ScriptedWebSocket socket,
+        TimeSpan timeout,
+        Func<IReadOnlyList<JsonElement>, object?, JsonElement> selector,
+        object? state,
+        string timeoutMessage)
+    {
+        using var cancellation = new CancellationTokenSource(timeout);
+        var observedCount = 0;
+
+        while (true)
+        {
+            var messages = ParseSentMessages(socket);
+            var candidate = selector(messages, state);
+            if (candidate.ValueKind != JsonValueKind.Undefined)
             {
-                return hubEvent;
+                return candidate;
             }
 
-            await Task.Delay(20);
+            try
+            {
+                observedCount = await socket.WaitForNextSentTextAsync(observedCount, cancellation.Token);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw new TimeoutException(timeoutMessage);
+            }
         }
-
-        throw new TimeoutException($"在 {timeout.TotalMilliseconds}ms 内未收到 type={eventType} 的 hub.event 通知。");
     }
 
     private HostTestContext CreateHostContext()

@@ -75,9 +75,19 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
             runtime = new
             {
                 protocolVersion = connection.Runtime.ProtocolVersion,
+                pid = connection.Runtime.Pid,
                 httpBaseUrl = connection.Runtime.HttpBaseUrl,
                 wsUrl = connection.Runtime.WsUrl,
-                tokenFile = connection.Runtime.TokenFile
+                tokenFile = connection.Runtime.TokenFile,
+                startedAtUtc = connection.Runtime.StartedAtUtc.ToString("O"),
+                runtimeTuning = new
+                {
+                    leaseSeconds = connection.Runtime.RuntimeTuning.LeaseSeconds,
+                    onlineThresholdSeconds = connection.Runtime.RuntimeTuning.OnlineThresholdSeconds,
+                    launchDedupeWindowSeconds = connection.Runtime.RuntimeTuning.LaunchDedupeWindowSeconds,
+                    launchRegisterTimeoutSeconds = connection.Runtime.RuntimeTuning.LaunchRegisterTimeoutSeconds
+                },
+                hubVersion = connection.Runtime.HubVersion
             }
         };
 

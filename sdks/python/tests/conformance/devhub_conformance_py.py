@@ -124,9 +124,18 @@ def run_discovery(context: dict[str, Any]) -> dict[str, Any]:
             "token": connection.token,
             "runtime": {
                 "protocolVersion": connection.runtime.protocol_version,
+                "pid": connection.runtime.pid,
                 "httpBaseUrl": connection.runtime.http_base_url,
                 "wsUrl": connection.runtime.ws_url,
                 "tokenFile": connection.runtime.token_file,
+                "startedAtUtc": connection.runtime.started_at_utc.isoformat().replace("+00:00", "Z"),
+                "runtimeTuning": {
+                    "leaseSeconds": connection.runtime.runtime_tuning.lease_seconds,
+                    "onlineThresholdSeconds": connection.runtime.runtime_tuning.online_threshold_seconds,
+                    "launchDedupeWindowSeconds": connection.runtime.runtime_tuning.launch_dedupe_window_seconds,
+                    "launchRegisterTimeoutSeconds": connection.runtime.runtime_tuning.launch_register_timeout_seconds,
+                },
+                "hubVersion": connection.runtime.hub_version,
             },
         }
         return {

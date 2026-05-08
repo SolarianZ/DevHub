@@ -58,9 +58,18 @@ async function runDiscovery(context) {
         token: connection.token,
         runtime: {
           protocolVersion: connection.runtime.protocolVersion,
+          pid: connection.runtime.pid,
           httpBaseUrl: connection.runtime.httpBaseUrl,
           wsUrl: connection.runtime.wsUrl,
-          tokenFile: connection.runtime.tokenFile
+          tokenFile: connection.runtime.tokenFile,
+          startedAtUtc: connection.runtime.startedAtUtc.toISOString(),
+          runtimeTuning: {
+            leaseSeconds: connection.runtime.runtimeTuning.leaseSeconds,
+            onlineThresholdSeconds: connection.runtime.runtimeTuning.onlineThresholdSeconds,
+            launchDedupeWindowSeconds: connection.runtime.runtimeTuning.launchDedupeWindowSeconds,
+            launchRegisterTimeoutSeconds: connection.runtime.runtimeTuning.launchRegisterTimeoutSeconds
+          },
+          hubVersion: connection.runtime.hubVersion
         }
       },
       error: null

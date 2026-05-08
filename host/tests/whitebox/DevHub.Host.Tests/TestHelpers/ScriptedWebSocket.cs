@@ -14,6 +14,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     private readonly bool _blockCloseAsyncUntilCanceled;
     private readonly object _framesLock = new();
     private readonly object _sentTextsLock = new();
+    private readonly object _sendSignalLock = new();
     private SocketFrame? _activeFrame;
     private WebSocketState _state;
     private WebSocketCloseStatus? _closeStatus;
@@ -21,6 +22,8 @@ internal sealed class ScriptedWebSocket : WebSocket
     private bool _closeFrameQueued;
     private int _closeAsyncCallCount;
     private int _closeAsyncCancellationCount;
+    private int _sentTextCount;
+    private TaskCompletionSource<int> _nextSendSignal = CreateSendSignal();
 
     /// <summary>
     /// 初始化脚本化 WebSocket。
@@ -128,6 +131,31 @@ internal sealed class ScriptedWebSocket : WebSocket
         }
     }
 
+    /// <summary>
+    /// 等待服务端发送新的文本消息。
+    /// </summary>
+    /// <param name="observedCount">调用方当前已观察到的文本消息数量。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>新的已发送文本消息总数。</returns>
+    public Task<int> WaitForNextSentTextAsync(int observedCount, CancellationToken cancellationToken)
+    {
+        lock (_sendSignalLock)
+        {
+            if (_sentTextCount > observedCount)
+            {
+                return Task.FromResult(_sentTextCount);
+            }
+
+            var waitTask = _nextSendSignal.Task;
+            if (!cancellationToken.CanBeCanceled)
+            {
+                return waitTask;
+            }
+
+            return WaitWithCancellationAsync(waitTask, cancellationToken);
+        }
+    }
+
     /// <inheritdoc />
     public override WebSocketCloseStatus? CloseStatus => _closeStatus;
 
@@ -185,6 +213,7 @@ internal sealed class ScriptedWebSocket : WebSocket
     public override void Dispose()
     {
         _state = WebSocketState.Closed;
+        CompletePendingSendWaiters();
         _frameSignal.Release();
     }
 
@@ -276,9 +305,65 @@ internal sealed class ScriptedWebSocket : WebSocket
             {
                 SentTexts.Add(Encoding.UTF8.GetString(buffer.Array, buffer.Offset, buffer.Count));
             }
+
+            SignalSentText();
         }
 
         return Task.CompletedTask;
+    }
+
+    private static TaskCompletionSource<int> CreateSendSignal()
+    {
+        return new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private static async Task<int> WaitWithCancellationAsync(Task<int> task, CancellationToken cancellationToken)
+    {
+        var cancellationTask = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var registration = cancellationToken.Register(static state =>
+        {
+            ((TaskCompletionSource)state!).TrySetCanceled();
+        }, cancellationTask);
+
+        var completed = await Task.WhenAny(task, cancellationTask.Task);
+        if (completed == task)
+        {
+            return await task;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new OperationCanceledException(cancellationToken);
+    }
+
+    private void SignalSentText()
+    {
+        TaskCompletionSource<int>? previousSignal;
+        int sentTextCount;
+
+        lock (_sendSignalLock)
+        {
+            _sentTextCount += 1;
+            sentTextCount = _sentTextCount;
+            previousSignal = _nextSendSignal;
+            _nextSendSignal = CreateSendSignal();
+        }
+
+        previousSignal.TrySetResult(sentTextCount);
+    }
+
+    private void CompletePendingSendWaiters()
+    {
+        TaskCompletionSource<int>? previousSignal;
+        int sentTextCount;
+
+        lock (_sendSignalLock)
+        {
+            sentTextCount = _sentTextCount;
+            previousSignal = _nextSendSignal;
+            _nextSendSignal = CreateSendSignal();
+        }
+
+        previousSignal.TrySetResult(sentTextCount);
     }
 
     private void EnqueueFrame(SocketFrame frame)

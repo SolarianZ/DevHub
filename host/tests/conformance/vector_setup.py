@@ -357,6 +357,8 @@ def copy_host_runtime(host_context: HostRuntimeContext, runtime_dir: Path) -> Pa
 def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
     """构造 Host 运行时占位符。"""
 
+    hub_info = host_context.hub_info
+    runtime_tuning = require_mapping(hub_info["runtimeTuning"], "host_context.hub_info.runtimeTuning")
     return {
         "HOST_DATA_DIR": str(host_context.data_dir),
         "HOST_APPS_DIR": str(host_context.apps_dir),
@@ -365,8 +367,15 @@ def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
         "HOST_HUB_JSON": str(host_context.hub_json_path),
         "HOST_TOKEN_FILE": str(host_context.token_file),
         "HOST_TOKEN": host_context.token,
+        "HOST_PID": str(hub_info["pid"]),
         "HOST_HTTP_BASE_URL": host_context.http_base_url,
         "HOST_WS_URL": host_context.ws_url,
+        "HOST_STARTED_AT_UTC": str(hub_info["startedAtUtc"]),
+        "HOST_HUB_VERSION": str(hub_info.get("hubVersion", "")),
+        "HOST_RUNTIME_TUNING_LEASE_SECONDS": str(runtime_tuning["leaseSeconds"]),
+        "HOST_RUNTIME_TUNING_ONLINE_THRESHOLD_SECONDS": str(runtime_tuning["onlineThresholdSeconds"]),
+        "HOST_RUNTIME_TUNING_LAUNCH_DEDUPE_WINDOW_SECONDS": str(runtime_tuning["launchDedupeWindowSeconds"]),
+        "HOST_RUNTIME_TUNING_LAUNCH_REGISTER_TIMEOUT_SECONDS": str(runtime_tuning["launchRegisterTimeoutSeconds"]),
     }
 
 
@@ -388,6 +397,17 @@ def substitute_placeholders(value: Any, placeholders: dict[str, str]) -> Any:
     """递归替换向量中的 ${PLACEHOLDER}。"""
 
     if isinstance(value, str):
+        direct_match = re.fullmatch(r"\$\{([A-Z0-9_]+)\}", value)
+        if direct_match:
+            replacement = placeholders.get(direct_match.group(1), value)
+            if replacement == value:
+                return value
+
+            try:
+                return json.loads(replacement)
+            except json.JSONDecodeError:
+                return replacement
+
         return re.compile(r"\$\{([A-Z0-9_]+)\}").sub(
             lambda match: placeholders.get(match.group(1), match.group(0)),
             value,
