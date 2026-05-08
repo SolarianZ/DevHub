@@ -827,12 +827,18 @@ public class LaunchCoordinatorTests : IDisposable
             {
                 if (startCallCount++ == 0)
                 {
-                    launchIdCaptured.TrySetResult(launchConfiguration.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
+                    Assert.NotNull(launchConfiguration.EnvironmentVariables);
+                    var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
+                        LaunchCoordinator.LaunchIdEnvironmentVariable,
+                        out var launchId);
+                    Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
+                    Assert.False(string.IsNullOrWhiteSpace(launchId));
+                    launchIdCaptured.TrySetResult(launchId!);
                 }
 
                 return System.Diagnostics.Process.GetCurrentProcess();
             });
-            var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var launchTask = coordinator.LaunchAsync(
             appId: "launch-exit-before-register.app",
@@ -842,7 +848,15 @@ public class LaunchCoordinatorTests : IDisposable
             CancellationToken.None);
 
         var launchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        OverrideTrackedLaunchPid(coordinator, launchId, -1);
+        MarkTrackedLaunchFailed(
+            coordinator,
+            launchId,
+            reason: "process_exited_before_register",
+            failureData: new
+            {
+                reason = "process_exited_before_register",
+                launchId
+            });
         var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.False(result.Ok);
@@ -1038,12 +1052,14 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 
-    private static void OverrideTrackedLaunchPid(LaunchCoordinator coordinator, string launchId, int pid)
+    private static void MarkTrackedLaunchFailed(LaunchCoordinator coordinator, string launchId, string reason, object failureData)
     {
         var syncRootField = typeof(LaunchCoordinator).GetField("_launchSyncRoot", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchSyncRoot.");
         var launchRecordsField = typeof(LaunchCoordinator).GetField("_launchRecordsById", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchRecordsById.");
+        var markLaunchFailedMethod = typeof(LaunchCoordinator).GetMethod("MarkLaunchFailed", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator.MarkLaunchFailed.");
 
         var syncRoot = syncRootField.GetValue(coordinator)
             ?? throw new InvalidOperationException("LaunchCoordinator._launchSyncRoot was null.");
@@ -1062,9 +1078,7 @@ public class LaunchCoordinatorTests : IDisposable
 
             var launchRecord = arguments[1]
                 ?? throw new InvalidOperationException($"Tracked launch record '{launchId}' was null.");
-            var pidProperty = launchRecord.GetType().GetProperty("Pid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                ?? throw new InvalidOperationException("Could not locate LaunchRecord.Pid.");
-            pidProperty.SetValue(launchRecord, pid);
+            markLaunchFailedMethod.Invoke(coordinator, [launchRecord, reason, failureData]);
         }
     }
 }
