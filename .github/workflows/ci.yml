@@ -318,11 +318,6 @@ jobs:
       - name: Verify version metadata
         run: python3 scripts/release/sync_versions.py --check
 
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install requests
-
       - name: Restore
         run: dotnet restore host/DevHub.slnx
 
@@ -560,9 +555,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python SDK test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e './sdks/python[test]' requests
+        run: python -m pip install -e './sdks/python[test]'
 
       - name: Download shared Host artifact
         uses: actions/download-artifact@v7
@@ -604,9 +597,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python SDK test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e './sdks/python[test]' requests
+        run: python -m pip install -e './sdks/python[test]'
 
       - name: Install JavaScript SDK dependencies
         run: npm --prefix sdks/javascript ci
@@ -726,11 +717,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install requests
 
       - name: Restore
         run: dotnet restore host/DevHub.slnx
@@ -868,11 +854,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install requests
 
       - name: Install Windows ACL dependency
         if: runner.os == 'Windows'

@@ -12,10 +12,12 @@ import subprocess
 import sys
 import threading
 import time
-import requests
+import urllib.error
+import urllib.request
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from http.client import HTTPMessage
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
 
@@ -205,6 +207,76 @@ def paths_refer_to_same_location(left: str, right: str) -> bool:
         return os.path.samefile(left, right)
     except (FileNotFoundError, OSError, ValueError):
         return normalize_path_for_comparison(left) == normalize_path_for_comparison(right)
+
+
+class TestHttpResponse:
+    """封装测试所需的 HTTP 响应字段，避免黑盒测试依赖第三方 HTTP 客户端。"""
+
+    def __init__(self, status_code: int, body: bytes, headers: HTTPMessage):
+        self.status_code = status_code
+        self._body = body
+        self.headers = headers
+
+    @property
+    def text(self) -> str:
+        """按响应头字符集解码响应体。"""
+        charset = self.headers.get_content_charset() or "utf-8"
+        return self._body.decode(charset, errors="replace")
+
+    def json(self) -> Any:
+        """将响应体解析为 JSON。"""
+        return json.loads(self.text)
+
+
+def http_request(
+    method: str,
+    url: str,
+    *,
+    json_body: Any = _UNSET,
+    data: Optional[bytes | str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送测试 HTTP 请求并返回轻量响应对象。"""
+    request_headers = dict(headers or {})
+    body: Optional[bytes]
+    if json_body is not _UNSET:
+        body = json.dumps(json_body, ensure_ascii=False).encode("utf-8")
+    elif isinstance(data, str):
+        body = data.encode("utf-8")
+    else:
+        body = data
+
+    request = urllib.request.Request(url, data=body, headers=request_headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return TestHttpResponse(response.status, response.read(), response.headers)
+    except urllib.error.HTTPError as error:
+        return TestHttpResponse(error.code, error.read(), error.headers)
+    except urllib.error.URLError as error:
+        raise Exception(f"HTTP request failed: {error}") from error
+
+
+def http_post(
+    url: str,
+    *,
+    json_body: Any = _UNSET,
+    data: Optional[bytes | str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送 POST 请求。"""
+    return http_request("POST", url, json_body=json_body, data=data, headers=headers, timeout=timeout)
+
+
+def http_options(
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送 OPTIONS 请求。"""
+    return http_request("OPTIONS", url, headers=headers, timeout=timeout)
 
 
 def _parse_command_string(raw_command: str) -> List[str]:
@@ -904,24 +976,18 @@ class RpcClient:
         """发送 JSON body 并返回 (status_code, parsed_json)。"""
         request_headers = headers or self.headers
         url = f"{self.base_url}/rpc"
-        try:
-            response = requests.post(url, json=payload, headers=request_headers, timeout=timeout)
-            return response.status_code, response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+        response = http_post(url, json_body=payload, headers=request_headers, timeout=timeout)
+        return response.status_code, response.json()
 
     def post_raw(self, body, headers=None, timeout=30):
         """发送原始 body 并返回 (status_code, parsed_json/text)。"""
         request_headers = headers or self.headers
         url = f"{self.base_url}/rpc"
+        response = http_post(url, data=body, headers=request_headers, timeout=timeout)
         try:
-            response = requests.post(url, data=body, headers=request_headers, timeout=timeout)
-            try:
-                return response.status_code, response.json()
-            except Exception:
-                return response.status_code, response.text
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+            return response.status_code, response.json()
+        except Exception:
+            return response.status_code, response.text
 
     def call(self, method, params=None, request_id="1"):
         """

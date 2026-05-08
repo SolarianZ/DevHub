@@ -45,7 +45,6 @@ host/tests/
 
 - .NET SDK 10.0+
 - Python 3.11+
-- Python 依赖：`pip install requests`
 - Windows ACL 语义校验依赖：`pip install pywin32`
 
 ## 运行方式

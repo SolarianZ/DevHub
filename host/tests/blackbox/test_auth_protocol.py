@@ -7,10 +7,9 @@ import os
 import re
 import uuid
 import unittest
-import requests
 
 
-from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions, http_options, http_post
 
 
 class TestAuthProtocol(unittest.TestCase):
@@ -47,12 +46,12 @@ class TestAuthProtocol(unittest.TestCase):
 
     def _post_json(self, base_url, headers, payload):
         """发送 JSON 请求并返回 (status_code, json_response)"""
-        response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+        response = http_post(f"{base_url}/rpc", json_body=payload, headers=headers, timeout=30)
         return response.status_code, response.json()
 
     def _post_json_response(self, base_url, headers, payload):
         """发送 JSON 请求并返回原始 HTTP 响应。"""
-        return requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+        return http_post(f"{base_url}/rpc", json_body=payload, headers=headers, timeout=30)
 
     def _assert_origin_cors_headers(self, result, response, origin, require_preflight=False):
         """断言带 Origin 的 /rpc 响应包含 CORS 头。"""
@@ -606,7 +605,7 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, _ = DiscoveryService.get_hub_info()
             origin = "http://localhost:1420"
-            response = requests.options(
+            response = http_options(
                 f"{base_url}/rpc",
                 headers={
                     "Origin": origin,
@@ -734,7 +733,7 @@ class TestAuthProtocol(unittest.TestCase):
             ]
 
             for case in cases:
-                response = requests.post(f"{base_url}/rpc", json=case["payload"], headers=case["headers"], timeout=30)
+                response = http_post(f"{base_url}/rpc", json_body=case["payload"], headers=case["headers"], timeout=30)
                 if response.status_code != 200:
                     result.mark_failure(f"❌ {case['name']} 返回非200状态码: {response.status_code}")
                     return result

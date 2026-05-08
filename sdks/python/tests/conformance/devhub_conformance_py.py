@@ -9,10 +9,11 @@ import asyncio
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
-import requests
 import websockets
 
 
@@ -37,6 +38,25 @@ from devhub_sdk import (  # type: ignore  # noqa: E402
     LaunchConfiguration,
     discover_runtime,
 )
+
+
+def post_raw_json(
+    url: str,
+    *,
+    body: bytes,
+    headers: dict[str, str],
+    timeout: float = 30,
+) -> dict[str, Any]:
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_body = response.read()
+    except urllib.error.HTTPError as error:
+        response_body = error.read()
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"RPC request failed: {error}") from error
+
+    return json.loads(response_body.decode("utf-8"))
 
 
 def main() -> int:
@@ -206,13 +226,12 @@ def run_rpc(context: dict[str, Any]) -> dict[str, Any]:
 
     headers = dict(vector.get("http", {}).get("headers", {}))
     body = normalize_raw_request_body(vector["request"])
-    response = requests.post(
+    actual = post_raw_json(
         f"{connection.runtime.http_base_url}/rpc",
-        data=body.encode("utf-8"),
+        body=body.encode("utf-8"),
         headers=headers,
         timeout=30,
     )
-    actual = json.loads(response.text)
     return {
         "sdk": "python",
         "vectorId": vector["id"],
@@ -759,9 +778,9 @@ def send_raw_rpc(
     method: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    response = requests.post(
+    return post_raw_json(
         f"{connection.runtime.http_base_url}/rpc",
-        data=json.dumps(
+        body=json.dumps(
             {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -780,7 +799,6 @@ def send_raw_rpc(
         },
         timeout=30,
     )
-    return json.loads(response.text)
 
 
 def read_raw_result(response: dict[str, Any], *, path: str) -> dict[str, Any]:

@@ -6,7 +6,6 @@ DevHub internal_error / parse_error / invalid_request 测试
 import os
 import uuid
 import unittest
-import requests
 
 
 from tests.blackbox.test_base import (
@@ -15,6 +14,7 @@ from tests.blackbox.test_base import (
     RpcClient,
     TestResult,
     get_definitions_catalog_path,
+    http_post,
     safe_remove,
 )
 
@@ -61,7 +61,7 @@ class TestInternalErrors(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             invalid_json = '{"jsonrpc":"2.0","id":"bad-json-id","method":"hub.ping","params":{'
-            response = requests.post(f"{base_url}/rpc", data=invalid_json, headers=headers, timeout=30)
+            response = http_post(f"{base_url}/rpc", data=invalid_json, headers=headers, timeout=30)
 
             if response.status_code != 200:
                 result.mark_failure(f"❌ HTTP 状态码不正确: {response.status_code}")
@@ -92,7 +92,7 @@ class TestInternalErrors(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             headers = self._headers(token)
             invalid_utf8 = b'{"jsonrpc":"2.0","id":"bad-utf8","method":"hub.ping","params":{"echo":"\xc3("}}'
-            response = requests.post(f"{base_url}/rpc", data=invalid_utf8, headers=headers, timeout=30)
+            response = http_post(f"{base_url}/rpc", data=invalid_utf8, headers=headers, timeout=30)
 
             if response.status_code != 200:
                 result.mark_failure(f"HTTP 状态码不正确: {response.status_code}")
@@ -147,7 +147,7 @@ class TestInternalErrors(unittest.TestCase):
             ]
 
             for case in cases:
-                response = requests.post(f"{base_url}/rpc", json=case["payload"], headers=headers, timeout=30)
+                response = http_post(f"{base_url}/rpc", json_body=case["payload"], headers=headers, timeout=30)
                 if response.status_code != 200:
                     result.mark_failure(f"❌ {case['name']} 返回非200状态码: {response.status_code}")
                     return result
@@ -164,9 +164,9 @@ class TestInternalErrors(unittest.TestCase):
 
                 result.add_detail(f"✅ {case['name']} 返回 invalid_request")
 
-            null_params_response = requests.post(
+            null_params_response = http_post(
                 f"{base_url}/rpc",
-                json={"jsonrpc": "2.0", "id": "ping-null-params", "method": "hub.ping", "params": None},
+                json_body={"jsonrpc": "2.0", "id": "ping-null-params", "method": "hub.ping", "params": None},
                 headers=headers,
                 timeout=30,
             )

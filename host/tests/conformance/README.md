@@ -54,7 +54,7 @@ python host/tests/conformance/vector_runner.py
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 npm --prefix sdks/javascript ci
 npm --prefix sdks/javascript run build
-python -m pip install -e "./sdks/python[test]" requests
+python -m pip install -e "./sdks/python[test]"
 ```
 
 如果同机还要并行跑三套 SDK 集成测试，或者希望官方适配器统一复用同一份 Host 构建产物，请先把 Host 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向该目录下的 `DevHub.Host.dll`；如需只覆盖单语言调试，再额外设置对应语言特定变量：

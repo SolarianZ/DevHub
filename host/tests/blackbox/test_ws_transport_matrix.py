@@ -7,7 +7,6 @@ import os
 import time
 import uuid
 import unittest
-import requests
 
 
 from tests.blackbox.test_base import (
@@ -17,6 +16,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     TestResult,
     get_runtime_hub_info,
+    http_post,
     new_instance_id,
     unregister_instances,
 )
@@ -575,9 +575,9 @@ class TestWsTransportMatrix(unittest.TestCase):
                 "method": "hub.events.subscribe",
                 "params": {"types": ["app.instance.registered"]},
             }
-            response = requests.post(
+            response = http_post(
                 f"{http_base_url}/rpc",
-                json=notification_payload,
+                json_body=notification_payload,
                 headers=client.headers,
                 timeout=30,
             )
