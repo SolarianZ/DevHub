@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Reflection;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -782,9 +783,11 @@ public class LaunchCoordinatorTests : IDisposable
             onlineThresholdSeconds: 30,
             launchDedupeWindowSeconds: 30,
             launchRegisterTimeoutSeconds: 1);
+        var launchStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback(() => launchStarted.TrySetResult())
             .Returns(System.Diagnostics.Process.GetCurrentProcess());
         var coordinator = CreateCoordinator(clock, processLauncher.Object, runtimeTuningOptions: tuningOptions);
 
@@ -795,12 +798,12 @@ public class LaunchCoordinatorTests : IDisposable
             waitForRegisterMs: 5000,
             CancellationToken.None);
 
-        await Task.Delay(60);
+        await launchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(2));
-        Assert.False(launchTask.IsCompleted);
+        await Assert.ThrowsAsync<TimeoutException>(() => launchTask.WaitAsync(TimeSpan.FromMilliseconds(100)));
 
         clock.Advance(TimeSpan.FromSeconds(3));
-        var result = await launchTask;
+        var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.False(result.Ok);
         Assert.Equal(-32020, result.ErrorCode);
@@ -815,19 +818,32 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-exit-before-register.app", includeLaunch: true);
 
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var startCallCount = 0;
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
-            .SetupSequence(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
-            .Returns(CreateShortLivedSleepProcess())
-            .Returns(System.Diagnostics.Process.GetCurrentProcess());
-        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns<LaunchConfiguration, string?>((launchConfiguration, _) =>
+            {
+                if (startCallCount++ == 0)
+                {
+                    launchIdCaptured.TrySetResult(launchConfiguration.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
+                }
 
-        var result = await coordinator.LaunchAsync(
+                return System.Diagnostics.Process.GetCurrentProcess();
+            });
+            var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var launchTask = coordinator.LaunchAsync(
             appId: "launch-exit-before-register.app",
             scope: ScopeContract.Global,
             dedupeKey: "exit-before-register",
             waitForRegisterMs: 1200,
             CancellationToken.None);
+
+        var launchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        OverrideTrackedLaunchPid(coordinator, launchId, -1);
+        var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.False(result.Ok);
         Assert.Equal(-32020, result.ErrorCode);
@@ -1022,15 +1038,33 @@ public class LaunchCoordinatorTests : IDisposable
         }
     }
 
-    private static System.Diagnostics.Process CreateShortLivedSleepProcess()
+    private static void OverrideTrackedLaunchPid(LaunchCoordinator coordinator, string launchId, int pid)
     {
-        var processStartInfo = new System.Diagnostics.ProcessStartInfo
+        var syncRootField = typeof(LaunchCoordinator).GetField("_launchSyncRoot", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchSyncRoot.");
+        var launchRecordsField = typeof(LaunchCoordinator).GetField("_launchRecordsById", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchRecordsById.");
+
+        var syncRoot = syncRootField.GetValue(coordinator)
+            ?? throw new InvalidOperationException("LaunchCoordinator._launchSyncRoot was null.");
+
+        lock (syncRoot)
         {
-            FileName = "python3",
-            UseShellExecute = false
-        };
-        processStartInfo.ArgumentList.Add("-c");
-        processStartInfo.ArgumentList.Add("import time; time.sleep(0.05)");
-        return System.Diagnostics.Process.Start(processStartInfo)!;
+            var launchRecords = launchRecordsField.GetValue(coordinator)
+                ?? throw new InvalidOperationException("LaunchCoordinator._launchRecordsById was null.");
+            var tryGetValue = launchRecords.GetType().GetMethod("TryGetValue")
+                ?? throw new InvalidOperationException("Could not locate TryGetValue on LaunchCoordinator launch record map.");
+
+            var arguments = new object?[] { launchId, null };
+            var found = (bool)(tryGetValue.Invoke(launchRecords, arguments)
+                ?? throw new InvalidOperationException("TryGetValue returned null."));
+            Assert.True(found, $"Tracked launch record '{launchId}' was not found.");
+
+            var launchRecord = arguments[1]
+                ?? throw new InvalidOperationException($"Tracked launch record '{launchId}' was null.");
+            var pidProperty = launchRecord.GetType().GetProperty("Pid", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Could not locate LaunchRecord.Pid.");
+            pidProperty.SetValue(launchRecord, pid);
+        }
     }
 }

@@ -20,6 +20,10 @@ public class TestGovernanceTests
         """\[Trait\("Category",\s*"(Spec|Impl)"\)\]\s*public\s+(?:sealed\s+)?class""",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
+    private static readonly Regex SpecificationHeadingRegex = new(
+        """^#{2,4}\s+((?:\d+\.)*\d+[A-Z]?)\b""",
+        RegexOptions.Compiled | RegexOptions.Multiline);
+
     [Fact]
     public void Impl_AllWhiteboxTests_ShouldUseSpecOrImplPrefix()
     {
@@ -40,6 +44,8 @@ public class TestGovernanceTests
     [Fact]
     public void Impl_SpecTests_ShouldDeclareSpecRefAndClauseConsistency()
     {
+        var specificationClauses = GetSpecificationClauses();
+
         foreach (var testFile in GetTestFiles())
         {
             var content = File.ReadAllText(testFile);
@@ -64,6 +70,13 @@ public class TestGovernanceTests
                     specRefMatches.Count > 0,
                     $"Spec 测试缺少 SpecRef 标记: {Path.GetFileName(testFile)}::{methodName}");
                 Assert.Equal(expectedClauses, specRefMatches);
+
+                foreach (var specRef in specRefMatches)
+                {
+                    Assert.Contains(
+                        specRef,
+                        specificationClauses);
+                }
             }
         }
     }
@@ -180,6 +193,44 @@ public class TestGovernanceTests
 
     private static bool IsClauseToken(string token)
     {
-        return token.All(char.IsDigit);
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        if (token.All(char.IsDigit))
+        {
+            return true;
+        }
+
+        return token.Length > 1
+            && token[..^1].All(char.IsDigit)
+            && char.IsUpper(token[^1]);
+    }
+
+    private static HashSet<string> GetSpecificationClauses()
+    {
+        var specificationPath = FindSpecificationPath();
+        var specification = File.ReadAllText(specificationPath);
+        return SpecificationHeadingRegex.Matches(specification)
+            .Select(match => match.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static string FindSpecificationPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var specificationPath = Path.Combine(directory.FullName, "docs", "specification", "protocol", "Specification.md");
+            if (File.Exists(specificationPath))
+            {
+                return specificationPath;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("无法定位 docs/specification/protocol/Specification.md。");
     }
 }

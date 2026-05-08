@@ -292,8 +292,8 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsNull_ShouldReturnVersion()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_HttpHubGetVersion_WhenParamsIsNull_ShouldReturnVersion()
     {
         using var harness = CreateHarness();
 
@@ -312,8 +312,8 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_HttpHubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
     {
         using var harness = CreateHarness();
 
@@ -330,8 +330,8 @@ public class HttpNotificationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_HttpHubGetVersion_WhenParamsIsScalar_ShouldReturnInvalidParams()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_HttpHubGetVersion_WhenParamsIsScalar_ShouldReturnInvalidParams()
     {
         using var harness = CreateHarness();
 

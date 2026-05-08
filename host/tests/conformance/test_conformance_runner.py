@@ -522,6 +522,84 @@ class TestConformanceRunner(unittest.TestCase):
 
         self.assertEqual(["$.actual.event.payload.scope", "$.actual.event.payload.extra"], diffs)
 
+    def test_collect_subset_differences_should_allow_extra_fields(self) -> None:
+        expected = {
+            "phase": "ws",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "payload": {
+                        "invocationId": "${ANY_NON_EMPTY_STRING}",
+                        "delivery": {
+                            "attempt": 1,
+                        },
+                    }
+                }
+            },
+        }
+        actual = {
+            "phase": "ws",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "payload": {
+                        "invocationId": "invk-123",
+                        "appId": "events.sample",
+                        "delivery": {
+                            "attempt": 1,
+                            "leaseToken": "secret",
+                        },
+                    }
+                }
+            },
+        }
+
+        diffs = vector_runner.collect_subset_differences(expected, actual)
+
+        self.assertEqual([], diffs)
+
+    def test_collect_forbidden_path_differences_should_report_present_paths(self) -> None:
+        actual = {
+            "phase": "ws",
+            "outcome": "success",
+            "actual": {
+                "event": {
+                    "payload": {
+                        "delivery": {
+                            "attempt": 1,
+                            "leaseToken": "secret",
+                        }
+                    }
+                }
+            },
+        }
+
+        diffs = vector_runner.collect_forbidden_path_differences(
+            actual,
+            ["$.actual.event.payload.delivery.leaseToken", "$.actual.event.payload.reason"],
+        )
+
+        self.assertEqual(["$.actual.event.payload.delivery.leaseToken"], diffs)
+
+    def test_parse_expected_spec_should_extract_match_mode_and_forbid_paths(self) -> None:
+        expected_spec = {
+            "matchMode": "subset",
+            "forbidPaths": ["$.actual.event.payload.delivery.leaseToken"],
+            "phase": "ws",
+            "actual": {
+                "event": {
+                    "type": "invocation.delivered",
+                }
+            },
+        }
+
+        expected, match_mode, forbid_paths = vector_runner.parse_expected_spec(expected_spec)
+
+        self.assertEqual("subset", match_mode)
+        self.assertEqual(("$.actual.event.payload.delivery.leaseToken",), forbid_paths)
+        self.assertNotIn("matchMode", expected)
+        self.assertNotIn("forbidPaths", expected)
+
     def test_run_adapter_when_process_times_out_should_return_process_error(self) -> None:
         adapter = vector_runner.AdapterTarget(
             name="timeout-adapter",

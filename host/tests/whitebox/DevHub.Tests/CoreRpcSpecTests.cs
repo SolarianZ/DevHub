@@ -138,8 +138,8 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
     {
         var handler = new HubGetVersionHandler(
             Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0-preview.1+build.2"),
@@ -158,8 +158,8 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
     {
         var handler = new HubGetVersionHandler(
             Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0"),

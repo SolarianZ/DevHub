@@ -330,13 +330,13 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
         runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
 
-        string? capturedLaunchId = null;
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -365,12 +365,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
-        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
-        {
-            await Task.Delay(10);
-        }
-
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
 
         var registerResponse = await appInstancesHandler.HandleAsync(
@@ -423,13 +418,13 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
         runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
 
-        string? capturedLaunchId = null;
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -458,12 +453,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
-        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
-        {
-            await Task.Delay(10);
-        }
-
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
 
         var registerResponse = await appInstancesHandler.HandleAsync(
@@ -520,13 +510,13 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
         runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
 
-        string? capturedLaunchId = null;
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -555,12 +545,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
-        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
-        {
-            await Task.Delay(10);
-        }
-
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
 
         var registerResponse = await appInstancesHandler.HandleAsync(
@@ -682,8 +667,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
     [Fact]
     [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
+    [Trait("SpecRef", "6.3.11A")]
+    public async Task Spec_6_3_11A_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
     {
         var clock = new SequenceClock(
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -766,8 +751,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.13")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_13_And_6_3_14_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
+    public async Task Spec_6_3_13_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
     {
         WriteDefinition("notify.rpc-disabled", rpcEnabled: false);
         WriteDefinition("notify.route-errors", rpcEnabled: true);
@@ -934,8 +918,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     [Fact]
     [Trait("Category", "Spec")]
     [Trait("SpecRef", "6.3.14")]
+    [Trait("SpecRef", "6.3.15")]
     [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_14_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
+    public async Task Spec_6_3_14_And_6_3_15_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
     {
         WriteDefinition("request.success", rpcEnabled: true);
 

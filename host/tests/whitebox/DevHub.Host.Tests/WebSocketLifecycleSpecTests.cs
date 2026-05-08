@@ -735,8 +735,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsNull_ShouldReturnVersion()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_AfterAuthenticate_HubGetVersion_WhenParamsNull_ShouldReturnVersion()
     {
         var context = CreateHostContext();
 
@@ -776,8 +776,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_AfterAuthenticate_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
     {
         var context = CreateHostContext();
 
@@ -811,8 +811,8 @@ public class WebSocketLifecycleSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1.1")]
-    public async Task Spec_6_3_1_1_AfterAuthenticate_HubGetVersion_WhenParamsScalar_ShouldReturnInvalidParams()
+    [Trait("SpecRef", "6.3.1A")]
+    public async Task Spec_6_3_1A_AfterAuthenticate_HubGetVersion_WhenParamsScalar_ShouldReturnInvalidParams()
     {
         var context = CreateHostContext();
 

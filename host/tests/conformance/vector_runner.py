@@ -49,6 +49,7 @@ WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
 CASE_ID_PATTERN = re.compile(r"^CONF-\d{3}$")
 ALLOWED_ADAPTER_OUTCOMES = frozenset({"success", "error"})
+ALLOWED_MATCH_MODES = frozenset({"strict", "subset"})
 ADAPTER_TIMEOUT_SECONDS = 60
 
 
@@ -552,12 +553,18 @@ def run_vector(
                     )
                     continue
 
+            expected_spec = (
+                execution.resolved_vector["expectedDiscovery"]
+                if is_discovery
+                else execution.resolved_vector["expectedResponse"]
+            )
+
             if adapter_result.get("error") is not None:
                 failures.append(
                     {
                         "vectorId": execution.resolved_vector["id"],
                         "sdk": adapter.name,
-                        "expected": expected,
+                        "expected": expected_spec,
                         "actual": adapter_result.get("actual"),
                         "diffFields": ["$process"],
                         "message": adapter_result["error"],
@@ -568,14 +575,16 @@ def run_vector(
                 )
                 continue
 
+            expected, match_mode, forbid_paths = parse_expected_spec(expected_spec)
             comparable = build_comparable_payload(adapter_result, is_discovery)
-            diffs = collect_differences(expected, comparable)
+            diffs = collect_comparison_differences(expected, comparable, match_mode)
+            diffs.extend(collect_forbidden_path_differences(comparable, forbid_paths))
             if diffs:
                 failures.append(
                     {
                         "vectorId": execution.resolved_vector["id"],
                         "sdk": adapter.name,
-                        "expected": expected,
+                        "expected": expected_spec,
                         "actual": comparable,
                         "diffFields": diffs,
                         "vectorPath": str(vector_path),
@@ -586,7 +595,7 @@ def run_vector(
                 continue
 
             if not is_discovery:
-                normalized_results[adapter.name] = canonicalize_with_expected(comparable, expected)
+                normalized_results[adapter.name] = canonicalize_for_match_mode(comparable, expected, match_mode)
         except OrchestrationFailure as exc:
             failures.append(
                 {
@@ -872,6 +881,101 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
     return result.get("actual")
 
 
+def parse_expected_spec(spec: Any) -> tuple[Any, str, tuple[str, ...]]:
+    if not isinstance(spec, dict):
+        return spec, "strict", ()
+
+    match_mode = spec.get("matchMode", "strict")
+    if not isinstance(match_mode, str) or match_mode not in ALLOWED_MATCH_MODES:
+        raise ValueError(f"expected.matchMode 不支持：{match_mode!r}")
+
+    forbid_paths_value = spec.get("forbidPaths", [])
+    if forbid_paths_value is None:
+        forbid_paths: tuple[str, ...] = ()
+    elif isinstance(forbid_paths_value, list):
+        parsed_paths: list[str] = []
+        for index, raw_path in enumerate(forbid_paths_value):
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                raise ValueError(f"expected.forbidPaths[{index}] 必须为非空字符串。")
+            parsed_paths.append(raw_path)
+        forbid_paths = tuple(parsed_paths)
+    else:
+        raise ValueError("expected.forbidPaths 必须为字符串数组。")
+
+    expected_payload = {
+        key: value
+        for key, value in spec.items()
+        if key not in {"matchMode", "forbidPaths"}
+    }
+    return expected_payload, match_mode, forbid_paths
+
+
+def collect_comparison_differences(expected: Any, actual: Any, match_mode: str) -> list[str]:
+    if match_mode == "subset":
+        return collect_subset_differences(expected, actual)
+    return collect_differences(expected, actual)
+
+
+def canonicalize_for_match_mode(actual: Any, expected: Any, match_mode: str) -> Any:
+    if match_mode == "subset":
+        return canonicalize_subset_with_expected(actual, expected)
+    return canonicalize_with_expected(actual, expected)
+
+
+def collect_forbidden_path_differences(actual: Any, forbid_paths: Iterable[str]) -> list[str]:
+    diffs: list[str] = []
+    for raw_path in forbid_paths:
+        if path_exists(actual, raw_path):
+            diffs.append(raw_path)
+    return diffs
+
+
+def path_exists(value: Any, path: str) -> bool:
+    if path == "$":
+        return True
+    if not isinstance(path, str) or not path.startswith("$"):
+        raise ValueError(f"禁止路径必须以 '$' 开头：{path!r}")
+
+    current = value
+    position = 1
+    while position < len(path):
+        current_char = path[position]
+        if current_char == ".":
+            next_position = position + 1
+            end_position = next_position
+            while end_position < len(path) and path[end_position] not in ".[":
+                end_position += 1
+            if end_position == next_position:
+                raise ValueError(f"禁止路径语法非法：{path!r}")
+
+            key = path[next_position:end_position]
+            if not isinstance(current, dict) or key not in current:
+                return False
+            current = current[key]
+            position = end_position
+            continue
+
+        if current_char == "[":
+            end_position = path.find("]", position)
+            if end_position < 0:
+                raise ValueError(f"禁止路径语法非法：{path!r}")
+
+            index_text = path[position + 1:end_position]
+            if not index_text.isdigit():
+                raise ValueError(f"禁止路径数组下标非法：{path!r}")
+
+            index = int(index_text)
+            if not isinstance(current, list) or index >= len(current):
+                return False
+            current = current[index]
+            position = end_position + 1
+            continue
+
+        raise ValueError(f"禁止路径语法非法：{path!r}")
+
+    return True
+
+
 def maybe_track_registered_instance_session_token(execution: VectorExecutionContext, result: dict[str, Any]) -> None:
     """当主请求成功注册实例时，把最新 instanceSessionToken 同步到 cleanup ledger。"""
     request = execution.resolved_vector.get("request")
@@ -1022,6 +1126,63 @@ def canonicalize_with_expected(actual: Any, expected: Any) -> Any:
         ]
 
     return actual
+
+
+def canonicalize_subset_with_expected(actual: Any, expected: Any) -> Any:
+    if is_wildcard(expected, actual):
+        return expected
+
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return actual
+        return {
+            key: canonicalize_subset_with_expected(actual[key], expected[key])
+            for key in expected
+            if key in actual
+        }
+
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return actual
+        return [
+            canonicalize_subset_with_expected(actual[index], expected[index])
+            for index in range(min(len(expected), len(actual)))
+        ]
+
+    return actual
+
+
+def collect_subset_differences(expected: Any, actual: Any, path: str = "$") -> list[str]:
+    if is_wildcard(expected, actual):
+        return []
+
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return [path]
+
+        diffs: list[str] = []
+        for key in expected:
+            child_path = f"{path}.{key}"
+            if key not in actual:
+                diffs.append(child_path)
+                continue
+            diffs.extend(collect_subset_differences(expected[key], actual[key], child_path))
+        return diffs
+
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return [path]
+        if len(expected) != len(actual):
+            return [path]
+
+        diffs: list[str] = []
+        for index in range(len(expected)):
+            diffs.extend(collect_subset_differences(expected[index], actual[index], f"{path}[{index}]"))
+        return diffs
+
+    if expected != actual:
+        return [path]
+    return []
 
 
 def collect_differences(expected: Any, actual: Any, path: str = "$") -> list[str]:
