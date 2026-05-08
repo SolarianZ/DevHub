@@ -41,6 +41,46 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
+    public void Impl_GetAllDefinitions_BeforeRefresh_ShouldExposePreviousSnapshotOnly()
+    {
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        provider.Refresh();
+        Assert.Empty(provider.GetAllDefinitions());
+
+        WriteDefinition("snapshot-list-target");
+
+        var staleDefinitions = provider.GetAllDefinitions();
+        Assert.DoesNotContain(staleDefinitions, definition => definition.AppId == "snapshot-list-target");
+
+        provider.Refresh();
+
+        var freshDefinitions = provider.GetAllDefinitions();
+        Assert.Contains(freshDefinitions, definition => definition.AppId == "snapshot-list-target");
+    }
+
+    [Fact]
+    public void Impl_GetDefinition_BeforeRefresh_ShouldReadPreviousSnapshotOnly()
+    {
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        provider.Refresh();
+        Assert.Null(provider.GetDefinition("snapshot-get-target", ScopeContract.Global));
+
+        WriteDefinition("snapshot-get-target");
+
+        Assert.Null(provider.GetDefinition("snapshot-get-target", ScopeContract.Global));
+
+        provider.Refresh();
+
+        var definition = provider.GetDefinition("snapshot-get-target", ScopeContract.Global);
+        Assert.NotNull(definition);
+        Assert.Equal("snapshot-get-target", definition!.AppId);
+    }
+
+    [Fact]
     public void Impl_GetDefinition_WhenMissing_ShouldReturnNull()
     {
         var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());

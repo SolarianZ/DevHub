@@ -96,45 +96,6 @@ public class SpecConformanceTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_AppDefinitionsHandler_ListDefinitions_ShouldReadExistingSnapshotWithoutRefreshingFromDisk()
-    {
-        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
-        var definitionProvider = new DefinitionProvider(definitionLoader);
-        var handler = new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>());
-
-        WriteJson("snapshot-list-target.json", new
-        {
-            appId = "snapshot-list-target",
-            scope = ScopeContract.Global,
-            displayName = "Snapshot List Target"
-        });
-
-        var staleResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "req-list-stale-snapshot",
-            Method = "hub.apps.listDefinitions",
-            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null })
-        }, CancellationToken.None);
-
-        Assert.Null(staleResponse.Error);
-        var staleDefinitions = JsonSerializer.SerializeToElement(staleResponse.Result).GetProperty("definitions").EnumerateArray();
-        Assert.DoesNotContain(staleDefinitions, d => d.GetProperty("appId").GetString() == "snapshot-list-target");
-
-        definitionProvider.Refresh();
-
-        var freshResponse = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "req-list-fresh-snapshot",
-            Method = "hub.apps.listDefinitions",
-            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null })
-        }, CancellationToken.None);
-
-        Assert.Null(freshResponse.Error);
-        var freshDefinitions = JsonSerializer.SerializeToElement(freshResponse.Result).GetProperty("definitions").EnumerateArray();
-        Assert.Contains(freshDefinitions, d => d.GetProperty("appId").GetString() == "snapshot-list-target");
-    }
-
-    [Fact]
     public async Task Impl_AppDefinitionsHandler_GetDefinition_ShouldReturnDefinitionWhenExists()
     {
         WriteJson("get-target.json", new
@@ -166,46 +127,6 @@ public class SpecConformanceTests : IDisposable
         Assert.True(resultElement.GetProperty("ok").GetBoolean());
         var definitionElement = resultElement.GetProperty("definition");
         Assert.Equal("get-target", definitionElement.GetProperty("appId").GetString());
-    }
-
-    [Fact]
-    public async Task Impl_AppDefinitionsHandler_GetDefinition_ShouldReadExistingSnapshotWithoutRefreshingFromDisk()
-    {
-        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
-        var definitionProvider = new DefinitionProvider(definitionLoader);
-        var handler = new AppDefinitionsHandler(definitionProvider, Mock.Of<ILogger<AppDefinitionsHandler>>());
-
-        WriteJson("snapshot-get-target.json", new
-        {
-            appId = "snapshot-get-target",
-            scope = ScopeContract.Global,
-            displayName = "Snapshot Get Target"
-        });
-
-        var request = new JsonRpcRequest
-        {
-            Id = "req-get-snapshot",
-            Method = "hub.apps.getDefinition",
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                appId = "snapshot-get-target",
-                scope = ScopeContract.Global
-            })
-        };
-
-        var staleResponse = await handler.HandleAsync(request, CancellationToken.None);
-
-        Assert.NotNull(staleResponse.Error);
-        Assert.Equal(-32014, staleResponse.Error.Code);
-        Assert.Equal("app_definition_not_found", staleResponse.Error.Message);
-
-        definitionProvider.Refresh();
-
-        var freshResponse = await handler.HandleAsync(request, CancellationToken.None);
-
-        Assert.Null(freshResponse.Error);
-        var freshResult = JsonSerializer.SerializeToElement(freshResponse.Result);
-        Assert.Equal("snapshot-get-target", freshResult.GetProperty("definition").GetProperty("appId").GetString());
     }
 
     [Fact]

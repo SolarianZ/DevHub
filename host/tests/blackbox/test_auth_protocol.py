@@ -215,6 +215,78 @@ class TestAuthProtocol(unittest.TestCase):
 
         return result
 
+    def test_missing_token_takes_precedence_over_invalid_json_body(self):
+        """测试缺失 token 时必须先返回 unauthorized，而不是 parse_error"""
+        result = TestResult("测试缺失 token 优先于非法 JSON body")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            headers.pop("Authorization", None)
+
+            response = http_post(
+                f"{base_url}/rpc",
+                data=b'{"jsonrpc":"2.0","id":"auth-missing-token-invalid-json","method":"hub.ping","params":',
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                body,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id=None,
+                expected_data={"reason": "missing_token"},
+            ):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_invalid_token_takes_precedence_over_invalid_json_body(self):
+        """测试无效 token 时必须先返回 unauthorized，而不是 parse_error"""
+        result = TestResult("测试无效 token 优先于非法 JSON body")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            headers["Authorization"] = "Bearer invalid_token"
+
+            response = http_post(
+                f"{base_url}/rpc",
+                data=b'{"jsonrpc":"2.0","id":"auth-invalid-token-invalid-json","method":"hub.ping","params":',
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                body,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id=None,
+                expected_data={"reason": "invalid_token"},
+            ):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ping_with_invalid_protocol_version(self):
         """测试使用无效协议版本的调用"""
         result = TestResult("测试使用无效协议版本的调用")
@@ -598,6 +670,40 @@ class TestAuthProtocol(unittest.TestCase):
 
         return result
 
+    def test_http_notification_success_returns_200_with_empty_body(self):
+        """测试合法 HTTP notification 成功时返回 200 且空响应体"""
+        result = TestResult("测试 HTTP notification 成功返回 200 且空响应体")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "hub.ping",
+                "params": {"echo": "notify"},
+            }
+
+            response = http_post(
+                f"{base_url}/rpc",
+                json_body=payload,
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            if response.text != "":
+                result.mark_failure(f"❌ HTTP notification 成功响应体必须为空，实际为: {response.text!r}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_rpc_options_preflight_returns_cors_headers(self):
         """测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头。"""
         result = TestResult("测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头")
@@ -752,6 +858,8 @@ class TestAuthProtocol(unittest.TestCase):
             self.test_ping_with_valid_credentials,
             self.test_ping_without_token,
             self.test_ping_with_invalid_token,
+            self.test_missing_token_takes_precedence_over_invalid_json_body,
+            self.test_invalid_token_takes_precedence_over_invalid_json_body,
             self.test_ping_with_invalid_protocol_version,
             self.test_ping_without_protocol_header,
             self.test_ping_without_client_id,
@@ -763,6 +871,7 @@ class TestAuthProtocol(unittest.TestCase):
             self.test_jsonrpc_id_null_rejected,
             self.test_jsonrpc_id_must_be_string_or_number,
             self.test_content_type_must_be_application_json,
+            self.test_http_notification_success_returns_200_with_empty_body,
             self.test_rpc_options_preflight_returns_cors_headers,
             self.test_post_with_origin_returns_cors_headers_on_success,
             self.test_post_with_origin_returns_cors_headers_on_jsonrpc_error,
