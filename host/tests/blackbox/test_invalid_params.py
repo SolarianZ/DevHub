@@ -1034,6 +1034,8 @@ class TestInvalidParams(unittest.TestCase):
         """运行所有 invalid_params 测试"""
         return [
             self.test_params_as_array(),
+            self.test_hub_get_version_unexpected_params(),
+            self.test_scalar_params_should_be_invalid_request_for_hub_ping(),
             self.test_hub_apps_get_definition_missing_appid(),
             self.test_hub_apps_get_definition_empty_appid(),
             self.test_hub_apps_get_instance_invalid_params(),

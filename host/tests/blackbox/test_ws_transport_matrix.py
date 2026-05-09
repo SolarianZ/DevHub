@@ -604,11 +604,13 @@ class TestWsTransportMatrix(unittest.TestCase):
     def run_all_tests(self, full=False):
         return [
             self.test_ws_matrix_001_ping_should_work_after_auth(),
+            self.test_ws_matrix_001a_get_version_should_work_after_auth(),
             self.test_ws_matrix_002_list_definitions_should_work_after_auth(),
             self.test_ws_matrix_003_get_definition_should_work_after_auth(),
             self.test_ws_matrix_004_list_instances_should_work_after_auth(),
             self.test_ws_matrix_004a_get_instance_should_work_after_auth(),
             self.test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
+            self.test_ws_matrix_005a_scalar_params_should_be_invalid_request_for_hub_ping(),
             self.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
             self.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ]

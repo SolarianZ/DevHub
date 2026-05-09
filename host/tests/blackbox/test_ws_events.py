@@ -1639,6 +1639,7 @@ class TestWsEvents:
     def run_all_tests(self, full=False):
         results = [
             self.test_ws_001_first_message_must_authenticate(),
+            self.test_ws_001a_first_get_version_message_must_authenticate(),
             self.test_ws_002_pre_auth_notification_should_close_connection(),
             self.test_ws_003_authenticate_invalid_token_should_close(),
             self.test_ws_004_authenticate_unsupported_protocol_should_close(),

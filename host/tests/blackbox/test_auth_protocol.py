@@ -856,6 +856,7 @@ class TestAuthProtocol(unittest.TestCase):
         """运行所有鉴权与协议版本测试"""
         tests = [
             self.test_ping_with_valid_credentials,
+            self.test_get_version_with_valid_credentials,
             self.test_ping_without_token,
             self.test_ping_with_invalid_token,
             self.test_missing_token_takes_precedence_over_invalid_json_body,
