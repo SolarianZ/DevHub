@@ -168,15 +168,10 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            register_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-core",
-                    "scope": "",
-                    "pid": 12345,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-core", 12345),
+            )
 
             if not self._validate_register_result(result, register_response):
                 return result
@@ -214,15 +209,10 @@ class TestAppInstances(unittest.TestCase):
             instance_id = self.generate_unique_instance_id()
             unknown_app_id = "app-not-in-definitions"
 
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": unknown_app_id,
-                    "scope": "",
-                    "pid": 12346,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, unknown_app_id, 12346),
+            )
 
             if not self._validate_register_result(result, response):
                 return result
@@ -249,15 +239,10 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            response1 = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-upsert",
-                    "scope": "",
-                    "pid": 12347,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            response1 = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-upsert", 12347),
+            )
             if not self._validate_register_result(result, response1):
                 return result
 
@@ -265,15 +250,10 @@ class TestAppInstances(unittest.TestCase):
             token_1 = response1["result"]["instanceSessionToken"]
             time.sleep(1)
 
-            response2 = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-upsert",
-                    "scope": "",
-                    "pid": 12348,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            response2 = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-upsert", 12348),
+            )
             if not self._validate_register_result(result, response2):
                 return result
 
@@ -311,26 +291,21 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            register_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-heartbeat",
-                    "scope": "",
-                    "pid": 12349,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-heartbeat", 12349),
+            )
             if not self._validate_register_result(result, register_response):
                 return result
 
-            heartbeat1_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
+            heartbeat1_response = client.heartbeat_instance(instance_id)
             if not RpcAssertions.expect_success(result, heartbeat1_response, ["lastSeenUtc"]):
                 return result
 
             last_seen_1 = heartbeat1_response["result"]["lastSeenUtc"]
             time.sleep(1)
 
-            heartbeat2_response = client.call("hub.apps.heartbeat", {"instanceId": instance_id})
+            heartbeat2_response = client.heartbeat_instance(instance_id)
             if not RpcAssertions.expect_success(result, heartbeat2_response, ["lastSeenUtc"]):
                 return result
 
@@ -357,7 +332,7 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             nonexistent_id = f"nonexistent-{self.generate_unique_instance_id()}"
 
-            response = client.call("hub.apps.heartbeat", {"instanceId": nonexistent_id})
+            response = client.heartbeat_instance(nonexistent_id)
             if not RpcAssertions.expect_error(
                 result,
                 response,
@@ -385,19 +360,14 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            register_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-unregister",
-                    "scope": "",
-                    "pid": 12350,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-unregister", 12350),
+            )
             if not self._validate_register_result(result, register_response):
                 return result
 
-            unregister_response = client.call("hub.apps.unregisterInstance", {"instanceId": instance_id})
+            unregister_response = client.unregister_instance(instance_id)
             if not RpcAssertions.expect_success(result, unregister_response):
                 return result
 
@@ -428,7 +398,7 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             nonexistent_id = f"nonexistent-{self.generate_unique_instance_id()}"
 
-            response = client.call("hub.apps.unregisterInstance", {"instanceId": nonexistent_id})
+            response = client.unregister_instance(nonexistent_id)
             if not RpcAssertions.expect_success(result, response):
                 return result
 
@@ -642,25 +612,15 @@ class TestAppInstances(unittest.TestCase):
             instance_id_1 = self.generate_unique_instance_id()
             instance_id_2 = self.generate_unique_instance_id()
 
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_1,
-                    "appId": "test-app-list-1",
-                    "scope": "",
-                    "pid": 12351,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_1, "test-app-list-1", 12351),
+            )
 
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_2,
-                    "appId": "test-app-list-2",
-                    "scope": "scope-x",
-                    "pid": 12352,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_2, "test-app-list-2", 12352, scope="scope-x"),
+            )
 
             response_by_app = client.call("hub.apps.listInstances", {"appId": "test-app-list-1", "scope": None})
             if not RpcAssertions.expect_success(result, response_by_app, ["instances"]):
@@ -724,25 +684,15 @@ class TestAppInstances(unittest.TestCase):
             instance_id_global = self.generate_unique_instance_id()
             instance_id_scoped = self.generate_unique_instance_id()
 
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_global,
-                    "appId": "test-app-default-scope",
-                    "scope": "",
-                    "pid": 12353,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_global, "test-app-default-scope", 12353),
+            )
 
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_scoped,
-                    "appId": "test-app-default-scope",
-                    "scope": "workspace-a",
-                    "pid": 12354,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_scoped, "test-app-default-scope", 12354, scope="workspace-a"),
+            )
 
             response = client.call("hub.apps.listInstances", {"appId": "test-app-default-scope", "scope": ""})
             if not RpcAssertions.expect_success(result, response, ["instances"]):
@@ -779,27 +729,17 @@ class TestAppInstances(unittest.TestCase):
             empty_global_instance_id = self.generate_unique_instance_id()
             app_id = "test-app-scope-global-explicit"
 
-            scoped_global_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": scoped_global_instance_id,
-                    "appId": app_id,
-                    "scope": "global",
-                    "pid": 12355,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            scoped_global_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(scoped_global_instance_id, app_id, 12355, scope="global"),
+            )
             if not RpcAssertions.expect_success(result, scoped_global_response, ["instance"]):
                 return result
 
-            empty_global_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": empty_global_instance_id,
-                    "appId": app_id,
-                    "scope": "",
-                    "pid": 12356,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            empty_global_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(empty_global_instance_id, app_id, 12356),
+            )
             if not RpcAssertions.expect_success(result, empty_global_response, ["instance"]):
                 return result
 
@@ -848,27 +788,17 @@ class TestAppInstances(unittest.TestCase):
             app_id = "test-app-empty-scope-global"
             scoped_value = "workspace-empty-scope"
 
-            empty_scope_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": empty_scope_instance_id,
-                    "appId": app_id,
-                    "scope": "",
-                    "pid": 12357,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            empty_scope_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(empty_scope_instance_id, app_id, 12357),
+            )
             if not RpcAssertions.expect_success(result, empty_scope_response, ["instance"]):
                 return result
 
-            scoped_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": scoped_instance_id,
-                    "appId": app_id,
-                    "scope": scoped_value,
-                    "pid": 12359,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            scoped_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(scoped_instance_id, app_id, 12359, scope=scoped_value),
+            )
             if not RpcAssertions.expect_success(result, scoped_response, ["instance"]):
                 return result
 
@@ -924,24 +854,14 @@ class TestAppInstances(unittest.TestCase):
             instance_id_1 = self.generate_unique_instance_id()
             instance_id_2 = self.generate_unique_instance_id()
 
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_1,
-                    "appId": "test-app-scope-match",
-                    "scope": "scope-1",
-                    "pid": 12357,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
-            client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id_2,
-                    "appId": "test-app-scope-match",
-                    "scope": "",
-                    "pid": 12358,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_1, "test-app-scope-match", 12357, scope="scope-1"),
+            )
+            client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id_2, "test-app-scope-match", 12358),
+            )
 
             response = client.call("hub.apps.listInstances", {"appId": "test-app-scope-match", "scope": "scope-1"})
             if not RpcAssertions.expect_success(result, response, ["instances"]):
@@ -976,15 +896,10 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-invoke",
-                    "scope": "",
-                    "pid": 12359,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-invoke", 12359),
+            )
             if not RpcAssertions.expect_success(result, response, ["instance"]):
                 return result
 
@@ -1094,15 +1009,10 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            register_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-offline",
-                    "scope": "",
-                    "pid": 12360,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-offline", 12360),
+            )
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
@@ -1156,15 +1066,10 @@ class TestAppInstances(unittest.TestCase):
             client = RpcClient(base_url, token)
             instance_id = self.generate_unique_instance_id()
 
-            register_response = client.call("hub.apps.registerInstance", {
-                "instance": {
-                    "instanceId": instance_id,
-                    "appId": "test-app-offline-include",
-                    "scope": "",
-                    "pid": 12361,
-                    "invoke": {"poll": True, "respond": True}
-                }
-            })
+            register_response = client.call(
+                "hub.apps.registerInstance",
+                self._register_payload(instance_id, "test-app-offline-include", 12361),
+            )
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 

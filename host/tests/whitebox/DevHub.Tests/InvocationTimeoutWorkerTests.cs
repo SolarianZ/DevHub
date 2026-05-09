@@ -13,6 +13,7 @@ using Moq;
 [Trait("Category", "Impl")]
 public class InvocationTimeoutWorkerTests
 {
+    private static readonly DateTime BaseUtc = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<InvocationRoutingService>> _routingLogger = new();
     private readonly Mock<ILogger<InvocationStore>> _storeLogger = new();
@@ -22,19 +23,20 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public async Task Impl_SweepOnce_ShouldNotifyWaiterTimeout_ForRequestTimeout()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(BaseUtc);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, clock, _workerLogger.Object);
 
         var request = CreateRequest("worker-timeout.app", ttlMs: 5000, waitTimeoutMs: 1000);
-        request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
+        request.CreatedAtUtc = BaseUtc.AddMilliseconds(-1500);
 
         var created = store.CreateInvocation(request, hasOnlineCandidates: true);
         var waitTask = waiter.Register(created.InvocationId);
 
-        worker.SweepOnce(DateTime.UtcNow);
+        worker.SweepOnce(BaseUtc);
 
         var completion = await waitTask;
         Assert.Equal(InvocationRequestCompletionKind.Timeout, completion.Kind);
@@ -46,19 +48,20 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public async Task Impl_SweepOnce_ShouldNotifyWaiterExpired_ForRequestTtlElapsed()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(BaseUtc);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, clock, _workerLogger.Object);
 
         var request = CreateRequest("worker-expired.app", ttlMs: 1000, waitTimeoutMs: 5000);
-        request.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
+        request.CreatedAtUtc = BaseUtc.AddMilliseconds(-1500);
 
         var created = store.CreateInvocation(request, hasOnlineCandidates: true);
         var waitTask = waiter.Register(created.InvocationId);
 
-        worker.SweepOnce(DateTime.UtcNow);
+        worker.SweepOnce(BaseUtc);
 
         var completion = await waitTask;
         Assert.Equal(InvocationRequestCompletionKind.Expired, completion.Kind);
@@ -70,18 +73,19 @@ public class InvocationTimeoutWorkerTests
     [Fact]
     public void Impl_SweepOnce_ShouldIgnoreNotifyTimeoutTransitions_ForWaiterCompletion()
     {
-        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var clock = new MutableClock(BaseUtc);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
-        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
         var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
-        var worker = new InvocationTimeoutWorker(store, waiter, new SystemClock(), _workerLogger.Object);
+        var worker = new InvocationTimeoutWorker(store, waiter, clock, _workerLogger.Object);
 
         var notify = CreateNotify("worker-notify.app", ttlMs: 1000);
-        notify.CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(-1500);
+        notify.CreatedAtUtc = BaseUtc.AddMilliseconds(-1500);
 
         var created = store.CreateInvocation(notify, hasOnlineCandidates: true);
 
-        worker.SweepOnce(DateTime.UtcNow);
+        worker.SweepOnce(BaseUtc);
 
         Assert.False(waiter.CompleteSuccess(created.InvocationId, new { ok = true }));
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -98,7 +102,7 @@ public class InvocationTimeoutWorkerTests
             Method = "demo.request",
             Args = new Dictionary<string, object?>(),
             Kind = InvocationKind.Request,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = BaseUtc,
             Options = new InvocationOptions
             {
                 TtlMs = ttlMs,
@@ -126,7 +130,7 @@ public class InvocationTimeoutWorkerTests
             Method = "demo.notify",
             Args = new Dictionary<string, object?>(),
             Kind = InvocationKind.Notify,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = BaseUtc,
             Options = new InvocationOptions
             {
                 TtlMs = ttlMs,
@@ -142,8 +146,17 @@ public class InvocationTimeoutWorkerTests
             State = InvocationState.Created
         };
     }
-}
 
+    private sealed class MutableClock : IClock
+    {
+        public MutableClock(DateTime utcNow)
+        {
+            UtcNow = utcNow;
+        }
+
+        public DateTime UtcNow { get; set; }
+    }
+}
 
 
 

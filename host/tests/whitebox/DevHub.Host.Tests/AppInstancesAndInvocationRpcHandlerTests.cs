@@ -15,7 +15,7 @@ using Moq;
 /// <summary>
 /// Host 使用的共享实例管理与调用链 RPC 处理器测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 {
     private readonly string _dataDirectory;
@@ -32,9 +32,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_ShouldRegisterInstanceAndRejectPasswordMismatch()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_ShouldRegisterInstanceAndRejectPasswordMismatch()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -111,9 +110,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenTopLevelLaunchIdIsInvalid_ShouldReturnInvalidParams()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_WhenTopLevelLaunchIdIsInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateAppInstancesHandler(appRegistry);
@@ -148,9 +146,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
     {
         const string appId = "managed.scope.app";
         const string managedScope = "workspace-A";
@@ -232,9 +229,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_AppInstancesAndLaunch_WhenUntrackedRegistrationUsesDifferentScope_ShouldKeepLaunchWaiting()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_AppInstancesAndLaunch_WhenUntrackedRegistrationUsesDifferentScope_ShouldKeepLaunchWaiting()
     {
         const string appId = "managed.untracked.launch";
         const string launchScope = "workspace-A";
@@ -316,9 +312,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesAndLaunch_WhenTopLevelLaunchIdMatches_ShouldCompleteWaitingLaunch()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_WhenTopLevelLaunchIdMatches_ShouldCompleteWaitingLaunch()
     {
         const string appId = "managed.bound.launch.success";
         const string launchScope = "workspace-A";
@@ -403,9 +398,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesAndLaunch_WhenMetaLaunchIdIsPresent_ShouldRemainUntracked()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_WhenMetaLaunchIdIsPresent_ShouldRemainUntracked()
     {
         const string appId = "managed.meta-launch-ignored";
         const string launchScope = "workspace-A";
@@ -494,9 +488,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
     {
         const string appId = "managed.bound.launch";
         const string launchScope = "workspace-A";
@@ -585,9 +578,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.9")]
-    public async Task Spec_6_3_9_AppInstancesRpcHandler_WhenHeartbeatUnknown_ShouldReturnInstanceNotFound()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_9_AppInstancesRpcHandler_WhenHeartbeatUnknown_ShouldReturnInstanceNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateAppInstancesHandler(appRegistry);
@@ -610,9 +602,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardOwnershipToken()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardOwnershipToken()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -666,9 +657,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.11A")]
-    public async Task Spec_6_3_11A_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_11A_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
     {
         var clock = new SequenceClock(
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -704,9 +694,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         RegisterInstance(appRegistry, "list.app", "global.instance");
@@ -749,9 +738,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_13_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
     {
         WriteDefinition("notify.rpc-disabled", rpcEnabled: false);
         WriteDefinition("notify.route-errors", rpcEnabled: true);
@@ -846,10 +834,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.13")]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_13_And_6_3_15_InvocationRpcHandler_NotifyAndPoll_ShouldDeliverQueuedInvocation()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_13_And_6_3_15_InvocationRpcHandler_NotifyAndPoll_ShouldDeliverQueuedInvocation()
     {
         WriteDefinition("notify.success", rpcEnabled: true);
 
@@ -916,11 +902,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    [Trait("SpecRef", "6.3.15")]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_14_And_6_3_15_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_And_6_3_15_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
     {
         WriteDefinition("request.success", rpcEnabled: true);
 
@@ -1001,9 +984,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenCalleeReturnsError_ShouldMapInvocationFailed()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenCalleeReturnsError_ShouldMapInvocationFailed()
     {
         WriteDefinition("request.failed", rpcEnabled: true);
 
@@ -1088,13 +1070,12 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutElapses_ShouldReturnInvocationTimeout()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutElapses_ShouldReturnInvocationTimeout()
     {
         WriteDefinition("request.timeout", rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(600));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(600));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         using var context = CreateInvocationHandlerContext(appRegistry, clock: clock);
 
@@ -1126,13 +1107,12 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutEqualsTtl_ShouldPreferInvocationExpired()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutEqualsTtl_ShouldPreferInvocationExpired()
     {
         WriteDefinition("request.expired", rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(1));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(1));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         using var context = CreateInvocationHandlerContext(appRegistry, clock: clock);
 
@@ -1163,9 +1143,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_InvocationRpcHandler_Poll_ShouldRejectUnknownOrUnauthorizedInstances()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_15_InvocationRpcHandler_Poll_ShouldRejectUnknownOrUnauthorizedInstances()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var pollDisabledToken = RegisterInstance(appRegistry, "poll.app", "poll.disabled", poll: false);
@@ -1202,9 +1181,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_InvocationRpcHandler_Respond_ShouldRejectInvalidPayloadsUnauthorizedInstancesAndDeliveryConflict()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_16_InvocationRpcHandler_Respond_ShouldRejectInvalidPayloadsUnauthorizedInstancesAndDeliveryConflict()
     {
         WriteDefinition("respond.conflict", rpcEnabled: true);
 

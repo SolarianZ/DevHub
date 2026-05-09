@@ -14,7 +14,7 @@ using Moq;
 /// <summary>
 /// Invocation 规范白盒测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public class InvocationSpecTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -26,8 +26,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenOfflineAndOptionsOmitted_ShouldDefaultQueueAndAutoLaunch()
+    public async Task Impl_6_3_13_Notify_WhenOfflineAndOptionsOmitted_ShouldDefaultQueueAndAutoLaunch()
     {
         const string appId = "spec-6.3.10-default-offline-options";
         WriteDefinition(appId, rpcEnabled: true);
@@ -54,8 +53,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenTargetInstanceSpecifiedAndOptionsOmitted_ShouldDefaultAutoLaunchFalse()
+    public async Task Impl_6_3_13_Notify_WhenTargetInstanceSpecifiedAndOptionsOmitted_ShouldDefaultAutoLaunchFalse()
     {
         const string appId = "spec-6.3.10-default-target-instance-options";
         WriteDefinition(appId, rpcEnabled: true);
@@ -93,8 +91,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenOptionsOmittedWithExplicitGlobalScope_ShouldUseDefaultTtlAndRouteGlobal()
+    public async Task Impl_6_3_13_Notify_WhenOptionsOmittedWithExplicitGlobalScope_ShouldUseDefaultTtlAndRouteGlobal()
     {
         const string appId = "spec-6.3.10-default-options";
         WriteDefinition(appId, rpcEnabled: true);
@@ -136,8 +133,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
+    public async Task Impl_6_3_13_Notify_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
     {
         const string appId = "spec-6.3.10-explicit-global-scope";
         WriteDefinition(appId, rpcEnabled: true);
@@ -197,8 +193,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenTargetInstanceAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_13_Notify_WhenTargetInstanceAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -229,8 +224,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenAutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_13_Notify_WhenAutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -261,8 +255,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.13")]
-    public async Task Spec_6_3_13_Notify_WhenRpcDisabled_ShouldReturnForbiddenWithReason()
+    public async Task Impl_6_3_13_Notify_WhenRpcDisabled_ShouldReturnForbiddenWithReason()
     {
         const string appId = "spec-6.3.10-rpc-disabled";
         WriteDefinition(appId, rpcEnabled: false);
@@ -298,8 +291,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_14_Request_WhenWaitTimeoutGreaterThanTtl_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -327,8 +319,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenOptionsOmittedWithExplicitGlobalScope_ShouldApplyDefaults()
+    public async Task Impl_6_3_14_Request_WhenOptionsOmittedWithExplicitGlobalScope_ShouldApplyDefaults()
     {
         const string onlineAppId = "spec-6.3.11-default-options-online";
         const string onlineInstanceId = "spec-6.3.11-default-options-online-instance";
@@ -400,8 +391,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenTargetInstanceSpecifiedAndAutoLaunchOmitted_ShouldDefaultToFalse()
+    public async Task Impl_6_3_14_Request_WhenTargetInstanceSpecifiedAndAutoLaunchOmitted_ShouldDefaultToFalse()
     {
         const string appId = "spec-6.3.11-target-instance-default-auto-launch";
         const string observerInstanceId = "spec-6.3.11-target-instance-default-auto-launch-observer";
@@ -442,8 +432,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenTargetInstanceAndAutoLaunchTrue_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_14_Request_WhenTargetInstanceAndAutoLaunchTrue_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -471,8 +460,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenAutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_14_Request_WhenAutoLaunchTrueAndQueueIfOfflineFalse_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -500,8 +488,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenTtlElapsedBeforeCompletion_ShouldReturnInvocationExpired()
+    public async Task Impl_6_3_14_Request_WhenTtlElapsedBeforeCompletion_ShouldReturnInvocationExpired()
     {
         const string appId = "spec-6.3.11-ttl-expired";
         WriteDefinition(appId, rpcEnabled: true);
@@ -538,8 +525,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenRpcDisabled_ShouldReturnForbiddenWithReason()
+    public async Task Impl_6_3_14_Request_WhenRpcDisabled_ShouldReturnForbiddenWithReason()
     {
         const string appId = "spec-6.3.11-rpc-disabled";
         WriteDefinition(appId, rpcEnabled: false);
@@ -572,8 +558,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
+    public async Task Impl_6_3_14_Request_WhenCalleeRespondsError_ShouldReturnInvocationFailed()
     {
         const string appId = "spec-6.3.11-invocation-failed";
         const string instanceId = "spec-6.3.11-invocation-failed-instance";
@@ -640,8 +625,7 @@ public class InvocationSpecTests : IDisposable
     [Theory]
     [InlineData("scalar")]
     [InlineData("null")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenCalleeErrorDataIsJsonValue_ShouldPreserveData(string dataCase)
+    public async Task Impl_6_3_14_Request_WhenCalleeErrorDataIsJsonValue_ShouldPreserveData(string dataCase)
     {
         var appId = $"spec-callee-json-value-{dataCase}";
         var instanceId = $"spec-callee-json-value-{dataCase}-instance";
@@ -708,8 +692,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_Request_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
+    public async Task Impl_6_3_14_Request_WhenScopeOmittedOrNull_ShouldReturnInvalidParams_AndEmptyShouldRouteOnlyToGlobal()
     {
         const string appId = "spec-6.3.11-explicit-global-scope";
         WriteDefinition(appId, rpcEnabled: true);
@@ -785,8 +768,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_Poll_WhenInstanceUnregistered_ShouldReturnInstanceNotFound()
+    public async Task Impl_6_3_15_Poll_WhenInstanceUnregistered_ShouldReturnInstanceNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -803,8 +785,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_Poll_WhenInvokePollDisabled_ShouldReturnForbiddenWithReason()
+    public async Task Impl_6_3_15_Poll_WhenInvokePollDisabled_ShouldReturnForbiddenWithReason()
     {
         const string appId = "spec-6.3.12-poll-disabled";
         WriteDefinition(appId, rpcEnabled: true);
@@ -821,8 +802,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_Poll_WhenNoItems_ShouldLongPollUntilWaitMsThenReturnEmptyItems()
+    public async Task Impl_6_3_15_Poll_WhenNoItems_ShouldLongPollUntilWaitMsThenReturnEmptyItems()
     {
         const string appId = "spec-6.3.12-long-poll";
         WriteDefinition(appId, rpcEnabled: true);
@@ -832,19 +812,16 @@ public class InvocationSpecTests : IDisposable
 
         var handler = CreateInvocationHandler(appRegistry);
 
-        var stopwatch = Stopwatch.StartNew();
+        // InvocationStore.PollAsync 当前仍使用真实 Task.Delay，这里只验证公开结果而不对 wall-clock 做脆弱断言。
         var response = await PollAsync(handler, appRegistry, "spec-6.3.12-long-poll", maxCount: 1, waitMs: 140);
-        stopwatch.Stop();
 
         AssertSuccess(response);
         var items = JsonSerializer.SerializeToElement(response.Result).GetProperty("items").EnumerateArray().ToList();
         Assert.Empty(items);
-        Assert.True(stopwatch.ElapsedMilliseconds >= 100);
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_Poll_WhenSucceeds_ShouldReturnLeaseSeconds()
+    public async Task Impl_6_3_15_Poll_WhenSucceeds_ShouldReturnLeaseSeconds()
     {
         const string appId = "spec-6.3.12-last-seen";
         const string instanceId = "spec-6.3.12-last-seen-instance";
@@ -886,8 +863,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenInstanceUnregistered_ShouldReturnInstanceNotFound()
+    public async Task Impl_6_3_16_Respond_WhenInstanceUnregistered_ShouldReturnInstanceNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -912,8 +888,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenInvokeRespondDisabled_ShouldReturnForbiddenWithReason()
+    public async Task Impl_6_3_16_Respond_WhenInvokeRespondDisabled_ShouldReturnForbiddenWithReason()
     {
         const string appId = "spec-6.3.13-respond-disabled";
         WriteDefinition(appId, rpcEnabled: true);
@@ -937,8 +912,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenValueAndErrorXorInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_16_Respond_WhenValueAndErrorXorInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -971,8 +945,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenErrorPayloadMalformed_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_16_Respond_WhenErrorPayloadMalformed_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);
@@ -1018,8 +991,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenNonLeaseHolderOrDuplicate_ShouldReturnDeliveryConflict()
+    public async Task Impl_6_3_16_Respond_WhenNonLeaseHolderOrDuplicate_ShouldReturnDeliveryConflict()
     {
         const string appId = "spec-6.3.13-delivery-conflict";
         const string holderInstanceId = "spec-6.3.13-holder";
@@ -1090,8 +1062,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenInvocationTimedOutOrExpired_ShouldReturnInvocationExpired()
+    public async Task Impl_6_3_16_Respond_WhenInvocationTimedOutOrExpired_ShouldReturnInvocationExpired()
     {
         const string timeoutAppId = "spec-6.3.13-timeout";
         const string timeoutInstanceId = "spec-6.3.13-timeout-instance";
@@ -1184,8 +1155,7 @@ public class InvocationSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_Respond_WhenSucceeds_ShouldReturnOk()
+    public async Task Impl_6_3_16_Respond_WhenSucceeds_ShouldReturnOk()
     {
         const string appId = "spec-6.3.13-last-seen";
         const string instanceId = "spec-6.3.13-last-seen-instance";

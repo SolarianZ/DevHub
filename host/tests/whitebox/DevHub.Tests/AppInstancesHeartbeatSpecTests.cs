@@ -13,15 +13,14 @@ using Moq;
 /// <summary>
 /// hub.apps.heartbeat 规范白盒测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public class AppInstancesHeartbeatSpecTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _handlerLogger = new();
 
     [Fact]
-    [Trait("SpecRef", "6.3.6")]
-    public async Task Spec_6_3_6_Heartbeat_ShouldReturnOkAndRefreshLastSeenUtc()
+    public async Task Impl_6_3_6_Heartbeat_ShouldReturnOkAndRefreshLastSeenUtc()
     {
         var clock = new MutableClock(DateTime.UtcNow);
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
@@ -86,8 +85,7 @@ public class AppInstancesHeartbeatSpecTests
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.6")]
-    public async Task Spec_6_3_6_Heartbeat_UnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
+    public async Task Impl_6_3_6_Heartbeat_UnknownInstance_ShouldReturnInstanceNotFoundWithUnknownReason()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);

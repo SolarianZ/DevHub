@@ -16,6 +16,7 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     TestResult,
     new_instance_id,
+    resolve_instance_session_token,
     safe_remove,
     unregister_instances,
     write_app_definition,
@@ -453,6 +454,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             invocation_id_1 = items_1[0].get("invocationId")
             response_both = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
+                "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_1,
                 "value": {"ok": True},
                 "error": {"code": 1001, "message": "app_error"}
@@ -483,6 +485,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             invocation_id_2 = items_2[0].get("invocationId")
             response_none = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
+                "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_2,
             }, request_id="respond-xor-none")
             if not RpcAssertions.expect_error(result, response_none, -32602, "invalid_params"):

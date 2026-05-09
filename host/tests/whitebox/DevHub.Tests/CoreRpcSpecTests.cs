@@ -13,7 +13,7 @@ using Moq;
 /// <summary>
 /// 核心 RPC 规范白盒测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public class CoreRpcSpecTests : IDisposable
 {
     private const string InstancePassword = "core-rpc-password";
@@ -29,8 +29,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1")]
-    public async Task Spec_6_3_1_HubPing_WhenEchoOmitted_ShouldReturnOkAndServerTime()
+    public async Task Impl_6_3_1_HubPing_WhenEchoOmitted_ShouldReturnOkAndServerTime()
     {
         var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
         var response = await handler.HandleAsync(new JsonRpcRequest
@@ -51,8 +50,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1")]
-    public async Task Spec_6_3_1_HubPing_WhenEchoProvided_ShouldEchoBack()
+    public async Task Impl_6_3_1_HubPing_WhenEchoProvided_ShouldEchoBack()
     {
         var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
         var parameters = JsonSerializer.SerializeToElement(new
@@ -81,12 +79,11 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Theory]
-    [Trait("SpecRef", "6.1")]
     [InlineData("[1,2,3]")]
     [InlineData("\"text\"")]
     [InlineData("1")]
     [InlineData("true")]
-    public async Task Spec_6_1_HubPing_WhenParamsIsNotObjectOrNull_ShouldReturnInvalidParams(string paramsJson)
+    public async Task Impl_6_1_HubPing_WhenParamsIsNotObjectOrNull_ShouldReturnInvalidParams(string paramsJson)
     {
         var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
         using var document = JsonDocument.Parse(paramsJson);
@@ -104,10 +101,9 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Theory]
-    [Trait("SpecRef", "6.3.1")]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Spec_6_3_1_HubPing_WhenParamsOmittedOrNull_ShouldReturnOk(bool useNullParams)
+    public async Task Impl_6_3_1_HubPing_WhenParamsOmittedOrNull_ShouldReturnOk(bool useNullParams)
     {
         var handler = new HubPingHandler(new SystemClock(), Mock.Of<ILogger<HubPingHandler>>());
         var request = new JsonRpcRequest
@@ -138,8 +134,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1A")]
-    public async Task Spec_6_3_1A_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
+    public async Task Impl_6_3_1A_HubGetVersion_WhenParamsOmitted_ShouldReturnSemVerVersion()
     {
         var handler = new HubGetVersionHandler(
             Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0-preview.1+build.2"),
@@ -158,8 +153,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.1A")]
-    public async Task Spec_6_3_1A_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_1A_HubGetVersion_WhenParamsContainUnexpectedField_ShouldReturnInvalidParams()
     {
         var handler = new HubGetVersionHandler(
             Mock.Of<IHubVersionSource>(source => source.CurrentVersion == "0.7.0"),
@@ -178,8 +172,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.3")]
-    public async Task Spec_6_3_3_ListDefinitions_ShouldReturnDefinitions()
+    public async Task Impl_6_3_3_ListDefinitions_ShouldReturnDefinitions()
     {
         WriteDefinition(new
         {
@@ -204,8 +197,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_4_GetDefinition_ShouldReturnDefinitionWhenExists()
+    public async Task Impl_6_3_4_GetDefinition_ShouldReturnDefinitionWhenExists()
     {
         WriteDefinition(new
         {
@@ -229,8 +221,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_4_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
+    public async Task Impl_6_3_4_GetDefinition_WhenMissing_ShouldReturnAppDefinitionNotFound()
     {
         var handler = CreateDefinitionsHandler();
         var response = await handler.HandleAsync(new JsonRpcRequest
@@ -248,8 +239,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.5")]
-    public async Task Spec_6_3_5_RegisterInstance_ShouldReturnInstanceWithServerManagedTimestamps()
+    public async Task Impl_6_3_5_RegisterInstance_ShouldReturnInstanceWithServerManagedTimestamps()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -286,8 +276,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.5")]
-    public async Task Spec_6_3_5_RegisterInstance_WhenSameInstanceRegistersAgain_ShouldRefreshLastSeenUtc()
+    public async Task Impl_6_3_5_RegisterInstance_WhenSameInstanceRegistersAgain_ShouldRefreshLastSeenUtc()
     {
         var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
@@ -349,8 +338,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.5")]
-    public async Task Spec_6_3_5_RegisterInstance_InvalidScope_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_5_RegisterInstance_InvalidScope_ShouldReturnInvalidParams()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -381,8 +369,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.7")]
-    public async Task Spec_6_3_7_UnregisterInstance_ShouldBeIdempotent()
+    public async Task Impl_6_3_7_UnregisterInstance_ShouldBeIdempotent()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);
@@ -428,8 +415,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_GlobalScopeAndIncludeOfflineFalse_ShouldApply()
+    public async Task Impl_6_3_8_ListInstances_GlobalScopeAndIncludeOfflineFalse_ShouldApply()
     {
         var clock = new MutableClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
@@ -494,8 +480,7 @@ public class CoreRpcSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
+    public async Task Impl_6_3_8_ListInstances_WhenScopeNull_ShouldReturnAllScopes()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _instancesLogger.Object);

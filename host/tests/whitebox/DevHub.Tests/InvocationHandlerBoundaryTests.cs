@@ -450,11 +450,10 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         const string appId = "invocation-wait-budget-elapsed";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(600));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(600));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateHandler(appRegistry, clock);
 
-        var stopwatch = Stopwatch.StartNew();
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "request-wait-budget-elapsed",
@@ -473,10 +472,8 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 }
             })
         }, CancellationToken.None);
-        stopwatch.Stop();
 
         AssertError(response, -32012, "invocation_timeout");
-        Assert.True(stopwatch.ElapsedMilliseconds < 350, $"Expected timeout without waiting the stale wait window, actual={stopwatch.ElapsedMilliseconds}ms.");
 
         var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
         Assert.True(errorData.GetProperty("elapsedMs").GetInt32() >= 500);

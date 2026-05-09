@@ -15,7 +15,7 @@ using Moq;
 /// <summary>
 /// Host 使用的共享定义管理与启动 RPC 处理器测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -30,10 +30,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.3")]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_3_And_6_3_4_AppDefinitionsRpcHandler_ShouldListAndGetDefinitions()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_3_And_6_3_4_AppDefinitionsRpcHandler_ShouldListAndGetDefinitions()
     {
         using var context = CreateDefinitionContext();
         WriteDefinition(
@@ -80,9 +78,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_4_AppDefinitionsRpcHandler_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_4_AppDefinitionsRpcHandler_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -97,10 +94,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.5")]
-    [Trait("SpecRef", "6.3.6")]
-    public async Task Spec_6_3_5_And_6_3_6_AppDefinitionsRpcHandler_ShouldValidateAndRejectInvalidDefinitions()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_And_6_3_6_AppDefinitionsRpcHandler_ShouldValidateAndRejectInvalidDefinitions()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -137,9 +132,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.5")]
-    public async Task Spec_6_3_5_AppDefinitionsRpcHandler_WhenDefinitionParamMissing_ShouldReturnInvalidParams()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_AppDefinitionsRpcHandler_WhenDefinitionParamMissing_ShouldReturnInvalidParams()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -152,10 +146,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.6")]
-    [Trait("SpecRef", "6.3.7")]
-    public async Task Spec_6_3_6_And_6_3_7_AppDefinitionsRpcHandler_ShouldUpsertAndDeleteDefinition()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_6_And_6_3_7_AppDefinitionsRpcHandler_ShouldUpsertAndDeleteDefinition()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
@@ -206,11 +198,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.5")]
-    [Trait("SpecRef", "6.3.6")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_5_And_6_3_6_And_6_3_12_AppDefinitionsAndLaunch_WhenLaunchExePathBlank_ShouldStoreDefinitionAndReturnLaunchConfigMissing()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_And_6_3_6_And_6_3_12_AppDefinitionsAndLaunch_WhenLaunchExePathBlank_ShouldStoreDefinitionAndReturnLaunchConfigMissing()
     {
         using var context = CreateDefinitionContext();
         var definitionsHandler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -253,9 +242,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.3")]
-    public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
@@ -395,9 +383,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_LaunchRpcHandler_ShouldValidateScopeWaitAndDedupeKey()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_LaunchRpcHandler_ShouldValidateScopeWaitAndDedupeKey()
     {
         using var context = CreateDefinitionContext();
         var handler = CreateLaunchHandler(context);
@@ -420,9 +407,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_LaunchRpcHandler_ShouldMapLaunchErrorsAndSuccess()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_LaunchRpcHandler_ShouldMapLaunchErrorsAndSuccess()
     {
         using var context = CreateDefinitionContext();
         var processLauncher = new Mock<IProcessLauncher>();

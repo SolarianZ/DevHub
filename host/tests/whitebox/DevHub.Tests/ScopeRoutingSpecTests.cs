@@ -13,7 +13,7 @@ using Moq;
 /// <summary>
 /// scope 与路由矩阵规范白盒测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public class ScopeRoutingSpecTests : IDisposable
 {
     private const string InstancePassword = "scope-routing-password";
@@ -26,8 +26,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Register_WhenScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldBeGlobal()
+    public async Task Impl_5_5_Register_WhenScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldBeGlobal()
     {
         const string appId = "spec-5.5-register-global";
 
@@ -74,8 +73,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Register_WhenScopeIsGlobalLiteral_ShouldBeExplicitScope()
+    public async Task Impl_5_5_Register_WhenScopeIsGlobalLiteral_ShouldBeExplicitScope()
     {
         const string appId = "spec-5.5-global-literal";
 
@@ -115,8 +113,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Launch_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
+    public async Task Impl_5_5_Launch_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
         const string appId = "spec-5.5-launch-scope";
         WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
@@ -159,8 +156,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Launch_WhenScopeEmpty_ShouldLaunchGlobalDefinition()
+    public async Task Impl_5_5_Launch_WhenScopeEmpty_ShouldLaunchGlobalDefinition()
     {
         const string appId = "spec-5.5-launch-empty";
         WriteDefinition(appId, includeLaunch: true);
@@ -183,8 +179,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Invoke_WhenTargetScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldRouteOnlyToGlobal()
+    public async Task Impl_5_5_Invoke_WhenTargetScopeOmittedOrNull_ShouldBeRejected_And_EmptyString_ShouldRouteOnlyToGlobal()
     {
         const string appId = "spec-5.5-target-default";
         WriteDefinition(appId, rpcEnabled: true);
@@ -274,8 +269,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Register_WhenScopeTypeInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_5_5_Register_WhenScopeTypeInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateAppInstancesHandler(appRegistry);
@@ -304,8 +298,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Launch_WhenScopeTypeInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_5_5_Launch_WhenScopeTypeInvalid_ShouldReturnInvalidParams()
     {
         const string appId = "spec-5.5-launch-invalid";
         WriteDefinition(appId, includeLaunch: true);
@@ -328,8 +321,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Invoke_WhenTargetScopeTypeInvalid_ShouldReturnInvalidParams()
+    public async Task Impl_5_5_Invoke_WhenTargetScopeTypeInvalid_ShouldReturnInvalidParams()
     {
         const string appId = "spec-5.5-target-invalid";
         WriteDefinition(appId, rpcEnabled: true);
@@ -365,8 +357,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Invoke_WhenTargetScopeIsExplicit_ShouldUseCaseSensitiveExactMatch()
+    public async Task Impl_5_5_Invoke_WhenTargetScopeIsExplicit_ShouldUseCaseSensitiveExactMatch()
     {
         const string appId = "spec-5.5-case-sensitive";
         WriteDefinition(appId, rpcEnabled: true);
@@ -420,8 +411,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    public async Task Spec_5_5_Invoke_WhenTargetScopeHasNoMatch_ShouldNotFallbackToGlobal()
+    public async Task Impl_5_5_Invoke_WhenTargetScopeHasNoMatch_ShouldNotFallbackToGlobal()
     {
         const string appId = "spec-5.5-no-fallback-global";
         WriteDefinition(appId, rpcEnabled: true);
@@ -458,8 +448,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "7.1")]
-    public async Task Spec_7_1_Invoke_WhenTargetInstanceIdProvided_ShouldRouteOnlyToThatInstance()
+    public async Task Impl_7_1_Invoke_WhenTargetInstanceIdProvided_ShouldRouteOnlyToThatInstance()
     {
         const string appId = "spec-7.1-instance-id-priority";
         WriteDefinition(appId, rpcEnabled: true);
@@ -510,8 +499,7 @@ public class ScopeRoutingSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "7.1")]
-    public async Task Spec_7_1_Invoke_WhenQueueIfOfflineTrueAndDefinitionMissing_ShouldReturnInstanceNotFound()
+    public async Task Impl_7_1_Invoke_WhenQueueIfOfflineTrueAndDefinitionMissing_ShouldReturnInstanceNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateInvocationHandler(appRegistry);

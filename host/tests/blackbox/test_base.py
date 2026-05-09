@@ -997,9 +997,6 @@ class RpcClient:
         :param request_id: 请求 ID
         :return: 响应字典
         """
-        if isinstance(params, dict):
-            params = self._with_default_instance_credentials(method, params)
-
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -1011,24 +1008,6 @@ class RpcClient:
         if isinstance(params, dict) and isinstance(response, dict):
             self._record_instance_session_state(method, params, response)
         return response
-
-    @staticmethod
-    def _with_default_instance_credentials(method, params):
-        if method == "hub.apps.registerInstance" and "password" not in params and isinstance(params.get("instance"), dict):
-            enriched = dict(params)
-            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
-            return enriched
-
-        if (
-            method in {"hub.apps.heartbeat", "hub.apps.unregisterInstance", "hub.invoke.poll", "hub.invoke.respond"}
-            and "instanceSessionToken" not in params
-            and isinstance(params.get("instanceId"), str)
-        ):
-            enriched = dict(params)
-            enriched["instanceSessionToken"] = resolve_instance_session_token(params.get("instanceId"))
-            return enriched
-
-        return params
 
     @staticmethod
     def _record_instance_session_state(method, params, response):
@@ -1072,9 +1051,6 @@ class RpcClient:
 
     def call_with_timeout(self, method, params=None, timeout_sec=30, request_id="1"):
         """带超时的 JSON-RPC 调用。"""
-        if isinstance(params, dict):
-            params = self._with_default_instance_credentials(method, params)
-
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -1118,16 +1094,18 @@ class RpcClient:
 
     def heartbeat_instance(self, instance_id, instance_session_token=None):
         """发送实例心跳。"""
-        params = {"instanceId": instance_id}
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        params = {
+            "instanceId": instance_id,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
+        }
         return self.call("hub.apps.heartbeat", params)
 
     def unregister_instance(self, instance_id, instance_session_token=None):
         """注销实例。"""
-        params = {"instanceId": instance_id}
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        params = {
+            "instanceId": instance_id,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
+        }
         return self.call("hub.apps.unregisterInstance", params)
 
     def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None, instance_session_token=None):
@@ -1138,10 +1116,9 @@ class RpcClient:
         params = {
             "instanceId": instance_id,
             "maxCount": max_count,
-            "waitMs": wait_ms
+            "waitMs": wait_ms,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
 
         return self.call_with_timeout("hub.invoke.poll", params, timeout_sec=timeout_sec)
 
@@ -1150,10 +1127,9 @@ class RpcClient:
         params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
-            "value": value
+            "value": value,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
         if lease_token is not None:
             params["leaseToken"] = lease_token
 
@@ -1164,10 +1140,9 @@ class RpcClient:
         params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
-            "error": error
+            "error": error,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
         if lease_token is not None:
             params["leaseToken"] = lease_token
 

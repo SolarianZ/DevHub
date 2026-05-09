@@ -8,6 +8,12 @@ using System.Text.RegularExpressions;
 [Trait("Category", "Impl")]
 public class TestGovernanceTests
 {
+    private static readonly string[] SpecWhiteboxAllowList =
+    [
+        "HttpNotificationSpecTests.cs",
+        "WebSocketLifecycleSpecTests.cs",
+    ];
+
     private static readonly Regex TestMethodRegex = new(
         """(?ms)(\[(?:Fact|Theory)\][\r\n \t]*(?:\[[^\]]+\][\r\n \t]*)*)(public\s+(?:async\s+)?(?:Task|void)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\()""",
         RegexOptions.Compiled);
@@ -114,6 +120,27 @@ public class TestGovernanceTests
                 categoryMatch.Success,
                 $"测试类缺少 Category 标记: {Path.GetFileName(testFile)}");
             Assert.Equal(expectedCategory, categoryMatch.Groups[1].Value);
+        }
+    }
+
+    [Fact]
+    public void Impl_SpecWhiteboxTests_ShouldBeLimitedToPublicBoundaryFixtures()
+    {
+        foreach (var testFile in GetTestFiles())
+        {
+            var content = File.ReadAllText(testFile);
+            var hasSpecMethod = TestMethodRegex.Matches(content)
+                .Cast<Match>()
+                .Any(match => match.Groups[3].Value.StartsWith("Spec_", StringComparison.Ordinal));
+
+            if (!hasSpecMethod)
+            {
+                continue;
+            }
+
+            Assert.Contains(
+                Path.GetFileName(testFile),
+                SpecWhiteboxAllowList);
         }
     }
 

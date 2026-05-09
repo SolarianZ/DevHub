@@ -12,7 +12,7 @@ using Moq;
 /// <summary>
 /// Launch 规范白盒测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public class LaunchSpecTests : IDisposable
 {
     private readonly string _tempDirectory;
@@ -24,8 +24,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
+    public async Task Impl_6_3_12_Launch_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
         var handler = CreateLaunchHandler();
 
@@ -45,8 +44,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenScopeEmpty_ShouldResolveGlobalDefinition()
+    public async Task Impl_6_3_12_Launch_WhenScopeEmpty_ShouldResolveGlobalDefinition()
     {
         const string appId = "spec-6.3.9-empty-scope";
         WriteDefinition(appId, includeLaunch: true);
@@ -71,8 +69,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
+    public async Task Impl_6_3_12_Launch_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         var handler = CreateLaunchHandler();
 
@@ -93,8 +90,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenLaunchConfigMissing_ShouldReturnLaunchFailedWithLaunchConfigMissing()
+    public async Task Impl_6_3_12_Launch_WhenLaunchConfigMissing_ShouldReturnLaunchFailedWithLaunchConfigMissing()
     {
         const string appId = "spec-6.3.9-launch-config-missing";
         WriteDefinition(appId, includeLaunch: false);
@@ -119,8 +115,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenProcessCreationFails_ShouldReturnLaunchFailedWithProcessStartFailed()
+    public async Task Impl_6_3_12_Launch_WhenProcessCreationFails_ShouldReturnLaunchFailedWithProcessStartFailed()
     {
         const string appId = "spec-6.3.9-process-failed";
         WriteDefinition(appId, includeLaunch: true);
@@ -150,8 +145,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenWaitForRegisterMsPositiveAndRegisterTimeout_ShouldReturnStarting()
+    public async Task Impl_6_3_12_Launch_WhenWaitForRegisterMsPositiveAndRegisterTimeout_ShouldReturnStarting()
     {
         const string appId = "spec-6.3.9-starting";
         WriteDefinition(appId, includeLaunch: true);
@@ -181,8 +175,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenProcessStarted_ShouldReturnStarted()
+    public async Task Impl_6_3_12_Launch_WhenProcessStarted_ShouldReturnStarted()
     {
         const string appId = "spec-6.3.9-started";
         WriteDefinition(appId, includeLaunch: true);
@@ -216,8 +209,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenMatchingOnlineInstanceExists_ShouldReturnAlreadyRunning()
+    public async Task Impl_6_3_12_Launch_WhenMatchingOnlineInstanceExists_ShouldReturnAlreadyRunning()
     {
         const string appId = "spec-6.3.9-online-instance";
         const string scope = "workspace-A";
@@ -257,8 +249,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenDedupeHitsWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
+    public async Task Impl_6_3_12_Launch_WhenDedupeHitsWithinWindow_ShouldReturnAlreadyRunningAndReuseLaunchId()
     {
         const string appId = "spec-6.3.9-dedupe-hit";
         WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: "{appId}:{scopeOrGlobal}", definitionScope: "workspace-A");
@@ -306,8 +297,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenDedupeTemplateMissing_ShouldUseDefaultTemplate()
+    public async Task Impl_6_3_12_Launch_WhenDedupeTemplateMissing_ShouldUseDefaultTemplate()
     {
         const string appId = "spec-6.3.9-default-dedupe-template";
         WriteDefinition(appId, includeLaunch: true, dedupeKeyTemplate: null);
@@ -355,8 +345,7 @@ public class LaunchSpecTests : IDisposable
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_Launch_WhenTemplatesContainSpecPlaceholders_ShouldRenderArgsAndDedupeByRenderedKey()
+    public async Task Impl_6_3_12_Launch_WhenTemplatesContainSpecPlaceholders_ShouldRenderArgsAndDedupeByRenderedKey()
     {
         const string appId = "spec-6.3.9-template-placeholders";
         const string httpBaseUrl = "http://127.0.0.1:7361";

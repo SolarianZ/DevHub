@@ -14,7 +14,6 @@ public sealed class TransportAdapterImplTests
     private readonly AppDefinitionValidator _validator = new();
 
     [Fact]
-    [Trait("SpecRef", "5.1.2")]
     public void Impl_AppDefinitionValidator_WhenRootIsNotObject_ShouldReturnInvalidDefinitionIssue()
     {
         var ok = _validator.TryParseAndValidate(ParseElement("\"bad\""), out var definition, out var validationResult);
@@ -30,8 +29,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
-    [Trait("SpecRef", "5.1.2")]
     public void Impl_AppDefinitionValidator_WhenDefinitionContainsInvalidNestedFields_ShouldCollectValidationIssues()
     {
         var ok = _validator.TryParseAndValidate(
@@ -73,7 +70,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenLaunchOrCapabilitiesAreNotObjects_ShouldReturnInvalidFieldType()
     {
         var ok = _validator.TryParseAndValidate(
@@ -96,7 +92,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenDefinitionValid_ShouldParseModel()
     {
         var ok = _validator.TryParseAndValidate(
@@ -139,7 +134,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenLaunchExePathBlank_ShouldParseModelAndPreserveValue()
     {
         var ok = _validator.TryParseAndValidate(
@@ -165,7 +159,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenLaunchExePathMissing_ShouldParseLaunchModel()
     {
         var ok = _validator.TryParseAndValidate(
@@ -191,7 +184,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "6.1")]
     public void Impl_RpcParamReader_StringHelpers_ShouldFollowObjectAndWhitespaceRules()
     {
         var request = new JsonRpcRequest
@@ -237,7 +229,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
     public void Impl_RpcParamReader_ScopeHelpers_ShouldRequireExplicitScopeAndSeparateListFilters()
     {
         var requiredMissingOk = RpcParamReader.TryGetRequiredScope(
@@ -282,8 +273,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    [Trait("SpecRef", "6.3.13")]
     public void Impl_RpcParamReader_TryParseInvocationTarget_ShouldRequireTargetAndExplicitScope()
     {
         var missingTargetOk = RpcParamReader.TryParseInvocationTarget(
@@ -330,7 +319,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
     public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeAnyJsonData()
     {
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""1"""), out _));
