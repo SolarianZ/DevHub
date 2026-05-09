@@ -34,6 +34,7 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
     VectorExecutionContext,
     materialize_vector,
     read_log_tail,
+    restart_suite_host,
     sanitize_file_name,
     start_suite_host,
     stop_process,
@@ -105,12 +106,14 @@ def main() -> int:
         try:
             for vector_path, vector in vectors:
                 try:
-                    result = run_vector(
+                    result, host_context, process = run_vector(
                         vector_path,
                         vector,
                         host_context,
                         temp_root,
                         adapter_targets,
+                        process,
+                        log_file,
                     )
                 except Exception as exc:  # noqa: BLE001
                     failure_count += 1
@@ -490,19 +493,26 @@ def run_vector(
     host_context: HostRuntimeContext,
     temp_root: Path,
     adapter_targets: list[AdapterTarget],
-) -> dict[str, Any]:
+    suite_process: subprocess.Popen[str],
+    suite_log_file,
+) -> tuple[dict[str, Any], HostRuntimeContext, subprocess.Popen[str]]:
     is_discovery = "expectedDiscovery" in vector
     failures: list[dict[str, Any]] = []
     normalized_results: dict[str, Any] = {}
-
     for adapter in adapter_targets:
         execution: VectorExecutionContext | None = None
         try:
-            execution = materialize_vector(
+            def restart_current_suite_host(current_context: HostRuntimeContext) -> HostRuntimeContext:
+                nonlocal host_context, suite_process
+                host_context, suite_process = restart_suite_host(current_context, suite_process, suite_log_file)
+                return host_context
+
+            execution, host_context = materialize_vector(
                 vector_path,
                 vector,
                 host_context,
                 temp_root,
+                restart_current_suite_host,
                 execution_name=adapter.name,
             )
             adapter_result = execute_adapter_vector(adapter, execution, host_context)
@@ -629,7 +639,7 @@ def run_vector(
             )
         finally:
             if execution is not None:
-                execution.cleanup(host_context)
+                host_context = execution.cleanup(host_context, restart_current_suite_host)
 
     if not failures and normalized_results:
         baseline_sdk, baseline_payload = next(iter(normalized_results.items()))
@@ -651,10 +661,14 @@ def run_vector(
                     }
                 )
 
-    return {
-        "passed": not failures,
-        "failures": failures,
-    }
+    return (
+        {
+            "passed": not failures,
+            "failures": failures,
+        },
+        host_context,
+        suite_process,
+    )
 
 
 def execute_adapter_vector(

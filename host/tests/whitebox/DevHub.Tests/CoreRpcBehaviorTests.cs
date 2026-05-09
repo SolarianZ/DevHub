@@ -11,10 +11,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// 核心 RPC 规范白盒测试。
+/// 核心 RPC 实现行为白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public class CoreRpcSpecTests : IDisposable
+public class CoreRpcBehaviorTests : IDisposable
 {
     private const string InstancePassword = "core-rpc-password";
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
@@ -22,9 +22,9 @@ public class CoreRpcSpecTests : IDisposable
     private readonly Mock<ILogger<AppInstancesHandler>> _instancesLogger = new();
     private readonly string _tempDirectory;
 
-    public CoreRpcSpecTests()
+    public CoreRpcBehaviorTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubCoreRpcSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubCoreRpcBehaviorTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

@@ -12,16 +12,16 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// Invocation 规范白盒测试。
+/// Invocation 实现行为白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public class InvocationSpecTests : IDisposable
+public class InvocationBehaviorTests : IDisposable
 {
     private readonly string _tempDirectory;
 
-    public InvocationSpecTests()
+    public InvocationBehaviorTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubInvocationSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubInvocationBehaviorTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

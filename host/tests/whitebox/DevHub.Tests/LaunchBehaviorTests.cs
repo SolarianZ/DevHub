@@ -10,16 +10,16 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// Launch 规范白盒测试。
+/// Launch 实现行为白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public class LaunchSpecTests : IDisposable
+public class LaunchBehaviorTests : IDisposable
 {
     private readonly string _tempDirectory;
 
-    public LaunchSpecTests()
+    public LaunchBehaviorTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubLaunchBehaviorTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

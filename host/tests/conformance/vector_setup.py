@@ -30,7 +30,6 @@ from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
 SUITE_HOST_ENV_OVERRIDES = {
     "DEVHUB_ONLINE_THRESHOLD_SECONDS": "2",
     "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16",
-    "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_REQUEST_IDS": "http-internal-error",
 }
 
 
@@ -77,7 +76,7 @@ class CleanupLedger:
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
     instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
-    def cleanup(self, host_context: HostRuntimeContext) -> None:
+    def cleanup(self, host_context: HostRuntimeContext, restart_suite_host) -> HostRuntimeContext:
         client = host_context.create_rpc_client()
 
         for instance_id, instance_session_token in reversed(self.registered_instances):
@@ -102,29 +101,16 @@ class CleanupLedger:
         if self.definitions_catalog_overridden and self.previous_definitions_catalog is not None:
             host_context.apps_dir.mkdir(parents=True, exist_ok=True)
             host_context.definitions_catalog_path.write_text(self.previous_definitions_catalog, encoding="utf-8")
-            self._refresh_definition_snapshot(host_context)
+            host_context = restart_suite_host(host_context)
         elif self.definitions_catalog_overridden and not self.had_previous_definitions_catalog:
             try:
                 host_context.definitions_catalog_path.unlink()
             except FileNotFoundError:
                 pass
-            self._refresh_definition_snapshot(host_context)
+            host_context = restart_suite_host(host_context)
 
         shutil.rmtree(self.vector_temp_dir, ignore_errors=True)
-
-    @staticmethod
-    def _refresh_definition_snapshot(host_context: HostRuntimeContext) -> None:
-        # launch 是当前公开协议中保留显式刷新 Definition 快照语义的入口。
-        client = host_context.create_rpc_client()
-        client.call(
-            "hub.apps.launch",
-            {
-                "appId": "devhub.cleanup.refresh-sentinel",
-                "scope": "",
-                "waitForRegisterMs": 0,
-            },
-            request_id="cleanup-refresh-definition-snapshot",
-        )
+        return host_context
 
 
 @dataclass
@@ -138,8 +124,8 @@ class VectorExecutionContext:
     context_path: Path
     cleanup_ledger: CleanupLedger
 
-    def cleanup(self, host_context: HostRuntimeContext) -> None:
-        self.cleanup_ledger.cleanup(host_context)
+    def cleanup(self, host_context: HostRuntimeContext, restart_suite_host) -> HostRuntimeContext:
+        return self.cleanup_ledger.cleanup(host_context, restart_suite_host)
 
 
 def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
@@ -159,6 +145,29 @@ def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Po
     except Exception:
         stop_process(process)
         log_file.close()
+        raise
+
+
+def restart_suite_host(
+    previous_context: HostRuntimeContext,
+    process: subprocess.Popen[str],
+    log_file,
+) -> tuple[HostRuntimeContext, subprocess.Popen[str]]:
+    """复用同一 dataDir 重启 suite Host，并返回新的运行时上下文。"""
+
+    stop_process(process)
+    log_file.seek(0)
+    log_file.truncate(0)
+    log_file.flush()
+
+    with temporary_env_var(TEST_HUB_ENV_JSON_ENV_VAR, json.dumps(SUITE_HOST_ENV_OVERRIDES, ensure_ascii=False)):
+        restarted_process = start_isolated_hub_process(str(previous_context.data_dir), log_file)
+
+    try:
+        restarted_context = wait_for_host_runtime(previous_context.data_dir, restarted_process, log_file)
+        return restarted_context, restarted_process
+    except Exception:
+        stop_process(restarted_process)
         raise
 
 
@@ -269,8 +278,9 @@ def materialize_vector(
     vector: dict[str, Any],
     host_context: HostRuntimeContext,
     temp_root: Path,
+    restart_suite_host,
     execution_name: str | None = None,
-) -> VectorExecutionContext:
+) -> tuple[VectorExecutionContext, HostRuntimeContext]:
     """物化单条向量的 setup、上下文文件与 cleanup ledger。"""
 
     setup = require_optional_mapping(vector.get("setup"), "setup")
@@ -284,8 +294,25 @@ def materialize_vector(
     try:
         data_dir = vector_temp_dir / "data"
         runtime_dir = data_dir / "runtime"
-        token_file = copy_host_runtime(host_context, runtime_dir)
+        resolved_vector = copy.deepcopy(vector)
 
+        base_placeholders = {
+            "VECTOR_DATA_DIR": str(data_dir),
+            "VECTOR_RUNTIME_DIR": str(runtime_dir),
+            "VECTOR_PYTHON_EXE": sys.executable or "python3",
+        }
+        resolved_setup = require_optional_mapping(
+            substitute_placeholders(copy.deepcopy(vector), base_placeholders).get("setup"),
+            "setup")
+
+        host_context = apply_definitions_setup(
+            host_context,
+            require_optional_list(resolved_setup.get("definitions"), "setup.definitions"),
+            ledger,
+            restart_suite_host,
+        )
+
+        token_file = copy_host_runtime(host_context, runtime_dir)
         placeholders = build_host_placeholders(host_context)
         placeholders.update(
             {
@@ -298,13 +325,7 @@ def materialize_vector(
 
         resolved_vector = substitute_placeholders(copy.deepcopy(vector), placeholders)
         resolved_setup = require_optional_mapping(resolved_vector.get("setup"), "setup")
-
         apply_data_dir_setup(data_dir, require_optional_mapping(resolved_setup.get("dataDir"), "setup.dataDir"))
-        apply_definitions_setup(
-            host_context,
-            require_optional_list(resolved_setup.get("definitions"), "setup.definitions"),
-            ledger,
-        )
         apply_instances_setup(
             host_context,
             require_optional_list(resolved_setup.get("instances"), "setup.instances"),
@@ -325,16 +346,19 @@ def materialize_vector(
         context_path = vector_temp_dir / "execution-context.json"
         context_path.write_text(json.dumps(context_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        return VectorExecutionContext(
-            source_path=vector_path,
-            resolved_vector=resolved_vector,
-            data_dir=data_dir,
-            environment_data_dir=environment_data_dir,
-            context_path=context_path,
-            cleanup_ledger=ledger,
+        return (
+            VectorExecutionContext(
+                source_path=vector_path,
+                resolved_vector=resolved_vector,
+                data_dir=data_dir,
+                environment_data_dir=environment_data_dir,
+                context_path=context_path,
+                cleanup_ledger=ledger,
+            ),
+            host_context,
         )
     except Exception:
-        ledger.cleanup(host_context)
+        ledger.cleanup(host_context, restart_suite_host)
         raise
 
 
@@ -511,15 +535,15 @@ def apply_definitions_setup(
     host_context: HostRuntimeContext,
     definitions: list[Any],
     ledger: CleanupLedger,
-) -> None:
+    restart_suite_host,
+) -> HostRuntimeContext:
     """通过公开 RPC 将 setup.definitions 写入 suite Host。"""
 
     if not definitions:
-        return
+        return host_context
 
     if any(is_raw_definition_setup(require_mapping(item, f"setup.definitions[{index}]")) for index, item in enumerate(definitions)):
-        apply_raw_definitions_setup(host_context, definitions, ledger)
-        return
+        return apply_raw_definitions_setup(host_context, definitions, ledger, restart_suite_host)
 
     client = host_context.create_rpc_client()
     for index, item in enumerate(definitions):
@@ -544,6 +568,8 @@ def apply_definitions_setup(
 
         ledger.upserted_definitions.append((materialized["appId"], materialized["scope"]))
 
+    return host_context
+
 
 def is_raw_definition_setup(definition_setup: dict[str, Any]) -> bool:
     """判断 setup.definitions 条目是否需要按原始 catalog 片段写入。"""
@@ -555,7 +581,8 @@ def apply_raw_definitions_setup(
     host_context: HostRuntimeContext,
     definitions: list[Any],
     ledger: CleanupLedger,
-) -> None:
+    restart_suite_host,
+) -> HostRuntimeContext:
     """将包含非法条目的 setup.definitions 原样物化到 definitions.json。"""
 
     if ledger.previous_definitions_catalog is None:
@@ -574,20 +601,7 @@ def apply_raw_definitions_setup(
         json.dumps(catalog, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    refresh_response = host_context.create_rpc_client().call(
-        "hub.apps.launch",
-        {
-            "appId": "devhub.setup.refresh-sentinel",
-            "scope": "",
-            "waitForRegisterMs": 0,
-        },
-        request_id="setup-refresh-definition-snapshot",
-    )
-    if refresh_response.get("error", {}).get("message") != "app_definition_not_found":
-        raise RuntimeError(
-            "刷新预置 Definition 快照失败："
-            f"{json.dumps(refresh_response, ensure_ascii=False, sort_keys=True)}"
-        )
+    return restart_suite_host(host_context)
 
 
 def append_catalog_definition_setup(catalog: dict[str, Any], definition_setup: dict[str, Any], index: int) -> None:

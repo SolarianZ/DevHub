@@ -11,10 +11,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// hub.apps.heartbeat 规范白盒测试。
+/// hub.apps.heartbeat 实现行为白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public class AppInstancesHeartbeatSpecTests
+public class AppInstancesHeartbeatBehaviorTests
 {
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _handlerLogger = new();
@@ -125,5 +125,4 @@ public class AppInstancesHeartbeatSpecTests
         }
     }
 }
-
 

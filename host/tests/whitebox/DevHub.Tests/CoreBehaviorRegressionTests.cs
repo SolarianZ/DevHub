@@ -10,17 +10,17 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 [Trait("Category", "Impl")]
-public class SpecConformanceTests : IDisposable
+public class CoreBehaviorRegressionTests : IDisposable
 {
-    private const string InstancePassword = "spec-conformance-password";
+    private const string InstancePassword = "core-behavior-password";
     private readonly Mock<ILogger<DefinitionLoader>> _definitionLogger = new();
     private readonly Mock<ILogger<AppRegistry>> _registryLogger = new();
     private readonly Mock<ILogger<AppInstancesHandler>> _instancesLogger = new();
     private readonly string _tempDirectory;
 
-    public SpecConformanceTests()
+    public CoreBehaviorRegressionTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubCoreBehaviorTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

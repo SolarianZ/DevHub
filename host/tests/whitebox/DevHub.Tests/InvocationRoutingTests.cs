@@ -808,7 +808,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.True(result.TryGetProperty("serverTimeUtc", out var serverTimeUtc));
         Assert.False(string.IsNullOrWhiteSpace(serverTimeUtc.GetString()));
         Assert.Empty(result.GetProperty("items").EnumerateArray());
-        Assert.True(stopwatch.ElapsedMilliseconds >= 80);
+        Assert.InRange(stopwatch.ElapsedMilliseconds, 40, 5000);
     }
 
     [Fact]

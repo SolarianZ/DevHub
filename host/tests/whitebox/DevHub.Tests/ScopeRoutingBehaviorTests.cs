@@ -11,17 +11,17 @@ using Microsoft.Extensions.Logging;
 using Moq;
 
 /// <summary>
-/// scope 与路由矩阵规范白盒测试。
+/// scope 与路由矩阵实现行为白盒测试。
 /// </summary>
 [Trait("Category", "Impl")]
-public class ScopeRoutingSpecTests : IDisposable
+public class ScopeRoutingBehaviorTests : IDisposable
 {
     private const string InstancePassword = "scope-routing-password";
     private readonly string _tempDirectory;
 
-    public ScopeRoutingSpecTests()
+    public ScopeRoutingBehaviorTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubScopeRoutingSpecTests", Guid.NewGuid().ToString("N"));
+        _tempDirectory = Path.Combine(Path.GetTempPath(), "DevHubScopeRoutingBehaviorTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDirectory);
     }
 

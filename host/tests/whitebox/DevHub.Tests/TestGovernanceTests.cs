@@ -26,6 +26,10 @@ public class TestGovernanceTests
         """\[Trait\("Category",\s*"(Spec|Impl)"\)\]\s*public\s+(?:sealed\s+)?class""",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
+    private static readonly Regex ImplSpecNamingRegex = new(
+        """(Spec|Conformance)""",
+        RegexOptions.Compiled);
+
     private static readonly Regex SpecificationHeadingRegex = new(
         """^#{2,4}\s+((?:\d+\.)*\d+[A-Z]?)\b""",
         RegexOptions.Compiled | RegexOptions.Multiline);
@@ -141,6 +145,39 @@ public class TestGovernanceTests
             Assert.Contains(
                 Path.GetFileName(testFile),
                 SpecWhiteboxAllowList);
+        }
+    }
+
+    [Fact]
+    public void Impl_ImplWhiteboxTests_ShouldNotUseSpecOrConformanceNaming()
+    {
+        foreach (var testFile in GetTestFiles())
+        {
+            var content = File.ReadAllText(testFile);
+            var categoryMatch = CategoryRegex.Match(content);
+            if (!categoryMatch.Success || categoryMatch.Groups[1].Value != "Impl")
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(testFile);
+            Assert.DoesNotMatch(
+                ImplSpecNamingRegex,
+                fileName);
+
+            var classNameMatch = Regex.Match(content, """public\s+(?:sealed\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)""");
+            Assert.True(classNameMatch.Success, $"测试类名解析失败: {fileName}");
+            Assert.DoesNotMatch(
+                ImplSpecNamingRegex,
+                classNameMatch.Groups[1].Value);
+
+            var summaryMatch = Regex.Match(content, """<summary>\s*(.*?)\s*</summary>""", RegexOptions.Singleline);
+            if (summaryMatch.Success)
+            {
+                Assert.DoesNotMatch(
+                    ImplSpecNamingRegex,
+                    summaryMatch.Groups[1].Value);
+            }
         }
     }
 

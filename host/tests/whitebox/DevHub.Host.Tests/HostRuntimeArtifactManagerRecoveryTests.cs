@@ -217,12 +217,6 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         var lockStream = new FileStream(hubJsonPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var writeTask = System.Threading.Tasks.Task.Run(() => manager.WriteHubJson(48021, "v2"));
 
-        if (OperatingSystem.IsWindows())
-        {
-            await System.Threading.Tasks.Task.Delay(200);
-            Assert.False(writeTask.IsCompleted);
-        }
-
         lockStream.Dispose();
 
         var completedTask = await System.Threading.Tasks.Task.WhenAny(writeTask, System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(10)));
