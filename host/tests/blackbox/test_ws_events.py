@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 
 
 from tests.blackbox.test_base import (
+    _UNSET,
+    build_json_rpc_request,
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -244,18 +246,21 @@ class TestWsEvents:
         }
 
     def _authenticate(self, ws, token, request_id="ws-auth-1"):
-        ws.send_json({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "hub.ws.authenticate",
-            "params": {
+        ws.send_json(build_json_rpc_request(
+            "hub.ws.authenticate",
+            request_id=request_id,
+            params={
                 "token": token,
                 "protocolVersion": 1,
                 "clientId": "PyWsTestClient",
                 "clientSessionId": str(uuid.uuid4())
-            }
-        })
+            },
+        ))
         return ws.recv_json(timeout=3)
+
+    @staticmethod
+    def _send_ws_request(ws, request_id, method, params=_UNSET):
+        ws.send_json(build_json_rpc_request(method, request_id=request_id, params=params))
 
     @staticmethod
     def _assert_event_notification_contract(result: TestResult, message: dict, expected_subscription_id=None):
@@ -308,6 +313,64 @@ class TestWsEvents:
         return params
 
     @staticmethod
+    def _assert_invocation_event_payload(result: TestResult, event_type: str, payload: dict):
+        if event_type == "invocation.queued":
+            required_fields = ["invocationId", "appId", "target", "method", "kind"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.queued payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.queued payload.target 非对象: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.delivered":
+            required_fields = ["invocationId", "appId", "target", "instanceId", "delivery"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.delivered payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.delivered payload.target 非对象: {payload}")
+                return False
+            delivery = payload.get("delivery")
+            if not isinstance(delivery, dict):
+                result.mark_failure(f"❌ invocation.delivered payload.delivery 非对象: {payload}")
+                return False
+            if not isinstance(delivery.get("attempt"), int):
+                result.mark_failure(f"❌ invocation.delivered payload.delivery.attempt 非整数: {payload}")
+                return False
+            if "leaseToken" in delivery:
+                result.mark_failure(f"❌ invocation.delivered payload 泄漏 delivery.leaseToken: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.completed":
+            required_fields = ["invocationId", "appId", "target", "instanceId"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.completed payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.completed payload.target 非对象: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.failed":
+            required_fields = ["invocationId", "appId", "target", "instanceId", "reason"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.failed payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.failed payload.target 非对象: {payload}")
+                return False
+            return True
+
+        return True
+
+    @staticmethod
     def _collect_event_types(ws, expected_types, timeout_sec=6):
         deadline = time.time() + timeout_sec
         found_types = []
@@ -349,6 +412,8 @@ class TestWsEvents:
                 return None
 
             event_type = params.get("type")
+            if not self._assert_invocation_event_payload(result, event_type, params.get("payload", {})):
+                return None
             if isinstance(event_type, str):
                 found_types.append(event_type)
 
@@ -386,12 +451,7 @@ class TestWsEvents:
         try:
             _, ws_url, _ = self._runtime_hub_info()
             with SimpleWebSocketClient(ws_url) as ws:
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "pre-auth-req",
-                    "method": "hub.ping",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "pre-auth-req", "hub.ping", {})
                 response = ws.recv_json(timeout=3)
 
                 if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-req"):
@@ -414,12 +474,7 @@ class TestWsEvents:
         try:
             _, ws_url, _ = self._runtime_hub_info()
             with SimpleWebSocketClient(ws_url) as ws:
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "pre-auth-get-version",
-                    "method": "hub.getVersion",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "pre-auth-get-version", "hub.getVersion", {})
                 response = ws.recv_json(timeout=3)
 
                 if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-get-version"):
@@ -598,12 +653,7 @@ class TestWsEvents:
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "sub-5",
-                    "method": "hub.events.subscribe",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "sub-5", "hub.events.subscribe", {})
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
@@ -904,14 +954,7 @@ class TestWsEvents:
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "sub-6",
-                    "method": "hub.events.subscribe",
-                    "params": {
-                        "types": ["invocation.failed"]
-                    }
-                })
+                self._send_ws_request(ws, "sub-6", "hub.events.subscribe", {"types": ["invocation.failed"]})
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
@@ -1195,7 +1238,7 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                upsert_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="upsert-12d")
+                upsert_response = rpc_client.upsert_definition(definition, request_id="upsert-12d")
                 if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                     return result
 
@@ -1241,11 +1284,7 @@ class TestWsEvents:
         finally:
             try:
                 http_base_url, _, token = self._runtime_hub_info()
-                RpcClient(http_base_url, token).call(
-                    "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": ""},
-                    request_id="cleanup-12d",
-                )
+                RpcClient(http_base_url, token).delete_definition(app_id, scope="", request_id="cleanup-12d")
             except Exception:
                 pass
 
@@ -1261,7 +1300,7 @@ class TestWsEvents:
             rpc_client = RpcClient(http_base_url, token)
             definition = self._definition_payload(app_id, "Definition Deleted Event")
 
-            seed_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="seed-12e")
+            seed_response = rpc_client.upsert_definition(definition, request_id="seed-12e")
             if not RpcAssertions.expect_success(result, seed_response, ["definition"]):
                 return result
 
@@ -1283,11 +1322,7 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                delete_response = rpc_client.call(
-                    "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": ""},
-                    request_id="delete-12e",
-                )
+                delete_response = rpc_client.delete_definition(app_id, scope="", request_id="delete-12e")
                 if not RpcAssertions.expect_success(result, delete_response):
                     return result
 

@@ -279,6 +279,29 @@ def http_options(
     return http_request("OPTIONS", url, headers=headers, timeout=timeout)
 
 
+def build_json_rpc_request(method: str, request_id: Any = "1", params: Any = _UNSET) -> Dict[str, Any]:
+    """构造 JSON-RPC 请求负载，保留 params 的原始形态。"""
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+    }
+    if params is not _UNSET:
+        payload["params"] = params
+    return payload
+
+
+def build_json_rpc_notification(method: str, params: Any = _UNSET) -> Dict[str, Any]:
+    """构造 JSON-RPC notification 负载，保留 params 的原始形态。"""
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "method": method,
+    }
+    if params is not _UNSET:
+        payload["params"] = params
+    return payload
+
+
 def _parse_command_string(raw_command: str) -> List[str]:
     """解析命令字符串，兼容 JSON 数组或 shell 风格字符串。"""
     candidate = raw_command.strip()
@@ -771,57 +794,6 @@ def validate_current_user_only_file_access(path: str) -> Tuple[bool, str]:
     return True, f"权限位为 0o{permission:o}"
 
 
-def _read_definition_catalog() -> Dict[str, Any]:
-    """读取 Definition 目录索引。"""
-    catalog_path = get_definitions_catalog_path()
-    if not os.path.exists(catalog_path):
-        return {"version": 1, "definitions": []}
-
-    with open(catalog_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _write_definition_catalog(catalog: Dict[str, Any]) -> None:
-    """写回 Definition 目录索引。"""
-    catalog_path = get_definitions_catalog_path()
-    with open(catalog_path, "w", encoding="utf-8") as f:
-        json.dump(catalog, f, ensure_ascii=False, indent=2)
-
-
-def _find_definition_entry(catalog: Dict[str, Any], app_id: str, scope: str) -> Optional[Dict[str, Any]]:
-    """按 appId 查找目录索引中的应用分组。"""
-    for definition in catalog.get("definitions", []):
-        if definition.get("appId") == app_id and definition.get("scope") == scope:
-            return definition
-
-    return None
-
-
-def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
-    """写入测试 AppDefinition 并返回目录索引路径。"""
-    normalized_scope = normalize_definition_scope(payload.get("scope"))
-    payload = dict(payload)
-    payload["appId"] = app_id
-    payload["scope"] = normalized_scope
-    catalog = _read_definition_catalog()
-    definitions = catalog.setdefault("definitions", [])
-    existing = _find_definition_entry(catalog, app_id, normalized_scope)
-    if existing is not None:
-        definitions.remove(existing)
-    definitions.append(payload)
-
-    catalog["definitions"].sort(
-        key=lambda item: (
-            item.get("appId", ""),
-            0 if item.get("scope", "") == "" else 1,
-            item.get("scope", ""),
-        )
-    )
-
-    _write_definition_catalog(catalog)
-    return get_definitions_catalog_path()
-
-
 def normalize_definition_scope(scope: Optional[str]) -> str:
     """规范化 Definition scope（Global 统一编码为空字符串）。"""
     if scope in (None, ""):
@@ -864,31 +836,6 @@ def build_app_definition(
     return payload
 
 
-def write_app_definition(
-    app_id: str,
-    *,
-    scope: Optional[str] = "",
-    display_name: Optional[str] = None,
-    description: Optional[str] = None,
-    rpc: bool = True,
-    events: bool = False,
-    launch: Optional[Dict[str, Any]] = None,
-) -> str:
-    """按统一结构写入 AppDefinition。"""
-    return write_definition(
-        app_id,
-        build_app_definition(
-            app_id=app_id,
-            scope=scope,
-            display_name=display_name,
-            description=description,
-            rpc=rpc,
-            events=events,
-            launch=launch,
-        ),
-    )
-
-
 def safe_remove(path: Optional[str]):
     """安全删除文件（不存在或删除失败时忽略）。"""
     if not path:
@@ -929,6 +876,50 @@ def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]
             client.unregister_instance(instance_id, instance_session_token=instance_session_token)
     except Exception:
         pass
+
+
+def delete_definitions(definition_ids: Iterable[Tuple[str, Optional[str]]]):
+    """按 appId + scope 列表执行幂等 Definition 删除。"""
+    targets = [(app_id, scope) for app_id, scope in definition_ids if app_id]
+    if not targets:
+        return
+
+    try:
+        base_url, token = DiscoveryService.get_hub_info()
+        client = RpcClient(base_url, token)
+        for app_id, scope in targets:
+            client.delete_definition(app_id, scope=scope)
+    except Exception:
+        pass
+
+
+def upsert_app_definition(
+    app_id: str,
+    *,
+    scope: Optional[str] = "",
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    rpc: bool = True,
+    events: bool = False,
+    launch: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    """经公开 RPC 写入测试 AppDefinition，并返回其复合标识。"""
+    base_url, token = DiscoveryService.get_hub_info()
+    client = RpcClient(base_url, token)
+    definition = build_app_definition(
+        app_id=app_id,
+        scope=scope,
+        display_name=display_name,
+        description=description,
+        rpc=rpc,
+        events=events,
+        launch=launch,
+    )
+    response = client.upsert_definition(definition)
+    error = response.get("error") if isinstance(response, dict) else None
+    if error is not None:
+        raise RuntimeError(f"upsertDefinition failed: {response}")
+    return app_id, normalize_definition_scope(scope)
 
 
 def get_runtime_hub_info() -> Tuple[str, str, str]:
@@ -989,7 +980,11 @@ class RpcClient:
         except Exception:
             return response.status_code, response.text
 
-    def call(self, method, params=None, request_id="1"):
+    def _build_request_payload(self, method, request_id="1", params=_UNSET):
+        """构造 JSON-RPC request payload。"""
+        return build_json_rpc_request(method, request_id=request_id, params=params)
+
+    def call(self, method, params=_UNSET, request_id="1"):
         """
         调用 JSON-RPC 方法
         :param method: 方法名
@@ -997,12 +992,7 @@ class RpcClient:
         :param request_id: 请求 ID
         :return: 响应字典
         """
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=self.headers, timeout=30)
         if isinstance(params, dict) and isinstance(response, dict):
@@ -1025,19 +1015,14 @@ class RpcClient:
             if isinstance(instance_id, str):
                 forget_instance_session_token(instance_id)
 
-    def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
+    def call_with_invalid_headers(self, method, invalid_headers, params=_UNSET, request_id="1"):
         """
         使用无效的请求头调用方法（用于测试鉴权）
         """
         headers = self.headers.copy()
         headers.update(invalid_headers)
 
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=headers, timeout=30)
         return response
@@ -1049,19 +1034,26 @@ class RpcClient:
         status_code, response = self.post_json(requests_list, headers=self.headers, timeout=30)
         return response, status_code
 
-    def call_with_timeout(self, method, params=None, timeout_sec=30, request_id="1"):
+    def call_with_timeout(self, method, params=_UNSET, timeout_sec=30, request_id="1"):
         """带超时的 JSON-RPC 调用。"""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
         if isinstance(params, dict) and isinstance(response, dict):
             self._record_instance_session_state(method, params, response)
         return response
+
+    def upsert_definition(self, definition, request_id="1"):
+        """调用 hub.apps.upsertDefinition。"""
+        return self.call("hub.apps.upsertDefinition", {"definition": definition}, request_id=request_id)
+
+    def delete_definition(self, app_id, *, scope="", request_id="1"):
+        """调用 hub.apps.deleteDefinition。"""
+        return self.call(
+            "hub.apps.deleteDefinition",
+            build_definition_identity_params(app_id, scope),
+            request_id=request_id,
+        )
 
     def register_instance(
         self,

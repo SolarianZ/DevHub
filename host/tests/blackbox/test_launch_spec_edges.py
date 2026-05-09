@@ -15,6 +15,7 @@ from tests.blackbox.test_base import (
     DiscoveryService,
     TEST_HUB_ENV_JSON_ENV_VAR,
     PENDING_WAIT_STATUS,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -24,7 +25,7 @@ from tests.blackbox.test_base import (
     start_isolated_hub_process,
     temporary_env_var,
     poll_until_deadline_with_long_wait_status,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -48,7 +49,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         return launch_config
 
     def _create_definition(self, app_id, launch_config, scope=""):
-        return write_app_definition(
+        return upsert_app_definition(
             app_id,
             scope=scope,
             rpc=True,
@@ -111,7 +112,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -164,7 +165,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -209,7 +210,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -294,7 +295,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
             if process is not None and process.poll() is None:
                 process.terminate()
                 try:
@@ -386,7 +387,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -450,7 +451,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
             safe_remove(capture_file)
             safe_remove(script_path)
             if script_path:
@@ -491,7 +492,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 

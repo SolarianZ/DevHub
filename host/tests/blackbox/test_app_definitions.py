@@ -11,6 +11,7 @@ import uuid
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcAssertions,
     RpcClient,
     TestResult,
@@ -18,7 +19,7 @@ from tests.blackbox.test_base import (
     build_definition_identity_params,
     get_definitions_catalog_path,
     safe_remove,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -54,7 +55,7 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id, definition = self.create_test_app_definition()
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {"definition": definition})
+            upsert_response = client.upsert_definition(definition)
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                 return result
 
@@ -78,7 +79,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    client.delete_definition(app_id)
             except Exception:
                 pass
 
@@ -93,7 +94,7 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id, definition = self.create_test_app_definition()
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {"definition": definition})
+            upsert_response = client.upsert_definition(definition)
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                 return result
 
@@ -115,7 +116,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    client.delete_definition(app_id)
             except Exception:
                 pass
 
@@ -362,15 +363,13 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("blank-launch-store")
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "",
-                    "displayName": "Blank Launch Store App",
-                    "launch": {
-                        "exePath": "   ",
-                        "argsTemplate": "managed"
-                    }
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Blank Launch Store App",
+                "launch": {
+                    "exePath": "   ",
+                    "argsTemplate": "managed"
                 }
             })
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
@@ -397,7 +396,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    client.delete_definition(app_id)
             except Exception:
                 pass
 
@@ -412,16 +411,14 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("managed-app")
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "",
-                    "displayName": "Managed App",
-                    "description": "Managed from blackbox test",
-                    "launch": {
-                        "exePath": "echo",
-                        "argsTemplate": "managed"
-                    }
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Managed App",
+                "description": "Managed from blackbox test",
+                "launch": {
+                    "exePath": "echo",
+                    "argsTemplate": "managed"
                 }
             })
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
@@ -440,7 +437,7 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ getDefinition 未返回最新定义: {get_response}")
                 return result
 
-            delete_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            delete_response = client.delete_definition(app_id)
             if not RpcAssertions.expect_success(result, delete_response):
                 return result
 
@@ -455,7 +452,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    client.delete_definition(app_id)
             except Exception:
                 pass
 
@@ -474,13 +471,11 @@ class TestAppDefinitions(unittest.TestCase):
                 ("", "Managed Scoped App Global", "global-definition"),
                 ("workspace-a", "Managed Scoped App Workspace A", "workspace-a-definition"),
             ]:
-                upsert_response = client.call("hub.apps.upsertDefinition", {
-                    "definition": {
-                        "appId": app_id,
-                        "scope": scope,
-                        "displayName": display_name,
-                        "description": description,
-                    }
+                upsert_response = client.upsert_definition({
+                    "appId": app_id,
+                    "scope": scope,
+                    "displayName": display_name,
+                    "description": description,
                 })
                 if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                     return result
@@ -520,7 +515,7 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ Scoped Definition 读取结果不正确: {scoped_definition}")
                 return result
 
-            delete_global_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
+            delete_global_response = client.delete_definition(app_id, scope="")
             if not RpcAssertions.expect_success(result, delete_global_response):
                 return result
 
@@ -545,8 +540,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "workspace-a"))
+                    delete_definitions([(app_id, ""), (app_id, "workspace-a")])
             except Exception:
                 pass
 
@@ -561,22 +555,18 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = f"Sample.App_{uuid.uuid4().hex[:8]}"
 
-            global_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "",
-                    "displayName": "Global App",
-                }
+            global_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Global App",
             })
             if not RpcAssertions.expect_success(result, global_response, ["definition"]):
                 return result
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "global",
-                    "displayName": "Explicit Global App",
-                }
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "global",
+                "displayName": "Explicit Global App",
             })
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                 return result
@@ -586,17 +576,12 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ upsertDefinition 未按原值回显 canonical 标识符: {definition}")
                 return result
 
-            with open(get_definitions_catalog_path(), "r", encoding="utf-8") as f:
-                catalog = json.load(f)
-
-            matching_definitions = [entry for entry in catalog.get("definitions", []) if entry.get("appId") == app_id]
-            if not matching_definitions:
-                result.mark_failure(f"❌ catalog 中未找到目标 appId: {catalog}")
+            list_all_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": None})
+            if not RpcAssertions.expect_success(result, list_all_response, ["definitions"]):
                 return result
-
-            scopes = [entry.get("scope") for entry in matching_definitions]
-            if scopes != ["", "global"]:
-                result.mark_failure(f"❌ catalog 中的 scope 集合不正确: {matching_definitions}")
+            matching_definitions = list_all_response["result"]["definitions"]
+            if [entry.get("scope") for entry in matching_definitions] != ["", "global"]:
+                result.mark_failure(f"❌ listDefinitions 未返回预期 scope 顺序: {matching_definitions}")
                 return result
 
             get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "global"))
@@ -628,8 +613,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "global"))
+                    delete_definitions([(app_id, ""), (app_id, "global")])
             except Exception:
                 pass
 
@@ -643,12 +627,10 @@ class TestAppDefinitions(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": "Invalid App",
-                    "scope": "",
-                    "displayName": "   "
-                }
+            response = client.upsert_definition({
+                "appId": "Invalid App",
+                "scope": "",
+                "displayName": "   "
             })
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                 return result
@@ -675,7 +657,7 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             app_id = self._new_app_id("managed-scope-app")
-            definition_path = write_app_definition(
+            definition_path = upsert_app_definition(
                 app_id,
                 scope="workspace-a",
                 display_name="Managed Scope App",
@@ -735,7 +717,7 @@ class TestAppDefinitions(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -748,7 +730,7 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("missing-delete-app")
 
-            response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            response = client.delete_definition(app_id)
             if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
                 return result
             if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id}):

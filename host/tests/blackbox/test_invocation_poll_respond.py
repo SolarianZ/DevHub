@@ -12,14 +12,14 @@ import unittest
 from tests.blackbox.test_base import (
     call_with_long_wait_status,
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     new_instance_id,
     resolve_instance_session_token,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -27,7 +27,7 @@ class TestInvocationPollRespond(unittest.TestCase):
     """Invocation poll/respond 测试类"""
 
     def _create_definition(self, app_id):
-        return write_app_definition(app_id, rpc=True, events=False)
+        return upsert_app_definition(app_id, rpc=True, events=False)
 
     @staticmethod
     def _new_app_id(prefix):
@@ -113,7 +113,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -153,7 +153,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -198,7 +198,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -265,7 +265,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -330,7 +330,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -403,7 +403,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_a, instance_b])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -496,7 +496,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -580,7 +580,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -687,7 +687,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_a, instance_b])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 

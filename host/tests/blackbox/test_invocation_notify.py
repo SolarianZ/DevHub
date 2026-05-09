@@ -12,13 +12,13 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     new_instance_id,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -26,7 +26,7 @@ class TestInvocationNotify(unittest.TestCase):
     """Invocation notify 测试类"""
 
     def _create_definition(self, app_id, rpc=True):
-        return write_app_definition(app_id, rpc=rpc, events=False)
+        return upsert_app_definition(app_id, rpc=rpc, events=False)
 
     @staticmethod
     def _new_app_id(prefix):
@@ -150,7 +150,7 @@ class TestInvocationNotify(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -205,7 +205,7 @@ class TestInvocationNotify(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -311,7 +311,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -343,7 +343,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -377,7 +377,7 @@ class TestInvocationNotify(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -482,7 +482,7 @@ class TestInvocationNotify(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 

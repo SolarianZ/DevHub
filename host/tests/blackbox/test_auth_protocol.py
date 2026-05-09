@@ -9,7 +9,15 @@ import uuid
 import unittest
 
 
-from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions, http_options, http_post
+from tests.blackbox.test_base import (
+    DiscoveryService,
+    RpcAssertions,
+    RpcClient,
+    TestResult,
+    build_json_rpc_request,
+    http_options,
+    http_post,
+)
 
 
 class TestAuthProtocol(unittest.TestCase):
@@ -24,12 +32,7 @@ class TestAuthProtocol(unittest.TestCase):
 
     def _build_payload(self, request_id, method="hub.ping", params=None):
         """构造 JSON-RPC 请求体"""
-        return {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        return build_json_rpc_request(method, request_id=request_id, params=params)
 
     def _build_headers(self, token, content_type="application/json", origin=None):
         """构造标准请求头"""
@@ -107,11 +110,15 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.ping")
-            if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
-                return result
-
-            result.add_detail(f"✅ 服务器时间: {response['result']['serverTimeUtc']}")
+            ping_shapes = [
+                ("省略 params", client.call("hub.ping")),
+                ("params=null", client.call("hub.ping", None, request_id="ping-null-params")),
+                ("params={}", client.call("hub.ping", {}, request_id="ping-empty-object")),
+            ]
+            for shape_name, response in ping_shapes:
+                if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
+                    return result
+                result.add_detail(f"✅ {shape_name} 成功: {response['result']['serverTimeUtc']}")
 
             # hub.ping echo 为可选实现
             test_echo = "test-message-123"
@@ -139,14 +146,20 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.getVersion")
-            if not RpcAssertions.expect_success(result, response, ["version"]):
-                return result
+            version_shapes = [
+                ("省略 params", client.call("hub.getVersion")),
+                ("params=null", client.call("hub.getVersion", None, request_id="get-version-null")),
+                ("params={}", client.call("hub.getVersion", {}, request_id="get-version-empty-object")),
+            ]
+            for shape_name, response in version_shapes:
+                if not RpcAssertions.expect_success(result, response, ["version"]):
+                    return result
 
-            version = response["result"].get("version")
-            if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", version):
-                result.mark_failure(f"❌ hub.getVersion.version 不是合法 SemVer: {version!r}")
-                return result
+                version = response["result"].get("version")
+                if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", version):
+                    result.mark_failure(f"❌ {shape_name} 的 hub.getVersion.version 不是合法 SemVer: {version!r}")
+                    return result
+                result.add_detail(f"✅ {shape_name} 返回合法版本: {version}")
 
             result.mark_success()
         except Exception as e:

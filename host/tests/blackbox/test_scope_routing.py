@@ -13,15 +13,15 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_shared_test_asset_path,
     get_test_python_executable,
     new_instance_id,
-    safe_remove,
     sleep_with_long_wait_status,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -38,7 +38,7 @@ class TestScopeRouting(unittest.TestCase):
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
 
-        return write_app_definition(
+        return upsert_app_definition(
             app_id,
             scope=scope,
             rpc=True,
@@ -279,7 +279,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -391,7 +391,7 @@ class TestScopeRouting(unittest.TestCase):
                 pass
 
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -627,7 +627,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -684,7 +684,7 @@ class TestScopeRouting(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -1098,7 +1098,7 @@ class TestScopeRouting(unittest.TestCase):
                 pass
 
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 

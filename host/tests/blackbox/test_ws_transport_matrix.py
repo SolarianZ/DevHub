@@ -10,7 +10,9 @@ import unittest
 
 
 from tests.blackbox.test_base import (
+    _UNSET,
     build_app_definition,
+    build_json_rpc_request,
     build_definition_identity_params,
     RpcClient,
     RpcAssertions,
@@ -40,9 +42,7 @@ class TestWsTransportMatrix(unittest.TestCase):
         return new_instance_id(f"ws-transport-{suffix}")
 
     def _create_definition(self, client, app_id, result):
-        response = client.call("hub.apps.upsertDefinition", {
-            "definition": build_app_definition(app_id, rpc=True, events=False),
-        })
+        response = client.upsert_definition(build_app_definition(app_id, rpc=True, events=False))
         return RpcAssertions.expect_success(result, response, ["definition"])
 
     @staticmethod
@@ -61,13 +61,8 @@ class TestWsTransportMatrix(unittest.TestCase):
         return ws.recv_json(timeout=3)
 
     @staticmethod
-    def _ws_call(ws, request_id, method, params):
-        ws.send_json({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params,
-        })
+    def _ws_call(ws, request_id, method, params=_UNSET):
+        ws.send_json(build_json_rpc_request(method, request_id=request_id, params=params))
         return ws.recv_json(timeout=3)
 
     @staticmethod
@@ -98,9 +93,15 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
                     return result
 
-                response = self._ws_call(ws, "matrix-ping-001", "hub.ping", {})
-                if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
-                    return result
+                cases = [
+                    ("省略 params", self._ws_call(ws, "matrix-ping-001-omitted", "hub.ping", params=_UNSET)),
+                    ("params=null", self._ws_call(ws, "matrix-ping-001-null", "hub.ping", params=None)),
+                    ("params={}", self._ws_call(ws, "matrix-ping-001-empty", "hub.ping", params={})),
+                ]
+                for shape_name, response in cases:
+                    if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
+                        return result
+                    result.add_detail(f"✅ {shape_name} 的 WS hub.ping 成功")
 
             result.mark_success()
         except Exception as e:
@@ -119,14 +120,19 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
                     return result
 
-                response = self._ws_call(ws, "matrix-get-version-001a", "hub.getVersion", {})
-                if not RpcAssertions.expect_success(result, response, ["version"]):
-                    return result
-
-                version = response.get("result", {}).get("version")
-                if not isinstance(version, str) or not version.strip():
-                    result.mark_failure(f"❌ version 非法: {response}")
-                    return result
+                cases = [
+                    ("省略 params", self._ws_call(ws, "matrix-get-version-001a-omitted", "hub.getVersion", params=_UNSET)),
+                    ("params=null", self._ws_call(ws, "matrix-get-version-001a-null", "hub.getVersion", params=None)),
+                    ("params={}", self._ws_call(ws, "matrix-get-version-001a-empty", "hub.getVersion", params={})),
+                ]
+                for shape_name, response in cases:
+                    if not RpcAssertions.expect_success(result, response, ["version"]):
+                        return result
+                    version = response.get("result", {}).get("version")
+                    if not isinstance(version, str) or not version.strip():
+                        result.mark_failure(f"❌ {shape_name} 的 version 非法: {response}")
+                        return result
+                    result.add_detail(f"✅ {shape_name} 的 WS hub.getVersion 成功")
 
             result.mark_success()
         except Exception as e:
@@ -196,7 +202,7 @@ class TestWsTransportMatrix(unittest.TestCase):
         finally:
             try:
                 if "http_client" in locals() and "app_id" in locals():
-                    http_client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    http_client.delete_definition(app_id)
             except Exception:
                 pass
 
