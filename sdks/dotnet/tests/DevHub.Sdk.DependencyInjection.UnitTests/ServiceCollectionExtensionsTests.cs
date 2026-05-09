@@ -51,8 +51,14 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Equal("di-client", handler.LastRequest.ClientId);
         Assert.Equal("hub.ping", handler.LastRequest.Method);
         Assert.Equal(2, runtimeResolver.ResolveCallCount);
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for HTTP client", StringComparison.Ordinal));
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for WebSocket client", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains("DevHubClient", StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("resolved", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains("DevHubEventsClient", StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("resolved", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

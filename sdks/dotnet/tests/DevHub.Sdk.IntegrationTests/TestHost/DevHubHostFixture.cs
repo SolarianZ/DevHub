@@ -17,6 +17,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private const string PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_DOTNET_SDK_HOST_ASSEMBLY";
     private const string SharedPrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_SDK_HOST_ASSEMBLY";
     private const string TestLiveStatusEnvironmentVariable = "DEVHUB_TEST_LIVE_STATUS";
+    private const string TestHubEnvironmentJsonEnvironmentVariable = "DEVHUB_TEST_HUB_ENV_JSON";
     private const string HostAssemblyFileName = "DevHub.Host.dll";
     private const string HostTargetFramework = "net10.0";
     private const int LongWaitStatusThresholdSeconds = 8;
@@ -207,6 +208,11 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         startInfo.ArgumentList.Add(hostAssemblyPath);
         startInfo.Environment[DataDirEnvironmentVariable] = DataDirectory;
         startInfo.Environment[SingleInstanceSlotEnvironmentVariable] = slot;
+        var hostEnvironmentJson = Environment.GetEnvironmentVariable(TestHubEnvironmentJsonEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(hostEnvironmentJson))
+        {
+            startInfo.Environment[TestHubEnvironmentJsonEnvironmentVariable] = hostEnvironmentJson;
+        }
 
         _hostProcess = new Process
         {

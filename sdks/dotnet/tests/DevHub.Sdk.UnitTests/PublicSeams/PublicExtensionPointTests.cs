@@ -73,8 +73,14 @@ public sealed class PublicExtensionPointTests
 
         _ = await client.PingAsync(new { channel = "http" });
 
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Starting DevHub runtime discovery for HTTP client", StringComparison.Ordinal));
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Sending DevHub HTTP RPC request", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains(nameof(DevHubClient), StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("runtime discovery", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains("JsonRpcHttpTransport", StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("HTTP RPC", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-public", StringComparison.Ordinal));
     }
 
@@ -178,11 +184,17 @@ public sealed class PublicExtensionPointTests
             {
                 RuntimeResolver = new RecordingRuntimeResolver(connectionInfo),
                 LoggerFactory = loggerFactory
-            });
+        });
 
         Assert.Equal(connectionInfo.Runtime.WsUrl, client.Runtime.WsUrl);
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Starting DevHub runtime discovery for WebSocket client", StringComparison.Ordinal));
-        Assert.Contains(loggerFactory.Entries, entry => entry.Message.Contains("Resolved DevHub runtime for WebSocket client", StringComparison.Ordinal));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains(nameof(DevHubEventsClient), StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("runtime discovery", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(loggerFactory.Entries, entry =>
+            entry.Category.Contains(nameof(DevHubEventsClient), StringComparison.Ordinal) &&
+            entry.Level == LogLevel.Information &&
+            entry.Message.Contains("resolved", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(loggerFactory.Entries, entry => entry.Message.Contains("token-public", StringComparison.Ordinal));
     }
 

@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using DevHub.Sdk.IntegrationTests.TestHost;
 using DevHub.Sdk.Models;
@@ -226,22 +227,6 @@ public sealed class HttpFlowTests
         await using var host = await DevHubHostFixture.StartAsync();
         await using var client = await host.CreateClientAsync("definition-management-client");
 
-        var localException = Assert.Throws<ArgumentException>(() => new AppDefinition
-        {
-            AppId = "Invalid App Id",
-            Scope = string.Empty,
-            DisplayName = "Broken Definition"
-        });
-        Assert.Equal("AppId", localException.ParamName);
-
-        var invalidDisplayNameException = Assert.Throws<ArgumentException>(() => new AppDefinition
-        {
-            AppId = "definition.invalid.display-name",
-            Scope = string.Empty,
-            DisplayName = string.Empty
-        });
-        Assert.Equal("DisplayName", invalidDisplayNameException.ParamName);
-
         var validDefinition = new AppDefinition
         {
             AppId = "definition.http.app",
@@ -261,19 +246,81 @@ public sealed class HttpFlowTests
         Assert.Equal(validDefinition.DisplayName, fetched.DisplayName);
         Assert.Equal(validDefinition.Scope, fetched.Scope);
 
-        var invalidUpsertDisplayNameException = Assert.Throws<ArgumentException>(() => new AppDefinition
+        var blankLaunchDefinition = new AppDefinition
         {
-            AppId = "definition.invalid.display-name",
+            AppId = "definition.blank-launch.app",
             Scope = string.Empty,
-            DisplayName = " "
-        });
-        Assert.Equal("DisplayName", invalidUpsertDisplayNameException.ParamName);
+            DisplayName = "Blank Launch Definition",
+            Launch = new LaunchConfiguration
+            {
+                ExePath = "   "
+            }
+        };
+
+        var blankLaunchValidation = await client.ValidateDefinitionAsync(blankLaunchDefinition);
+        Assert.True(blankLaunchValidation.Valid);
+        Assert.Empty(blankLaunchValidation.Errors);
+
+        using var invalidUpsert = await CallInvalidUpsertDefinitionAsync(host.DataDirectory, client.Options);
+        var invalidUpsertError = invalidUpsert.RootElement.GetProperty("error");
+        Assert.Equal(-32602, invalidUpsertError.GetProperty("code").GetInt32());
+        Assert.Equal("invalid_params", invalidUpsertError.GetProperty("message").GetString());
+        Assert.Equal("definition_invalid", invalidUpsertError.GetProperty("data").GetProperty("reason").GetString());
+        Assert.Contains(invalidUpsertError.GetProperty("data").GetProperty("errors").EnumerateArray(), issue =>
+            issue.GetProperty("path").GetString() == "definition.displayName");
 
         await client.DeleteDefinitionAsync(validDefinition.AppId, validDefinition.Scope);
 
         var notFoundException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.GetDefinitionAsync(validDefinition.AppId, validDefinition.Scope));
         Assert.Equal(-32014, notFoundException.Code);
         Assert.Equal("app_definition_not_found", notFoundException.Message);
+        Assert.Equal(validDefinition.AppId, notFoundException.ErrorData!.Value.GetProperty("appId").GetString());
+        Assert.Equal(validDefinition.Scope, notFoundException.ErrorData!.Value.GetProperty("scope").GetString());
+    }
+
+    private static async Task<JsonDocument> CallInvalidUpsertDefinitionAsync(string dataDirectory, DevHubClientOptions options)
+    {
+        var connection = await new FileSystemDevHubRuntimeResolver().ResolveAsync(new DevHubClientOptions
+        {
+            ClientId = options.ClientId,
+            ClientSessionId = options.ClientSessionId,
+            DataDir = dataDirectory,
+            ProtocolVersion = options.ProtocolVersion
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, connection.RpcEndpoint)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    jsonrpc = "2.0",
+                    id = "sdk-invalid-upsert",
+                    method = "hub.apps.upsertDefinition",
+                    @params = new
+                    {
+                        definition = new
+                        {
+                            appId = "definition.invalid-upsert.app",
+                            scope = "",
+                            launch = new
+                            {
+                                exePath = "echo"
+                            }
+                        }
+                    }
+                }),
+                Encoding.UTF8,
+                "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", connection.Token);
+        request.Headers.TryAddWithoutValidation("X-DevHub-Protocol", options.ProtocolVersion.ToString());
+        request.Headers.TryAddWithoutValidation("X-DevHub-ClientId", options.ClientId);
+        request.Headers.TryAddWithoutValidation("X-DevHub-ClientSessionId", options.ClientSessionId.ToString("D"));
+
+        using var httpClient = new HttpClient();
+        using var response = await httpClient.SendAsync(request);
+        var payload = await response.Content.ReadAsStringAsync();
+        return JsonDocument.Parse(payload);
     }
 
     [Fact]

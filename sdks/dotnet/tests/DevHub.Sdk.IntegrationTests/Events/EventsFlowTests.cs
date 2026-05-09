@@ -212,6 +212,54 @@ public sealed class EventsFlowTests
         Assert.Equal("missing-events-inst", exception.ErrorData!.Value.GetProperty("instanceId").GetString());
     }
 
+    [Fact]
+    public async Task WsAuthenticate_WhenTokenInvalid_ShouldPropagateUnauthorized()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var connectionFactory = new AuthenticateTamperingConnectionFactory(static socket =>
+        {
+            socket.TokenOverride = "bad-token";
+        });
+
+        await using var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "events-auth-invalid-token-client",
+                DataDir = host.DataDirectory
+            },
+            connectionFactory);
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => eventsClient.AuthenticateAsync());
+
+        Assert.Equal(-32001, exception.Code);
+        Assert.Equal("unauthorized", exception.Message);
+        Assert.Equal("invalid_token", exception.Reason);
+    }
+
+    [Fact]
+    public async Task WsAuthenticate_WhenProtocolVersionMismatch_ShouldPropagateNotSupported()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var connectionFactory = new AuthenticateTamperingConnectionFactory(static socket =>
+        {
+            socket.ProtocolVersionOverride = 2;
+        });
+
+        await using var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
+            new DevHubClientOptions
+            {
+                ClientId = "events-auth-protocol-client",
+                DataDir = host.DataDirectory
+            },
+            connectionFactory);
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => eventsClient.AuthenticateAsync());
+
+        Assert.Equal(-32099, exception.Code);
+        Assert.Equal("not_supported", exception.Message);
+        Assert.Equal("mismatch", exception.Reason);
+    }
+
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId)
     {
         return new AppInstanceRegistration
@@ -263,6 +311,122 @@ public sealed class EventsFlowTests
             var connection = new DisconnectableWebSocketConnection(socket);
             CurrentConnection = connection;
             return connection;
+        }
+    }
+
+    private sealed class AuthenticateTamperingConnectionFactory : IWebSocketConnectionFactory
+    {
+        private readonly Action<AuthenticateTamperingWebSocketConnection> _configure;
+
+        public AuthenticateTamperingConnectionFactory(Action<AuthenticateTamperingWebSocketConnection> configure)
+        {
+            _configure = configure;
+        }
+
+        public async Task<IWebSocketConnection> ConnectAsync(Uri uri, CancellationToken cancellationToken)
+        {
+            var socket = new ClientWebSocket();
+            await socket.ConnectAsync(uri, cancellationToken);
+
+            var connection = new AuthenticateTamperingWebSocketConnection(socket);
+            _configure(connection);
+            return connection;
+        }
+    }
+
+    private sealed class AuthenticateTamperingWebSocketConnection : IWebSocketConnection
+    {
+        private readonly ClientWebSocket _clientWebSocket;
+        private bool _tampered;
+
+        public AuthenticateTamperingWebSocketConnection(ClientWebSocket clientWebSocket)
+        {
+            _clientWebSocket = clientWebSocket;
+        }
+
+        public string? TokenOverride { get; set; }
+
+        public int? ProtocolVersionOverride { get; set; }
+
+        public WebSocketState State => _clientWebSocket.State;
+
+        public async Task SendTextAsync(string text, CancellationToken cancellationToken)
+        {
+            var outboundText = text;
+            if (!_tampered && text.Contains("\"method\":\"hub.ws.authenticate\"", StringComparison.Ordinal))
+            {
+                using var document = JsonDocument.Parse(text);
+                var request = document.RootElement;
+                var payload = new Dictionary<string, object?>
+                {
+                    ["jsonrpc"] = request.GetProperty("jsonrpc").GetString(),
+                    ["id"] = request.GetProperty("id").GetString(),
+                    ["method"] = request.GetProperty("method").GetString()
+                };
+
+                var originalParams = request.GetProperty("params");
+                payload["params"] = new Dictionary<string, object?>
+                {
+                    ["token"] = TokenOverride ?? originalParams.GetProperty("token").GetString(),
+                    ["protocolVersion"] = ProtocolVersionOverride ?? originalParams.GetProperty("protocolVersion").GetInt32(),
+                    ["clientId"] = originalParams.GetProperty("clientId").GetString(),
+                    ["clientSessionId"] = originalParams.GetProperty("clientSessionId").GetString()
+                };
+
+                outboundText = JsonSerializer.Serialize(payload);
+                _tampered = true;
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(outboundText);
+            await _clientWebSocket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        }
+
+        public async Task<WebSocketReceiveMessage> ReceiveAsync(CancellationToken cancellationToken)
+        {
+            var buffer = new byte[4096];
+            using var stream = new MemoryStream();
+
+            while (true)
+            {
+                var result = await _clientWebSocket.ReceiveAsync(buffer, cancellationToken);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    return new WebSocketReceiveMessage
+                    {
+                        MessageType = result.MessageType,
+                        CloseStatus = result.CloseStatus,
+                        CloseStatusDescription = result.CloseStatusDescription
+                    };
+                }
+
+                if (result.Count > 0)
+                {
+                    await stream.WriteAsync(buffer.AsMemory(0, result.Count), cancellationToken);
+                }
+
+                if (result.EndOfMessage)
+                {
+                    return new WebSocketReceiveMessage
+                    {
+                        MessageType = result.MessageType,
+                        Text = Encoding.UTF8.GetString(stream.ToArray())
+                    };
+                }
+            }
+        }
+
+        public async Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+        {
+            if (_clientWebSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                await _clientWebSocket.CloseAsync(closeStatus, statusDescription, cancellationToken);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _clientWebSocket.Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 

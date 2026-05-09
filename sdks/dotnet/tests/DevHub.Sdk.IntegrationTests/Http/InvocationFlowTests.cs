@@ -372,6 +372,231 @@ public sealed class InvocationFlowTests
         Assert.Equal(1, requestResult.Value!.Value.GetProperty("value").GetInt32());
     }
 
+    [Fact]
+    public async Task NotifyAndRequest_WhenRpcDisabled_ShouldReturnForbidden()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.rpc-disabled.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.rpc-disabled.app",
+            Capabilities = new AppCapabilities
+            {
+                Rpc = false
+            }
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-rpc-disabled-client");
+
+        var notifyException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.rpc-disabled.app",
+            Method = "test.notify",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                AutoLaunch = false,
+                QueueIfOffline = true
+            }
+        }));
+        Assert.Equal(-32002, notifyException.Code);
+        Assert.Equal("rpc_disabled", notifyException.Reason);
+
+        var requestException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.rpc-disabled.app",
+            Method = "test.request",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 3000,
+                WaitTimeoutMs = 1000,
+                AutoLaunch = false,
+                QueueIfOffline = true
+            }
+        }));
+        Assert.Equal(-32002, requestException.Code);
+        Assert.Equal("rpc_disabled", requestException.Reason);
+    }
+
+    [Fact]
+    public async Task NotifyAndRequest_WhenDefinitionMissing_ShouldReturnDefinitionNotFound()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var client = await host.CreateClientAsync("invoke-definition-missing-client");
+
+        var notifyException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.definition-missing.app",
+            Method = "test.notify",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                AutoLaunch = false,
+                QueueIfOffline = true
+            }
+        }));
+        Assert.Equal(-32010, notifyException.Code);
+        Assert.Equal("definition_not_found", notifyException.Reason);
+
+        var requestException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.definition-missing.app",
+            Method = "test.request",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 3000,
+                WaitTimeoutMs = 1000,
+                AutoLaunch = false,
+                QueueIfOffline = true
+            }
+        }));
+        Assert.Equal(-32010, requestException.Code);
+        Assert.Equal("definition_not_found", requestException.Reason);
+    }
+
+    [Fact]
+    public async Task Poll_WhenInstancePollDisabled_ShouldReturnForbidden()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.poll-disabled.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.poll-disabled.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-poll-disabled-client");
+        var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "poll-disabled-inst-1",
+            AppId = "invoke.poll-disabled.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = false,
+                Respond = true
+            }
+        }, InstancePassword);
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.PollAsync(new PollRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            WaitMs = 0
+        }));
+        Assert.Equal(-32002, exception.Code);
+        Assert.Equal("poll_not_enabled", exception.Reason);
+    }
+
+    [Fact]
+    public async Task Respond_WhenInstanceRespondDisabled_ShouldReturnForbidden()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.respond-disabled.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.respond-disabled.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-respond-disabled-client");
+        var registered = await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "respond-disabled-inst-1",
+            AppId = "invoke.respond-disabled.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = false
+            }
+        }, InstancePassword);
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = "invk-missing",
+            LeaseToken = "missing-lease",
+            Value = new { ok = true }
+        }));
+        Assert.Equal(-32002, exception.Code);
+        Assert.Equal("respond_not_enabled", exception.Reason);
+    }
+
+    [Fact]
+    public async Task Respond_WhenLeaseTokenInvalid_ShouldReturnDeliveryConflict()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.lease-conflict.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.lease-conflict.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-lease-conflict-client");
+        var registered = await RegisterInstanceAsync(client, "invoke.lease-conflict.app", "lease-conflict-inst-1", scope: string.Empty);
+
+        var requestTask = client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.lease-conflict.app",
+            Method = "test.lease-conflict",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        var invocation = await WaitForSingleInvocationAsync(client, registered.Instance.InstanceId, registered.InstanceSessionToken);
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = invocation.InvocationId,
+            LeaseToken = $"{invocation.Delivery!.LeaseToken}-wrong",
+            Value = new { ok = true }
+        }));
+        Assert.Equal(-32030, exception.Code);
+        Assert.Equal("delivery_conflict", exception.Message);
+
+        await client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
+            Value = new { ok = true, value = 9 }
+        });
+
+        var requestResult = await requestTask;
+        Assert.True(requestResult.Ok);
+        Assert.Equal(9, requestResult.Value!.Value.GetProperty("value").GetInt32());
+    }
+
     private static AppInstanceRegistration CreateInstance(string appId, string instanceId, string scope)
     {
         return new AppInstanceRegistration
