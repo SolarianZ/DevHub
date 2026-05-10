@@ -502,9 +502,17 @@ def run_vector(
     for adapter in adapter_targets:
         execution: VectorExecutionContext | None = None
         try:
-            def restart_current_suite_host(current_context: HostRuntimeContext) -> HostRuntimeContext:
+            def restart_current_suite_host(
+                current_context: HostRuntimeContext,
+                host_env_overrides: dict[str, str] | None = None,
+            ) -> HostRuntimeContext:
                 nonlocal host_context, suite_process
-                host_context, suite_process = restart_suite_host(current_context, suite_process, suite_log_file)
+                host_context, suite_process = restart_suite_host(
+                    current_context,
+                    suite_process,
+                    suite_log_file,
+                    host_env_overrides,
+                )
                 return host_context
 
             execution, host_context = materialize_vector(
@@ -620,7 +628,7 @@ def run_vector(
                     ),
                     "vectorPath": str(vector_path),
                     "resolvedVector": execution.resolved_vector if execution is not None else vector,
-                    "adapterMeta": build_static_adapter_meta(adapter),
+                    "adapterMeta": getattr(exc, "adapter_meta", build_static_adapter_meta(adapter)),
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -719,8 +727,11 @@ def run_adapter_with_orchestration(
         helper.run_phase("duringCaller", load_orchestration_phase(execution.resolved_vector, "duringCaller"))
         result = wait_adapter_process(adapter, process)
         helper.run_phase("afterCaller", load_orchestration_phase(execution.resolved_vector, "afterCaller"))
-    except Exception:
-        terminate_adapter_process(process)
+    except Exception as exc:
+        if isinstance(exc, OrchestrationFailure):
+            exc.adapter_meta = collect_adapter_process_meta(adapter, process)
+        else:
+            terminate_adapter_process(process)
         raise
     finally:
         if process.poll() is None:
@@ -857,6 +868,21 @@ def terminate_adapter_process(process: subprocess.Popen[str]) -> None:
         process.communicate(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+
+
+def collect_adapter_process_meta(adapter: AdapterTarget, process: subprocess.Popen[str]) -> dict[str, Any]:
+    """在 helper 失败时收集 adapter 输出，便于失败快照暴露 caller 侧错误。"""
+
+    if process.poll() is None:
+        process.kill()
+
+    try:
+        stdout, stderr = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        stdout = ""
+        stderr = "适配器进程终止后仍未退出。"
+
+    return build_adapter_meta(adapter, process.returncode, stdout, stderr)
 
 
 def try_parse_json_line(stdout: str) -> dict[str, Any] | None:

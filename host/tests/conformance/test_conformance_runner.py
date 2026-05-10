@@ -24,6 +24,8 @@ if str(HOST_ROOT) not in sys.path:
     sys.path.insert(0, str(HOST_ROOT))
 
 from tests.conformance import vector_runner  # type: ignore  # noqa: E402
+from tests.conformance import vector_setup  # type: ignore  # noqa: E402
+from tests.conformance.raw_protocol_helper import OrchestrationFailure  # type: ignore  # noqa: E402
 
 
 SUITE_DIRECTORY = REPO_ROOT / "host" / "tests" / "conformance" / "v1.0.1"
@@ -31,6 +33,167 @@ SUITE_DIRECTORY = REPO_ROOT / "host" / "tests" / "conformance" / "v1.0.1"
 
 class TestConformanceRunner(unittest.TestCase):
     """验证 conformance runner 的外部适配器挂接能力。"""
+
+    def test_suite_host_env_overrides_should_not_enable_pending_limit_by_default(self) -> None:
+        self.assertNotIn(
+            "DEVHUB_PENDING_INVOCATIONS_LIMIT",
+            vector_setup.SUITE_HOST_ENV_OVERRIDES,
+        )
+
+        merged = vector_setup.build_suite_host_env_overrides()
+
+        self.assertEqual("2", merged["DEVHUB_ONLINE_THRESHOLD_SECONDS"])
+        self.assertNotIn("DEVHUB_PENDING_INVOCATIONS_LIMIT", merged)
+
+    def test_suite_host_env_overrides_should_apply_vector_specific_pending_limit(self) -> None:
+        merged = vector_setup.build_suite_host_env_overrides(
+            {"DEVHUB_PENDING_INVOCATIONS_LIMIT": "16"}
+        )
+
+        self.assertEqual("2", merged["DEVHUB_ONLINE_THRESHOLD_SECONDS"])
+        self.assertEqual("16", merged["DEVHUB_PENDING_INVOCATIONS_LIMIT"])
+
+    def test_materialize_vector_with_host_env_overrides_should_restart_and_restore_host(self) -> None:
+        restart_calls: list[tuple[object, dict[str, str] | None]] = []
+
+        class FakeRpcClient:
+            def unregister_instance(self, instance_id, instance_session_token=None):
+                return {"result": {"ok": True}}
+
+            def call(self, method, params=None, request_id="1"):
+                return {"result": {"ok": True}}
+
+        class FakeHostContext:
+            def __init__(self, data_dir: Path) -> None:
+                self.data_dir = data_dir
+                self.runtime_dir = data_dir / "runtime"
+                self.hub_json_path = self.runtime_dir / "hub.json"
+                self.token_file = self.runtime_dir / "token.txt"
+                self.token = "token"
+                self.hub_info = {
+                    "pid": 123,
+                    "httpBaseUrl": "http://127.0.0.1:12345",
+                    "wsUrl": "ws://127.0.0.1:12345/ws",
+                    "startedAtUtc": "2026-05-10T00:00:00Z",
+                    "runtimeTuning": {
+                        "leaseSeconds": 30,
+                        "onlineThresholdSeconds": 2,
+                        "launchDedupeWindowSeconds": 30,
+                        "launchRegisterTimeoutSeconds": 30,
+                    },
+                }
+
+            @property
+            def http_base_url(self) -> str:
+                return str(self.hub_info["httpBaseUrl"])
+
+            @property
+            def ws_url(self) -> str:
+                return str(self.hub_info["wsUrl"])
+
+            @property
+            def apps_dir(self) -> Path:
+                return self.data_dir / "apps"
+
+            @property
+            def definitions_catalog_path(self) -> Path:
+                return self.apps_dir / "definitions.json"
+
+            def create_rpc_client(self) -> FakeRpcClient:
+                return FakeRpcClient()
+
+        host_context = FakeHostContext(Path("/tmp/devhub-host"))
+
+        def restart_suite_host(current_context, host_env_overrides=None):
+            restart_calls.append((current_context, host_env_overrides))
+            return current_context
+
+        vector = {
+            "id": "sample.host-env-overrides",
+            "caseId": "CONF-999",
+            "transport": "http",
+            "hostEnvOverrides": {"DEVHUB_PENDING_INVOCATIONS_LIMIT": "16"},
+            "setup": {},
+            "request": {"kind": "raw.rpc"},
+            "expectedResponse": {},
+            "tags": [],
+        }
+
+        with tempfile.TemporaryDirectory(prefix="devhub-conformance-host-env-") as temp_root_str:
+            with mock.patch.object(vector_setup, "copy_host_runtime", return_value=Path(temp_root_str) / "token.txt"):
+                execution, _ = vector_setup.materialize_vector(
+                    Path("sample.json"),
+                    vector,
+                    host_context,  # type: ignore[arg-type]
+                    Path(temp_root_str),
+                    restart_suite_host,
+                    execution_name="adapter",
+                )
+
+                execution.cleanup(host_context, restart_suite_host)  # type: ignore[arg-type]
+
+        self.assertEqual(
+            [
+                (host_context, {"DEVHUB_PENDING_INVOCATIONS_LIMIT": "16"}),
+                (host_context, None),
+            ],
+            restart_calls,
+        )
+
+    def test_run_vector_when_helper_fails_should_include_adapter_meta(self) -> None:
+        adapter = vector_runner.AdapterTarget(
+            name="meta-adapter",
+            command_prefix=(sys.executable, "dummy.py"),
+            working_directory=REPO_ROOT,
+            env_overrides={},
+            source="manifest",
+            is_official=False,
+        )
+        vector = {
+            "id": "sample.helper-failure",
+            "caseId": "CONF-999",
+            "transport": "http",
+            "request": {"kind": "sdk.notify"},
+            "expectedResponse": {},
+            "tags": [],
+        }
+        execution = SimpleNamespace(
+            resolved_vector=vector,
+            cleanup=lambda host_context, restart_suite_host: host_context,
+        )
+        failure = OrchestrationFailure(
+            phase="duringCaller",
+            step_index=0,
+            action="poll_expect_invocation",
+            message="poll 未拉取到符合预期的 invocation。",
+            expected={"appId": "sample"},
+            actual=[],
+            diff_fields=["$.items"],
+        )
+        failure.adapter_meta = {
+            "adapter": "meta-adapter",
+            "source": "manifest",
+            "workingDirectory": str(REPO_ROOT),
+            "official": False,
+            "exitCode": 0,
+            "stdout": '{"actual":{"error":{"message":"rate_limited"}}}',
+            "stderr": "",
+        }
+
+        with mock.patch.object(vector_runner, "materialize_vector", return_value=(execution, "host")):
+            with mock.patch.object(vector_runner, "execute_adapter_vector", side_effect=failure):
+                result, _, _ = vector_runner.run_vector(
+                    Path("sample.json"),
+                    vector,
+                    "host",  # type: ignore[arg-type]
+                    Path("/tmp"),
+                    [adapter],
+                    None,  # type: ignore[arg-type]
+                    io.StringIO(),
+                )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(failure.adapter_meta, result["failures"][0]["adapterMeta"])
 
     def test_resolve_adapter_targets_with_manifest_should_skip_official_by_default(self) -> None:
         with tempfile.TemporaryDirectory(prefix="devhub-conformance-manifest-") as temp_root_str:

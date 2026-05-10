@@ -3,6 +3,9 @@
   "caseId": "CONF-008",
   "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。",
   "transport": "http",
+  "hostEnvOverrides": {
+    "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16"
+  },
   "setup": {
     "definitions": [
       {

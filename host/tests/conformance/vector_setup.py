@@ -29,7 +29,6 @@ from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
 
 SUITE_HOST_ENV_OVERRIDES = {
     "DEVHUB_ONLINE_THRESHOLD_SECONDS": "2",
-    "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16",
 }
 
 
@@ -69,6 +68,7 @@ class CleanupLedger:
     """记录每条向量创建的临时资产，便于统一清理。"""
 
     vector_temp_dir: Path
+    host_env_overrides_applied: bool = False
     upserted_definitions: list[tuple[str, str]] = field(default_factory=list)
     definitions_catalog_overridden: bool = False
     previous_definitions_catalog: str | None = None
@@ -109,6 +109,9 @@ class CleanupLedger:
                 pass
             host_context = restart_suite_host(host_context)
 
+        if self.host_env_overrides_applied:
+            host_context = restart_suite_host(host_context)
+
         shutil.rmtree(self.vector_temp_dir, ignore_errors=True)
         return host_context
 
@@ -128,7 +131,10 @@ class VectorExecutionContext:
         return self.cleanup_ledger.cleanup(host_context, restart_suite_host)
 
 
-def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
+def start_suite_host(
+    temp_root: Path,
+    host_env_overrides: dict[str, str] | None = None,
+) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
     """启动 suite 级隔离 Host，并注入 runner 需要的调优参数。"""
 
     host_data_dir = temp_root / "isolated-hub-data"
@@ -136,7 +142,10 @@ def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Po
     log_path = temp_root / "isolated-hub.log"
     log_file = open(log_path, "w+", encoding="utf-8")
 
-    with temporary_env_var(TEST_HUB_ENV_JSON_ENV_VAR, json.dumps(SUITE_HOST_ENV_OVERRIDES, ensure_ascii=False)):
+    with temporary_env_var(
+        TEST_HUB_ENV_JSON_ENV_VAR,
+        json.dumps(build_suite_host_env_overrides(host_env_overrides), ensure_ascii=False),
+    ):
         process = start_isolated_hub_process(str(host_data_dir), log_file)
 
     try:
@@ -152,6 +161,7 @@ def restart_suite_host(
     previous_context: HostRuntimeContext,
     process: subprocess.Popen[str],
     log_file,
+    host_env_overrides: dict[str, str] | None = None,
 ) -> tuple[HostRuntimeContext, subprocess.Popen[str]]:
     """复用同一 dataDir 重启 suite Host，并返回新的运行时上下文。"""
 
@@ -160,7 +170,10 @@ def restart_suite_host(
     log_file.truncate(0)
     log_file.flush()
 
-    with temporary_env_var(TEST_HUB_ENV_JSON_ENV_VAR, json.dumps(SUITE_HOST_ENV_OVERRIDES, ensure_ascii=False)):
+    with temporary_env_var(
+        TEST_HUB_ENV_JSON_ENV_VAR,
+        json.dumps(build_suite_host_env_overrides(host_env_overrides), ensure_ascii=False),
+    ):
         restarted_process = start_isolated_hub_process(str(previous_context.data_dir), log_file)
 
     try:
@@ -169,6 +182,15 @@ def restart_suite_host(
     except Exception:
         stop_process(restarted_process)
         raise
+
+
+def build_suite_host_env_overrides(host_env_overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """合成 suite Host 默认环境覆盖与单向量环境覆盖。"""
+
+    merged = dict(SUITE_HOST_ENV_OVERRIDES)
+    if host_env_overrides:
+        merged.update(host_env_overrides)
+    return merged
 
 
 def wait_for_host_runtime(
@@ -285,13 +307,20 @@ def materialize_vector(
 
     setup = require_optional_mapping(vector.get("setup"), "setup")
     validate_setup_shape(setup)
+    host_env_overrides = read_host_env_overrides(vector.get("hostEnvOverrides"))
 
     vector_dir = temp_root / sanitize_file_name(str(vector["id"]))
     vector_temp_dir = vector_dir / sanitize_file_name(execution_name) if execution_name else vector_dir
-    ledger = CleanupLedger(vector_temp_dir=vector_temp_dir)
+    ledger = CleanupLedger(vector_temp_dir=vector_temp_dir, host_env_overrides_applied=bool(host_env_overrides))
     vector_temp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        if host_env_overrides:
+            host_context = restart_suite_host(host_context, host_env_overrides)
+
+        def restart_with_current_host_env(current_context: HostRuntimeContext) -> HostRuntimeContext:
+            return restart_suite_host(current_context, host_env_overrides)
+
         data_dir = vector_temp_dir / "data"
         runtime_dir = data_dir / "runtime"
         resolved_vector = copy.deepcopy(vector)
@@ -309,7 +338,7 @@ def materialize_vector(
             host_context,
             require_optional_list(resolved_setup.get("definitions"), "setup.definitions"),
             ledger,
-            restart_suite_host,
+            restart_with_current_host_env,
         )
 
         token_file = copy_host_runtime(host_context, runtime_dir)
@@ -469,6 +498,20 @@ def validate_setup_shape(setup: dict[str, Any]) -> None:
 
     definitions = require_optional_list(setup.get("definitions"), "setup.definitions")
     validate_definitions_setup(definitions)
+
+
+def read_host_env_overrides(value: Any) -> dict[str, str]:
+    """读取单向量 Host 环境覆盖。"""
+
+    overrides = require_optional_mapping(value, "hostEnvOverrides")
+    parsed: dict[str, str] = {}
+    for key, item in overrides.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("hostEnvOverrides 的键必须为非空字符串。")
+        if not isinstance(item, str):
+            raise ValueError(f"hostEnvOverrides.{key} 必须为字符串。")
+        parsed[key] = item
+    return parsed
 
 
 def validate_definitions_setup(definitions: list[Any]) -> None:
