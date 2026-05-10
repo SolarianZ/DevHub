@@ -118,26 +118,29 @@ public class CoreServiceTests
     public void Impl_AppRegistry_Heartbeat_ShouldUpdateLastSeen()
     {
         // Arrange
-        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var now = DateTime.UtcNow;
+        var clock = new Mock<IClock>();
+        clock.SetupGet(c => c.UtcNow).Returns(() => now);
+        var appRegistry = new AppRegistry(clock.Object, _mockRegistryLogger.Object);
         var instance = new AppInstance
         {
             InstanceId = "test-instance-2",
             AppId = "test-app-2",
             Scope = ScopeContract.Global,
             Pid = 5678,
-            RegisteredAtUtc = DateTime.UtcNow,
-            LastSeenUtc = DateTime.UtcNow.AddSeconds(-10)
+            RegisteredAtUtc = now,
+            LastSeenUtc = now.AddSeconds(-10)
         };
         appRegistry.RegisterInstance(instance);
 
-        var beforeHeartbeat = instance.LastSeenUtc;
+        now = now.AddSeconds(5);
 
         appRegistry.Heartbeat("test-instance-2", out _);
         var updatedInstance = appRegistry.GetInstance("test-instance-2");
 
         // Assert
         Assert.NotNull(updatedInstance);
-        Assert.True(updatedInstance.LastSeenUtc > beforeHeartbeat);
+        Assert.Equal(now, updatedInstance.LastSeenUtc);
     }
 
     [Fact]

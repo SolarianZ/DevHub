@@ -286,6 +286,7 @@ class TestAppDefinitions(unittest.TestCase):
     def test_validate_definition(self):
         """测试 validateDefinition 返回结构化校验结果"""
         result = TestResult("测试 validateDefinition 返回结构化校验结果")
+        cleanup_definitions = []
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -308,6 +309,41 @@ class TestAppDefinitions(unittest.TestCase):
 
             if valid_response["result"].get("valid") is not True or valid_response["result"].get("errors") != []:
                 result.mark_failure(f"❌ 合法定义校验结果不正确: {valid_response}")
+                return result
+
+            get_valid_response = client.call("hub.apps.getDefinition", build_definition_identity_params(valid_app_id))
+            if not RpcAssertions.expect_error(result, get_valid_response, -32014, "app_definition_not_found"):
+                return result
+
+            baseline_app_id = self._new_app_id("validate-baseline")
+            baseline_definition = {
+                "appId": baseline_app_id,
+                "scope": "",
+                "displayName": "Baseline Definition",
+                "description": "stored baseline"
+            }
+            upsert_baseline = client.upsert_definition(baseline_definition)
+            if not RpcAssertions.expect_success(result, upsert_baseline, ["definition"]):
+                return result
+            cleanup_definitions.append((baseline_app_id, ""))
+
+            validate_update_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": baseline_app_id,
+                    "scope": "",
+                    "displayName": "Candidate Definition",
+                    "description": "validate must not persist this candidate"
+                }
+            })
+            if not RpcAssertions.expect_success(result, validate_update_response, ["valid", "errors"]):
+                return result
+
+            stored_baseline_response = client.call("hub.apps.getDefinition", build_definition_identity_params(baseline_app_id))
+            if not RpcAssertions.expect_success(result, stored_baseline_response, ["definition"]):
+                return result
+            stored_baseline = stored_baseline_response["result"]["definition"]
+            if stored_baseline.get("displayName") != "Baseline Definition" or stored_baseline.get("description") != "stored baseline":
+                result.mark_failure(f"❌ validateDefinition 修改了已存在 Definition: {stored_baseline}")
                 return result
 
             blank_launch_app_id = self._new_app_id("blank-launch-validate")
@@ -347,10 +383,19 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ 非法定义缺少 appId 校验问题: {invalid_response}")
                 return result
 
+            list_after_invalid_response = client.call("hub.apps.listDefinitions", {"scope": None})
+            if not RpcAssertions.expect_success(result, list_after_invalid_response, ["definitions"]):
+                return result
+            if any(definition.get("appId") == "Invalid App" for definition in list_after_invalid_response["result"]["definitions"]):
+                result.mark_failure(f"❌ validateDefinition 非法候选污染了 Definition 清单: {list_after_invalid_response}")
+                return result
+
             result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
+        finally:
+            delete_definitions(cleanup_definitions)
 
         return result
 

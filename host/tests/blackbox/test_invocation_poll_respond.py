@@ -452,10 +452,16 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id_1 = items_1[0].get("invocationId")
+            lease_token_1 = items_1[0].get("delivery", {}).get("leaseToken")
+            if not isinstance(lease_token_1, str) or not lease_token_1:
+                result.mark_failure(f"❌ XOR 子场景1缺少有效 leaseToken: {items_1[0]}")
+                return result
+
             response_both = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
                 "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_1,
+                "leaseToken": lease_token_1,
                 "value": {"ok": True},
                 "error": {"code": 1001, "message": "app_error"}
             }, request_id="respond-xor-both")
@@ -483,10 +489,16 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id_2 = items_2[0].get("invocationId")
+            lease_token_2 = items_2[0].get("delivery", {}).get("leaseToken")
+            if not isinstance(lease_token_2, str) or not lease_token_2:
+                result.mark_failure(f"❌ XOR 子场景2缺少有效 leaseToken: {items_2[0]}")
+                return result
+
             response_none = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
                 "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_2,
+                "leaseToken": lease_token_2,
             }, request_id="respond-xor-none")
             if not RpcAssertions.expect_error(result, response_none, -32602, "invalid_params"):
                 return result

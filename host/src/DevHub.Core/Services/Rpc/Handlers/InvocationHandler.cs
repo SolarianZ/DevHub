@@ -310,6 +310,7 @@ public class InvocationHandler : IRpcHandler
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
         LogRouteDecision(request.Method, appId, target, candidates.Count);
+
         if (candidates.Count == 0)
         {
             if (!options.QueueIfOffline)
@@ -341,6 +342,13 @@ public class InvocationHandler : IRpcHandler
 
             if (options.AutoLaunch)
             {
+                if (_store.IsPendingLimitReached(_runtimeTuningOptions.PendingInvocationsLimit, out var preLaunchActiveInvocationCount))
+                {
+                    return new InvocationBuildResult(
+                        null,
+                        BuildPendingInvocationsLimitError(request.Id, preLaunchActiveInvocationCount));
+                }
+
                 var launchResult = await _launchCoordinator.LaunchAsync(
                     appId,
                     target.Scope,
@@ -408,20 +416,25 @@ public class InvocationHandler : IRpcHandler
 
             return new InvocationBuildResult(
                 null,
-                RpcErrorFactory.Create(
-                    request.Id,
-                    -32040,
-                    "rate_limited",
-                    new
-                    {
-                        reason = "pending_invocations_limit_exceeded",
-                        limit = _runtimeTuningOptions.PendingInvocationsLimit,
-                        active = activeInvocationCount
-                    }));
+                BuildPendingInvocationsLimitError(request.Id, activeInvocationCount));
         }
 
         PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
         return new InvocationBuildResult(invocation, null, waiterTask);
+    }
+
+    private JsonRpcResponse BuildPendingInvocationsLimitError(object? requestId, int activeInvocationCount)
+    {
+        return RpcErrorFactory.Create(
+            requestId,
+            -32040,
+            "rate_limited",
+            new
+            {
+                reason = "pending_invocations_limit_exceeded",
+                limit = _runtimeTuningOptions.PendingInvocationsLimit,
+                active = activeInvocationCount
+            });
     }
 
     private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)

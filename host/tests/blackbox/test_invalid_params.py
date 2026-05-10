@@ -7,7 +7,7 @@ import os
 import unittest
 
 
-from tests.blackbox.test_base import DEFAULT_INSTANCE_PASSWORD, DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.blackbox.test_base import DEFAULT_INSTANCE_PASSWORD, DiscoveryService, RpcClient, TestResult, RpcAssertions, new_instance_id, unregister_instances
 
 
 class TestInvalidParams(unittest.TestCase):
@@ -126,7 +126,7 @@ class TestInvalidParams(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.getDefinition", {})
+            response = client.call("hub.apps.getDefinition", {"scope": ""})
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                 return result
 
@@ -145,12 +145,48 @@ class TestInvalidParams(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.getDefinition", {"appId": ""})
+            response = client.call("hub.apps.getDefinition", {"appId": "", "scope": ""})
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                 return result
 
             result.mark_success()
 
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_hub_apps_definition_scope_invalid_params(self):
+        """测试 Definition 类接口 scope 参数校验"""
+        result = TestResult("测试 Definition 类接口 scope 参数校验")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                ("listDefinitions 缺少 scope", "hub.apps.listDefinitions", {"appId": "scope.params.app"}),
+                ("listDefinitions 空对象", "hub.apps.listDefinitions", {}),
+                ("listDefinitions scope 数字", "hub.apps.listDefinitions", {"scope": 123}),
+                ("listDefinitions scope 对象", "hub.apps.listDefinitions", {"scope": {"name": "workspace-a"}}),
+                ("listDefinitions scope 非法 grammar", "hub.apps.listDefinitions", {"scope": ".invalid-scope"}),
+                ("getDefinition 缺少 scope", "hub.apps.getDefinition", {"appId": "scope.params.app"}),
+                ("getDefinition scope null", "hub.apps.getDefinition", {"appId": "scope.params.app", "scope": None}),
+                ("getDefinition scope 布尔", "hub.apps.getDefinition", {"appId": "scope.params.app", "scope": True}),
+                ("getDefinition scope 非法 grammar", "hub.apps.getDefinition", {"appId": "scope.params.app", "scope": "invalid-scope-"}),
+                ("deleteDefinition 缺少 scope", "hub.apps.deleteDefinition", {"appId": "scope.params.app"}),
+                ("deleteDefinition scope null", "hub.apps.deleteDefinition", {"appId": "scope.params.app", "scope": None}),
+                ("deleteDefinition scope 数组", "hub.apps.deleteDefinition", {"appId": "scope.params.app", "scope": ["workspace-a"]}),
+                ("deleteDefinition scope 非法 grammar", "hub.apps.deleteDefinition", {"appId": "scope.params.app", "scope": "invalid scope"}),
+            ]
+
+            for index, (name, method, payload) in enumerate(cases):
+                response = client.call(method, payload, request_id=f"definition-scope-invalid-{index}")
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id=f"definition-scope-invalid-{index}"):
+                    return result
+                result.add_detail(f"✅ {name} 正确返回 invalid_params")
+
+            result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
 
@@ -916,6 +952,60 @@ class TestInvalidParams(unittest.TestCase):
 
         return result
 
+    def test_hub_invoke_poll_invalid_numeric_params(self):
+        """测试 hub.invoke.poll maxCount 与 waitMs 数值边界"""
+        result = TestResult("测试 hub.invoke.poll maxCount 与 waitMs 数值边界")
+        instance_id = None
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            instance_id = new_instance_id("poll-invalid-numeric")
+
+            register_response = client.register_instance(
+                instance_id=instance_id,
+                app_id="poll.invalid.numeric.app",
+                scope="",
+                poll=True,
+                respond=True,
+                pid=12345,
+            )
+            if not RpcAssertions.expect_success(result, register_response, ["instance", "instanceSessionToken"]):
+                return result
+
+            instance_session_token = register_response["result"]["instanceSessionToken"]
+            cases = [
+                ("maxCount=0", {"maxCount": 0, "waitMs": 0}),
+                ("maxCount=101", {"maxCount": 101, "waitMs": 0}),
+                ("maxCount 负数", {"maxCount": -1, "waitMs": 0}),
+                ("maxCount 非整数", {"maxCount": 1.5, "waitMs": 0}),
+                ("maxCount 字符串", {"maxCount": "1", "waitMs": 0}),
+                ("maxCount 布尔", {"maxCount": True, "waitMs": 0}),
+                ("waitMs 负数", {"maxCount": 1, "waitMs": -1}),
+                ("waitMs 非整数", {"maxCount": 1, "waitMs": 0.5}),
+                ("waitMs 字符串", {"maxCount": 1, "waitMs": "0"}),
+                ("waitMs 布尔", {"maxCount": 1, "waitMs": False}),
+            ]
+
+            for index, (name, partial_payload) in enumerate(cases):
+                payload = {
+                    "instanceId": instance_id,
+                    "instanceSessionToken": instance_session_token,
+                    **partial_payload,
+                }
+                response = client.call("hub.invoke.poll", payload, request_id=f"poll-invalid-numeric-{index}")
+                if not RpcAssertions.expect_error(result, response, -32602, "invalid_params", expected_id=f"poll-invalid-numeric-{index}"):
+                    return result
+                result.add_detail(f"✅ {name} 正确返回 invalid_params")
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            unregister_instances([instance_id])
+
+        return result
+
     def test_hub_invoke_respond_missing_instance_session_token(self):
         """测试 hub.invoke.respond 缺少 instanceSessionToken 参数"""
         result = TestResult("测试 hub.invoke.respond 缺少 instanceSessionToken 参数")
@@ -1038,6 +1128,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_scalar_params_should_be_invalid_request_for_hub_ping(),
             self.test_hub_apps_get_definition_missing_appid(),
             self.test_hub_apps_get_definition_empty_appid(),
+            self.test_hub_apps_definition_scope_invalid_params(),
             self.test_hub_apps_get_instance_invalid_params(),
             self.test_hub_apps_register_instance_missing_instance(),
             self.test_hub_apps_register_instance_missing_password(),
@@ -1057,6 +1148,7 @@ class TestInvalidParams(unittest.TestCase):
             self.test_hub_apps_list_instances_invalid_params(),
             self.test_hub_invoke_poll_missing_instance_session_token(),
             self.test_hub_invoke_poll_invalid_instanceid(),
+            self.test_hub_invoke_poll_invalid_numeric_params(),
             self.test_hub_invoke_respond_missing_instance_session_token(),
             self.test_hub_invoke_respond_invalid_instanceid(),
         ]

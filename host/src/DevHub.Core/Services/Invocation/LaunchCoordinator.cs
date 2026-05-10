@@ -24,6 +24,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private readonly AppRegistry _appRegistry;
     private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
     private readonly IProcessLauncher _processLauncher;
+    private readonly IProcessStatusProvider _processStatusProvider;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly IClock _clock;
     private readonly ILogger<LaunchCoordinator> _logger;
@@ -43,8 +44,32 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             appRegistry,
             runtimeHttpBaseUrlProvider,
             processLauncher,
+            new ProcessStatusProvider(),
             clock,
             RuntimeTuningOptions.Default,
+            logger)
+    {
+    }
+
+    /// <summary>
+    /// 初始化启动协调器。
+    /// </summary>
+    public LaunchCoordinator(
+        IDefinitionProvider definitionProvider,
+        AppRegistry appRegistry,
+        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        IProcessLauncher processLauncher,
+        IClock clock,
+        RuntimeTuningOptions runtimeTuningOptions,
+        ILogger<LaunchCoordinator> logger)
+        : this(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider,
+            processLauncher,
+            new ProcessStatusProvider(),
+            clock,
+            runtimeTuningOptions,
             logger)
     {
     }
@@ -58,6 +83,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         AppRegistry appRegistry,
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
         IProcessLauncher processLauncher,
+        IProcessStatusProvider processStatusProvider,
         IClock clock,
         RuntimeTuningOptions runtimeTuningOptions,
         ILogger<LaunchCoordinator> logger)
@@ -66,6 +92,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         _appRegistry = appRegistry;
         _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
         _processLauncher = processLauncher;
+        _processStatusProvider = processStatusProvider;
         _clock = clock;
         _runtimeTuningOptions = runtimeTuningOptions;
         _logger = logger;
@@ -675,22 +702,14 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
     }
 
-    private static bool IsLaunchStillInProgress(LaunchRecord record)
+    private bool IsLaunchStillInProgress(LaunchRecord record)
     {
         if (!record.Pid.HasValue)
         {
             return true;
         }
 
-        try
-        {
-            using var process = Process.GetProcessById(record.Pid.Value);
-            return !process.HasExited;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            return false;
-        }
+        return _processStatusProvider.IsProcessRunning(record.Pid.Value);
     }
 
     private static object BuildAppDefinitionNotFoundData(string appId, string scope)

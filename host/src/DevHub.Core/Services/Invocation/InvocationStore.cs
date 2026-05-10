@@ -78,6 +78,21 @@ public class InvocationStore
     }
 
     /// <summary>
+    /// 判断当前活动 invocation 数量是否已经达到挂起上限。
+    /// </summary>
+    /// <param name="pendingInvocationsLimit">挂起 invocation 总量上限；0 表示不启用。</param>
+    /// <param name="activeInvocationCount">当前活动 invocation 数量。</param>
+    /// <returns>已经达到上限时返回 <see langword="true" />。</returns>
+    public bool IsPendingLimitReached(int pendingInvocationsLimit, out int activeInvocationCount)
+    {
+        lock (_syncRoot)
+        {
+            activeInvocationCount = CountActiveInvocationsUnsafe();
+            return pendingInvocationsLimit > 0 && activeInvocationCount >= pendingInvocationsLimit;
+        }
+    }
+
+    /// <summary>
     /// 获取调用。
     /// </summary>
     public bool TryGet(string invocationId, out InvocationModel? invocation)

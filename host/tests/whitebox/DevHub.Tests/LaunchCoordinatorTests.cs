@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -818,6 +819,10 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-exit-before-register.app", includeLaunch: true);
 
+        var processStatusProvider = new Mock<IProcessStatusProvider>();
+        processStatusProvider
+            .Setup(provider => provider.IsProcessRunning(It.IsAny<int>()))
+            .Returns(false);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
@@ -830,24 +835,11 @@ public class LaunchCoordinatorTests : IDisposable
                 Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
                 Assert.False(string.IsNullOrWhiteSpace(launchId));
 
-                var process = new System.Diagnostics.Process
-                {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "dotnet",
-                        ArgumentList = { "--version" },
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                    }
-                };
-                process.StartInfo.FileName = ResolvePythonExecutable();
-                process.StartInfo.ArgumentList.Clear();
-                process.StartInfo.ArgumentList.Add(ResolveSharedAssetPath("launch_exit_immediately.py"));
-                Assert.True(process.Start());
-                return process;
+                return Process.GetCurrentProcess();
             });
-        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+        var coordinator = CreateCoordinator(
+            processLauncher: processLauncher.Object,
+            processStatusProvider: processStatusProvider.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-exit-before-register.app",
@@ -873,6 +865,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(retry.Ok);
         Assert.Equal("started", retry.Status);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+        processStatusProvider.Verify(provider => provider.IsProcessRunning(It.IsAny<int>()), Times.AtLeastOnce);
     }
 
     [Fact]
@@ -918,7 +911,8 @@ public class LaunchCoordinatorTests : IDisposable
         IClock? clock = null,
         IProcessLauncher? processLauncher = null,
         AppRegistry? appRegistry = null,
-        RuntimeTuningOptions? runtimeTuningOptions = null)
+        RuntimeTuningOptions? runtimeTuningOptions = null,
+        IProcessStatusProvider? processStatusProvider = null)
     {
         var effectiveClock = clock ?? new SystemClock();
         var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
@@ -931,6 +925,7 @@ public class LaunchCoordinatorTests : IDisposable
             effectiveAppRegistry,
             provider,
             processLauncher ?? new ProcessLauncher(),
+            processStatusProvider ?? new ProcessStatusProvider(),
             effectiveClock,
             runtimeTuningOptions ?? RuntimeTuningOptions.Default,
             _launchLogger.Object);

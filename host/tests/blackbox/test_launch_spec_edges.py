@@ -716,6 +716,86 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_010_structured_args_should_render_templates_and_override_args_template(self):
+        """LAUNCH-EDGE-010: launch.args 必须渲染模板并优先于 argsTemplate。"""
+        result = TestResult("LAUNCH-EDGE-010 launch.args 模板渲染与优先级")
+        definition_path = None
+        temp_dir = None
+
+        try:
+            app_id = self._new_app_id("structured-args")
+            scope = "workspace-structured"
+            temp_dir = tempfile.mkdtemp(prefix="devhub-launch-edge-args-")
+            structured_capture_file = os.path.join(temp_dir, "structured-argv.json")
+            template_capture_file = os.path.join(temp_dir, "template-argv.json")
+            capture_script_path = self._capture_argv_script_path()
+
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "args": [
+                        capture_script_path,
+                        structured_capture_file,
+                        "{appId}",
+                        "{scope}",
+                        "{scopeOrGlobal}",
+                        "{httpBaseUrl}",
+                    ],
+                    "argsTemplate": f'"{capture_script_path}" "{template_capture_file}" args-template-should-be-ignored',
+                },
+                scope=scope,
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            response = client.launch_app(
+                app_id=app_id,
+                scope=scope,
+                wait_for_register_ms=0,
+                request_id="launch-edge-010",
+            )
+            if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                return result
+
+            deadline = time.time() + 3
+            while time.time() < deadline and not os.path.exists(structured_capture_file):
+                time.sleep(0.05)
+
+            if not os.path.exists(structured_capture_file):
+                result.mark_failure("❌ launch.args 启动进程未写出 argv 捕获文件")
+                return result
+
+            if os.path.exists(template_capture_file):
+                result.mark_failure("❌ launch.args 存在时仍执行了 argsTemplate")
+                return result
+
+            with open(structured_capture_file, "r", encoding="utf-8") as handle:
+                captured = json.load(handle)
+
+            expected = [app_id, scope, scope, base_url]
+            if captured != expected:
+                result.mark_failure(f"❌ launch.args 模板渲染不符合预期: expected={expected}, actual={captured}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            delete_definitions([definition_path] if definition_path else [])
+            if temp_dir and os.path.isdir(temp_dir):
+                try:
+                    for root, dirs, files in os.walk(temp_dir, topdown=False):
+                        for file_name in files:
+                            os.remove(os.path.join(root, file_name))
+                        for dir_name in dirs:
+                            os.rmdir(os.path.join(root, dir_name))
+                    os.rmdir(temp_dir)
+                except Exception:
+                    pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
@@ -728,6 +808,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_007_argstemplate_should_split_quotes_and_escapes(),
             self.test_launch_edge_008_invalid_argstemplate_should_return_invalid_params(),
             self.test_launch_edge_009_shell_metacharacters_should_remain_argv_literals(),
+            self.test_launch_edge_010_structured_args_should_render_templates_and_override_args_template(),
         ]
 
 

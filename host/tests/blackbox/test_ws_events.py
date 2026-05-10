@@ -1480,6 +1480,87 @@ class TestWsEvents:
 
         return result
 
+    def test_ws_014b_post_auth_invalid_json_should_parse_error(self):
+        """WS-014B: 鉴权后非法 JSON 应返回 parse_error。"""
+        result = TestResult("WS-014B 鉴权后非法JSON返回 parse_error")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14b")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_text('{"jsonrpc":"2.0","id":"bad-json-14b","method":"hub.ping","params":')
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32700, "parse_error", expected_id=None):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_014c_post_auth_invalid_envelope_should_invalid_request(self):
+        """WS-014C: 鉴权后非法信封应返回 invalid_request。"""
+        result = TestResult("WS-014C 鉴权后非法信封返回 invalid_request")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14c")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "1.0",
+                    "id": "bad-envelope-14c",
+                    "method": "hub.ping",
+                    "params": {}
+                })
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id="bad-envelope-14c"):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_014d_post_auth_batch_root_array_should_invalid_request(self):
+        """WS-014D: 鉴权后根数组 batch 应返回单一 invalid_request。"""
+        result = TestResult("WS-014D 鉴权后根数组batch返回 invalid_request")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14d")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json([
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "batch-14d",
+                        "method": "hub.ping",
+                        "params": {}
+                    }
+                ])
+                response = ws.recv_json(timeout=3)
+                if not isinstance(response, dict):
+                    result.mark_failure(f"❌ 鉴权后根数组 batch 响应不是单一 JSON-RPC 对象: {response}")
+                    return result
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id=None):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_012c_unsubscribe_existing_id_should_stop_delivery(self):
         """WS-012C: 取消真实 subscriptionId 后不应再收到 hub.event。"""
         result = TestResult("WS-012C 真实 subscriptionId 取消后停止事件投递")
@@ -1693,6 +1774,9 @@ class TestWsEvents:
             self.test_ws_013_pre_auth_invalid_json_should_parse_error(),
             self.test_ws_013b_pre_auth_invalid_utf8_should_parse_error(),
             self.test_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
+            self.test_ws_014b_post_auth_invalid_json_should_parse_error(),
+            self.test_ws_014c_post_auth_invalid_envelope_should_invalid_request(),
+            self.test_ws_014d_post_auth_batch_root_array_should_invalid_request(),
             self.test_ws_015_first_authenticate_without_id_should_invalid_request(),
             self.test_ws_016_pre_auth_batch_root_array_should_invalid_request(),
             self.test_ws_017_authenticate_invalid_params_should_close_and_block_retry(),
