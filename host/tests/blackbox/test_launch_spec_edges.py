@@ -505,6 +505,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
         definition_path = None
         script_path = None
         capture_file = None
+        windows_style_path = "C:\\Program Files\\DevHub\\config.json"
+        unquoted_windows_literal = "C:\\Temp\\literal.txt"
 
         try:
             app_id = self._new_app_id("args-template-split")
@@ -522,7 +524,11 @@ class TestLaunchSpecEdges(unittest.TestCase):
                 app_id,
                 {
                     "exePath": get_test_python_executable(),
-                    "argsTemplate": f"\"{script_path}\" \"{capture_file}\" --name \"hello world\" '--literal value' plain\\ value",
+                    "argsTemplate": (
+                        f"\"{script_path}\" \"{capture_file}\" "
+                        f"--name \"hello world\" '--literal value' plain\\ value "
+                        f"\"{windows_style_path}\" {unquoted_windows_literal}"
+                    ),
                 },
             )
 
@@ -549,7 +555,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             with open(capture_file, "r", encoding="utf-8") as handle:
                 captured = json.load(handle)
 
-            expected = ["--name", "hello world", "--literal value", "plain value"]
+            expected = ["--name", "hello world", "--literal value", "plain value", windows_style_path, unquoted_windows_literal]
             if captured != expected:
                 result.mark_failure(f"❌ argsTemplate argv 拆分不符合预期: expected={expected}, actual={captured}")
                 return result
@@ -577,7 +583,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
                 app_id,
                 {
                     "exePath": get_test_python_executable(),
-                    "argsTemplate": "\"unterminated",
+                    "argsTemplate": "foo\\",
                 },
             )
 
@@ -589,6 +595,43 @@ class TestLaunchSpecEdges(unittest.TestCase):
                 scope="",
                 wait_for_register_ms=0,
                 request_id="launch-edge-008",
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_launch_args_template"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            delete_definitions([definition_path] if definition_path else [])
+
+        return result
+
+    def test_launch_edge_008b_unterminated_quote_argstemplate_should_return_invalid_params(self):
+        """LAUNCH-EDGE-008B: 未闭合引号 argsTemplate 必须返回 invalid_launch_args_template。"""
+        result = TestResult("LAUNCH-EDGE-008B 未闭合引号 argsTemplate 返回 invalid_params")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("unterminated-quote-args-template")
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "argsTemplate": "\"unterminated",
+                },
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.launch_app(
+                app_id=app_id,
+                scope="",
+                wait_for_register_ms=0,
+                request_id="launch-edge-008b",
             )
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                 return result
@@ -807,6 +850,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),
             self.test_launch_edge_007_argstemplate_should_split_quotes_and_escapes(),
             self.test_launch_edge_008_invalid_argstemplate_should_return_invalid_params(),
+            self.test_launch_edge_008b_unterminated_quote_argstemplate_should_return_invalid_params(),
             self.test_launch_edge_009_shell_metacharacters_should_remain_argv_literals(),
             self.test_launch_edge_010_structured_args_should_render_templates_and_override_args_template(),
         ]

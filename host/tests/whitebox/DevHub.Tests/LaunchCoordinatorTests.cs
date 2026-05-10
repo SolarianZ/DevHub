@@ -581,11 +581,14 @@ public class LaunchCoordinatorTests : IDisposable
     [Fact]
     public async Task Impl_LaunchAsync_ArgsTemplate_ShouldSplitQuotedArgumentsForProcessStart()
     {
+        const string windowsStylePath = @"C:\Program Files\DevHub\config.json";
+        const string unquotedWindowsLiteral = @"C:\Temp\literal.txt";
+
         WriteDefinition(
             "launch-args-template-split.app",
             includeLaunch: true,
             exePath: "dotnet",
-            argsTemplate: "--name \"hello world\" '--literal value' plain\\ value");
+            argsTemplate: $"--name \"hello world\" '--literal value' plain\\ value \"{windowsStylePath}\" {unquotedWindowsLiteral}");
 
         LaunchConfiguration? capturedLaunchConfig = null;
         var processLauncher = new Mock<IProcessLauncher>();
@@ -604,7 +607,7 @@ public class LaunchCoordinatorTests : IDisposable
             CancellationToken.None);
 
         Assert.True(result.Ok);
-        Assert.Equal(new[] { "--name", "hello world", "--literal value", "plain value" }, capturedLaunchConfig!.Args);
+        Assert.Equal(new[] { "--name", "hello world", "--literal value", "plain value", windowsStylePath, unquotedWindowsLiteral }, capturedLaunchConfig!.Args);
     }
 
     [Fact]
@@ -614,13 +617,40 @@ public class LaunchCoordinatorTests : IDisposable
             "launch-args-template-malformed.app",
             includeLaunch: true,
             exePath: "dotnet",
-            argsTemplate: "\"unterminated");
+            argsTemplate: "foo\\");
 
         var processLauncher = new Mock<IProcessLauncher>();
         var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
         var result = await coordinator.LaunchAsync(
             appId: "launch-args-template-malformed.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32602, result.ErrorCode);
+        Assert.Equal("invalid_params", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("invalid_launch_args_template", errorData.GetProperty("reason").GetString());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_WhenQuoteUnterminated_ShouldReturnInvalidParams()
+    {
+        WriteDefinition(
+            "launch-args-template-unterminated-quote.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "\"unterminated");
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-unterminated-quote.app",
             scope: ScopeContract.Global,
             dedupeKey: null,
             waitForRegisterMs: 0,

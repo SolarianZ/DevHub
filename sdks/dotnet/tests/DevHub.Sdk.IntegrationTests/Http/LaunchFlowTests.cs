@@ -319,6 +319,8 @@ public sealed class LaunchFlowTests
         await using var host = await DevHubHostFixture.StartAsync();
         var scriptPath = CreateCaptureArgvScript();
         var capturePath = Path.Combine(host.DataDirectory, "launch-args-template-argv.json");
+        const string windowsStylePath = @"C:\Program Files\DevHub\config.json";
+        const string unquotedWindowsLiteral = @"C:\Temp\literal.txt";
         await host.WriteDefinitionAsync(new AppDefinition
         {
             AppId = "launch.args-template.app",
@@ -327,7 +329,7 @@ public sealed class LaunchFlowTests
             Launch = new LaunchConfiguration
             {
                 ExePath = GetPythonExecutable(),
-                ArgsTemplate = $"\"{scriptPath}\" \"{capturePath}\" --name \"hello world\" '--literal value' plain\\ value"
+                ArgsTemplate = $"\"{scriptPath}\" \"{capturePath}\" --name \"hello world\" '--literal value' plain\\ value \"{windowsStylePath}\" {unquotedWindowsLiteral}"
             }
         });
 
@@ -341,7 +343,7 @@ public sealed class LaunchFlowTests
         });
 
         using var document = JsonDocument.Parse(await WaitForFileTextAsync(capturePath));
-        Assert.Equal(["--name", "hello world", "--literal value", "plain value"], ReadArgv(document.RootElement));
+        Assert.Equal(["--name", "hello world", "--literal value", "plain value", windowsStylePath, unquotedWindowsLiteral], ReadArgv(document.RootElement));
     }
 
     [Fact]
@@ -356,7 +358,7 @@ public sealed class LaunchFlowTests
             Launch = new LaunchConfiguration
             {
                 ExePath = GetPythonExecutable(),
-                ArgsTemplate = "\"unterminated"
+                ArgsTemplate = "foo\\"
             }
         });
 
@@ -365,6 +367,35 @@ public sealed class LaunchFlowTests
         var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.LaunchAsync(new LaunchRequest
         {
             AppId = "launch.invalid-args-template.app",
+            Scope = string.Empty,
+            WaitForRegisterMs = 0
+        }));
+        Assert.Equal(-32602, exception.Code);
+        Assert.Equal("invalid_params", exception.Message);
+        Assert.Equal("invalid_launch_args_template", exception.Reason);
+    }
+
+    [Fact]
+    public async Task Launch_WhenArgsTemplateQuoteUnterminated_ShouldReturnInvalidParams()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "launch.unterminated-quote-args-template.app",
+            Scope = string.Empty,
+            DisplayName = "launch.unterminated-quote-args-template.app",
+            Launch = new LaunchConfiguration
+            {
+                ExePath = GetPythonExecutable(),
+                ArgsTemplate = "\"unterminated"
+            }
+        });
+
+        await using var client = await host.CreateClientAsync("launch-unterminated-quote-template-client");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.unterminated-quote-args-template.app",
             Scope = string.Empty,
             WaitForRegisterMs = 0
         }));

@@ -1008,7 +1008,7 @@ Hub 在 `hub.apps.validateDefinition` 的成功结果，以及 `hub.apps.upsertD
 - 如果 `AppDefinition.launch.dedupeKeyTemplate` 被省略或为 null，Hub **必须**使用默认模板：`{appId}:{scopeOrGlobal}`。
 - Hub **必须**以 argv 列表启动进程，且**不得**通过 shell 执行启动参数。shell 元字符、命令替换、重定向和管道字符均**必须**作为普通参数文本传递。
 - 当 `launch.args` 存在时，Hub **必须**逐元素执行上述模板替换，并把每个展开后的元素作为恰好一个 argv 参数传递。`launch.args` 存在时，Hub **必须**忽略 `launch.argsTemplate`。
-- 当仅存在 `launch.argsTemplate` 时，Hub **必须**先执行上述模板替换，再按协议定义的 argv 拆分规则生成参数列表：未加引号的 ASCII 空白分隔参数，单引号与双引号仅用于保留其中空白，反斜杠转义其后的单个字符；引号字符本身不进入参数值，未闭合引号或悬空反斜杠**必须**导致 `-32602 invalid_params`。该解析结果仍**必须**作为 argv 传递，**不得**经 shell 执行。
+- 当仅存在 `launch.argsTemplate` 时，Hub **必须**先执行上述模板替换，再按协议定义的 argv 拆分规则生成参数列表：未加引号的 ASCII 空白分隔参数，单引号与双引号仅用于保留其中空白；未加引号时，反斜杠仅在后继字符是 ASCII 空白、引号字符或另一个反斜杠时转义该字符，其他情况下反斜杠按字面量保留；在单引号或双引号内，反斜杠仅在后继字符等于当前引号字符或另一个反斜杠时转义该字符，其他情况下反斜杠按字面量保留。引号字符本身不进入参数值，未闭合引号或悬空反斜杠**必须**导致 `-32602 invalid_params`。该解析结果仍**必须**作为 argv 传递，**不得**经 shell 执行。
 - `waitForRegisterMs` 若省略则默认为 `0`，且**必须**为 ≥ 0 的整数（超出范围 => `-32602 invalid_params`）。
 - 如果缺失 `AppDefinition.launch` 或 `launch.exePath` 缺失/为空白字符串，Hub **必须**在 `hub.apps.launch` 阶段返回 `-32020 launch_failed` 且 `error.data.reason="launch_config_missing"`。`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` **不得**仅因 `launch.exePath` 是空白字符串而拒绝候选 Definition。
 - Hub **必须**读取精确命中的 `AppDefinition.launch.exePath`。若该 `appId + scope` 对应的 Definition 缺失：返回 `-32014 app_definition_not_found`，且 `error.data` **必须**至少包含 `appId` 与原始 canonical `scope`。若进程创建失败：返回 `-32020`。

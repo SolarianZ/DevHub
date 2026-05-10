@@ -524,8 +524,43 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         var escaping = false;
         var tokenStarted = false;
 
-        foreach (var ch in rendered)
+        for (var index = 0; index < rendered.Length; index++)
         {
+            var ch = rendered[index];
+
+            if (quote.HasValue)
+            {
+                if (ch == quote.Value)
+                {
+                    quote = null;
+                    tokenStarted = true;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    if (index + 1 < rendered.Length)
+                    {
+                        var next = rendered[index + 1];
+                        if (next == quote.Value || next == '\\')
+                        {
+                            current.Append(next);
+                            tokenStarted = true;
+                            index++;
+                            continue;
+                        }
+                    }
+
+                    current.Append(ch);
+                    tokenStarted = true;
+                    continue;
+                }
+
+                current.Append(ch);
+                tokenStarted = true;
+                continue;
+            }
+
             if (escaping)
             {
                 current.Append(ch);
@@ -536,18 +571,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
             if (ch == '\\')
             {
-                escaping = true;
-                tokenStarted = true;
-                continue;
-            }
-
-            if (quote.HasValue)
-            {
-                if (ch == quote.Value)
+                if (index + 1 >= rendered.Length)
                 {
-                    quote = null;
-                    tokenStarted = true;
-                    continue;
+                    throw new FormatException("launch argsTemplate has invalid quoting or escaping.");
+                }
+
+                if (index + 1 < rendered.Length)
+                {
+                    var next = rendered[index + 1];
+                    if (char.IsWhiteSpace(next) || next is '\'' or '"' or '\\')
+                    {
+                        escaping = true;
+                        tokenStarted = true;
+                        continue;
+                    }
                 }
 
                 current.Append(ch);
