@@ -208,6 +208,171 @@ public sealed class LaunchFlowTests
         Assert.Equal("definition_scope_mismatch", registerResponse.GetProperty("error").GetProperty("data").GetProperty("reason").GetString());
     }
 
+    [Fact]
+    public async Task Launch_WhenUsingDefaultAndCustomDedupeTemplates_ShouldReturnResolvedDedupeKeys()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var defaultCapturePath = Path.Combine(host.DataDirectory, "launch-default-dedupe-argv.json");
+        var scopedCapturePath = Path.Combine(host.DataDirectory, "launch-custom-dedupe-argv.json");
+        await host.WriteDefinitionAsync(CreateCaptureLaunchDefinition(
+            "launch.default-dedupe.app",
+            defaultCapturePath,
+            scope: string.Empty,
+            args:
+            [
+                "default",
+                "{appId}",
+                "{scope}",
+                "{scopeOrGlobal}",
+                "{httpBaseUrl}"
+            ]));
+        await host.WriteDefinitionAsync(CreateCaptureLaunchDefinition(
+            "launch.custom-dedupe.app",
+            scopedCapturePath,
+            scope: "scope-a",
+            args:
+            [
+                "custom",
+                "{appId}",
+                "{scope}",
+                "{scopeOrGlobal}",
+                "{unknown}"
+            ],
+            dedupeKeyTemplate: "{appId}:{scope}:{scopeOrGlobal}"));
+
+        await using var client = await host.CreateClientAsync("launch-template-client");
+
+        var defaultLaunch = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.default-dedupe.app",
+            Scope = string.Empty,
+            WaitForRegisterMs = 0
+        });
+        var scopedLaunch = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.custom-dedupe.app",
+            Scope = "scope-a",
+            WaitForRegisterMs = 0
+        });
+
+        Assert.Equal("launch.default-dedupe.app:global", defaultLaunch.DedupeKey);
+        Assert.Equal("launch.custom-dedupe.app:scope-a:scope-a", scopedLaunch.DedupeKey);
+
+        using var defaultDocument = JsonDocument.Parse(await WaitForFileTextAsync(defaultCapturePath));
+        var defaultArgv = ReadArgv(defaultDocument.RootElement);
+        Assert.Equal("default", defaultArgv[0]);
+        Assert.Equal("launch.default-dedupe.app", defaultArgv[1]);
+        Assert.Equal(string.Empty, defaultArgv[2]);
+        Assert.Equal("global", defaultArgv[3]);
+        Assert.StartsWith("http://", defaultArgv[4], StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(defaultDocument.RootElement.GetProperty("launchId").GetString()));
+
+        using var scopedDocument = JsonDocument.Parse(await WaitForFileTextAsync(scopedCapturePath));
+        var scopedArgv = ReadArgv(scopedDocument.RootElement);
+        Assert.Equal(["custom", "launch.custom-dedupe.app", "scope-a", "scope-a", "{unknown}"], scopedArgv);
+        Assert.False(string.IsNullOrWhiteSpace(scopedDocument.RootElement.GetProperty("launchId").GetString()));
+    }
+
+    [Fact]
+    public async Task Launch_WhenArgsAndArgsTemplateBothPresent_ShouldUseStructuredArgs()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var structuredCapturePath = Path.Combine(host.DataDirectory, "launch-structured-args.json");
+        var templateCapturePath = Path.Combine(host.DataDirectory, "launch-ignored-template-args.json");
+        var ignoredScriptPath = CreateCaptureArgvScript();
+        await host.WriteDefinitionAsync(CreateCaptureLaunchDefinition(
+            "launch.structured-args.app",
+            structuredCapturePath,
+            scope: "workspace-A",
+            args:
+            [
+                "structured",
+                "{appId}",
+                "{scope}",
+                "{scopeOrGlobal}",
+                "{httpBaseUrl}"
+            ],
+            argsTemplate: $"\"{ignoredScriptPath}\" \"{templateCapturePath}\" template-should-be-ignored"));
+
+        await using var client = await host.CreateClientAsync("launch-structured-args-client");
+
+        _ = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.structured-args.app",
+            Scope = "workspace-A",
+            WaitForRegisterMs = 0
+        });
+
+        using var document = JsonDocument.Parse(await WaitForFileTextAsync(structuredCapturePath));
+        var argv = ReadArgv(document.RootElement);
+        Assert.Equal("structured", argv[0]);
+        Assert.Equal("launch.structured-args.app", argv[1]);
+        Assert.Equal("workspace-A", argv[2]);
+        Assert.Equal("workspace-A", argv[3]);
+        Assert.StartsWith("http://", argv[4], StringComparison.Ordinal);
+        Assert.False(File.Exists(templateCapturePath));
+    }
+
+    [Fact]
+    public async Task Launch_WhenArgsTemplateUsesQuotesAndEscapes_ShouldSplitIntoArgv()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var scriptPath = CreateCaptureArgvScript();
+        var capturePath = Path.Combine(host.DataDirectory, "launch-args-template-argv.json");
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "launch.args-template.app",
+            Scope = string.Empty,
+            DisplayName = "launch.args-template.app",
+            Launch = new LaunchConfiguration
+            {
+                ExePath = GetPythonExecutable(),
+                ArgsTemplate = $"\"{scriptPath}\" \"{capturePath}\" --name \"hello world\" '--literal value' plain\\ value"
+            }
+        });
+
+        await using var client = await host.CreateClientAsync("launch-args-template-client");
+
+        _ = await client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.args-template.app",
+            Scope = string.Empty,
+            WaitForRegisterMs = 0
+        });
+
+        using var document = JsonDocument.Parse(await WaitForFileTextAsync(capturePath));
+        Assert.Equal(["--name", "hello world", "--literal value", "plain value"], ReadArgv(document.RootElement));
+    }
+
+    [Fact]
+    public async Task Launch_WhenArgsTemplateInvalid_ShouldReturnInvalidParams()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "launch.invalid-args-template.app",
+            Scope = string.Empty,
+            DisplayName = "launch.invalid-args-template.app",
+            Launch = new LaunchConfiguration
+            {
+                ExePath = GetPythonExecutable(),
+                ArgsTemplate = "\"unterminated"
+            }
+        });
+
+        await using var client = await host.CreateClientAsync("launch-invalid-template-client");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.LaunchAsync(new LaunchRequest
+        {
+            AppId = "launch.invalid-args-template.app",
+            Scope = string.Empty,
+            WaitForRegisterMs = 0
+        }));
+        Assert.Equal(-32602, exception.Code);
+        Assert.Equal("invalid_params", exception.Message);
+        Assert.Equal("invalid_launch_args_template", exception.Reason);
+    }
+
     private static AppDefinition CreateRegisterOnLaunchDefinition(
         string appId,
         string resultPath,
@@ -299,6 +464,52 @@ if __name__ == "__main__":
         };
     }
 
+    private static AppDefinition CreateCaptureLaunchDefinition(
+        string appId,
+        string capturePath,
+        string scope,
+        List<string> args,
+        string? dedupeKeyTemplate = null,
+        string? argsTemplate = null)
+    {
+        var scriptPath = CreateCaptureArgvScript();
+        return new AppDefinition
+        {
+            AppId = appId,
+            Scope = scope,
+            DisplayName = appId,
+            Launch = new LaunchConfiguration
+            {
+                ExePath = GetPythonExecutable(),
+                Args = [scriptPath, capturePath, .. args],
+                ArgsTemplate = argsTemplate,
+                DedupeKeyTemplate = dedupeKeyTemplate
+            }
+        };
+    }
+
+    private static string CreateCaptureArgvScript()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"devhub-dotnet-sdk-capture-argv-{Guid.NewGuid():N}.py");
+        File.WriteAllText(
+            scriptPath,
+            """
+import json
+import os
+import pathlib
+import sys
+import time
+
+payload = {
+    "argv": sys.argv[2:],
+    "launchId": os.environ.get("DEVHUB_LAUNCH_ID")
+}
+pathlib.Path(sys.argv[1]).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+time.sleep(2)
+""");
+        return scriptPath;
+    }
+
     private static AppDefinition CreateLaunchDefinition(string appId, string scope = "")
     {
         if (OperatingSystem.IsWindows())
@@ -383,5 +594,10 @@ if __name__ == "__main__":
         }
 
         throw new TimeoutException($"未能在限定时间内读取文件：{path}");
+    }
+
+    private static List<string> ReadArgv(JsonElement root)
+    {
+        return root.GetProperty("argv").EnumerateArray().Select(static item => item.GetString() ?? string.Empty).ToList();
     }
 }

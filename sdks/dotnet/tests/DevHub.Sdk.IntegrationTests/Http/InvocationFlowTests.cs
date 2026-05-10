@@ -308,6 +308,182 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
+    public async Task TargetInstanceId_ShouldRouteOnlyToSpecifiedInstance_AndMissingTargetShouldReturnReason()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.target-instance.app",
+            Scope = "scope-a",
+            DisplayName = "invoke.target-instance.app.scope-a"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-target-instance-client");
+        var targetInstance = await RegisterInstanceAsync(client, "invoke.target-instance.app", "target-instance-inst-1", scope: "scope-a");
+        var peerInstance = await RegisterInstanceAsync(client, "invoke.target-instance.app", "target-instance-inst-2", scope: "scope-a");
+
+        var notifyResult = await client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.target-instance.app",
+            Method = "test.target.notify",
+            Target = new InvocationTarget
+            {
+                Scope = "scope-a",
+                InstanceId = targetInstance.Instance.InstanceId
+            },
+            Options = new InvocationOptions
+            {
+                AutoLaunch = false,
+                QueueIfOffline = false
+            }
+        });
+
+        Assert.True(notifyResult.Ok);
+        var notifyInvocation = await WaitForSingleInvocationAsync(client, targetInstance.Instance.InstanceId, targetInstance.InstanceSessionToken);
+        Assert.Equal(notifyResult.InvocationId, notifyInvocation.InvocationId);
+        Assert.Empty((await client.PollAsync(new PollRequest
+        {
+            InstanceId = peerInstance.Instance.InstanceId,
+            InstanceSessionToken = peerInstance.InstanceSessionToken,
+            WaitMs = 0
+        })).Items);
+
+        var requestTask = client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.target-instance.app",
+            Method = "test.target.request",
+            Target = new InvocationTarget
+            {
+                Scope = "scope-a",
+                InstanceId = targetInstance.Instance.InstanceId
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000,
+                AutoLaunch = false,
+                QueueIfOffline = false
+            }
+        });
+
+        var requestInvocation = await WaitForSingleInvocationAsync(client, targetInstance.Instance.InstanceId, targetInstance.InstanceSessionToken);
+        Assert.Empty((await client.PollAsync(new PollRequest
+        {
+            InstanceId = peerInstance.Instance.InstanceId,
+            InstanceSessionToken = peerInstance.InstanceSessionToken,
+            WaitMs = 0
+        })).Items);
+
+        await client.RespondAsync(new RespondRequest
+        {
+            InstanceId = targetInstance.Instance.InstanceId,
+            InstanceSessionToken = targetInstance.InstanceSessionToken,
+            InvocationId = requestInvocation.InvocationId,
+            LeaseToken = requestInvocation.Delivery!.LeaseToken,
+            Value = new { ok = true, routed = targetInstance.Instance.InstanceId }
+        });
+
+        var requestResult = await requestTask;
+        Assert.True(requestResult.Ok);
+        Assert.Equal(targetInstance.Instance.InstanceId, requestResult.Value!.Value.GetProperty("routed").GetString());
+
+        var missingNotifyException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.target-instance.app",
+            Method = "test.target.notify.missing",
+            Target = new InvocationTarget
+            {
+                Scope = "scope-a",
+                InstanceId = "target-instance-missing"
+            },
+            Options = new InvocationOptions
+            {
+                AutoLaunch = false,
+                QueueIfOffline = false
+            }
+        }));
+        Assert.Equal(-32010, missingNotifyException.Code);
+        Assert.Equal("target_instance_missing", missingNotifyException.Reason);
+
+        var missingRequestException = await Assert.ThrowsAsync<DevHubRpcException>(() => client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.target-instance.app",
+            Method = "test.target.request.missing",
+            Target = new InvocationTarget
+            {
+                Scope = "scope-a",
+                InstanceId = "target-instance-missing"
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 3000,
+                WaitTimeoutMs = 1000,
+                AutoLaunch = false,
+                QueueIfOffline = false
+            }
+        }));
+        Assert.Equal(-32010, missingRequestException.Code);
+        Assert.Equal("target_instance_missing", missingRequestException.Reason);
+        Assert.Empty((await client.PollAsync(new PollRequest
+        {
+            InstanceId = targetInstance.Instance.InstanceId,
+            InstanceSessionToken = targetInstance.InstanceSessionToken,
+            WaitMs = 0
+        })).Items);
+        Assert.Empty((await client.PollAsync(new PollRequest
+        {
+            InstanceId = peerInstance.Instance.InstanceId,
+            InstanceSessionToken = peerInstance.InstanceSessionToken,
+            WaitMs = 0
+        })).Items);
+    }
+
+    [Fact]
+    public async Task RequestAsync_WhenCallerCancelsWaiting_ShouldLeaveInvocationRespondable()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.cancel-wait.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.cancel-wait.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-cancel-wait-client");
+        var registered = await RegisterInstanceAsync(client, "invoke.cancel-wait.app", "cancel-wait-inst-1", scope: string.Empty);
+        using var waitCancellation = new CancellationTokenSource();
+
+        var requestTask = client.RequestAsync(new InvokeRequest
+        {
+            AppId = "invoke.cancel-wait.app",
+            Method = "test.cancel.wait",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        }, waitCancellation.Token);
+
+        await Task.Delay(200);
+        await waitCancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => requestTask);
+
+        var invocation = await WaitForSingleInvocationAsync(client, registered.Instance.InstanceId, registered.InstanceSessionToken);
+        await client.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
+            Value = new { ok = true, value = 42 }
+        });
+    }
+
+    [Fact]
     public async Task PollAndRespond_WithSessionTokenMismatch_ShouldMapForbidden()
     {
         await using var host = await DevHubHostFixture.StartAsync();

@@ -120,6 +120,198 @@ public sealed class HttpFlowTests
     }
 
     [Fact]
+    public async Task Impl_Register_WithMatchingPassword_ShouldRotateInstanceSessionTokenAndInvalidateOldToken()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "token.rotate.app",
+            Scope = string.Empty,
+            DisplayName = "Token Rotate App"
+        });
+
+        await using var client = await host.CreateClientAsync("token-rotate-client");
+        var registration = new AppInstanceRegistration
+        {
+            InstanceId = "token-rotate-inst",
+            AppId = "token.rotate.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        };
+
+        var firstRegistration = await client.RegisterInstanceAsync(registration, InstancePassword);
+        var secondRegistration = await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = registration.InstanceId,
+            AppId = registration.AppId,
+            Scope = registration.Scope,
+            Pid = registration.Pid + 1,
+            Invoke = registration.Invoke
+        }, InstancePassword);
+
+        Assert.NotEqual(firstRegistration.InstanceSessionToken, secondRegistration.InstanceSessionToken);
+
+        var staleHeartbeat = await Assert.ThrowsAsync<DevHubRpcException>(() => client.HeartbeatAsync(
+            registration.InstanceId,
+            firstRegistration.InstanceSessionToken));
+        Assert.Equal(-32002, staleHeartbeat.Code);
+        Assert.Equal("instance_session_token_mismatch", staleHeartbeat.Reason);
+
+        var lastSeenUtc = await client.HeartbeatAsync(registration.InstanceId, secondRegistration.InstanceSessionToken);
+        Assert.NotEqual(default, lastSeenUtc);
+
+        var staleUnregister = await Assert.ThrowsAsync<DevHubRpcException>(() => client.UnregisterInstanceAsync(
+            registration.InstanceId,
+            firstRegistration.InstanceSessionToken));
+        Assert.Equal(-32002, staleUnregister.Code);
+        Assert.Equal("instance_session_token_mismatch", staleUnregister.Reason);
+
+        await client.UnregisterInstanceAsync(registration.InstanceId, secondRegistration.InstanceSessionToken);
+    }
+
+    [Fact]
+    public async Task Impl_Register_WithMatchingPasswordAndDifferentIdentityFromSecondClient_ShouldReturnIdentityMismatch()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "identity.original.app",
+            Scope = string.Empty,
+            DisplayName = "Identity Original App"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "identity.changed.app",
+            Scope = string.Empty,
+            DisplayName = "Identity Changed App"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "identity.original.app",
+            Scope = "scope-a",
+            DisplayName = "Identity Original App Scope A"
+        });
+
+        await using var ownerClient = await host.CreateClientAsync("identity-owner-client");
+        await using var competingClient = await host.CreateClientAsync("identity-competing-client");
+        var registered = await ownerClient.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "identity-mismatch-inst",
+            AppId = "identity.original.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, InstancePassword);
+
+        var appIdMismatch = await Assert.ThrowsAsync<DevHubRpcException>(() => competingClient.RegisterInstanceAsync(
+            new AppInstanceRegistration
+            {
+                InstanceId = "identity-mismatch-inst",
+                AppId = "identity.changed.app",
+                Scope = string.Empty,
+                Pid = Environment.ProcessId + 1,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            InstancePassword));
+        Assert.Equal(-32002, appIdMismatch.Code);
+        Assert.Equal("instance_identity_mismatch", appIdMismatch.Reason);
+
+        var scopeMismatch = await Assert.ThrowsAsync<DevHubRpcException>(() => competingClient.RegisterInstanceAsync(
+            new AppInstanceRegistration
+            {
+                InstanceId = "identity-mismatch-inst",
+                AppId = "identity.original.app",
+                Scope = "scope-a",
+                Pid = Environment.ProcessId + 2,
+                Invoke = new InvokeCapability
+                {
+                    Poll = true,
+                    Respond = true
+                }
+            },
+            InstancePassword));
+        Assert.Equal(-32002, scopeMismatch.Code);
+        Assert.Equal("instance_identity_mismatch", scopeMismatch.Reason);
+
+        var instance = await ownerClient.GetInstanceAsync("identity-mismatch-inst");
+        Assert.Equal("identity.original.app", instance.AppId);
+        Assert.Equal(string.Empty, instance.Scope);
+
+        await ownerClient.UnregisterInstanceAsync("identity-mismatch-inst", registered.InstanceSessionToken);
+    }
+
+    [Fact]
+    public async Task Impl_ListDefinitions_ShouldReturnDefinitionsInOrdinalOrderWithGlobalFirstWithinSameAppId()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.beta.app",
+            Scope = "scope-b",
+            DisplayName = "Sort Beta Scope B"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.alpha.app",
+            Scope = "scope-b",
+            DisplayName = "Sort Alpha Scope B"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.alpha.app",
+            Scope = string.Empty,
+            DisplayName = "Sort Alpha Global"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.alpha.app",
+            Scope = "scope-a",
+            DisplayName = "Sort Alpha Scope A"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.beta.app",
+            Scope = string.Empty,
+            DisplayName = "Sort Beta Global"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "sort.beta.app",
+            Scope = "scope-a",
+            DisplayName = "Sort Beta Scope A"
+        });
+
+        await using var client = await host.CreateClientAsync("definition-sort-client");
+        var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            Scope = null
+        });
+
+        Assert.Equal(new[]
+        {
+            ("sort.alpha.app", string.Empty),
+            ("sort.alpha.app", "scope-a"),
+            ("sort.alpha.app", "scope-b"),
+            ("sort.beta.app", string.Empty),
+            ("sort.beta.app", "scope-a"),
+            ("sort.beta.app", "scope-b")
+        }, definitions.Select(definition => (definition.AppId, definition.Scope)).ToArray());
+    }
+
+    [Fact]
     public async Task Impl_ListQueries_ShouldTreatNullAsNoFilterAndEmptyStringAsGlobalOnly()
     {
         await using var host = await DevHubHostFixture.StartAsync();

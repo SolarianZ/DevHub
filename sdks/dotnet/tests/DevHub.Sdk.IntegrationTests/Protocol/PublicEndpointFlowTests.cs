@@ -128,11 +128,177 @@ public sealed class PublicEndpointFlowTests
         AssertTransportMismatch(wsDocument.RootElement, "ws-http-only-method", "http");
     }
 
+    [Fact]
+    public async Task PublicRpcEndpoint_ShouldValidateEnvelopeAndTransportBeforeDispatch()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var runtime = await ReadRuntimeAsync(host.RuntimeDirectory);
+        var token = await File.ReadAllTextAsync(runtime.TokenFile);
+
+        using var httpClient = new HttpClient();
+
+        using var invalidJson = await httpClient.SendAsync(CreateRawRpcRequest(
+            runtime,
+            token,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"bad-json-id\",\"method\":\"hub.ping\",\"params\":",
+            contentType: "application/json"));
+        using (var document = JsonDocument.Parse(await invalidJson.Content.ReadAsStringAsync()))
+        {
+            AssertRpcError(document.RootElement, expectedCode: -32700, expectedMessage: "parse_error", expectedId: null);
+        }
+
+        using var batchRoot = await httpClient.SendAsync(CreateRawRpcRequest(
+            runtime,
+            token,
+            "[{\"jsonrpc\":\"2.0\",\"id\":\"batch-root\",\"method\":\"hub.ping\",\"params\":{}}]",
+            contentType: "application/json"));
+        using (var document = JsonDocument.Parse(await batchRoot.Content.ReadAsStringAsync()))
+        {
+            AssertRpcError(document.RootElement, expectedCode: -32600, expectedMessage: "invalid_request", expectedId: null);
+        }
+
+        using var missingContentType = await httpClient.SendAsync(CreateRawRpcRequest(
+            runtime,
+            token,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"missing-content-type\",\"method\":\"hub.ping\",\"params\":{}}",
+            contentType: null));
+        using (var document = JsonDocument.Parse(await missingContentType.Content.ReadAsStringAsync()))
+        {
+            var error = AssertRpcError(document.RootElement, expectedCode: -32600, expectedMessage: "invalid_request", expectedId: null);
+            Assert.Equal("invalid_content_type", error.GetProperty("data").GetProperty("reason").GetString());
+        }
+
+        using var missingSessionIdRequest = CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            id = "missing-session-id",
+            method = "hub.ping",
+            @params = new { }
+        });
+        missingSessionIdRequest.Headers.Remove("X-DevHub-ClientSessionId");
+        using var missingSessionId = await httpClient.SendAsync(missingSessionIdRequest);
+        using (var document = JsonDocument.Parse(await missingSessionId.Content.ReadAsStringAsync()))
+        {
+            var error = AssertRpcError(document.RootElement, expectedCode: -32600, expectedMessage: "invalid_request", expectedId: null);
+            var data = error.GetProperty("data");
+            Assert.Equal("missing_header", data.GetProperty("reason").GetString());
+            Assert.Equal("X-DevHub-ClientSessionId", data.GetProperty("header").GetString());
+        }
+
+        using var invalidSessionIdRequest = CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            id = "invalid-session-id",
+            method = "hub.ping",
+            @params = new { }
+        });
+        invalidSessionIdRequest.Headers.Remove("X-DevHub-ClientSessionId");
+        invalidSessionIdRequest.Headers.TryAddWithoutValidation("X-DevHub-ClientSessionId", "not-a-uuid");
+        using var invalidSessionId = await httpClient.SendAsync(invalidSessionIdRequest);
+        using (var document = JsonDocument.Parse(await invalidSessionId.Content.ReadAsStringAsync()))
+        {
+            var error = AssertRpcError(document.RootElement, expectedCode: -32600, expectedMessage: "invalid_request", expectedId: null);
+            var data = error.GetProperty("data");
+            Assert.Equal("invalid_header", data.GetProperty("reason").GetString());
+            Assert.Equal("X-DevHub-ClientSessionId", data.GetProperty("header").GetString());
+        }
+
+        using var invalidTokenInvalidJson = CreateRawRpcRequest(
+            runtime,
+            token,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"invalid-token-invalid-json\",\"method\":\"hub.ping\",\"params\":",
+            contentType: "application/json");
+        invalidTokenInvalidJson.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "bad-token");
+        using var unauthorized = await httpClient.SendAsync(invalidTokenInvalidJson);
+        using (var document = JsonDocument.Parse(await unauthorized.Content.ReadAsStringAsync()))
+        {
+            var error = AssertRpcError(document.RootElement, expectedCode: -32001, expectedMessage: "unauthorized", expectedId: null);
+            Assert.Equal("invalid_token", error.GetProperty("data").GetProperty("reason").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task PublicRpcEndpoint_ShouldHandleNotificationsAndCors()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        var runtime = await ReadRuntimeAsync(host.RuntimeDirectory);
+        var token = await File.ReadAllTextAsync(runtime.TokenFile);
+
+        using var httpClient = new HttpClient();
+        using var notification = await httpClient.SendAsync(CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            method = "hub.ping",
+            @params = new { echo = "notify" }
+        }));
+        Assert.Equal(HttpStatusCode.OK, notification.StatusCode);
+        Assert.Equal(string.Empty, await notification.Content.ReadAsStringAsync());
+
+        using var failedNotificationRequest = CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            method = "hub.ping",
+            @params = new { echo = "notify" }
+        });
+        failedNotificationRequest.Headers.Remove("Authorization");
+        using var failedNotification = await httpClient.SendAsync(failedNotificationRequest);
+        using (var document = JsonDocument.Parse(await failedNotification.Content.ReadAsStringAsync()))
+        {
+            var error = AssertRpcError(document.RootElement, expectedCode: -32001, expectedMessage: "unauthorized", expectedId: null);
+            Assert.Equal("missing_token", error.GetProperty("data").GetProperty("reason").GetString());
+        }
+
+        const string successOrigin = "tauri://localhost";
+        using var corsSuccessRequest = CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            id = "cors-success",
+            method = "hub.ping",
+            @params = new { }
+        });
+        corsSuccessRequest.Headers.TryAddWithoutValidation("Origin", successOrigin);
+        using var corsSuccess = await httpClient.SendAsync(corsSuccessRequest);
+        AssertOriginCorsHeaders(corsSuccess, successOrigin);
+
+        const string errorOrigin = "http://localhost:1420";
+        using var corsErrorRequest = CreateRpcRequest(runtime, token, new
+        {
+            jsonrpc = "2.0",
+            id = "cors-error",
+            method = "hub.ping",
+            @params = new { }
+        });
+        corsErrorRequest.Headers.Remove("X-DevHub-Protocol");
+        corsErrorRequest.Headers.TryAddWithoutValidation("Origin", errorOrigin);
+        using var corsError = await httpClient.SendAsync(corsErrorRequest);
+        AssertOriginCorsHeaders(corsError, errorOrigin);
+        using (var document = JsonDocument.Parse(await corsError.Content.ReadAsStringAsync()))
+        {
+            AssertRpcError(document.RootElement, expectedCode: -32099, expectedMessage: "not_supported", expectedId: null);
+        }
+    }
+
     private static HttpRequestMessage CreateRpcRequest(RuntimeInfo runtime, string token, object payload)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, BuildRpcUri(runtime))
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
+        request.Headers.TryAddWithoutValidation("X-DevHub-Protocol", "1");
+        request.Headers.TryAddWithoutValidation("X-DevHub-ClientId", "public-endpoint-http-client");
+        request.Headers.TryAddWithoutValidation("X-DevHub-ClientSessionId", "00000000-0000-0000-0000-000000000200");
+        return request;
+    }
+
+    private static HttpRequestMessage CreateRawRpcRequest(RuntimeInfo runtime, string token, string body, string? contentType)
+    {
+        var content = new StringContent(body, Encoding.UTF8);
+        content.Headers.ContentType = contentType is null ? null : MediaTypeHeaderValue.Parse(contentType);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildRpcUri(runtime))
+        {
+            Content = content
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
         request.Headers.TryAddWithoutValidation("X-DevHub-Protocol", "1");
@@ -196,6 +362,31 @@ public sealed class PublicEndpointFlowTests
         Assert.Equal("not_supported", error.GetProperty("message").GetString());
         Assert.Equal("transport_mismatch", error.GetProperty("data").GetProperty("reason").GetString());
         Assert.Equal(expectedTransport, error.GetProperty("data").GetProperty("expected").GetString());
+    }
+
+    private static JsonElement AssertRpcError(JsonElement root, int expectedCode, string expectedMessage, string? expectedId)
+    {
+        Assert.Equal("2.0", root.GetProperty("jsonrpc").GetString());
+        var id = root.GetProperty("id");
+        if (expectedId is null)
+        {
+            Assert.Equal(JsonValueKind.Null, id.ValueKind);
+        }
+        else
+        {
+            Assert.Equal(expectedId, id.GetString());
+        }
+
+        var error = root.GetProperty("error");
+        Assert.Equal(expectedCode, error.GetProperty("code").GetInt32());
+        Assert.Equal(expectedMessage, error.GetProperty("message").GetString());
+        return error;
+    }
+
+    private static void AssertOriginCorsHeaders(HttpResponseMessage response, string origin)
+    {
+        Assert.Equal(origin, response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        Assert.Contains(response.Headers.Vary, value => string.Equals(value, "Origin", StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed record RuntimeInfo(string HttpBaseUrl, string WsUrl, string TokenFile);

@@ -206,6 +206,152 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
+    public async Task SubscribeWithoutTypesAndEmptyTypes_ShouldReceiveAllEventTypes()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var omittedTypesClient = await host.CreateEventsClientAsync("events-all-omitted-types-client");
+        await using var emptyTypesClient = await host.CreateEventsClientAsync("events-all-empty-types-client");
+        await using var httpClient = await host.CreateClientAsync("events-all-http-client");
+
+        await omittedTypesClient.AuthenticateAsync();
+        await emptyTypesClient.AuthenticateAsync();
+        var omittedTypesSubscriptionId = await omittedTypesClient.SubscribeAsync();
+        var emptyTypesSubscriptionId = await emptyTypesClient.SubscribeAsync(Array.Empty<DevHubEventType>());
+        await using var omittedTypesEnumerator = omittedTypesClient.ReadEventsAsync().GetAsyncEnumerator();
+        await using var emptyTypesEnumerator = emptyTypesClient.ReadEventsAsync().GetAsyncEnumerator();
+
+        var observedByOmittedTypes = new List<DevHubEventType>();
+        var observedByEmptyTypes = new List<DevHubEventType>();
+        var definition = new AppDefinition
+        {
+            AppId = "events.subscribe-all.app",
+            Scope = string.Empty,
+            DisplayName = "Events Subscribe All App"
+        };
+
+        _ = await httpClient.UpsertDefinitionAsync(definition);
+        await AssertNextEventPairAsync(DevHubEventTypes.AppDefinitionUpserted);
+
+        var registered = await httpClient.RegisterInstanceAsync(CreateInstance(definition.AppId, "events-subscribe-all-inst-1"), InstancePassword);
+        await AssertNextEventPairAsync(DevHubEventTypes.AppInstanceRegistered);
+
+        var completedRequestTask = httpClient.RequestAsync(new InvokeRequest
+        {
+            AppId = definition.AppId,
+            Method = "test.subscribe.all.success",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationQueued);
+        var completedInvocation = await WaitForSingleInvocationAsync(httpClient, registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationDelivered);
+
+        await httpClient.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = completedInvocation.InvocationId,
+            LeaseToken = completedInvocation.Delivery!.LeaseToken,
+            Value = new { ok = true }
+        });
+
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationCompleted);
+        _ = await completedRequestTask;
+
+        var failedRequestTask = httpClient.RequestAsync(new InvokeRequest
+        {
+            AppId = definition.AppId,
+            Method = "test.subscribe.all.failure",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationQueued);
+        var failedInvocation = await WaitForSingleInvocationAsync(httpClient, registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationDelivered);
+
+        await httpClient.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = failedInvocation.InvocationId,
+            LeaseToken = failedInvocation.Delivery!.LeaseToken,
+            Error = DevHubCalleeError.Create(1001, "app_error", new { reason = "expected" })
+        });
+
+        await AssertNextEventPairAsync(DevHubEventTypes.InvocationFailed);
+        _ = await Assert.ThrowsAsync<DevHubRpcException>(() => failedRequestTask);
+
+        await httpClient.UnregisterInstanceAsync(registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        await AssertNextEventPairAsync(DevHubEventTypes.AppInstanceUnregistered);
+
+        await httpClient.DeleteDefinitionAsync(definition.AppId, definition.Scope);
+        await AssertNextEventPairAsync(DevHubEventTypes.AppDefinitionDeleted);
+
+        Assert.Equal(
+            DevHubEventTypes.All.OrderBy(static item => item.Value),
+            observedByOmittedTypes.Distinct().OrderBy(static item => item.Value));
+        Assert.Equal(
+            DevHubEventTypes.All.OrderBy(static item => item.Value),
+            observedByEmptyTypes.Distinct().OrderBy(static item => item.Value));
+
+        async Task AssertNextEventPairAsync(DevHubEventType expectedType)
+        {
+            var omittedTypesEvent = await ReadNextEventAsync(omittedTypesEnumerator, TimeSpan.FromSeconds(3));
+            var emptyTypesEvent = await ReadNextEventAsync(emptyTypesEnumerator, TimeSpan.FromSeconds(3));
+
+            Assert.Equal(omittedTypesSubscriptionId, omittedTypesEvent.SubscriptionId);
+            Assert.Equal(emptyTypesSubscriptionId, emptyTypesEvent.SubscriptionId);
+            Assert.Equal(expectedType, omittedTypesEvent.Type);
+            Assert.Equal(expectedType, emptyTypesEvent.Type);
+
+            observedByOmittedTypes.Add(omittedTypesEvent.Type);
+            observedByEmptyTypes.Add(emptyTypesEvent.Type);
+        }
+    }
+
+    [Fact]
+    public async Task UnsubscribeMissingSubscriptionId_ShouldSucceedAndPreserveSubsequentDelivery()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "events.unsubscribe-missing.app",
+            Scope = string.Empty,
+            DisplayName = "events.unsubscribe-missing.app"
+        });
+
+        await using var eventsClient = await host.CreateEventsClientAsync("events-unsubscribe-missing-client");
+        await using var httpClient = await host.CreateClientAsync("events-unsubscribe-missing-http-client");
+
+        await eventsClient.AuthenticateAsync();
+        await eventsClient.UnsubscribeAsync("missing-subscription-id");
+
+        var subscriptionId = await eventsClient.SubscribeAsync(new[] { DevHubEventTypes.AppInstanceRegistered });
+        await httpClient.RegisterInstanceAsync(CreateInstance("events.unsubscribe-missing.app", "events-unsubscribe-missing-inst-1"), InstancePassword);
+
+        var deliveredEvent = await ReadSingleEventAsync(eventsClient, TimeSpan.FromSeconds(2));
+        Assert.Equal(subscriptionId, deliveredEvent.SubscriptionId);
+        Assert.Equal(DevHubEventTypes.AppInstanceRegistered, deliveredEvent.Type);
+        Assert.Equal("events-unsubscribe-missing-inst-1", deliveredEvent.Payload!.Value.GetProperty("instanceId").GetString());
+    }
+
+    [Fact]
     public async Task DisconnectCleanup_ShouldRequireResubscribeAfterReconnect()
     {
         await using var host = await DevHubHostFixture.StartAsync();
