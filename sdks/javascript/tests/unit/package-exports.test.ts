@@ -1,5 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { expect, it } from "vitest";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { afterEach, expect, it } from "vitest";
 import * as sdk from "../../src/index.js";
 import {
   APP_DEFINITION_UPSERTED,
@@ -9,6 +13,15 @@ import {
 import { JsonRpcHttpTransport } from "../../src/http-transport.js";
 import { FileSystemRuntimeResolver } from "../../src/runtime.js";
 import { JsonRpcWsSession } from "../../src/ws-session.js";
+
+const execFileAsync = promisify(execFile);
+const tempRoots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempRoots.splice(0).map(async (target) => {
+    await rm(target, { recursive: true, force: true });
+  }));
+});
 
 it("顶层入口应导出高级扩展点", () => {
   expect(sdk.JsonRpcHttpTransport).toBe(JsonRpcHttpTransport);
@@ -41,8 +54,8 @@ it("package exports 应为 runtime 提供显式子路径", async () => {
 });
 
 it("构建后的根入口应保持浏览器安全", async () => {
-  const distIndexUrl = new URL("../../dist/index.js", import.meta.url);
-  const distIndex = await readFile(distIndexUrl, "utf-8");
+  const outDir = await buildPackageToTempDist();
+  const distIndex = await readFile(path.join(outDir, "index.js"), "utf-8");
 
   expect(distIndex).not.toContain("./runtime.js");
   expect(distIndex).not.toMatch(/["']node:[^"']+["']/);
@@ -56,3 +69,35 @@ it("源码根入口不得静态解析 Node 专用 ws 依赖", async () => {
   expect(wsSessionSource).not.toMatch(/from\s+["']ws["']/);
   expect(wsSessionSource).not.toContain("@types/ws");
 });
+
+async function buildPackageToTempDist(): Promise<string> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "devhub-js-sdk-dist-unit-"));
+  tempRoots.push(tempRoot);
+
+  const outDir = path.join(tempRoot, "dist");
+  const tsconfigPath = path.join(tempRoot, "tsconfig.build.json");
+  const sdkRoot = new URL("../..", import.meta.url);
+  const sdkRootPath = sdkRoot.pathname;
+  const tscPath = new URL("../../node_modules/typescript/bin/tsc", import.meta.url);
+
+  await writeFile(
+    tsconfigPath,
+    JSON.stringify({
+      extends: new URL("../../tsconfig.build.json", import.meta.url).pathname,
+      compilerOptions: {
+        outDir,
+        typeRoots: [
+          path.join(sdkRootPath, "node_modules", "@types")
+        ]
+      }
+    }),
+    "utf-8"
+  );
+
+  await execFileAsync(process.execPath, [tscPath.pathname, "-p", tsconfigPath], {
+    cwd: sdkRootPath,
+    maxBuffer: 10 * 1024 * 1024
+  });
+
+  return outDir;
+}
