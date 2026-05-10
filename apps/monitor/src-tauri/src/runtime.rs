@@ -426,6 +426,69 @@ mod tests {
     }
 
     #[test]
+    fn discover_runtime_accepts_non_zero_protocol_version_for_compatibility_assessment() {
+        let data_directory = create_temp_directory("runtime-protocol-unsupported");
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        let token_path = runtime_directory.join("token.txt");
+        fs::write(&token_path, "secret-token\n").expect("failed to write token");
+        let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+            "protocolVersion": 2,
+            "pid": 4321,
+            "httpBaseUrl": "http://127.0.0.1:4123",
+            "wsUrl": "ws://127.0.0.1:4123/ws",
+            "tokenFile": token_path.display().to_string(),
+            "startedAtUtc": "2026-04-12T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 15,
+                "launchDedupeWindowSeconds": 5,
+                "launchRegisterTimeoutSeconds": 45
+            },
+            "hubVersion": "0.7.0"
+        }))
+        .expect("failed to serialize hub.json");
+        fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
+
+        let connection = discover_runtime(&data_directory).expect("expected runtime discovery");
+
+        assert_eq!(connection.runtime.protocol_version, 2);
+        assert_eq!(connection.token, "secret-token");
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn discover_runtime_rejects_zero_protocol_version_as_invalid_layout() {
+        let data_directory = create_temp_directory("runtime-protocol-zero");
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        let token_path = runtime_directory.join("token.txt");
+        fs::write(&token_path, "secret-token\n").expect("failed to write token");
+        let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+            "protocolVersion": 0,
+            "pid": 4321,
+            "httpBaseUrl": "http://127.0.0.1:4123",
+            "wsUrl": "ws://127.0.0.1:4123/ws",
+            "tokenFile": token_path.display().to_string(),
+            "startedAtUtc": "2026-04-12T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 15,
+                "launchDedupeWindowSeconds": 5,
+                "launchRegisterTimeoutSeconds": 45
+            }
+        }))
+        .expect("failed to serialize hub.json");
+        fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
+
+        let error = discover_runtime(&data_directory).expect_err("expected invalid runtime");
+        assert!(error.to_string().contains("hub.json.protocolVersion"));
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
     fn discover_runtime_rejects_legacy_runtime_root_layout() {
         let data_directory = create_temp_directory("runtime-legacy");
         fs::write(data_directory.join("hub.json"), "{}").expect("failed to write legacy hub.json");

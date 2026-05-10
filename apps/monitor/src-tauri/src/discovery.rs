@@ -21,6 +21,18 @@ use tokio::time::{sleep, Duration, Instant};
 const DISCOVERY_INTERVAL: Duration = Duration::from_millis(500);
 const LAUNCH_ACTION_DELAY: Duration = Duration::from_secs(3);
 
+#[derive(Debug, Clone)]
+enum RuntimeDiscoverySuccess {
+    HostAvailable {
+        connection: MonitorRuntimeConnectionInfo,
+        compatibility: RuntimeCompatibilityAssessment,
+    },
+    HostIncompatible {
+        connection: MonitorRuntimeConnectionInfo,
+        compatibility: RuntimeCompatibilityAssessment,
+    },
+}
+
 #[derive(Clone)]
 pub struct DiscoveryCoordinator {
     settings_service: SettingsService,
@@ -135,80 +147,68 @@ impl DiscoveryCoordinator {
             let resolved = self.settings_service.resolve_effective_data_dir();
 
             let discovery_result = match discover_runtime(Path::new(&resolved.path)) {
-                Ok(connection) => match verify_runtime(&connection).await {
-                    Ok(verification) => Ok((connection, verification)),
-                    Err(error) => Err(error),
-                },
+                Ok(connection) => {
+                    match assess_discovered_runtime_before_verification(&connection) {
+                        Some(compatibility) => Ok(RuntimeDiscoverySuccess::HostIncompatible {
+                            connection,
+                            compatibility,
+                        }),
+                        None => match verify_runtime(&connection).await {
+                            Ok(verification) => {
+                                let compatibility = assess_runtime_compatibility_with_host_version(
+                                    &connection,
+                                    verification.host_version.as_deref(),
+                                );
+
+                                if compatibility.problem.is_some() {
+                                    Ok(RuntimeDiscoverySuccess::HostIncompatible {
+                                        connection,
+                                        compatibility,
+                                    })
+                                } else {
+                                    Ok(RuntimeDiscoverySuccess::HostAvailable {
+                                        connection,
+                                        compatibility,
+                                    })
+                                }
+                            }
+                            Err(error) => Err(error),
+                        },
+                    }
+                }
                 Err(error) => Err(error),
             };
 
             match discovery_result {
-                Ok((connection, verification)) => {
+                Ok(RuntimeDiscoverySuccess::HostIncompatible {
+                    connection,
+                    compatibility,
+                }) => {
                     if !self.snapshot_publisher.is_current_generation(generation) {
                         return Ok(());
                     }
 
-                    let compatibility = assess_runtime_compatibility_with_host_version(
+                    if !self.publish_incompatible_runtime(
+                        &app,
+                        generation,
+                        settings,
+                        resolved,
                         &connection,
-                        verification.host_version.as_deref(),
-                    );
+                        &compatibility,
+                        &mut last_incompatible_message,
+                    )? {
+                        return Ok(());
+                    }
 
-                    if let Some(incompatible_problem) = compatibility.problem.clone() {
-                        let incompatible_message = incompatible_problem.message.clone();
-                        if last_incompatible_message.as_deref()
-                            != Some(incompatible_message.as_str())
-                        {
-                            let snapshot = build_snapshot(
-                                generation,
-                                BootstrapPhase::HostIncompatible,
-                                settings,
-                                resolved.clone(),
-                                None,
-                                Some(incompatible_problem.clone()),
-                            );
-                            if !self
-                                .snapshot_publisher
-                                .publish_if_current(&app, generation, snapshot)
-                            {
-                                return Ok(());
-                            }
-
-                            record_backend_log(
-                                &self.log_service,
-                                resolved.path.clone(),
-                                MonitorLogLevel::Warn,
-                                "discovery",
-                                "validate_host",
-                                "incompatible",
-                                Some(&incompatible_problem.message),
-                                Some(json_map(vec![
-                                    ("dataDir", Value::String(resolved.path.clone())),
-                                    (
-                                        "protocolVersion",
-                                        Value::from(connection.runtime.protocol_version),
-                                    ),
-                                    (
-                                        "hubVersion",
-                                        compatibility
-                                            .result
-                                            .host_version
-                                            .clone()
-                                            .map(Value::String)
-                                            .unwrap_or(Value::Null),
-                                    ),
-                                    (
-                                        "compatibilityStatus",
-                                        Value::String(
-                                            compatibility.result.status.as_str().to_string(),
-                                        ),
-                                    ),
-                                ])),
-                            )?;
-                            last_incompatible_message = Some(incompatible_message);
-                        }
-
-                        sleep(DISCOVERY_INTERVAL).await;
-                        continue;
+                    sleep(DISCOVERY_INTERVAL).await;
+                    continue;
+                }
+                Ok(RuntimeDiscoverySuccess::HostAvailable {
+                    connection,
+                    compatibility,
+                }) => {
+                    if !self.snapshot_publisher.is_current_generation(generation) {
+                        return Ok(());
                     }
 
                     let port = port_from_runtime(&connection);
@@ -320,6 +320,73 @@ impl DiscoveryCoordinator {
             }
         }
     }
+
+    fn publish_incompatible_runtime(
+        &self,
+        app: &AppHandle,
+        generation: u64,
+        settings: MonitorSettings,
+        resolved: ResolvedDataDir,
+        connection: &MonitorRuntimeConnectionInfo,
+        compatibility: &RuntimeCompatibilityAssessment,
+        last_incompatible_message: &mut Option<String>,
+    ) -> Result<bool> {
+        let Some(incompatible_problem) = compatibility.problem.as_ref() else {
+            return Ok(true);
+        };
+
+        let incompatible_message = incompatible_problem.message.clone();
+        if last_incompatible_message.as_deref() == Some(incompatible_message.as_str()) {
+            return Ok(true);
+        }
+
+        let snapshot = build_snapshot(
+            generation,
+            BootstrapPhase::HostIncompatible,
+            settings,
+            resolved.clone(),
+            None,
+            Some(incompatible_problem.clone()),
+        );
+        if !self
+            .snapshot_publisher
+            .publish_if_current(app, generation, snapshot)
+        {
+            return Ok(false);
+        }
+
+        record_backend_log(
+            &self.log_service,
+            resolved.path.clone(),
+            MonitorLogLevel::Warn,
+            "discovery",
+            "validate_host",
+            "incompatible",
+            Some(&incompatible_problem.message),
+            Some(json_map(vec![
+                ("dataDir", Value::String(resolved.path)),
+                (
+                    "protocolVersion",
+                    Value::from(connection.runtime.protocol_version),
+                ),
+                (
+                    "hubVersion",
+                    compatibility
+                        .result
+                        .host_version
+                        .clone()
+                        .map(Value::String)
+                        .unwrap_or(Value::Null),
+                ),
+                (
+                    "compatibilityStatus",
+                    Value::String(compatibility.result.status.as_str().to_string()),
+                ),
+            ])),
+        )?;
+        *last_incompatible_message = Some(incompatible_message);
+        Ok(true)
+    }
 }
 
 pub fn build_snapshot(
@@ -378,6 +445,20 @@ fn assess_runtime_compatibility(
     )
 }
 
+fn assess_discovered_runtime_before_verification(
+    connection: &MonitorRuntimeConnectionInfo,
+) -> Option<RuntimeCompatibilityAssessment> {
+    if connection.runtime.protocol_version == 1 {
+        return None;
+    }
+
+    let compatibility = assess_runtime_compatibility_with_host_version(
+        connection,
+        connection.runtime.hub_version.as_deref(),
+    );
+    Some(compatibility)
+}
+
 fn assess_runtime_compatibility_with_host_version(
     connection: &MonitorRuntimeConnectionInfo,
     host_version: Option<&str>,
@@ -420,8 +501,9 @@ fn assess_runtime_compatibility_with_host_version(
 #[cfg(test)]
 mod tests {
     use super::{
-        assess_runtime_compatibility, build_launch_available_snapshot,
-        should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
+        assess_discovered_runtime_before_verification, assess_runtime_compatibility,
+        build_launch_available_snapshot, should_transition_to_launch_available,
+        LAUNCH_ACTION_DELAY,
     };
     use crate::models::{
         BootstrapPhase, DataDirSource, MonitorRuntimeConnectionInfo, MonitorRuntimeTuning,
@@ -510,6 +592,31 @@ mod tests {
             .expect("expected incompatible hub version");
         assert!(unsupported_hub.message.contains("JS SDK="));
         assert!(unsupported_hub.message.contains("Host=1.0.0"));
+    }
+
+    #[test]
+    fn compatibility_precheck_rejects_unsupported_protocol_before_verification() {
+        let compatibility =
+            assess_discovered_runtime_before_verification(&create_connection(2, Some("0.7.0")))
+                .expect("expected protocol mismatch");
+
+        let problem = compatibility
+            .problem
+            .expect("expected incompatible problem");
+        assert_eq!(problem.code, "host_incompatible");
+        assert!(problem.message.contains("protocolVersion=2"));
+        assert_eq!(
+            compatibility.result.status,
+            VersionCompatibilityStatus::Incompatible
+        );
+    }
+
+    #[test]
+    fn compatibility_precheck_allows_supported_protocol_to_continue_verification() {
+        let compatibility =
+            assess_discovered_runtime_before_verification(&create_connection(1, Some("1.0.0")));
+
+        assert!(compatibility.is_none());
     }
 
     #[test]
