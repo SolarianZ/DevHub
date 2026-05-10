@@ -12,6 +12,7 @@ namespace DevHub.Sdk.IntegrationTests.Http;
 public sealed class HttpFlowTests
 {
     private const string InstancePassword = "sdk-http-flow-password";
+    private const string OnlineThresholdSecondsEnvironmentVariable = "DEVHUB_ONLINE_THRESHOLD_SECONDS";
 
     [Fact]
     public async Task PingAndAppsFlow_ShouldSucceed()
@@ -80,6 +81,43 @@ public sealed class HttpFlowTests
             Scope = null
         });
         Assert.Empty(instancesAfterUnregister);
+    }
+
+    [Fact]
+    public async Task ListInstances_WithIncludeOffline_ShouldReturnRetainedOfflineSnapshot()
+    {
+        await using var host = await DevHubHostFixture.StartAsync(new Dictionary<string, string?>
+        {
+            [OnlineThresholdSecondsEnvironmentVariable] = "1"
+        });
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "http.offline-list.app",
+            Scope = string.Empty,
+            DisplayName = "HTTP Offline List App"
+        });
+
+        await using var client = await host.CreateClientAsync("http-offline-list-client");
+        await client.RegisterInstanceAsync(new AppInstanceRegistration
+        {
+            InstanceId = "http-offline-list-inst-1",
+            AppId = "http.offline-list.app",
+            Scope = string.Empty,
+            Pid = Environment.ProcessId,
+            Invoke = new InvokeCapability
+            {
+                Poll = true,
+                Respond = true
+            }
+        }, InstancePassword);
+
+        var offlineInstance = await WaitForOfflineSnapshotAsync(
+            client,
+            "http.offline-list.app",
+            "http-offline-list-inst-1");
+        Assert.Equal("http-offline-list-inst-1", offlineInstance.InstanceId);
+        Assert.Equal("http.offline-list.app", offlineInstance.AppId);
+        Assert.Equal(string.Empty, offlineInstance.Scope);
     }
 
     [Fact]
@@ -468,6 +506,37 @@ public sealed class HttpFlowTests
         Assert.Equal("app_definition_not_found", notFoundException.Message);
         Assert.Equal(validDefinition.AppId, notFoundException.ErrorData!.Value.GetProperty("appId").GetString());
         Assert.Equal(validDefinition.Scope, notFoundException.ErrorData!.Value.GetProperty("scope").GetString());
+    }
+
+    private static async Task<AppInstance> WaitForOfflineSnapshotAsync(DevHubClient client, string appId, string instanceId)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var onlineInstances = await client.ListInstancesAsync(new ListInstancesRequest
+            {
+                AppId = appId,
+                Scope = string.Empty
+            });
+            var offlineInstances = await client.ListInstancesAsync(new ListInstancesRequest
+            {
+                AppId = appId,
+                Scope = string.Empty,
+                IncludeOffline = true
+            });
+            var retainedSnapshot = offlineInstances.SingleOrDefault(instance =>
+                string.Equals(instance.InstanceId, instanceId, StringComparison.Ordinal));
+
+            if (retainedSnapshot is not null && !onlineInstances.Any(instance =>
+                    string.Equals(instance.InstanceId, instanceId, StringComparison.Ordinal)))
+            {
+                return retainedSnapshot;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"等待实例离线快照超时：{instanceId}");
     }
 
     private static async Task<JsonDocument> CallInvalidUpsertDefinitionAsync(string dataDirectory, DevHubClientOptions options)

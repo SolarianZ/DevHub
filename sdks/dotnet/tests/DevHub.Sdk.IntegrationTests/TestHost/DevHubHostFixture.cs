@@ -27,6 +27,7 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     private readonly string _tempRoot;
     private readonly string _repoRoot;
+    private readonly IReadOnlyDictionary<string, string?> _hostEnvironmentVariables;
     private readonly StringBuilder _stdout = new();
     private readonly StringBuilder _stderr = new();
     private Process? _hostProcess;
@@ -87,11 +88,15 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
     private DevHubHostFixture(
         string tempRoot,
         string repoRoot,
-        string dataDirectory)
+        string dataDirectory,
+        IReadOnlyDictionary<string, string?>? hostEnvironmentVariables)
     {
         _tempRoot = tempRoot;
         _repoRoot = repoRoot;
         DataDirectory = dataDirectory;
+        _hostEnvironmentVariables = hostEnvironmentVariables is null
+            ? new Dictionary<string, string?>(StringComparer.Ordinal)
+            : new Dictionary<string, string?>(hostEnvironmentVariables, StringComparer.Ordinal);
     }
 
     public string DataDirectory { get; }
@@ -110,6 +115,11 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public static async Task<DevHubHostFixture> StartAsync()
     {
+        return await StartAsync(hostEnvironmentVariables: null);
+    }
+
+    public static async Task<DevHubHostFixture> StartAsync(IReadOnlyDictionary<string, string?>? hostEnvironmentVariables)
+    {
         var repoRoot = ResolveRepositoryRoot();
         var tempRoot = Path.Combine(Path.GetTempPath(), "DevHubSdkIntegrationTests", Guid.NewGuid().ToString("N"));
         var dataDirectory = Path.Combine(tempRoot, "data");
@@ -118,7 +128,8 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         var fixture = new DevHubHostFixture(
             tempRoot,
             repoRoot,
-            dataDirectory);
+            dataDirectory,
+            hostEnvironmentVariables);
         await fixture.StartProcessAsync();
         return fixture;
     }
@@ -208,6 +219,18 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
         startInfo.ArgumentList.Add(hostAssemblyPath);
         startInfo.Environment[DataDirEnvironmentVariable] = DataDirectory;
         startInfo.Environment[SingleInstanceSlotEnvironmentVariable] = slot;
+        foreach (var (name, value) in _hostEnvironmentVariables)
+        {
+            if (value is null)
+            {
+                startInfo.Environment.Remove(name);
+            }
+            else
+            {
+                startInfo.Environment[name] = value;
+            }
+        }
+
         var hostEnvironmentJson = Environment.GetEnvironmentVariable(TestHubEnvironmentJsonEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(hostEnvironmentJson))
         {

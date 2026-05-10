@@ -44,6 +44,62 @@ public sealed class InvocationFlowTests
     }
 
     [Fact]
+    public async Task Poll_WithMaxCount_ShouldLimitReturnedItems()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await host.WriteDefinitionAsync(new AppDefinition
+        {
+            AppId = "invoke.poll-max.app",
+            Scope = string.Empty,
+            DisplayName = "invoke.poll-max.app"
+        });
+
+        await using var client = await host.CreateClientAsync("invoke-poll-max-client");
+        var registered = await RegisterInstanceAsync(client, "invoke.poll-max.app", "poll-max-inst-1", scope: string.Empty);
+
+        var firstNotify = await client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.poll-max.app",
+            Method = "test.poll.max.1",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            }
+        });
+        var secondNotify = await client.NotifyAsync(new InvokeRequest
+        {
+            AppId = "invoke.poll-max.app",
+            Method = "test.poll.max.2",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            }
+        });
+
+        var firstPoll = await client.PollAsync(new PollRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            MaxCount = 1,
+            WaitMs = 0
+        });
+        Assert.Single(firstPoll.Items);
+
+        var secondPoll = await client.PollAsync(new PollRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            MaxCount = 10,
+            WaitMs = 0
+        });
+        Assert.Single(secondPoll.Items);
+
+        Assert.Equal(
+            new[] { firstNotify.InvocationId, secondNotify.InvocationId }.OrderBy(static item => item, StringComparer.Ordinal),
+            firstPoll.Items.Concat(secondPoll.Items).Select(item => item.InvocationId).OrderBy(static item => item, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task RequestRespondValue_ShouldReturnResult_AndSecondRespondShouldConflict()
     {
         await using var host = await DevHubHostFixture.StartAsync();
@@ -468,11 +524,11 @@ public sealed class InvocationFlowTests
             }
         }, waitCancellation.Token);
 
-        await Task.Delay(200);
+        var invocation = await WaitForSingleInvocationAsync(client, registered.Instance.InstanceId, registered.InstanceSessionToken);
+
         await waitCancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => requestTask);
 
-        var invocation = await WaitForSingleInvocationAsync(client, registered.Instance.InstanceId, registered.InstanceSessionToken);
         await client.RespondAsync(new RespondRequest
         {
             InstanceId = registered.Instance.InstanceId,

@@ -30,12 +30,14 @@
     }
   },
   "expectedResponse": {
+    "matchMode": "subset",
     "phase": "sdk-invocation",
     "operation": "notify",
     "outcome": "error",
     "actual": {
       "code": -32602,
-      "message": "invalid_params"
+      "message": "invalid_params",
+      "source": "sdk_local_validation"
     }
   },
   "tags": [
