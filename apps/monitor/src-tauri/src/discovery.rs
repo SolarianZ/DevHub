@@ -12,7 +12,7 @@ use crate::versioning::{
     create_version_compatibility_result, VersionCompatibilityResult, VersionCompatibilityStatus,
     MONITOR_VERSION, SDK_VERSION,
 };
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use reqwest::Client;
 use serde_json::Value;
 use std::path::Path;
@@ -457,14 +457,98 @@ async fn probe_unsupported_protocol_runtime_with_client(
     connection: &MonitorRuntimeConnectionInfo,
     client: &Client,
 ) -> Result<()> {
-    client
+    let body = client
         .post(&connection.rpc_endpoint)
         .header("Content-Type", "application/json")
         .body(r#"{"jsonrpc":"2.0","id":"monitor-probe","method":"hub.ping","params":{}}"#)
         .send()
         .await
-        .map(|_| ())
+        .with_context(|| format!("不兼容 Host 活性探测失败：{}", connection.rpc_endpoint))?
+        .text()
+        .await
+        .with_context(|| format!("不兼容 Host 活性探测失败：{}", connection.rpc_endpoint))?;
+
+    validate_unsupported_protocol_probe_response(&body)
         .with_context(|| format!("不兼容 Host 活性探测失败：{}", connection.rpc_endpoint))
+}
+
+fn validate_unsupported_protocol_probe_response(body: &str) -> Result<()> {
+    let value: Value = serde_json::from_str(body).context("响应体不是 JSON。")?;
+    let Some(response) = value.as_object() else {
+        bail!("响应体不是 JSON-RPC 对象。");
+    };
+
+    if response.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        bail!("响应体缺少 JSON-RPC 2.0 标记。");
+    }
+
+    let id = response.get("id");
+    let has_probe_id = id.and_then(Value::as_str) == Some("monitor-probe");
+    let has_null_error_id = id == Some(&Value::Null) && response.contains_key("error");
+    if !has_probe_id && !has_null_error_id {
+        bail!("响应 id 不是 monitor-probe 或错误响应 null。")
+    }
+
+    if let Some(error) = response.get("error") {
+        let Some(error_object) = error.as_object() else {
+            bail!("JSON-RPC error 不是对象。");
+        };
+        let Some(code) = error_object.get("code").and_then(Value::as_i64) else {
+            bail!("JSON-RPC error 缺少数值 code。");
+        };
+        let message = error_object.get("message").and_then(Value::as_str);
+        if !is_devhub_probe_error(code, message) {
+            bail!("JSON-RPC error 不是可识别的 DevHub 错误。");
+        }
+        return Ok(());
+    }
+
+    if let Some(result) = response.get("result") {
+        validate_probe_ping_result(result)?;
+        return Ok(());
+    }
+
+    bail!("响应体不是 JSON-RPC result 或 error 响应。")
+}
+
+fn validate_probe_ping_result(result: &Value) -> Result<()> {
+    let Some(result_object) = result.as_object() else {
+        bail!("JSON-RPC result 不是对象。");
+    };
+
+    if result_object.get("ok").and_then(Value::as_bool) != Some(true) {
+        bail!("JSON-RPC result 缺少 ok=true。");
+    }
+
+    let Some(server_time_utc) = result_object.get("serverTimeUtc").and_then(Value::as_str) else {
+        bail!("JSON-RPC result 缺少 serverTimeUtc。");
+    };
+
+    chrono::DateTime::parse_from_rfc3339(server_time_utc)
+        .context("JSON-RPC result.serverTimeUtc 不是合法的 RFC 3339 时间。")?;
+
+    Ok(())
+}
+
+fn is_devhub_probe_error(code: i64, message: Option<&str>) -> bool {
+    matches!(
+        (code, message),
+        (-32001, Some("unauthorized"))
+            | (-32099, Some("not_supported"))
+            | (-32600, Some("invalid_request"))
+            | (-32601, Some("method_not_found"))
+            | (-32602, Some("invalid_params"))
+            | (-32603, Some("internal_error"))
+            | (-32002, Some("forbidden"))
+            | (-32010, Some("instance_not_found"))
+            | (-32011, Some("invocation_expired"))
+            | (-32012, Some("invocation_timeout"))
+            | (-32014, Some("app_definition_not_found"))
+            | (-32020, Some("launch_failed"))
+            | (-32030, Some("delivery_conflict"))
+            | (-32040, Some("rate_limited"))
+            | (-32050, Some("invocation_failed"))
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -662,8 +746,12 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_protocol_probe_succeeds_when_endpoint_responds() {
-        let (url, server) = spawn_probe_server();
+    fn unsupported_protocol_probe_succeeds_when_endpoint_returns_json_rpc_error() {
+        let (url, server) = spawn_probe_server(
+            "400 Bad Request",
+            "application/json",
+            r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"unauthorized"}}"#,
+        );
         let mut connection = create_connection(2, Some("0.7.0"));
         connection.runtime.http_base_url = url;
         connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
@@ -678,6 +766,110 @@ mod tests {
             &client,
         ))
         .expect("expected active endpoint");
+        server.join().expect("probe server failed");
+    }
+
+    #[test]
+    fn unsupported_protocol_probe_fails_when_endpoint_returns_html() {
+        let (url, server) = spawn_probe_server(
+            "200 OK",
+            "text/html",
+            "<html><body>not DevHub</body></html>",
+        );
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = url;
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("failed to build client");
+
+        let error = tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect_err("expected non-JSON-RPC response to fail");
+
+        assert!(error.to_string().contains("不兼容 Host 活性探测失败"));
+        server.join().expect("probe server failed");
+    }
+
+    #[test]
+    fn unsupported_protocol_probe_fails_when_endpoint_returns_plain_json() {
+        let (url, server) = spawn_probe_server(
+            "200 OK",
+            "application/json",
+            r#"{"status":"ok","service":"other"}"#,
+        );
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = url;
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("failed to build client");
+
+        let error = tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect_err("expected non-JSON-RPC response to fail");
+
+        assert!(error.to_string().contains("不兼容 Host 活性探测失败"));
+        server.join().expect("probe server failed");
+    }
+
+    #[test]
+    fn unsupported_protocol_probe_fails_when_endpoint_returns_unknown_json_rpc_error() {
+        let (url, server) = spawn_probe_server(
+            "400 Bad Request",
+            "application/json",
+            r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"other_service_error"}}"#,
+        );
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = url;
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("failed to build client");
+
+        let error = tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect_err("expected unknown JSON-RPC response to fail");
+
+        assert!(error.to_string().contains("不兼容 Host 活性探测失败"));
+        server.join().expect("probe server failed");
+    }
+
+    #[test]
+    fn unsupported_protocol_probe_fails_when_endpoint_returns_unrecognized_json_rpc_result() {
+        let (url, server) = spawn_probe_server(
+            "200 OK",
+            "application/json",
+            r#"{"jsonrpc":"2.0","id":"monitor-probe","result":{"ok":true}}"#,
+        );
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = url;
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("failed to build client");
+
+        let error = tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect_err("expected incomplete JSON-RPC result to fail");
+
+        assert!(error.to_string().contains("不兼容 Host 活性探测失败"));
         server.join().expect("probe server failed");
     }
 
@@ -728,7 +920,11 @@ mod tests {
         );
     }
 
-    fn spawn_probe_server() -> (String, thread::JoinHandle<()>) {
+    fn spawn_probe_server(
+        status: &'static str,
+        content_type: &'static str,
+        body: &'static str,
+    ) -> (String, thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind listener");
         let address = listener.local_addr().expect("failed to read local address");
         let (ready_sender, ready_receiver) = mpsc::channel();
@@ -737,8 +933,12 @@ mod tests {
             let (mut stream, _) = listener.accept().expect("failed to accept connection");
             let mut buffer = [0_u8; 1024];
             let _ = stream.read(&mut buffer);
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
             stream
-                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                .write_all(response.as_bytes())
                 .expect("failed to write response");
         });
         ready_receiver.recv().expect("probe server did not start");
